@@ -1,102 +1,162 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GUBER • Day-1 OG Lifetime Pass</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DAY-1 OG Lifetime Pass | GUBER</title>
 
+<style>
     body {
-      min-height: 100vh;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        sans-serif;
-      background: radial-gradient(circle at top, #0aff9d15, #000 60%, #000);
-      color: #f5f5f5;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 30px 10px;
+        margin: 0;
+        background: #000000;
+        font-family: 'Arial', sans-serif;
+        color: #dcdcdc;
+        line-height: 1.6;
     }
 
-    .page-wrapper {
-      max-width: 960px;
-      width: 100%;
+    .page {
+        max-width: 850px;
+        margin: auto;
+        padding: 25px;
+        border-radius: 20px;
+        background: linear-gradient(180deg, #050505, #000000);
+        box-shadow: 0 0 25px rgba(0,255,0,0.12);
+        border: 1px solid rgba(0,255,0,0.2);
     }
 
-    .card {
-      background: #0b0b0f;
-      border-radius: 24px;
-      padding: 28px 20px 30px;
-      margin: 0 auto;
-      border: 1px solid #15ff87;
-      box-shadow: 0 0 40px rgba(0, 255, 120, 0.45);
-      position: relative;
-      overflow: hidden;
+    h1, h2 {
+        color: #ffd700;
+        text-shadow: 0 0 12px rgba(255,215,0,0.6);
     }
 
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: -40%;
-      background: radial-gradient(circle at top left, #ffd70022, transparent 65%);
-      opacity: 0.8;
-      pointer-events: none;
+    /* GOLD BUTTON */
+    .cta-button {
+        display: block;
+        text-align: center;
+        background: linear-gradient(135deg, #b8860b, #ffd700, #b8860b);
+        color: #000;
+        font-weight: bold;
+        padding: 15px 20px;
+        border-radius: 50px;
+        font-size: 20px;
+        margin: 25px auto;
+        text-decoration: none;
+        box-shadow: 0 0 18px rgba(255,215,0,0.7);
+        transition: 0.2s;
     }
 
-    .inner {
-      position: relative;
-      z-index: 1;
+    .cta-button:hover {
+        box-shadow: 0 0 30px rgba(255,215,0,1);
+        transform: scale(1.04);
     }
 
-    .top-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 18px;
+    /* COUNTDOWN TIMER */
+    #countdown {
+        color: #00ff88;
+        font-size: 22px;
+        text-align: center;
+        margin-bottom: 20px;
+        text-shadow: 0 0 10px #00ff88;
     }
 
-    .top-logo img {
-      height: 40px;
+    .gold-logo {
+        display: block;
+        margin: 20px auto;
+        width: 170px;
     }
 
-    .top-logo span {
-      font-size: 13px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: #9bffcf;
+    .badge-container img {
+        width: 180px;
+        margin: 10px auto;
+        display: block;
     }
 
-    .hero {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 22px;
+    .footer {
+        text-align: center;
+        margin-top: 40px;
+        font-size: 14px;
+        color: #888;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+    <img src="Gubergoldday1.png" class="gold-logo" alt="GUBER Gold Logo">
+
+    <h1>DAY-1 OG LIFETIME PASS</h1>
+    <p>A one-time <strong>$1.99</strong> thank-you for believing in GUBER before the world catches on.  
+    Your perks are locked in forever.</p>
+
+    <!-- Countdown Timer -->
+    <div id="countdown">Loading countdown...</div>
+
+    <h2>Your Lifetime Benefits</h2>
+
+    <ul>
+        <li><strong>Lifetime 15% fee discount</strong> on all GUBER service fees.</li>
+        <li><strong>DAY-1 OG badge</strong> shown on your profile.</li>
+        <li><strong>Special employer perk:</strong> When Urgent Posting launches, DAY-1 OG employers get the Urgent Boost FREE for life.</li>
+        <li><strong>Early access</strong> to new features, tools, and private updates.</li>
+        <li>Founding supporter recognition.</li>
+    </ul>
+
+    <div class="badge-container">
+        <img src="Urgent.png" alt="Urgent Badge">
+    </div>
+
+    <h2>DAY-1 OG Ambassador Program</h2>
+    <p>
+        Refer <strong>10+ people</strong> who:
+        <br>• Sign up  
+        <br>• Complete at least one job as a helper OR employer  
+        <br><br>
+        Earn an additional <strong>5% fee discount</strong> for the following month.
+        <br><br>
+        These stack until your fee reaches <strong>0% for a full 30 days.</strong>
+        <br><br>
+        DAY-1 OG members ALWAYS keep their permanent 15% lifetime rate.
+    </p>
+
+    <a href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00" class="cta-button">
+        🔒 CLAIM MY DAY-1 OG PASS — $1.99
+    </a>
+
+    <div class="footer">
+        © 2025 GUBER APP LLC — All Rights Reserved  
+        <br>Contact: support@guberapp.com
+    </div>
+</div>
+
+<!-- Countdown Script -->
+<script>
+    const endDate = new Date();
+    endDate.setHours(endDate.getHours() + 48); // 48 HOURS LIMIT
+
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const distance = endDate - now;
+
+        if (distance <= 0) {
+            document.getElementById("countdown").innerHTML = "⚠ OFFER EXPIRED FOREVER";
+            return;
+        }
+
+        const hours = Math.floor((distance % (1000*60*60*24)) / (1000*60*60));
+        const minutes = Math.floor((distance % (1000*60*60)) / (1000*60));
+        const seconds = Math.floor((distance % (1000*60)) / 1000);
+
+        document.getElementById("countdown").innerHTML =
+            `⚡ Offer ends in: ${hours}h ${minutes}m ${seconds}s`;
     }
 
-    .hero-text {
-      flex: 1 1 260px;
-    }
+    setInterval(updateCountdown, 1000);
+</script>
 
-    .eyebrow {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
-      color: #ffd36b;
-      margin-bottom: 8px;
-    }
-
-    .hero-title {
-      font-size: 30px;
-      line-height: 1.1;
-      font-weight: 800;
-      text-transform: uppercase;
-      margin-bottom: 10px;
-      background: linear-gradient(90deg, #ffe26a, #ffb400, #fff3b5);
+</body>
+</html>      background: linear-gradient(90deg, #ffe26a, #ffb400, #fff3b5);
       -webkit-background-clip: text;
       color: transparent;
       text-shadow: 0 0 18px rgba(255, 215, 0, 0.6);
