@@ -236,7 +236,8 @@
       margin-top: 26px;
       padding: 20px 18px 18px;
       border-radius: 26px;
-      background: radial-gradient(circle at top left, rgba(255, 59, 218, 0.08), transparent 65%),
+      background:
+        radial-gradient(circle at top left, rgba(255, 59, 218, 0.08), transparent 65%),
         radial-gradient(circle at bottom right, rgba(124, 255, 140, 0.05), transparent 60%),
         var(--bg-card);
       border: 1px solid var(--border-soft);
@@ -302,7 +303,8 @@
       margin-top: 18px;
       padding: 14px 14px 12px;
       border-radius: 18px;
-      background: radial-gradient(circle at 10% 0%, rgba(124, 255, 140, 0.16), transparent 60%),
+      background:
+        radial-gradient(circle at 10% 0%, rgba(124, 255, 140, 0.16), transparent 60%),
         #030308;
       border: 1px solid rgba(124, 255, 140, 0.5);
       font-size: 13px;
@@ -358,6 +360,27 @@
       border-radius: 999px;
       background: var(--hot-pink);
       box-shadow: 0 0 10px rgba(255, 59, 218, 0.8);
+    }
+
+    /* Employer section styling: gold + pink accent */
+    .section-employer {
+      background:
+        radial-gradient(circle at top right, rgba(255, 59, 218, 0.18), transparent 70%),
+        radial-gradient(circle at bottom left, rgba(245, 197, 66, 0.18), transparent 65%),
+        var(--bg-card-soft);
+      border: 1px solid rgba(245, 197, 66, 0.65);
+      box-shadow:
+        0 0 40px rgba(245, 197, 66, 0.25),
+        0 0 60px rgba(255, 59, 218, 0.2);
+    }
+
+    .section-employer .section-header {
+      color: var(--gold);
+    }
+
+    .section-employer .section-title span.hot {
+      color: var(--hot-pink);
+      text-shadow: 0 0 12px rgba(255, 59, 218, 0.7);
     }
 
     .cta-wrap {
@@ -488,7 +511,7 @@
       <div class="section-header">Helpers only • No extra out-of-pocket cost</div>
       <h2 class="section-title">How the money works</h2>
       <p class="section-body">
-        GUBER takes a small **service fee** out of each completed job so the platform can run safely,
+        GUBER takes a small <strong>service fee</strong> out of each completed job so the platform can run safely,
         handle payments, support, and tech. You never swipe a card for this fee — it simply comes
         out before your payout hits.
       </p>
@@ -500,7 +523,7 @@
         </li>
         <li>
           <span class="list-icon">💎</span>
-          <span><strong>Day-1 OG helpers:</strong> The platform only keeps <strong>15%</strong>. You keep **85%** on the same job.</span>
+          <span><strong>Day-1 OG helpers:</strong> The platform only keeps <strong>15%</strong>. You keep <strong>85%</strong> on the same job.</span>
         </li>
         <li>
           <span class="list-icon">♾️</span>
@@ -519,12 +542,12 @@
         </div>
         <p style="margin-top:8px;">
           That extra <strong>$5</strong> may not sound like much on one job — but over dozens or hundreds of
-          jobs, your Day-1 OG pass can add up to **hundreds or thousands of dollars** that stay in your pocket.
+          jobs, your Day-1 OG pass can add up to <strong>hundreds or thousands of dollars</strong> that stay in your pocket.
         </p>
       </div>
     </section>
 
-    <!-- SECTION: BENEFITS -->
+    <!-- SECTION: HELPER BENEFITS -->
     <section class="section">
       <div class="section-header">For helpers • Lifetime benefits</div>
       <h2 class="section-title"><span class="hot">What you get</span> as a Day-1 OG</h2>
@@ -548,6 +571,43 @@
         <li>
           <span class="list-icon">📲</span>
           <span><strong>Early access</strong> to select features, tests, and private “helper-only” updates as GUBER grows.</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- SECTION: EMPLOYER ADVANTAGE -->
+    <section class="section section-employer">
+      <div class="section-header">Employer advantage • OG exclusive</div>
+      <h2 class="section-title">
+        <span class="hot">Lifetime urgent visibility</span> for OG employers
+      </h2>
+      <ul class="list">
+        <li>
+          <span class="list-icon">📢</span>
+          <span>
+            <strong>Urgent Job Boost fee = $0 forever</strong> for verified Day-1 OG employer accounts.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🔥</span>
+          <span>
+            All employers will normally pay an additional fee to mark jobs as <strong>URGENT</strong> for higher
+            visibility and faster responses from helpers.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">♾️</span>
+          <span>
+            As a Day-1 OG employer, your account is permanently exempt from this fee on eligible Urgent postings —
+            giving you a built-in visibility advantage at <strong>no extra cost</strong>.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🏷️</span>
+          <span>
+            Full details, limits, and eligibility for Urgent Job Boosts will be published in the live GUBER app,
+            but your <strong>OG Urgent = $0</strong> status will always be honored wherever that feature is supported.
+          </span>
         </li>
       </ul>
     </section>
@@ -606,7 +666,8 @@
           <span class="list-icon">🔐</span>
           <span>
             The 15% helper service-fee rate applies to eligible GUBER jobs completed through the platform
-            under your verified account, subject to GUBER’s <a href="/terms-of-service.html" style="color:var(--neon-green); text-decoration:none;">Terms of Service</a>.
+            under your verified account, subject to GUBER’s
+            <a href="/terms-of-service.html" style="color:var(--neon-green); text-decoration:none;">Terms of Service</a>.
           </span>
         </li>
         <li>
