@@ -1,501 +1,631 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DAY-1 OG Lifetime Pass | GUBER</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GUBER • Day-1 OG Lifetime Pass</title>
+  <style>
+    :root {
+      --bg-dark: #020304;
+      --bg-panel: #050709;
+      --guber-green: #17ff77;
+      --guber-gold: #ffd769;
+      --guber-gold-deep: #e5aa2a;
+      --text-main: #f4f7ff;
+      --text-soft: #c5d0e0;
+      --accent: #00ffb9;
+      --danger: #ff4a4a;
+    }
 
-<style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-        margin: 0;
-        background: #000000;
-        font-family: 'Arial', sans-serif;
-        color: #dcdcdc;
-        line-height: 1.6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #04110a 0%, #000000 55%, #020304 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 20px 12px 40px;
     }
 
     .page {
-        max-width: 850px;
-        margin: auto;
-        padding: 25px;
-        border-radius: 20px;
-        background: linear-gradient(180deg, #050505, #000000);
-        box-shadow: 0 0 25px rgba(0,255,0,0.12);
-        border: 1px solid rgba(0,255,0,0.2);
-    }
-
-    h1, h2 {
-        color: #ffd700;
-        text-shadow: 0 0 12px rgba(255,215,0,0.6);
-    }
-
-    /* GOLD BUTTON */
-    .cta-button {
-        display: block;
-        text-align: center;
-        background: linear-gradient(135deg, #b8860b, #ffd700, #b8860b);
-        color: #000;
-        font-weight: bold;
-        padding: 15px 20px;
-        border-radius: 50px;
-        font-size: 20px;
-        margin: 25px auto;
-        text-decoration: none;
-        box-shadow: 0 0 18px rgba(255,215,0,0.7);
-        transition: 0.2s;
-    }
-
-    .cta-button:hover {
-        box-shadow: 0 0 30px rgba(255,215,0,1);
-        transform: scale(1.04);
-    }
-
-    /* COUNTDOWN TIMER */
-    #countdown {
-        color: #00ff88;
-        font-size: 22px;
-        text-align: center;
-        margin-bottom: 20px;
-        text-shadow: 0 0 10px #00ff88;
-    }
-
-    .gold-logo {
-        display: block;
-        margin: 20px auto;
-        width: 170px;
-    }
-
-    .badge-container img {
-        width: 180px;
-        margin: 10px auto;
-        display: block;
-    }
-
-    .footer {
-        text-align: center;
-        margin-top: 40px;
-        font-size: 14px;
-        color: #888;
-    }
-</style>
-</head>
-
-<body>
-
-<div class="page">
-
-    <img src="Gubergoldday1.png" class="gold-logo" alt="GUBER Gold Logo">
-
-    <h1>DAY-1 OG LIFETIME PASS</h1>
-    <p>A one-time <strong>$1.99</strong> thank-you for believing in GUBER before the world catches on.  
-    Your perks are locked in forever.</p>
-
-    <!-- Countdown Timer -->
-    <div id="countdown">Loading countdown...</div>
-
-    <h2>Your Lifetime Benefits</h2>
-
-    <ul>
-        <li><strong>Lifetime 15% fee discount</strong> on all GUBER service fees.</li>
-        <li><strong>DAY-1 OG badge</strong> shown on your profile.</li>
-        <li><strong>Special employer perk:</strong> When Urgent Posting launches, DAY-1 OG employers get the Urgent Boost FREE for life.</li>
-        <li><strong>Early access</strong> to new features, tools, and private updates.</li>
-        <li>Founding supporter recognition.</li>
-    </ul>
-
-    <div class="badge-container">
-        <img src="Urgent.png" alt="Urgent Badge">
-    </div>
-
-    <h2>DAY-1 OG Ambassador Program</h2>
-    <p>
-        Refer <strong>10+ people</strong> who:
-        <br>• Sign up  
-        <br>• Complete at least one job as a helper OR employer  
-        <br><br>
-        Earn an additional <strong>5% fee discount</strong> for the following month.
-        <br><br>
-        These stack until your fee reaches <strong>0% for a full 30 days.</strong>
-        <br><br>
-        DAY-1 OG members ALWAYS keep their permanent 15% lifetime rate.
-    </p>
-
-    <a href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00" class="cta-button">
-        🔒 CLAIM MY DAY-1 OG PASS — $1.99
-    </a>
-
-    <div class="footer">
-        © 2025 GUBER APP LLC — All Rights Reserved  
-        <br>Contact: support@guberapp.com
-    </div>
-</div>
-
-<!-- Countdown Script -->
-<script>
-    const endDate = new Date();
-    endDate.setHours(endDate.getHours() + 48); // 48 HOURS LIMIT
-
-    function updateCountdown() {
-        const now = new Date().getTime();
-        const distance = endDate - now;
-
-        if (distance <= 0) {
-            document.getElementById("countdown").innerHTML = "⚠ OFFER EXPIRED FOREVER";
-            return;
-        }
-
-        const hours = Math.floor((distance % (1000*60*60*24)) / (1000*60*60));
-        const minutes = Math.floor((distance % (1000*60*60)) / (1000*60));
-        const seconds = Math.floor((distance % (1000*60)) / 1000);
-
-        document.getElementById("countdown").innerHTML =
-            `⚡ Offer ends in: ${hours}h ${minutes}m ${seconds}s`;
-    }
-
-    setInterval(updateCountdown, 1000);
-</script>
-
-</body>
-</html>      background: linear-gradient(90deg, #ffe26a, #ffb400, #fff3b5);
-      -webkit-background-clip: text;
-      color: transparent;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.6);
-    }
-
-    .hero-sub {
-      font-size: 15px;
-      color: #d7ffe7;
+      width: 100%;
       max-width: 420px;
+      background: radial-gradient(circle at top, #04150e 0%, #050709 40%, #020304 100%);
+      border-radius: 24px;
+      box-shadow: 0 0 40px rgba(0, 255, 100, 0.18);
+      border: 1px solid rgba(0, 255, 100, 0.18);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background: radial-gradient(circle at 20% 0%, rgba(0, 255, 185, 0.22) 0, transparent 48%),
+                  radial-gradient(circle at 80% 0%, rgba(255, 215, 0, 0.18) 0, transparent 52%);
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .inner {
+      position: relative;
+      z-index: 1;
+      padding: 20px 18px 26px;
+    }
+
+    .top-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       margin-bottom: 14px;
     }
 
-    .hero-badge {
+    .top-brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: radial-gradient(circle, #ffd86b 0%, #b57a0c 55%, #7a5300 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 18px rgba(255, 215, 0, 0.65);
+      overflow: hidden;
+    }
+
+    .top-brand-logo img {
+      width: 90%;
+      height: auto;
+      display: block;
+    }
+
+    .top-brand-text {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #9bffc5;
+      text-shadow: 0 0 10px rgba(0, 255, 120, 0.6);
+    }
+
+    .top-brand-sub {
+      font-size: 10px;
+      color: #7fa0b5;
+    }
+
+    .hero-card {
+      margin-top: 6px;
+      background: linear-gradient(145deg, rgba(15, 35, 22, 0.95), rgba(4, 9, 14, 0.98));
+      border-radius: 18px;
+      padding: 18px 16px 16px;
+      box-shadow: 0 0 32px rgba(0, 255, 120, 0.2);
+      border: 1px solid rgba(0, 255, 120, 0.35);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-pill {
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 6px 12px;
       border-radius: 999px;
-      background: rgba(8, 39, 20, 0.95);
-      border: 1px solid rgba(21, 255, 135, 0.7);
-      box-shadow: 0 0 15px rgba(0, 255, 120, 0.4);
+      border: 1px solid rgba(0, 255, 185, 0.55);
+      background: radial-gradient(circle at 0 0, rgba(0, 255, 185, 0.25) 0, rgba(0, 0, 0, 0.75) 40%, rgba(0, 255, 120, 0.15) 100%);
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.15em;
-      color: #9bffcf;
-      margin-bottom: 18px;
+      letter-spacing: 0.12em;
+      color: #c9fff0;
+      margin-bottom: 10px;
     }
 
-    .hero-badge img {
-      height: 20px;
+    .hero-pill img {
+      height: 18px;
+      width: auto;
+      display: block;
     }
 
-    .hero-image {
-      flex: 0 0 260px;
-      text-align: center;
-    }
-
-    .hero-image img {
-      max-width: 260px;
-      width: 100%;
-      filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 6px 0 14px;
-    }
-
-    .pill {
-      border-radius: 999px;
-      border: 1px solid rgba(255, 215, 0, 0.6);
-      padding: 4px 10px;
+    .hero-eyebrow {
       font-size: 11px;
-      color: #ffe8a3;
-      background: rgba(0, 0, 0, 0.5);
-    }
-
-    .sections {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 18px;
-      margin-top: 18px;
-    }
-
-    .section-card {
-      background: radial-gradient(circle at top, #151520, #050509);
-      border-radius: 18px;
-      padding: 16px 14px 16px;
-      border: 1px solid rgba(255, 215, 0, 0.45);
-      box-shadow: 0 0 24px rgba(255, 215, 0, 0.25);
-    }
-
-    .section-title {
-      font-size: 15px;
-      font-weight: 700;
-      color: #ffe388;
-      margin-bottom: 6px;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
-    }
-
-    .section-tag {
-      font-size: 11px;
-      color: #ffdd99;
-      opacity: 0.8;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-
-    .section-card ul {
-      list-style: none;
-      margin-left: 0;
-    }
-
-    .section-card li {
-      font-size: 13px;
-      color: #f8f8f8;
-      margin-bottom: 6px;
-      padding-left: 16px;
-      position: relative;
-    }
-
-    .section-card li::before {
-      content: "◆";
-      position: absolute;
-      left: 0;
-      top: 1px;
-      font-size: 10px;
-      color: #ffd36b;
-    }
-
-    .urgent-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 10px;
-    }
-
-    .urgent-row img {
-      height: 34px;
-      filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
-    }
-
-    .urgent-row span {
-      font-size: 12px;
-      color: #ffe9b0;
-    }
-
-    .ambassador {
-      margin-top: 16px;
-      padding: 14px 12px 12px;
-      border-radius: 16px;
-      border: 1px dashed rgba(0, 255, 153, 0.7);
-      background: rgba(5, 34, 21, 0.9);
-      box-shadow: 0 0 20px rgba(0, 255, 153, 0.35);
-    }
-
-    .ambassador-title {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: #9bffcf;
-      margin-bottom: 6px;
-    }
-
-    .ambassador p {
-      font-size: 12px;
-      color: #e7fff4;
+      color: #9bffc5;
       margin-bottom: 4px;
     }
 
-    .fine-print {
-      font-size: 11px;
-      color: #9bd6b7;
-      margin-top: 6px;
-      opacity: 0.9;
+    .hero-title-main {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 4px;
+      text-transform: uppercase;
     }
 
-    .cta {
-      margin-top: 22px;
+    .hero-title-main span {
+      color: var(--guber-gold);
+      text-shadow: 0 0 14px rgba(255, 215, 0, 0.7);
+    }
+
+    .hero-subline {
+      font-size: 12px;
+      color: var(--text-soft);
+      margin-bottom: 8px;
+    }
+
+    .hero-subline strong {
+      color: #ffffff;
+    }
+
+    .hero-countdown-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #ffb37a;
+      margin-top: 8px;
+      margin-bottom: 2px;
+    }
+
+    .countdown {
+      display: inline-flex;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffe0aa;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 999px;
+      padding: 4px 8px;
+      border: 1px solid rgba(255, 198, 109, 0.4);
+      box-shadow: 0 0 18px rgba(255, 198, 109, 0.35);
+    }
+
+    .countdown span {
+      min-width: 52px;
+      text-align: center;
+    }
+
+    .hero-main-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .hero-copy {
+      font-size: 11px;
+      color: var(--text-soft);
+      max-width: 60%;
+    }
+
+    .hero-logo-wrap {
+      flex: 0 0 90px;
+    }
+
+    .hero-logo {
+      width: 90px;
+      height: 90px;
+      border-radius: 24px;
+      padding: 8px;
+      background: radial-gradient(circle, #ffd86b 0%, #b67a0e 45%, #7a5300 100%);
+      box-shadow:
+        0 0 27px rgba(255, 215, 0, 0.85),
+        0 0 55px rgba(0, 255, 120, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .hero-logo img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .section {
+      margin-top: 18px;
+      background: linear-gradient(145deg, rgba(4, 9, 14, 0.96), rgba(9, 18, 23, 0.98));
+      border-radius: 18px;
+      padding: 14px 14px 12px;
+      border: 1px solid rgba(0, 255, 185, 0.22);
+      box-shadow: 0 0 26px rgba(0, 255, 120, 0.16);
+    }
+
+    .section + .section {
+      margin-top: 12px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #e5fff4;
+      margin-bottom: 6px;
+    }
+
+    .section-title span {
+      color: var(--guber-gold);
+    }
+
+    .section-tagline {
+      font-size: 11px;
+      color: #8fb3c6;
+      margin-bottom: 6px;
+    }
+
+    .section ul {
+      list-style: none;
+      padding-left: 0;
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .section li {
+      margin-bottom: 5px;
+      position: relative;
+      padding-left: 16px;
+    }
+
+    .section li::before {
+      content: "•";
+      position: absolute;
+      left: 3px;
+      top: 0;
+      color: var(--guber-green);
+      font-size: 14px;
+    }
+
+    .section strong {
+      color: #ffffff;
+    }
+
+    .section-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .section-badge-row img {
+      height: 22px;
+      width: auto;
+      display: block;
+    }
+
+    .tiny-note {
+      font-size: 10px;
+      color: #7f94aa;
+      margin-top: 6px;
+    }
+
+    .tiny-note span {
+      color: var(--accent);
+    }
+
+    .cta-wrap {
+      margin-top: 18px;
       text-align: center;
     }
 
     .cta-button {
-      display: inline-block;
-      padding: 12px 26px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #ffd36b, #ffb400, #ffe89b);
-      color: #2b1a00;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
-      font-size: 11px;
-      border: none;
-      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       text-decoration: none;
-      box-shadow: 0 0 26px rgba(255, 215, 0, 0.8);
+      padding: 14px 22px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffe26a, #ffbf3a, #e29415);
+      color: #1a1103;
+      font-weight: 800;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      box-shadow:
+        0 0 30px rgba(255, 215, 0, 0.85),
+        0 12px 30px rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      position: relative;
+      overflow: hidden;
     }
 
-    .cta-note {
-      font-size: 11px;
-      color: #f5f5f5;
+    .cta-button::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.6) 0, transparent 36%);
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .cta-button span.price {
+      font-weight: 900;
+    }
+
+    .cta-button .lock {
+      font-size: 18px;
+    }
+
+    .cta-subtext {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #8aa0b5;
+    }
+
+    .cta-subtext span {
+      color: var(--accent);
+    }
+
+    .cta-button.disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      box-shadow: none;
+      filter: grayscale(0.4);
+    }
+
+    .cta-button.disabled::before {
+      display: none;
+    }
+
+    .expired-text {
       margin-top: 8px;
-      opacity: 0.8;
+      font-size: 11px;
+      color: var(--danger);
+      font-weight: 600;
     }
 
     footer {
-      margin-top: 22px;
-      font-size: 11px;
-      color: #9b9b9b;
-      text-align: center;
-      border-top: 1px solid #222;
+      margin-top: 18px;
       padding-top: 10px;
-      text-shadow: 0 0 6px #00ff9d;
+      border-top: 1px solid rgba(0, 255, 120, 0.25);
+      text-align: center;
+      font-size: 10px;
+      color: #8ca3b6;
+      text-shadow: 0 0 10px rgba(0, 255, 120, 0.4);
     }
 
     footer a {
-      color: #00ff9d;
+      color: #8bffcb;
       text-decoration: none;
     }
 
-    @media (min-width: 720px) {
-      .sections {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    @media (max-width: 360px) {
+      .hero-main-row {
+        flex-direction: column-reverse;
+        align-items: flex-start;
+      }
+
+      .hero-copy {
+        max-width: 100%;
+      }
+
+      .hero-logo-wrap {
+        align-self: center;
       }
     }
   </style>
 </head>
 <body>
-  <div class="page-wrapper">
-    <div class="card">
-      <div class="inner">
-        <div class="top-logo">
+  <div class="page">
+    <div class="inner">
+      <!-- TOP BRAND -->
+      <div class="top-brand">
+        <div class="top-brand-logo">
           <img src="Guberapplogo.png" alt="GUBER logo" />
-          <span>Global Unlimited Business & Employment Resource</span>
         </div>
-
-        <div class="hero">
-          <div class="hero-text">
-            <div class="eyebrow">Founding Supporter Exclusive</div>
-            <h1 class="hero-title">Day-1 OG Lifetime Pass</h1>
-            <p class="hero-sub">
-              A one-time <strong>$1.99</strong> thank-you for believing in GUBER
-              before the world catches up. Lock in your perks <em>forever</em>.
-            </p>
-
-            <div class="hero-badge">
-              <img src="Gubergoldday1.png" alt="GUBER Day-1 OG Badge" />
-              <span>Lifetime 15% Fee Discount • Day-1 Verified</span>
-            </div>
-
-            <div class="pill-row">
-              <div class="pill">One-time payment • Never expires</div>
-              <div class="pill">Locked-in 15% platform fee discount</div>
-              <div class="pill">Founding supporter recognition</div>
-            </div>
-          </div>
-
-          <div class="hero-image">
-            <img src="Gubergoldday1.png" alt="GUBER Gold Day-1 Logo" />
-          </div>
+        <div>
+          <div class="top-brand-text">GLOBAL UNLIMITED BUSINESS &amp; EMPLOYMENT RESOURCE</div>
+          <div class="top-brand-sub">Official Day-1 OG Lifetime Pass</div>
         </div>
-
-        <div class="sections">
-          <!-- Helpers -->
-          <div class="section-card">
-            <div class="section-tag">For Helpers</div>
-            <div class="section-title">Earn More On Every Job</div>
-            <ul>
-              <li>
-                Lifetime <strong>15% discount</strong> on GUBER service fees when
-                you complete jobs through the app.
-              </li>
-              <li>
-                Day-1 OG status on your profile (when launched) so serious
-                employers know you believed in the platform early.
-              </li>
-              <li>
-                Early access to new features, tests, and private
-                “helper-only” updates before public rollouts.
-              </li>
-            </ul>
-          </div>
-
-          <!-- Employers -->
-          <div class="section-card">
-            <div class="section-tag">For Employers</div>
-            <div class="section-title">Free Urgent Boost For Life</div>
-            <ul>
-              <li>
-                Lifetime <strong>15% discount</strong> on GUBER service fees
-                when you post and complete jobs through the app.
-              </li>
-              <li>
-                Access to a special “Day-1 OG” badge on your company profile
-                once the platform is live.
-              </li>
-            </ul>
-
-            <div class="urgent-row">
-              <img src="Urgent .png" alt="Urgent Boost Icon" />
-              <span>
-                <strong>PLUS:</strong> When Urgent Posting goes live, Day-1 OG
-                employers get the <strong>Urgent boost free for life</strong> on
-                eligible jobs.
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Ambassador Program -->
-        <div class="ambassador">
-          <div class="ambassador-title">Day-1 OG Ambassador Program</div>
-          <p>
-            Refer <strong>10 or more people</strong> who:
-            <br />• Sign up, and<br />
-            • Complete at least one job as a helper or employer,
-          </p>
-          <p>
-            and you’ll earn an additional
-            <strong>5% fee discount for the following month.</strong>
-          </p>
-          <p>
-            These 5% Ambassador bonuses can stack until your GUBER platform fee
-            reaches <strong>0% for a full 30 days.</strong>
-          </p>
-          <p class="fine-print">
-            Ambassador rewards and eligibility may be adjusted as the platform
-            grows, but Day-1 OG members will always keep their
-            <strong>permanent 15% base discount</strong>.
-          </p>
-        </div>
-
-        <!-- CTA -->
-        <div class="cta">
-          <a
-            href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00"
-            class="cta-button"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Claim My Day-1 OG Pass – $1.99
-          </a>
-          <div class="cta-note">
-            One-time payment • Limited time only • This offer will never return.
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <footer>
-          © 2025 GUBER APP LLC — All Rights Reserved<br />
-          Contact: <a href="mailto:support@guberapp.com">support@guberapp.com</a>
-        </footer>
       </div>
+
+      <!-- HERO -->
+      <div class="hero-card">
+        <div class="hero-pill">
+          <img src="Gubergoldday1.png" alt="Day-1 OG badge" />
+          LIFETIME 15% FEE DISCOUNT • DAY-1 VERIFIED
+        </div>
+
+        <div class="hero-eyebrow">Founding supporter exclusive</div>
+        <div class="hero-title-main">
+          DAY-1 <span>OG LIFETIME</span><br />PASS
+        </div>
+        <p class="hero-subline">
+          A one-time <strong>$1.99</strong> thank-you for believing in GUBER before the world catches up.
+          Lock in your perks forever.
+        </p>
+
+        <div class="hero-countdown-label">Offer ends December 31, 2025 at 11:59 PM CST</div>
+        <div id="countdown" class="countdown">
+          <span id="cd-days">--d</span>
+          <span id="cd-hours">--h</span>
+          <span id="cd-mins">--m</span>
+          <span id="cd-secs">--s</span>
+        </div>
+
+        <div class="hero-main-row">
+          <p class="hero-copy">
+            Standard GUBER service fee is <strong>20% per completed job</strong> for helpers.<br /><br />
+            As a Day-1 OG, you lock in a permanent <strong>15% service fee</strong> when you complete
+            jobs through the app — a lifetime discount on your earnings, just for showing up early.
+          </p>
+          <div class="hero-logo-wrap">
+            <div class="hero-logo">
+              <img src="Gubergoldday1.png" alt="GUBER Gold Day-1 OG" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION: HELPERS -->
+      <div class="section">
+        <div class="section-title"><span>For Helpers</span> • Earn More On Every Job</div>
+        <p class="section-tagline">If you plan to help even a little, Day-1 OG pays you back forever.</p>
+        <ul>
+          <li>
+            <strong>Standard fee:</strong> 20% GUBER service fee on each completed job.
+          </li>
+          <li>
+            <strong>Day-1 OG fee:</strong> Lifetime <strong>15% service fee</strong> when you complete jobs
+            through the app — a permanent 5% discount on every eligible payout.
+          </li>
+          <li>
+            <strong>Verified status:</strong> “Day-1 OG” tag on your profile (when the app launches) so serious
+            employers know you believed in the platform early.
+          </li>
+          <li>
+            <strong>Early access:</strong> Invites to select tests, early features, and private “helper-only”
+            updates before public rollout.
+          </li>
+        </ul>
+        <p class="tiny-note">
+          This pass is designed for <span>helpers</span> who plan to run real jobs through GUBER and want their fee locked in before launch.
+        </p>
+      </div>
+
+      <!-- SECTION: EMPLOYERS -->
+      <div class="section">
+        <div class="section-title"><span>For Employers</span> • Urgent Boost For Life</div>
+        <div class="section-badge-row">
+          <img src="Urgent.png" alt="Urgent badge" />
+        </div>
+        <p class="section-tagline">
+          When the Urgent Post feature goes live, Day-1 OG employers get an extra boost that never expires.
+        </p>
+        <ul>
+          <li>
+            <strong>Free Urgent boost for life</strong> on eligible job posts connected to your Day-1 OG account,
+            once Urgent Posting is active in the app.
+          </li>
+          <li>
+            Designed for early employers who want first access to serious helpers as the network grows.
+          </li>
+          <li>
+            You still pay any normal job fees that apply to employers in the future — but the Urgent boost itself
+            is free for life on qualifying posts.
+          </li>
+        </ul>
+        <p class="tiny-note">
+          Exact Urgent placement rules may evolve as the platform grows, but Day-1 OG employers will always keep their
+          <span>lifetime Urgent boost</span> benefit on eligible jobs.
+        </p>
+      </div>
+
+      <!-- SECTION: AMBASSADOR PROGRAM -->
+      <div class="section">
+        <div class="section-title"><span>Day-1 OG Ambassador</span> Program</div>
+        <p class="section-tagline">
+          Help grow the network, and we’ll keep lowering your fee — all the way down to 0% for a full month.
+        </p>
+        <ul>
+          <li>
+            <strong>Refer 10 or more people</strong> who:
+            <br />– Sign up for GUBER, and<br />– Complete at least one job as a helper or employer.
+          </li>
+          <li>
+            For each block of <strong>10 successful referrals</strong>, you earn an additional
+            <strong>5% fee discount</strong> on your GUBER service fee for the following month.
+          </li>
+          <li>
+            These 5% Ambassador bonuses can <strong>stack</strong> until your platform fee reaches
+            <strong>0% for a full 30 days</strong> (no GUBER service fee during that period).
+          </li>
+          <li>
+            After promotional months end, your account returns to your permanent <strong>15% Day-1 OG rate</strong>
+            on eligible helper jobs.
+          </li>
+        </ul>
+        <p class="tiny-note">
+          Ambassador rewards and eligibility may be adjusted as the platform grows, but Day-1 OG helpers will always
+          keep their guaranteed <span>15% lifetime base rate</span>.
+        </p>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-wrap">
+        <a
+          id="ctaButton"
+          class="cta-button"
+          href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="lock">🔒</span>
+          CLAIM MY DAY-1 OG PASS — <span class="price">$1.99</span>
+        </a>
+        <p class="cta-subtext">
+          One-time payment • Limited early offer • <span>This exact deal will never return once it closes.</span>
+        </p>
+        <p id="expiredText" class="expired-text" style="display:none;">
+          This offer has ended. The Day-1 OG Lifetime Pass is no longer available.
+        </p>
+      </div>
+
+      <!-- FOOTER -->
+      <footer>
+        © 2025 GUBER APP LLC — All Rights Reserved<br />
+        Contact: <a href="mailto:support@guberapp.com">support@guberapp.com</a>
+      </footer>
     </div>
   </div>
+
+  <script>
+    (function () {
+      // Countdown to Dec 31, 2025 11:59:59 PM CST (UTC-6)
+      const countDownDate = new Date("2025-12-31T23:59:59-06:00").getTime();
+
+      const daysEl = document.getElementById("cd-days");
+      const hoursEl = document.getElementById("cd-hours");
+      const minsEl = document.getElementById("cd-mins");
+      const secsEl = document.getElementById("cd-secs");
+      const ctaButton = document.getElementById("ctaButton");
+      const expiredText = document.getElementById("expiredText");
+
+      function updateCountdown() {
+        const now = new Date().getTime();
+        const distance = countDownDate - now;
+
+        if (distance <= 0) {
+          daysEl.textContent = "00d";
+          hoursEl.textContent = "00h";
+          minsEl.textContent = "00m";
+          secsEl.textContent = "00s";
+
+          if (ctaButton) {
+            ctaButton.classList.add("disabled");
+            ctaButton.setAttribute("href", "javascript:void(0)");
+          }
+          if (expiredText) {
+            expiredText.style.display = "block";
+          }
+          clearInterval(timer);
+          return;
+        }
+
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor(
+          (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+        );
+        const minutes = Math.floor(
+          (distance % (1000 * 60 * 60)) / (1000 * 60)
+        );
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        daysEl.textContent = String(days).padStart(2, "0") + "d";
+        hoursEl.textContent = String(hours).padStart(2, "0") + "h";
+        minsEl.textContent = String(minutes).padStart(2, "0") + "m";
+        secsEl.textContent = String(seconds).padStart(2, "0") + "s";
+      }
+
+      const timer = setInterval(updateCountdown, 1000);
+      updateCountdown();
+    })();
+  </script>
 </body>
 </html>
