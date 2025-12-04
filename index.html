@@ -16,6 +16,7 @@
       --text-main: #f5f5f5;
       --text-soft: #c1c1c1;
       --border: #00ff6a;
+      --gold: #ffd700;
     }
 
     * {
@@ -153,7 +154,7 @@
     .og-title {
       font-size: 14px;
       font-weight: 700;
-      color: #ffd700;
+      color: var(--gold);
       margin-bottom: 6px;
     }
 
@@ -168,19 +169,16 @@
       margin-bottom: 3px;
     }
 
-    .og-img-button {
-      display: inline-block;
+    .og-note {
       margin-top: 4px;
-      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-soft);
     }
 
-    .og-img-button img {
-      max-width: 190px;
-      height: auto;
-      display: block;
-      border-radius: 999px;
-      box-shadow: 0 0 18px rgba(255,215,0,0.45);
-      border: 1px solid rgba(255,215,0,0.8);
+    .og-note-emoji {
+      margin-top: 2px;
+      font-size: 10px;
+      color: #bbbbbb;
     }
 
     .fine-print {
@@ -196,11 +194,9 @@
       padding: 10px;
       border: 1px solid rgba(0,255,106,0.3);
       box-shadow: 0 0 20px rgba(0,255,106,0.2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
       position: relative;
       overflow: hidden;
+      min-height: 260px;
     }
 
     .hero-right video {
@@ -223,6 +219,74 @@
       z-index: 2;
       opacity: 0;
       transition: opacity 0.2s ease-out;
+    }
+
+    /* Gold OG logo inside animation frame */
+    .og-logo-overlay {
+      position: absolute;
+      right: 18px;   /* keep near where Guberman shoots */
+      bottom: 24px;
+      z-index: 3;
+      opacity: 0;
+      transform: scale(0.9);
+      transition: opacity 0.35s ease-out, transform 0.35s ease-out, box-shadow 0.35s ease-out;
+      cursor: pointer;
+    }
+
+    .og-logo-overlay img {
+      max-width: 150px;
+      height: auto;
+      display: block;
+      border-radius: 999px;
+      border: 1px solid rgba(255,215,0,0.85);
+      box-shadow: 0 0 8px rgba(255,215,0,0.6);
+    }
+
+    .og-logo-overlay.visible {
+      opacity: 1;
+      transform: scale(1);
+      box-shadow: 0 0 20px rgba(255,215,0,0.85);
+    }
+
+    /* Energy beam + burst */
+    .energy-beam {
+      position: absolute;
+      right: 40px; /* rough align with muzzle */
+      bottom: 70px;
+      width: 0;
+      height: 4px;
+      background: linear-gradient(to left, var(--gold), var(--accent));
+      box-shadow: 0 0 10px rgba(0,255,106,0.8);
+      z-index: 2;
+      opacity: 0;
+      transform-origin: right center;
+      border-radius: 999px;
+      transition: opacity 0.12s ease-out;
+    }
+
+    .energy-burst {
+      position: absolute;
+      right: 24px;
+      bottom: 65px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,215,0,0.9) 0%, rgba(255,215,0,0.1) 55%, transparent 70%);
+      box-shadow: 0 0 18px rgba(255,215,0,0.9);
+      z-index: 2;
+      opacity: 0;
+      transform: scale(0.7);
+      transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+    }
+
+    .energy-active .energy-beam {
+      opacity: 1;
+      width: 70px;
+    }
+
+    .energy-active .energy-burst {
+      opacity: 1;
+      transform: scale(1.05);
     }
 
     .section {
@@ -370,7 +434,7 @@
 
       .hero-right {
         order: -1;
-        min-height: 220px;
+        min-height: 230px;
       }
 
       .twoway-grid,
@@ -405,7 +469,7 @@
     <img src="Welcomebanner.webp" alt="Welcome to GUBER">
   </div>
 
-  <!-- HERO: OG + ANIMATION -->
+  <!-- HERO: TEXT + ANIMATION FRAME -->
   <section class="hero">
     <div class="hero-left">
       <div class="hero-pill">
@@ -435,10 +499,14 @@
           <li>Name stored on the OG Founders List forever</li>
         </ul>
 
-        <!-- Gold Day-1 OG image as button -->
-        <a href="day1og.html" id="ogButton" class="og-img-button">
-          <img src="Gubergoldday1.png" alt="Day-1 OG">
-        </a>
+        <div class="og-note">
+          To unlock Day-1 OG access, click the gold GUBER logo when Guberman hits it
+          with his laser. Please be patient… Guberman is preparing your VIP access.
+          He’ll escort you shortly.
+        </div>
+        <div class="og-note-emoji">
+          Access unlocks after impact. The laser only stings a little 😅.
+        </div>
 
         <div class="fine-print">
           *“Work today, get paid today” depends on the poster releasing funds
@@ -447,24 +515,34 @@
       </div>
     </div>
 
-    <div class="hero-right">
+    <div class="hero-right" id="heroRight">
       <!-- Looping Guberman animation -->
       <video
+        id="loopVideo"
         class="laser-loop"
         src="GubermanOG.webm"
         autoplay
         muted
-        loop
         playsinline
       ></video>
 
       <!-- Click-triggered laser animation -->
       <video
+        id="clickVideo"
         class="laser-click"
         src="Guberman shooting laser.webm"
         muted
         playsinline
       ></video>
+
+      <!-- Energy trail + burst -->
+      <div class="energy-beam" id="energyBeam"></div>
+      <div class="energy-burst" id="energyBurst"></div>
+
+      <!-- Gold OG logo overlay inside animation frame -->
+      <a href="day1og.html" id="ogLogoOverlay" class="og-logo-overlay">
+        <img src="Gubergoldday1.png" alt="Day-1 OG">
+      </a>
     </div>
   </section>
 
@@ -673,34 +751,101 @@
 </div>
 
 <script>
-  // 2-stage Guberman laser logic
-  const ogButton = document.getElementById('ogButton');
-  const loopVideo = document.querySelector('.laser-loop');
-  const clickVideo = document.querySelector('.laser-click');
+  const loopVideo = document.getElementById('loopVideo');
+  const clickVideo = document.getElementById('clickVideo');
+  const ogLogoOverlay = document.getElementById('ogLogoOverlay');
+  const heroRight = document.getElementById('heroRight');
+  const energyBeam = document.getElementById('energyBeam');
+  const energyBurst = document.getElementById('energyBurst');
 
-  if (ogButton && clickVideo) {
-    ogButton.addEventListener('click', function (e) {
-      // Play laser animation before going to Day-1 page
+  let cycleTimeout = null;
+  let logoVisible = false;
+  let inClickSequence = false;
+
+  function triggerEnergyAndLogo() {
+    // energy burst on
+    heroRight.classList.add('energy-active');
+    ogLogoOverlay.classList.add('visible');
+    logoVisible = true;
+
+    // turn off burst after short moment
+    setTimeout(() => {
+      heroRight.classList.remove('energy-active');
+    }, 220);
+
+    // keep logo visible for about 8 seconds, then fade out before next cycle
+    setTimeout(() => {
+      if (!inClickSequence) {
+        ogLogoOverlay.classList.remove('visible');
+        logoVisible = false;
+      }
+    }, 8000);
+  }
+
+  function startLaserCycle() {
+    if (!loopVideo) return;
+
+    // restart loop clip from beginning
+    try {
+      loopVideo.currentTime = 0;
+    } catch (e) {}
+    loopVideo.play();
+
+    // after ~1.3s (rough timing of laser impact) -> show energy + logo
+    setTimeout(() => {
+      if (!inClickSequence) {
+        triggerEnergyAndLogo();
+      }
+    }, 1300);
+
+    // schedule next cycle in ~10 seconds total
+    cycleTimeout = setTimeout(startLaserCycle, 10000);
+  }
+
+  if (loopVideo) {
+    // start first cycle once metadata is ready (safer for currentTime)
+    loopVideo.addEventListener('loadedmetadata', () => {
+      startLaserCycle();
+    });
+
+    // fallback if metadata doesn't fire for some reason
+    setTimeout(() => {
+      if (!cycleTimeout) {
+        startLaserCycle();
+      }
+    }, 1000);
+  }
+
+  // Click handler for OG logo
+  if (ogLogoOverlay && clickVideo) {
+    ogLogoOverlay.addEventListener('click', function (e) {
       e.preventDefault();
-      try {
-        if (loopVideo) {
-          loopVideo.style.opacity = '0';
-          loopVideo.pause();
-        }
-        clickVideo.currentTime = 0;
-      } catch (err) {}
+      if (inClickSequence) return; // prevent double-clicks
+      inClickSequence = true;
+
+      // stop cycle
+      if (cycleTimeout) {
+        clearTimeout(cycleTimeout);
+        cycleTimeout = null;
+      }
+
+      // hide loop video, show click video
+      loopVideo.style.opacity = '0';
+      try { loopVideo.pause(); } catch (e2) {}
 
       clickVideo.style.opacity = '1';
-      const targetUrl = ogButton.getAttribute('href') || '#';
-
+      try { clickVideo.currentTime = 0; } catch (e3) {}
       clickVideo.play();
 
+      // brief energy flash again on click
+      heroRight.classList.add('energy-active');
+      setTimeout(() => {
+        heroRight.classList.remove('energy-active');
+      }, 220);
+
+      // when click animation ends, redirect to Day-1 page
+      const targetUrl = ogLogoOverlay.getAttribute('href') || '#';
       clickVideo.onended = function () {
-        clickVideo.style.opacity = '0';
-        if (loopVideo) {
-          loopVideo.style.opacity = '1';
-          loopVideo.play();
-        }
         if (targetUrl && targetUrl !== '#') {
           window.location.href = targetUrl;
         }
