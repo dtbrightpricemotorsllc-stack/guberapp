@@ -3,217 +3,653 @@
 <head>
   <meta charset="UTF-8">
   <title>GUBER – Work or Hire Anywhere</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style>
     :root {
+      --bg: #000000;
+      --card: #111111;
+      --card-soft: #151515;
       --accent: #00ff6a;
-      --accent-soft: rgba(0,255,106,0.25);
-      --text: #f5f5f5;
-      --soft: #c1c1c1;
+      --accent-soft: rgba(0, 255, 106, 0.2);
+      --accent-alt: #7f5dff;
+      --text-main: #f5f5f5;
+      --text-soft: #c1c1c1;
+      --border: #00ff6a;
       --gold: #ffd700;
-      --purple: #9c5dff;
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
       margin: 0;
-      font-family: system-ui, Arial;
-      background: radial-gradient(circle at top, #181818 0, #000 55%);
-      color: var(--text);
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #151515 0, #000 55%, #000 100%);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
     }
 
-    a { text-decoration: none; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
 
     .page {
       max-width: 1100px;
       margin: 0 auto;
-      padding: 20px 16px 40px;
+      padding: 20px 14px 40px;
     }
 
     /* HEADER */
+
     .header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 12px;
       margin-bottom: 16px;
     }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
     .logo-wrap img {
       height: 50px;
+      width: auto;
       filter: drop-shadow(0 0 16px rgba(0,255,106,0.5));
     }
+
     .brand-name {
-      font-size: 12px;
       font-weight: 700;
-      color: var(--soft);
-      letter-spacing: .15em;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--text-soft);
     }
+
     .top-tagline {
       font-size: 11px;
-      color: var(--accent);
       text-transform: uppercase;
-      letter-spacing: .15em;
+      letter-spacing: 0.16em;
+      color: var(--accent);
     }
 
-    /* WELCOME BANNER */
-    .welcome-banner img {
-      width: 100%;
+    /* BANNER */
+
+    .welcome-banner {
       border-radius: 12px;
-      border: 1px solid var(--accent-soft);
-      box-shadow: 0 0 20px rgba(0,255,106,0.15);
-      margin-bottom: 20px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      border: 1px solid rgba(0,255,106,0.35);
+      box-shadow: 0 0 18px rgba(0,255,106,0.25);
     }
 
-    /* HERO SECTION */
-    .hero {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 20px;
-      margin-bottom: 40px;
+    .welcome-banner img {
+      display: block;
+      width: 100%;
+      height: auto;
     }
 
-    .hero-left h1 {
-      margin-top: 0;
-      font-size: 28px;
-      line-height: 1.3;
-    }
+    /* DAY-1 OG TOP STRIP */
 
-    .hero-left p {
-      font-size: 14px;
-      color: var(--soft);
-      line-height: 1.52;
-    }
-
-    /* OG INSTRUCTIONS MOVED ABOVE ANIMATION */
-    .og-instructions {
-      background: rgba(255,215,0,0.08);
-      border: 1px solid rgba(255,215,0,0.4);
-      padding: 12px 14px;
+    .og-strip {
+      margin: 0 0 16px;
       border-radius: 10px;
-      margin-bottom: 12px;
-      color: var(--gold);
+      padding: 10px 14px;
+      background: linear-gradient(90deg, #3a2a00, #8a6b1a);
+      border: 1px solid rgba(255,215,0,0.6);
+      box-shadow: 0 0 18px rgba(255,215,0,0.35);
       font-size: 13px;
+      color: #fff4c2;
       line-height: 1.45;
     }
 
-    /* HERO RIGHT ANIMATION BOX */
+    .og-strip b {
+      color: #fff;
+    }
+
+    /* HERO */
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 22px;
+      margin-bottom: 26px;
+    }
+
+    .hero-left h1 {
+      margin: 0 0 10px;
+      font-size: 26px;
+      line-height: 1.25;
+      color: var(--text-main);
+      text-shadow: 0 0 12px rgba(0,0,0,0.8);
+    }
+
+    .hero-left p {
+      margin: 0 0 10px;
+      font-size: 14px;
+      color: var(--text-soft);
+      line-height: 1.5;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--accent-soft);
+      background: rgba(0,0,0,0.7);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-soft);
+      margin-bottom: 8px;
+    }
+
+    .hero-pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    /* OG CARD */
+
+    .og-card {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: rgba(10,10,10,0.9);
+      border: 1px solid rgba(255,215,0,0.5);
+      box-shadow: 0 0 20px rgba(255,215,0,0.18);
+      text-align: left;
+    }
+
+    .og-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+
+    .og-list {
+      margin: 0 0 8px;
+      padding-left: 18px;
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .og-list li {
+      margin-bottom: 3px;
+    }
+
+    .og-note {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .og-note-emoji {
+      margin-top: 2px;
+      font-size: 10px;
+      color: #bbbbbb;
+    }
+
+    .fine-print {
+      margin-top: 8px;
+      font-size: 10px;
+      color: #888;
+      max-width: 360px;
+    }
+
+    /* HERO RIGHT – ANIMATION BOX */
+
     .hero-right {
-      position: relative;
-      background: #000;
+      background: radial-gradient(circle at top, rgba(0,255,106,0.15), rgba(0,0,0,0.9));
       border-radius: 14px;
-      border: 1px solid rgba(0,255,106,0.25);
-      box-shadow: 0 0 18px rgba(0,255,106,0.25);
+      padding: 10px;
+      border: 1px solid rgba(0,255,106,0.3);
+      box-shadow: 0 0 20px rgba(0,255,106,0.2);
+      position: relative;
       overflow: hidden;
       min-height: 260px;
     }
 
     .hero-right video {
       position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
+      inset: 8px;
+      width: calc(100% - 16px);
+      height: calc(100% - 16px);
+      border-radius: 10px;
       object-fit: contain;
       background: #000;
+      z-index: 1;
     }
 
-    /* HIDE LOOP VIDEO WHEN WE WANT */
-    #loopVideo.hidden {
-      opacity: 0 !important;
+    .laser-loop {
+      opacity: 1;
+      transition: opacity 0.2s ease-out;
     }
 
-    /* REAL GOLD OG LOGO OVERLAY */
-    .og-logo-overlay {
+    .laser-click {
+      opacity: 0;
+      transition: opacity 0.2s ease-out;
+      z-index: 3;
+    }
+
+    /* Mask to hide the video logo area under the real OG logo */
+    .og-logo-mask {
       position: absolute;
       right: 20px;
-      bottom: 22px;
-      z-index: 5;
+      bottom: 40px;
+      width: 190px;
+      height: 190px;
+      background: #000;      /* same as video bg so it just looks clean */
+      border-radius: 50%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* Real gold OG logo overlay (clickable) */
+
+    .og-logo-overlay {
+      position: absolute;
+      right: 26px;
+      bottom: 46px;
+      z-index: 4;
+      opacity: 1;
+      transform: scale(1);
+      transition: box-shadow 0.25s ease-out, transform 0.25s ease-out;
       cursor: pointer;
-      text-align: center;
     }
 
     .og-logo-overlay img {
-      width: 165px;
-      filter: drop-shadow(0 0 14px rgba(255,215,0,0.9));
+      max-width: 180px;      /* bigger logo */
+      height: auto;
+      display: block;
+      box-shadow: 0 0 16px rgba(255,215,0,0.95);
+    }
+
+    .og-logo-overlay.spark-pulse {
+      transform: scale(1.04);
+      box-shadow: 0 0 28px rgba(255,215,0,1);
+    }
+
+    /* Energy / spark FX */
+
+    .energy-beam {
+      position: absolute;
+      right: 76px;
+      bottom: 98px;
+      width: 0;
+      height: 4px;
+      background: linear-gradient(to left, var(--gold), var(--accent));
+      box-shadow: 0 0 10px rgba(0,255,106,0.8);
+      z-index: 3;
+      opacity: 0;
+      transform-origin: right center;
       border-radius: 999px;
+      transition: opacity 0.12s ease-out, width 0.12s ease-out;
     }
 
-    .click-hint {
-      font-size: 12px;
+    .energy-burst {
+      position: absolute;
+      right: 50px;
+      bottom: 95px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,215,0,0.95) 0%, rgba(255,215,0,0.1) 55%, transparent 70%);
+      box-shadow: 0 0 20px rgba(255,215,0,0.95);
+      z-index: 3;
+      opacity: 0;
+      transform: scale(0.7);
+      transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+    }
+
+    .hero-right.spark-active .energy-beam {
+      opacity: 1;
+      width: 90px;
+    }
+
+    .hero-right.spark-active .energy-burst {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+
+    /* CLICK HERE LABEL */
+
+    .og-click-label {
+      position: absolute;
+      right: 26px;
+      bottom: 18px;
+      z-index: 5;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
       color: var(--gold);
-      margin-top: 4px;
-      text-shadow: 0 0 8px rgba(255,215,0,0.8);
+      text-shadow: 0 0 6px rgba(0,0,0,0.9);
     }
 
-    /* MOBILE */
+    /* CONTENT SECTIONS */
+
+    .section {
+      margin-bottom: 26px;
+    }
+
+    .section h2 {
+      font-size: 20px;
+      margin: 0 0 6px;
+      color: var(--accent);
+    }
+
+    .section p {
+      margin: 0 0 10px;
+      font-size: 14px;
+      color: var(--text-soft);
+      line-height: 1.6;
+    }
+
+    .twoway-grid {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 14px;
+      box-shadow: 0 0 14px rgba(0,0,0,0.75);
+    }
+
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      color: var(--text-main);
+    }
+
+    .card ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .card ul li {
+      margin-bottom: 4px;
+    }
+
+    /* PHONE PREVIEWS */
+
+    .phones {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .phones img {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 0 20px rgba(0,0,0,0.9);
+      background: #000;
+      object-fit: cover;
+    }
+
+    /* QUOTES */
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .quote {
+      background: var(--card-soft);
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .quote span {
+      display: block;
+      margin-top: 6px;
+      font-size: 11px;
+      color: #999;
+    }
+
+    .small-print {
+      font-size: 12px;
+      color: var(--text-soft);
+      margin-top: 6px;
+    }
+
+    /* FOOTER */
+
+    .footer {
+      margin-top: 26px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      font-size: 11px;
+      color: #888;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .footer-links a {
+      color: var(--accent);  /* neon green */
+      text-decoration: none;
+      font-size: 11px;
+    }
+
+    .footer-links a:hover {
+      color: #ffffff;
+      text-decoration: underline;
+    }
+
+    .my-story-link {
+      font-size: 11px;
+    }
+
+    .my-story-link a {
+      color: var(--accent-alt);  /* purple */
+    }
+
+    .my-story-link a:hover {
+      color: #ffffff;
+    }
+
     @media (max-width: 780px) {
-      .hero { grid-template-columns: 1fr; }
-      .hero-right { min-height: 220px; }
-      .og-logo-overlay img { width: 145px; }
-    }
+      .hero {
+        grid-template-columns: minmax(0,1fr);
+      }
 
+      .hero-right {
+        order: -1;
+        min-height: 230px;
+      }
+
+      .twoway-grid,
+      .phones,
+      .quote-grid {
+        grid-template-columns: minmax(0,1fr);
+      }
+
+      .page {
+        padding: 16px 10px 30px;
+      }
+
+      .og-strip {
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
-
 <body>
+
 <div class="page">
 
   <!-- HEADER -->
-  <div class="header">
+  <header class="header">
     <div class="logo-wrap">
       <img src="Guberapplogo.png" alt="GUBER Logo">
+      <div>
+        <div class="brand-name">GUBER APP</div>
+        <div class="top-tagline">WORK • HIRE • HELP • ANYWHERE</div>
+      </div>
     </div>
-    <div>
-      <div class="brand-name">GUBER APP</div>
-      <div class="top-tagline">Work • Hire • Help • Anywhere</div>
-    </div>
-  </div>
+  </header>
 
   <!-- WELCOME BANNER -->
   <div class="welcome-banner">
-    <img src="Welcomebanner.webp" alt="Welcome Banner">
+    <img src="Welcomebanner.webp" alt="Welcome to GUBER">
   </div>
 
-  <!-- WORK/HIRE EXPLANATION MOVED UP -->
-  <div class="og-instructions">
-    Guberman will guide you to Day-1 OG access.  
-    When the gold GUBER logo appears, <b>tap it</b> to unlock your permanent Day-1 badge.  
-    If he hasn’t fired yet, be patient — he’ll hit the target soon.
+  <!-- DAY-1 OG INFO STRIP -->
+  <div class="og-strip">
+    Guberman will guide you to <b>Day-1 OG access</b>. When the gold GUBER logo
+    appears, tap it to unlock your permanent Day-1 badge. If he hasn’t fired
+    yet, be patient — he’ll hit the target soon.
   </div>
 
-  <!-- HERO SECTION -->
-  <div class="hero">
+  <!-- HERO: TEXT + ANIMATION FRAME -->
+  <section class="hero">
     <div class="hero-left">
+      <div class="hero-pill">
+        <span class="hero-pill-dot"></span>
+        <span>Coming Soon</span>
+      </div>
+
       <h1>Work or Hire. Anytime. Anywhere.</h1>
 
       <p>
-        GUBER lets you work when you want, hire when you need help, and move life forward without
-        waiting on callbacks or approvals. Anyone can work. Anyone can hire. Anyone can win.
+        GUBER lets you work when you want, hire when you need help,
+        and move life forward without waiting on callbacks or approval.
       </p>
 
       <p>
-        Whether you need money today or you need help today, GUBER puts control back in your hands.
+        Anyone can work. Anyone can hire. Anyone can win.
+        Whether you need money today or you need help today,
+        GUBER puts control back in your hands.
       </p>
+
+      <div class="og-card">
+        <div class="og-title">Day-1 OG Lifetime Access</div>
+        <ul class="og-list">
+          <li>Permanent Day-1 OG badge inside the app</li>
+          <li>Priority placement in select job categories</li>
+          <li>Early access to new GUBER features</li>
+          <li>Locked-in lowest fee structure for OGs</li>
+          <li>Name stored on the OG Founders List forever</li>
+        </ul>
+
+        <div class="og-note">
+          To unlock Day-1 OG access, wait for Guberman to hit the gold GUBER logo
+          with his laser, then tap the logo to enter the Day-1 OG page.
+          Please be patient — Guberman is preparing your VIP escort.
+        </div>
+        <div class="og-note-emoji">
+          Access unlocks after impact. The laser only stings a little 😅.
+        </div>
+
+        <div class="fine-print">
+          *“Work today, get paid today” depends on the poster releasing funds
+          when the job is completed. Bank and Stripe processing times may vary.
+        </div>
+      </div>
     </div>
 
-    <!-- ANIMATION BOX -->
-    <div class="hero-right">
+    <div class="hero-right" id="heroRight">
+      <!-- Looping Guberman animation -->
+      <video
+        id="loopVideo"
+        class="laser-loop"
+        src="GubermanOG.webm"
+        muted
+        playsinline
+      ></video>
 
-      <!-- LOOPING ANIMATION -->
-      <video id="loopVideo" src="GubermanOG.webm" muted playsinline></video>
+      <!-- Click-triggered laser animation -->
+      <video
+        id="clickVideo"
+        class="laser-click"
+        src="Guberman shooting laser.webm"
+        muted
+        playsinline
+      ></video>
 
-      <!-- CLICK ANIMATION -->
-      <video id="clickVideo" src="Guberman shooting laser.webm" muted playsinline style="opacity:0;"></video>
+      <!-- Mask to cover the video logo area -->
+      <div class="og-logo-mask" id="ogLogoMask"></div>
 
-      <!-- REAL GOLD LOGO OVERLAY -->
-      <a class="og-logo-overlay" id="ogLogo" href="day1og.html">
-        <img src="Gubergoldday1.png" alt="Day-1 OG Logo">
-        <div class="click-hint">Click Here →</div>
+      <!-- Energy beam + spark burst -->
+      <div class="energy-beam" id="energyBeam"></div>
+      <div class="energy-burst" id="energyBurst"></div>
+
+      <!-- Real Gold Day-1 OG logo overlay (clickable) -->
+      <a href="day1og.html" id="ogLogoOverlay" class="og-logo-overlay">
+        <img src="Gubergoldday1.png" alt="Day-1 OG">
       </a>
 
+      <!-- Solid gold click label -->
+      <div class="og-click-label">
+        CLICK HERE TO UNLOCK DAY-1 OG
+      </div>
     </div>
-  </div>
+  </section>
+
+  <!-- ECOSYSTEM SECTION -->
+  <section class="section">
+    <h2>Not Just an App — A Whole Ecosystem</h2>
+    <p>
+      Other platforms do one thing. GUBER does more. It’s a full system designed
+      for people who want to work, people who need help, small shops that need
+      extra hands, larger companies managing busy seasons, and buyers and
+      sellers who want trust built in.
+    </p>
+    <p>
+      From on-demand hiring, to same-day work, to verified inspections, to a
+      future marketplace built on proof — GUBER is building a new way to work,
+      help, hire, and thrive in the real world.
+    </p>
+    <p>
+      This isn’t a gig app. It isn’t a job board. It isn’t a regular
+      marketplace. GUBER is a complete ecosystem, created from real struggle,
+      real needs, and real life.
+    </p>
+  </section>
+
   <!-- WHAT IS GUBER / TWO-WAY STREET -->
   <section class="section">
-    <h2 style="color: var(--accent);">What Is GUBER?</h2>
+    <h2>What Is GUBER?</h2>
     <p>
       GUBER is a two-way street. You can work. You can hire. You can help or
       get help — all in one place.
@@ -223,159 +659,259 @@
       need help fast without the usual delay.
     </p>
 
-    <div class="twoway-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
-      <div class="card" style="background:#111; padding:14px; border-radius:10px;">
-        <h3 style="margin:0 0 8px; color:#fff;">If You Want to Work</h3>
-        <ul style="color:#c1c1c1; font-size:13px; padding-left:18px;">
-          <li>Find work anywhere you go</li>
-          <li>Make money the same day</li>
-          <li>Short jobs, big jobs, last-minute jobs</li>
-          <li>Build reputation, reviews, and repeat clients</li>
+    <div class="twoway-grid">
+      <div class="card">
+        <h3>If You Want to Work</h3>
+        <ul>
+          <li>Find work anywhere you are — even when you travel</li>
+          <li>Turn your skills or hustle into income the same day</li>
+          <li>Take short jobs, big jobs, or last-minute calls</li>
+          <li>Build a reputation, reviews, and repeat clients</li>
+          <li>Maybe get hired full-time — or stay your own boss</li>
         </ul>
       </div>
-
-      <div class="card" style="background:#111; padding:14px; border-radius:10px;">
-        <h3 style="margin:0 0 8px; color:#fff;">If You Want to Hire</h3>
-        <ul style="color:#c1c1c1; font-size:13px; padding-left:18px;">
-          <li>Post what you need — get help fast</li>
-          <li>Hire skilled or simple-task Helpers</li>
-          <li>Check ratings & profiles</li>
-          <li>Only pay when the job is done</li>
+      <div class="card">
+        <h3>If You Want to Hire</h3>
+        <ul>
+          <li>Post what you need and get help fast</li>
+          <li>Hire helpers for skilled jobs or simple tasks</li>
+          <li>See ratings and profiles before you choose</li>
+          <li>Only pay when the job is completed</li>
+          <li>Use it at home, at work, or for your business</li>
         </ul>
       </div>
     </div>
   </section>
 
-  <!-- VERIFIED INSPECTIONS -->
+  <!-- VERIFIED INSPECTIONS + FUTURE VERIFIED MARKETPLACE -->
   <section class="section">
-    <h2 style="color: var(--accent);">Verified Inspections & Safe Buying Tools</h2>
+    <h2>Verified Inspections & Safe Buying Tools</h2>
     <p>
       Buying something you can’t see in person? Send a GUBER Helper to inspect
       it with photos, video, notes, and checklists. Vehicles, equipment,
-      machines — make smarter decisions before you pay.
+      and machines — make smarter decisions before you pay or travel.
     </p>
     <p>
-      A verified marketplace is coming soon where items will include authentic
-      inspection history from trusted Helpers.
+      Coming soon, GUBER will power a verified marketplace where items are
+      listed with real inspection history attached — giving buyers more
+      confidence and giving honest sellers a competitive edge.
     </p>
   </section>
 
-  <!-- PHONE IMAGES -->
+  <!-- JOB TYPES + PHONES -->
   <section class="section">
-    <h2 style="color: var(--accent);">One App. Unlimited Types of Work.</h2>
+    <h2>One App. Unlimited Types of Work.</h2>
     <p>
-      Use GUBER for almost anything — mechanical help, diagnostics, yard work,
-      cleaning, errands, inspections, towing, and more. If it needs doing,
-      someone nearby can take the job.
+      Use GUBER for almost anything: mechanical help, diagnostics, moving, yard
+      work, cleaning, pressure washing, small repairs, errands, inspections,
+      towing, and more. If it needs doing, someone nearby can take the job.
     </p>
 
-    <div class="phones" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;">
-      <img src="Cell1.png" alt="Preview 1" style="width:100%; border-radius:12px;">
-      <img src="Cell2.png" alt="Preview 2" style="width:100%; border-radius:12px;">
+    <div class="phones">
+      <div>
+        <img src="Cell1.png" alt="GUBER app preview 1">
+      </div>
+      <div>
+        <img src="Cell2.png" alt="GUBER app preview 2">
+      </div>
     </div>
+
+    <p class="small-print">
+      (Preview screens shown are examples. Final design and features may
+      change as we test and improve the app.)
+    </p>
   </section>
 
-  <!-- BUSINESSES -->
+  <!-- FLEXIBILITY / FAMILY / PROTECTION SYSTEMS -->
   <section class="section">
-    <h2 style="color: var(--accent);">For Individuals, Small Businesses & Companies</h2>
+    <h2>Built for Real Life, Not Just Resumes</h2>
+    <p>
+      Life doesn’t wait for perfect timing. Bills don’t wait. Kids don’t wait.
+      Emergencies don’t wait. GUBER is built for people who need a way to move
+      right now — without losing themselves in the process.
+    </p>
+    <p>
+      You can work on a schedule that fits your life, not the other way
+      around. Earn extra money, create breathing room, and still make time for
+      the people you care about.
+    </p>
+    <p>
+      As GUBER grows, we’re building systems to help keep both workers and
+      posters confident and protected.
+    </p>
+  </section>
+
+  <!-- FOR INDIVIDUALS, SMALL BUSINESS, BIG COMPANIES -->
+  <section class="section">
+    <h2>For Individuals, Small Businesses & Companies</h2>
     <p>
       GUBER works for everyday people, hustlers, shops, businesses, and
       companies that need extra help on-demand.
+    </p>
+    <p>
+      Whether you’re a homeowner, a small shop, or a larger company, GUBER
+      gives you instant access to a flexible, on-demand workforce:
+    </p>
+
+    <ul style="font-size:13px; color:var(--text-soft); padding-left:18px;">
+      <li>Busy shops that need an extra hand today</li>
+      <li>Construction and trades needing day help or short-term help</li>
+      <li>Retail, warehouse, delivery, and logistics needing surge support</li>
+      <li>Property managers and landlords needing quick turn-around help</li>
+      <li>Event organizers and service companies needing reliable extra staff</li>
+    </ul>
+
+    <p>
+      GUBER welcomes individuals, small businesses, and major companies —
+      anyone who needs real help, real workers, and real results without
+      the wait.
     </p>
   </section>
 
   <!-- SOCIAL PROOF -->
   <section class="section">
-    <h2 style="color: var(--accent);">Real People Already See the Vision</h2>
+    <h2>Real People Already See the Vision</h2>
+    <p>
+      These are real reactions from people who’ve heard about GUBER:
+    </p>
 
-    <div class="quote-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
-      <div class="quote" style="background:#151515; padding:12px; border-radius:10px; color:#bbb;">
-        “That would be amazing — I'd already be home instead of pulling a double.”
-        <span style="display:block; margin-top:6px; color:#777;">— Store Manager</span>
+    <div class="quote-grid">
+      <div class="quote">
+        “If you could get O’Reilly’s on board with something like this,
+        that would be amazing. I’d already be home by now instead of
+        pulling a double.”
+        <span>— Store Manager</span>
       </div>
-
-      <div class="quote" style="background:#151515; padding:12px; border-radius:10px; color:#bbb;">
+      <div class="quote">
         “That’s dope. That makes anybody an independent contractor.”
-        <span style="display:block; margin-top:6px; color:#777;">— Customer</span>
+        <span>— Customer</span>
       </div>
-
-      <div class="quote" style="background:#151515; padding:12px; border-radius:10px; color:#bbb;">
-        “You’re about to prove there’s money to be made.”
-        <span style="display:block; margin-top:6px; color:#777;">— Shop Customer</span>
+      <div class="quote">
+        “You’re about to prove there’s money out there to be made.”
+        <span>— Older gentleman in the shop</span>
       </div>
-
-      <div class="quote" style="background:#151515; padding:12px; border-radius:10px; color:#bbb;">
-        “Lazy people won’t like this — now they have no excuse.”
-        <span style="display:block; margin-top:6px; color:#777;">— Friend</span>
+      <div class="quote">
+        “Lazy people aren’t going to like this — now they have no excuse.”
+        <span>— Friend</span>
+      </div>
+      <div class="quote">
+        “I thought it was live already. I needed it before Christmas.”
+        <span>— Customer</span>
+      </div>
+      <div class="quote">
+        “You’re going to make it bad for us business owners… everybody
+        already wants to be their own boss, and now you’re about to give
+        them the power.”
+        <span>— Business owner</span>
       </div>
     </div>
   </section>
 
-  <!-- FOOTER -->
-  <footer class="footer" style="
-      margin-top: 40px;
-      padding-top: 16px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      display:flex;
-      justify-content:space-between;
-      flex-wrap:wrap;
-      gap:14px;
-      font-size:12px;
-      color:#aaa;
-    ">
-
-    <!-- MY STORY LINK (PURPLE) -->
-    <a href="my-story.html" style="color: var(--purple); font-weight:600;">My Story →</a>
-
-    <!-- ALL LINKS FIXED + NEON GREEN -->
-    <div style="display:flex; gap:12px; flex-wrap:wrap;">
-      <a href="about.html" style="color:var(--accent);">About</a>
-      <a href="safety.html" style="color:var(--accent);">Safety</a>
-      <a href="terms.html" style="color:var(--accent);">Terms</a>
-      <a href="privacy.html" style="color:var(--accent);">Privacy</a>
-      <a href="refund.html" style="color:var(--accent);">Refund</a>
-      <a href="data-deletion.html" style="color:var(--accent);">Data Deletion</a>
+  <!-- SUBTLE MY STORY LINK + FOOTER -->
+  <footer class="footer">
+    <div class="my-story-link">
+      <a href="my-story.html">My Story →</a>
     </div>
-
+    <div class="footer-links">
+      <a href="about.html">About GUBER</a>
+      <a href="safety-policy.html">Safety</a>
+      <a href="terms-of-service.html">Terms</a>
+      <a href="privacy-policy.html">Privacy</a>
+      <a href="refund-policy.html">Refund Policy</a>
+      <a href="data-deletion.html">Data Deletion</a>
+    </div>
   </footer>
+
 </div>
 
-<!-- JAVASCRIPT (Handles 6.58s logo disappear + click animation) -->
 <script>
-  const loop = document.getElementById("loopVideo");
-  const clickV = document.getElementById("clickVideo");
-  const logo = document.getElementById("ogLogo");
+  const loopVideo = document.getElementById('loopVideo');
+  const clickVideo = document.getElementById('clickVideo');
+  const ogLogoOverlay = document.getElementById('ogLogoOverlay');
+  const heroRight = document.getElementById('heroRight');
 
-  let hidingScheduled = false;
+  let sparkTimeout = null;
+  let inClickSequence = false;
 
-  function scheduleHide() {
-    if (hidingScheduled) return;
-    hidingScheduled = true;
+  function triggerSpark() {
+    heroRight.classList.add('spark-active');
+    ogLogoOverlay.classList.add('spark-pulse');
 
     setTimeout(() => {
-      loop.classList.add("hidden");
-    }, 6580); // FINAL — hides loop logo exactly before slide
+      heroRight.classList.remove('spark-active');
+      ogLogoOverlay.classList.remove('spark-pulse');
+    }, 220);
   }
 
-  loop.addEventListener("play", () => scheduleHide());
-  loop.addEventListener("loadedmetadata", () => {
-    loop.currentTime = 0;
-    loop.play();
-    scheduleHide();
-  });
+  function scheduleEffects() {
+    // 6.58 seconds = 6580 ms (matches your trimmed GubermanOG clip)
+    if (sparkTimeout) clearTimeout(sparkTimeout);
+    sparkTimeout = setTimeout(() => {
+      if (!inClickSequence) {
+        triggerSpark();
+      }
+    }, 6580);
+  }
 
-  // Click → swap animations
-  logo.addEventListener("click", (e) => {
-    e.preventDefault();
-    loop.style.opacity = 0;
-    clickV.style.opacity = 1;
-    clickV.currentTime = 0;
-    clickV.play();
+  function startCycle() {
+    if (!loopVideo) return;
+    try {
+      loopVideo.currentTime = 0;
+    } catch (e) {}
+    loopVideo.play();
+    scheduleEffects();
+  }
 
-    clickV.onended = () => {
-      window.location.href = "day1og.html";
-    };
-  });
+  if (loopVideo) {
+    loopVideo.addEventListener('loadedmetadata', () => {
+      startCycle();
+    });
+
+    loopVideo.addEventListener('ended', () => {
+      if (!inClickSequence) {
+        startCycle();
+      }
+    });
+
+    // Backup start if metadata is slow
+    setTimeout(() => {
+      if (loopVideo.paused && loopVideo.readyState >= 2) {
+        startCycle();
+      }
+    }, 1000);
+  }
+
+  // Click handler for OG logo
+  if (ogLogoOverlay && clickVideo && loopVideo) {
+    ogLogoOverlay.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (inClickSequence) return;
+      inClickSequence = true;
+
+      if (sparkTimeout) {
+        clearTimeout(sparkTimeout);
+        sparkTimeout = null;
+      }
+
+      // Swap videos: hide loop, show click
+      loopVideo.style.opacity = '0';
+      try { loopVideo.pause(); } catch (e2) {}
+
+      clickVideo.style.opacity = '1';
+      try { clickVideo.currentTime = 0; } catch (e3) {}
+      clickVideo.play();
+
+      // Spark at the start of the click animation too
+      triggerSpark();
+
+      const targetUrl = ogLogoOverlay.getAttribute('href') || '#';
+      clickVideo.onended = function () {
+        if (targetUrl && targetUrl !== '#') {
+          window.location.href = targetUrl;
+        }
+      };
+    });
+  }
 </script>
 
 </body>
