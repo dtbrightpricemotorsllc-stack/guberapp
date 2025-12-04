@@ -99,7 +99,7 @@
       display: grid;
       grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
       gap: 22px;
-      margin-bottom: 28px;
+      margin-bottom: 26px;
     }
 
     .hero-left h1 {
@@ -147,6 +147,7 @@
       background: rgba(10,10,10,0.9);
       border: 1px solid rgba(255,215,0,0.5);
       box-shadow: 0 0 20px rgba(255,215,0,0.18);
+      text-align: left;
     }
 
     .og-title {
@@ -157,7 +158,7 @@
     }
 
     .og-list {
-      margin: 0;
+      margin: 0 0 8px;
       padding-left: 18px;
       font-size: 12px;
       color: var(--text-soft);
@@ -167,28 +168,19 @@
       margin-bottom: 3px;
     }
 
-    .og-btn {
-      margin-top: 8px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 10px 18px;
-      border-radius: 999px;
-      border: 1px solid #ffd700;
-      background: radial-gradient(circle at top, #ffe066, #b38700);
-      color: #000;
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      box-shadow: 0 0 18px rgba(255,215,0,0.35);
+    .og-img-button {
+      display: inline-block;
+      margin-top: 4px;
       cursor: pointer;
     }
 
-    .og-btn:hover {
-      filter: brightness(1.05);
-      text-decoration: none;
+    .og-img-button img {
+      max-width: 190px;
+      height: auto;
+      display: block;
+      border-radius: 999px;
+      box-shadow: 0 0 18px rgba(255,215,0,0.45);
+      border: 1px solid rgba(255,215,0,0.8);
     }
 
     .fine-print {
@@ -212,23 +204,25 @@
     }
 
     .hero-right video {
-      max-width: 100%;
-      height: auto;
-      display: block;
+      position: absolute;
+      inset: 8px;
+      width: calc(100% - 16px);
+      height: calc(100% - 16px);
       border-radius: 10px;
+      object-fit: contain;
+      background: #000;
     }
 
     .laser-loop {
-      position: relative;
       z-index: 1;
+      opacity: 1;
+      transition: opacity 0.2s ease-out;
     }
 
     .laser-click {
-      position: absolute;
-      inset: 0;
+      z-index: 2;
       opacity: 0;
       transition: opacity 0.2s ease-out;
-      z-index: 2;
     }
 
     .section {
@@ -376,6 +370,7 @@
 
       .hero-right {
         order: -1;
+        min-height: 220px;
       }
 
       .twoway-grid,
@@ -421,14 +416,13 @@
       <h1>Work or Hire. Anytime. Anywhere.</h1>
 
       <p>
-        GUBER is a real-world work platform where anyone can find work,
-        hire help, and keep life moving — without waiting on HR, callbacks,
-        or approval.
+        GUBER is a real-world platform where anyone can find work, hire help,
+        and keep life moving — without waiting on HR, callbacks, or approval.
       </p>
 
       <p>
-        Whether you need money or you need help, GUBER puts control back in
-        your hands. You can be the worker, the one hiring, or both.
+        Whether you need money or you need help, GUBER lets you be the worker,
+        the one hiring, or both.
       </p>
 
       <div class="og-card">
@@ -441,8 +435,9 @@
           <li>Name stored on the OG Founders List forever</li>
         </ul>
 
-        <a href="day1og.html" class="og-btn" id="ogButton">
-          <span>Become a Day-1 OG</span>
+        <!-- Gold Day-1 OG image as button -->
+        <a href="day1og.html" id="ogButton" class="og-img-button">
+          <img src="Gubergoldday1.png" alt="Day-1 OG">
         </a>
 
         <div class="fine-print">
@@ -453,17 +448,17 @@
     </div>
 
     <div class="hero-right">
-      <!-- Looping animation -->
+      <!-- Looping Guberman animation -->
       <video
         class="laser-loop"
-        src="loopGubermanOG.webm"
+        src="GubermanOG.webm"
         autoplay
         muted
         loop
         playsinline
       ></video>
 
-      <!-- Click-triggered animation -->
+      <!-- Click-triggered laser animation -->
       <video
         class="laser-click"
         src="Guberman shooting laser.webm"
@@ -473,17 +468,37 @@
     </div>
   </section>
 
+  <!-- ECOSYSTEM SECTION -->
+  <section class="section">
+    <h2>Not Just an App — A Whole Ecosystem</h2>
+    <p>
+      Other platforms do one thing. GUBER does more. It’s a full system designed
+      for people who want to work, people who need help, small shops that need
+      extra hands, larger companies managing busy seasons, and buyers and
+      sellers who want trust built in.
+    </p>
+    <p>
+      From on-demand hiring, to same-day work, to verified inspections, to a
+      future marketplace built on proof — GUBER is building a new way to work,
+      help, hire, and thrive in the real world.
+    </p>
+    <p>
+      This isn’t a gig app. It isn’t a job board. It isn’t a regular
+      marketplace. GUBER is a complete ecosystem, created from real struggle,
+      real needs, and real life.
+    </p>
+  </section>
+
   <!-- WHAT IS GUBER / TWO-WAY STREET -->
   <section class="section">
     <h2>What Is GUBER?</h2>
     <p>
-      GUBER is a two-way street. You can work. You can hire. You can help
-      or get help — all in one place.
+      GUBER is a two-way street. You can work. You can hire. You can help or
+      get help — all in one place.
     </p>
     <p>
-      It’s not just another job app. It’s a real-time work and help network
-      for people who need money now, people who need help now, and companies
-      that need extra hands without the usual delay.
+      It’s built for everyday people, hustlers, shop owners, and companies that
+      need extra help without the usual delay.
     </p>
 
     <div class="twoway-grid">
@@ -492,7 +507,7 @@
         <ul>
           <li>Find work anywhere you are — even when you travel</li>
           <li>Turn your skills or hustle into income the same day</li>
-          <li>Take short jobs, big jobs, or last-minute jobs</li>
+          <li>Take short jobs, big jobs, or last-minute calls</li>
           <li>Build a reputation, reviews, and repeat clients</li>
           <li>Maybe get hired full-time — or stay your own boss</li>
         </ul>
@@ -510,22 +525,41 @@
     </div>
   </section>
 
+  <!-- VERIFIED INSPECTIONS + FUTURE VERIFIED MARKETPLACE -->
+  <section class="section">
+    <h2>Verified Inspections & Safe Buying Tools</h2>
+    <p>
+      GUBER is also a trust system. If you’re buying something you can’t see in
+      person — a car at auction, a vehicle out of state, or a marketplace item
+      across town — you can send a helper to inspect it for you.
+    </p>
+    <p>
+      Helpers can verify vehicles, equipment, and items with photos, video,
+      notes, and checklists, so you can make smarter decisions before you pay
+      or travel.
+    </p>
+    <p>
+      Coming soon, GUBER will power a verified marketplace where items are
+      listed with real inspection history attached — giving buyers more
+      confidence and giving honest sellers a competitive edge.
+    </p>
+  </section>
+
   <!-- JOB TYPES + PHONES -->
   <section class="section">
     <h2>One App. Unlimited Types of Work.</h2>
     <p>
-      Use GUBER for almost anything: mechanical help, diagnostics, moving,
-      yard work, cleaning, pressure washing, small repairs, errands,
-      inspections, towing, and more. If it needs doing, someone nearby
-      can take the job.
+      Use GUBER for almost anything: mechanical help, diagnostics, moving, yard
+      work, cleaning, pressure washing, small repairs, errands, inspections,
+      towing, and more. If it needs doing, someone nearby can take the job.
     </p>
 
     <div class="phones">
       <div>
-        <img src="cell1.webp" alt="GUBER app preview 1">
+        <img src="Cell1.png" alt="GUBER app preview 1">
       </div>
       <div>
-        <img src="cell2.webp" alt="GUBER app preview 2">
+        <img src="Cell2.png" alt="GUBER app preview 2">
       </div>
     </div>
 
@@ -545,12 +579,12 @@
     </p>
     <p>
       You can work on a schedule that fits your life, not the other way
-      around. Earn extra money, create breathing room, and still make time
-      for the people you care about.
+      around. Earn extra money, create breathing room, and still make time for
+      the people you care about.
     </p>
     <p>
-      GUBER is also building systems to help keep both workers and posters
-      confident and protected as the platform grows.
+      As GUBER grows, we’re building systems to help keep both workers and
+      posters confident and protected.
     </p>
   </section>
 
@@ -558,13 +592,13 @@
   <section class="section">
     <h2>For Individuals, Small Businesses & Big Companies</h2>
     <p>
-      GUBER isn’t just built for one type of person. It’s built for everyday
-      people, side hustlers, shop owners, and companies that need extra help
+      GUBER isn’t just built for one type of person. It’s for everyday people,
+      side hustlers, small shops, and larger companies that need extra help
       when things get busy.
     </p>
     <p>
-      Whether you’re a homeowner, a small business, or a larger company,
-      GUBER gives you instant access to a flexible, on-demand workforce:
+      Whether you’re a homeowner, a small business, or a larger company, GUBER
+      gives you instant access to a flexible, on-demand workforce:
     </p>
 
     <ul style="font-size:13px; color:var(--text-soft); padding-left:18px;">
@@ -641,18 +675,35 @@
 <script>
   // 2-stage Guberman laser logic
   const ogButton = document.getElementById('ogButton');
+  const loopVideo = document.querySelector('.laser-loop');
   const clickVideo = document.querySelector('.laser-click');
 
   if (ogButton && clickVideo) {
-    ogButton.addEventListener('click', function () {
+    ogButton.addEventListener('click', function (e) {
+      // Play laser animation before going to Day-1 page
+      e.preventDefault();
       try {
+        if (loopVideo) {
+          loopVideo.style.opacity = '0';
+          loopVideo.pause();
+        }
         clickVideo.currentTime = 0;
-      } catch (e) {}
+      } catch (err) {}
+
       clickVideo.style.opacity = '1';
+      const targetUrl = ogButton.getAttribute('href') || '#';
+
       clickVideo.play();
 
       clickVideo.onended = function () {
         clickVideo.style.opacity = '0';
+        if (loopVideo) {
+          loopVideo.style.opacity = '1';
+          loopVideo.play();
+        }
+        if (targetUrl && targetUrl !== '#') {
+          window.location.href = targetUrl;
+        }
       };
     });
   }
