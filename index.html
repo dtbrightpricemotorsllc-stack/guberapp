@@ -207,86 +207,99 @@
       border-radius: 10px;
       object-fit: contain;
       background: #000;
+      z-index: 1;
     }
 
     .laser-loop {
-      z-index: 1;
       opacity: 1;
       transition: opacity 0.2s ease-out;
     }
 
     .laser-click {
-      z-index: 2;
       opacity: 0;
       transition: opacity 0.2s ease-out;
+      z-index: 3;
     }
 
-    /* Gold OG logo inside animation frame */
+    /* Mask to hide the video logo area under the real OG logo */
+    .og-logo-mask {
+      position: absolute;
+      right: 16px;
+      bottom: 22px;
+      width: 200px;
+      height: 200px;
+      background: #000;
+      border-radius: 50%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* Real gold OG logo overlay (clickable) */
     .og-logo-overlay {
       position: absolute;
-      right: 18px;   /* keep near where Guberman shoots */
-      bottom: 24px;
-      z-index: 3;
-      opacity: 0;
-      transform: scale(0.9);
-      transition: opacity 0.35s ease-out, transform 0.35s ease-out, box-shadow 0.35s ease-out;
+      right: 24px;
+      bottom: 30px;
+      z-index: 4;
+      opacity: 1;
+      transform: scale(1);
+      transition: box-shadow 0.25s ease-out, transform 0.25s ease-out;
       cursor: pointer;
     }
 
     .og-logo-overlay img {
-      max-width: 150px;
+      max-width: 190px; /* bigger logo */
       height: auto;
       display: block;
       border-radius: 999px;
-      border: 1px solid rgba(255,215,0,0.85);
-      box-shadow: 0 0 8px rgba(255,215,0,0.6);
+      border: 1px solid rgba(255,215,0,0.9);
+      box-shadow: 0 0 14px rgba(255,215,0,0.85);
     }
 
-    .og-logo-overlay.visible {
-      opacity: 1;
-      transform: scale(1);
-      box-shadow: 0 0 20px rgba(255,215,0,0.85);
+    /* Pulse on impact */
+    .og-logo-overlay.spark-pulse {
+      transform: scale(1.04);
+      box-shadow: 0 0 28px rgba(255,215,0,1);
     }
 
-    /* Energy beam + burst */
+    /* Energy / spark FX */
     .energy-beam {
       position: absolute;
-      right: 40px; /* rough align with muzzle */
-      bottom: 70px;
+      right: 70px; /* approximate muzzle → logo direction */
+      bottom: 80px;
       width: 0;
       height: 4px;
       background: linear-gradient(to left, var(--gold), var(--accent));
       box-shadow: 0 0 10px rgba(0,255,106,0.8);
-      z-index: 2;
+      z-index: 3;
       opacity: 0;
       transform-origin: right center;
       border-radius: 999px;
-      transition: opacity 0.12s ease-out;
+      transition: opacity 0.12s ease-out, width 0.12s ease-out;
     }
 
     .energy-burst {
       position: absolute;
-      right: 24px;
-      bottom: 65px;
-      width: 40px;
-      height: 40px;
+      right: 40px;
+      bottom: 70px;
+      width: 50px;
+      height: 50px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,215,0,0.9) 0%, rgba(255,215,0,0.1) 55%, transparent 70%);
-      box-shadow: 0 0 18px rgba(255,215,0,0.9);
-      z-index: 2;
+      background: radial-gradient(circle, rgba(255,215,0,0.95) 0%, rgba(255,215,0,0.1) 55%, transparent 70%);
+      box-shadow: 0 0 20px rgba(255,215,0,0.95);
+      z-index: 3;
       opacity: 0;
       transform: scale(0.7);
       transition: opacity 0.18s ease-out, transform 0.18s ease-out;
     }
 
-    .energy-active .energy-beam {
+    .hero-right.spark-active .energy-beam {
       opacity: 1;
-      width: 70px;
+      width: 90px;
     }
 
-    .energy-active .energy-burst {
+    .hero-right.spark-active .energy-burst {
       opacity: 1;
-      transform: scale(1.05);
+      transform: scale(1.1);
     }
 
     .section {
@@ -516,12 +529,11 @@
     </div>
 
     <div class="hero-right" id="heroRight">
-      <!-- Looping Guberman animation -->
+      <!-- Looping Guberman animation (we control loop with JS) -->
       <video
         id="loopVideo"
         class="laser-loop"
         src="GubermanOG.webm"
-        autoplay
         muted
         playsinline
       ></video>
@@ -535,11 +547,14 @@
         playsinline
       ></video>
 
-      <!-- Energy trail + burst -->
+      <!-- Mask to cover the video logo area -->
+      <div class="og-logo-mask" id="ogLogoMask"></div>
+
+      <!-- Energy beam + spark burst -->
       <div class="energy-beam" id="energyBeam"></div>
       <div class="energy-burst" id="energyBurst"></div>
 
-      <!-- Gold OG logo overlay inside animation frame -->
+      <!-- Real Gold Day-1 OG logo overlay (clickable) -->
       <a href="day1og.html" id="ogLogoOverlay" class="og-logo-overlay">
         <img src="Gubergoldday1.png" alt="Day-1 OG">
       </a>
@@ -758,78 +773,72 @@
   const energyBeam = document.getElementById('energyBeam');
   const energyBurst = document.getElementById('energyBurst');
 
-  let cycleTimeout = null;
-  let logoVisible = false;
+  let sparkTimeout = null;
   let inClickSequence = false;
 
-  function triggerEnergyAndLogo() {
-    // energy burst on
-    heroRight.classList.add('energy-active');
-    ogLogoOverlay.classList.add('visible');
-    logoVisible = true;
+  function triggerSpark() {
+    // Add spark + glow classes
+    heroRight.classList.add('spark-active');
+    ogLogoOverlay.classList.add('spark-pulse');
 
-    // turn off burst after short moment
+    // Remove again after a short burst
     setTimeout(() => {
-      heroRight.classList.remove('energy-active');
+      heroRight.classList.remove('spark-active');
+      ogLogoOverlay.classList.remove('spark-pulse');
     }, 220);
-
-    // keep logo visible for about 8 seconds, then fade out before next cycle
-    setTimeout(() => {
-      if (!inClickSequence) {
-        ogLogoOverlay.classList.remove('visible');
-        logoVisible = false;
-      }
-    }, 8000);
   }
 
-  function startLaserCycle() {
-    if (!loopVideo) return;
+  function scheduleEffects() {
+    // 6.58 seconds = 6580 ms
+    if (sparkTimeout) clearTimeout(sparkTimeout);
+    sparkTimeout = setTimeout(() => {
+      if (!inClickSequence) {
+        triggerSpark();
+      }
+    }, 6580);
+  }
 
-    // restart loop clip from beginning
+  function startCycle() {
+    if (!loopVideo) return;
     try {
       loopVideo.currentTime = 0;
     } catch (e) {}
     loopVideo.play();
-
-    // after ~1.3s (rough timing of laser impact) -> show energy + logo
-    setTimeout(() => {
-      if (!inClickSequence) {
-        triggerEnergyAndLogo();
-      }
-    }, 1300);
-
-    // schedule next cycle in ~10 seconds total
-    cycleTimeout = setTimeout(startLaserCycle, 10000);
+    scheduleEffects();
   }
 
   if (loopVideo) {
-    // start first cycle once metadata is ready (safer for currentTime)
     loopVideo.addEventListener('loadedmetadata', () => {
-      startLaserCycle();
+      startCycle();
     });
 
-    // fallback if metadata doesn't fire for some reason
+    loopVideo.addEventListener('ended', () => {
+      if (!inClickSequence) {
+        startCycle();
+      }
+    });
+
+    // Fallback in case metadata is slow
     setTimeout(() => {
-      if (!cycleTimeout) {
-        startLaserCycle();
+      if (loopVideo.paused && loopVideo.readyState >= 2) {
+        startCycle();
       }
     }, 1000);
   }
 
   // Click handler for OG logo
-  if (ogLogoOverlay && clickVideo) {
+  if (ogLogoOverlay && clickVideo && loopVideo) {
     ogLogoOverlay.addEventListener('click', function (e) {
       e.preventDefault();
-      if (inClickSequence) return; // prevent double-clicks
+      if (inClickSequence) return;
       inClickSequence = true;
 
-      // stop cycle
-      if (cycleTimeout) {
-        clearTimeout(cycleTimeout);
-        cycleTimeout = null;
+      if (sparkTimeout) {
+        clearTimeout(sparkTimeout);
+        sparkTimeout = null;
       }
 
-      // hide loop video, show click video
+      // Swap videos: hide loop, show click
       loopVideo.style.opacity = '0';
       try { loopVideo.pause(); } catch (e2) {}
 
@@ -837,13 +846,9 @@
       try { clickVideo.currentTime = 0; } catch (e3) {}
       clickVideo.play();
 
-      // brief energy flash again on click
-      heroRight.classList.add('energy-active');
-      setTimeout(() => {
-        heroRight.classList.remove('energy-active');
-      }, 220);
+      // Small spark again at start of click animation
+      triggerSpark();
 
-      // when click animation ends, redirect to Day-1 page
       const targetUrl = ogLogoOverlay.getAttribute('href') || '#';
       clickVideo.onended = function () {
         if (targetUrl && targetUrl !== '#') {
