@@ -1,147 +1,423 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My-Story – Why I Built GUBER</title>
-    <style>
-        body {
-            background-color: #000;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 0 20px;
-        }
-        h1, h2 {
-            text-align: center;
-            color: #39ff14; /* GUBER neon green */
-        }
-        .logo {
-            display: block;
-            margin: 30px auto 10px;
-            width: 180px;
-        }
-        .section {
-            max-width: 900px;
-            margin: 0 auto;
-            padding-bottom: 40px;
-        }
-        img.gubee {
-            display: block;
-            margin: 20px auto;
-            width: 220px;
-        }
-        a {
-            color: #39ff14;
-            font-weight: bold;
-        }
-        .footer {
-            text-align: center;
-            margin: 40px 0;
-            color: #888;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>My Story | GUBER</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #05030a;
+      --card: #0c0916;
+      --accent: #8b5cff;
+      --accent-soft: rgba(139, 92, 255, 0.18);
+      --text-main: #f7f5ff;
+      --text-soft: #c5bfdc;
+      --text-strong: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top, #1a1030 0, #05030a 45%, #020107 100%);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 32px 16px 48px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .content {
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .logo-wrap {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .logo-wrap img {
+      max-width: 220px;
+      height: auto;
+      filter: drop-shadow(0 0 18px rgba(139, 92, 255, 0.6));
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--accent-soft);
+      color: var(--text-soft);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: 30px;
+      line-height: 1.2;
+      color: var(--text-strong);
+      text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    }
+
+    .subtitle {
+      color: var(--text-soft);
+      font-size: 14px;
+      max-width: 520px;
+    }
+
+    .hero-head {
+      margin-bottom: 28px;
+    }
+
+    .card {
+      background: linear-gradient(
+          145deg,
+          rgba(139, 92, 255, 0.18),
+          rgba(15, 23, 42, 0.9)
+        );
+      border-radius: 18px;
+      padding: 20px 18px;
+      border: 1px solid rgba(139, 92, 255, 0.35);
+      box-shadow:
+        0 0 40px rgba(15, 23, 42, 0.9),
+        0 0 40px rgba(139, 92, 255, 0.25);
+    }
+
+    .card p {
+      margin: 0 0 14px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-soft);
+    }
+
+    .card p strong {
+      color: var(--text-main);
+    }
+
+    .divider {
+      margin: 32px auto 26px;
+      height: 1px;
+      width: 100%;
+      max-width: 260px;
+      background: radial-gradient(circle, var(--accent-soft), transparent);
+      position: relative;
+    }
+
+    .divider::before {
+      content: "✦";
+      position: absolute;
+      left: 50%;
+      top: -12px;
+      transform: translateX(-50%);
+      font-size: 14px;
+      color: var(--accent);
+      background: radial-gradient(circle, #05030a 40%, transparent 70%);
+      padding: 0 6px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      margin: 0 0 12px;
+      color: var(--text-strong);
+    }
+
+    .section-tag {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .gubee-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .gubee-img {
+      text-align: center;
+    }
+
+    .gubee-img img {
+      max-width: 260px;
+      width: 90%;
+      height: auto;
+      filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.75));
+    }
+
+    @media (min-width: 768px) {
+      .card {
+        padding: 24px 24px;
+      }
+
+      h1 {
+        font-size: 34px;
+      }
+
+      .card p {
+        font-size: 15px;
+      }
+
+      .gubee-wrap {
+        flex-direction: row;
+        align-items: flex-start;
+      }
+
+      .gubee-img {
+        flex: 0 0 280px;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div class="page">
+    <main class="content">
+      <div class="logo-wrap">
+        <img src="guberapplogo.png" alt="GUBER App Logo" />
+      </div>
 
-    <!-- GUBER LOGO AT TOP -->
-    <img src="Guberapplogo.png" alt="GUBER Logo" class="logo">
+      <header class="hero-head">
+        <div class="pill">
+          <span class="pill-dot"></span>
+          <span>My Story</span>
+        </div>
+        <h1>The True Origin Story of GUBER &amp; Gubee</h1>
+        <p class="subtitle">
+          This isn’t a startup pitch. It’s where I really came from, what I
+          survived, and why GUBER exists at all.
+        </p>
+      </header>
 
-    <h1>Why I Built GUBER</h1>
+      <section class="card" aria-label="True Origin Story of GUBER">
+        <p>
+          GUBER didn’t come from a business plan or some tech meeting. It came
+          from my life — the real, messy parts that forced me to rebuild myself
+          from the ground up.
+        </p>
 
-    <div class="section">
+        <p>
+          Back in <strong>2016</strong>, I built my own business from nothing.
+          I was grinding, hustling, trying to create stability with my own
+          hands. Then the woman I loved started medical school, and I did what I
+          believed a supportive man should do — I tried to hold everything
+          together for both of us.
+        </p>
 
-        <p><em>The Imagination That Saved a Child.<br>
-        The Grind That Built a Man.<br>
-        The Vision That Created GUBER.</em></p>
+        <p>
+          For over a year, I drove four hours back and forth between cities,
+          trying to make money while still being present for her. I didn’t shut
+          my business down immediately. I fought for it. I stretched myself
+          thin. Eventually the constant travel wore me down, and I started
+          selling off the things I owned — tools, equipment, whatever I had —
+          just to survive and keep supporting her dreams.
+        </p>
 
-        <p>Long before GUBER existed… long before the neon colors, the logo, or the mascot… there was a boy who survived the world using only one thing: <strong>his imagination.</strong></p>
+        <p>
+          Years later, when her residency ended, something similar happened
+          again… except this time, I wasn’t juggling two worlds. I was just
+          waiting.
+        </p>
 
-        <p>Growing up, Mr. T didn’t have comfort, structure, or a soft place to fall. He didn’t have the resources, the support, or the guidance most kids rely on.</p>
+        <p>
+          She told me she was “back home with her mom,” waiting on military
+          orders. She cried to me, said she felt like a failure, said she didn’t
+          want to burden me because she wouldn’t have income for a while. And I
+          believed her. I prepared myself for when she’d call and say it was
+          time for us to move forward.
+        </p>
 
-        <p>But he had a mind that refused to shut down — a mind that created entire worlds when reality felt too heavy, a mind that could picture happiness when life gave him none.</p>
+        <p>
+          But what I later came to understand was completely different from what
+          I believed.
+        </p>
 
-        <p>Imagination wasn’t childish. It was survival.</p>
+        <p>
+          While she was calling me with tears and telling me she was at home
+          waiting on orders, she had already begun a new chapter of her life —
+          <strong>five states away</strong> — building a new career I knew
+          nothing about. From my perspective, everyone around her seemed aware.
+          I was the only one left in the dark.
+        </p>
 
-        <hr>
+        <p>
+          And that wasn’t all. For <strong>three months</strong>, I waited —
+          believing the story I was being told. Believing she was sitting in her
+          mother’s house, unsure of her future, struggling emotionally. But
+          later, I learned she had already been established in that new place
+          for months — working, settled in, building new friendships, possibly
+          even new connections beyond that. From my point of view, she had
+          already moved forward long before I realized something was wrong.
+        </p>
 
-        <h2>2016 — The Grind Begins</h2>
+        <p>
+          And she never told me. She let me wait. She let me hope. She let me
+          hold on to a future she had already stepped out of.
+        </p>
 
-        <p>As an adult, Mr. T built his first real business in 2016. No shortcuts. No handouts. Just hustle.</p>
+        <p>
+          When I finally dug deep and uncovered the truth myself — when I
+          confronted her — I never heard from her again. No explanation. No
+          honesty. No apology. Just silence.
+        </p>
 
-        <p>Then life shifted. The woman he loved entered medical school, and he committed to supporting her — not with talk, but with action.</p>
+        <p>
+          One day, I was someone she cried to… and the next day, it felt like I
+          never existed.
+        </p>
 
-        <p>He drove four hours back and forth between cities for over a year, sacrificing his time, money, business, and stability just to keep the relationship together.</p>
+        <p>
+          But the hardest part wasn’t the distance or the silence. It was the
+          time I lost — time spent following her moves, time I could’ve used
+          rebuilding myself, and time away from my mother… time I will never get
+          back.
+        </p>
 
-        <p>He sold off his tools and equipment, watching the business he'd built fade away piece by piece. But he kept going.</p>
+        <p>
+          When my mom passed — the woman I always dreamed of blessing with a
+          home — the person I loved didn’t show up. She didn’t stand beside me.
+          She didn’t even help watch the dogs. I faced everything alone: the
+          grief, the bills, the heartbreak, the confusion, and the reality that
+          the life I believed in no longer existed.
+        </p>
 
-        <p>Norfolk → Macon → Mobile… each move demanded a new sacrifice. Each one cost him more than the last.</p>
+        <p>
+          The emotional weight became too heavy, and eventually I had to let our
+          dogs go. Losing them felt like losing the last pieces of the future I
+          thought I was building.
+        </p>
 
-        <p>And eventually, the truth surfaced — the truth about loyalty, love, and everything he thought he was building.</p>
+        <p>
+          Sitting in that pain, I asked the question every man asks when he’s
+          given everything he has:
+        </p>
 
-        <hr>
+        <p><strong>“I guess I just wasn’t good enough… right?”</strong></p>
 
-        <h2>GUBER — Born From the Bottom</h2>
+        <p>
+          But that moment wasn’t the end of my story — it was the spark. I’ve
+          survived things most people never witness. I’ve rebuilt from nothing
+          more than once. And climbing out of the darkest season of my life,
+          something clicked:
+        </p>
 
-        <p>When everything collapsed — the business, the trust, the relationship — something awakened inside him.</p>
+        <p>
+          Most people don’t fall because they’re weak. They fall because help
+          takes too long. Because opportunity moves too slow. Because life
+          doesn’t wait for callbacks, approval, or a second chance.
+        </p>
 
-        <p>The child who survived using imagination grew into a man who refused to stay down.</p>
+        <p>
+          Nobody should have to sit alone in a city waiting for life to give
+          them a break. Nobody should lose everything because they couldn’t work
+          <strong>today</strong>.
+        </p>
 
-        <p>Out of heartbreak, loss, and frustration came a decision:</p>
+        <p>
+          And that’s where <strong>GUBER</strong> came from. From real loss.
+          From real survival. From rebuilding after heartbreak, confusion, and
+          abandonment. From understanding what it feels like to need help
+          <strong>right now</strong> and not have any.
+        </p>
 
-        <p><strong>If the world wasn’t going to give him opportunity, he would build it.</strong></p>
+        <p>
+          GUBER isn’t just an app. It’s a second chance… and the beginning of
+          something bigger.
+        </p>
+      </section>
 
-        <p>Not just for himself — but for everyone who ever struggled like him.</p>
+      <div class="divider"></div>
 
-        <p>That decision became GUBER.</p>
+      <section class="card" aria-label="Origin of Gubee / Guberman">
+        <div class="gubee-wrap">
+          <div class="gubee-img">
+            <img src="Oggubee.webp" alt="Gubee / Guberman mascot" />
+          </div>
+          <div>
+            <div class="section-tag">GUBEE / GUBERMAN</div>
+            <h2 class="section-title">The Origin of Gubee</h2>
 
-        <p>GUBER wasn’t built from inspiration. It was built from survival. It became a platform for hustlers, helpers, workers, grinders — people who need opportunity now, not “someday.”</p>
+            <p>
+              Gubee didn’t come from marketing. He didn’t come from a design
+              meeting. He came from the same place GUBER came from —
+              <strong>me</strong>, my imagination, and the pain I had to grow
+              through.
+            </p>
 
-        <hr>
+            <p>
+              As a child, imagination was the only escape I had. When life felt
+              heavy, my mind created worlds that kept me alive. I never grew out
+              of that. Imagination was the one thing life could never take from
+              me.
+            </p>
 
-        <h2>Gubee — The Imagination Reborn</h2>
+            <p>
+              And after everything collapsed — the heartbreak, the lies, the
+              silence, the funeral, the distance — that imagination returned
+              with a new purpose.
+            </p>
 
-        <!-- GUBEE IMAGE RIGHT ABOVE HIS SECTION -->
-        <img src="Oggubee.webp" alt="Gubee Mascot" class="gubee">
+            <p>
+              Gubee became the child of my imagination. The identity I never got
+              to raise. The future that was abandoned before it began. The
+              symbol of everything I still had left inside me.
+            </p>
 
-        <p>Years later, the imagination that saved him as a child returned with a new purpose.</p>
+            <p>
+              While adults see GUBER as opportunity, kids will see GUBEE as
+              hope — a superhero of responsibility, ambition, work ethic, and a
+              better future.
+            </p>
 
-        <p>A new character emerged — <strong>Gubee</strong> — glowing, friendly, futuristic. A mascot built to inspire the next generation.</p>
+            <p>
+              Gubee represents everything I never had growing up: someone to
+              look up to, someone to inspire me, someone who made doing the
+              right thing feel powerful and rewarding.
+            </p>
 
-        <p>Adults will see GUBER as opportunity… but kids will grow up seeing GUBER as a world of heroes.</p>
+            <p>
+              He represents the child whose future was walked away from… but now
+              belongs to the world.
+            </p>
 
-        <p>Gubee represents:</p>
+            <p>
+              Gubee is not just a mascot. He’s purpose. He’s legacy. He’s the
+              imagination that saved me — reborn to inspire millions.
+            </p>
 
-        <ul>
-            <li>help</li>
-            <li>hope</li>
-            <li>hustle</li>
-            <li>responsibility</li>
-            <li>imagination</li>
-            <li>a better future</li>
-        </ul>
-
-        <p>Gubee is the child Mr. T never got to raise — the symbol of what he wanted to give the world.</p>
-
-        <hr>
-
-        <h2>This Is the True Origin of Mr. T</h2>
-
-        <p>A man shaped by struggle.</p>
-        <p>Driven by sacrifice.</p>
-        <p>Fueled by imagination.</p>
-        <p>Rebuilt by pain.</p>
-
-        <p>GUBER and Gubee aren’t business ideas. They are the result of a lifetime of survival, learning, rebuilding, and vision.</p>
-
-        <p>This is the story of how a child’s imagination built a platform that will change the world.</p>
-
-    </div>
-
-    <div class="footer">
-        <p><a href="index.html">← Back to Home</a></p>
-    </div>
-
+            <p>
+              This isn’t just my story. This is my
+              <strong>why</strong>. Everything that broke me… built GUBER.
+              Everything I lost… created Gubee. Everything I survived… became
+              the foundation of a platform that will change lives.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
 </body>
 </html>
