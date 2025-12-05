@@ -5,6 +5,16 @@
   <title>GUBER – Work or Hire Anywhere</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+  <!-- FAVICON + BASIC META FOR GOOGLE/SOCIAL -->
+  <link rel="icon" type="image/png" href="favicon.png">
+  <meta name="description" content="GUBER is a real-world platform where anyone can find work, hire help, and get verified inspections and on-demand support — anytime, anywhere.">
+
+  <meta property="og:title" content="GUBER – Work or Hire Anywhere">
+  <meta property="og:description" content="Work when you want. Hire when you need help. GUBER connects people who need money with people who need help — plus verified inspections, a future marketplace, and Day-1 OG access before launch.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://guberapp.com/">
+  <meta property="og:image" content="https://guberapp.com/Guberapplogo.png">
+
   <style>
     :root {
       --bg: #000000;
@@ -84,7 +94,7 @@
       color: var(--accent);
     }
 
-    /* BANNER */
+    /* WELCOME BANNER */
 
     .welcome-banner {
       border-radius: 12px;
@@ -100,7 +110,7 @@
       height: auto;
     }
 
-    /* DAY-1 OG TOP STRIP */
+    /* DAY-1 OG TOP STRIP (ALERT) */
 
     .og-strip {
       margin: 0 0 16px;
@@ -214,6 +224,30 @@
       max-width: 360px;
     }
 
+    .og-cta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffdf6a, #ffb400);
+      color: #000;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      box-shadow: 0 0 15px rgba(255,215,0,0.85);
+      border: 1px solid rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+
+    .og-cta:hover {
+      text-decoration: none;
+      box-shadow: 0 0 22px rgba(255,215,0,1);
+      transform: translateY(-1px);
+    }
+
     /* HERO RIGHT – ANIMATION BOX */
 
     .hero-right {
@@ -235,112 +269,12 @@
       border-radius: 10px;
       object-fit: contain;
       background: #000;
-      z-index: 1;
-    }
-
-    .laser-loop {
-      opacity: 1;
-      transition: opacity 0.2s ease-out;
-    }
-
-    .laser-click {
       opacity: 0;
-      transition: opacity 0.2s ease-out;
-      z-index: 3;
+      transition: opacity 0.6s ease-in-out;
     }
 
-    /* Mask to hide the video logo area under the real OG logo */
-    .og-logo-mask {
-      position: absolute;
-      right: 20px;
-      bottom: 40px;
-      width: 190px;
-      height: 190px;
-      background: #000;      /* same as video bg so it just looks clean */
-      border-radius: 50%;
-      z-index: 2;
-      pointer-events: none;
-    }
-
-    /* Real gold OG logo overlay (clickable) */
-
-    .og-logo-overlay {
-      position: absolute;
-      right: 26px;
-      bottom: 46px;
-      z-index: 4;
+    .hero-right video.active {
       opacity: 1;
-      transform: scale(1);
-      transition: box-shadow 0.25s ease-out, transform 0.25s ease-out;
-      cursor: pointer;
-    }
-
-    .og-logo-overlay img {
-      max-width: 180px;      /* bigger logo */
-      height: auto;
-      display: block;
-      box-shadow: 0 0 16px rgba(255,215,0,0.95);
-    }
-
-    .og-logo-overlay.spark-pulse {
-      transform: scale(1.04);
-      box-shadow: 0 0 28px rgba(255,215,0,1);
-    }
-
-    /* Energy / spark FX */
-
-    .energy-beam {
-      position: absolute;
-      right: 76px;
-      bottom: 98px;
-      width: 0;
-      height: 4px;
-      background: linear-gradient(to left, var(--gold), var(--accent));
-      box-shadow: 0 0 10px rgba(0,255,106,0.8);
-      z-index: 3;
-      opacity: 0;
-      transform-origin: right center;
-      border-radius: 999px;
-      transition: opacity 0.12s ease-out, width 0.12s ease-out;
-    }
-
-    .energy-burst {
-      position: absolute;
-      right: 50px;
-      bottom: 95px;
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,215,0,0.95) 0%, rgba(255,215,0,0.1) 55%, transparent 70%);
-      box-shadow: 0 0 20px rgba(255,215,0,0.95);
-      z-index: 3;
-      opacity: 0;
-      transform: scale(0.7);
-      transition: opacity 0.18s ease-out, transform 0.18s ease-out;
-    }
-
-    .hero-right.spark-active .energy-beam {
-      opacity: 1;
-      width: 90px;
-    }
-
-    .hero-right.spark-active .energy-burst {
-      opacity: 1;
-      transform: scale(1.1);
-    }
-
-    /* CLICK HERE LABEL */
-
-    .og-click-label {
-      position: absolute;
-      right: 26px;
-      bottom: 18px;
-      z-index: 5;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--gold);
-      text-shadow: 0 0 6px rgba(0,0,0,0.9);
     }
 
     /* CONTENT SECTIONS */
@@ -444,6 +378,41 @@
       margin-top: 6px;
     }
 
+    /* FLOATING OG BADGE */
+
+    .og-floating {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 50;
+    }
+
+    .og-floating a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle, rgba(255,215,0,0.95), rgba(0,0,0,0.9));
+      padding: 6px 10px;
+      border-radius: 999px;
+      box-shadow: 0 0 18px rgba(255,215,0,0.9);
+      border: 1px solid rgba(0,0,0,0.7);
+      gap: 8px;
+    }
+
+    .og-floating img {
+      width: 40px;
+      height: auto;
+      display: block;
+    }
+
+    .og-floating span {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #000;
+    }
+
     /* FOOTER */
 
     .footer {
@@ -453,16 +422,17 @@
       font-size: 11px;
       color: #888;
       display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 10px;
+      flex-direction: column;
       align-items: center;
+      gap: 8px;
+      text-align: center;
     }
 
     .footer-links {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
+      justify-content: center;
     }
 
     .footer-links a {
@@ -511,6 +481,10 @@
       .og-strip {
         font-size: 12px;
       }
+
+      .og-floating span {
+        display: none; /* icon only on tiny screens */
+      }
     }
   </style>
 </head>
@@ -536,9 +510,9 @@
 
   <!-- DAY-1 OG INFO STRIP -->
   <div class="og-strip">
-    Guberman will guide you to <b>Day-1 OG access</b>. When the gold GUBER logo
-    appears, tap it to unlock your permanent Day-1 badge. If he hasn’t fired
-    yet, be patient — he’ll hit the target soon.
+    ⚡ <b>Day-1 OG access is limited.</b> Before launch, a small group will lock in
+    permanent Day-1 OG status. Scroll to the Day-1 section below or tap the gold
+    badge to learn how to claim your spot.
   </div>
 
   <!-- HERO: TEXT + ANIMATION FRAME -->
@@ -557,12 +531,11 @@
       </p>
 
       <p>
-        Anyone can work. Anyone can hire. Anyone can win.
-        Whether you need money today or you need help today,
-        GUBER puts control back in your hands.
+        Anyone can work. Anyone can hire. Whether you need money today
+        or you need help today, GUBER puts control back in your hands.
       </p>
 
-      <div class="og-card">
+      <div class="og-card" id="day1og">
         <div class="og-title">Day-1 OG Lifetime Access</div>
         <ul class="og-list">
           <li>Permanent Day-1 OG badge inside the app</li>
@@ -573,78 +546,42 @@
         </ul>
 
         <div class="og-note">
-          To unlock Day-1 OG access, wait for Guberman to hit the gold GUBER logo
-          with his laser, then tap the logo to enter the Day-1 OG page.
-          Please be patient — Guberman is preparing your VIP escort.
+          Day-1 OG is a one-time window before launch. Once it closes, it never
+          comes back. If you believe in what GUBER is building, this is your
+          chance to be marked as one of the first.
         </div>
         <div class="og-note-emoji">
-          Access unlocks after impact. The laser only stings a little 😅.
+          No lottery, no tricks — just a lifetime badge and better positioning
+          for believing early.
         </div>
 
         <div class="fine-print">
           *“Work today, get paid today” depends on the poster releasing funds
           when the job is completed. Bank and Stripe processing times may vary.
         </div>
+
+        <a href="day1og.html" class="og-cta">
+          Claim Day-1 OG Access
+        </a>
       </div>
     </div>
 
     <div class="hero-right" id="heroRight">
-      <!-- Looping Guberman animation -->
+      <!-- Two looping animations that fade between each other -->
       <video
-        id="loopVideo"
-        class="laser-loop"
+        id="anim1"
         src="GubermanOG.webm"
         muted
         playsinline
       ></video>
 
-      <!-- Click-triggered laser animation -->
       <video
-        id="clickVideo"
-        class="laser-click"
+        id="anim2"
         src="Guberman shooting laser.webm"
         muted
         playsinline
       ></video>
-
-      <!-- Mask to cover the video logo area -->
-      <div class="og-logo-mask" id="ogLogoMask"></div>
-
-      <!-- Energy beam + spark burst -->
-      <div class="energy-beam" id="energyBeam"></div>
-      <div class="energy-burst" id="energyBurst"></div>
-
-      <!-- Real Gold Day-1 OG logo overlay (clickable) -->
-      <a href="day1og.html" id="ogLogoOverlay" class="og-logo-overlay">
-        <img src="Gubergoldday1.png" alt="Day-1 OG">
-      </a>
-
-      <!-- Solid gold click label -->
-      <div class="og-click-label">
-        CLICK HERE TO UNLOCK DAY-1 OG
-      </div>
     </div>
-  </section>
-
-  <!-- ECOSYSTEM SECTION -->
-  <section class="section">
-    <h2>Not Just an App — A Whole Ecosystem</h2>
-    <p>
-      Other platforms do one thing. GUBER does more. It’s a full system designed
-      for people who want to work, people who need help, small shops that need
-      extra hands, larger companies managing busy seasons, and buyers and
-      sellers who want trust built in.
-    </p>
-    <p>
-      From on-demand hiring, to same-day work, to verified inspections, to a
-      future marketplace built on proof — GUBER is building a new way to work,
-      help, hire, and thrive in the real world.
-    </p>
-    <p>
-      This isn’t a gig app. It isn’t a job board. It isn’t a regular
-      marketplace. GUBER is a complete ecosystem, created from real struggle,
-      real needs, and real life.
-    </p>
   </section>
 
   <!-- WHAT IS GUBER / TWO-WAY STREET -->
@@ -681,6 +618,102 @@
         </ul>
       </div>
     </div>
+  </section>
+
+  <!-- WHY GUBER MATTERS – EMOTIONAL SECTION -->
+  <section class="section">
+    <h2>Why GUBER Matters — Right Now</h2>
+
+    <p>
+      Life moves fast. Bills don’t wait. Problems don’t pause. And most people
+      don’t realize how much they actually need help until they’re already
+      overwhelmed.
+    </p>
+
+    <p>
+      Right now — today — somebody is stressed because they don’t have enough
+      time. Somebody else is stressed because they don’t have enough money.
+      <br><br>
+      <b>GUBER solves both problems.</b>
+    </p>
+
+    <p>
+      Sometimes you need extra cash. Sometimes you just need an extra pair of
+      hands. But life doesn’t give you either on demand.
+    </p>
+
+    <p>Think about it:</p>
+
+    <ul style="font-size:14px; color:var(--text-soft); padding-left:22px; line-height:1.55;">
+      <li>You overslept and the yard still needs cutting before the party</li>
+      <li>You forgot to set up tables and chairs for a birthday</li>
+      <li>You need someone to follow you to pick up a car</li>
+      <li>You’ve got errands to do but only 30 minutes on lunch break</li>
+      <li>You want to make $40 real quick unloading a truck</li>
+      <li>You need a diagnostic or inspection but don’t have time</li>
+      <li>You want to buy something out of state but don’t trust the seller</li>
+      <li>You’re exhausted and just need help getting the house straight</li>
+    </ul>
+
+    <p>
+      There are a hundred moments every week where you think:
+      <br><br>
+      <em>“Damn… I wish I had somebody to help real quick.”</em>
+    </p>
+
+    <p>
+      And there are a hundred people every week thinking:
+      <br><br>
+      <em>“Damn… I need to make money today.”</em>
+    </p>
+
+    <p><b>GUBER is the bridge between those two people.</b></p>
+
+    <p>
+      That’s why this platform is different. That’s why it matters. That’s why
+      it’s needed <b>now</b>, not later.
+    </p>
+
+    <p>
+      GUBER gives people a way to work instantly. GUBER gives people a way to
+      get help instantly. GUBER creates opportunity where there was none.
+    </p>
+
+    <p>
+      These jobs already exist — people just never had a way to <b>ask</b> for them.
+      Nobody thinks:
+      <br><br>
+      <em>“Let me hire someone to set up the chairs for my wife’s birthday.”</em>
+    </p>
+
+    <p>
+      But once they realize they can — once they realize help is right there
+      on their phone — everything changes.
+    </p>
+
+    <p>
+      GUBER isn’t a gig app. It’s not a job board. It’s not a marketplace.
+      <br><br>
+      It’s a <b>new habit</b>, a new reflex, a new way of getting through life.
+    </p>
+
+    <p>
+      <b>
+        That is why you shouldn’t quit.  
+        That is why people will use it.  
+        That is why this is bigger than anything out right now.
+      </b>
+    </p>
+
+    <p>
+      This isn’t convenience. This is <b>power</b> — for the worker and the one who
+      needs help.
+    </p>
+
+    <p>
+      And when people finally see that…<br>
+      <b>GUBER becomes unstoppable.</b>
+    </p>
   </section>
 
   <!-- VERIFIED INSPECTIONS + FUTURE VERIFIED MARKETPLACE -->
@@ -741,7 +774,7 @@
     </p>
   </section>
 
-  <!-- FOR INDIVIDUALS, SMALL BUSINESS, BIG COMPANIES -->
+  <!-- FOR INDIVIDUALS, SMALL BUSINESS, COMPANIES -->
   <section class="section">
     <h2>For Individuals, Small Businesses & Companies</h2>
     <p>
@@ -824,93 +857,64 @@
 
 </div>
 
+<!-- FLOATING DAY-1 OG BADGE -->
+<div class="og-floating">
+  <a href="day1og.html">
+    <img src="Gubergoldday1.png" alt="Day-1 OG">
+    <span>Day-1 OG</span>
+  </a>
+</div>
+
 <script>
-  const loopVideo = document.getElementById('loopVideo');
-  const clickVideo = document.getElementById('clickVideo');
-  const ogLogoOverlay = document.getElementById('ogLogoOverlay');
-  const heroRight = document.getElementById('heroRight');
+  // Simple alternating animation between two videos (option 3)
+  const anim1 = document.getElementById('anim1');
+  const anim2 = document.getElementById('anim2');
 
-  let sparkTimeout = null;
-  let inClickSequence = false;
+  if (anim1 && anim2) {
+    let current = 1;
 
-  function triggerSpark() {
-    heroRight.classList.add('spark-active');
-    ogLogoOverlay.classList.add('spark-pulse');
+    function playVideo(video) {
+      try {
+        video.currentTime = 0;
+      } catch (e) {}
+      video.play().catch(() => {});
+    }
 
-    setTimeout(() => {
-      heroRight.classList.remove('spark-active');
-      ogLogoOverlay.classList.remove('spark-pulse');
-    }, 220);
-  }
-
-  function scheduleEffects() {
-    // 6.58 seconds = 6580 ms (matches your trimmed GubermanOG clip)
-    if (sparkTimeout) clearTimeout(sparkTimeout);
-    sparkTimeout = setTimeout(() => {
-      if (!inClickSequence) {
-        triggerSpark();
+    function cycle() {
+      if (current === 1) {
+        anim1.classList.add('active');
+        anim2.classList.remove('active');
+        playVideo(anim1);
+      } else {
+        anim2.classList.add('active');
+        anim1.classList.remove('active');
+        playVideo(anim2);
       }
-    }, 6580);
-  }
+    }
 
-  function startCycle() {
-    if (!loopVideo) return;
-    try {
-      loopVideo.currentTime = 0;
-    } catch (e) {}
-    loopVideo.play();
-    scheduleEffects();
-  }
-
-  if (loopVideo) {
-    loopVideo.addEventListener('loadedmetadata', () => {
-      startCycle();
+    anim1.addEventListener('ended', () => {
+      current = 2;
+      cycle();
     });
 
-    loopVideo.addEventListener('ended', () => {
-      if (!inClickSequence) {
-        startCycle();
-      }
+    anim2.addEventListener('ended', () => {
+      current = 1;
+      cycle();
     });
 
-    // Backup start if metadata is slow
+    // Start with first animation
+    anim1.addEventListener('loadedmetadata', () => {
+      current = 1;
+      cycle();
+    });
+
+    // Backup start in case metadata is slow
     setTimeout(() => {
-      if (loopVideo.paused && loopVideo.readyState >= 2) {
-        startCycle();
+      if (anim1.paused) {
+        current = 1;
+        cycle();
       }
     }, 1000);
-  }
-
-  // Click handler for OG logo
-  if (ogLogoOverlay && clickVideo && loopVideo) {
-    ogLogoOverlay.addEventListener('click', function (e) {
-      e.preventDefault();
-      if (inClickSequence) return;
-      inClickSequence = true;
-
-      if (sparkTimeout) {
-        clearTimeout(sparkTimeout);
-        sparkTimeout = null;
-      }
-
-      // Swap videos: hide loop, show click
-      loopVideo.style.opacity = '0';
-      try { loopVideo.pause(); } catch (e2) {}
-
-      clickVideo.style.opacity = '1';
-      try { clickVideo.currentTime = 0; } catch (e3) {}
-      clickVideo.play();
-
-      // Spark at the start of the click animation too
-      triggerSpark();
-
-      const targetUrl = ogLogoOverlay.getAttribute('href') || '#';
-      clickVideo.onended = function () {
-        if (targetUrl && targetUrl !== '#') {
-          window.location.href = targetUrl;
-        }
-      };
-    });
   }
 </script>
 
