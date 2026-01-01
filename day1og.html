@@ -4,14 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GUBER • Day-1 OG Lifetime Pass</title>
-  <meta name="description" content="Lock in a lifetime 15% GUBER service fee as a Day-1 OG helper with a transferable NFT access token. One-time $1.99. Very limited pre-launch allocation." />
+  <meta
+    name="description"
+    content="Lock in a lifetime 15% GUBER service fee as a Day-1 OG helper with a transferable NFT access token. One-time $1.99. Very limited pre-launch allocation."
+  />
   <style>
     :root {
       --bg-main: #020205;
       --bg-card: #05050b;
       --bg-card-soft: #0c0513;
       --gold: #f5c542;
-      --gold-deep: #b87a1f;
       --hot-pink: #ff3bda;
       --neon-green: #7cff8c;
       --text-main: #f8f8ff;
@@ -75,4 +77,629 @@
       background:
         radial-gradient(circle at 30% 0%, rgba(245, 197, 66, 0.6), transparent 60%),
         #000;
-      box-shadow: 0 0 30px rgba
+      box-shadow: 0 0 30px rgba(245, 197, 66, 0.75);
+    }
+
+    .hero-logo-pill-inner {
+      border-radius: 999px;
+      padding: 12px 18px;
+      background: #000;
+      border: 1px solid rgba(245, 197, 66, 0.85);
+    }
+
+    .hero-logo-pill img {
+      display: block;
+      height: 40px;
+      width: auto;
+    }
+
+    .hero-title-block {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .hero-kicker {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--neon-green);
+      margin-bottom: 4px;
+    }
+
+    .hero-title {
+      font-size: 28px;
+      line-height: 1.1;
+      font-weight: 800;
+    }
+
+    .hero-title span.gold {
+      color: var(--gold);
+      text-shadow: 0 0 14px rgba(245, 197, 66, 0.7);
+    }
+
+    .hero-sub {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .hero-sub strong {
+      color: var(--hot-pink);
+      font-weight: 600;
+    }
+
+    /* TOKEN HERO IMAGE (no flip, no squish) */
+    .hero-token-wrap {
+      margin: 20px auto 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .hero-token-img {
+      width: 260px;
+      max-width: 80%;
+      height: auto;          /* keeps proportions */
+      border-radius: 24px;   /* soft corners, no pinching */
+      box-shadow:
+        0 0 40px rgba(245, 197, 66, 0.7),
+        0 0 70px rgba(255, 59, 218, 0.4);
+      background: #000;
+    }
+
+    .hero-token-caption {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .hero-token-caption strong {
+      color: var(--gold);
+    }
+
+    .hero-pill {
+      margin: 18px 0 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(124, 255, 140, 0.6);
+      background: radial-gradient(circle at 0 50%, rgba(124, 255, 140, 0.38), transparent 70%);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--neon-green);
+      box-shadow: 0 0 14px rgba(124, 255, 140, 0.45);
+    }
+
+    .hero-pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--neon-green);
+      box-shadow: 0 0 10px rgba(124, 255, 140, 0.9);
+    }
+
+    .hero-price-line {
+      margin-top: 8px;
+      font-size: 14px;
+      color: var(--text-soft);
+    }
+
+    .hero-price-line strong {
+      color: var(--gold);
+      font-size: 16px;
+    }
+
+    .hero-price-line span.subtle {
+      font-size: 12px;
+      color: #878aa4;
+    }
+
+    .hero-limited-note {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #ffb38a;
+    }
+
+    .hero-limited-note strong {
+      color: #ffddaa;
+    }
+
+    .section {
+      margin-top: 26px;
+      padding: 20px 18px 18px;
+      border-radius: 26px;
+      background:
+        radial-gradient(circle at top left, rgba(255, 59, 218, 0.08), transparent 65%),
+        radial-gradient(circle at bottom right, rgba(124, 255, 140, 0.05), transparent 60%),
+        var(--bg-card);
+      border: 1px solid var(--border-soft);
+    }
+
+    .section-header {
+      font-size: 14px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--neon-green);
+      margin-bottom: 4px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .section-title span.hot {
+      color: var(--hot-pink);
+    }
+
+    .section-body {
+      font-size: 14px;
+      color: var(--text-soft);
+    }
+
+    .section-body strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .list {
+      margin-top: 14px;
+      list-style: none;
+      font-size: 14px;
+      color: var(--text-soft);
+    }
+
+    .list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .list-icon {
+      font-size: 15px;
+      margin-top: 1px;
+      text-shadow: 0 0 8px rgba(124, 255, 140, 0.7);
+    }
+
+    .list li strong {
+      color: var(--text-main);
+    }
+
+    .math-card {
+      margin-top: 18px;
+      padding: 14px 14px 12px;
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(124, 255, 140, 0.16), transparent 60%),
+        #030308;
+      border: 1px solid rgba(124, 255, 140, 0.5);
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .math-card-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--neon-green);
+      margin-bottom: 4px;
+    }
+
+    .math-grid {
+      margin-top: 6px;
+      display: grid;
+      grid-template-columns: 1.2fr 1.2fr;
+      gap: 6px 14px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .math-label {
+      color: #878aa4;
+    }
+
+    .math-value-normal {
+      color: #ffb38a;
+    }
+
+    .math-value-og {
+      color: var(--neon-green);
+    }
+
+    .section-employer {
+      background:
+        radial-gradient(circle at top right, rgba(255, 59, 218, 0.18), transparent 70%),
+        radial-gradient(circle at bottom left, rgba(245, 197, 66, 0.18), transparent 65%),
+        var(--bg-card-soft);
+      border: 1px solid rgba(245, 197, 66, 0.65);
+      box-shadow:
+        0 0 40px rgba(245, 197, 66, 0.25),
+        0 0 60px rgba(255, 59, 218, 0.2);
+    }
+
+    .section-employer .section-header {
+      color: var(--gold);
+    }
+
+    .section-employer .section-title span.hot {
+      color: var(--hot-pink);
+      text-shadow: 0 0 12px rgba(255, 59, 218, 0.7);
+    }
+
+    .section-nft {
+      background:
+        radial-gradient(circle at top left, rgba(124, 255, 140, 0.12), transparent 65%),
+        radial-gradient(circle at bottom right, rgba(255, 59, 218, 0.12), transparent 55%),
+        var(--bg-card);
+      border: 1px solid rgba(124, 255, 140, 0.55);
+    }
+
+    .token-gallery {
+      margin-top: 16px;
+      border-radius: 20px;
+      overflow: hidden;
+      background: radial-gradient(circle at 10% 0%, rgba(245, 197, 66, 0.25), transparent 60%);
+      padding: 10px;
+    }
+
+    .token-gallery img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+    }
+
+    .cta-wrap {
+      margin-top: 28px;
+      text-align: center;
+    }
+
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px 26px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #1a1204;
+      background: linear-gradient(145deg, #ffe89d, #f5c542, #ffb13b);
+      box-shadow:
+        0 0 40px rgba(245, 197, 66, 0.7),
+        0 0 80px rgba(255, 59, 218, 0.35);
+      border: 1px solid rgba(0, 0, 0, 0.8);
+    }
+
+    .cta-button span.lock {
+      font-size: 18px;
+    }
+
+    .cta-note {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    footer {
+      margin-top: 30px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(64, 64, 96, 0.7);
+      font-size: 11px;
+      color: #7a7d94;
+      text-align: center;
+    }
+
+    footer a {
+      color: var(--neon-green);
+      text-decoration: none;
+    }
+
+    .social-links {
+      margin-top: 8px;
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+
+    .social-links a {
+      color: var(--text-soft);
+      text-decoration: none;
+    }
+
+    @media (min-width: 720px) {
+      .hero-card {
+        padding: 26px 24px 28px;
+      }
+      .hero-title {
+        font-size: 32px;
+      }
+      .hero-sub {
+        font-size: 14px;
+      }
+      .section {
+        padding: 22px 22px 20px;
+      }
+      .section-title {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- HERO -->
+    <header class="hero-card">
+      <div class="hero-top-row">
+        <div class="hero-logo-pill">
+          <div class="hero-logo-pill-inner">
+            <img src="Guberapplogo.png" alt="GUBER Logo" />
+          </div>
+        </div>
+        <div class="hero-title-block">
+          <div class="hero-kicker">Global Unlimited Business &amp; Employment Resource</div>
+          <h1 class="hero-title">
+            <span class="gold">Day-1 OG</span> Lifetime Pass
+          </h1>
+          <p class="hero-sub">
+            A one-time <strong>$1.99</strong> thank-you for believing in GUBER
+            before the app fully launches. Day-1 OG passes are very limited
+            and may be closed at any time during this early pre-launch phase.
+          </p>
+        </div>
+      </div>
+
+      <!-- TOKEN HERO VISUAL -->
+      <div class="hero-token-wrap">
+        <!-- This should be your front+back token art -->
+        <img
+          src="Gubertoken.webp"
+          alt="GUBER Day-1 OG Founder Token"
+          class="hero-token-img"
+        />
+      </div>
+
+      <p class="hero-token-caption">
+        Your <strong>Day-1 OG NFT access token</strong> is a numbered digital pass.
+        One token = one lifetime helper discount and OG status, as long as it’s
+        linked to a verified account.
+      </p>
+
+      <div class="hero-pill">
+        <span class="hero-pill-dot"></span>
+        LIFETIME 15% SERVICE FEE • HELPER PERK
+      </div>
+
+      <p class="hero-price-line">
+        One-time payment of <strong>$1.99</strong>.
+        <span class="subtle">No subscriptions. No renewal. No hidden fees.</span>
+      </p>
+
+      <p class="hero-limited-note">
+        <strong>Very limited pre-launch allocation.</strong>
+        Once the GUBER app is officially live, no new Day-1 OG passes will be sold.
+      </p>
+    </header>
+
+    <!-- SECTION: HOW THE MONEY WORKS -->
+    <section class="section">
+      <div class="section-header">Helpers only • No extra out-of-pocket cost</div>
+      <h2 class="section-title">How the money works</h2>
+      <p class="section-body">
+        GUBER takes a small <strong>service fee</strong> out of each completed job so the platform
+        can run safely, handle payments, support, and tech. You never swipe a card for this fee —
+        it simply comes out before your payout hits.
+      </p>
+
+      <ul class="list">
+        <li>
+          <span class="list-icon">✅</span>
+          <span><strong>Normal helpers:</strong> The platform keeps <strong>20%</strong> from each completed job. You keep 80%.</span>
+        </li>
+        <li>
+          <span class="list-icon">💎</span>
+          <span><strong>Day-1 OG helpers:</strong> The platform only keeps <strong>15%</strong>. You keep <strong>85%</strong> on the same job.</span>
+        </li>
+        <li>
+          <span class="list-icon">♾️</span>
+          <span>This 15% rate is <strong>locked in for life</strong> on eligible GUBER jobs connected to your account or to whoever you transfer your OG token to.</span>
+        </li>
+      </ul>
+
+      <div class="math-card">
+        <div class="math-card-title">Quick example</div>
+        <div>On a $100 job:</div>
+        <div class="math-grid">
+          <div class="math-label">Normal helper keeps</div>
+          <div class="math-value-normal">$80 (20% platform fee)</div>
+          <div class="math-label">Day-1 OG helper keeps</div>
+          <div class="math-value-og">$85 (15% platform fee)</div>
+        </div>
+        <p style="margin-top:8px;">
+          That extra <strong>$5</strong> may not sound like much on one job — but over dozens or hundreds of
+          jobs, your Day-1 OG pass can add up to <strong>hundreds or thousands of dollars</strong> that stay in your pocket.
+        </p>
+      </div>
+    </section>
+
+    <!-- SECTION: NFT ACCESS TOKEN DETAILS -->
+    <section class="section section-nft">
+      <div class="section-header">Digital access pass • NFT backed</div>
+      <h2 class="section-title"><span class="hot">How your Day-1 OG NFT works</span></h2>
+      <p class="section-body">
+        Each Day-1 OG pass is tied to a <strong>serial-numbered NFT (digital token)</strong> that represents
+        your access rights inside the GUBER platform. Think of it as a <strong>transferable digital pass</strong>:
+        whoever holds the token — and links it to their verified GUBER account — receives the Day-1 OG perks.
+      </p>
+
+      <ul class="list">
+        <li>
+          <span class="list-icon">🔢</span>
+          <span>
+            Every token has its own <strong>unique ID / serial number</strong> (for example, something like
+            <strong>GFT-4F92</strong>) so your pass can be verified as an original Day-1 OG issue.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">📦</span>
+          <span>
+            When you purchase, you’ll be added to the <strong>Day-1 OG email list</strong>. Your NFT will be
+            delivered with simple step-by-step instructions once the token system is live.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🔁</span>
+          <span>
+            The token is <strong>transferable</strong>. If you sell or gift your OG NFT later, the new owner
+            can link it to their own verified GUBER account and take over the connected perks.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">⚠️</span>
+          <span>
+            At any time, <strong>only the current NFT holder</strong> (as verified and linked in GUBER) can use the
+            Day-1 OG perks for that token. Once you transfer it, your own OG access for that token ends.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🧾</span>
+          <span>
+            This NFT is a <strong>digital access pass only</strong>. It does not represent ownership, stock, or a
+            guarantee of income. It simply locks in discounted platform fees and OG recognition for the active holder.
+          </span>
+        </li>
+      </ul>
+
+      <div class="token-gallery">
+        <img src="Gubertoken.webp" alt="GUBER Day-1 OG Token Front and Back" />
+      </div>
+    </section>
+
+    <!-- SECTION: HELPER BENEFITS -->
+    <section class="section">
+      <div class="section-header">For helpers • Lifetime benefits</div>
+      <h2 class="section-title"><span class="hot">What you get</span> as a Day-1 OG</h2>
+      <ul class="list">
+        <li>
+          <span class="list-icon">🟩</span>
+          <span><strong>Lifetime 15% platform service fee</strong> on eligible GUBER jobs you complete as a helper.</span>
+        </li>
+        <li>
+          <span class="list-icon">🚀</span>
+          <span><strong>You keep more of every payout.</strong> No extra app bill, no surprise charges — the discount is built into the service fee.</span>
+        </li>
+        <li>
+          <span class="list-icon">👤</span>
+          <span><strong>Day-1 OG badge</strong> on your profile when the app is live, so serious employers know you believed in the platform early.</span>
+        </li>
+        <li>
+          <span class="list-icon">🔒</span>
+          <span><strong>Locked-in rate.</strong> Even if standard fees change in the future, your Day-1 OG helper rate stays 15% on qualifying jobs.</span>
+        </li>
+        <li>
+          <span class="list-icon">📲</span>
+          <span><strong>Early access</strong> to select features, tests, and private “helper-only” updates as GUBER grows.</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- SECTION: EMPLOYER ADVANTAGE -->
+    <section class="section section-employer">
+      <div class="section-header">Employer advantage • OG exclusive</div>
+      <h2 class="section-title">
+        <span class="hot">Lifetime urgent visibility</span> for OG employers
+      </h2>
+      <ul class="list">
+        <li>
+          <span class="list-icon">📢</span>
+          <span>
+            <strong>Urgent Job Boost fee = $0</strong> for verified Day-1 OG employer accounts whenever that feature is available in your region.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🔥</span>
+          <span>
+            Normal employers will pay an additional fee to mark jobs as <strong>URGENT</strong> for higher visibility and faster responses from helpers.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">♾️</span>
+          <span>
+            As a Day-1 OG employer, your account is permanently exempt from this extra fee on eligible Urgent postings — giving you a built-in visibility advantage at <strong>no extra cost</strong>.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🏷️</span>
+          <span>
+            Full details, limits, and eligibility for Urgent Job Boosts will be published in the live GUBER app, but your <strong>OG Urgent = $0</strong> status will always be honored wherever that feature is supported.
+          </span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- SECTION: FINE PRINT -->
+    <section class="section">
+      <div class="section-header">The fine print • Plain language</div>
+      <h2 class="section-title">Simple, transparent, no games</h2>
+      <ul class="list">
+        <li>
+          <span class="list-icon">🧾</span>
+          <span>
+            The Day-1 OG pass is a <strong>one-time $1.99 digital perk</strong> and does not represent ownership,
+            stock, or a guarantee of future earnings.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🔐</span>
+          <span>
+            The 15% helper service-fee rate applies to eligible GUBER jobs completed through the platform
+            under the account that currently holds a valid Day-1 OG NFT, subject to GUBER’s Terms of Service.
+          </span>
+        </li>
+        <li>
+          <span class="list-icon">🌍</span>
+          <span>
+            Availability, features, and eligibility may vary by region as GUBER rolls out. Your Day-1 OG status will always be honored wherever the platform is officially live.
+          </span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- CTA -->
+    <div class="cta-wrap">
+      <a
+        class="cta-button"
+        href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00?success_url=https%3A%2F%2Fguberapp.com%2Fog-confirmation.html"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span class="lock">🔒</span>
+        <span>Claim my Day-1 OG pass — $1.99</span>
+      </a>
+      <div class="cta-note">
+        One-time payment • Very limited pre-launch allocation • After successful payment, you’ll be redirected to the OG confirmation page.
+      </div>
+    </div>
+
+    <footer>
+      © 2025 Guber Global LLC — All Rights Reserved<br />
+      Contact: <a href="mailto:support@guberapp.com">support@guberapp.com</a>
+      <div class="social-links">
+        <a href="https://www.facebook.com/share/1H8GbxUHwn/" target="_blank" rel="noopener noreferrer">Facebook</a>
+        <a href="https://www.instagram.com/guber_global?igsh=MWs5aHg4bW90amtmNw==" target="_blank" rel="noopener noreferrer">Instagram</a>
+        <a href="https://www.tiktok.com/@the.guber.app?_r=1&_t=ZP-92iR9knPjH4" target="_blank" rel="noopener noreferrer">TikTok</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
