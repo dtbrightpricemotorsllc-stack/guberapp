@@ -72,7 +72,8 @@ const LIGHT_MAP_STYLES: google.maps.MapTypeStyle[] = [
   { featureType: "landscape.man_made", elementType: "geometry.fill", stylers: [{ color: "#eaf3e8" }] },
 ];
 
-const DEFAULT_CENTER = { lat: 36.0726, lng: -79.792 };
+const US_CENTER = { lat: 39.8283, lng: -98.5795 };
+const US_DENIED_ZOOM = 4;
 
 const DARK_CTRL = "rgba(14,15,22,0.88)";
 const DARK_CTRL_SOLID = "#0e0f16";
@@ -129,6 +130,7 @@ export default function MapExplore() {
 
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadErr, setMapLoadErr] = useState<string | null>(null);
+  const [locating, setLocating] = useState(true);
   const [radiusMiles, setRadiusMiles] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [mapViewMode, setMapViewMode] = useState<"jobs" | "workers" | "cash_drops">("jobs");
@@ -186,16 +188,19 @@ export default function MapExplore() {
   useEffect(() => {
     if (!config) return;
     if (!apiKey) { setMapLoadErr("no-key"); return; }
+    if (locating) return;
     if (!mapDivRef.current || initStartedRef.current) return;
     initStartedRef.current = true;
     setMapLoadErr(null);
+    const denied = !userPos && locationDenied;
+    const mapCenter = userPos || US_CENTER;
     (async () => {
       try {
         setOptions({ key: apiKey, version: "weekly" } as Parameters<typeof setOptions>[0]);
         const mapsLib = await importLibrary("maps") as typeof google.maps;
         const map = new mapsLib.Map(mapDivRef.current!, {
-          center: DEFAULT_CENTER,
-          zoom: 10,
+          center: mapCenter,
+          zoom: denied ? US_DENIED_ZOOM : 10,
           maxZoom: 13,
           styles: LIGHT_MAP_STYLES,
           zoomControl: false,
@@ -214,29 +219,40 @@ export default function MapExplore() {
         initStartedRef.current = false;
       }
     })();
-  }, [apiKey, config]);
+  }, [apiKey, config, locating]);
 
   const watchIdRef2 = useRef<number | null>(null);
+
+  const reverseGeocodeZip = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+      const data = await res.json();
+      if (data?.zip) setZipInput(data.zip);
+    } catch {}
+  };
 
   const startWatchPosition = () => {
     if (!navigator.geolocation) {
       console.warn("[GUBER] Geolocation API not available");
+      setLocating(false);
       setLocationDenied(true);
       return;
     }
+    setLocating(true);
     setLocationDenied(false);
     const id = navigator.geolocation.watchPosition(
       (pos) => {
-        // Ignore readings with poor accuracy (>300m) — they cause "in water" pins
         if (pos.coords.accuracy > 300) return;
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserPos(coords);
+        setLocating(false);
         setLocationDenied(false);
         if (mapRef.current && !hasCenteredRef.current) {
           mapRef.current.panTo(coords);
+          mapRef.current.setZoom(10);
           hasCenteredRef.current = true;
         }
-        // Auto-correct stored location once per session when GPS is reliable
+        reverseGeocodeZip(coords.lat, coords.lng);
         if (!hasUpdatedLocationRef.current) {
           hasUpdatedLocationRef.current = true;
           apiRequest("POST", "/api/users/location", { lat: coords.lat, lng: coords.lng }).catch(() => {});
@@ -245,6 +261,7 @@ export default function MapExplore() {
       (err) => {
         const labels: Record<number, string> = { 1: "PERMISSION_DENIED", 2: "POSITION_UNAVAILABLE", 3: "TIMEOUT" };
         console.warn(`[GUBER] map-explore geolocation: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}`);
+        setLocating(false);
         setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
@@ -515,9 +532,13 @@ export default function MapExplore() {
 
   const handleRecenter = () => {
     if (!mapRef.current) return;
-    const target = userPos || DEFAULT_CENTER;
-    mapRef.current.panTo(target);
-    mapRef.current.setZoom(11);
+    if (userPos) {
+      mapRef.current.panTo(userPos);
+      mapRef.current.setZoom(11);
+    } else {
+      mapRef.current.panTo(US_CENTER);
+      mapRef.current.setZoom(US_DENIED_ZOOM);
+    }
   };
 
   const handlePanToDrop = (drop: any) => {
@@ -546,6 +567,16 @@ export default function MapExplore() {
 
       {/* MAP */}
       <div ref={mapDivRef} className="absolute inset-0" />
+
+      {/* DETECTING LOCATION OVERLAY */}
+      {locating && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3" style={{ background: "#eaf3e8" }} data-testid="overlay-detecting-location">
+          <Navigation className="w-8 h-8 animate-pulse" style={{ color: "#16a34a" }} />
+          <p className="text-sm font-bold tracking-wide" style={{ color: "#15803d", fontFamily: "Inter, sans-serif" }}>
+            Detecting your location…
+          </p>
+        </div>
+      )}
 
       {/* MAP ERROR / NOT CONFIGURED OVERLAY */}
       {mapLoadErr && (

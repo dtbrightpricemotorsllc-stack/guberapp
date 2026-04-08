@@ -81,7 +81,8 @@ const DAYLIGHT_STYLES: object[] = [
   { featureType: "landscape.man_made", elementType: "geometry.fill", stylers: [{ color: "#f0ede8" }] },
 ];
 
-const DEFAULT_CENTER = { lat: 36.0726, lng: -79.7920 }; // Greensboro NC
+const US_CENTER = { lat: 39.8283, lng: -98.5795 };
+const US_DENIED_ZOOM = 4;
 
 export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPinClick, onCashDropClick, className, center, cluster, onUserPos }: GoogleMapProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
@@ -109,18 +110,17 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
 
   const apiKey = config?.googleMapsApiKey ?? "";
 
-  const buildMap = async (mapCenter: { lat: number; lng: number }) => {
+  const buildMap = async (mapCenter: { lat: number; lng: number }, denied?: boolean) => {
     if (!mapDivRef.current || initStartedRef.current) return;
     initStartedRef.current = true;
     try {
-      // setOptions converts camelCase to snake_case — use "key" not "apiKey" to get ?key=XXX
       setOptions({ key: apiKey, version: "weekly" } as Parameters<typeof setOptions>[0]);
 
       const mapsLib = await importLibrary("maps") as typeof google.maps;
 
       const map = new mapsLib.Map(mapDivRef.current, {
         center: mapCenter,
-        zoom: 11,
+        zoom: denied ? US_DENIED_ZOOM : 11,
         maxZoom: 14,
         styles: DAYLIGHT_STYLES as google.maps.MapTypeStyle[],
         zoomControl: true,
@@ -145,6 +145,14 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     }
   };
 
+  const reverseGeocodeZip = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+      const data = await res.json();
+      if (data?.zip) setZipInput(data.zip);
+    } catch {}
+  };
+
   const startWatchPosition = () => {
     if (!navigator.geolocation) {
       setLocating(false);
@@ -163,8 +171,10 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         onUserPos?.(coords);
         if (mapRef.current && !center && !hasCenteredRef.current) {
           mapRef.current.panTo(coords);
+          mapRef.current.setZoom(11);
           hasCenteredRef.current = true;
         }
+        reverseGeocodeZip(coords.lat, coords.lng);
       },
       (err) => {
         const labels: Record<number, string> = {
@@ -219,9 +229,11 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   useEffect(() => {
     if (!config || !apiKey) return;
     if (initStartedRef.current) return;
-    const mapCenter = center || userPos || DEFAULT_CENTER;
-    buildMap(mapCenter);
-  }, [apiKey, config]);
+    if (locating) return;
+    const denied = !userPos && locationDenied;
+    const mapCenter = center || userPos || US_CENTER;
+    buildMap(mapCenter, denied);
+  }, [apiKey, config, locating]);
 
   useEffect(() => {
     if (!mapRef.current || !center) return;
@@ -453,8 +465,13 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
 
   const handleRecenter = () => {
     if (!mapRef.current) return;
-    mapRef.current.panTo(userPos || DEFAULT_CENTER);
-    mapRef.current.setZoom(11);
+    if (userPos) {
+      mapRef.current.panTo(userPos);
+      mapRef.current.setZoom(11);
+    } else {
+      mapRef.current.panTo(US_CENTER);
+      mapRef.current.setZoom(US_DENIED_ZOOM);
+    }
   };
 
   if (config && !apiKey) {
@@ -500,7 +517,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <Navigation className="w-6 h-6 text-primary animate-pulse" />
             <span className="text-xs text-muted-foreground/60 font-display tracking-wider">
-              {locating ? "FINDING YOUR LOCATION..." : "LOADING MAP..."}
+              {locating ? "Detecting your location…" : "LOADING MAP..."}
             </span>
           </div>
         </div>
