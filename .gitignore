@@ -7,4 +7,23 @@ vite.config.ts.*
 # Android keystore (stored as GitHub Secret, never commit)
 *.jks
 *.keystore
-attached_assets/
+attached_assets/*.mp4
+attached_assets/*.jpg
+attached_assets/*.jpeg
+attached_assets/*.txt
+attached_assets/*.json
+attached_assets/*.md
+attached_assets/*.html
+attached_assets/*.svg
+attached_assets/Screen_Recording_*
+attached_assets/Screenshot_*
+attached_assets/Video.*
+attached_assets/Messenger_*
+attached_assets/Pasted-*
+attached_assets/Urgent*
+attached_assets/ogImage.png
+attached_assets/screenshot-*
+attached_assets/branding-*
+attached_assets/content-*
+attached_assets/logo.*
+attached_assets/logoHref*
