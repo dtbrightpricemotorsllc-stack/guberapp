@@ -30,11 +30,11 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Install Android SDK 36 + build tools (via pre-installed sdkmanager)
         run: |
