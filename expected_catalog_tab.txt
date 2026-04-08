@@ -1,0 +1,223 @@
+function CatalogTab() {
+  const { toast } = useToast();
+  const [expandedCat, setExpandedCat] = useState<number | null>(null);
+  const [expandedUC, setExpandedUC] = useState<number | null>(null);
+  const [newUCName, setNewUCName] = useState("");
+  const [newUCTier, setNewUCTier] = useState("community");
+  const [newSTName, setNewSTName] = useState("");
+
+  const { data: catalog, isLoading } = useQuery<{
+    viCategories: VICategory[];
+    useCases: UseCase[];
+    serviceTypes: CatalogServiceType[];
+    detailOptionSets: DetailOptionSet[];
+    proofTemplates: ProofTemplate[];
+  }>({ queryKey: ["/api/catalog/all"] });
+
+  const addUCMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/admin/catalog/use-case", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog/all"] });
+      toast({ title: "Use case added" });
+      setNewUCName("");
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const addSTMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/admin/catalog/service-type", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog/all" ] });
+      toast({ title: "Service type added" });
+      setNewSTName("");
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>;
+
+  const cats = catalog?.viCategories || [];
+  const ucs = catalog?.useCases || [];
+  const sts = catalog?.serviceTypes || [];
+  const dos = catalog?.detailOptionSets || [];
+  const pts = catalog?.proofTemplates || [];
+
+  return (
+    <div className="space-y-6" data-testid="admin-catalog">
+      <div className="glass-card rounded-2xl overflow-hidden border border-border/10">
+        <div className="bg-muted/5 p-4 border-b border-border/5">
+          <h2 className="text-sm font-display font-bold text-foreground/80 flex items-center gap-2 uppercase tracking-widest">
+            <FolderTree className="w-4 h-4 text-primary" />
+            Job Checklists
+          </h2>
+        </div>
+        <div className="p-4">
+          <JobChecklistEditor />
+        </div>
+      </div>
+
+      <div className="glass-card rounded-2xl overflow-hidden border border-border/10">
+        <div className="bg-muted/5 p-4 border-b border-border/5">
+          <h2 className="text-sm font-display font-bold text-foreground/80 flex items-center gap-2 uppercase tracking-widest">
+            <FolderTree className="w-4 h-4 text-primary" />
+            V&I Dropdown Tree Catalog
+          </h2>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="pt-4 border-t border-border/10">
+            {cats.map(cat => {
+              const catUCs = ucs.filter(uc => uc.viCategoryId === cat.id);
+              const catDetails = dos.filter(d => d.viCategoryId === cat.id);
+              const isExpanded = expandedCat === cat.id;
+
+              return (
+                <div key={cat.id} className="bg-card rounded-xl border border-border/20 overflow-hidden mb-2 last:mb-0" data-testid={`catalog-cat-${cat.id}`}>
+                  <button
+                    className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+                    onClick={() => setExpandedCat(isExpanded ? null : cat.id)}
+                    data-testid={`toggle-cat-${cat.id}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">{cat.icon}</Badge>
+                      <span className="text-sm font-semibold">{cat.name}</span>
+                      <span className="text-[10px] text-muted-foreground">({catUCs.length} use cases)</span>
+                    </div>
+                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-border/10 px-3 pb-3">
+                      {catDetails.length > 0 && (
+                        <div className="mt-2 mb-3 p-2 bg-muted/20 rounded-lg">
+                          <p className="text-[10px] text-muted-foreground font-semibold mb-1">Detail Options (Layer 4)</p>
+                          <div className="flex flex-wrap gap-1">
+                            {catDetails.map(d => (
+                              <Badge key={d.id} variant="outline" className="text-[9px]">
+                                {d.label}: {(d.options as string[])?.length || 0} options
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        {catUCs.map(uc => {
+                          const ucSTs = sts.filter(st => st.useCaseId === uc.id);
+                          const ucExpanded = expandedUC === uc.id;
+
+                          return (
+                            <div key={uc.id} className="bg-background rounded-lg border border-border/10" data-testid={`catalog-uc-${uc.id}`}>
+                              <button
+                                className="w-full flex items-center justify-between p-2.5 hover:bg-muted/20 transition-colors"
+                                onClick={() => setExpandedUC(ucExpanded ? null : uc.id)}
+                                data-testid={`toggle-uc-${uc.id}`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform shrink-0 ${ucExpanded ? "rotate-90" : ""}`} />
+                                  <span className="text-[12px] font-medium truncate">{uc.name}</span>
+                                  {uc.minTier !== "community" && (
+                                    <Badge variant="outline" className="text-[8px] shrink-0">
+                                      <Lock className="w-2.5 h-2.5 mr-0.5" />{uc.minTier}
+                                    </Badge>
+                                  )}
+                                  <span className="text-[9px] text-muted-foreground shrink-0">({ucSTs.length} types)</span>
+                                </div>
+                              </button>
+
+                              {ucExpanded && (
+                                <div className="border-t border-border/5 px-3 pb-2 space-y-1">
+                                  {ucSTs.map(st => {
+                                    const pt = pts.find(p => p.id === st.proofTemplateId);
+                                    return (
+                                      <div key={st.id} className="flex items-center justify-between py-1.5 px-2 bg-muted/10 rounded text-[11px]" data-testid={`catalog-st-${st.id}`}>
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <CheckCircle className="w-3 h-3 text-primary shrink-0" />
+                                          <span className="truncate">{st.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {st.credentialRequired && <Badge variant="outline" className="text-[8px]">Cred</Badge>}
+                                          {st.minTier !== "community" && <Badge variant="outline" className="text-[8px]">{st.minTier}</Badge>}
+                                          {pt && <Badge variant="outline" className="text-[8px] bg-secondary/10 text-secondary border-secondary/30"><Camera className="w-2 h-2 mr-0.5" />{pt.requiredPhotoCount}{pt.requiredVideo ? <><Video className="w-2 h-2 mx-0.5" /></> : ""}</Badge>}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+
+                                  <div className="flex gap-1.5 mt-2">
+                                    <Input
+                                      value={newSTName}
+                                      onChange={e => setNewSTName(e.target.value)}
+                                      placeholder="New service type name..."
+                                      className="h-7 text-[11px] bg-background border-border/20"
+                                      data-testid="input-new-service-type"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      className="h-7 text-[10px] font-display px-2"
+                                      disabled={!newSTName || addSTMutation.isPending}
+                                      onClick={() => addSTMutation.mutate({
+                                        useCaseId: uc.id,
+                                        name: newSTName,
+                                        minTier: uc.minTier,
+                                        titleTemplate: `${uc.name} - ${newSTName}`,
+                                        descriptionTemplate: `${newSTName} for ${uc.name}`,
+                                      })}
+                                      data-testid="button-add-service-type"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        <div className="flex gap-1.5 mt-2 pt-2 border-t border-border/10">
+                          <Input
+                            value={newUCName}
+                            onChange={e => setNewUCName(e.target.value)}
+                            placeholder="New use case name..."
+                            className="h-7 text-[11px] bg-background border-border/20"
+                            data-testid="input-new-use-case"
+                          />
+                          <Select value={newUCTier} onValueChange={setNewUCTier}>
+                            <SelectTrigger className="w-24 h-7 text-[10px] bg-background border-border/20" data-testid="select-new-uc-tier">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="community">Community</SelectItem>
+                              <SelectItem value="verified">Verified</SelectItem>
+                              <SelectItem value="credentialed">Credentialed</SelectItem>
+                              <SelectItem value="elite">Elite</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            className="h-7 text-[10px] font-display px-2"
+                            disabled={!newUCName || addUCMutation.isPending}
+                            onClick={() => addUCMutation.mutate({
+                              viCategoryId: cat.id,
+                              name: newUCName,
+                              minTier: newUCTier,
+                            })}
+                            data-testid="button-add-use-case"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OGTab({ allUsers, usersLoading, refetchUsers }: { allUsers: User[] | undefined; usersLoading: boolean; refetchUsers: () => void }) {
+  const { toast } = useToast();

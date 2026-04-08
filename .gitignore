@@ -1,0 +1,10 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+# Android keystore (stored as GitHub Secret, never commit)
+*.jks
+*.keystore
+attached_assets/

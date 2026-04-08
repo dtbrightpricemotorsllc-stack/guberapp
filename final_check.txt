@@ -1,0 +1,16 @@
+   955	</div>
+   956	</div>
+   957	)}
+   958	</div>
+   959	</div>
+   960	</div>
+   961	</div>
+   962	);
+   963	}
+   964	
+   965	function OGTab({ allUsers, usersLoading, refetchUsers }: { allUsers: User[] | undefined; usersLoading: boolean; refetchUsers: () => void }) {const [syncResult, setSyncResult] = useState<{ activated: string[]; alreadyActive: string[]; preapproved: string[]; emailMismatch: string[]; totalScanned: number; totalOgInStripe: number } | null>(null);
+   966	const [tbSyncResult, setTbSyncResult] = useState<{ activated: string[]; alreadyActive: string[]; preapproved: string[]; totalScanned: number } | null>(null);
+   967	const [resetEmail, setResetEmail] = useState("");
+   968	const [resetPassword, setResetPassword] = useState("");
+   969	const resetPasswordMutation = useMutation({
+   970	mutationFn: () => apiRequest("POST", "/api/admin/reset-user-password", { email: resetEmail.trim(), newPassword: resetPassword }),

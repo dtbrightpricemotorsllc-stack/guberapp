@@ -1,0 +1,31 @@
+   940	</Select>
+   941	<Button
+   942	size="sm"
+   943	className="h-7 text-[10px] font-display px-2"
+   944	disabled={!newUCName || addUCMutation.isPending}
+   945	onClick={() => addUCMutation.mutate({
+   946	viCategoryId: cat.id,
+   947	name: newUCName,
+   948	minTier: newUCTier,
+   949	})}
+   950	data-testid="button-add-use-case"
+   951	>
+   952	<Plus className="w-3 h-3" />
+   953	</Button>
+   954	</div>
+   955	                    </div>
+   956	                  </div>
+   957	                </div>
+   958	              )}
+   959	            </div>
+   960	          </div>
+   961	        </div>
+   962	      </div>
+   963	    );
+   964	  })}
+   965	</div>
+   966	</div>
+   967	</div>
+   968	</div>
+   969	);
+   970	}

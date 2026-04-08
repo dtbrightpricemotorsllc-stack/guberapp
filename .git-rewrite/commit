@@ -1,0 +1,16 @@
+tree c2750fc53be669a244ccbced15ceb1590455a4b2
+parent e325e10dfbe5f155f39173a3379e863aecb152b2
+parent 91f5d47cf400ca5e8c6ac894e6f6ea2e1e4c37aa
+author guberappglobal <53992375-guberappglobal@users.noreply.replit.com> 1772464626 +0000
+committer guberappglobal <53992375-guberappglobal@users.noreply.replit.com> 1772464626 +0000
+
+Improve verification and inspection job submission flow
+
+Update job submission routes and success page to correctly handle verification and inspection jobs, including redirect URLs, success messaging, and cancellation handling.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: a16d0efd-8343-4666-90de-ff5cb34651c8
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: ddc08c91-f6f9-40d4-b738-e29d0c69d860
+Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/e56cd826-6031-480e-8c02-ef3bd7b48c68/a16d0efd-8343-4666-90de-ff5cb34651c8/neyjZmH
+Replit-Helium-Checkpoint-Created: true

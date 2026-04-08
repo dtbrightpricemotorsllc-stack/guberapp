@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#000000" />
+    <title>GUBER — Work · Hire · Help · Anywhere</title>
+    <link rel="canonical" href="https://guberapp.app/" />
+    <link rel="sitemap" type="application/xml" href="https://guberapp.app/sitemap.xml" />
+    <meta name="application-name" content="GUBER" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="GUBER" />
+    <meta name="description" content="GUBER — Trust-enforced local visibility network. Post jobs, find workers, verify identities — all in your community." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="GUBER" />
+    <meta property="og:title" content="GUBER — Work · Hire · Help · Anywhere" />
+    <meta property="og:description" content="GUBER connects people to paid local work and makes opportunity visible to everyone." />
+    <meta property="og:image" content="https://guberapp.app/icon-512.png" />
+    <meta property="og:url" content="https://guberapp.app" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="GUBER" />
+    <meta name="twitter:description" content="GUBER — Trust-enforced local visibility network. Work · Hire · Help · Anywhere." />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "GUBER",
+      "alternateName": "GUBER App",
+      "url": "https://guberapp.app",
+      "description": "Trust-enforced local visibility network. Post jobs, find workers, verify identities — all in your community.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://guberapp.app/browse-jobs?search={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Oxanium:wght@200..800&display=swap" as="style" onload="this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Oxanium:wght@200..800&display=swap" rel="stylesheet" /></noscript>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Capture beforeinstallprompt as early as possible — before React loads.
+      // Chrome fires this event very early; if the React component hasn't mounted
+      // yet the event is lost. We stash it on window so the component can pick it up.
+      window.__installPromptEvent = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__installPromptEvent = e;
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

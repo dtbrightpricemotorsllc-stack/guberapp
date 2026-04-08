@@ -1,0 +1,10 @@
+Add text labels to verification and inspection tiles and improve error handling
+
+Restores the AI or Not iframe integration, increases map fuzzing radius, adds visible text labels to V&I tiles, and improves V&I checkout error handling for session expiry.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: a16d0efd-8343-4666-90de-ff5cb34651c8
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: 37bdd700-5ddc-48a1-a631-c960e62162d5
+Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/e56cd826-6031-480e-8c02-ef3bd7b48c68/a16d0efd-8343-4666-90de-ff5cb34651c8/eanuh7j
+Replit-Helium-Checkpoint-Created: true

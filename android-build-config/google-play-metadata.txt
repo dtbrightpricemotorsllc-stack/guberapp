@@ -1,0 +1,58 @@
+GUBER — Google Play Store Metadata Reference
+==============================================
+
+App ID (Package Name): com.guber.app
+App Name: GUBER
+Category: Business
+Content Rating: Everyone (or Everyone 10+ — to be confirmed during submission)
+
+Version Code: Increment by 1 for each upload (start at 1)
+Version Name: 1.0.0 (use semantic versioning)
+
+Minimum SDK: 23 (Android 6.0 Marshmallow) — set by Capacitor 8
+Target SDK: 34 (Android 14) — set by Capacitor 8 Gradle template
+Minimum WebView version: 60
+
+Short description (max 80 chars):
+  Find work. Hire locally. Earn on your schedule.
+
+Full description (max 4000 chars):
+  GUBER is a trust-enforced local visibility network that connects people
+  to paid work in their community. Whether you need someone to help today
+  or you're looking for flexible income, GUBER makes it simple.
+
+  WORK:
+  • Browse and accept jobs near you across 7 categories
+  • Get paid via Stripe directly to your account
+  • Build a verifiable work history with your GUBER Resume
+
+  HIRE:
+  • Post a job in under 2 minutes
+  • See pre-vetted, locally available workers
+  • Pay only when you lock in a helper
+
+  FEATURES:
+  • Cash Drops — limited-time earning events in your area
+  • V&I (Verify & Inspect) — professional property and vehicle checks
+  • Marketplace — buy, sell, and trade locally
+  • Trust Toolbox — AI-powered identity verification
+  • Referral system — earn rewards for growing your community
+
+  BUILT FOR TRUST:
+  GUBER enforces trust at every step. Workers build verified histories,
+  and posters know who's coming. No guessing. No surprises.
+
+Privacy Policy URL: https://guberapp.app/privacy
+Terms of Service URL: https://guberapp.app/terms
+
+Screenshots required:
+  - Phone screenshots: at least 2, up to 8 (16:9 or 9:16 ratio)
+  - Recommended sizes: 1080x1920 or 1440x2560
+  - Feature graphic: 1024x500 PNG (use icon-1024.png as base)
+  - App icon: 512x512 PNG (use icon-512.png from client/public/)
+
+Release track order for first submission:
+  1. Internal testing → 2. Closed testing (optional) → 3. Open testing (optional) → 4. Production
+
+Google Play Console URL: https://play.google.com/console
+Developer account cost: $25 one-time registration fee

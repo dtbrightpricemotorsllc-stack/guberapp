@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  GUBER iOS Info.plist Template
+  ==============================
+  After running `npx cap add ios` on macOS, merge these keys into:
+    ios/App/App/Info.plist
+
+  Add each <key>/<string> block inside the root <dict> of that file.
+-->
+<plist version="1.0">
+<dict>
+
+  <!-- ─── Location Permissions ─────────────────────────────────────────── -->
+  <!--
+    Required for GPS / nearby jobs / Cash Drops / map features.
+    Without these, iOS silently denies all navigator.geolocation calls.
+  -->
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>GUBER uses your location to show nearby jobs, Cash Drops, and workers in your area.</string>
+
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+  <string>GUBER uses your location in the background to notify you about nearby jobs and Cash Drops even when the app is minimized.</string>
+
+  <!-- ─── Camera / Photo Library ────────────────────────────────────────── -->
+  <!--
+    Required for proof submission (job completion photos/video).
+  -->
+  <key>NSCameraUsageDescription</key>
+  <string>GUBER needs camera access to take proof photos when completing a job.</string>
+
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>GUBER needs photo library access to attach proof images to job submissions.</string>
+
+  <key>NSPhotoLibraryAddUsageDescription</key>
+  <string>GUBER saves job proof photos to your library.</string>
+
+  <!-- ─── Microphone ────────────────────────────────────────────────────── -->
+  <!--
+    Required if video proof recording is enabled.
+  -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>GUBER needs microphone access to record video proof for job completion.</string>
+
+  <!-- ─── Face ID (optional — if biometric auth is added later) ──────────── -->
+  <!-- <key>NSFaceIDUsageDescription</key> -->
+  <!-- <string>GUBER uses Face ID to authenticate you securely.</string> -->
+
+  <!-- ─── App Transport Security ────────────────────────────────────────── -->
+  <!--
+    Allow guberapp.app HTTPS traffic (already HTTPS so default ATS is fine).
+    Only needed if you ever add non-HTTPS endpoints.
+  -->
+  <!-- <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <false/>
+  </dict> -->
+
+  <!-- ─── URL Schemes (Google Sign-In deep link) ────────────────────────── -->
+  <!--
+    The guber:// scheme is already set via capacitor.config.ts ios.scheme = 'guber'.
+    Capacitor adds this automatically. No manual entry needed unless you see issues.
+
+    If you need to add it manually:
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleURLName</key>
+        <string>com.guber.app</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>guber</string>
+        </array>
+      </dict>
+    </array>
+  -->
+
+</dict>
+</plist>
