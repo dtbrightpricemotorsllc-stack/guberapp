@@ -162,7 +162,7 @@ export default function JobDetail() {
   const [availableFrom, setAvailableFrom] = useState("");
   const [availableTo, setAvailableTo] = useState("");
   const [confirmedStartTime, setConfirmedStartTime] = useState("");
-  const [needMoreTimeSent, setNeedMoreTimeSent] = useState(false);
+  
 
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), 30_000);
@@ -420,7 +420,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       return resp.json();
     },
     onSuccess: () => {
-      setNeedMoreTimeSent(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       toast({ title: "Worker Notified", description: "The worker has been told you need more time." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -1624,7 +1624,17 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           )}
 
           {job.status === "posted_public" && !isOwner && (
-            <Button onClick={() => { setShowWaiverModal(true); setWaiverChecked(false); setCategoryWaiverChecked(false); }}
+            <Button onClick={() => {
+              setShowWaiverModal(true);
+              setWaiverChecked(false);
+              setCategoryWaiverChecked(false);
+              if (job.urgentSwitch || job.category === "On-Demand Help") {
+                const now = new Date();
+                setAvailableFrom(toLocalDatetimeString(now));
+                const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
+                setAvailableTo(toLocalDatetimeString(endOfDay));
+              }
+            }}
               disabled={acceptMutation.isPending || (acceptMutation.error?.message === "STRIPE_CONNECT_REQUIRED")}
               className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl" data-testid="button-accept-job">
               <CheckCircle className="w-5 h-5 mr-2" /> ACCEPT JOB
@@ -1794,7 +1804,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 {(() => {
                   const sentAt = (job as any).assignment?.needMoreTimeSentAt;
                   const sentRecently = sentAt && (Date.now() - new Date(sentAt).getTime()) < 60 * 60 * 1000;
-                  const isDisabled = needMoreTimeMutation.isPending || needMoreTimeSent || !!sentRecently;
+                  const isDisabled = needMoreTimeMutation.isPending || !!sentRecently;
                   return (
                     <Button
                       onClick={() => needMoreTimeMutation.mutate()}
