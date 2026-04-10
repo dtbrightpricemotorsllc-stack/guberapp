@@ -282,6 +282,7 @@ export const jobs = pgTable("jobs", {
   autoIncreaseIntervalMins: integer("auto_increase_interval_mins"),
   nextIncreaseAt: timestamp("next_increase_at"),
   taskTier: text("task_tier"),
+  estimatedDurationHours: real("estimated_duration_hours"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -298,6 +299,10 @@ export const assignments = pgTable("assignments", {
   payout: real("payout"),
   jobWaiverAcceptedAt: timestamp("job_waiver_accepted_at"),
   categoryWaiverAcceptedAt: timestamp("category_waiver_accepted_at"),
+  workerAvailableFrom: timestamp("worker_available_from"),
+  workerAvailableTo: timestamp("worker_available_to"),
+  confirmedStartTime: timestamp("confirmed_start_time"),
+  needMoreTimeSentAt: timestamp("need_more_time_sent_at"),
 });
 
 export const timesheets = pgTable("timesheets", {

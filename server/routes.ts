@@ -4001,7 +4001,6 @@ export async function registerRoutes(
 
     const sanitized = sanitizeJobForPublic(job, req.session.userId);
     
-    // Privacy hardening: filter jobDetails and other fields for contact info
     if (sanitized.description) sanitized.description = filterContactInfo(sanitized.description).clean;
     if (sanitized.jobDetails) {
       const cleanDetails: Record<string, string> = {};
@@ -4009,6 +4008,19 @@ export async function registerRoutes(
         cleanDetails[key] = filterContactInfo(val as string).clean;
       }
       sanitized.jobDetails = cleanDetails;
+    }
+
+    if (isOwner || isHelper) {
+      const jobAssignments = await storage.getAssignmentsByJob(job.id);
+      const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
+      if (activeAssignment) {
+        (sanitized as any).assignment = {
+          workerAvailableFrom: activeAssignment.workerAvailableFrom,
+          workerAvailableTo: activeAssignment.workerAvailableTo,
+          confirmedStartTime: activeAssignment.confirmedStartTime,
+          needMoreTimeSentAt: activeAssignment.needMoreTimeSentAt,
+        };
+      }
     }
 
     res.json(sanitized);
@@ -4574,6 +4586,30 @@ export async function registerRoutes(
         }
       }
 
+      const { availableFrom, availableTo } = req.body;
+      if (!availableFrom || !availableTo) {
+        return res.status(400).json({ message: "Availability window required. Please provide availableFrom and availableTo." });
+      }
+      const fromDate = new Date(availableFrom);
+      const toDate = new Date(availableTo);
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return res.status(400).json({ message: "Invalid date format for availability window" });
+      }
+      if (toDate <= fromDate) {
+        return res.status(400).json({ message: "availableTo must be after availableFrom" });
+      }
+      if (fromDate < new Date()) {
+        return res.status(400).json({ message: "Availability window must be in the future" });
+      }
+
+      if (job.urgentSwitch) {
+        const now = new Date();
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        if (fromDate > endOfToday) {
+          return res.status(400).json({ message: "Urgent jobs require same-day availability. Your availability window must start today." });
+        }
+      }
+
       const updated = await storage.updateJob(jobId, {
         status: "accepted_pending_payment",
         assignedHelperId: req.session.userId!,
@@ -4595,11 +4631,14 @@ export async function registerRoutes(
         acceptedAt: new Date(),
         jobWaiverAcceptedAt: waiverAccepted ? new Date() : null,
         categoryWaiverAcceptedAt: categoryWaiverAccepted ? new Date() : null,
+        workerAvailableFrom: fromDate,
+        workerAvailableTo: toDate,
       });
 
+      const availWindow = `Available: ${fromDate.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} – ${toDate.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
       await notify(job.postedById, {
         title: "Helper Applied",
-        body: `${helper.fullName} wants to accept your job "${job.title}". Confirm to lock the job.`,
+        body: `${helper.fullName} wants to accept your job "${job.title}". ${availWindow}. Confirm to lock the job.`,
         jobId,
         priority: "high",
       });
@@ -4622,18 +4661,37 @@ export async function registerRoutes(
       const poster = await storage.getUser(req.session.userId!);
       if (!poster) return res.status(401).json({ message: "User not found" });
 
+      const { confirmedStartTime } = req.body;
+      if (confirmedStartTime) {
+        const confirmDate = new Date(confirmedStartTime);
+        if (isNaN(confirmDate.getTime())) {
+          return res.status(400).json({ message: "Invalid confirmedStartTime format" });
+        }
+        const jobAssignments = await storage.getAssignmentsByJob(jobId);
+        const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
+        if (activeAssignment?.workerAvailableFrom && activeAssignment?.workerAvailableTo) {
+          const from = new Date(activeAssignment.workerAvailableFrom);
+          const to = new Date(activeAssignment.workerAvailableTo);
+          if (confirmDate < from || confirmDate > to) {
+            return res.status(400).json({ message: `Confirmed start time must be within the worker's availability window (${from.toLocaleString()} – ${to.toLocaleString()})` });
+          }
+        }
+        if (activeAssignment) {
+          await storage.updateAssignment(activeAssignment.id, { confirmedStartTime: confirmDate } as any);
+        }
+      }
+
       const budget = job.budget ?? 0;
       const urgentFee = job.urgentFee ?? 0;
-      // Poster pays: budget + urgent fee only. GUBER's 20% platform fee is taken at capture
-      // (not added on top) so the poster never sees a separate service fee line.
       const totalCharge = budget + urgentFee;
 
-      // Barter or zero-budget: lock directly, no payment
-      if (job.category === "Barter Labor" || budget <= 0) {
+      const isAdmin = poster.role === "admin";
+      if (job.category === "Barter Labor" || budget <= 0 || isAdmin) {
         const updated = await storage.updateJob(jobId, { status: "funded", lockedAt: new Date() });
-        await notify(job.assignedHelperId, {
+        const timeMsg = confirmedStartTime ? ` Start time: ${new Date(confirmedStartTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.` : "";
+        await notify(job.assignedHelperId!, {
           title: "Job Funded!",
-          body: `You've been confirmed for "${job.title}". Job details and address are now available.`,
+          body: `You've been confirmed for "${job.title}".${timeMsg} Job details and address are now available.`,
           jobId,
           priority: "high",
         });
@@ -4742,6 +4800,42 @@ export async function registerRoutes(
         posterProcessingFee: stripeFee,
       } as any);
       res.json({ checkoutUrl: stripeSession.url, jobId, grossCharge, stripeFee });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/jobs/:id/need-more-time", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.postedById !== req.session.userId) return res.status(403).json({ message: "Only the hirer can send this" });
+      if (job.status !== "accepted_pending_payment") return res.status(400).json({ message: "Job must be in accepted/pending payment status" });
+      if (!job.assignedHelperId) return res.status(400).json({ message: "No helper assigned" });
+
+      const jobAssignments = await storage.getAssignmentsByJob(jobId);
+      const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
+      if (activeAssignment?.needMoreTimeSentAt) {
+        const lastSent = new Date(activeAssignment.needMoreTimeSentAt);
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        if (lastSent > hourAgo) {
+          return res.status(429).json({ message: "You've already notified the worker. Please wait before sending again." });
+        }
+      }
+
+      if (activeAssignment) {
+        await storage.updateAssignment(activeAssignment.id, { needMoreTimeSentAt: new Date() } as any);
+      }
+
+      await notify(job.assignedHelperId, {
+        title: "Hirer is preparing",
+        body: `The hirer is preparing for your arrival and will respond with an exact time shortly. Please be patient.`,
+        jobId,
+        priority: "normal",
+      });
+
+      res.json({ sent: true, message: "Worker has been notified" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

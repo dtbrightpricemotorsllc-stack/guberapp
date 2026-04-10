@@ -85,6 +85,7 @@ export interface IStorage {
 
   createAssignment(data: any): Promise<Assignment>;
   getAssignmentsByJob(jobId: number): Promise<Assignment[]>;
+  updateAssignment(id: number, data: Partial<Assignment>): Promise<Assignment>;
 
   createTimesheet(data: any): Promise<Timesheet>;
   getTimesheetsByAssignment(assignmentId: number): Promise<Timesheet[]>;
@@ -486,6 +487,11 @@ export class DatabaseStorage implements IStorage {
 
   async getAssignmentsByJob(jobId: number): Promise<Assignment[]> {
     return db.select().from(assignments).where(eq(assignments.jobId, jobId));
+  }
+
+  async updateAssignment(id: number, data: Partial<Assignment>): Promise<Assignment> {
+    const [a] = await db.update(assignments).set(data).where(eq(assignments.id, id)).returning();
+    return a;
   }
 
   async createTimesheet(data: any): Promise<Timesheet> {

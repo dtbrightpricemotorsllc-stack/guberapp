@@ -150,6 +150,10 @@ export default function JobDetail() {
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [selectedPayoutMode, setSelectedPayoutMode] = useState<"standard" | "early" | "instant">("standard");
   const [now, setNow] = useState(Date.now());
+  const [availableFrom, setAvailableFrom] = useState("");
+  const [availableTo, setAvailableTo] = useState("");
+  const [confirmedStartTime, setConfirmedStartTime] = useState("");
+  const [needMoreTimeSent, setNeedMoreTimeSent] = useState(false);
 
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), 30_000);
@@ -360,13 +364,15 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   });
 
   const acceptMutation = useMutation({
-    mutationFn: ({ waiverAccepted, categoryWaiverAccepted }: { waiverAccepted: boolean; categoryWaiverAccepted: boolean }) =>
-      apiRequest("POST", `/api/jobs/${jobId}/accept`, { waiverAccepted, categoryWaiverAccepted }),
+    mutationFn: ({ waiverAccepted, categoryWaiverAccepted, availableFrom: af, availableTo: at }: { waiverAccepted: boolean; categoryWaiverAccepted: boolean; availableFrom: string; availableTo: string }) =>
+      apiRequest("POST", `/api/jobs/${jobId}/accept`, { waiverAccepted, categoryWaiverAccepted, availableFrom: af, availableTo: at }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       setShowWaiverModal(false);
       setWaiverChecked(false);
       setCategoryWaiverChecked(false);
+      setAvailableFrom("");
+      setAvailableTo("");
       toast({ title: "Applied!", description: "Waiting for the poster to confirm and pay." });
     },
     onError: (err: any) => {
@@ -382,8 +388,10 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   });
 
   const lockMutation = useMutation({
-    mutationFn: async () => {
-      const resp = await apiRequest("POST", `/api/jobs/${jobId}/lock`);
+    mutationFn: async (startTime?: string) => {
+      const body: any = {};
+      if (startTime) body.confirmedStartTime = startTime;
+      const resp = await apiRequest("POST", `/api/jobs/${jobId}/lock`, body);
       return resp.json();
     },
     onSuccess: (data: any) => {
@@ -393,6 +401,18 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
         toast({ title: "Job Locked!", description: "Your helper has been notified." });
       }
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const needMoreTimeMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await apiRequest("POST", `/api/jobs/${jobId}/need-more-time`);
+      return resp.json();
+    },
+    onSuccess: () => {
+      setNeedMoreTimeSent(true);
+      toast({ title: "Worker Notified", description: "The worker has been told you need more time." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -1717,11 +1737,67 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   Payments processed by Stripe. Funds are held until job completion and confirmation by both parties. Refunds are case-by-case. GUBER may assist in disputes but does not guarantee any outcome.
                 </p>
               </div>
-              <Button onClick={() => lockMutation.mutate()} disabled={lockMutation.isPending}
-                className="w-full h-12 font-display tracking-wider bg-secondary text-secondary-foreground rounded-xl" data-testid="button-lock-job">
-                {lockMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Lock className="w-5 h-5 mr-2" />}
-                {job.category === "Barter Labor" ? "CONFIRM HELPER & LOCK" : "CONFIRM HELPER & PAY"}
-              </Button>
+              {(job as any).assignment?.workerAvailableFrom && (
+                <div className="bg-card rounded-xl border border-emerald-500/20 p-4 space-y-2" data-testid="card-worker-availability">
+                  <p className="text-[10px] font-display font-semibold text-muted-foreground/60 uppercase tracking-wider">Worker Availability</p>
+                  <div className="flex items-center gap-2 text-xs text-emerald-400">
+                    <Clock className="w-4 h-4" />
+                    <span>
+                      {new Date((job as any).assignment.workerAvailableFrom).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      {" – "}
+                      {new Date((job as any).assignment.workerAvailableTo).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">Pick a start time</label>
+                    <input
+                      type="datetime-local"
+                      value={confirmedStartTime}
+                      onChange={(e) => setConfirmedStartTime(e.target.value)}
+                      min={new Date((job as any).assignment.workerAvailableFrom).toISOString().slice(0, 16)}
+                      max={new Date((job as any).assignment.workerAvailableTo).toISOString().slice(0, 16)}
+                      className="w-full bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
+                      data-testid="input-confirmed-start-time"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(job as any).assignment?.confirmedStartTime && (
+                <div className="bg-card rounded-xl border border-primary/20 p-3 flex items-center gap-2" data-testid="card-confirmed-time">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <span className="text-xs text-muted-foreground">
+                    Confirmed start: <span className="text-foreground font-semibold">{new Date((job as any).assignment.confirmedStartTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                  </span>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button onClick={() => lockMutation.mutate(confirmedStartTime || undefined)} disabled={lockMutation.isPending}
+                  className="flex-1 h-12 font-display tracking-wider bg-secondary text-secondary-foreground rounded-xl" data-testid="button-lock-job">
+                  {lockMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Lock className="w-5 h-5 mr-2" />}
+                  {job.category === "Barter Labor" ? "CONFIRM & LOCK" : "CONFIRM & PAY"}
+                </Button>
+                <Button
+                  onClick={() => needMoreTimeMutation.mutate()}
+                  disabled={needMoreTimeMutation.isPending || needMoreTimeSent || !!(job as any).assignment?.needMoreTimeSentAt}
+                  variant="outline"
+                  className="h-12 px-4 font-display tracking-wider rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                  data-testid="button-need-more-time"
+                >
+                  {needMoreTimeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                  <span className="ml-1.5 text-[10px]">{(needMoreTimeSent || (job as any).assignment?.needMoreTimeSentAt) ? "SENT" : "NEED TIME"}</span>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {(isHelper || isOwner) && (job as any).assignment?.confirmedStartTime && ["funded", "active", "in_progress"].includes(job.status) && (
+            <div className="bg-card rounded-xl border border-primary/20 p-3 flex items-center gap-2" data-testid="card-scheduled-time">
+              <Clock className="w-4 h-4 text-primary" />
+              <span className="text-xs text-muted-foreground">
+                Scheduled start: <span className="text-foreground font-semibold">{new Date((job as any).assignment.confirmedStartTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+              </span>
             </div>
           )}
 
@@ -2510,14 +2586,52 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
             )}
 
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-3">
+              <p className="text-[10px] font-display font-bold tracking-widest text-emerald-400/80 uppercase">Your Availability</p>
+              <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                When are you available to do this job? The hirer will pick a start time within your window.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">From</label>
+                  <input
+                    type="datetime-local"
+                    value={availableFrom}
+                    onChange={(e) => setAvailableFrom(e.target.value)}
+                    min={new Date().toISOString().slice(0, 16)}
+                    className="w-full mt-1 bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50"
+                    data-testid="input-available-from"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">To</label>
+                  <input
+                    type="datetime-local"
+                    value={availableTo}
+                    onChange={(e) => setAvailableTo(e.target.value)}
+                    min={availableFrom || new Date().toISOString().slice(0, 16)}
+                    className="w-full mt-1 bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50"
+                    data-testid="input-available-to"
+                  />
+                </div>
+              </div>
+              {job.urgentSwitch && (
+                <p className="text-[10px] text-amber-400/80 font-medium">This is an urgent job — your availability must start today.</p>
+              )}
+            </div>
+
             <Button
               onClick={() => acceptMutation.mutate({
                 waiverAccepted: waiverChecked,
                 categoryWaiverAccepted: categoryWaiverChecked,
+                availableFrom: new Date(availableFrom).toISOString(),
+                availableTo: new Date(availableTo).toISOString(),
               })}
               disabled={
                 acceptMutation.isPending ||
                 !waiverChecked ||
+                !availableFrom ||
+                !availableTo ||
                 ((job.category === "Verify & Inspect" || job.category === "Skilled Labor" || job.category === "General Labor" || job.category === "On-Demand Help" || job.category === "Marketplace") && !categoryWaiverChecked)
               }
               className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl disabled:opacity-40"
