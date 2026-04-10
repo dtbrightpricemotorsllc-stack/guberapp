@@ -20,6 +20,15 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import type { Job, User as UserType, ProofSubmission, BountyAttempt } from "@shared/schema";
+
+function toLocalDatetimeString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const h = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:${min}`;
+}
 import { TrustBadge } from "@/components/trust-badge";
 import { Link, useLocation } from "wouter";
 import {
@@ -1758,8 +1767,8 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       type="datetime-local"
                       value={confirmedStartTime}
                       onChange={(e) => setConfirmedStartTime(e.target.value)}
-                      min={new Date((job as any).assignment.workerAvailableFrom).toISOString().slice(0, 16)}
-                      max={new Date((job as any).assignment.workerAvailableTo).toISOString().slice(0, 16)}
+                      min={toLocalDatetimeString(new Date((job as any).assignment.workerAvailableFrom))}
+                      max={toLocalDatetimeString(new Date((job as any).assignment.workerAvailableTo))}
                       className="w-full bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
                       data-testid="input-confirmed-start-time"
                     />
@@ -1782,16 +1791,23 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   {lockMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Lock className="w-5 h-5 mr-2" />}
                   {job.category === "Barter Labor" ? "CONFIRM & LOCK" : "CONFIRM & PAY"}
                 </Button>
-                <Button
-                  onClick={() => needMoreTimeMutation.mutate()}
-                  disabled={needMoreTimeMutation.isPending || needMoreTimeSent || !!(job as any).assignment?.needMoreTimeSentAt}
-                  variant="outline"
-                  className="h-12 px-4 font-display tracking-wider rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                  data-testid="button-need-more-time"
-                >
-                  {needMoreTimeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
-                  <span className="ml-1.5 text-[10px]">{(needMoreTimeSent || (job as any).assignment?.needMoreTimeSentAt) ? "SENT" : "NEED TIME"}</span>
-                </Button>
+                {(() => {
+                  const sentAt = (job as any).assignment?.needMoreTimeSentAt;
+                  const sentRecently = sentAt && (Date.now() - new Date(sentAt).getTime()) < 60 * 60 * 1000;
+                  const isDisabled = needMoreTimeMutation.isPending || needMoreTimeSent || !!sentRecently;
+                  return (
+                    <Button
+                      onClick={() => needMoreTimeMutation.mutate()}
+                      disabled={isDisabled}
+                      variant="outline"
+                      className="h-12 px-4 font-display tracking-wider rounded-xl border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                      data-testid="button-need-more-time"
+                    >
+                      {needMoreTimeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                      <span className="ml-1.5 text-[10px]">{isDisabled ? "SENT" : "NEED TIME"}</span>
+                    </Button>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -2602,7 +2618,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     type="datetime-local"
                     value={availableFrom}
                     onChange={(e) => setAvailableFrom(e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
+                    min={toLocalDatetimeString(new Date())}
                     className="w-full mt-1 bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50"
                     data-testid="input-available-from"
                   />
@@ -2613,7 +2629,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     type="datetime-local"
                     value={availableTo}
                     onChange={(e) => setAvailableTo(e.target.value)}
-                    min={availableFrom || new Date().toISOString().slice(0, 16)}
+                    min={availableFrom || toLocalDatetimeString(new Date())}
                     className="w-full mt-1 bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50"
                     data-testid="input-available-to"
                   />
