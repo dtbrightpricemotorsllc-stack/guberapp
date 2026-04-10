@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Star } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { isNativeApp, isAndroid } from "@/lib/platform";
 
 interface ZipJob {
   id: number;
@@ -563,7 +564,7 @@ export default function MapExplore() {
 
   return (
     <GuberLayout>
-    <div className="fixed left-0 right-0 z-10 overflow-hidden" style={{ background: "#eaf3e8", top: 'calc(56px + env(safe-area-inset-top, 0px))', bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }} data-testid="page-map-explore">
+    <div className="fixed left-0 right-0 z-10 overflow-hidden" style={{ background: "#eaf3e8", top: (isNativeApp && isAndroid) ? 'calc(56px + 36px)' : 'calc(56px + env(safe-area-inset-top, 0px))', bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }} data-testid="page-map-explore">
 
       {/* MAP */}
       <div ref={mapDivRef} className="absolute inset-0" />

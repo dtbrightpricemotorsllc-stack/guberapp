@@ -1,8 +1,9 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Notification } from "@shared/schema";
 import { subscribeToPush } from "@/lib/push";
 import { playGuberPing, unlockAudio } from "@/lib/notification-sound";
+import { isNativeApp, isAndroid } from "@/lib/platform";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
@@ -118,10 +119,24 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
 
   const initials = (user as any)?.publicUsername?.slice(0, 2).toUpperCase() || (user as any)?.guberId?.replace("GUB-", "").slice(0, 2) || user?.fullName?.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) || "U";
 
+  const [statusBarHeight, setStatusBarHeight] = useState(0);
+  useEffect(() => {
+    if (isNativeApp && isAndroid) {
+      const test = document.createElement("div");
+      test.style.height = "env(safe-area-inset-top, 0px)";
+      test.style.position = "fixed";
+      test.style.visibility = "hidden";
+      document.body.appendChild(test);
+      const h = test.getBoundingClientRect().height;
+      document.body.removeChild(test);
+      if (h < 4) setStatusBarHeight(36);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {!hideHeader && (
-        <header className="sticky top-0 z-50 glass-header" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <header className="sticky top-0 z-50 glass-header" style={{ paddingTop: statusBarHeight ? `${statusBarHeight}px` : 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center justify-between px-5 h-[56px]">
             <div
               onClick={handleLogoTap}
