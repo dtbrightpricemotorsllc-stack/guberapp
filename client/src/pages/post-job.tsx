@@ -345,16 +345,16 @@ export default function PostJob() {
 
               <div className="glass-card-strong rounded-md p-4 space-y-3">
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Job Title</Label>
+                  <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Job Title</Label>
                   <p className="text-sm font-display font-semibold" data-testid="text-vi-title">{viTitle}</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Description</Label>
+                  <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Description</Label>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed" data-testid="text-vi-description">{viDescription}</p>
                 </div>
                 {viJobDetails && Object.keys(viJobDetails).length > 0 && (
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Details</Label>
+                    <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Details</Label>
                     <div className="flex flex-wrap gap-1.5">
                       {Object.entries(viJobDetails).map(([k, v]) => (
                         <Badge key={k} variant="secondary" className="text-xs">
@@ -378,7 +378,7 @@ export default function PostJob() {
           {!isVIJob && (
             <>
               <div className="space-y-2">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Category</Label>
+                <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Category</Label>
                 <Select value={category} onValueChange={(v) => { setCategory(v); setServiceType(""); setGeneralNotes(""); }}>
                   <SelectTrigger className="premium-input rounded-md" data-testid="select-category">
                     <SelectValue placeholder="Select category" />
@@ -413,7 +413,7 @@ export default function PostJob() {
 
               {category && category !== "Verify & Inspect" && services && (
                 <div className="space-y-2">
-                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Service Type</Label>
+                  <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Service Type</Label>
                   <Select value={serviceType} onValueChange={(v) => { setServiceType(v); setJobDetails({}); }}>
                     <SelectTrigger className="premium-input rounded-md" data-testid="select-service">
                       <SelectValue placeholder="Select service" />
@@ -427,7 +427,7 @@ export default function PostJob() {
 
               {(isGeneralLabor || isSkilledLabor) && serviceType && (
                 <div className="space-y-2">
-                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display flex items-center gap-1">
+                  <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     Estimated Time Needed
                   </Label>
@@ -458,7 +458,7 @@ export default function PostJob() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">
+                    <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
                       What do you need? <span className="text-destructive">*</span>
                     </Label>
                     <Textarea
@@ -472,7 +472,7 @@ export default function PostJob() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">
+                    <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
                       What are you offering in exchange? <span className="text-destructive">*</span>
                     </Label>
                     <Textarea
@@ -487,7 +487,7 @@ export default function PostJob() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">
+                    <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
                       Estimated value of your offering
                     </Label>
                     <Select value={barterEstimatedValue} onValueChange={setBarterEstimatedValue}>
@@ -505,7 +505,7 @@ export default function PostJob() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">
+                    <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
                       Estimated time needed
                     </Label>
                     <Select value={estimatedMinutes} onValueChange={setEstimatedMinutes}>
@@ -533,7 +533,7 @@ export default function PostJob() {
                   </div>
                   {checklists.map((c) => (
                     <div key={c.id} className="space-y-2">
-                      <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">
+                      <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
                         {c.label} {c.required && <span className="text-destructive">*</span>}
                       </Label>
 
@@ -633,7 +633,7 @@ export default function PostJob() {
               {category && serviceType && (
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Additional Notes (optional)</Label>
+                    <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Additional Notes (optional)</Label>
                     <span className="text-[10px] text-muted-foreground">{generalNotes.length}/300</span>
                   </div>
                   <Textarea
@@ -704,7 +704,7 @@ export default function PostJob() {
                 <span className="text-xs font-display font-bold text-indigo-400/90 uppercase tracking-wider">Task Tier</span>
               </div>
               <div className="space-y-2">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Select Complexity Tier</Label>
+                <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Select Complexity Tier</Label>
                 <Select value={taskTier} onValueChange={(v) => setTaskTier(v as TaskTierId)}>
                   <SelectTrigger className="premium-input rounded-md" data-testid="select-task-tier">
                     <SelectValue placeholder="Choose a tier (optional)" />
@@ -723,11 +723,11 @@ export default function PostJob() {
                     <p className="text-xs font-display font-semibold text-indigo-400/80">{selectedTier.description}</p>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-display">Est. Time</p>
+                        <p className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Est. Time</p>
                         <p className="text-sm font-display font-bold">{selectedTier.estimatedTimeMin}–{selectedTier.estimatedTimeMax} min</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-display">Typical Pay</p>
+                        <p className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Typical Pay</p>
                         <p className="text-sm font-display font-bold">${selectedTier.typicalPayMin}–${selectedTier.typicalPayMax}</p>
                       </div>
                     </div>
@@ -743,7 +743,7 @@ export default function PostJob() {
               })()}
 
               <div className="space-y-2">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Pricing Mode</Label>
+                <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Pricing Mode</Label>
                 <div className="grid gap-2">
                   {PRICING_MODES.map((mode) => (
                     <button
@@ -770,7 +770,7 @@ export default function PostJob() {
 
           {!isBarter && category !== "Verify & Inspect" && (
             <div className="space-y-2">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Service Price ($)</Label>
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Service Price ($)</Label>
               <Input value={budget} onChange={(e) => setBudget(e.target.value)}
                 type="number" className="premium-input rounded-md"
                 placeholder={pricingSuggestion ? `Min $${pricingSuggestion.minPayout}` : "0.00"}
@@ -783,7 +783,7 @@ export default function PostJob() {
 
           {isVIJob && !isBarter && (
             <div className="space-y-2">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Service Price ($)</Label>
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Service Price ($)</Label>
               <Input value={budget} onChange={(e) => setBudget(e.target.value)}
                 type="number" className="premium-input rounded-md"
                 placeholder={pricingSuggestion ? `Min $${pricingSuggestion.minPayout}` : "0.00"}
@@ -817,7 +817,7 @@ export default function PostJob() {
                 <div className="space-y-3 pt-2 border-t border-border/20 animate-fade-in">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-display">Increase By ($)</Label>
+                      <Label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Increase By ($)</Label>
                       <Input
                         type="number"
                         value={autoIncreaseAmount}
@@ -829,7 +829,7 @@ export default function PostJob() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-display">Max Payout ($)</Label>
+                      <Label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Max Payout ($)</Label>
                       <Input
                         type="number"
                         value={autoIncreaseMax}
@@ -842,7 +842,7 @@ export default function PostJob() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-display">Increase Every</Label>
+                    <Label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Increase Every</Label>
                     <Select value={autoIncreaseIntervalMins} onValueChange={setAutoIncreaseIntervalMins}>
                       <SelectTrigger className="premium-input rounded-md" data-testid="select-auto-increase-interval">
                         <SelectValue />
@@ -880,7 +880,7 @@ export default function PostJob() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display flex items-center gap-1">
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display flex items-center gap-1">
                 <MapPin className="w-3 h-3" />
                 Location {locationRequired && <span className="text-destructive">*</span>}
               </Label>

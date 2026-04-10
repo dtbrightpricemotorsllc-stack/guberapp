@@ -173,7 +173,7 @@ export default function SubmitObservation() {
         <Card className="glass-card rounded-xl p-6 space-y-5">
 
           <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Observation Type <span className="text-destructive">*</span></Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Observation Type <span className="text-destructive">*</span></Label>
             <Select value={observationType} onValueChange={setObservationType}>
               <SelectTrigger className="premium-input rounded-md" data-testid="select-observation-type">
                 <SelectValue placeholder="Select type" />
@@ -185,7 +185,7 @@ export default function SubmitObservation() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">GPS Location <span className="text-destructive">*</span></Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">GPS Location <span className="text-destructive">*</span></Label>
             <Button
               variant="outline"
               className="w-full rounded-md premium-input justify-start gap-2"
@@ -204,7 +204,7 @@ export default function SubmitObservation() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Address <span className="text-destructive">*</span></Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Address <span className="text-destructive">*</span></Label>
             <Input
               value={address}
               onChange={e => setAddress(e.target.value)}
@@ -215,7 +215,7 @@ export default function SubmitObservation() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
               Photos <span className="text-destructive">*</span>
               <span className="text-muted-foreground/50 ml-2 normal-case tracking-normal">(min 1, max 5)</span>
             </Label>
@@ -256,7 +256,7 @@ export default function SubmitObservation() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Description</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Description</Label>
             <Textarea
               value={notes}
               onChange={e => setNotes(e.target.value.slice(0, 500))}
@@ -268,7 +268,7 @@ export default function SubmitObservation() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Tags</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Tags</Label>
             <Input
               value={tagsInput}
               onChange={e => setTagsInput(e.target.value)}

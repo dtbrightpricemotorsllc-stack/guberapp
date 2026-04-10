@@ -515,7 +515,7 @@ export default function MapExplore() {
     if (!/^\d{5}$/.test(zip)) { setZipError("Enter a valid 5-digit zip"); return; }
     setZipError(""); setZipLoading(true);
     try {
-      const res = await fetch(`/api/geocode?address=${encodeURIComponent(zip)}`);
+      const res = await fetch(`/api/geocode?address=${encodeURIComponent(zip + ", USA")}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (typeof data?.lat !== "number" || typeof data?.lng !== "number") throw new Error();

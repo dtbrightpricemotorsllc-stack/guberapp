@@ -105,7 +105,7 @@ export default function BusinessOnboarding() {
           <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Company Info</p>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Company Logo</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Company Logo</Label>
             <div className="flex items-center gap-3">
               <div
                 onClick={() => fileInputRef.current?.click()}
@@ -133,7 +133,7 @@ export default function BusinessOnboarding() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Company Name *</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Company Name *</Label>
             <Input
               value={form.companyName}
               onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
@@ -144,7 +144,7 @@ export default function BusinessOnboarding() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Industry</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Industry</Label>
             <Select value={form.industry} onValueChange={(v) => setForm((f) => ({ ...f, industry: v }))}>
               <SelectTrigger className="bg-background border-border/30" data-testid="select-industry">
                 <SelectValue placeholder="Select your industry" />
@@ -156,7 +156,7 @@ export default function BusinessOnboarding() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Company Description</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Company Description</Label>
             <Textarea
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -172,7 +172,7 @@ export default function BusinessOnboarding() {
           <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Contact Info</p>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Contact Person</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Contact Person</Label>
             <Input
               value={form.contactPerson}
               onChange={(e) => setForm((f) => ({ ...f, contactPerson: e.target.value }))}
@@ -183,7 +183,7 @@ export default function BusinessOnboarding() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Contact Phone</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Contact Phone</Label>
             <Input
               value={form.contactPhone}
               onChange={(e) => setForm((f) => ({ ...f, contactPhone: e.target.value }))}
@@ -195,7 +195,7 @@ export default function BusinessOnboarding() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Billing Email</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Billing Email</Label>
             <Input
               value={form.billingEmail}
               onChange={(e) => setForm((f) => ({ ...f, billingEmail: e.target.value }))}

@@ -297,7 +297,7 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (apiKey) {
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&region=us&key=${apiKey}`;
       const resp = await fetch(url);
       const data = await resp.json() as any;
       if (data.status === "OK" && data.results?.[0]) {
@@ -309,7 +309,7 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 
   // Fallback: use Nominatim (OpenStreetMap) — exact address geocoding, no API key required
   try {
-    const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=us`;
     const nomResp = await fetch(nomUrl, { headers: { "User-Agent": "GUBER-App/1.0 contact@guberapp.app" } });
     if (nomResp.ok) {
       const nomData = await nomResp.json() as any[];

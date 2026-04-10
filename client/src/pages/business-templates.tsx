@@ -94,7 +94,7 @@ export default function BusinessTemplates() {
             <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">New Template</p>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Template Name</Label>
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Template Name</Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -121,7 +121,7 @@ export default function BusinessTemplates() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Required Photos</Label>
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Required Photos</Label>
               <div className="flex items-center gap-3">
                 <button onClick={() => setForm((f) => ({ ...f, requiredPhotoCount: Math.max(1, f.requiredPhotoCount - 1) }))} className="w-8 h-8 rounded-lg border border-border/30 flex items-center justify-center text-muted-foreground hover:bg-muted/20">−</button>
                 <span className="font-display font-bold text-lg w-8 text-center">{form.requiredPhotoCount}</span>
@@ -131,7 +131,7 @@ export default function BusinessTemplates() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Checklist Items</Label>
+                <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Checklist Items</Label>
                 <button onClick={addChecklistItem} className="text-[10px] text-primary font-display flex items-center gap-1 hover:text-primary/80" data-testid="button-add-checklist-item">
                   <Plus className="w-3 h-3" /> Add Item
                 </button>

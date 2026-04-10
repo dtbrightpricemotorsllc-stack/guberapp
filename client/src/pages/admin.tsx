@@ -2972,18 +2972,18 @@ return (
 </div>
 
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Mission Title <span className="text-destructive">*</span></label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Mission Title <span className="text-destructive">*</span></label>
 <Input value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Mountain Photo Challenge" className="premium-input rounded-md" data-testid="input-drop-title" />
 </div>
 
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Mission Description</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Mission Description</label>
 <Textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the mission in detail — what do participants need to do?" className="premium-input rounded-md min-h-[100px]" data-testid="input-drop-description" />
 </div>
 
 <div className="space-y-2">
 <div className="flex items-center justify-between">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Sponsored Drop</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Sponsored Drop</label>
 <div className="flex items-center gap-2">
 <span className="text-[10px] text-muted-foreground/50 font-display">Mark as Sponsored</span>
 <Switch checked={form.isSponsored} onCheckedChange={(v) => setForm(f => ({ ...f, isSponsored: v }))} data-testid="toggle-is-sponsored" />
@@ -3017,13 +3017,13 @@ return (
 </p>
 <div className="flex items-center justify-between">
 <div>
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Show Sponsor Branding</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Show Sponsor Branding</label>
 <p className="text-[10px] text-muted-foreground/40">Display sponsor name/logo on drop card and detail</p>
 </div>
 <Switch checked={form.brandingEnabled} onCheckedChange={(v) => setForm(f => ({ ...f, brandingEnabled: v }))} data-testid="toggle-branding-enabled" />
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Reward Type</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Type</label>
 <select
 value={form.rewardType}
 onChange={(e) => setForm(f => ({ ...f, rewardType: e.target.value }))}
@@ -3039,16 +3039,16 @@ data-testid="select-reward-type"
 {form.rewardType !== "cash" && (
 <>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Reward Description</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Description</label>
 <Input value={form.rewardDescription} onChange={(e) => setForm(f => ({ ...f, rewardDescription: e.target.value }))} placeholder="e.g. 20% off next purchase" className="premium-input rounded-md" data-testid="input-reward-description" />
 </div>
 <div className="grid grid-cols-2 gap-3">
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Reward Quantity</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Quantity</label>
 <Input type="number" value={form.rewardQuantity} onChange={(e) => setForm(f => ({ ...f, rewardQuantity: parseInt(e.target.value) || 0 }))} className="premium-input rounded-md" data-testid="input-reward-quantity" />
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Redemption Method</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Redemption Method</label>
 <select
 value={form.rewardRedemptionType}
 onChange={(e) => setForm(f => ({ ...f, rewardRedemptionType: e.target.value }))}
@@ -3063,15 +3063,15 @@ data-testid="select-reward-redemption-type"
 </div>
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Redemption Instructions</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Redemption Instructions</label>
 <Textarea value={form.redemptionInstructions} onChange={(e) => setForm(f => ({ ...f, redemptionInstructions: e.target.value }))} placeholder="e.g. Show this screen to any cashier." className="premium-input rounded-md min-h-[60px]" data-testid="input-redemption-instructions" />
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">No Purchase Required Text</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">No Purchase Required Text</label>
 <Input value={form.noPurchaseRequiredText} onChange={(e) => setForm(f => ({ ...f, noPurchaseRequiredText: e.target.value }))} placeholder="No purchase necessary to participate." className="premium-input rounded-md" data-testid="input-no-purchase-text" />
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Disclaimer (optional)</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Disclaimer (optional)</label>
 <Input value={form.disclaimerText} onChange={(e) => setForm(f => ({ ...f, disclaimerText: e.target.value }))} placeholder="e.g. Valid for first-time customers only." className="premium-input rounded-md" data-testid="input-disclaimer-text" />
 </div>
 </>
@@ -3081,7 +3081,7 @@ data-testid="select-reward-redemption-type"
 
 <div className="space-y-2">
 <div className="flex items-center justify-between">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display flex items-center gap-1">
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display flex items-center gap-1">
 <MapPin className="w-3 h-3" />
 Drop Location <span className="text-destructive">*</span>
 </label>
@@ -3119,7 +3119,7 @@ data-testid="input-drop-address"
 </div>
 
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Arrival Radius</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Arrival Radius</label>
 <div className="flex items-center gap-3">
 <Input type="number" value={form.gpsRadius} onChange={(e) => setForm(f => ({ ...f, gpsRadius: parseInt(e.target.value) || 200 }))} className="premium-input rounded-md w-28" data-testid="input-drop-radius" />
 <span className="text-[10px] text-muted-foreground/50 font-display">{form.gpsRadius <= 100 ? "Very close — same building" : form.gpsRadius <= 250 ? "~1 city block" : form.gpsRadius <= 500 ? "~2-3 blocks" : "Wide area"} ({form.gpsRadius}m)</span>
@@ -3128,30 +3128,30 @@ data-testid="input-drop-address"
 
 <div className="grid grid-cols-2 gap-3">
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Reward Per Winner ($)</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Per Winner ($)</label>
 <Input type="number" value={form.rewardPerWinner} onChange={(e) => setForm(f => ({ ...f, rewardPerWinner: parseFloat(e.target.value) || 0 }))} className="premium-input rounded-md" data-testid="input-drop-reward" />
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Max Winners</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Max Winners</label>
 <Input type="number" value={form.winnerLimit} onChange={(e) => setForm(f => ({ ...f, winnerLimit: parseInt(e.target.value) || 1 }))} className="premium-input rounded-md" data-testid="input-drop-winner-limit" />
 </div>
 </div>
 
 <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/20 p-3">
 <div className="space-y-2">
-<label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-display">Cash Winner Cap</label>
+<label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Cash Winner Cap</label>
 <Input type="number" min={0} value={form.cashWinnerCount} onChange={(e) => { const v = parseInt(e.target.value); setForm(f => ({ ...f, cashWinnerCount: isNaN(v) ? 1 : Math.max(0, v) })); }} className="premium-input rounded-md" data-testid="input-cash-winner-count" />
 <p className="text-[10px] text-muted-foreground/40">Admin confirms up to N cash winners</p>
 </div>
 <div className="space-y-2">
-<label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-display">Reward Winner Cap</label>
+<label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Winner Cap</label>
 <Input type="number" min={0} value={form.rewardWinnerCount} onChange={(e) => setForm(f => ({ ...f, rewardWinnerCount: parseInt(e.target.value) || 0 }))} className="premium-input rounded-md" data-testid="input-reward-winner-count" />
 <p className="text-[10px] text-muted-foreground/40">Auto-selected by arrival after cash cap hit</p>
 </div>
 </div>
 
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Final Location Mode</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Final Location Mode</label>
 <select
 value={form.finalLocationMode}
 onChange={(e) => setForm(f => ({ ...f, finalLocationMode: e.target.value }))}
@@ -3176,15 +3176,15 @@ data-testid="select-final-location-mode"
 <div className="space-y-3">
 <div className="flex items-center gap-2">
 <Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
-<span className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Schedule (optional)</span>
+<span className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Schedule (optional)</span>
 </div>
 <div className="grid grid-cols-2 gap-3">
 <div className="space-y-1">
-<label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-display">Start</label>
+<label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Start</label>
 <Input type="datetime-local" value={form.startTime} onChange={(e) => setForm(f => ({ ...f, startTime: e.target.value }))} className="premium-input rounded-md text-xs" data-testid="input-drop-start" />
 </div>
 <div className="space-y-1">
-<label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-display">End</label>
+<label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">End</label>
 <Input type="datetime-local" value={form.endTime} onChange={(e) => setForm(f => ({ ...f, endTime: e.target.value }))} className="premium-input rounded-md text-xs" data-testid="input-drop-end" />
 </div>
 </div>
@@ -3193,10 +3193,10 @@ data-testid="select-final-location-mode"
 <div className="space-y-3">
 <div className="flex items-center gap-2">
 <Eye className="w-3.5 h-3.5 text-muted-foreground/50" />
-<span className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Mission Config</span>
+<span className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Mission Config</span>
 </div>
 <div className="space-y-2">
-<label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Clue Text</label>
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Clue Text</label>
 <Textarea value={form.clueText} onChange={(e) => setForm(f => ({ ...f, clueText: e.target.value }))} placeholder="Optional hint shown to participants — e.g. 'Look for the red awning'" className="premium-input rounded-md min-h-[70px]" data-testid="input-drop-clue" />
 </div>
 <div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border">
@@ -3218,7 +3218,7 @@ data-testid="select-final-location-mode"
 <div className="space-y-3">
 <div className="flex items-center gap-2">
 <Camera className="w-3.5 h-3.5 text-muted-foreground/50" />
-<span className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Proof Items</span>
+<span className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Proof Items</span>
 </div>
 {form.proofItems.map((item, i) => (
 <div key={i} className="flex items-center gap-2">
@@ -3636,7 +3636,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
 
               <div className="border-t border-border/20 pt-4 space-y-3">
                 <div>
-                  <label className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase block mb-1.5">Admin Notes</label>
+                  <label className="text-[10px] font-display font-bold tracking-widest text-[#00E5E5] uppercase block mb-1.5">Admin Notes</label>
                   <textarea
                     value={adminNotes}
                     onChange={(e) => setAdminNotes(e.target.value)}
@@ -3647,7 +3647,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase block mb-1.5">Link to Cash Drop (optional)</label>
+                  <label className="text-[10px] font-display font-bold tracking-widest text-[#00E5E5] uppercase block mb-1.5">Link to Cash Drop (optional)</label>
                   <select
                     value={linkedDropId}
                     onChange={(e) => setLinkedDropId(e.target.value)}

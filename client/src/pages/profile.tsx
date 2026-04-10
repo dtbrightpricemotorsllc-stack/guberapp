@@ -890,7 +890,7 @@ export default function Profile() {
                 )}
                 {!displayUser.idVerified && !pendingTypes.has("id") && !verificationStatus?.id && (
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Document Type</label>
+                    <label className="text-[10px] text-[#00E5E5] uppercase font-bold tracking-wider">Document Type</label>
                     <Select value={idDocType} onValueChange={setIdDocType}>
                       <SelectTrigger className="h-8 text-xs bg-background/50 border-white/10" data-testid="select-id-type">
                         <SelectValue />

@@ -183,20 +183,20 @@ export default function AccountSettings() {
             { label: "Skills", field: "skills", testid: "input-settings-skills" },
           ].map((f) => (
             <div key={f.field} className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">{f.label}</Label>
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">{f.label}</Label>
               <Input value={(form as any)[f.field]} onChange={update(f.field)}
                 type={f.type || "text"} className="bg-background border-border/30" data-testid={f.testid} />
             </div>
           ))}
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Bio</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Bio</Label>
             <Textarea value={form.userBio} onChange={update("userBio")}
               className="bg-background border-border/30" placeholder="About you" data-testid="input-settings-bio" />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Role</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Role</Label>
             <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
               <SelectTrigger className="bg-background border-border/30" data-testid="select-role"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -233,7 +233,7 @@ export default function AccountSettings() {
               { label: "Confirm New Password", field: "confirmPassword", testid: "input-confirm-password" },
             ].map((f) => (
               <div key={f.field} className="space-y-1.5">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">{f.label}</Label>
+                <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">{f.label}</Label>
                 <Input
                   type="password"
                   value={(pwForm as any)[f.field]}
@@ -470,7 +470,7 @@ export default function AccountSettings() {
           </div>
 
           <div className="px-5 pb-2 pt-3">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display mb-2 block">Zoom</Label>
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display mb-2 block">Zoom</Label>
             <input
               type="range"
               min={1}

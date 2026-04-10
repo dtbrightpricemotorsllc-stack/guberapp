@@ -1772,7 +1772,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </span>
                   </div>
                   <div className="space-y-1 pt-1">
-                    <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">Pick a start time</label>
+                    <label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-bold">Pick a start time</label>
                     <input
                       type="datetime-local"
                       value={confirmedStartTime}
@@ -2623,7 +2623,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">From</label>
+                  <label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-bold">From</label>
                   <input
                     type="datetime-local"
                     value={availableFrom}
@@ -2634,7 +2634,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-bold">To</label>
+                  <label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-bold">To</label>
                   <input
                     type="datetime-local"
                     value={availableTo}
@@ -2689,7 +2689,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-muted-foreground uppercase tracking-wider font-bold">Title</label>
+                <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-bold">Title</label>
                 <input
                   className="w-full mt-1 bg-background border border-border/30 rounded-xl px-3 py-2.5 text-sm font-display focus:outline-none focus:border-primary/50"
                   value={editForm.title}
@@ -2699,7 +2699,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 />
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground uppercase tracking-wider font-bold">Description</label>
+                <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-bold">Description</label>
                 <Textarea
                   className="w-full mt-1 bg-background border border-border/30 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary/50 min-h-[80px]"
                   value={editForm.description}
@@ -2710,7 +2710,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider font-bold">Budget ($)</label>
+                  <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-bold">Budget ($)</label>
                   <input
                     type="number"
                     min="1"
@@ -2723,7 +2723,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground uppercase tracking-wider font-bold">Location / Address</label>
+                <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-bold">Location / Address</label>
                 <div className="mt-1">
                   <PlacesAutocomplete
                     value={editForm.location}
