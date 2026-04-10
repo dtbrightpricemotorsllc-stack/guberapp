@@ -4602,11 +4602,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Availability window must be in the future" });
       }
 
-      if (job.urgentSwitch) {
+      if (job.urgentSwitch || job.category === "On-Demand Help") {
         const now = new Date();
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
         if (fromDate > endOfToday) {
-          return res.status(400).json({ message: "Urgent jobs require same-day availability. Your availability window must start today." });
+          return res.status(400).json({ message: "Urgent/on-demand jobs require same-day availability. Your availability window must start today." });
         }
       }
 
@@ -4879,9 +4879,15 @@ export async function registerRoutes(
       } as any);
 
       if (job.assignedHelperId) {
+        let timeMsg = "";
+        const jobAssignments = await storage.getAssignmentsByJob(jobId);
+        const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
+        if (activeAssignment?.confirmedStartTime) {
+          timeMsg = ` Start time: ${new Date(activeAssignment.confirmedStartTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.`;
+        }
         await notify(job.assignedHelperId, {
           title: "Job Locked! 💰",
-          body: `Payment confirmed! You're locked in for "${job.title}". Address and details are now available.`,
+          body: `Payment confirmed! You're locked in for "${job.title}".${timeMsg} Address and details are now available.`,
           jobId,
           priority: "high",
         });

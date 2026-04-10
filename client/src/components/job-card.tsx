@@ -130,11 +130,13 @@ export function JobCard({ job }: { job: Job }) {
                     Est. value: {(job as any).barterEstimatedValue}
                   </Badge>
                 )}
-                {(job as any).estimatedMinutes && (
+                {((job as any).estimatedMinutes || (job as any).estimatedDurationHours) && (
                   <Badge variant="secondary" className="text-[10px] px-2 py-0 h-5" style={{ background: "rgba(20,184,166,0.12)", color: "#14B8A6", borderColor: "rgba(20,184,166,0.25)" }}>
-                    Est. time: {(job as any).estimatedMinutes < 60
-                      ? `${(job as any).estimatedMinutes}m`
-                      : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')}h`}
+                    Est. time: {(job as any).estimatedMinutes
+                      ? ((job as any).estimatedMinutes < 60
+                        ? `${(job as any).estimatedMinutes}m`
+                        : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')}h`)
+                      : `${(job as any).estimatedDurationHours}h`}
                   </Badge>
                 )}
               </div>
@@ -176,15 +178,17 @@ export function JobCard({ job }: { job: Job }) {
                   <MapPin className="w-3 h-3" />{job.location}
                 </span>
               )}
-              {(job as any).estimatedMinutes && (
+              {((job as any).estimatedMinutes || (job as any).estimatedDurationHours) && (
                 <span className="flex items-center gap-0.5" data-testid={`text-time-${job.id}`}>
                   <Clock className="w-3 h-3" />
-                  {(job as any).estimatedMinutes < 60
-                    ? `${(job as any).estimatedMinutes}m`
-                    : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')}h`}
+                  {(job as any).estimatedMinutes
+                    ? ((job as any).estimatedMinutes < 60
+                      ? `${(job as any).estimatedMinutes}m`
+                      : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')}h`)
+                    : `${(job as any).estimatedDurationHours}h`}
                 </span>
               )}
-              {job.createdAt && !(job as any).estimatedMinutes && (
+              {job.createdAt && !(job as any).estimatedMinutes && !(job as any).estimatedDurationHours && (
                 <span className="flex items-center gap-0.5">
                   <Clock className="w-3 h-3" />
                   {new Date(job.createdAt).toLocaleDateString()}

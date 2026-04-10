@@ -221,7 +221,10 @@ export default function PostJob() {
         ...(exactLat !== null && exactLng !== null ? { lat: exactLat, lng: exactLng } : {}),
       };
 
-      if (estimatedMinutes) payload.estimatedMinutes = estimatedMinutes;
+      if (estimatedMinutes) {
+        payload.estimatedMinutes = estimatedMinutes;
+        payload.estimatedDurationHours = parseFloat(estimatedMinutes) / 60;
+      }
 
       if (isVIJob) {
         payload.useCaseName = viUseCaseName;

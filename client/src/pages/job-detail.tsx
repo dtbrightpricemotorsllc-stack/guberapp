@@ -928,14 +928,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   <p className="text-sm font-display font-semibold" style={{ color: "#14B8A6" }} data-testid="text-barter-value-detail">{(job as any).barterEstimatedValue}</p>
                 </div>
               )}
-              {(job as any).estimatedMinutes && (
+              {((job as any).estimatedMinutes || (job as any).estimatedDurationHours) && (
                 <div>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1">Estimated Time</p>
                   <p className="text-sm font-display font-semibold flex items-center gap-1" style={{ color: "#14B8A6" }} data-testid="text-barter-time-detail">
                     <Clock className="w-3.5 h-3.5" />
-                    {(job as any).estimatedMinutes < 60
-                      ? `${(job as any).estimatedMinutes} min`
-                      : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')} hr`}
+                    {(job as any).estimatedMinutes
+                      ? ((job as any).estimatedMinutes < 60
+                        ? `${(job as any).estimatedMinutes} min`
+                        : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')} hr`)
+                      : `${(job as any).estimatedDurationHours} hr`}
                   </p>
                 </div>
               )}
@@ -977,14 +979,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 )}
               </div>
             )}
-            {(job as any).estimatedMinutes && (
+            {((job as any).estimatedMinutes || (job as any).estimatedDurationHours) && (
               <div className="bg-background rounded-xl p-3">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Est. Time</p>
                 <p className="text-sm font-display font-bold flex items-center gap-1" data-testid="text-estimated-time-detail">
                   <Clock className="w-4 h-4 text-muted-foreground" />
-                  {(job as any).estimatedMinutes < 60
-                    ? `${(job as any).estimatedMinutes} min`
-                    : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')} hr`}
+                  {(job as any).estimatedMinutes
+                    ? ((job as any).estimatedMinutes < 60
+                      ? `${(job as any).estimatedMinutes} min`
+                      : `${((job as any).estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')} hr`)
+                    : `${(job as any).estimatedDurationHours} hr`}
                 </p>
               </div>
             )}
@@ -2615,8 +2619,10 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   />
                 </div>
               </div>
-              {job.urgentSwitch && (
-                <p className="text-[10px] text-amber-400/80 font-medium">This is an urgent job — your availability must start today.</p>
+              {(job.urgentSwitch || job.category === "On-Demand Help") && (
+                <p className="text-[10px] text-amber-400/80 font-medium">
+                  {job.urgentSwitch ? "This is an urgent job" : "This is an on-demand job"} — your availability must start today.
+                </p>
               )}
             </div>
 
