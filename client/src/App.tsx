@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect, useLocation } from "wouter";
+import { Switch, Route, Redirect, useLocation, useSearch } from "wouter";
 import { useEffect, useState, lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -85,9 +85,13 @@ function BizLoader() {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
+  const [currentPath] = useLocation();
 
   if (isLoading) return <PageLoader />;
-  if (!user) return <Redirect to="/login" />;
+  if (!user) {
+    const returnTo = encodeURIComponent(currentPath);
+    return <Redirect to={`/login?returnTo=${returnTo}`} />;
+  }
 
   return (
     <Suspense fallback={<PageLoader />}>
@@ -126,9 +130,12 @@ function ConsumerRoute({ component: Component }: { component: React.ComponentTyp
 
 function PublicOnly({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
+  const search = useSearch();
 
   if (isLoading) return <PageLoader />;
   if (user) {
+    const returnTo = new URLSearchParams(search).get("returnTo");
+    if (returnTo) return <Redirect to={returnTo} />;
     if (user.accountType === "business") return <Redirect to="/biz/dashboard" />;
     return <Redirect to="/dashboard" />;
   }

@@ -52,12 +52,16 @@ export default function Login() {
     else if (error === "not_configured") toast({ title: "Not Available", description: "Google Sign-In is not configured yet.", variant: "destructive" });
   }, [search]);
 
+  const returnTo = new URLSearchParams(search).get("returnTo") || "";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       const loggedInUser = await login(email, password);
-      if (loggedInUser?.accountType === "business") {
+      if (returnTo) {
+        setLocation(returnTo);
+      } else if (loggedInUser?.accountType === "business") {
         setLocation("/biz/dashboard");
       } else {
         setLocation("/dashboard");
@@ -253,7 +257,7 @@ export default function Login() {
 
         <p className="text-center text-sm text-muted-foreground/60 mt-8 animate-fade-in stagger-3">
           New to GUBER?{" "}
-          <Link href="/signup" className="guber-text-purple font-display font-semibold hover:underline tracking-wider" data-testid="link-signup">
+          <Link href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"} className="guber-text-purple font-display font-semibold hover:underline tracking-wider" data-testid="link-signup">
             SIGN UP
           </Link>
         </p>

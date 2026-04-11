@@ -580,6 +580,88 @@ export async function registerRoutes(
     }
   });
 
+  // ─────────────────────────────────────────────
+  // PUBLIC API — no auth required
+  // Used by the guberapp.com GitHub homepage to show live job previews
+  // ─────────────────────────────────────────────
+  const PUBLIC_CORS_ORIGINS = ["https://guberapp.com", "https://www.guberapp.com"];
+
+  function setPublicCors(req: Request, res: Response) {
+    const origin = req.headers.origin;
+    if (origin && PUBLIC_CORS_ORIGINS.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Vary", "Origin");
+  }
+
+  app.options("/api/public/jobs", (req: Request, res: Response) => {
+    setPublicCors(req, res);
+    res.sendStatus(204);
+  });
+
+  app.get("/api/public/jobs", async (req: Request, res: Response) => {
+    setPublicCors(req, res);
+    try {
+      const { zip, search, category } = req.query as Record<string, string | undefined>;
+
+      let query = db
+        .select({
+          id: jobsTable.id,
+          title: jobsTable.title,
+          category: jobsTable.category,
+          budget: jobsTable.budget,
+          locationApprox: jobsTable.locationApprox,
+          zip: jobsTable.zip,
+          urgentSwitch: jobsTable.urgentSwitch,
+          payType: jobsTable.payType,
+          jobType: jobsTable.jobType,
+          proofRequired: jobsTable.proofRequired,
+          serviceType: jobsTable.serviceType,
+          verifyInspectCategory: jobsTable.verifyInspectCategory,
+          jobImage: jobsTable.jobImage,
+          createdAt: jobsTable.createdAt,
+        })
+        .from(jobsTable)
+        .where(
+          and(
+            eq(jobsTable.status, "posted_public"),
+            eq(jobsTable.isPublished, true),
+            eq(jobsTable.isPaid, true),
+            zip ? eq(jobsTable.zip, zip) : undefined,
+            search ? sql`lower(${jobsTable.title}) LIKE ${"%" + search.toLowerCase() + "%"}` : undefined,
+            category ? eq(jobsTable.category, category) : undefined,
+          )
+        )
+        .orderBy(desc(jobsTable.createdAt))
+        .limit(20) as any;
+
+      const rows = await query;
+
+      const FALLBACK_JOBS = [
+        { id: -1, title: "Property Walk-Through", category: "Verify & Inspect", budget: 45, locationApprox: "Mobile, AL area", zip: "36606", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -2, title: "Furniture Move — 2BR Apt", category: "Moving Help", budget: 80, locationApprox: "Daphne, AL area", zip: "36526", urgentSwitch: true, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -3, title: "Yard Cleanup & Bag Clippings", category: "Lawn & Yard", budget: 55, locationApprox: "Saraland, AL area", zip: "36571", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -4, title: "Same-Day Grocery Run", category: "Errands", budget: 25, locationApprox: "Chickasaw, AL area", zip: "36611", urgentSwitch: true, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -5, title: "Handyman Pre-Sale Inspection", category: "Verify & Inspect", budget: 65, locationApprox: "Satsuma, AL area", zip: "36572", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -6, title: "Office Deep Clean — After Hours", category: "Cleaning", budget: 90, locationApprox: "Prichard, AL area", zip: "36610", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+      ];
+
+      const results = rows.length > 0
+        ? rows.map((j: any) => ({ ...j, appUrl: `https://guberapp.app/jobs/${j.id}` }))
+        : FALLBACK_JOBS;
+
+      res.json({ jobs: results, isFallback: rows.length === 0 });
+    } catch (err) {
+      console.error("[public/jobs] error:", err);
+      res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
+  // ─────────────────────────────────────────────
+
   app.get("/api/geocode", async (req: Request, res: Response) => {
     const address = typeof req.query.address === "string" ? req.query.address : "";
     if (!address) return res.status(400).json({ error: "address required" });

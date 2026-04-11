@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "@/components/guber-logo";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ function PasswordStrength({ password }: { password: string }) {
 export default function Signup() {
   const { signup } = useAuth();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const returnTo = new URLSearchParams(search).get("returnTo") || "";
   const { toast } = useToast();
   const [form, setForm] = useState({ email: "", username: "", fullName: "", password: "", zipcode: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -72,7 +74,7 @@ export default function Signup() {
     try {
       await signup({ ...form, referralCode: refCode || undefined } as any);
       localStorage.removeItem("guber_ref");
-      setLocation("/dashboard");
+      setLocation(returnTo || "/dashboard");
     } catch (err: any) {
       toast({ title: "Signup Failed", description: err.message || "Please try again", variant: "destructive" });
     } finally {
