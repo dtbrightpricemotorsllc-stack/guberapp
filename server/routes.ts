@@ -583,6 +583,7 @@ export async function registerRoutes(
   // ─────────────────────────────────────────────
   // PUBLIC API — no auth required
   // Used by the guberapp.com GitHub homepage to show live job previews
+  // Response shape: { jobs: JobPreview[], isFallback: boolean }
   // ─────────────────────────────────────────────
   const PUBLIC_CORS_ORIGINS = ["https://guberapp.com", "https://www.guberapp.com"];
 
@@ -590,12 +591,10 @@ export async function registerRoutes(
     const origin = req.headers.origin;
     if (origin && PUBLIC_CORS_ORIGINS.includes(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
-    } else {
-      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Vary", "Origin");
     }
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.setHeader("Vary", "Origin");
   }
 
   app.options("/api/public/jobs", (req: Request, res: Response) => {
@@ -608,7 +607,16 @@ export async function registerRoutes(
     try {
       const { zip, search, category } = req.query as Record<string, string | undefined>;
 
-      let query = db
+      const conditions = [
+        eq(jobsTable.status, "posted_public"),
+        eq(jobsTable.isPublished, true),
+        eq(jobsTable.isPaid, true),
+        ...(zip ? [eq(jobsTable.zip, zip)] : []),
+        ...(search ? [sql`lower(${jobsTable.title}) LIKE ${"%" + search.toLowerCase() + "%"}`] : []),
+        ...(category ? [eq(jobsTable.category, category)] : []),
+      ];
+
+      const rows = await db
         .select({
           id: jobsTable.id,
           title: jobsTable.title,
@@ -626,20 +634,9 @@ export async function registerRoutes(
           createdAt: jobsTable.createdAt,
         })
         .from(jobsTable)
-        .where(
-          and(
-            eq(jobsTable.status, "posted_public"),
-            eq(jobsTable.isPublished, true),
-            eq(jobsTable.isPaid, true),
-            zip ? eq(jobsTable.zip, zip) : undefined,
-            search ? sql`lower(${jobsTable.title}) LIKE ${"%" + search.toLowerCase() + "%"}` : undefined,
-            category ? eq(jobsTable.category, category) : undefined,
-          )
-        )
+        .where(and(...conditions))
         .orderBy(desc(jobsTable.createdAt))
-        .limit(20) as any;
-
-      const rows = await query;
+        .limit(20);
 
       const FALLBACK_JOBS = [
         { id: -1, title: "Property Walk-Through", category: "Verify & Inspect", budget: 45, locationApprox: "Mobile, AL area", zip: "36606", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
@@ -650,11 +647,12 @@ export async function registerRoutes(
         { id: -6, title: "Office Deep Clean — After Hours", category: "Cleaning", budget: 90, locationApprox: "Prichard, AL area", zip: "36610", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
       ];
 
-      const results = rows.length > 0
-        ? rows.map((j: any) => ({ ...j, appUrl: `https://guberapp.app/jobs/${j.id}` }))
-        : FALLBACK_JOBS;
+      const isFallback = rows.length === 0;
+      const jobs = isFallback
+        ? FALLBACK_JOBS
+        : rows.map((j) => ({ ...j, appUrl: `https://guberapp.app/jobs/${j.id}` }));
 
-      res.json({ jobs: results, isFallback: rows.length === 0 });
+      res.json({ jobs, isFallback });
     } catch (err) {
       console.error("[public/jobs] error:", err);
       res.status(500).json({ error: "Failed to fetch jobs" });
