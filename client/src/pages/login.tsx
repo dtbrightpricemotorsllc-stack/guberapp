@@ -52,7 +52,8 @@ export default function Login() {
     else if (error === "not_configured") toast({ title: "Not Available", description: "Google Sign-In is not configured yet.", variant: "destructive" });
   }, [search]);
 
-  const returnTo = new URLSearchParams(search).get("returnTo") || "";
+  const rawReturnTo = new URLSearchParams(search).get("returnTo") || "";
+  const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

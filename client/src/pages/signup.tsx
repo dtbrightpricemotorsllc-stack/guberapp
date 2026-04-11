@@ -34,7 +34,8 @@ export default function Signup() {
   const { signup } = useAuth();
   const [, setLocation] = useLocation();
   const search = useSearch();
-  const returnTo = new URLSearchParams(search).get("returnTo") || "";
+  const rawReturnTo = new URLSearchParams(search).get("returnTo") || "";
+  const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "";
   const { toast } = useToast();
   const [form, setForm] = useState({ email: "", username: "", fullName: "", password: "", zipcode: "" });
   const [showPassword, setShowPassword] = useState(false);

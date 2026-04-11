@@ -134,7 +134,8 @@ function PublicOnly({ component: Component }: { component: React.ComponentType }
 
   if (isLoading) return <PageLoader />;
   if (user) {
-    const returnTo = new URLSearchParams(search).get("returnTo");
+    const rawReturnTo = new URLSearchParams(search).get("returnTo");
+    const returnTo = rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : null;
     if (returnTo) return <Redirect to={returnTo} />;
     if (user.accountType === "business") return <Redirect to="/biz/dashboard" />;
     return <Redirect to="/dashboard" />;

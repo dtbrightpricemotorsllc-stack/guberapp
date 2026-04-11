@@ -609,8 +609,6 @@ export async function registerRoutes(
 
       const conditions = [
         eq(jobsTable.status, "posted_public"),
-        eq(jobsTable.isPublished, true),
-        eq(jobsTable.isPaid, true),
         ...(zip ? [eq(jobsTable.zip, zip)] : []),
         ...(search ? [sql`lower(${jobsTable.title}) LIKE ${"%" + search.toLowerCase() + "%"}`] : []),
         ...(category ? [eq(jobsTable.category, category)] : []),
@@ -647,12 +645,11 @@ export async function registerRoutes(
         { id: -6, title: "Office Deep Clean — After Hours", category: "Cleaning", budget: 90, locationApprox: "Prichard, AL area", zip: "36610", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
       ];
 
-      const isFallback = rows.length === 0;
-      const jobs = isFallback
-        ? FALLBACK_JOBS
-        : rows.map((j) => ({ ...j, appUrl: `https://guberapp.app/jobs/${j.id}` }));
+      const jobs = rows.length > 0
+        ? rows.map((j) => ({ ...j, appUrl: `https://guberapp.app/jobs/${j.id}` }))
+        : FALLBACK_JOBS;
 
-      res.json({ jobs, isFallback });
+      res.json(jobs);
     } catch (err) {
       console.error("[public/jobs] error:", err);
       res.status(500).json({ error: "Failed to fetch jobs" });
