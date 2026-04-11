@@ -583,7 +583,7 @@ export async function registerRoutes(
   // ─────────────────────────────────────────────
   // PUBLIC API — no auth required
   // Used by the guberapp.com GitHub homepage to show live job previews
-  // Response shape: { jobs: JobPreview[], isFallback: boolean }
+  // Response shape: JobPreview[] (plain JSON array)
   // ─────────────────────────────────────────────
   const PUBLIC_CORS_ORIGINS = ["https://guberapp.com", "https://www.guberapp.com"];
 
