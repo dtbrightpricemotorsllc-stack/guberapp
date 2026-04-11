@@ -1,61 +1,86 @@
-<!DOCTYPE html>
-<html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#000000" />
-    <title>GUBER — Work · Hire · Help · Anywhere</title>
-    <link rel="canonical" href="https://guberapp.app/" />
-    <link rel="sitemap" type="application/xml" href="https://guberapp.app/sitemap.xml" />
-    <meta name="application-name" content="GUBER" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="GUBER" />
-    <meta name="description" content="GUBER — Trust-enforced local visibility network. Post jobs, find workers, verify identities — all in your community." />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="GUBER" />
-    <meta property="og:title" content="GUBER — Work · Hire · Help · Anywhere" />
-    <meta property="og:description" content="GUBER connects people to paid local work and makes opportunity visible to everyone." />
-    <meta property="og:image" content="https://guberapp.app/icon-512.png" />
-    <meta property="og:url" content="https://guberapp.app" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="GUBER" />
-    <meta name="twitter:description" content="GUBER — Trust-enforced local visibility network. Work · Hire · Help · Anywhere." />
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "GUBER",
-      "alternateName": "GUBER App",
-      "url": "https://guberapp.app",
-      "description": "Trust-enforced local visibility network. Post jobs, find workers, verify identities — all in your community.",
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": "https://guberapp.app/browse-jobs?search={search_term_string}",
-        "query-input": "required name=search_term_string"
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
+
+  <!-- FAVICONS -->
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#000000" />
+
+  <!-- PRIMARY SEO -->
+  <title>GUBER — Find Work, Hire Help, Verify Before You Buy</title>
+
+  <meta
+    name="description"
+    content="GUBER helps people find work, hire help, and verify items before spending money. Build trust through real people, real proof, and local or remote verification when it matters most."
+  />
+
+  <meta name="robots" content="index, follow" />
+
+  <!-- CANONICAL -->
+  <link rel="canonical" href="https://guberapp.app/" />
+
+  <!-- APP META -->
+  <meta name="application-name" content="GUBER" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GUBER" />
+
+  <!-- OPEN GRAPH (SOCIAL SHARING) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="GUBER" />
+  <meta property="og:title" content="GUBER — Find Work, Hire Help, Verify Before You Buy" />
+  <meta
+    property="og:description"
+    content="Real people. Real proof. Find work, hire help, and verify purchases before you spend."
+  />
+  <meta property="og:image" content="https://guberapp.app/android-chrome-512x512.png" />
+  <meta property="og:url" content="https://guberapp.app/" />
+
+  <!-- TWITTER -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="GUBER — Find Work, Hire Help, Verify Before You Buy" />
+  <meta
+    name="twitter:description"
+    content="Real people. Real proof. Find work, hire help, and verify purchases before you spend."
+  />
+  <meta name="twitter:image" content="https://guberapp.app/android-chrome-512x512.png" />
+
+  <!-- STRUCTURED DATA -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "GUBER",
+    "alternateName": "GUBER App",
+    "url": "https://guberapp.app/",
+    "description": "Find work, hire help, and verify purchases using real people and real proof through GUBER.",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://guberapp.app/browse-jobs?search={search_term_string}",
+      "query-input": "required name=search_term_string"
     }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Oxanium:wght@200..800&display=swap" as="style" onload="this.rel='stylesheet'" />
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Oxanium:wght@200..800&display=swap" rel="stylesheet" /></noscript>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>
-      // Capture beforeinstallprompt as early as possible — before React loads.
-      // Chrome fires this event very early; if the React component hasn't mounted
-      // yet the event is lost. We stash it on window so the component can pick it up.
-      window.__installPromptEvent = null;
-      window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        window.__installPromptEvent = e;
-      });
-    </script>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+  }
+  </script>
+
+  <!-- FONTS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="preload"
+    href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Oxanium:wght@200..800&display=swap"
+    as="style"
+    onload="this.onload=null;this.rel='stylesheet'"
+  />
+  <noscript>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Oxanium:wght@200..800&display=swap"
+      rel="stylesheet"
+    />
+  </noscript>
+</head>
