@@ -3872,9 +3872,27 @@ function FeedbackTab() {
   );
 }
 
+interface NsopwMatch {
+  offenderName?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  state?: string;
+  jurisdiction?: string;
+  city?: string;
+}
+
+interface NsopwResult {
+  loading: boolean;
+  done: boolean;
+  available: boolean;
+  matches: NsopwMatch[];
+  message?: string;
+}
+
 function SafetyQueueTab({ allUsers }: { allUsers: User[] | undefined }) {
 const { toast } = useToast();
-const [searchResults, setSearchResults] = useState<Record<number, { loading: boolean; done: boolean; available: boolean; matches: unknown[] }>>({});
+const [searchResults, setSearchResults] = useState<Record<number, NsopwResult>>({});
 
 const bgCheckMutation = useMutation({
   mutationFn: ({ id, status }: { id: number; status: string }) =>
@@ -3883,7 +3901,7 @@ const bgCheckMutation = useMutation({
     queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     toast({ title: "Status updated" });
   },
-  onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
 });
 
 const searchRegistry = async (u: User) => {
@@ -3897,14 +3915,20 @@ const searchRegistry = async (u: User) => {
   setSearchResults(prev => ({ ...prev, [u.id]: { loading: true, done: false, available: false, matches: [] } }));
   try {
     const resp = await fetch(`/api/admin/nsopw-search?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}`);
-    const data = await resp.json() as { available: boolean; matches: unknown[] };
-    setSearchResults(prev => ({ ...prev, [u.id]: { loading: false, done: true, available: data.available, matches: data.matches || [] } }));
+    const data = await resp.json() as { available: boolean; matches: NsopwMatch[]; message?: string };
+    setSearchResults(prev => ({ ...prev, [u.id]: { loading: false, done: true, available: data.available, matches: data.matches || [], message: data.message } }));
   } catch {
-    setSearchResults(prev => ({ ...prev, [u.id]: { loading: false, done: true, available: false, matches: [] } }));
+    setSearchResults(prev => ({ ...prev, [u.id]: { loading: false, done: true, available: false, matches: [], message: "Registry temporarily unavailable" } }));
   }
 };
 
-const pendingUsers = (allUsers || []).filter(u => (u as any).backgroundCheckStatus === "none");
+const pendingUsers = (allUsers || [])
+  .filter(u => u.backgroundCheckStatus === "none")
+  .sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
 
 if (!allUsers) {
   return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>;
@@ -3927,7 +3951,7 @@ return (
         <Shield className="w-4 h-4 text-amber-400" />
         <span className="text-xs font-display font-semibold">{pendingUsers.length} user{pendingUsers.length !== 1 ? "s" : ""} pending review</span>
       </div>
-      <p className="text-[10px] text-muted-foreground">Click Search Registry to check the federal NSOPW database. Then mark Clear or Flag.</p>
+      <p className="text-[10px] text-muted-foreground">Newest first. Click Search Registry to check the federal NSOPW database. Then mark Clear or Flag.</p>
     </div>
 
     {pendingUsers.map(u => {
@@ -3943,11 +3967,11 @@ return (
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold">{u.fullName}</p>
-                <Badge variant="outline" className="text-[8px]">{(u as any).tier}</Badge>
+                <Badge variant="outline" className="text-[8px]">{u.tier}</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">{u.email}</p>
               <p className="text-[11px] text-muted-foreground">
-                Joined: {(u as any).createdAt ? new Date((u as any).createdAt).toLocaleDateString() : "—"} • Zip: {(u as any).zipcode || "—"}
+                Joined: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"} • Zip: {u.zipcode || "—"}
               </p>
             </div>
             <Button
@@ -3967,7 +3991,7 @@ return (
             <div className={`rounded-lg p-2.5 text-xs space-y-1.5 ${result.matches.length > 0 ? "bg-red-500/10 border border-red-500/20" : "bg-primary/5 border border-primary/20"}`}>
               {!result.available ? (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground text-[11px]">Registry temporarily unavailable — search manually</span>
+                  <span className="text-muted-foreground text-[11px]">{result.message || "Registry temporarily unavailable"} — search manually</span>
                   <a href={nsopwUrl} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline flex items-center gap-0.5" data-testid={`link-nsopw-manual-${u.id}`}>
                     Open NSOPW <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
                   </a>
@@ -3983,7 +4007,7 @@ return (
                     <AlertTriangle className="w-3 h-3 shrink-0" />
                     <span>{result.matches.length} match{result.matches.length !== 1 ? "es" : ""} found — review before clearing</span>
                   </div>
-                  {result.matches.slice(0, 3).map((match: any, i) => (
+                  {result.matches.slice(0, 3).map((match, i) => (
                     <div key={i} className="text-[10px] text-muted-foreground border-t border-border/10 pt-1.5">
                       <span className="font-medium text-foreground">
                         {match.offenderName || match.name || `${match.firstName || ""} ${match.lastName || ""}`.trim() || "Unknown"}

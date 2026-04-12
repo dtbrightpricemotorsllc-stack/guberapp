@@ -3566,14 +3566,14 @@ export async function registerRoutes(
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      if (!response.ok) return res.json({ available: false, matches: [] });
+      if (!response.ok) return res.json({ available: false, matches: [], message: "NSOPW returned an error response" });
       const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("json")) return res.json({ available: false, matches: [] });
+      if (!contentType.includes("json")) return res.json({ available: false, matches: [], message: "NSOPW returned an unexpected response format" });
       const data = await response.json() as Record<string, unknown>;
       const matches = (data.results ?? data.offenders ?? data.data ?? []) as unknown[];
       return res.json({ available: true, matches });
     } catch {
-      return res.json({ available: false, matches: [] });
+      return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
     }
   });
 
