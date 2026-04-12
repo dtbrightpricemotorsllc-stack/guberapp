@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <link rel="icon" href="/favicon.ico" />
+  <link rel="canonical" href="https://guberapp.com/" />
 
   <meta
     name="description"
@@ -26,13 +27,9 @@
       --bg: #000000;
       --bg-soft: #0a0a0a;
       --card: #101010;
-      --card-2: #161616;
       --accent: #00ff6a;
-      --accent-soft: rgba(0,255,106,0.12);
-      --accent-border: rgba(0,255,106,0.24);
+      --accent-border: rgba(0,255,106,0.22);
       --gold: #ffcc33;
-      --gold-2: #ffb300;
-      --gold-soft: rgba(255,204,51,0.14);
       --text: #f5f5f5;
       --text-soft: #c7c7c7;
       --muted: #8d8d8d;
@@ -65,14 +62,14 @@
       color: inherit;
     }
 
-    button, input {
+    button, input, select {
       font: inherit;
     }
 
     .page {
       max-width: 1180px;
       margin: 0 auto;
-      padding: 18px 14px 44px;
+      padding: 18px 14px 100px;
     }
 
     .header {
@@ -118,7 +115,7 @@
 
     .hero {
       display: grid;
-      grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
       gap: 22px;
       align-items: stretch;
       margin-bottom: 26px;
@@ -127,11 +124,10 @@
     .hero-left,
     .hero-right,
     .card,
-    .banner-card,
     .job-card,
     .quote,
-    .og-card,
-    .hero-panel {
+    .banner-card,
+    .og-card {
       border-radius: var(--radius);
       border: 1px solid rgba(255,255,255,0.07);
       box-shadow: 0 0 22px rgba(0,0,0,0.28);
@@ -143,59 +139,20 @@
     }
 
     .hero-right {
-      padding: 12px;
+      padding: 14px;
       border-color: var(--accent-border);
-      background: radial-gradient(circle at top, rgba(0,255,106,0.16), rgba(0,0,0,0.92) 70%);
+      background:
+        radial-gradient(circle at top right, rgba(0,255,106,0.10), transparent 40%),
+        radial-gradient(circle at bottom left, rgba(255,204,51,0.08), transparent 35%),
+        linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008));
     }
 
     .hero-panel {
       height: 100%;
+      border-radius: 16px;
       padding: 18px;
-      background:
-        radial-gradient(circle at top right, rgba(0,255,106,0.09), transparent 40%),
-        radial-gradient(circle at bottom left, rgba(255,204,51,0.08), transparent 40%),
-        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-    }
-
-    .hero-panel h3 {
-      margin: 0 0 12px;
-      font-size: 26px;
-      line-height: 1.05;
-      letter-spacing: -0.03em;
-    }
-
-    .hero-panel p {
-      margin: 0 0 12px;
-      color: var(--text-soft);
-      line-height: 1.7;
-      font-size: 14px;
-    }
-
-    .hero-live-list {
-      display: grid;
-      gap: 10px;
-      margin-top: 14px;
-    }
-
-    .hero-live-item {
-      padding: 12px;
-      border-radius: 14px;
-      background: rgba(255,255,255,0.04);
+      background: rgba(0,0,0,0.45);
       border: 1px solid rgba(255,255,255,0.06);
-    }
-
-    .hero-live-item b {
-      display: block;
-      font-size: 13px;
-      margin-bottom: 4px;
-      color: var(--text);
-    }
-
-    .hero-live-item span {
-      display: block;
-      color: var(--text-soft);
-      font-size: 12px;
-      line-height: 1.5;
     }
 
     .hero-pill-row {
@@ -243,7 +200,7 @@
 
     .hero-sub {
       margin: 0 0 10px;
-      max-width: 680px;
+      max-width: 700px;
       color: var(--text-soft);
       font-size: 16px;
       line-height: 1.65;
@@ -261,9 +218,37 @@
       border: 1px solid rgba(255,255,255,0.07);
     }
 
-    .input-grid {
+    .mode-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mode-btn {
+      min-height: 38px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.09);
+      background: rgba(255,255,255,0.03);
+      color: var(--text-soft);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .mode-btn.active {
+      background: linear-gradient(135deg, #00ff6a, #00d85a);
+      color: #000;
+      border-color: transparent;
+      box-shadow: var(--shadow-green);
+    }
+
+    .filter-grid {
       display: grid;
-      grid-template-columns: 1.5fr 0.8fr;
+      grid-template-columns: 1.25fr 1fr 0.8fr;
       gap: 10px;
       margin-bottom: 10px;
     }
@@ -392,6 +377,47 @@
       color: var(--text-soft);
     }
 
+    .hero-panel h3 {
+      margin: 0 0 10px;
+      font-size: 26px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-panel p {
+      margin: 0 0 12px;
+      color: var(--text-soft);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .hero-live-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .hero-live-item {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .hero-live-item b {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+
+    .hero-live-item span {
+      display: block;
+      color: var(--text-soft);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     .section {
       margin-bottom: 30px;
     }
@@ -438,10 +464,15 @@
       grid-template-columns: repeat(4, minmax(0,1fr));
     }
 
+    .card,
+    .job-card,
+    .hero-panel {
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+
     .card {
       background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
       padding: 16px;
-      transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
 
     .card:hover,
@@ -497,7 +528,6 @@
       padding: 16px;
       background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
       border: 1px solid rgba(0,255,106,0.18);
-      transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
 
     .job-top {
@@ -538,7 +568,8 @@
     .job-price {
       color: var(--accent);
       font-weight: 900;
-      font-size: 17px;
+      font-size: 20px;
+      text-shadow: 0 0 10px rgba(0,255,106,0.35);
     }
 
     .job-paytype {
@@ -666,9 +697,6 @@
     .quote {
       background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
       padding: 15px;
-      font-size: 13px;
-      line-height: 1.7;
-      color: var(--text-soft);
     }
 
     .quote span {
@@ -736,7 +764,7 @@
     .floating-og {
       position: fixed;
       right: 14px;
-      bottom: 14px;
+      bottom: 70px;
       z-index: 50;
     }
 
@@ -764,6 +792,30 @@
       letter-spacing: 0.08em;
     }
 
+    .sticky-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 60;
+      background: rgba(0,0,0,0.92);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 10px;
+    }
+
+    .sticky-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+    }
+
+    .sticky-inner .btn {
+      flex: 1;
+      min-height: 48px;
+    }
+
     @media (max-width: 980px) {
       .hero {
         grid-template-columns: 1fr;
@@ -780,7 +832,7 @@
 
     @media (max-width: 780px) {
       .page {
-        padding: 16px 10px 30px;
+        padding: 16px 10px 120px;
       }
 
       .hero h1 {
@@ -791,6 +843,7 @@
         font-size: 30px;
       }
 
+      .filter-grid,
       .input-grid,
       .hero-stat-row,
       .grid-2,
@@ -842,19 +895,36 @@
       </p>
 
       <p class="hero-sub">
-        Work when you want. Hire when you need help. Verify vehicles, property, parts, or marketplace items before you waste time or money.
+        Pick a mode, choose a category, and open the real job inside GUBER. The homepage previews the action. The app handles the full move.
       </p>
 
       <div class="action-box">
-        <div class="input-grid">
+        <div class="mode-row">
+          <button id="modeWork" class="mode-btn active" type="button">Work</button>
+          <button id="modeHire" class="mode-btn" type="button">Hire</button>
+          <button id="modeVerify" class="mode-btn" type="button">Verify</button>
+        </div>
+
+        <div class="filter-grid">
+          <select id="categoryInput" class="action-input">
+            <option value="">All Categories</option>
+            <option value="General Labor">General Labor</option>
+            <option value="Skilled Work">Skilled Work</option>
+            <option value="Moving Help">Moving Help</option>
+            <option value="Errands">Errands</option>
+            <option value="Lawn & Yard">Lawn & Yard</option>
+            <option value="Marketplace">Marketplace</option>
+            <option value="Verify & Inspect">Verify & Inspect</option>
+          </select>
+
           <input id="searchInput" class="action-input" placeholder="What do you need done or verified?" />
           <input id="zipInput" class="action-input" placeholder="ZIP code" />
         </div>
 
         <div class="cta-row">
-          <button class="btn btn-primary" onclick="loadJobs()">Find Work</button>
-          <a href="https://guberapp.app/post-job" class="btn btn-secondary">Post Job</a>
-          <a href="https://guberapp.app/verify-inspect" class="btn btn-ghost">Verify</a>
+          <button id="findBtn" class="btn btn-primary" type="button">Find Work</button>
+          <a id="postBtn" href="https://guberapp.app/post-job" class="btn btn-secondary">Post Job</a>
+          <a id="verifyBtn" href="https://guberapp.app/verify-inspect" class="btn btn-ghost">Verify</a>
         </div>
 
         <div class="hero-note">
@@ -899,6 +969,7 @@
         <p>
           GUBER is built for the moments where waiting costs money, trust, time, or momentum.
         </p>
+
         <div class="hero-live-list">
           <div class="hero-live-item">
             <b>Need help fast</b>
@@ -923,7 +994,7 @@
 
   <section class="section">
     <h2 class="section-title">Live Opportunities <span class="accent">●</span></h2>
-    <p class="section-lead">Real jobs. Real categories. Real paths into the app.</p>
+    <p class="section-lead">Preview-level jobs only. Tap a card and continue inside the real app.</p>
 
     <div id="jobsContainer" class="grid-3"></div>
 
@@ -985,30 +1056,6 @@
       <div class="card card-accent">
         <h3>Move Faster</h3>
         <p>GUBER is built for real-life moments where waiting costs time, money, or momentum.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2 class="section-title">This Isn’t Just an App… <span class="accent">It’s Opportunity</span></h2>
-    <p class="section-lead">
-      GUBER connects people to real work, real help, and real-world verification. No guessing. No waiting. Just action.
-    </p>
-
-    <div class="grid-3">
-      <div class="card">
-        <h3>Make Money On Demand</h3>
-        <p>Take jobs when you want. Work local or remote. Get paid for action.</p>
-      </div>
-
-      <div class="card">
-        <h3>Hire Instantly</h3>
-        <p>Post a job and get real people ready to move — not just browse.</p>
-      </div>
-
-      <div class="card">
-        <h3>Verify Before You Spend</h3>
-        <p>Have someone check vehicles, property, or items before you commit.</p>
       </div>
     </div>
   </section>
@@ -1240,7 +1287,56 @@
   </a>
 </div>
 
+<div class="sticky-bar">
+  <div class="sticky-inner">
+    <a href="https://guberapp.app" class="btn btn-primary">Open App</a>
+    <a href="https://guberapp.app/post-job" class="btn btn-secondary">Post Job</a>
+  </div>
+</div>
+
 <script>
+let currentMode = "work";
+
+const modeWork = document.getElementById("modeWork");
+const modeHire = document.getElementById("modeHire");
+const modeVerify = document.getElementById("modeVerify");
+const findBtn = document.getElementById("findBtn");
+const postBtn = document.getElementById("postBtn");
+const verifyBtn = document.getElementById("verifyBtn");
+const categoryInput = document.getElementById("categoryInput");
+
+function setMode(mode) {
+  currentMode = mode;
+
+  modeWork.classList.toggle("active", mode === "work");
+  modeHire.classList.toggle("active", mode === "hire");
+  modeVerify.classList.toggle("active", mode === "verify");
+
+  if (mode === "work") {
+    findBtn.textContent = "Find Work";
+    postBtn.textContent = "Post Job";
+    verifyBtn.textContent = "Verify";
+    categoryInput.value = categoryInput.value === "Verify & Inspect" ? "" : categoryInput.value;
+  }
+
+  if (mode === "hire") {
+    findBtn.textContent = "Find Help";
+    postBtn.textContent = "Post Job";
+    verifyBtn.textContent = "Verify";
+  }
+
+  if (mode === "verify") {
+    findBtn.textContent = "Find Verification";
+    verifyBtn.textContent = "Verify";
+    categoryInput.value = "Verify & Inspect";
+  }
+}
+
+modeWork.addEventListener("click", () => setMode("work"));
+modeHire.addEventListener("click", () => setMode("hire"));
+modeVerify.addEventListener("click", () => setMode("verify"));
+findBtn.addEventListener("click", loadJobs);
+
 async function loadJobs() {
   const container = document.getElementById("jobsContainer");
   const empty = document.getElementById("emptyState");
@@ -1249,10 +1345,12 @@ async function loadJobs() {
 
   const zip = document.getElementById("zipInput").value.trim();
   const search = document.getElementById("searchInput").value.trim();
+  const category = document.getElementById("categoryInput").value.trim();
 
   const params = [];
   if (zip) params.push("zip=" + encodeURIComponent(zip));
   if (search) params.push("search=" + encodeURIComponent(search));
+  if (category) params.push("category=" + encodeURIComponent(category));
 
   if (params.length) url += "?" + params.join("&");
 
@@ -1285,10 +1383,10 @@ async function loadJobs() {
           <div class="job-paytype">${job.payType || ""}</div>
         </div>
         <div class="job-tags">
-          ${job.jobType || ""}${job.proofRequired ? ' • Proof Required' : ''}
+          ${job.jobType || ""}${job.proofRequired ? " • Proof Required" : ""}
         </div>
         <div class="job-actions">
-          <a href="${job.appUrl || 'https://guberapp.app'}" class="btn btn-primary">View & Apply</a>
+          <a href="${job.appUrl || "https://guberapp.app"}" class="btn btn-primary">Open in App</a>
           <a href="https://guberapp.app" class="btn btn-ghost">Open App</a>
         </div>
       `;
@@ -1307,4 +1405,4 @@ loadJobs();
 </script>
 
 </body>
-                              </html>
+</html>
