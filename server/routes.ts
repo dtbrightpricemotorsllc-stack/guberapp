@@ -3552,6 +3552,31 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/nsopw-search", requireAdmin, async (req: Request, res: Response) => {
+    const { firstName, lastName } = req.query as { firstName?: string; lastName?: string };
+    if (!firstName || !lastName) return res.status(400).json({ message: "firstName and lastName are required" });
+    const cleanFirst = firstName.trim();
+    const cleanLast = lastName.trim();
+    try {
+      const url = `https://www.nsopw.gov/api/search/sexoffender?firstName=${encodeURIComponent(cleanFirst)}&lastName=${encodeURIComponent(cleanLast)}&state=&city=&county=&zip=&radius=10&searchType=stateOnly`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(url, {
+        headers: { "User-Agent": "GUBER-Safety/1.0 contact@guberapp.app", "Accept": "application/json" },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) return res.json({ available: false, matches: [] });
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("json")) return res.json({ available: false, matches: [] });
+      const data = await response.json() as Record<string, unknown>;
+      const matches = (data.results ?? data.offenders ?? data.data ?? []) as unknown[];
+      return res.json({ available: true, matches });
+    } catch {
+      return res.json({ available: false, matches: [] });
+    }
+  });
+
   app.patch("/api/admin/proof-template/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
