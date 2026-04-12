@@ -3558,35 +3558,6 @@ export async function registerRoutes(
     const cleanFirst = firstName.trim();
     const cleanLast = lastName.trim();
     try {
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const payload = JSON.stringify({ firstName: cleanFirst, lastName: cleanLast, jurisdictions: ["all"] });
-      const { stdout } = await execFileAsync("curl", [
-        "--silent", "--max-time", "12",
-        "--write-out", "\n%{http_code}",
-        "-X", "POST",
-        "-H", "Content-Type: application/json",
-        "-H", "Accept: application/json, text/javascript, */*; q=0.01",
-        "-H", "X-Requested-With: XMLHttpRequest",
-        "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "-H", "Origin: https://www.nsopw.gov",
-        "-H", "Referer: https://www.nsopw.gov/search-public-sex-offender-registries",
-        "-H", "sec-fetch-dest: empty",
-        "-H", "sec-fetch-mode: cors",
-        "-H", "sec-fetch-site: same-site",
-        "-d", payload,
-        "https://nsopw-api.ojp.gov/nsopw/v1/v1.0/search",
-      ], { timeout: 15000 });
-      const lastNewline = stdout.lastIndexOf("\n");
-      const body = stdout.slice(0, lastNewline).trim();
-      const httpStatus = parseInt(stdout.slice(lastNewline + 1).trim(), 10);
-      if (httpStatus === 0) {
-        return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
-      }
-      if (httpStatus >= 500) {
-        return res.json({ available: false, matches: [], message: "NSOPW registry returned a server error" });
-      }
       interface NsopwApiResponse {
         statusCode?: number;
         offenders?: Array<{
@@ -3598,9 +3569,36 @@ export async function registerRoutes(
           city?: string;
         }> | null;
       }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      let response: Response;
+      try {
+        response = await fetch("https://nsopw-api.ojp.gov/nsopw/v1/v1.0/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Origin": "https://www.nsopw.gov",
+            "Referer": "https://www.nsopw.gov/search-public-sex-offender-registries",
+          },
+          body: JSON.stringify({ firstName: cleanFirst, lastName: cleanLast, jurisdictions: ["all"] }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (response.status >= 500) {
+        return res.json({ available: false, matches: [], message: "NSOPW registry returned a server error" });
+      }
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
+      }
       let data: NsopwApiResponse;
       try {
-        data = JSON.parse(body) as NsopwApiResponse;
+        data = await response.json() as NsopwApiResponse;
       } catch {
         return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
       }
