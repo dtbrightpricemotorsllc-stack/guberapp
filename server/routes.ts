@@ -3558,19 +3558,51 @@ export async function registerRoutes(
     const cleanFirst = firstName.trim();
     const cleanLast = lastName.trim();
     try {
-      const url = `https://www.nsopw.gov/api/search/sexoffender?firstName=${encodeURIComponent(cleanFirst)}&lastName=${encodeURIComponent(cleanLast)}&state=&city=&county=&zip=&radius=10&searchType=stateOnly`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      const response = await fetch(url, {
-        headers: { "User-Agent": "GUBER-Safety/1.0 contact@guberapp.app", "Accept": "application/json" },
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (!response.ok) return res.json({ available: false, matches: [], message: "NSOPW returned an error response" });
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("json")) return res.json({ available: false, matches: [], message: "NSOPW returned an unexpected response format" });
-      const data = await response.json() as Record<string, unknown>;
-      const matches = (data.results ?? data.offenders ?? data.data ?? []) as unknown[];
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+      const payload = JSON.stringify({ firstName: cleanFirst, lastName: cleanLast, jurisdictions: ["all"] });
+      const { stdout } = await execFileAsync("curl", [
+        "--silent", "--max-time", "12",
+        "-X", "POST",
+        "-H", "Content-Type: application/json",
+        "-H", "Accept: application/json, text/javascript, */*; q=0.01",
+        "-H", "X-Requested-With: XMLHttpRequest",
+        "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "-H", "Origin: https://www.nsopw.gov",
+        "-H", "Referer: https://www.nsopw.gov/search-public-sex-offender-registries",
+        "-H", "sec-fetch-dest: empty",
+        "-H", "sec-fetch-mode: cors",
+        "-H", "sec-fetch-site: same-site",
+        "-d", payload,
+        "https://nsopw-api.ojp.gov/nsopw/v1/v1.0/search",
+      ], { timeout: 15000 });
+      interface NsopwApiResponse {
+        statusCode?: number;
+        offenders?: Array<{
+          offenderName?: string;
+          firstName?: string;
+          lastName?: string;
+          state?: string;
+          jurisdiction?: string;
+          city?: string;
+        }> | null;
+      }
+      let data: NsopwApiResponse;
+      try {
+        data = JSON.parse(stdout) as NsopwApiResponse;
+      } catch {
+        return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
+      }
+      const rawOffenders = data.offenders ?? [];
+      const matches = (rawOffenders || []).map(o => ({
+        offenderName: o.offenderName,
+        firstName: o.firstName,
+        lastName: o.lastName,
+        state: o.state,
+        jurisdiction: o.jurisdiction,
+        city: o.city,
+      }));
       return res.json({ available: true, matches });
     } catch {
       return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
