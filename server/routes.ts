@@ -3564,6 +3564,7 @@ export async function registerRoutes(
       const payload = JSON.stringify({ firstName: cleanFirst, lastName: cleanLast, jurisdictions: ["all"] });
       const { stdout } = await execFileAsync("curl", [
         "--silent", "--max-time", "12",
+        "--write-out", "\n%{http_code}",
         "-X", "POST",
         "-H", "Content-Type: application/json",
         "-H", "Accept: application/json, text/javascript, */*; q=0.01",
@@ -3577,6 +3578,15 @@ export async function registerRoutes(
         "-d", payload,
         "https://nsopw-api.ojp.gov/nsopw/v1/v1.0/search",
       ], { timeout: 15000 });
+      const lastNewline = stdout.lastIndexOf("\n");
+      const body = stdout.slice(0, lastNewline).trim();
+      const httpStatus = parseInt(stdout.slice(lastNewline + 1).trim(), 10);
+      if (httpStatus === 0) {
+        return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
+      }
+      if (httpStatus >= 500) {
+        return res.json({ available: false, matches: [], message: "NSOPW registry returned a server error" });
+      }
       interface NsopwApiResponse {
         statusCode?: number;
         offenders?: Array<{
@@ -3590,9 +3600,12 @@ export async function registerRoutes(
       }
       let data: NsopwApiResponse;
       try {
-        data = JSON.parse(stdout) as NsopwApiResponse;
+        data = JSON.parse(body) as NsopwApiResponse;
       } catch {
         return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
+      }
+      if (!("offenders" in data)) {
+        return res.json({ available: false, matches: [], message: "NSOPW registry returned an unexpected response" });
       }
       const rawOffenders = data.offenders ?? [];
       const matches = (rawOffenders || []).map(o => ({

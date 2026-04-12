@@ -3971,7 +3971,7 @@ return (
               </div>
               <p className="text-[11px] text-muted-foreground">{u.email}</p>
               <p className="text-[11px] text-muted-foreground">
-                Joined: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"} • Zip: {u.zipcode || "—"}
+                Joined: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"} • {u.locationApprox || u.zipcode ? `${u.locationApprox || ""}${u.locationApprox && u.zipcode ? " · " : ""}${u.zipcode || ""}` : "Location unknown"}
               </p>
             </div>
             <Button
