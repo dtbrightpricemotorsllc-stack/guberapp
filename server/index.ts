@@ -322,7 +322,9 @@ app.use((req, res, next) => {
   });
 
   const shutdown = () => {
+    httpServer.closeAllConnections?.();
     httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
