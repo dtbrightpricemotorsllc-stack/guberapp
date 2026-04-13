@@ -123,7 +123,7 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-display font-bold text-sm leading-snug">{job.title}</h3>
           {job.urgentSwitch && (
-            <Badge className="shrink-0 text-[9px] font-display tracking-widest bg-red-500/15 text-red-400 border-red-500/20 no-default-hover-elevate" data-testid={`badge-urgent-${job.id}`}>
+            <Badge className="shrink-0 text-[9px] font-display tracking-widest bg-amber-500/15 text-amber-400 border-amber-500/20 no-default-hover-elevate" data-testid={`badge-urgent-${job.id}`}>
               <Zap className="w-2.5 h-2.5 mr-0.5" /> URGENT
             </Badge>
           )}
@@ -267,7 +267,7 @@ export default function Home() {
             <div className="flex items-center gap-2 mb-0.5">
               <span className="text-[11px] font-display font-black tracking-widest text-amber-400">DAY-1 OG STATUS</span>
               <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}>LIMITED</span>
+                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>LIMITED</span>
             </div>
             <p className="text-[10px] text-amber-200/60 font-display">Founding status · $1.99 one-time · Free urgent forever</p>
           </div>

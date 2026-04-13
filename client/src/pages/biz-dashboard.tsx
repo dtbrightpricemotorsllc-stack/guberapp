@@ -74,7 +74,7 @@ function statusStyle(status: string): { color: string; background: string; borde
     in_progress: { color: "#60a5fa", background: "rgba(96,165,250,0.08)", borderColor: "rgba(96,165,250,0.2)" },
     completed: { color: GOLD, background: "rgba(198,168,92,0.08)", borderColor: "rgba(198,168,92,0.2)" },
     proof_submitted: { color: "#a78bfa", background: "rgba(167,139,250,0.08)", borderColor: "rgba(167,139,250,0.2)" },
-    disputed: { color: "#f87171", background: "rgba(248,113,113,0.08)", borderColor: "rgba(248,113,113,0.2)" },
+    disputed: { color: "#f59e0b", background: "rgba(245,158,11,0.08)", borderColor: "rgba(245,158,11,0.2)" },
     cancelled: { color: TEXT_MUTED, background: "rgba(113,113,122,0.08)", borderColor: "rgba(113,113,122,0.15)" },
     expired: { color: TEXT_MUTED, background: "rgba(113,113,122,0.06)", borderColor: "rgba(113,113,122,0.1)" },
   };

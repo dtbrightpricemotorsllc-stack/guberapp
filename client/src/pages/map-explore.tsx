@@ -589,7 +589,7 @@ export default function MapExplore() {
             </>
           ) : (
             <>
-              <AlertTriangle className="w-9 h-9" style={{ color: "#ef4444", opacity: 0.5 }} />
+              <AlertTriangle className="w-9 h-9" style={{ color: "#f59e0b", opacity: 0.5 }} />
               <p className="text-sm font-bold tracking-wide" style={{ color: "#374151" }}>Map could not load</p>
               <p className="text-xs text-center max-w-[220px]" style={{ color: "#6b7280" }}>{mapLoadErr}</p>
               <button
@@ -614,10 +614,10 @@ export default function MapExplore() {
       {locationDenied && mapReady && (
         <div
           className="absolute z-25 bottom-20 left-3 right-3 flex items-center gap-2 px-3 py-2 rounded-xl pointer-events-auto"
-          style={{ background: "rgba(14,15,22,0.92)", border: "1px solid rgba(239,68,68,0.35)", backdropFilter: "blur(10px)", zIndex: 25 }}
+          style={{ background: "rgba(14,15,22,0.92)", border: "1px solid rgba(245,158,11,0.35)", backdropFilter: "blur(10px)", zIndex: 25 }}
           data-testid="banner-location-denied-explore"
         >
-          <LocateOff className="w-3.5 h-3.5 shrink-0" style={{ color: "#f87171" }} />
+          <LocateOff className="w-3.5 h-3.5 shrink-0" style={{ color: "#f59e0b" }} />
           <span className="flex-1 text-[10px] font-bold tracking-wide" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "Inter, sans-serif" }}>
             Location unavailable — enter a ZIP above to browse nearby jobs
           </span>
@@ -688,7 +688,7 @@ export default function MapExplore() {
         </div>
 
         {zipError && (
-          <p className="text-xs text-red-400 pl-14 mt-1 pointer-events-auto" style={{ fontFamily: "Inter, sans-serif" }}>
+          <p className="text-xs text-amber-400 pl-14 mt-1 pointer-events-auto" style={{ fontFamily: "Inter, sans-serif" }}>
             {zipError}
           </p>
         )}
@@ -816,7 +816,7 @@ export default function MapExplore() {
                   <button
                     onClick={() => { setRadiusMiles(0); setCategoryFilter(""); }}
                     className="text-xs font-semibold px-2.5 py-1 rounded-full active:scale-95"
-                    style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444", fontFamily: "Inter, sans-serif" }}
+                    style={{ background: "rgba(100,100,120,0.18)", color: "#9ca3af", fontFamily: "Inter, sans-serif" }}
                     data-testid="button-clear-filters"
                   >
                     Clear
@@ -1109,7 +1109,7 @@ export default function MapExplore() {
                   <p className="text-xs" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
                     {selectedZip.total} job{selectedZip.total !== 1 ? "s" : ""}
                     {selectedZip.urgentCount > 0 && (
-                      <span className="ml-1.5 text-red-400 font-semibold">· {selectedZip.urgentCount} urgent</span>
+                      <span className="ml-1.5 text-amber-400 font-semibold">· {selectedZip.urgentCount} urgent</span>
                     )}
                   </p>
                 </div>
@@ -1181,8 +1181,8 @@ export default function MapExplore() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {job.urgentSwitch && (
-                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-red-400 px-1.5 py-0.5 rounded-full"
-                      style={{ background: "rgba(239,68,68,0.15)" }}>
+                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-400 px-1.5 py-0.5 rounded-full"
+                      style={{ background: "rgba(245,158,11,0.15)" }}>
                       <Zap className="w-2.5 h-2.5" /> URGENT
                     </span>
                   )}

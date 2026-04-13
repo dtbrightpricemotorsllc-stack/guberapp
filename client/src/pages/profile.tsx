@@ -839,7 +839,7 @@ export default function Profile() {
             )}
             {(displayUser as any).cancellationRate > 0.10 && (
               <div className="mt-3 rounded-lg p-2.5 flex items-center gap-2"
-                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+                style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}
                 data-testid="warning-reliability-restricted">
                 <AlertCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
                 <p className="text-[11px] text-destructive/80">High cancel rate — urgent and high-trust jobs may be restricted.</p>

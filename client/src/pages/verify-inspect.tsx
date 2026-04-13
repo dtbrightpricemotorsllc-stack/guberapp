@@ -1710,17 +1710,17 @@ export default function VerifyInspect() {
 
                 <div
                   className="flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all"
-                  style={{ background: viurgent ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${viurgent ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)"}` }}
+                  style={{ background: viurgent ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${viurgent ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.08)"}` }}
                   onClick={() => setViUrgent(!viurgent)}
                   data-testid="toggle-urgent"
                 >
                   <div>
-                    <p className="text-sm font-display font-semibold" style={{ color: viurgent ? "#ef4444" : "#9ca3af" }}>URGENT REQUEST</p>
+                    <p className="text-sm font-display font-semibold" style={{ color: viurgent ? "#f59e0b" : "#9ca3af" }}>URGENT REQUEST</p>
                     <p className="text-[10px] text-muted-foreground/50 mt-0.5">
                       {isOG ? "FREE for Day-1 OG members" : isDemoUser ? "Urgent fee applies" : "+ $10 urgent fee"}
                     </p>
                   </div>
-                  <div className={`w-11 h-6 rounded-full transition-all ${viurgent ? "bg-red-500" : "bg-muted/30"} relative`}>
+                  <div className={`w-11 h-6 rounded-full transition-all ${viurgent ? "bg-amber-500" : "bg-muted/30"} relative`}>
                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${viurgent ? "left-[22px]" : "left-0.5"}`} />
                   </div>
                 </div>
@@ -1734,7 +1734,7 @@ export default function VerifyInspect() {
                     {urgentFee > 0 && !isDemoUser && (
                       <div className="flex items-center justify-between text-sm mt-1">
                         <span className="text-muted-foreground font-display">Urgent Fee</span>
-                        <span className="font-bold" style={{ color: "#ef4444" }}>+${urgentFee.toFixed(2)}</span>
+                        <span className="font-bold" style={{ color: "#f59e0b" }}>+${urgentFee.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="border-t border-white/10 mt-2 pt-2 flex items-center justify-between">

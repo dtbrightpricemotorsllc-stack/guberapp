@@ -1318,7 +1318,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   <Badge variant="outline" className={
                     (job as any).partConditionTag === "Intact" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-[10px]" :
                     (job as any).partConditionTag === "Damaged" ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10 text-[10px]" :
-                    "border-red-500/40 text-red-400 bg-red-500/10 text-[10px]"
+                    "border-amber-500/40 text-amber-400 bg-amber-500/10 text-[10px]"
                   }>
                     {(job as any).partConditionTag}
                   </Badge>
@@ -1428,7 +1428,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                         key={tag}
                         onClick={() => setBountyCondition(tag)}
                         className={`h-9 rounded-xl text-xs font-display font-bold border transition-all ${bountyCondition === tag
-                          ? tag === "Intact" ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400" : tag === "Damaged" ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-400" : "bg-red-500/20 border-red-500/50 text-red-400"
+                          ? tag === "Intact" ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400" : tag === "Damaged" ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-400" : "bg-amber-500/20 border-amber-500/50 text-amber-400"
                           : "border-border/30 text-muted-foreground"
                         }`}
                         data-testid={`button-condition-${tag.toLowerCase()}`}
@@ -1494,11 +1494,11 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <div key={attempt.id} className="p-4 space-y-3" data-testid={`card-attempt-${attempt.id}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={`text-[10px] ${attempt.status === "approved" ? "border-emerald-500/40 text-emerald-400" : attempt.status === "rejected" ? "border-red-500/40 text-red-400" : "border-yellow-500/40 text-yellow-400"}`}>
+                      <Badge variant="outline" className={`text-[10px] ${attempt.status === "approved" ? "border-emerald-500/40 text-emerald-400" : attempt.status === "rejected" ? "border-amber-500/40 text-amber-400" : "border-yellow-500/40 text-yellow-400"}`}>
                         {attempt.status === "approved" ? "Approved" : attempt.status === "rejected" ? "Rejected" : "Pending Review"}
                       </Badge>
                       {attempt.partConditionTag && (
-                        <Badge variant="outline" className={`text-[10px] ${attempt.partConditionTag === "Intact" ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10" : attempt.partConditionTag === "Damaged" ? "border-yellow-500/30 text-yellow-400 bg-yellow-500/10" : "border-red-500/30 text-red-400 bg-red-500/10"}`}>
+                        <Badge variant="outline" className={`text-[10px] ${attempt.partConditionTag === "Intact" ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10" : attempt.partConditionTag === "Damaged" ? "border-yellow-500/30 text-yellow-400 bg-yellow-500/10" : "border-amber-500/30 text-amber-400 bg-amber-500/10"}`}>
                           {attempt.partConditionTag}
                         </Badge>
                       )}
@@ -2313,8 +2313,8 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
             </div>
 
-            <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)" }}>
-              <p className="text-[11px] text-destructive/80 leading-relaxed flex items-start gap-2">
+            <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.18)" }}>
+              <p className="text-[11px] text-amber-400/80 leading-relaxed flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 Repeated cancellations affect your reliability score and may reduce job visibility. This is logged and tracked.
               </p>
@@ -2384,8 +2384,8 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </div>
 
             {job && ["funded", "active", "in_progress"].includes(job.status) && (
-              <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)" }}>
-                <p className="text-[11px] text-destructive/80 leading-relaxed flex items-start gap-2">
+              <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.18)" }}>
+                <p className="text-[11px] text-amber-400/80 leading-relaxed flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   Cancelling after a helper has been locked affects your reliability score. The helper has already committed time to this job.
                 </p>
