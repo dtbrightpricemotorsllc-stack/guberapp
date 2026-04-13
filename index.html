@@ -376,8 +376,7 @@
         GUBER
       </a>
       <nav class="header-nav">
-        <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
-        <a href="https://guberapp.app/signup" class="btn btn-green">Sign Up</a>
+        <a href="https://guberapp.app/login" class="btn btn-ghost">Log In</a>
       </nav>
     </div>
   </header>
@@ -436,7 +435,7 @@
     <img src="/still-scrolling.png" alt="Still scrolling? Turn time into money with GUBER" />
     <div class="scroll-banner-links" style="background:rgba(0,0,0,0.6);padding:16px 22px;">
       <a href="https://guberapp.app/browse-jobs" class="btn btn-green">⚡ Find Work</a>
-      <a href="https://guberapp.app/signup" class="btn btn-ghost">📋 Post a Job</a>
+      <a href="https://guberapp.app/login" class="btn btn-ghost">📋 Post a Job</a>
     </div>
   </div>
 
@@ -652,7 +651,7 @@
 
       <div style="display:flex;align-items:center;gap:14px;margin-top:8px;">
         <img src="/vi-logo.png" alt="Verify & Inspect" class="vi-logo-badge" />
-        <a href="https://guberapp.app/signup" class="btn btn-ghost" style="border-color:var(--teal);color:var(--teal);">Request a Verification →</a>
+        <a href="https://guberapp.app/login" class="btn btn-ghost" style="border-color:var(--teal);color:var(--teal);">Request a Verification →</a>
       </div>
     </div>
   </section>
@@ -812,7 +811,7 @@
           🍎 &nbsp;Apple App Store — Coming Soon
         </div>
         <span class="app-or">— or —</span>
-        <a href="https://guberapp.app/signup" class="browser-opt">
+        <a href="https://guberapp.app/login" class="browser-opt">
           <span>Continue in Browser</span> →
         </a>
       </div>
@@ -953,7 +952,7 @@ var ZIP_CENTROIDS = {
           '<div class="popup-title">' + esc(job.title) + '</div>' +
           (budget ? '<div class="popup-amount popup-amount-job">' + esc(budget) + '</div>' : '') +
           (job.locationApprox ? '<div class="popup-loc">📍 ' + esc(job.locationApprox) + '</div>' : '') +
-          '<div style="font-size:12px;color:#888;margin-top:4px;">Open GUBER to accept this job</div>';
+          '<a href="https://guberapp.app/signup" class="popup-cta popup-cta-job" style="margin-top:8px;">Join GUBER →</a>';
         L.marker(ll, {icon: jobIcon()}).addTo(map).bindPopup(popup, {maxWidth: 240});
       });
       if (allLatLngs.length > 1) {
@@ -977,7 +976,7 @@ var ZIP_CENTROIDS = {
           '<div class="popup-title">' + esc(drop.title) + '</div>' +
           (reward ? '<div class="popup-amount popup-amount-drop">' + esc(reward) + ' reward</div>' : '') +
           '<div class="popup-loc">' + spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' remaining</div>' +
-          '<div style="font-size:12px;color:#888;margin-top:4px;">Open GUBER to claim this drop</div>';
+          '<a href="https://guberapp.app/signup" class="popup-cta popup-cta-drop" style="margin-top:8px;">Sign Up to Claim →</a>';
         L.marker(ll, {icon: dropIcon()}).addTo(map).bindPopup(popup, {maxWidth: 240});
       });
     })
