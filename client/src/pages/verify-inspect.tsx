@@ -775,12 +775,24 @@ export default function VerifyInspect() {
         </button>
 
         <div className="mb-6 animate-fade-in">
-          <div className="flex items-center gap-2 mb-1">
-            <Shield className="w-5 h-5 guber-text-purple" />
-            <h1 className="text-2xl font-display font-bold guber-text-purple tracking-tight">
-              VERIFY / INSPECT
-            </h1>
-          </div>
+          {(() => {
+            const catImg = GRID_CATEGORIES.find((c) => c.name === selectedCategory?.name)?.img;
+            return catImg ? (
+              <div className="relative rounded-2xl overflow-hidden mb-4" style={{ height: 90, border: "1.5px solid hsl(275 90% 65% / 0.4)", boxShadow: "0 0 14px hsl(275 90% 65% / 0.10)" }}>
+                <img src={catImg} alt={selectedCategory?.name} className="absolute inset-0 w-full h-full object-cover opacity-80" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
+                <div className="absolute inset-0 flex flex-col justify-center px-4">
+                  <p className="text-[9px] font-display font-bold tracking-widest text-primary/80 uppercase mb-0.5">GUBER · VERIFY &amp; INSPECT</p>
+                  <h1 className="text-lg font-display font-black text-white tracking-tight leading-tight">{selectedCategory?.name}</h1>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="w-5 h-5 guber-text-purple" />
+                <h1 className="text-2xl font-display font-bold guber-text-purple tracking-tight">VERIFY / INSPECT</h1>
+              </div>
+            );
+          })()}
           <p className="text-sm text-muted-foreground">
             Build your inspection request step by step
           </p>
