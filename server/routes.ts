@@ -709,6 +709,38 @@ export async function registerRoutes(
     return null;
   }
 
+  async function runNSOPWBackgroundCheck(userId: number, fullName: string): Promise<void> {
+    try {
+      const parts = (fullName || "").trim().split(/\s+/);
+      const firstName = parts[0] ?? "";
+      const lastName = parts.slice(1).join(" ") || parts[0] || "";
+      if (!firstName) return;
+
+      const apiRes = await fetch(
+        `https://www.nsopw.gov/api/search/sexoffender?q=${encodeURIComponent(firstName + " " + lastName)}&r=json`,
+        { headers: { "User-Agent": "GuberAdmin/1.0", "Accept": "application/json" }, signal: AbortSignal.timeout(8000) }
+      );
+
+      if (!apiRes.ok) return;
+
+      const data = await apiRes.json() as Record<string, unknown>;
+      const records = (data.records ?? data.results ?? data.offenders ?? []) as unknown[];
+
+      if (records.length > 0) {
+        await storage.updateUser(userId, { backgroundCheckStatus: "flagged" });
+        await storage.createAuditLog({
+          userId: null,
+          action: "auto_nsopw_flagged",
+          details: `Auto NSOPW check flagged user ${userId} (${fullName}): ${records.length} registry match(es) found.`,
+        });
+      } else {
+        await storage.updateUser(userId, { backgroundCheckStatus: "clear" });
+      }
+    } catch {
+      // Silently fail — user stays "none" and appears in Safety Queue for manual review
+    }
+  }
+
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {
       const parsed = signupSchema.safeParse(req.body);
@@ -800,6 +832,7 @@ export async function registerRoutes(
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
         res.status(201).json(sanitizeUser(user));
+        runNSOPWBackgroundCheck(user.id, fullName).catch(() => {});
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -887,6 +920,7 @@ export async function registerRoutes(
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
         res.status(201).json(sanitizeUser(user));
+        runNSOPWBackgroundCheck(user.id, fullName).catch(() => {});
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
