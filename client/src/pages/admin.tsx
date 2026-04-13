@@ -22,7 +22,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronRight, FolderTree, P
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import { Day1OGLogo } from "@/components/trust-badge";
@@ -3872,186 +3872,6 @@ function FeedbackTab() {
   );
 }
 
-interface NsopwMatch {
-  offenderName?: string;
-  name?: string;
-  firstName?: string;
-  lastName?: string;
-  state?: string;
-  jurisdiction?: string;
-  city?: string;
-}
-
-interface NsopwResult {
-  loading: boolean;
-  done: boolean;
-  available: boolean;
-  matches: NsopwMatch[];
-  message?: string;
-}
-
-function SafetyQueueTab({ allUsers }: { allUsers: User[] | undefined }) {
-const { toast } = useToast();
-const [searchResults, setSearchResults] = useState<Record<number, NsopwResult>>({});
-
-const bgCheckMutation = useMutation({
-  mutationFn: ({ id, status }: { id: number; status: string }) =>
-    apiRequest("PATCH", `/api/admin/users/${id}/background-check`, { status }),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-    toast({ title: "Status updated" });
-  },
-  onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-});
-
-const searchRegistry = async (u: User) => {
-  const parts = (u.fullName || "").trim().split(/\s+/);
-  const firstName = parts[0] || "";
-  const lastName = parts.slice(1).join(" ") || "";
-  if (!firstName || !lastName) {
-    toast({ title: "Cannot search", description: "User needs a first and last name", variant: "destructive" });
-    return;
-  }
-  setSearchResults(prev => ({ ...prev, [u.id]: { loading: true, done: false, available: false, matches: [] } }));
-  try {
-    const resp = await fetch(`/api/admin/nsopw-search?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}`);
-    const data = await resp.json() as { available: boolean; matches: NsopwMatch[]; message?: string };
-    setSearchResults(prev => ({ ...prev, [u.id]: { loading: false, done: true, available: data.available, matches: data.matches || [], message: data.message } }));
-  } catch {
-    setSearchResults(prev => ({ ...prev, [u.id]: { loading: false, done: true, available: false, matches: [], message: "Registry temporarily unavailable" } }));
-  }
-};
-
-const pendingUsers = (allUsers || [])
-  .filter(u => u.backgroundCheckStatus === "none")
-  .sort((a, b) => {
-    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return bTime - aTime;
-  });
-
-if (!allUsers) {
-  return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>;
-}
-
-if (pendingUsers.length === 0) {
-  return (
-    <div className="text-center py-16 text-muted-foreground">
-      <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-primary/40" />
-      <p className="text-sm font-display font-semibold">All users reviewed</p>
-      <p className="text-xs mt-1">No pending safety checks</p>
-    </div>
-  );
-}
-
-return (
-  <div className="space-y-3">
-    <div className="bg-muted/20 rounded-lg p-3">
-      <div className="flex items-center gap-2 mb-1">
-        <Shield className="w-4 h-4 text-amber-400" />
-        <span className="text-xs font-display font-semibold">{pendingUsers.length} user{pendingUsers.length !== 1 ? "s" : ""} pending review</span>
-      </div>
-      <p className="text-[10px] text-muted-foreground">Newest first. Click Search Registry to check the federal NSOPW database. Then mark Clear or Flag.</p>
-    </div>
-
-    {pendingUsers.map(u => {
-      const result = searchResults[u.id];
-      const parts = (u.fullName || "").trim().split(/\s+/);
-      const firstName = parts[0] || "";
-      const lastName = parts.slice(1).join(" ") || "";
-      const nsopwUrl = `https://www.nsopw.gov/Search/Results?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&state=`;
-
-      return (
-        <div key={u.id} className="bg-card rounded-xl border border-border/20 p-3 space-y-3" data-testid={`safety-queue-user-${u.id}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-semibold">{u.fullName}</p>
-                <Badge variant="outline" className="text-[8px]">{u.tier}</Badge>
-              </div>
-              <p className="text-[11px] text-muted-foreground">{u.email}</p>
-              <p className="text-[11px] text-muted-foreground">
-                Joined: {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"} • {u.locationApprox || u.zipcode ? `${u.locationApprox || ""}${u.locationApprox && u.zipcode ? " · " : ""}${u.zipcode || ""}` : "Location unknown"}
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => searchRegistry(u)}
-              disabled={result?.loading}
-              className="shrink-0"
-              data-testid={`button-nsopw-search-${u.id}`}
-            >
-              {result?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3 mr-1" />}
-              {result?.loading ? "Searching…" : "Search Registry"}
-            </Button>
-          </div>
-
-          {result?.done && (
-            <div className={`rounded-lg p-2.5 text-xs space-y-1.5 ${result.matches.length > 0 ? "bg-red-500/10 border border-red-500/20" : "bg-primary/5 border border-primary/20"}`}>
-              {!result.available ? (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground text-[11px]">{result.message || "Registry temporarily unavailable"} — search manually</span>
-                  <a href={nsopwUrl} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline flex items-center gap-0.5" data-testid={`link-nsopw-manual-${u.id}`}>
-                    Open NSOPW <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
-                  </a>
-                </div>
-              ) : result.matches.length === 0 ? (
-                <div className="flex items-center gap-1.5 text-primary">
-                  <CheckCircle className="w-3 h-3 shrink-0" />
-                  <span>No registry matches found for {u.fullName}</span>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-red-400 font-semibold">
-                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                    <span>{result.matches.length} match{result.matches.length !== 1 ? "es" : ""} found — review before clearing</span>
-                  </div>
-                  {result.matches.slice(0, 3).map((match, i) => (
-                    <div key={i} className="text-[10px] text-muted-foreground border-t border-border/10 pt-1.5">
-                      <span className="font-medium text-foreground">
-                        {match.offenderName || match.name || `${match.firstName || ""} ${match.lastName || ""}`.trim() || "Unknown"}
-                      </span>
-                      {(match.state || match.jurisdiction) && <span className="ml-2">— {match.state || match.jurisdiction}</span>}
-                      {match.city && <span className="ml-1">• {match.city}</span>}
-                    </div>
-                  ))}
-                  <a href={nsopwUrl} target="_blank" rel="noreferrer" className="text-[10px] text-primary underline flex items-center gap-0.5 pt-0.5" data-testid={`link-nsopw-verify-${u.id}`}>
-                    View full results on NSOPW.gov <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="flex-1 h-7 text-[10px]"
-              onClick={() => bgCheckMutation.mutate({ id: u.id, status: "clear" })}
-              disabled={bgCheckMutation.isPending}
-              data-testid={`button-mark-clear-${u.id}`}
-            >
-              <CheckCircle className="w-3 h-3 mr-1" /> Mark Clear
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="flex-1 h-7 text-[10px]"
-              onClick={() => bgCheckMutation.mutate({ id: u.id, status: "flagged" })}
-              disabled={bgCheckMutation.isPending}
-              data-testid={`button-flag-user-${u.id}`}
-            >
-              <AlertTriangle className="w-3 h-3 mr-1" /> Flag
-            </Button>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-);
-}
-
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
@@ -4209,7 +4029,6 @@ return (
 <TabsTrigger value="wallet" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-wallet">Wallet</TabsTrigger>
 <TabsTrigger value="payouts" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-payouts">💸 Payouts</TabsTrigger>
 <TabsTrigger value="settings" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-settings">Settings</TabsTrigger>
-<TabsTrigger value="safetyqueue" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-safetyqueue">🛡️ Safety Queue</TabsTrigger>
 <TabsTrigger value="feedback" className="font-display shrink-0 whitespace-nowrap relative" data-testid="tab-feedback">
   Feedback
   {feedbackUnread > 0 && (
@@ -4655,9 +4474,6 @@ data-testid={`button-resolve-dispute-${j.id}`}
 </TabsContent>
 <TabsContent value="feedback">
 <FeedbackTab />
-</TabsContent>
-<TabsContent value="safetyqueue">
-<SafetyQueueTab allUsers={allUsers} />
 </TabsContent>
 </Tabs>
 </div>

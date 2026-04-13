@@ -309,17 +309,20 @@ app.use((req, res, next) => {
 
   httpServer.on("error", (err: any) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`Port ${port} already in use — exiting so the runner can restart cleanly.`);
-      process.exit(1);
+      console.error(`Port ${port} in use, retrying in 1s...`);
+      setTimeout(() => {
+        httpServer.close();
+        httpServer.listen({ port, host: "0.0.0.0" }, () => {
+          log(`serving on port ${port}`);
+        });
+      }, 1000);
     } else {
       throw err;
     }
   });
 
   const shutdown = () => {
-    httpServer.closeAllConnections?.();
     httpServer.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 3000).unref();
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);

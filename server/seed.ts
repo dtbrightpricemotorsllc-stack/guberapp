@@ -452,14 +452,13 @@ export async function seedJobChecklists() {
   console.log("[GUBER] Job checklists seeded.");
 }
 
-const ADMIN_PASSWORD_HASH = "85693b91d67443fd1a06a34efe1caadec3bf362dfa53e78d7a4216de2f827d76cb1014c0c93210236c99796b2667b1919be2a29839b0ae0b6bffa7b349e4d948.a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6";
-
 export async function syncAdminCredentials() {
   try {
     const adminUser = await storage.getUserByEmail("admin@guberapp.com");
+    const correctHash = await hashPassword("Bouncer76!");
     if (adminUser) {
-      await storage.updateUser(adminUser.id, { role: "admin", tier: "elite", day1OG: true });
-      console.log("[GUBER] Admin role synced (password preserved).");
+      await storage.updateUser(adminUser.id, { password: correctHash, role: "admin", tier: "elite", day1OG: true });
+      console.log("[GUBER] Admin password synced.");
     } else {
       let adminUsername = "guberadmin";
       const existingUsername = await storage.getUserByUsername("guberadmin");
@@ -468,7 +467,7 @@ export async function syncAdminCredentials() {
         email: "admin@guberapp.com",
         username: adminUsername,
         fullName: "GUBER Admin",
-        password: ADMIN_PASSWORD_HASH,
+        password: correctHash,
         role: "admin",
         tier: "elite",
         trustScore: 500,

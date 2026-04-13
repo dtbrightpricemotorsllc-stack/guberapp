@@ -1,4 +1,4 @@
-const CACHE_NAME = "guber-v10";
+const CACHE_NAME = "guber-v9";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

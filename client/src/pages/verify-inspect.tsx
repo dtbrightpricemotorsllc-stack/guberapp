@@ -23,11 +23,9 @@ import {
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
 import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
 import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
-import onlineItemsFormImg from "@assets/file_0000000086f071f6bd8cb65e06c99d2e_1776024345567.png";
 import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
 import quickCheckImg from "@assets/file_000000001e2471f586eaaf945485317c_1772458167013.png";
 import pavSalvageImg from "@assets/pav_salvage_yard.png";
-
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +48,6 @@ import type {
   DetailOptionSet,
   ProofTemplate,
 } from "@shared/schema";
-
 
 const TIER_ORDER = ["community", "verified", "credentialed", "elite"];
 
@@ -798,31 +795,6 @@ export default function VerifyInspect() {
             ))}
           </div>
         </div>
-
-        {selectedCategory && (() => {
-          const n = selectedCategory.name;
-          const img =
-            n === "Property & Site Check" ? propertySiteImg :
-            n === "Online Items" ? onlineItemsFormImg :
-            n === "Wheels, Wings & Water" ? wheelsWingsImg :
-            n === "Quick Check" ? quickCheckImg :
-            n === "Part Availability Verification" ? pavSalvageImg :
-            null;
-          if (!img) return null;
-          return (
-            <div
-              className="relative rounded-2xl overflow-hidden mb-5"
-              style={{ height: 140, border: "1.5px solid hsl(275 90% 65% / 0.35)", boxShadow: "0 0 18px hsl(275 90% 65% / 0.1)" }}
-              data-testid="banner-vi-category"
-            >
-              <img src={img} alt={n} className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <div className="absolute bottom-0 left-0 p-4">
-                <p className="text-white font-display font-black text-base tracking-tight leading-tight drop-shadow-md">{n}</p>
-              </div>
-            </div>
-          );
-        })()}
 
         <div className="space-y-4">
           <div

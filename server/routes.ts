@@ -1483,15 +1483,14 @@ export async function registerRoutes(
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      const { email: rawEmail, password: rawPassword } = parsed.data;
-      const email = rawEmail.toLowerCase().trim();
-      const password = rawPassword.trim();
+      const { email, password } = parsed.data;
 
       let user = await storage.getUserByEmail(email);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
       if (user.banned) return res.status(403).json({ message: "Account permanently banned" });
       if (user.suspended) return res.status(403).json({ message: "Account suspended" });
 
+      // Guard: if password is null/missing (shouldn't happen but protect against it)
       if (!user.password || !user.password.includes(".")) {
         if (user.authProvider === "google") {
           return res.status(401).json({ message: "This account was created with Google Sign-In. Please tap 'Sign in with Google', or use 'Forgot Password' to set an email/password login." });
@@ -3550,99 +3549,6 @@ export async function registerRoutes(
       res.json(sanitizeUser(user));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.get("/api/admin/nsopw-search", requireAdmin, async (req: Request, res: Response) => {
-    const { firstName, lastName } = req.query as { firstName?: string; lastName?: string };
-    if (!firstName || !lastName) return res.status(400).json({ message: "firstName and lastName are required" });
-    const cleanFirst = firstName.trim();
-    const cleanLast = lastName.trim();
-    interface NsopwApiResponse {
-      statusCode?: number;
-      offenders?: Array<{
-        offenderName?: string;
-        firstName?: string;
-        lastName?: string;
-        state?: string;
-        jurisdiction?: string;
-        city?: string;
-      }> | null;
-    }
-    const parseNsopwBody = (raw: string): { available: boolean; matches: NsopwApiResponse["offenders"]; message?: string } | null => {
-      try {
-        const d = JSON.parse(raw) as NsopwApiResponse;
-        if (!("offenders" in d)) return null;
-        return { available: true, matches: d.offenders };
-      } catch {
-        return null;
-      }
-    };
-    const nsopwUrl = "https://nsopw-api.ojp.gov/nsopw/v1/v1.0/search";
-    const nsopwBody = JSON.stringify({ firstName: cleanFirst, lastName: cleanLast, jurisdictions: ["all"] });
-    const nsopwHeaders = {
-      "Content-Type": "application/json",
-      "Accept": "application/json, text/javascript, */*; q=0.01",
-      "X-Requested-With": "XMLHttpRequest",
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Origin": "https://www.nsopw.gov",
-      "Referer": "https://www.nsopw.gov/search-public-sex-offender-registries",
-    };
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      let fetchResponse: Response;
-      try {
-        fetchResponse = await fetch(nsopwUrl, { method: "POST", headers: nsopwHeaders, body: nsopwBody, signal: controller.signal });
-      } finally {
-        clearTimeout(timer);
-      }
-      if (fetchResponse.status < 500) {
-        const ct = fetchResponse.headers.get("content-type") ?? "";
-        if (ct.includes("application/json")) {
-          const raw = await fetchResponse.text();
-          const parsed = parseNsopwBody(raw);
-          if (parsed) {
-            const matches = (parsed.matches ?? []).map(o => ({
-              offenderName: o.offenderName, firstName: o.firstName, lastName: o.lastName,
-              state: o.state, jurisdiction: o.jurisdiction, city: o.city,
-            }));
-            return res.json({ available: true, matches });
-          }
-        }
-      }
-      const { execFile } = await import("child_process");
-      const { promisify } = await import("util");
-      const execFileAsync = promisify(execFile);
-      const { stdout } = await execFileAsync("curl", [
-        "--silent", "--max-time", "12", "--write-out", "\n%{http_code}",
-        "-X", "POST",
-        "-H", `Content-Type: application/json`,
-        "-H", `Accept: application/json, text/javascript, */*; q=0.01`,
-        "-H", `X-Requested-With: XMLHttpRequest`,
-        "-H", `User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
-        "-H", `Origin: https://www.nsopw.gov`,
-        "-H", `Referer: https://www.nsopw.gov/search-public-sex-offender-registries`,
-        "-H", `sec-fetch-site: same-site`, "-H", `sec-fetch-mode: cors`, "-H", `sec-fetch-dest: empty`,
-        "-d", nsopwBody, nsopwUrl,
-      ], { timeout: 15000 });
-      const lastNl = stdout.lastIndexOf("\n");
-      const curlBody = stdout.slice(0, lastNl).trim();
-      const curlStatus = parseInt(stdout.slice(lastNl + 1).trim(), 10);
-      if (curlStatus === 0 || curlStatus >= 500) {
-        return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
-      }
-      const curlParsed = parseNsopwBody(curlBody);
-      if (!curlParsed) {
-        return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
-      }
-      const matches = (curlParsed.matches ?? []).map(o => ({
-        offenderName: o.offenderName, firstName: o.firstName, lastName: o.lastName,
-        state: o.state, jurisdiction: o.jurisdiction, city: o.city,
-      }));
-      return res.json({ available: true, matches });
-    } catch {
-      return res.json({ available: false, matches: [], message: "NSOPW registry is temporarily unavailable" });
     }
   });
 
