@@ -605,7 +605,8 @@ export async function registerRoutes(
   app.get("/api/public/jobs", async (req: Request, res: Response) => {
     setPublicCors(req, res);
     try {
-      const { zip, search, category } = req.query as Record<string, string | undefined>;
+      const { zip, search, category, limit: limitParam } = req.query as Record<string, string | undefined>;
+      const limitVal = Math.min(20, Math.max(1, parseInt(limitParam || '20', 10) || 20));
 
       const conditions = [
         eq(jobsTable.status, "posted_public"),
@@ -636,7 +637,7 @@ export async function registerRoutes(
         .from(jobsTable)
         .where(and(...conditions))
         .orderBy(desc(jobsTable.createdAt))
-        .limit(20);
+        .limit(limitVal);
 
       const FALLBACK_JOBS = [
         { id: -1, title: "Property Walk-Through", category: "Verify & Inspect", budget: 45, locationApprox: "Mobile, AL area", zip: "36606", lat: 30.698, lng: -88.043, urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
