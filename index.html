@@ -21,6 +21,39 @@
   <meta property="og:url" content="https://guberapp.com/" />
   <meta property="og:image" content="https://guberapp.com/Guberapplogo.png" />
 
+  <link rel="canonical" href="https://guberapp.com/" />
+  <meta name="robots" content="index, follow" />
+  <meta name="keywords" content="local jobs, gig work, earn money, get help, verify inspect, cash drops, on demand work, local hiring, GUBER app" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "GUBER APP LLC",
+    "url": "https://guberapp.com",
+    "logo": "https://guberapp.com/Guberapplogo.png",
+    "sameAs": ["https://guberapp.app"],
+    "description": "GUBER connects people to paid local work, on-demand help, and real-world verification tools."
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "GUBER",
+    "url": "https://guberapp.com",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://guberapp.app/browse-jobs?search={search_term_string}"
+      },
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+
   <style>
     :root {
       --bg: #000000;
@@ -1162,6 +1195,61 @@
             '<a href="' + safeJobUrl(job.appUrl) + '" class="btn btn-primary btn-sm">Accept This Job &#8594;</a>';
           grid.appendChild(card);
         });
+
+        var existingSchema = document.getElementById('job-schema');
+        if (existingSchema) existingSchema.remove();
+        var schema = document.createElement('script');
+        schema.type = 'application/ld+json';
+        schema.id = 'job-schema';
+        var postings = jobs.slice(0, 6).map(function (job) {
+          var posting = {
+            '@type': 'JobPosting',
+            'title': job.title,
+            'description': job.title + ' \u2014 local job posted on GUBER. Category: ' + job.category + '. Location: ' + job.locationApprox + '.',
+            'identifier': {
+              '@type': 'PropertyValue',
+              'name': 'GUBER',
+              'value': 'guber-job-' + job.id
+            },
+            'datePosted': job.createdAt,
+            'employmentType': job.payType === 'hourly' ? 'PART_TIME' : 'CONTRACTOR',
+            'hiringOrganization': {
+              '@type': 'Organization',
+              'name': 'GUBER APP LLC',
+              'sameAs': 'https://guberapp.com',
+              'logo': 'https://guberapp.com/Guberapplogo.png'
+            },
+            'jobLocation': {
+              '@type': 'Place',
+              'address': {
+                '@type': 'PostalAddress',
+                'addressLocality': job.locationApprox,
+                'postalCode': job.zip,
+                'addressCountry': 'US'
+              }
+            },
+            'baseSalary': {
+              '@type': 'MonetaryAmount',
+              'currency': 'USD',
+              'value': {
+                '@type': 'QuantitativeValue',
+                'value': job.budget,
+                'unitText': job.payType === 'hourly' ? 'HOUR' : 'FLAT_RATE'
+              }
+            },
+            'url': safeJobUrl(job.appUrl).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"'),
+            'directApply': true
+          };
+          if (job.jobType === 'remote') {
+            posting['jobLocationType'] = 'TELECOMMUTE';
+          }
+          return posting;
+        });
+        schema.textContent = JSON.stringify({
+          '@context': 'https://schema.org',
+          '@graph': postings
+        });
+        document.head.appendChild(schema);
       })
       .catch(function () { renderFallback(grid); });
 

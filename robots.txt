@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://guberapp.com/sitemap.xml
