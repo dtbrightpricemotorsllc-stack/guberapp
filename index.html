@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>GUBER – Stop Watching. Start Moving.</title>
+  <!-- v20260413 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <link rel="icon" type="image/png" href="/favicon.png" />
@@ -794,6 +795,60 @@
     .footer-links { display: flex; flex-wrap: wrap; gap: 10px 14px; justify-content: center; }
     .footer-links a { font-size: 11px; color: var(--accent); }
 
+    /* ── SECTION: DAY-1 OG ── */
+    .og-section-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      border: 1px solid rgba(255,204,51,0.35);
+      background: linear-gradient(135deg, rgba(60,44,0,0.82), rgba(14,10,0,0.96));
+      box-shadow: 0 0 48px rgba(255,204,51,0.14), 0 0 80px rgba(255,170,0,0.08);
+      padding: 28px 24px 24px;
+      margin-top: 16px;
+    }
+    .og-perks-grid {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 12px;
+      margin: 18px 0 22px;
+    }
+    .og-perk {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,204,51,0.06);
+      border: 1px solid rgba(255,204,51,0.18);
+    }
+    .og-perk-icon { font-size: 22px; margin-bottom: 6px; display: block; }
+    .og-perk-title { font-size: 13px; font-weight: 800; color: var(--gold); margin-bottom: 4px; }
+    .og-perk-desc { font-size: 12px; color: var(--text-soft); line-height: 1.5; }
+    .og-cta-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; margin-top: 4px; }
+    @media (max-width: 640px) { .og-perks-grid { grid-template-columns: 1fr; } }
+
+    /* ── SECTION: LIVE JOBS PREVIEW ── */
+    .live-jobs-grid {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .live-job-card {
+      display: block;
+      text-decoration: none;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(0,255,106,0.04);
+      border: 1px solid rgba(0,255,106,0.15);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .live-job-card:hover { background: rgba(0,255,106,0.08); border-color: rgba(0,255,106,0.3); }
+    .live-job-cat { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); background: rgba(0,255,106,0.1); border: 1px solid rgba(0,255,106,0.2); border-radius: 999px; padding: 3px 10px; margin-bottom: 8px; }
+    .live-job-urgent { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #ff9f0a; background: rgba(255,159,10,0.12); border: 1px solid rgba(255,159,10,0.3); border-radius: 999px; padding: 3px 10px; margin-left: 6px; margin-bottom: 8px; }
+    .live-job-title { font-size: 15px; font-weight: 800; color: var(--text); margin: 0 0 5px; }
+    .live-job-loc { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+    .live-job-budget { font-size: 22px; font-weight: 900; color: var(--accent); margin: 0 0 10px; }
+    .live-job-action { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+    @media (max-width: 640px) { .live-jobs-grid { grid-template-columns: 1fr; } }
+
     /* ── FLOATING OG ── */
     .floating-og { position: fixed; right: 14px; bottom: 14px; z-index: 50; }
     .floating-og a {
@@ -886,7 +941,7 @@
       </div>
 
       <div class="cta-row">
-        <a href="https://guberapp.app" class="btn btn-primary btn-lg">Enter GUBER</a>
+        <a href="https://guberapp.app/login" class="btn btn-primary btn-lg">Enter GUBER</a>
         <a href="/day1og.html" class="btn btn-secondary btn-lg">Claim Day-1 OG</a>
       </div>
 
@@ -947,17 +1002,59 @@
     <p class="action-psych">Tap an action and you&#8217;ve already started. Finish what you just began.</p>
   </section>
 
-  <!-- section: join guber cta -->
-  <section class="section" id="join-guber">
-    <div class="final-cta" style="padding:36px 24px;">
-      <div class="eyebrow">Ready to move?</div>
-      <h2 class="section-title">See what&#8217;s available in your area.</h2>
-      <p class="section-lead">Real work, real money &#8212; posted right now. Create an account to see jobs and take action.</p>
-      <div class="cta-row" style="justify-content:center; margin-top:20px;">
-        <a href="https://guberapp.app/signup" class="btn btn-primary btn-lg">Create Account</a>
-        <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
+  <!-- section: live jobs preview -->
+  <section class="section" id="live-jobs">
+    <div class="eyebrow">Live opportunities</div>
+    <h2 class="section-title">Real work. Right now.</h2>
+    <p class="section-lead">These are actual jobs posted on GUBER. Sign up to accept, post your own, or verify anything before you commit.</p>
+
+    <div id="live-jobs-container">
+      <div class="live-jobs-grid">
+        <div class="job-skeleton" style="min-height:130px;"></div>
+        <div class="job-skeleton" style="min-height:130px;"></div>
+        <div class="job-skeleton" style="min-height:130px;"></div>
+        <div class="job-skeleton" style="min-height:130px;"></div>
       </div>
     </div>
+
+    <p class="action-psych" style="margin-top:16px;">You can see it. Now sign up to move on it.</p>
+  </section>
+
+  <!-- section: day-1 og -->
+  <section class="section" id="day1og-section">
+    <div class="eyebrow eyebrow-gold">Day-1 OG &#8212; Limited</div>
+    <h2 class="section-title"><span class="gold">Early supporter. Lifetime perks.</span></h2>
+    <p class="section-lead">Day-1 OG is not a subscription. It&#8217;s a one-time <strong style="color:#fff;">$1.99</strong> thank-you for believing in GUBER before the app fully launches. Very limited — may close without notice.</p>
+
+    <div class="og-section-card">
+      <p style="font-size:13px;color:var(--text-soft);margin:0 0 4px;">What Day-1 OG actually means:</p>
+      <div class="og-perks-grid">
+        <div class="og-perk">
+          <span class="og-perk-icon">&#128178;</span>
+          <div class="og-perk-title">15% Lifetime Service Fee</div>
+          <div class="og-perk-desc">Standard is 20%. As a Day-1 OG helper, your rate is locked at 15% for life — as long as your token is linked to a verified account.</div>
+        </div>
+        <div class="og-perk">
+          <span class="og-perk-icon">&#9889;</span>
+          <div class="og-perk-title">Urgent Job — FREE</div>
+          <div class="og-perk-desc">Marking a job urgent normally costs extra. Day-1 OGs post urgent jobs for free. Priority visibility, no extra charge.</div>
+        </div>
+        <div class="og-perk">
+          <span class="og-perk-icon">&#127941;</span>
+          <div class="og-perk-title">Numbered Founder Token</div>
+          <div class="og-perk-desc">Your NFT access token is numbered and one-of-a-kind. OG status. Founding-member record. Stays with your account.</div>
+        </div>
+        <div class="og-perk">
+          <span class="og-perk-icon">&#127965;</span>
+          <div class="og-perk-title">City Activation Power</div>
+          <div class="og-perk-desc">Day-1 OG support helps fund cash drops and city-level events. The more OGs in a city, the more likely something real happens there.</div>
+        </div>
+      </div>
+      <div class="og-cta-row">
+        <a href="/day1og.html" class="btn btn-secondary btn-lg">Get Day-1 OG &#8212; $1.99</a>
+      </div>
+    </div>
+    <p class="small-print" style="margin-top:12px;text-align:center;">One-time payment. No subscriptions. No renewal. Very limited pre-launch allocation.</p>
   </section>
 
   <!-- section: why guber feels different -->
@@ -995,6 +1092,17 @@
           and their performance is on record — standards rise. That&#8217;s not a feature.
           That&#8217;s a fundamental shift in how real-world work gets done.
         </p>
+      </div>
+    </div>
+
+    <div class="quote-grid" style="margin-top:18px;">
+      <div class="quote">
+        &#8220;That&#8217;s dope. That makes anybody an independent contractor.&#8221;
+        <span class="quote-attr">&#8212; Customer</span>
+      </div>
+      <div class="quote">
+        &#8220;You&#8217;re going to make it bad for us business owners&#8230; everybody already wants to be their own boss, and now you&#8217;re about to give them the power.&#8221;
+        <span class="quote-attr">&#8212; Business owner</span>
       </div>
     </div>
   </section>
@@ -1105,38 +1213,6 @@
     </div>
   </section>
 
-  <!-- section: social proof -->
-  <section class="section" id="social-proof">
-    <div class="eyebrow">Real reactions</div>
-    <h2 class="section-title">People already see it.</h2>
-
-    <div class="quote-grid">
-      <div class="quote">
-        &#8220;If you could get O&#8217;Reilly&#8217;s on board with something like this, that would be amazing. I&#8217;d already be home by now instead of pulling a double.&#8221;
-        <span class="quote-attr">&#8212; Store Manager</span>
-      </div>
-      <div class="quote">
-        &#8220;That&#8217;s dope. That makes anybody an independent contractor.&#8221;
-        <span class="quote-attr">&#8212; Customer</span>
-      </div>
-      <div class="quote">
-        &#8220;You&#8217;re about to prove there&#8217;s money out there to be made.&#8221;
-        <span class="quote-attr">&#8212; Older gentleman in the shop</span>
-      </div>
-      <div class="quote">
-        &#8220;Lazy people aren&#8217;t going to like this &#8212; now they have no excuse.&#8221;
-        <span class="quote-attr">&#8212; Friend</span>
-      </div>
-      <div class="quote">
-        &#8220;I thought it was live already. I needed it before Christmas.&#8221;
-        <span class="quote-attr">&#8212; Customer</span>
-      </div>
-      <div class="quote">
-        &#8220;You&#8217;re going to make it bad for us business owners&#8230; everybody already wants to be their own boss, and now you&#8217;re about to give them the power.&#8221;
-        <span class="quote-attr">&#8212; Business owner</span>
-      </div>
-    </div>
-  </section>
 
   <!-- section: cash drops -->
   <section class="section" id="cash-drops">
@@ -1177,7 +1253,7 @@
         </div>
 
         <div class="cta-row" style="margin-top:20px;">
-          <a href="https://guberapp.app" class="btn btn-primary">Enter GUBER &#8594;</a>
+          <a href="https://guberapp.app/login" class="btn btn-primary">Enter GUBER &#8594;</a>
           <a href="/day1og.html" class="btn btn-secondary">Become Day-1 OG &#8594;</a>
         </div>
 
@@ -1244,7 +1320,7 @@
         Stop watching. Start moving.
       </p>
       <div class="cta-row">
-        <a href="https://guberapp.app" class="btn btn-primary btn-lg">Enter GUBER</a>
+        <a href="https://guberapp.app/login" class="btn btn-primary btn-lg">Enter GUBER</a>
         <a href="/day1og.html" class="btn btn-secondary btn-lg">Become Day-1 OG</a>
       </div>
     </div>
@@ -1309,6 +1385,59 @@
       if (anim1.paused) { current = 1; cycle(); }
     }, 1000);
   }
+
+  // ── Live Jobs Preview ──
+  (function () {
+    var container = document.getElementById('live-jobs-container');
+    if (!container) return;
+
+    function esc(str) {
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showFallback() {
+      container.innerHTML =
+        '<div class="fallback-block">' +
+        '<div class="fallback-icon">&#128205;</div>' +
+        '<h3>Real work. Real money.</h3>' +
+        '<p>Sign up to see what\'s active in your area right now &#8212; and move on it.</p>' +
+        '<div class="cta-row" style="justify-content:center;">' +
+        '<a href="https://guberapp.app/signup" class="btn btn-primary btn-lg">Create Account</a>' +
+        '<a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>' +
+        '</div></div>';
+    }
+
+    fetch('https://guberapp.app/api/public/jobs?limit=6', {
+      method: 'GET',
+      credentials: 'omit',
+      headers: { 'Accept': 'application/json' }
+    })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (jobs) {
+      if (!Array.isArray(jobs) || !jobs.length) { showFallback(); return; }
+      var slice = jobs.slice(0, 6);
+      var html = '<div class="live-jobs-grid">';
+      slice.forEach(function (job) {
+        var budget = job.budget ? '$' + job.budget : '';
+        html += '<a href="https://guberapp.app/signup" class="live-job-card">';
+        html += '<div>';
+        if (job.category) html += '<span class="live-job-cat">' + esc(job.category) + '</span>';
+        if (job.urgentSwitch) html += '<span class="live-job-urgent">Urgent</span>';
+        html += '</div>';
+        html += '<div class="live-job-title">' + esc(job.title) + '</div>';
+        if (job.locationApprox) html += '<div class="live-job-loc">&#128205; ' + esc(job.locationApprox) + '</div>';
+        if (budget) html += '<div class="live-job-budget">' + esc(budget) + '</div>';
+        html += '<div class="live-job-action">Sign Up to Accept &#8594;</div>';
+        html += '</a>';
+      });
+      html += '</div>';
+      html += '<div style="text-align:center;margin-top:20px;">' +
+        '<a href="https://guberapp.app/signup" class="btn btn-primary btn-lg">Sign Up to See More Jobs</a>' +
+        '</div>';
+      container.innerHTML = html;
+    })
+    .catch(function () { showFallback(); });
+  })();
 </script>
 
 </body>
