@@ -309,13 +309,8 @@ app.use((req, res, next) => {
 
   httpServer.on("error", (err: any) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`Port ${port} in use, retrying in 1s...`);
-      setTimeout(() => {
-        httpServer.close();
-        httpServer.listen({ port, host: "0.0.0.0" }, () => {
-          log(`serving on port ${port}`);
-        });
-      }, 1000);
+      console.error(`Port ${port} already in use — exiting so the runner can restart cleanly.`);
+      process.exit(1);
     } else {
       throw err;
     }
