@@ -1483,7 +1483,8 @@ export async function registerRoutes(
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      const { email, password } = parsed.data;
+      const { email: rawEmail, password } = parsed.data;
+      const email = rawEmail.toLowerCase().trim();
 
       let user = await storage.getUserByEmail(email);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
