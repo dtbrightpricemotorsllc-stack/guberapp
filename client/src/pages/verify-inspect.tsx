@@ -21,10 +21,10 @@ import {
   Zap,
 } from "lucide-react";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
-import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
-import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
-import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
-import quickCheckImg from "@assets/file_000000001e2471f586eaaf945485317c_1772458167013.png";
+import propertySiteImg from "@assets/category-images/vi_property_site_check.png";
+import onlineItemsImg from "@assets/category-images/vi_online_items.png";
+import wheelsWingsImg from "@assets/category-images/vi_wheels_wings_water.png";
+import quickCheckImg from "@assets/category-images/vi_quick_check.png";
 import pavSalvageImg from "@assets/pav_salvage_yard.png";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

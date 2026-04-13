@@ -1,5 +1,28 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "AXw7bQILE8gxhLS-h_ysH"
+uri = "file://attached_assets/category-images/vi_property_site_check.png"
+type = "image"
+title = "property site check inspector"
+
+[[generated]]
+id = "8PYrXDG0dzQCV8Ad7uEf-"
+uri = "file://attached_assets/category-images/vi_online_items.png"
+type = "image"
+title = "online items verification"
+
+[[generated]]
+id = "Gxv_qO44jH3O2cstVgig-"
+uri = "file://attached_assets/category-images/vi_wheels_wings_water.png"
+type = "image"
+title = "wheels wings water vehicle inspection"
+
+[[generated]]
+id = "2U_QjRZMWLWCjueOqTfpP"
+uri = "file://attached_assets/category-images/vi_quick_check.png"
+type = "image"
+title = "quick check verification photo"
 
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
