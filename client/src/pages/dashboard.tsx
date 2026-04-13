@@ -13,7 +13,9 @@ import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat, ShoppingBag,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
   TrendingUp, X, Loader2, Rocket, UserCircle, Users, Lock, Banknote, Clock,
+  Droplets, Heart, Share2,
 } from "lucide-react";
+import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import { getPushStatus, subscribeToPush } from "@/lib/push";
 import { buildReferralShareText } from "@/lib/referral";
 import {
@@ -27,7 +29,7 @@ type PromoId = "cashdrop" | "day1og";
 type PromoCard = { id: PromoId; title: string; subtitle: string; buttonText: string; href: string; accent: string };
 
 const PROMOS: PromoCard[] = [
-  { id: "cashdrop", title: "💰 Cash Drops happen here", subtitle: "Stay active — your city could be next.", buttonText: "Got it", href: "/cash-drops", accent: "from-amber-500/20 to-orange-500/10" },
+  { id: "cashdrop", title: "💰 GUBER Gives Back", subtitle: "Cash Drops are fueled by Day-1 OG memberships and platform fees. The bigger we grow, the bigger the drops. Help put your city on the map.", buttonText: "Got it", href: "/dashboard", accent: "from-amber-500/20 to-orange-500/10" },
   { id: "day1og",  title: "🔥 Day-1 OG Access",        subtitle: "Get in early before it's gone.",         buttonText: "LOCK IN", href: "/profile",    accent: "from-fuchsia-500/20 to-violet-500/10" },
 ];
 
@@ -711,15 +713,8 @@ export default function Dashboard() {
             <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 10% 80%,rgba(91,33,182,0.1) 0%,transparent 50%)" }} />
             <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-30" style={{ background: "linear-gradient(90deg,transparent 0%,rgba(139,92,246,0.12) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
             <div className="relative flex items-start gap-3.5">
-              <div
-                className="p-2.5 rounded-xl shrink-0 mt-0.5 animate-pulse-glow"
-                style={{
-                  background: "linear-gradient(135deg,rgba(167,139,250,0.25),rgba(91,33,182,0.18))",
-                  border: "1.5px solid rgba(139,92,246,0.55)",
-                  boxShadow: "0 0 20px rgba(139,92,246,0.45)",
-                }}
-              >
-                <ShieldCheck className="w-5 h-5 text-violet-300" strokeWidth={1.5} />
+              <div className="shrink-0 mt-0.5 w-12 h-12 animate-pulse-glow" style={{ filter: "drop-shadow(0 0 12px rgba(139,92,246,0.6))" }}>
+                <img src={viLogoImg} alt="Verify & Inspect" className="w-full h-full object-contain" style={{ mixBlendMode: "screen" }} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[9px] font-display font-black tracking-[0.2em] text-violet-400/70 uppercase mb-0.5">Verify &amp; Inspect</p>
@@ -831,6 +826,55 @@ export default function Dashboard() {
               Try It
             </span>
           </div>
+        </div>
+
+        {/* ── Cash Drop Fuel Card ── */}
+        <div
+          className="mb-4 rounded-2xl overflow-hidden"
+          style={{
+            background: "linear-gradient(135deg,rgba(245,158,11,0.08),rgba(234,88,12,0.05),rgba(0,0,0,0))",
+            border: "1.5px solid rgba(245,158,11,0.22)",
+          }}
+          data-testid="card-cash-drop-fuel"
+        >
+          <div className="px-4 pt-4 pb-3 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl shrink-0" style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.25)" }}>
+                <Droplets className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-display font-black text-amber-400 tracking-wider leading-tight">💰 GUBER Gives Back</p>
+                <p className="text-[10px] text-amber-400/50 font-display mt-0.5">Community-fueled cash events</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+              Cash Drops are funded by <span className="text-amber-400/80 font-semibold">Day-1 OG memberships</span> and <span className="text-amber-400/80 font-semibold">platform fees</span>. Every job completed and every OG that joins puts more into the pot. The bigger GUBER grows, the bigger the drops.
+            </p>
+
+            <div className="rounded-xl p-3 space-y-1.5" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.12)" }}>
+              {[
+                { icon: "📍", text: "Help your city get on the map — share GUBER and explore" },
+                { icon: "🔗", text: "Save on platform fees by sharing your referral link" },
+                { icon: "📈", text: "As we grow, every drop gets bigger" },
+              ].map(({ icon, text }) => (
+                <div key={text} className="flex items-start gap-2">
+                  <span className="text-sm shrink-0 leading-none mt-0.5">{icon}</span>
+                  <p className="text-[10px] text-muted-foreground/60 leading-relaxed">{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleReferralShare}
+            className="w-full py-3 font-display text-[11px] font-black flex items-center justify-center gap-2 transition-all active:opacity-80 tracking-wider border-t"
+            style={{ background: "rgba(245,158,11,0.07)", borderColor: "rgba(245,158,11,0.15)", color: "#d97706" }}
+            data-testid="button-cash-drop-share-referral"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            GET YOUR REFERRAL LINK → Save on Fees
+          </button>
         </div>
 
         {/* ── Referral Nudge ── */}

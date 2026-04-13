@@ -21,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
+import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
 import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
 import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
@@ -707,10 +708,18 @@ export default function VerifyInspect() {
                style={{ border: "1.5px solid hsl(275 90% 65% / 0.5)", boxShadow: "0 0 18px hsl(275 90% 65% / 0.12)" }}>
             <img src={verifyInspectImg} alt="Verify & Inspect" className="absolute inset-0 w-full h-full object-cover opacity-70" />
             <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
-            <div className="relative p-5">
-              <p className="text-[9px] font-display font-bold tracking-widest text-primary/80 uppercase mb-1">GUBER</p>
-              <h1 className="text-2xl font-display font-black text-white tracking-tight leading-tight">Verify &amp; Inspect</h1>
-              <p className="text-white/50 text-xs mt-1">Visual proof jobs — on-site verification</p>
+            <div className="relative p-5 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[9px] font-display font-bold tracking-widest text-primary/80 uppercase mb-1">GUBER</p>
+                <h1 className="text-2xl font-display font-black text-white tracking-tight leading-tight">Verify &amp; Inspect</h1>
+                <p className="text-white/50 text-xs mt-1">Visual proof jobs — on-site verification</p>
+              </div>
+              <img
+                src={viLogoImg}
+                alt="Verify & Inspect"
+                className="w-20 h-20 object-contain shrink-0 drop-shadow-2xl"
+                style={{ mixBlendMode: "screen" }}
+              />
             </div>
           </div>
 

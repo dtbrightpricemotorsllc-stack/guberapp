@@ -10,6 +10,7 @@ import {
 
 import logoImg   from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
+import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import generalLaborImg  from "@assets/category-images/general_labor.png";
 import skilledLaborImg  from "@assets/category-images/skilled_labor.png";
 import onDemandHelpImg  from "@assets/category-images/on_demand_help.png";
@@ -352,6 +353,14 @@ export default function Home() {
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              {label === "Verify & Inspect" && (
+                <img
+                  src={viLogoImg}
+                  alt="V&I"
+                  className="absolute top-2 right-2 w-10 h-10 object-contain"
+                  style={{ mixBlendMode: "screen" }}
+                />
+              )}
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-[11px] font-display font-black tracking-widest text-white mb-0.5">{label}</p>
                 <p className="text-[10px] text-white/60 leading-tight">{desc}</p>
@@ -366,7 +375,16 @@ export default function Home() {
         <div className="rounded-2xl overflow-hidden relative"
           style={{ background: "linear-gradient(135deg, rgba(0,229,229,0.06) 0%, rgba(0,229,229,0.02) 100%)", border: "1px solid rgba(0,229,229,0.15)" }}>
           <div className="p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-8">
-            <img src={verifyInspectImg} alt="Verify & Inspect" className="w-full sm:w-64 h-48 sm:h-auto object-cover rounded-xl shrink-0" />
+            <div className="relative w-full sm:w-64 h-48 sm:h-48 shrink-0">
+              <img src={verifyInspectImg} alt="Verify & Inspect" className="w-full h-full object-cover rounded-xl" />
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/40 to-transparent" />
+              <img
+                src={viLogoImg}
+                alt="V&I"
+                className="absolute bottom-2 right-2 w-16 h-16 object-contain drop-shadow-2xl"
+                style={{ mixBlendMode: "screen" }}
+              />
+            </div>
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
                 style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}>
