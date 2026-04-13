@@ -630,6 +630,35 @@
       letter-spacing: -0.01em;
     }
 
+    /* ── V&I LOGO BADGE ── */
+    .vi-logo-badge {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      mix-blend-mode: screen;
+      filter: drop-shadow(0 0 8px rgba(0,229,229,0.6));
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* ── CASH DROP REFERRAL STRIP ── */
+    .referral-strip {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: linear-gradient(90deg, rgba(0,40,60,0.9), rgba(0,70,90,0.85));
+      border: 1px solid rgba(0,229,229,0.28);
+      box-shadow: 0 0 16px rgba(0,229,229,0.1);
+      color: #cffafe;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .referral-strip b { color: #fff; }
+    .referral-strip a { color: #00E5E5; text-decoration: underline; font-weight: 700; }
+
     /* ── SECTION 8: CASH DROPS ── */
     .cash-drop-block {
       position: relative;
@@ -996,6 +1025,7 @@
           <div class="action-tile-sub">See before you commit. Photos, video, GPS presence — real proof.</div>
           <div class="action-tile-cta">Get Proof &#8594;</div>
         </div>
+        <img src="/vi-logo.png" alt="Verify & Inspect" class="vi-logo-badge" />
       </a>
     </div>
 
@@ -1239,7 +1269,7 @@
         </p>
 
         <p class="section-lead">
-          Day-1 OG support and platform activity help make these moments possible.
+          Day-1 OG memberships and platform fees help make these moments possible.
           When people support GUBER, they help create real opportunities, real momentum,
           and real giveaways in the real world. Without that support and activity,
           this cannot happen at scale.
@@ -1248,8 +1278,13 @@
         <p class="section-lead">
           The more active your city becomes, the more visible it gets &#8212; and the more
           likely it is that something real happens there.
-          <strong style="color:#fff;">Visibility creates opportunity.</strong>
+          <strong style="color:#fff;">Visibility creates opportunity. As GUBER grows, the drops grow too.</strong>
         </p>
+
+        <div class="referral-strip">
+          <b>&#128279; Save on platform fees — share your referral link.</b><br>
+          Every time someone joins GUBER through your link, you save on fees. The more people you bring in, the more you keep. <a href="https://guberapp.app/profile">Go to your profile to get your personal referral link &#8594;</a>
+        </div>
 
         <div class="gold-strip">
           <b>Let us see you. Share GUBER. Activate your city.</b><br>
