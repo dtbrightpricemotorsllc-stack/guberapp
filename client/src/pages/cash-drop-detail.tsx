@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, MapPin, Clock, Trophy, Camera, AlertCircle, CheckCircle, Navigation, ChevronLeft, Car, ChevronRight, DollarSign, CreditCard, Wallet, Banknote, Heart, Share2 } from "lucide-react";
+import { Loader2, MapPin, Clock, Trophy, Camera, AlertCircle, CheckCircle, Navigation, ChevronLeft, Car, ChevronRight, DollarSign, CreditCard, Wallet, Banknote } from "lucide-react";
 import type { CashDrop, CashDropAttempt } from "@shared/schema";
 import { Link } from "wouter";
 
@@ -704,48 +704,6 @@ export default function CashDropDetail() {
           </div>
         )}
 
-        {/* ── About Cash Drops ── */}
-        <div
-          className="rounded-2xl overflow-hidden mt-2"
-          style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)" }}
-          data-testid="section-about-cash-drops"
-        >
-          <div className="px-4 pt-4 pb-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <Heart className="w-3.5 h-3.5 text-amber-400/70" />
-              <p className="text-[10px] font-display font-black tracking-widest text-amber-400/60 uppercase">About Cash Drops</p>
-            </div>
-            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-              Cash Drops are GUBER's way of giving back to the community. Every drop is funded by{" "}
-              <span className="text-amber-400/70 font-semibold">Day-1 OG memberships</span> and{" "}
-              <span className="text-amber-400/70 font-semibold">platform fees</span> collected from each job completed. As the platform and your city grow, the drops get bigger and more frequent.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { icon: "📍", label: "Help your city", desc: "Share GUBER to get your city on the map" },
-                { icon: "💸", label: "Save on fees", desc: "Your referral link lowers your platform fee" },
-                { icon: "📈", label: "Grow together", desc: "More users = bigger, more frequent drops" },
-                { icon: "🏆", label: "Show up & win", desc: "GPS check-in + photo proof = real cash" },
-              ].map(({ icon, label, desc }) => (
-                <div key={label} className="rounded-xl p-2.5 space-y-0.5" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.1)" }}>
-                  <p className="text-sm leading-none">{icon}</p>
-                  <p className="text-[10px] font-display font-bold text-amber-400/70">{label}</p>
-                  <p className="text-[9px] text-muted-foreground/45 leading-tight">{desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <Link href="/profile">
-            <button
-              className="w-full py-3 font-display text-[10px] font-black flex items-center justify-center gap-2 tracking-wider border-t transition-all active:opacity-80"
-              style={{ background: "rgba(245,158,11,0.06)", borderColor: "rgba(245,158,11,0.12)", color: "#b45309" }}
-              data-testid="button-about-get-referral"
-            >
-              <Share2 className="w-3 h-3" />
-              GET YOUR REFERRAL LINK → Profile
-            </button>
-          </Link>
-        </div>
       </div>
     </GuberLayout>
   );
