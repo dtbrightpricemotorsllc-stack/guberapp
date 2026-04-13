@@ -1407,6 +1407,8 @@
         '</div></div>';
     }
 
+    // /api/public/jobs is the CORS-enabled public endpoint for guberapp.com previews
+    // /api/jobs requires auth and cannot be called cross-origin from GitHub Pages
     fetch('https://guberapp.app/api/public/jobs?limit=6', {
       method: 'GET',
       credentials: 'omit',
