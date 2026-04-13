@@ -13,7 +13,7 @@ import { App as CapApp } from "@capacitor/app";
 
 // Core pages — eagerly loaded (fast path for first-visit users)
 import NotFound from "@/pages/not-found";
-import Welcome from "@/pages/welcome";
+import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
@@ -161,7 +161,7 @@ function Router() {
     <>
       <ScrollToTop />
     <Switch>
-      <Route path="/" component={() => <PublicOnly component={Welcome} />} />
+      <Route path="/" component={() => <PublicOnly component={Home} />} />
       <Route path="/login" component={() => <PublicOnly component={Login} />} />
       <Route path="/signup" component={() => <PublicOnly component={Signup} />} />
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />
