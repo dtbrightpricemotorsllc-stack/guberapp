@@ -25,7 +25,7 @@ import propertySiteImg from "@assets/category-images/vi_property_site_check.png"
 import onlineItemsImg from "@assets/category-images/vi_online_items.png";
 import wheelsWingsImg from "@assets/category-images/vi_wheels_wings_water.png";
 import quickCheckImg from "@assets/category-images/vi_quick_check.png";
-import pavSalvageImg from "@assets/pav_salvage_yard.png";
+import pavSalvageImg from "@assets/category-images/vi_pav_salvage.png";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

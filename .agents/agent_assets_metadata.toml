@@ -24,6 +24,12 @@ uri = "file://attached_assets/category-images/vi_quick_check.png"
 type = "image"
 title = "quick check verification photo"
 
+[[generated]]
+id = "PBk8PV_QBPGighnNyY_Fh"
+uri = "file://attached_assets/category-images/vi_pav_salvage.png"
+type = "image"
+title = "auto salvage yard parts"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
