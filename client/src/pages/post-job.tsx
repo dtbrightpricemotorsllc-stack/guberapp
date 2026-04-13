@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
 import { useAuth } from "@/lib/auth-context";
@@ -327,6 +327,31 @@ export default function PostJob() {
     const clean = filterNotesContent(val);
     setGeneralNotes(clean);
   };
+
+  if (!user?.idVerified) {
+    return (
+      <GuberLayout>
+        <div className="max-w-lg mx-auto px-4 py-12 flex flex-col items-center text-center gap-6">
+          <div className="w-16 h-16 rounded-full bg-muted/30 border border-border flex items-center justify-center">
+            <Lock className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <div>
+            <h2 className="text-xl font-display font-bold text-foreground mb-2">ID Verification Required</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              You need to verify your ID before you can post a job.
+              It only takes a few minutes.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 w-full max-w-xs">
+            <Link href="/profile">
+              <Button className="w-full" data-testid="button-postjob-verify-id-cta">Verify My ID Now</Button>
+            </Link>
+            <Button variant="ghost" onClick={() => history.back()} data-testid="button-postjob-gate-back">Go Back</Button>
+          </div>
+        </div>
+      </GuberLayout>
+    );
+  }
 
   return (
     <GuberLayout>

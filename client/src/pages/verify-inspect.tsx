@@ -765,6 +765,31 @@ export default function VerifyInspect() {
     );
   }
 
+  if (!user?.idVerified) {
+    return (
+      <GuberLayout>
+        <div className="max-w-lg mx-auto px-4 py-12 flex flex-col items-center text-center gap-6">
+          <div className="w-16 h-16 rounded-full bg-muted/30 border border-border flex items-center justify-center">
+            <Lock className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <div>
+            <h2 className="text-xl font-display font-bold text-foreground mb-2">ID Verification Required</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              You need to verify your ID before you can submit a Verify &amp; Inspect request.
+              It only takes a few minutes.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 w-full max-w-xs">
+            <Link href="/profile">
+              <Button className="w-full" data-testid="button-verify-id-cta">Verify My ID Now</Button>
+            </Link>
+            <Button variant="ghost" onClick={() => history.back()} data-testid="button-vi-gate-back">Go Back</Button>
+          </div>
+        </div>
+      </GuberLayout>
+    );
+  }
+
   return (
     <GuberLayout>
       <div
