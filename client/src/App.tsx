@@ -190,7 +190,7 @@ function Router() {
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />
       <Route path="/wallet" component={() => <ConsumerRoute component={WalletPage} />} />
       <Route path="/job-payment-success" component={() => <ProtectedRoute component={JobPaymentSuccess} />} />
-      <Route path="/og-success" component={() => <Suspense fallback={<PageLoader />}><OGSuccess /></Suspense>} />
+      <Route path="/og-success" component={() => <ProtectedRoute component={OGSuccess} />} />
       <Route path="/worker-clipboard/:id" component={() => <ProtectedRoute component={WorkerClipboard} />} />
       <Route path="/vi-requests" component={() => <ProtectedRoute component={VIRequests} />} />
       <Route path="/marketplace" component={() => <ProtectedRoute component={Marketplace} />} />
