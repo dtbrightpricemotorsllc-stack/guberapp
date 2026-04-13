@@ -128,6 +128,14 @@ function ConsumerRoute({ component: Component }: { component: React.ComponentTyp
   );
 }
 
+function RootRoute() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <PageLoader />;
+  if (!user) return <Redirect to="/login" />;
+  if (user.accountType === "business") return <Redirect to="/biz/dashboard" />;
+  return <Redirect to="/dashboard" />;
+}
+
 function PublicOnly({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const search = useSearch();
@@ -161,7 +169,7 @@ function Router() {
     <>
       <ScrollToTop />
     <Switch>
-      <Route path="/" component={() => <PublicOnly component={Home} />} />
+      <Route path="/" component={RootRoute} />
       <Route path="/login" component={() => <PublicOnly component={Login} />} />
       <Route path="/signup" component={() => <PublicOnly component={Signup} />} />
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />
@@ -185,7 +193,7 @@ function Router() {
       <Route path="/og-success" component={() => <Suspense fallback={<PageLoader />}><OGSuccess /></Suspense>} />
       <Route path="/worker-clipboard/:id" component={() => <ProtectedRoute component={WorkerClipboard} />} />
       <Route path="/vi-requests" component={() => <ProtectedRoute component={VIRequests} />} />
-      <Route path="/marketplace" component={() => <Suspense fallback={<PageLoader />}><Marketplace /></Suspense>} />
+      <Route path="/marketplace" component={() => <ProtectedRoute component={Marketplace} />} />
       <Route path="/marketplace-preview" component={() => <ProtectedRoute component={MarketplacePreview} />} />
       <Route path="/map" component={() => <ProtectedRoute component={MapExplore} />} />
       <Route path="/cash-drop/:id" component={() => <ProtectedRoute component={CashDropDetail} />} />
