@@ -1483,17 +1483,16 @@ export async function registerRoutes(
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      const { email: rawEmail, password } = parsed.data;
+      const { email: rawEmail, password: rawPassword } = parsed.data;
       const email = rawEmail.toLowerCase().trim();
+      const password = rawPassword.trim();
 
       let user = await storage.getUserByEmail(email);
-      console.log(`[LOGIN-DEBUG] email="${email}" found=${!!user} pwLen=${password?.length}`);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
       if (user.banned) return res.status(403).json({ message: "Account permanently banned" });
       if (user.suspended) return res.status(403).json({ message: "Account suspended" });
 
       if (!user.password || !user.password.includes(".")) {
-        console.log(`[LOGIN-DEBUG] no stored password for user ${user.id}`);
         if (user.authProvider === "google") {
           return res.status(401).json({ message: "This account was created with Google Sign-In. Please tap 'Sign in with Google', or use 'Forgot Password' to set an email/password login." });
         }
@@ -1501,7 +1500,6 @@ export async function registerRoutes(
       }
 
       const valid = await comparePasswords(password, user.password);
-      console.log(`[LOGIN-DEBUG] user=${user.id} valid=${valid} storedHashStart=${user.password.substring(0,16)}`);
       if (!valid) {
         if (user.authProvider === "google") {
           return res.status(401).json({ message: "Incorrect password. If you usually sign in with Google, try 'Sign in with Google' instead, or use 'Forgot Password' to set a new password." });
