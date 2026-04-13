@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -85,21 +84,21 @@ function GateModal({ onClose }: { onClose: () => void }) {
         </p>
 
         <div className="space-y-3">
-          <a
-            href="https://guberapp.app/signup"
+          <Link
+            href="/signup"
             className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm premium-btn"
             data-testid="link-gate-signup"
           >
             GET STARTED FREE
             <ChevronRight className="w-4 h-4" />
-          </a>
-          <a
-            href="https://guberapp.app/login"
+          </Link>
+          <Link
+            href="/login"
             className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium"
             data-testid="link-gate-login"
           >
             SIGN IN
-          </a>
+          </Link>
         </div>
 
         <p className="text-center text-muted-foreground/40 text-[10px] font-display tracking-wider mt-5">
@@ -200,16 +199,16 @@ export default function Home() {
       <nav className="relative z-10 flex items-center justify-between px-5 py-4 max-w-6xl mx-auto w-full">
         <img src={logoImg} alt="GUBER" className="h-10 object-contain" style={{ mixBlendMode: "screen" }} data-testid="img-nav-logo" />
         <div className="flex items-center gap-3">
-          <a href="https://guberapp.app/login" className="text-xs font-display tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-signin">
+          <Link href="/login" className="text-xs font-display tracking-[0.15em] text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-signin">
             SIGN IN
-          </a>
-          <a
-            href="https://guberapp.app/signup"
+          </Link>
+          <Link
+            href="/signup"
             className="h-9 px-5 rounded-xl text-xs font-display tracking-[0.15em] premium-btn flex items-center"
             data-testid="link-nav-signup"
           >
             GET STARTED
-          </a>
+          </Link>
         </div>
       </nav>
 
@@ -232,14 +231,14 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm mx-auto mb-8">
-          <a
-            href="https://guberapp.app/signup"
+          <Link
+            href="/signup"
             className="w-full sm:w-auto flex-1 h-13 px-7 rounded-xl font-display tracking-[0.2em] text-sm premium-btn flex items-center justify-center gap-2"
             data-testid="link-hero-getstarted"
           >
             GET STARTED FREE
             <ChevronRight className="w-4 h-4" />
-          </a>
+          </Link>
           <a
             href="https://guberapp.app/browse-jobs"
             className="w-full sm:w-auto flex-1 h-13 px-7 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center gap-2"
@@ -251,7 +250,7 @@ export default function Home() {
 
         {/* Day-1 OG badge */}
         <a
-          href="https://guberapp.com/day1og.html"
+          href="/day1og.html"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-3 rounded-xl px-5 py-3 w-full max-w-sm mx-auto group transition-all"
@@ -434,14 +433,14 @@ export default function Home() {
             No experience required — just show up.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
-            <a
-              href="https://guberapp.app/signup"
+            <Link
+              href="/signup"
               className="w-full sm:w-auto h-13 px-10 rounded-xl font-display tracking-[0.2em] text-sm premium-btn flex items-center justify-center gap-2"
               data-testid="link-cta-signup"
             >
               CREATE FREE ACCOUNT
               <ChevronRight className="w-4 h-4" />
-            </a>
+            </Link>
             <a
               href="https://guberapp.app/browse-jobs"
               className="w-full sm:w-auto h-13 px-8 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center"
