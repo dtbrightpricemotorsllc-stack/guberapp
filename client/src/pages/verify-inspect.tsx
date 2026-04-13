@@ -51,13 +51,6 @@ import type {
   ProofTemplate,
 } from "@shared/schema";
 
-const FORM_CATEGORY_IMG: Record<string, string> = {
-  "Property & Site Check": propertySiteImg,
-  "Online Items": onlineItemsFormImg,
-  "Wheels, Wings & Water": wheelsWingsImg,
-  "Quick Check": quickCheckImg,
-  "Part Availability Verification": pavSalvageImg,
-};
 
 const TIER_ORDER = ["community", "verified", "credentialed", "elite"];
 
@@ -806,25 +799,30 @@ export default function VerifyInspect() {
           </div>
         </div>
 
-        {selectedCategory && FORM_CATEGORY_IMG[selectedCategory.name] && (
-          <div
-            className="relative rounded-2xl overflow-hidden mb-5 animate-fade-in"
-            style={{ height: 140, border: "1.5px solid hsl(275 90% 65% / 0.35)", boxShadow: "0 0 18px hsl(275 90% 65% / 0.1)" }}
-            data-testid="banner-vi-category"
-          >
-            <img
-              src={FORM_CATEGORY_IMG[selectedCategory.name]}
-              alt={selectedCategory.name}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-            <div className="absolute bottom-0 left-0 p-4">
-              <p className="text-white font-display font-black text-base tracking-tight leading-tight drop-shadow-md">
-                {selectedCategory.name}
-              </p>
+        {selectedCategory && (() => {
+          const n = selectedCategory.name;
+          const img =
+            n === "Property & Site Check" ? propertySiteImg :
+            n === "Online Items" ? onlineItemsFormImg :
+            n === "Wheels, Wings & Water" ? wheelsWingsImg :
+            n === "Quick Check" ? quickCheckImg :
+            n === "Part Availability Verification" ? pavSalvageImg :
+            null;
+          if (!img) return null;
+          return (
+            <div
+              className="relative rounded-2xl overflow-hidden mb-5"
+              style={{ height: 140, border: "1.5px solid hsl(275 90% 65% / 0.35)", boxShadow: "0 0 18px hsl(275 90% 65% / 0.1)" }}
+              data-testid="banner-vi-category"
+            >
+              <img src={img} alt={n} className="absolute inset-0 w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              <div className="absolute bottom-0 left-0 p-4">
+                <p className="text-white font-display font-black text-base tracking-tight leading-tight drop-shadow-md">{n}</p>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <div className="space-y-4">
           <div
