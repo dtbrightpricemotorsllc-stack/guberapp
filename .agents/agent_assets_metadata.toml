@@ -1,0 +1,20 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "HX6uXRXpAqt_gidjEfGUi"
+uri = "file://attached_assets/stock_images/online_items.jpg"
+type = "image"
+title = "online marketplace items packages boxes verification ecommerce"
+
+[[outputs]]
+id = "layL4EBSBVWVGOWZZUBgs"
+uri = "file://attached_assets/stock_images/property_site_check.jpg"
+type = "image"
+title = "professional home property inspection real estate site check exterior"
+
+[[outputs]]
+id = "PWcpqt85L0CQ25wfb_XzP"
+uri = "file://attached_assets/stock_images/quick_check.jpg"
+type = "image"
+title = "quick inspection checklist clipboard verification professional"
