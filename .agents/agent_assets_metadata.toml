@@ -30,6 +30,60 @@ uri = "file://attached_assets/category-images/vi_pav_salvage.png"
 type = "image"
 title = "auto salvage yard parts"
 
+[[generated]]
+id = "HDyvFhg-rD1MUtEJ0U5_V"
+uri = "file://hero-bg-glow.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "c4Bg4RqWf-DtoztVI6Jhq"
+uri = "file://action-findjobs.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "J9V040d4tn2RpjpkrgriU"
+uri = "file://action-postjob.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "Yj6hdFSQ5y_b_us6ixKUu"
+uri = "file://action-verify.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "SoxEfsEWw22MwtwfYmkGQ"
+uri = "file://proof-tools.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "q5VsjVqyhgdajYhkWGxK6"
+uri = "file://dopamine-action.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "2nqUwdcZ5Nft5xItFfaz8"
+uri = "file://cash-drop.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "D8j9Zj-BLNBGuNiECzw7C"
+uri = "file://guber-resume.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "rPC6kAMNj9E_YsWV8Thj4"
+uri = "file://live-jobs-app.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
