@@ -3531,6 +3531,26 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/nsopw-search", requireAdmin, async (req: Request, res: Response) => {
+    const { firstName, lastName } = req.query as { firstName?: string; lastName?: string };
+    if (!firstName || !lastName) return res.status(400).json({ message: "firstName and lastName required" });
+    const searchUrl = `https://www.nsopw.gov/Search/Verify?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}&stateCode=`;
+    try {
+      const apiRes = await fetch(
+        `https://www.nsopw.gov/api/search/sexoffender?q=${encodeURIComponent(firstName + " " + lastName)}&r=json`,
+        { headers: { "User-Agent": "GuberAdmin/1.0", "Accept": "application/json" }, signal: AbortSignal.timeout(8000) }
+      );
+      if (apiRes.ok) {
+        const data = await apiRes.json() as Record<string, unknown>;
+        const records = (data.records ?? data.results ?? data.offenders ?? []) as unknown[];
+        return res.json({ results: records, searchUrl, source: "api" });
+      }
+      return res.json({ results: [], searchUrl, source: "fallback" });
+    } catch {
+      return res.json({ results: [], searchUrl, source: "fallback" });
+    }
+  });
+
   app.patch("/api/admin/users/:id/background-check", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);

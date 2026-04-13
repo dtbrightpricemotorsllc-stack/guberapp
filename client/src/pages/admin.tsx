@@ -22,7 +22,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronRight, FolderTree, P
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import { Day1OGLogo } from "@/components/trust-badge";
@@ -3872,6 +3872,141 @@ function FeedbackTab() {
   );
 }
 
+function SafetyQueueTab({ allUsers, usersLoading, bgCheckMutation }: {
+  allUsers: User[] | undefined;
+  usersLoading: boolean;
+  bgCheckMutation: { mutate: (args: { id: number; status: string; restrictions: string[] }) => void; isPending: boolean };
+}) {
+  const [searches, setSearches] = useState<Record<number, { loading: boolean; results: unknown[]; searchUrl: string; done: boolean; error: string | null }>>({});
+
+  const pendingUsers = (allUsers ?? [])
+    .filter(u => !u.backgroundCheckStatus || u.backgroundCheckStatus === "none")
+    .sort((a, b) => new Date((b as any).createdAt ?? 0).getTime() - new Date((a as any).createdAt ?? 0).getTime());
+
+  const searchNSOPW = async (userId: number, fullName: string) => {
+    const parts = (fullName || "").trim().split(/\s+/);
+    const firstName = parts[0] ?? "";
+    const lastName = parts.slice(1).join(" ") || parts[0] || "";
+    setSearches(prev => ({ ...prev, [userId]: { loading: true, results: [], searchUrl: "", done: false, error: null } }));
+    try {
+      const res = await fetch(`/api/admin/nsopw-search?firstName=${encodeURIComponent(firstName)}&lastName=${encodeURIComponent(lastName)}`);
+      const data = await res.json();
+      setSearches(prev => ({ ...prev, [userId]: { loading: false, results: data.results ?? [], searchUrl: data.searchUrl ?? "", done: true, error: null } }));
+    } catch {
+      setSearches(prev => ({ ...prev, [userId]: { loading: false, results: [], searchUrl: "", done: true, error: "Search unavailable — use the NSOPW link." } }));
+    }
+  };
+
+  if (usersLoading) return <div className="p-6"><Skeleton className="h-32 w-full" /></div>;
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Shield className="w-5 h-5 text-[#00E5E5]" />
+        <h2 className="text-lg font-display font-bold">Safety Queue</h2>
+        <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">{pendingUsers.length} pending</Badge>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">New signups not yet reviewed. Search the federal sex offender registry, then mark each user clear or flag them.</p>
+      {pendingUsers.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <CheckCircle className="w-10 h-10 mx-auto mb-2 text-primary" />
+          <p className="font-display">Queue is clear — all users reviewed</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {pendingUsers.map(u => {
+            const s = searches[u.id];
+            const name = (u as any).fullName || u.username || "Unknown";
+            return (
+              <div key={u.id} className="rounded-xl border border-border/30 bg-card p-4 space-y-3" data-testid={`safety-card-${u.id}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-10 h-10">
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-sm">{name}</p>
+                      <p className="text-xs text-muted-foreground">{u.email}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Joined {(u as any).createdAt ? new Date((u as any).createdAt).toLocaleDateString() : "—"}
+                        {(u as any).zip ? ` · ZIP ${(u as any).zip}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-[#00E5E5]/40 text-[#00E5E5] hover:bg-[#00E5E5]/10"
+                    disabled={s?.loading}
+                    onClick={() => searchNSOPW(u.id, name)}
+                    data-testid={`btn-nsopw-search-${u.id}`}
+                  >
+                    {s?.loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Search className="w-3 h-3 mr-1" />}
+                    Search Registry
+                  </Button>
+                </div>
+
+                {s?.done && (
+                  <div className="rounded-lg bg-background/50 border border-border/20 p-3 space-y-2">
+                    {s.results.length === 0 ? (
+                      <div className="flex items-center gap-2 text-sm text-primary">
+                        <CheckCircle className="w-4 h-4" /> No registry matches found
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-red-400 flex items-center gap-1">
+                          <AlertTriangle className="w-4 h-4" /> {s.results.length} match{s.results.length !== 1 ? "es" : ""} found — review carefully
+                        </p>
+                        {(s.results as Record<string, string>[]).slice(0, 3).map((r, i) => (
+                          <div key={i} className="text-xs text-muted-foreground pl-2 border-l border-red-500/30">
+                            {r.name || ((r.firstName ?? "") + " " + (r.lastName ?? "")).trim() || "Match"}
+                            {r.state ? ` — ${r.state}` : ""}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {s.searchUrl && (
+                      <a href={s.searchUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                        <ExternalLink className="w-3 h-3" /> View full results on NSOPW.gov
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {s?.error && (
+                  <p className="text-xs text-amber-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{s.error}</p>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30"
+                    disabled={bgCheckMutation.isPending}
+                    onClick={() => bgCheckMutation.mutate({ id: u.id, status: "clear", restrictions: [] })}
+                    data-testid={`btn-mark-clear-${u.id}`}
+                  >
+                    <CheckCircle className="w-3 h-3 mr-1" /> Mark Clear
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1"
+                    disabled={bgCheckMutation.isPending}
+                    onClick={() => bgCheckMutation.mutate({ id: u.id, status: "flagged", restrictions: [] })}
+                    data-testid={`btn-flag-user-${u.id}`}
+                  >
+                    <XCircle className="w-3 h-3 mr-1" /> Flag
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
@@ -4033,6 +4168,14 @@ return (
   Feedback
   {feedbackUnread > 0 && (
     <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-emerald-500 text-[9px] font-black text-white flex items-center justify-center px-0.5">{feedbackUnread}</span>
+  )}
+</TabsTrigger>
+<TabsTrigger value="safetyqueue" className="font-display shrink-0 whitespace-nowrap relative" data-testid="tab-safetyqueue">
+  🛡️ Safety Queue
+  {((allUsers ?? []).filter(u => !u.backgroundCheckStatus || u.backgroundCheckStatus === "none").length > 0) && (
+    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-yellow-500 text-[9px] font-black text-black flex items-center justify-center px-0.5">
+      {(allUsers ?? []).filter(u => !u.backgroundCheckStatus || u.backgroundCheckStatus === "none").length}
+    </span>
   )}
 </TabsTrigger>
 </TabsList>
@@ -4474,6 +4617,9 @@ data-testid={`button-resolve-dispute-${j.id}`}
 </TabsContent>
 <TabsContent value="feedback">
 <FeedbackTab />
+</TabsContent>
+<TabsContent value="safetyqueue">
+<SafetyQueueTab allUsers={allUsers} usersLoading={usersLoading} bgCheckMutation={bgCheckMutation} />
 </TabsContent>
 </Tabs>
 </div>
