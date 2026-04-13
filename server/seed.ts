@@ -458,8 +458,8 @@ export async function syncAdminCredentials() {
   try {
     const adminUser = await storage.getUserByEmail("admin@guberapp.com");
     if (adminUser) {
-      await storage.updateUser(adminUser.id, { password: ADMIN_PASSWORD_HASH, role: "admin", tier: "elite", day1OG: true });
-      console.log("[GUBER] Admin password synced.");
+      await storage.updateUser(adminUser.id, { role: "admin", tier: "elite", day1OG: true });
+      console.log("[GUBER] Admin role synced (password preserved).");
     } else {
       let adminUsername = "guberadmin";
       const existingUsername = await storage.getUserByUsername("guberadmin");
