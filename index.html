@@ -1159,7 +1159,7 @@
             '<h3 style="margin-top:6px;">' + escHtml(job.title) + '</h3>' +
             '<div class="job-card-meta">&#128205; ' + escHtml(job.locationApprox) + '</div>' +
             '<div class="job-card-budget">' + escHtml(budget) + '</div>' +
-            '<a href="' + escHtml(job.appUrl) + '" class="btn btn-primary btn-sm">Accept This Job &#8594;</a>';
+            '<a href="' + safeJobUrl(job.appUrl) + '" class="btn btn-primary btn-sm">Accept This Job &#8594;</a>';
           grid.appendChild(card);
         });
       })
@@ -1179,6 +1179,13 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    function safeJobUrl(url) {
+      if (typeof url === 'string' && url.indexOf('https://guberapp.app/jobs/') === 0) {
+        return escHtml(url);
+      }
+      return 'https://guberapp.app';
     }
   })();
 </script>
