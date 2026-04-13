@@ -21,11 +21,16 @@ import {
   Zap,
 } from "lucide-react";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
-import propertySiteImg from "@assets/category-images/vi_property_site_check.png";
-import onlineItemsImg from "@assets/category-images/vi_online_items.png";
-import wheelsWingsImg from "@assets/category-images/vi_wheels_wings_water.png";
-import quickCheckImg from "@assets/category-images/vi_quick_check.png";
-import pavSalvageImg from "@assets/category-images/vi_pav_salvage.png";
+import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
+import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
+import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
+import quickCheckImg from "@assets/file_000000001e2471f586eaaf945485317c_1772458167013.png";
+import pavSalvageImg from "@assets/pav_salvage_yard.png";
+import formPropertyImg from "@assets/category-images/vi_property_site_check.png";
+import formOnlineImg from "@assets/category-images/vi_online_items.png";
+import formWheelsImg from "@assets/category-images/vi_wheels_wings_water.png";
+import formQuickImg from "@assets/category-images/vi_quick_check.png";
+import formPavImg from "@assets/category-images/vi_pav_salvage.png";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -776,7 +781,14 @@ export default function VerifyInspect() {
 
         <div className="mb-6 animate-fade-in">
           {(() => {
-            const catImg = GRID_CATEGORIES.find((c) => c.name === selectedCategory?.name)?.img;
+            const FORM_IMGS: Record<string, string> = {
+              "Property & Site Check": formPropertyImg,
+              "Online Items": formOnlineImg,
+              "Wheels, Wings & Water": formWheelsImg,
+              "Quick Check": formQuickImg,
+              "Part Availability Verification": formPavImg,
+            };
+            const catImg = selectedCategory?.name ? FORM_IMGS[selectedCategory.name] : undefined;
             return catImg ? (
               <div className="relative rounded-2xl overflow-hidden mb-4" style={{ height: 90, border: "1.5px solid hsl(275 90% 65% / 0.4)", boxShadow: "0 0 14px hsl(275 90% 65% / 0.10)" }}>
                 <img src={catImg} alt={selectedCategory?.name} className="absolute inset-0 w-full h-full object-cover opacity-80" />
