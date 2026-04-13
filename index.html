@@ -910,7 +910,7 @@
     <p class="section-lead">Pick your move. Tap and you're already in motion.</p>
 
     <div class="action-tiles">
-      <a href="https://guberapp.app/browse-jobs" class="action-tile action-tile-green">
+      <a href="https://guberapp.app/login" class="action-tile action-tile-green">
         <img src="/action-findjobs.png" alt="Person accepting a job on their phone in a city at night" class="action-tile-img" />
         <div class="action-tile-overlay"></div>
         <div class="action-tile-content">
@@ -921,7 +921,7 @@
         </div>
       </a>
 
-      <a href="https://guberapp.app/post-job" class="action-tile action-tile-magenta">
+      <a href="https://guberapp.app/login" class="action-tile action-tile-magenta">
         <img src="/action-postjob.png" alt="Business owner posting a task on their phone at night" class="action-tile-img" />
         <div class="action-tile-overlay"></div>
         <div class="action-tile-content">
@@ -932,7 +932,7 @@
         </div>
       </a>
 
-      <a href="https://guberapp.app/verify-inspect" class="action-tile action-tile-teal">
+      <a href="https://guberapp.app/login" class="action-tile action-tile-teal">
         <img src="/action-verify.png" alt="Person photographing a car for verification" class="action-tile-img" />
         <div class="action-tile-overlay"></div>
         <div class="action-tile-content">
@@ -947,23 +947,16 @@
     <p class="action-psych">Tap an action and you&#8217;ve already started. Finish what you just began.</p>
   </section>
 
-  <!-- section: live local opportunities -->
-  <section class="section" id="live-jobs">
-    <div class="eyebrow">Live right now</div>
-    <h2 class="section-title">What&#8217;s Happening <span class="accent">Right Now</span></h2>
-    <p class="section-lead">Real work. Real money. Real-world activity — posted today.</p>
-
-    <div class="jobs-section-inner">
-      <div>
-        <div id="jobs-grid" class="jobs-grid"></div>
+  <!-- section: join guber cta -->
+  <section class="section" id="join-guber">
+    <div class="final-cta" style="padding:36px 24px;">
+      <div class="eyebrow">Ready to move?</div>
+      <h2 class="section-title">See what&#8217;s available in your area.</h2>
+      <p class="section-lead">Real work, real money &#8212; posted right now. Create an account to see jobs and take action.</p>
+      <div class="cta-row" style="justify-content:center; margin-top:20px;">
+        <a href="https://guberapp.app/signup" class="btn btn-primary btn-lg">Create Account</a>
+        <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
       </div>
-      <div class="jobs-phone-visual">
-        <img src="/live-jobs-app.png" alt="GUBER app showing live job listings on smartphone" />
-      </div>
-    </div>
-
-    <div style="text-align:center; margin-top:20px;">
-      <a href="https://guberapp.app" class="btn btn-primary">See Everything in the App &#8594;</a>
     </div>
   </section>
 
@@ -1282,111 +1275,6 @@
     <span>Day-1 OG</span>
   </a>
 </div>
-
-
-<script>
-  (function () {
-    var grid = document.getElementById('jobs-grid');
-    if (!grid) return;
-
-    for (var i = 0; i < 4; i++) {
-      var sk = document.createElement('div');
-      sk.className = 'job-skeleton';
-      grid.appendChild(sk);
-    }
-
-    fetch('https://guberapp.app/api/public/jobs')
-      .then(function (r) { return r.json(); })
-      .then(function (jobs) {
-        grid.innerHTML = '';
-        if (!jobs || jobs.length === 0) {
-          renderFallback(grid);
-          return;
-        }
-        jobs.slice(0, 6).forEach(function (job) {
-          var urgentBadge = job.urgentSwitch
-            ? '<span class="job-card-urgent">&#9889; Urgent</span>'
-            : '';
-          var budget = '$' + job.budget + (job.payType === 'hourly' ? '/hr' : '');
-          var card = document.createElement('div');
-          card.className = 'card card-green';
-          card.innerHTML =
-            '<span class="job-card-cat">' + escHtml(job.category) + '</span>' +
-            urgentBadge +
-            '<h3 style="margin-top:6px;">' + escHtml(job.title) + '</h3>' +
-            '<div class="job-card-meta">&#128205; ' + escHtml(job.locationApprox) + '</div>' +
-            '<div class="job-card-budget">' + escHtml(budget) + '</div>' +
-            '<a href="' + safeJobUrl(job.appUrl) + '" class="btn btn-primary btn-sm">Accept This Job &#8594;</a>';
-          grid.appendChild(card);
-        });
-
-        var existingSchema = document.getElementById('job-schema');
-        if (existingSchema) existingSchema.remove();
-        var schema = document.createElement('script');
-        schema.type = 'application/ld+json';
-        schema.id = 'job-schema';
-        var postings = jobs.slice(0, 6).map(function (job) {
-          var posting = {
-            '@type': 'JobPosting',
-            'title': job.title,
-            'description': job.title + ' \u2014 local job posted on GUBER. Category: ' + job.category + '. Location: ' + job.locationApprox + '.',
-            'identifier': { '@type': 'PropertyValue', 'name': 'GUBER', 'value': 'guber-job-' + job.id },
-            'datePosted': job.createdAt,
-            'employmentType': job.payType === 'hourly' ? 'PART_TIME' : 'CONTRACTOR',
-            'hiringOrganization': {
-              '@type': 'Organization',
-              'name': 'GUBER APP LLC',
-              'sameAs': 'https://guberapp.com',
-              'logo': 'https://guberapp.com/Guberapplogo.png'
-            },
-            'jobLocation': {
-              '@type': 'Place',
-              'address': { '@type': 'PostalAddress', 'addressLocality': job.locationApprox, 'postalCode': job.zip, 'addressCountry': 'US' }
-            },
-            'baseSalary': {
-              '@type': 'MonetaryAmount',
-              'currency': 'USD',
-              'value': { '@type': 'QuantitativeValue', 'value': job.budget, 'unitText': job.payType === 'hourly' ? 'HOUR' : 'FLAT_RATE' }
-            },
-            'url': safeJobUrl(job.appUrl).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"'),
-            'directApply': true
-          };
-          if (job.jobType === 'remote') posting['jobLocationType'] = 'TELECOMMUTE';
-          return posting;
-        });
-        schema.textContent = JSON.stringify({ '@context': 'https://schema.org', '@graph': postings });
-        document.head.appendChild(schema);
-      })
-      .catch(function () { renderFallback(grid); });
-
-    function renderFallback(el) {
-      el.innerHTML =
-        '<div class="fallback-block">' +
-        '<div class="fallback-icon">&#128205;</div>' +
-        '<h3>Nothing active in your area yet.</h3>' +
-        '<p>That means there&#8217;s an opening.<br>Be the first. Make your city the next one GUBER lights up.</p>' +
-        '<div class="cta-row">' +
-        '<a href="https://guberapp.app" class="btn btn-primary">Enter the App &#8594;</a>' +
-        '<a href="/day1og.html" class="btn btn-secondary btn-sm">Become Day-1 OG</a>' +
-        '</div></div>';
-    }
-
-    function escHtml(s) {
-      return String(s)
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;');
-    }
-
-    function safeJobUrl(url) {
-      if (typeof url === 'string' && url.indexOf('https://guberapp.app/jobs/') === 0) {
-        return escHtml(url);
-      }
-      return 'https://guberapp.app';
-    }
-  })();
-</script>
 
 
 <script>
