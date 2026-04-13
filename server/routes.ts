@@ -622,6 +622,8 @@ export async function registerRoutes(
           budget: jobsTable.budget,
           locationApprox: jobsTable.locationApprox,
           zip: jobsTable.zip,
+          lat: jobsTable.lat,
+          lng: jobsTable.lng,
           urgentSwitch: jobsTable.urgentSwitch,
           payType: jobsTable.payType,
           jobType: jobsTable.jobType,
@@ -637,12 +639,12 @@ export async function registerRoutes(
         .limit(20);
 
       const FALLBACK_JOBS = [
-        { id: -1, title: "Property Walk-Through", category: "Verify & Inspect", budget: 45, locationApprox: "Mobile, AL area", zip: "36606", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
-        { id: -2, title: "Furniture Move — 2BR Apt", category: "Moving Help", budget: 80, locationApprox: "Daphne, AL area", zip: "36526", urgentSwitch: true, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
-        { id: -3, title: "Yard Cleanup & Bag Clippings", category: "Lawn & Yard", budget: 55, locationApprox: "Saraland, AL area", zip: "36571", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
-        { id: -4, title: "Same-Day Grocery Run", category: "Errands", budget: 25, locationApprox: "Chickasaw, AL area", zip: "36611", urgentSwitch: true, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
-        { id: -5, title: "Handyman Pre-Sale Inspection", category: "Verify & Inspect", budget: 65, locationApprox: "Satsuma, AL area", zip: "36572", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
-        { id: -6, title: "Office Deep Clean — After Hours", category: "Cleaning", budget: 90, locationApprox: "Prichard, AL area", zip: "36610", urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -1, title: "Property Walk-Through", category: "Verify & Inspect", budget: 45, locationApprox: "Mobile, AL area", zip: "36606", lat: 30.698, lng: -88.043, urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -2, title: "Furniture Move — 2BR Apt", category: "Moving Help", budget: 80, locationApprox: "Daphne, AL area", zip: "36526", lat: 30.604, lng: -87.904, urgentSwitch: true, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -3, title: "Yard Cleanup & Bag Clippings", category: "Lawn & Yard", budget: 55, locationApprox: "Saraland, AL area", zip: "36571", lat: 30.820, lng: -88.073, urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -4, title: "Same-Day Grocery Run", category: "Errands", budget: 25, locationApprox: "Chickasaw, AL area", zip: "36611", lat: 30.768, lng: -88.075, urgentSwitch: true, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -5, title: "Handyman Pre-Sale Inspection", category: "Verify & Inspect", budget: 65, locationApprox: "Satsuma, AL area", zip: "36572", lat: 30.856, lng: -88.071, urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: true, serviceType: null, verifyInspectCategory: "property", jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
+        { id: -6, title: "Office Deep Clean — After Hours", category: "Cleaning", budget: 90, locationApprox: "Prichard, AL area", zip: "36610", lat: 30.747, lng: -88.084, urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
       ];
 
       const jobs = rows.length > 0
@@ -653,6 +655,37 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[public/jobs] error:", err);
       res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
+
+  app.options("/api/public/cash-drops", (req: Request, res: Response) => {
+    setPublicCors(req, res);
+    res.sendStatus(204);
+  });
+
+  app.get("/api/public/cash-drops", async (req: Request, res: Response) => {
+    setPublicCors(req, res);
+    try {
+      const allDrops = await storage.getActiveCashDrops();
+      const sanitized = allDrops.map((d) => ({
+        id: d.id,
+        title: d.title,
+        rewardPerWinner: d.rewardPerWinner,
+        winnerLimit: d.winnerLimit,
+        winnersFound: d.winnersFound,
+        gpsLat: d.gpsLat,
+        gpsLng: d.gpsLng,
+        status: d.status,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        rewardType: d.rewardType,
+        isSponsored: d.isSponsored,
+        sponsorName: d.sponsorName?.startsWith("DEMO_") ? null : (d.sponsorName ?? null),
+      }));
+      res.json(sanitized);
+    } catch (err) {
+      console.error("[public/cash-drops] error:", err);
+      res.status(500).json({ error: "Failed to fetch cash drops" });
     }
   });
   // ─────────────────────────────────────────────

@@ -2,1374 +2,832 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>GUBER – Stop Watching. Start Moving.</title>
-  <!-- v20260413 -->
+  <title>GUBER – Stop Watching. Start Moving. Verify Anything.</title>
+  <!-- v20260413-redesign -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
 
-  <meta
-    name="description"
-    content="GUBER is the action engine for real work, real money, and real-world visibility. Find jobs, post tasks, verify before you commit. Show up. Show proof. Start moving."
-  />
-
+  <meta name="description" content="GUBER is the action engine for real work, real money, and real-world visibility. Find jobs, post tasks, verify before you commit. Show up. Show proof. Start moving." />
   <meta property="og:title" content="GUBER – Stop Watching. Start Moving." />
-  <meta
-    property="og:description"
-    content="Work when you want. Post what you need. Verify before you commit. GUBER is built on visibility, proof, and accountability — not promises."
-  />
+  <meta property="og:description" content="Work when you want. Post what you need. Verify before you commit. GUBER is built on visibility, proof, and accountability — not promises." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://guberapp.com/" />
-  <meta property="og:image" content="https://guberapp.com/Guberapplogo.png" />
-
+  <meta property="og:image" content="https://guberapp.com/still-scrolling.png" />
   <link rel="canonical" href="https://guberapp.com/" />
   <meta name="robots" content="index, follow" />
-  <meta name="keywords" content="local jobs, gig work, earn money, get help, verify inspect, cash drops, on demand work, local hiring, GUBER app, accountability, proof, visibility" />
+  <meta name="keywords" content="local jobs, gig work, earn money, get help, verify inspect, cash drops, on demand work, local hiring, GUBER app" />
 
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "name": "GUBER APP LLC",
-    "url": "https://guberapp.com",
-    "logo": "https://guberapp.com/Guberapplogo.png",
-    "sameAs": ["https://guberapp.app"],
-    "description": "GUBER connects people to paid local work, on-demand help, and real-world verification tools."
-  }
-  </script>
-
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "name": "GUBER",
-    "url": "https://guberapp.com",
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": {
-        "@type": "EntryPoint",
-        "urlTemplate": "https://guberapp.app/browse-jobs?search={search_term_string}"
-      },
-      "query-input": "required name=search_term_string"
-    }
-  }
-  </script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"GUBER APP LLC","url":"https://guberapp.com","logo":"https://guberapp.com/Guberapplogo.png","sameAs":["https://guberapp.app"],"description":"GUBER connects people to paid local work, on-demand help, and real-world verification tools."}</script>
 
   <style>
     :root {
-      --bg: #000000;
+      --bg: #0a0a0a;
       --card: #111111;
+      --card-2: #161616;
+      --border: rgba(255,255,255,0.08);
       --accent: #00ff6a;
-      --accent-border: rgba(0,255,106,0.28);
+      --accent-dim: rgba(0,255,106,0.12);
       --gold: #ffcc33;
-      --text: #f5f5f5;
-      --text-soft: #c7c7c7;
-      --muted: #8d8d8d;
-      --purple: #9b6dff;
-      --magenta: #c850c0;
-      --magenta-border: rgba(200,80,192,0.28);
+      --gold-dim: rgba(255,204,51,0.12);
+      --gold-border: rgba(255,204,51,0.25);
       --teal: #00e5e5;
-      --teal-border: rgba(0,229,229,0.28);
-      --shadow-green: 0 0 22px rgba(0,255,106,0.18);
-      --shadow-gold: 0 0 24px rgba(255,204,51,0.18);
-      --shadow-magenta: 0 0 22px rgba(200,80,192,0.18);
-      --shadow-teal: 0 0 22px rgba(0,229,229,0.14);
+      --teal-dim: rgba(0,229,229,0.1);
+      --purple: #9b6dff;
+      --purple-dim: rgba(155,109,255,0.1);
+      --text: #f0f0f0;
+      --soft: #c0c0c0;
+      --muted: #7a7a7a;
       --radius: 16px;
+      --radius-sm: 10px;
+      --max: 1100px;
     }
 
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
-
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #000;
-      color: var(--text);
-      -webkit-font-smoothing: antialiased;
-    }
-
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; }
     img { max-width: 100%; display: block; }
-    a { text-decoration: none; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; }
 
-    /* ── LAYOUT ── */
-    .page { max-width: 1140px; margin: 0 auto; padding: 20px 14px 56px; }
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 22px; }
+    .sec { padding: 68px 0; }
+    .sec-sm { padding: 42px 0; }
+
+    .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .eyebrow-green { color: var(--accent); }
+    .eyebrow-gold { color: var(--gold); }
+    .eyebrow-teal { color: var(--teal); }
+    .eyebrow-purple { color: var(--purple); }
+
+    .sec-title { font-size: 34px; font-weight: 900; line-height: 1.12; letter-spacing: -0.02em; margin-bottom: 14px; }
+    .sec-lead { font-size: 16px; color: var(--soft); max-width: 620px; margin-bottom: 28px; line-height: 1.7; }
+
+    .gold { color: var(--gold); }
+    .green { color: var(--accent); }
+    .teal { color: var(--teal); }
+
+    /* BUTTONS */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 22px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; border: none; transition: transform 0.15s, opacity 0.15s; text-decoration: none; }
+    .btn:hover { transform: translateY(-2px); opacity: 0.9; }
+    .btn-green { background: var(--accent); color: #000; }
+    .btn-ghost { background: transparent; border: 1.5px solid rgba(255,255,255,0.2); color: var(--soft); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-gold { background: var(--gold); color: #000; }
+    .btn-lg { padding: 15px 28px; font-size: 16px; }
 
     /* ── HEADER ── */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    .logo-wrap { display: flex; align-items: center; gap: 10px; }
-    .logo-wrap img {
-      height: 54px;
-      width: auto;
-      filter: drop-shadow(0 0 15px rgba(0,255,106,0.38));
-    }
-    .brand-block { display: flex; flex-direction: column; gap: 3px; }
-    .brand-name {
-      font-size: 12px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--text);
-      font-weight: 700;
-    }
-    .brand-tagline {
-      font-size: 11px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--accent);
-    }
+    .header { position: sticky; top: 0; z-index: 200; background: rgba(10,10,10,0.93); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); padding: 12px 0; }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 900; color: var(--accent); letter-spacing: -0.02em; }
+    .brand img { width: 32px; height: 32px; object-fit: contain; }
+    .header-nav { display: flex; gap: 8px; }
+    .header-nav .btn { padding: 9px 16px; font-size: 13px; }
 
     /* ── HERO ── */
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0,1.1fr) minmax(0,0.9fr);
-      gap: 22px;
-      align-items: stretch;
-      margin-bottom: 32px;
-      position: relative;
-    }
-    .hero-left {
-      background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0));
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 20px;
-      padding: 22px 20px 20px;
-      box-shadow: 0 0 30px rgba(0,0,0,0.4);
-      position: relative;
-      overflow: hidden;
-    }
-    .hero-left::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: url('/hero-bg-glow.png') center/cover no-repeat;
-      opacity: 0.07;
-      pointer-events: none;
-    }
-    .hero-left > * { position: relative; z-index: 1; }
-    .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 13px;
-      border-radius: 999px;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-weight: 700;
-      color: var(--text-soft);
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-    .pill-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px var(--accent);
-    }
-    .pill-gold {
-      color: #fff4c7;
-      background: linear-gradient(90deg, rgba(90,67,0,0.65), rgba(132,98,10,0.6));
-      border: 1px solid rgba(255,204,51,0.35);
-    }
-    .hero h1 {
-      margin: 0 0 14px;
-      font-size: 48px;
-      line-height: 0.97;
-      letter-spacing: -0.047em;
-      font-weight: 900;
-    }
-    .hero-sub {
-      font-size: 15px;
-      color: var(--text-soft);
-      line-height: 1.72;
-      margin: 0 0 18px;
-      max-width: 560px;
-    }
-    .hero-sub strong { color: var(--text); }
-    .hero-stat-row {
-      display: grid;
-      grid-template-columns: repeat(3,minmax(0,1fr));
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    .hero-stat {
-      padding: 12px;
-      border-radius: 14px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-    .hero-stat b {
-      display: block;
-      font-size: 13px;
-      margin-bottom: 5px;
-      color: var(--text);
-    }
-    .hero-stat span {
-      display: block;
-      font-size: 11px;
-      line-height: 1.5;
-      color: var(--text-soft);
-    }
-    .cta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-    .hero-note {
-      font-size: 11px;
-      line-height: 1.6;
-      color: var(--muted);
-    }
-    .hero-right {
-      position: relative;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid var(--accent-border);
-      background: radial-gradient(circle at top, rgba(0,255,106,0.18), rgba(0,0,0,0.95) 70%);
-      box-shadow: 0 0 28px rgba(0,255,106,0.14);
-      padding: 12px;
-      min-height: 380px;
-    }
-    .hero-frame {
-      position: relative;
-      height: 100%;
-      border-radius: 14px;
-      overflow: hidden;
-      background: #000;
-    }
-    .hero-right video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000;
-      opacity: 0;
-      transition: opacity 0.55s ease-in-out;
-    }
-    .hero-right video.active { opacity: 1; }
+    .hero { padding: 72px 0 56px; }
+    .hero-grid { display: grid; grid-template-columns: 1fr 440px; gap: 52px; align-items: center; }
+    .hero-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; border: 1.5px solid rgba(255,255,255,0.18); color: var(--muted); }
+    .pill-green { border-color: var(--accent); color: var(--accent); }
+    .pill-gold { border-color: var(--gold); color: var(--gold); }
+    .pill-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .hero h1 { font-size: 52px; font-weight: 900; line-height: 1.06; letter-spacing: -0.03em; margin-bottom: 16px; }
+    .hero-sub { font-size: 17px; color: var(--soft); line-height: 1.65; margin-bottom: 10px; max-width: 520px; }
+    .hero-tagline { font-size: 19px; font-weight: 800; color: var(--accent); margin-bottom: 28px; }
+    .hero-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 32px; }
+    .hero-stat { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+    .hero-stat b { display: block; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .hero-stat span { font-size: 11px; color: var(--muted); line-height: 1.45; }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
+    .hero-ios { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; }
 
-    /* ── BUTTONS ── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 46px;
-      padding: 11px 20px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      border: 1px solid transparent;
-      transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .btn:hover { transform: translateY(-2px); opacity: 0.95; }
-    .btn-primary {
-      color: #000;
-      background: linear-gradient(135deg, #00ff6a, #00cc55);
-      box-shadow: var(--shadow-green);
-    }
-    .btn-secondary {
-      color: #000;
-      background: linear-gradient(135deg, #ffdf73, #ffaa00);
-      box-shadow: var(--shadow-gold);
-    }
-    .btn-ghost {
-      color: #c084fc;
-      background: rgba(168,85,247,0.08);
-      border-color: rgba(168,85,247,0.28);
-    }
-    .btn-magenta {
-      color: #fff;
-      background: linear-gradient(135deg, #c850c0, #9b1faa);
-      box-shadow: var(--shadow-magenta);
-    }
-    .btn-sm { min-height: 38px; padding: 8px 16px; font-size: 11px; }
-    .btn-lg { min-height: 56px; padding: 14px 28px; font-size: 14px; }
+    /* Hero right frame */
+    .hero-frame { position: relative; width: 100%; max-width: 340px; margin: 0 auto; aspect-ratio: 9/19; border-radius: 36px; overflow: hidden; background: #0d0d0d; border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 60px rgba(0,255,106,0.07); }
+    .hero-frame video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.55s ease-in-out; }
+    .hero-frame video.active { opacity: 1; }
+    .hero-frame-fallback { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
-    /* ── SECTION BASICS ── */
-    .section { margin-bottom: 32px; }
-    .section-title {
-      font-size: 32px;
-      line-height: 1.05;
-      margin: 0 0 10px;
-      letter-spacing: -0.035em;
-      font-weight: 900;
-    }
-    .section-title .accent { color: var(--accent); }
-    .section-title .gold { color: var(--gold); }
-    .section-title .magenta { color: var(--magenta); }
-    .section-lead {
-      margin: 0 0 8px;
-      font-size: 15px;
-      line-height: 1.75;
-      color: var(--text-soft);
-      max-width: 860px;
-    }
-    .eyebrow {
-      display: inline-block;
-      margin-bottom: 10px;
-      font-size: 11px;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: var(--accent);
-      font-weight: 800;
-    }
-    .eyebrow-gold { color: var(--gold); }
-    .eyebrow-magenta { color: var(--magenta); }
+    /* ── SCROLLING BANNER ── */
+    .scroll-banner { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: #0d0d0d; overflow: hidden; }
+    .scroll-banner img { width: 100%; max-height: 480px; object-fit: cover; object-position: center; display: block; }
+    .scroll-banner-links { display: flex; justify-content: center; gap: 16px; padding: 18px 22px; flex-wrap: wrap; background: rgba(0,0,0,0.5); }
 
-    /* ── GRIDS ── */
-    .grid-2, .grid-3, .grid-4 { display: grid; gap: 14px; margin-top: 18px; }
-    .grid-2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
-    .grid-3 { grid-template-columns: repeat(3,minmax(0,1fr)); }
-    .grid-4 { grid-template-columns: repeat(4,minmax(0,1fr)); }
+    /* ── LIVE MAP ── */
+    .map-sec { padding: 68px 0; }
+    .map-container { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 0 60px rgba(0,0,0,0.6); margin-top: 28px; }
+    #live-map { height: 420px; background: #111; }
+    .map-badge { position: absolute; bottom: 16px; left: 16px; z-index: 1000; background: rgba(0,0,0,0.88); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--soft); pointer-events: none; }
+    .map-legend { display: flex; gap: 24px; margin-top: 14px; flex-wrap: wrap; }
+    .map-legend-item { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+    .ldot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .ldot-green { background: var(--accent); box-shadow: 0 0 6px rgba(0,255,106,0.5); }
+    .ldot-gold { background: var(--gold); box-shadow: 0 0 6px rgba(255,204,51,0.5); }
+    .map-app-snap { display: none; margin-top: 20px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
 
-    /* ── CARDS ── */
-    .card {
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: var(--radius);
-      padding: 18px;
-      box-shadow: 0 0 18px rgba(0,0,0,0.3);
-    }
-    .card h3 { margin: 0 0 8px; font-size: 16px; color: var(--text); line-height: 1.3; }
-    .card p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--text-soft); }
-    .card ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--text-soft); }
-    .card ul li { margin-bottom: 4px; }
-    .card-green { border-color: rgba(0,255,106,0.22); box-shadow: 0 0 18px rgba(0,255,106,0.07); }
-    .card-gold { border-color: rgba(255,204,51,0.22); box-shadow: 0 0 18px rgba(255,204,51,0.07); }
-    .card-magenta { border-color: var(--magenta-border); box-shadow: var(--shadow-magenta); }
-    .card-teal { border-color: var(--teal-border); box-shadow: var(--shadow-teal); }
+    /* ── ACTION TILES ── */
+    .tiles-sec { padding: 68px 0; }
+    .tiles-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 28px; }
+    .tile { position: relative; border-radius: var(--radius); overflow: hidden; aspect-ratio: 3/4; display: flex; flex-direction: column; justify-content: flex-end; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
+    .tile:hover { transform: translateY(-4px); box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+    .tile-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity 0.2s; }
+    .tile:hover .tile-bg { opacity: 0.7; }
+    .tile-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.15) 65%, transparent 100%); }
+    .tile-body { position: relative; z-index: 2; padding: 20px; }
+    .tile-icon { font-size: 26px; display: block; margin-bottom: 6px; }
+    .tile-title { font-size: 20px; font-weight: 900; color: #fff; margin-bottom: 4px; }
+    .tile-sub { font-size: 13px; color: rgba(255,255,255,0.72); line-height: 1.4; margin-bottom: 10px; }
+    .tile-arrow { font-size: 13px; font-weight: 700; }
+    .tile-green .tile-arrow { color: var(--accent); }
+    .tile-magenta .tile-arrow { color: #ff7de9; }
+    .tile-teal .tile-arrow { color: var(--teal); }
+    .vi-badge { position: absolute; top: 12px; right: 12px; z-index: 3; width: 44px; height: 44px; object-fit: contain; mix-blend-mode: screen; }
+    .tiles-psych { text-align: center; margin-top: 20px; font-size: 14px; color: var(--muted); font-style: italic; }
 
-    /* ── SECTION 2: ACTION TILES ── */
-    .action-tiles { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin-top: 18px; }
-    .action-tile {
-      position: relative;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: #0a0a0a;
-      min-height: 280px;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      transition: transform 0.18s ease, box-shadow 0.18s ease;
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .action-tile:hover { transform: translateY(-4px); }
-    .action-tile-img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0.45;
-      transition: opacity 0.2s ease;
-    }
-    .action-tile:hover .action-tile-img { opacity: 0.6; }
-    .action-tile-overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-    .action-tile-green .action-tile-overlay {
-      background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,20,8,0.92) 70%);
-      border: 1px solid rgba(0,255,106,0.35);
-    }
-    .action-tile-magenta .action-tile-overlay {
-      background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(18,0,20,0.92) 70%);
-      border: 1px solid rgba(200,80,192,0.35);
-    }
-    .action-tile-teal .action-tile-overlay {
-      background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,18,20,0.92) 70%);
-      border: 1px solid rgba(0,229,229,0.35);
-    }
-    .action-tile-content {
-      position: relative;
-      z-index: 2;
-      padding: 20px;
-    }
-    .action-tile-icon { font-size: 32px; margin-bottom: 10px; display: block; }
-    .action-tile-title {
-      font-size: 22px;
-      font-weight: 900;
-      letter-spacing: -0.02em;
-      margin: 0 0 6px;
-      color: #fff;
-    }
-    .action-tile-green .action-tile-title { color: var(--accent); }
-    .action-tile-magenta .action-tile-title { color: #e080dc; }
-    .action-tile-teal .action-tile-title { color: var(--teal); }
-    .action-tile-sub {
-      font-size: 13px;
-      color: rgba(255,255,255,0.75);
-      line-height: 1.55;
-      margin: 0 0 14px;
-    }
-    .action-tile-cta {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      padding: 8px 14px;
-      border-radius: 999px;
-    }
-    .action-tile-green .action-tile-cta {
-      background: rgba(0,255,106,0.15);
-      border: 1px solid rgba(0,255,106,0.4);
-      color: var(--accent);
-    }
-    .action-tile-magenta .action-tile-cta {
-      background: rgba(200,80,192,0.15);
-      border: 1px solid rgba(200,80,192,0.4);
-      color: #e080dc;
-    }
-    .action-tile-teal .action-tile-cta {
-      background: rgba(0,229,229,0.12);
-      border: 1px solid rgba(0,229,229,0.35);
-      color: var(--teal);
-    }
-    .action-psych {
-      text-align: center;
-      margin-top: 14px;
-      font-size: 12px;
-      color: var(--muted);
-      font-style: italic;
-      letter-spacing: 0.03em;
-    }
+    /* ── STOP WATCHING ── */
+    .watching-sec { padding: 68px 0; }
+    .ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 36px; }
+    .ba-img { border-radius: var(--radius); overflow: hidden; }
+    .ba-img img { width: 100%; height: 100%; object-fit: cover; aspect-ratio: 4/3; }
+    .dopamine-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px; }
+    .dopamine-card p { font-size: 15px; color: var(--soft); line-height: 1.78; margin-bottom: 14px; }
+    .dopamine-card p strong { color: var(--text); }
+    .dopamine-finale { font-size: 21px; font-weight: 900; color: var(--accent); margin-top: 22px; padding-top: 22px; border-top: 1px solid rgba(0,255,106,0.15); letter-spacing: -0.01em; }
+    .eq-note { margin-top: 18px; padding: 18px 22px; background: rgba(0,255,106,0.04); border-left: 3px solid var(--accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 14px; color: var(--soft); line-height: 1.65; }
+    .eq-note strong { color: var(--text); }
 
-    /* ── SECTION 3: LIVE JOBS ── */
-    .jobs-section-inner {
-      display: grid;
-      grid-template-columns: 1fr 280px;
-      gap: 20px;
-      align-items: start;
-      margin-top: 18px;
-    }
-    .jobs-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
-    .job-skeleton {
-      animation: guber-pulse 1.6s ease-in-out infinite;
-      min-height: 148px;
-      border-radius: var(--radius);
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.07);
-    }
-    @keyframes guber-pulse {
-      0%,100% { opacity: 0.3; }
-      50% { opacity: 0.65; }
-    }
-    .job-card-cat {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--accent);
-      background: rgba(0,255,106,0.09);
-      border: 1px solid rgba(0,255,106,0.2);
-      border-radius: 999px;
-      padding: 3px 10px;
-      margin-bottom: 8px;
-    }
-    .job-card-urgent {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #ffcc33;
-      background: rgba(255,204,51,0.1);
-      border: 1px solid rgba(255,204,51,0.28);
-      border-radius: 999px;
-      padding: 3px 10px;
-      margin-left: 6px;
-      margin-bottom: 8px;
-    }
-    .job-card-meta { font-size: 12px; color: var(--muted); margin: 4px 0 10px; }
-    .job-card-budget { font-size: 20px; font-weight: 900; color: var(--accent); margin-bottom: 12px; }
-    .jobs-phone-visual {
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid rgba(0,255,106,0.2);
-      box-shadow: 0 0 28px rgba(0,255,106,0.12);
-      background: #0a0f0a;
-    }
-    .jobs-phone-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .fallback-block {
-      grid-column: 1 / -1;
-      text-align: center;
-      padding: 40px 20px;
-      border: 1px solid rgba(0,255,106,0.12);
-      border-radius: 20px;
-      background: rgba(0,255,106,0.03);
-    }
-    .fallback-icon { font-size: 42px; margin-bottom: 14px; }
-    .fallback-block h3 { margin: 0 0 10px; font-size: 22px; color: var(--text); }
-    .fallback-block p { margin: 0 0 18px; font-size: 14px; color: var(--text-soft); line-height: 1.7; }
-    .fallback-block .cta-row { justify-content: center; }
+    /* ── DAY-1 OG + CASH DROPS ── */
+    .ogdrop-sec { padding: 68px 0; }
+    .ogdrop-connector { text-align: center; background: rgba(255,204,51,0.05); border: 1px solid var(--gold-border); border-radius: var(--radius); padding: 20px 28px; margin-bottom: 32px; font-size: 15px; color: var(--soft); line-height: 1.65; }
+    .ogdrop-connector strong { color: var(--gold); }
+    .ogdrop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 
-    /* ── BANNER CARDS ── */
-    .banner-card {
-      position: relative;
-      overflow: hidden;
-      border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.07);
-      background: linear-gradient(135deg, #0d0d0d, #050505);
-      padding: 28px 24px;
-      box-shadow: 0 0 28px rgba(0,0,0,0.35);
-    }
-    .banner-card-inner { position: relative; z-index: 1; }
-    .banner-card h2 {
-      margin: 0 0 12px;
-      font-size: 36px;
-      line-height: 1.02;
-      letter-spacing: -0.04em;
-      font-weight: 900;
-    }
-    .banner-card p {
-      margin: 0 0 14px;
-      max-width: 860px;
-      font-size: 15px;
-      line-height: 1.8;
-      color: var(--text-soft);
-    }
-    .banner-card-bg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0.12;
-    }
+    /* Cash Drops card */
+    .drops-card { background: var(--card); border: 1px solid var(--gold-border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+    .drops-card-img { width: 100%; aspect-ratio: 16/10; object-fit: cover; }
+    .drops-card-body { padding: 22px; flex: 1; display: flex; flex-direction: column; }
+    .drops-card-body h3 { font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+    .drops-card-body p { font-size: 14px; color: var(--soft); line-height: 1.65; margin-bottom: 12px; }
+    .live-widget { background: rgba(255,204,51,0.07); border: 1px solid rgba(255,204,51,0.22); border-radius: 10px; padding: 14px; margin: 14px 0; font-size: 14px; min-height: 48px; }
+    .live-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; display: inline-block; margin-right: 7px; animation: blink 1.5s infinite; }
+    .ref-strip { background: rgba(0,229,229,0.05); border: 1px solid rgba(0,229,229,0.15); border-radius: var(--radius-sm); padding: 13px 16px; margin-top: 12px; font-size: 13px; color: var(--soft); }
+    .ref-strip b { color: var(--teal); }
+    .ref-strip a { color: var(--teal); }
+    .gold-strip { background: rgba(255,204,51,0.07); border: 1px solid rgba(255,204,51,0.18); border-radius: var(--radius-sm); padding: 12px 16px; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--gold); }
+    .small-print { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+    .mt-auto { margin-top: auto; }
 
-    /* ── SECTION 4: WHY DIFFERENT ── */
-    .contrast-grid {
-      display: grid;
-      grid-template-columns: repeat(3,minmax(0,1fr));
-      gap: 14px;
-      margin-top: 20px;
-    }
-    .contrast-divider {
-      text-align: center;
-      padding: 30px 0 20px;
-      font-size: 26px;
-      font-weight: 900;
-      letter-spacing: -0.03em;
-      line-height: 1.2;
-    }
-    .contrast-divider .green { color: var(--accent); font-size: 30px; }
+    /* Day-1 OG card */
+    .og-card { background: var(--card); border: 2px solid var(--gold); border-radius: var(--radius); overflow: hidden; position: relative; box-shadow: 0 0 40px rgba(255,204,51,0.1); display: flex; flex-direction: column; }
+    .og-card-logo { padding: 26px 20px 16px; background: linear-gradient(135deg, #1a1200 0%, #0f0a00 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .og-card-logo img.gold-shield { width: 72px; height: 72px; object-fit: contain; }
+    .og-mascot-img { width: 100%; object-fit: contain; max-height: 160px; border-radius: var(--radius-sm); }
+    .og-ribbon { position: absolute; top: 14px; right: -1px; background: var(--gold); color: #000; font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 14px 5px 10px; border-radius: 4px 0 0 4px; }
+    .og-card-body { padding: 20px 22px 22px; flex: 1; display: flex; flex-direction: column; }
+    .og-price { font-size: 40px; font-weight: 900; color: var(--gold); letter-spacing: -0.03em; line-height: 1; margin: 8px 0 4px; }
+    .og-price-line { font-size: 13px; color: var(--soft); margin-bottom: 14px; }
+    .og-sub { font-size: 14px; color: var(--soft); margin-bottom: 14px; line-height: 1.6; }
+    .og-warn { font-size: 12px; color: rgba(255,204,51,0.75); margin-bottom: 16px; font-weight: 700; }
+    .og-benefits { list-style: none; margin-bottom: 20px; }
+    .og-benefits li { font-size: 13px; color: var(--soft); padding: 7px 0; display: flex; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .og-benefits li:last-child { border-bottom: none; }
+    .og-check { color: var(--gold); font-weight: 700; flex-shrink: 0; }
+    .og-fine { font-size: 11px; color: var(--muted); text-align: center; margin-top: 10px; }
 
-    /* ── SECTION 5: PROOF TOOLS ── */
-    .proof-hero-img {
-      width: 100%;
-      border-radius: 18px;
-      overflow: hidden;
-      margin-bottom: 18px;
-      max-height: 340px;
-      object-fit: cover;
-      border: 1px solid rgba(0,255,106,0.15);
-      box-shadow: 0 0 24px rgba(0,255,106,0.08);
-    }
+    /* ── VERIFY & INSPECT ── */
+    .vi-sec { padding: 68px 0; }
+    .vi-hero { border-radius: var(--radius); overflow: hidden; margin-bottom: 10px; position: relative; }
+    .vi-hero img { width: 100%; object-fit: cover; max-height: 460px; display: block; }
+    .vi-caption { text-align: center; font-size: 13px; font-weight: 700; color: var(--teal); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 32px; }
+    .vi-tiles { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin: 28px 0; }
+    .vi-tile { background: rgba(0,229,229,0.04); border: 1px solid rgba(0,229,229,0.15); border-radius: var(--radius-sm); padding: 20px; }
+    .vi-tile-icon { font-size: 26px; margin-bottom: 8px; }
+    .vi-tile-title { font-size: 14px; font-weight: 800; color: var(--teal); margin-bottom: 5px; }
+    .vi-tile-sub { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .vi-logo-badge { width: 44px; height: 44px; object-fit: contain; mix-blend-mode: screen; }
 
-    /* ── SECTION 7: DOPAMINE ── */
-    .dopamine-block {
-      position: relative;
-      overflow: hidden;
-      border-radius: 20px;
-      min-height: 400px;
-      display: flex;
-      align-items: center;
-    }
-    .dopamine-bg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0.3;
-    }
-    .dopamine-overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(0,0,0,0.82) 0%, rgba(0,20,10,0.72) 100%);
-    }
-    .dopamine-content {
-      position: relative;
-      z-index: 2;
-      padding: 40px 36px;
-      max-width: 820px;
-    }
-    .dopamine-content h2 {
-      font-size: 46px;
-      font-weight: 900;
-      letter-spacing: -0.05em;
-      margin: 0 0 20px;
-      line-height: 0.97;
-    }
-    .dopamine-content p {
-      font-size: 16px;
-      line-height: 1.85;
-      color: var(--text-soft);
-      margin: 0 0 16px;
-    }
-    .dopamine-content p strong { color: #fff; }
-    .dopamine-finale {
-      font-size: 20px;
-      font-weight: 900;
-      color: var(--accent);
-      margin-top: 24px;
-      letter-spacing: -0.01em;
-    }
+    /* ── AI OR NOT ── */
+    .ai-sec { padding: 68px 0; background: rgba(155,109,255,0.03); border-top: 1px solid rgba(155,109,255,0.1); border-bottom: 1px solid rgba(155,109,255,0.1); }
+    .ai-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+    .ai-screen { border-radius: var(--radius); overflow: hidden; border: 1px solid rgba(155,109,255,0.2); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .ai-screen img { width: 100%; max-height: 420px; object-fit: cover; object-position: top; display: block; }
+    .ai-btns-row { display: flex; gap: 12px; margin-top: 24px; }
+    .ai-btn { flex: 1; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 800; letter-spacing: 0.06em; text-align: center; cursor: pointer; border: 2px solid; text-transform: uppercase; transition: opacity 0.15s; }
+    .ai-btn:hover { opacity: 0.75; }
+    .ai-btn-ai { border-color: var(--accent); color: var(--accent); background: rgba(0,255,106,0.06); }
+    .ai-btn-real { border-color: var(--teal); color: var(--teal); background: rgba(0,229,229,0.06); }
 
-    /* ── V&I LOGO BADGE ── */
-    .vi-logo-badge {
-      position: absolute;
-      bottom: 12px;
-      right: 12px;
-      width: 56px;
-      height: 56px;
-      object-fit: contain;
-      mix-blend-mode: screen;
-      filter: drop-shadow(0 0 8px rgba(0,229,229,0.6));
-      z-index: 2;
-      pointer-events: none;
-    }
+    /* ── TRUST / RESUME ── */
+    .trust-sec { padding: 68px 0; }
+    .trust-grid { display: grid; grid-template-columns: 280px 1fr; gap: 44px; align-items: start; }
+    .trust-phone img { width: 100%; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .trust-content h3 { font-size: 22px; font-weight: 800; margin-bottom: 12px; }
+    .trust-content p { font-size: 15px; color: var(--soft); line-height: 1.7; margin-bottom: 14px; }
+    .trust-list { list-style: none; margin-bottom: 20px; }
+    .trust-list li { font-size: 14px; color: var(--soft); padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; gap: 10px; }
+    .trust-list li::before { content: '›'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    .trust-list li:last-child { border-bottom: none; }
 
-    /* ── CASH DROP REFERRAL STRIP ── */
-    .referral-strip {
-      margin-top: 14px;
-      padding: 14px 16px;
-      border-radius: 14px;
-      background: linear-gradient(90deg, rgba(0,40,60,0.9), rgba(0,70,90,0.85));
-      border: 1px solid rgba(0,229,229,0.28);
-      box-shadow: 0 0 16px rgba(0,229,229,0.1);
-      color: #cffafe;
-      font-size: 13px;
-      line-height: 1.65;
-    }
-    .referral-strip b { color: #fff; }
-    .referral-strip a { color: #00E5E5; text-decoration: underline; font-weight: 700; }
+    /* ── BUSINESS ── */
+    .biz-sec { padding: 68px 0; }
+    .biz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .biz-plain { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
+    .biz-plain h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; }
+    .biz-plain p { font-size: 14px; color: var(--soft); line-height: 1.65; margin-bottom: 14px; }
+    .biz-list { list-style: none; }
+    .biz-list li { font-size: 14px; color: var(--soft); padding: 5px 0; display: flex; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .biz-list li:last-child { border-bottom: none; }
+    .biz-list li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    .biz-resume { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--card); border: 1px solid rgba(200,80,192,0.2); }
+    .biz-resume-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.1; }
+    .biz-resume-inner { position: relative; z-index: 1; padding: 28px; }
+    .biz-resume-inner h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; }
+    .biz-resume-inner p { font-size: 14px; color: var(--soft); line-height: 1.65; margin-bottom: 14px; }
+    .biz-resume-inner ul { list-style: none; }
+    .biz-resume-inner li { font-size: 14px; color: var(--soft); padding: 5px 0; display: flex; gap: 8px; }
+    .biz-resume-inner li::before { content: '›'; color: #c850c0; font-weight: 700; flex-shrink: 0; }
 
-    /* ── SECTION 8: CASH DROPS ── */
-    .cash-drop-block {
-      position: relative;
-      overflow: hidden;
-      border-radius: 20px;
-      border: 1px solid rgba(255,204,51,0.2);
-      background: linear-gradient(135deg, #0f0b00, #050300);
-      box-shadow: 0 0 32px rgba(255,204,51,0.08);
-    }
-    .cash-drop-bg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0.2;
-    }
-    .cash-drop-inner {
-      position: relative;
-      z-index: 1;
-      padding: 28px 24px;
-    }
-    .gold-strip {
-      margin-top: 18px;
-      padding: 14px 16px;
-      border-radius: 14px;
-      background: linear-gradient(90deg, rgba(60,44,0,0.88), rgba(120,90,8,0.82));
-      border: 1px solid rgba(255,204,51,0.32);
-      box-shadow: var(--shadow-gold);
-      color: #fff4c9;
-      font-size: 13px;
-      line-height: 1.65;
-    }
-    .gold-strip b { color: #fff; }
+    /* ── INTERACTIVE DEMO ── */
+    .demo-sec { padding: 68px 0; }
+    .demo-search-row { display: flex; gap: 10px; margin: 24px 0 6px; flex-wrap: wrap; }
+    .demo-input { flex: 1; min-width: 180px; padding: 13px 16px; background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.14); border-radius: var(--radius-sm); color: var(--text); font-size: 15px; outline: none; transition: border-color 0.15s; }
+    .demo-input:focus { border-color: var(--accent); }
+    .demo-input::placeholder { color: var(--muted); }
+    #demo-results { margin-top: 8px; min-height: 60px; }
+    .demo-result { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
+    .demo-result:last-child { border-bottom: none; }
+    .demo-result-left { flex: 1; min-width: 0; }
+    .demo-cat-badge { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; background: rgba(0,255,106,0.1); color: var(--accent); margin-bottom: 5px; }
+    .demo-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+    .demo-loc { font-size: 12px; color: var(--muted); }
+    .demo-budget { font-size: 20px; font-weight: 900; color: var(--accent); white-space: nowrap; }
+    .demo-accept { font-size: 13px; font-weight: 700; color: var(--accent); white-space: nowrap; margin-left: 8px; }
+    .demo-accept:hover { text-decoration: underline; }
+    .demo-empty { text-align: center; padding: 32px; color: var(--muted); font-size: 15px; }
+    .demo-loading { text-align: center; padding: 20px; color: var(--muted); font-size: 14px; }
 
-    /* ── SECTION 9: BUSINESS + RESUME ── */
-    .biz-resume-grid {
-      display: grid;
-      grid-template-columns: repeat(2,minmax(0,1fr));
-      gap: 16px;
-      margin-top: 18px;
-    }
-    .resume-card {
-      position: relative;
-      overflow: hidden;
-      border-radius: 20px;
-      border: 1px solid var(--magenta-border);
-      background: linear-gradient(180deg, rgba(200,80,192,0.06), rgba(0,0,0,0.5));
-      box-shadow: var(--shadow-magenta);
-      padding: 22px 20px;
-    }
-    .resume-card-bg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0.12;
-    }
-    .resume-card-inner { position: relative; z-index: 1; }
-    .resume-card h3 {
-      font-size: 22px;
-      font-weight: 900;
-      color: #e080dc;
-      margin: 0 0 10px;
-      letter-spacing: -0.02em;
-    }
-    .resume-card p {
-      font-size: 14px;
-      line-height: 1.7;
-      color: var(--text-soft);
-      margin: 0 0 12px;
-    }
-    .resume-card ul {
-      margin: 0;
-      padding-left: 18px;
-      font-size: 13px;
-      line-height: 1.75;
-      color: var(--text-soft);
-    }
-    .biz-card {
-      position: relative;
-      overflow: hidden;
-      border-radius: 20px;
-      border: 1px solid rgba(255,204,51,0.22);
-      background: linear-gradient(180deg, rgba(255,204,51,0.07), rgba(0,0,0,0.5));
-      box-shadow: var(--shadow-gold);
-      padding: 22px 20px;
-    }
-    .biz-card h3 {
-      font-size: 22px;
-      font-weight: 900;
-      color: var(--gold);
-      margin: 0 0 10px;
-      letter-spacing: -0.02em;
-    }
-    .biz-card p {
-      font-size: 14px;
-      line-height: 1.7;
-      color: var(--text-soft);
-      margin: 0 0 12px;
-    }
-    .biz-card ul {
-      margin: 0;
-      padding-left: 18px;
-      font-size: 13px;
-      line-height: 1.75;
-      color: var(--text-soft);
-    }
+    /* Post demo */
+    .post-demo { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-top: 44px; }
+    .post-demo h4 { font-size: 16px; font-weight: 700; color: var(--soft); margin-bottom: 20px; }
+    .post-steps { display: flex; align-items: stretch; gap: 0; margin-top: 4px; flex-wrap: wrap; gap: 8px; }
+    .post-step { flex: 1; min-width: 120px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px 12px; text-align: center; }
+    .step-num { width: 28px; height: 28px; background: var(--accent); color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; margin: 0 auto 8px; }
+    .step-label { font-size: 13px; color: var(--soft); font-weight: 600; margin-bottom: 3px; }
+    .step-detail { font-size: 11px; color: var(--muted); }
+    .demo-note { text-align: center; margin-top: 28px; font-size: 14px; color: var(--muted); }
+    .demo-note a { color: var(--accent); font-weight: 700; }
 
-    /* ── SECTION 10: FINAL CTA ── */
-    .final-cta {
-      text-align: center;
-      padding: 52px 24px;
-      border-radius: 24px;
-      background: radial-gradient(circle at center, rgba(0,255,106,0.09) 0%, rgba(0,0,0,0.9) 65%);
-      border: 1px solid rgba(0,255,106,0.12);
-      box-shadow: 0 0 40px rgba(0,255,106,0.06);
-    }
-    .final-cta h2 {
-      font-size: 48px;
-      font-weight: 900;
-      letter-spacing: -0.05em;
-      margin: 0 0 12px;
-      line-height: 1.0;
-    }
-    .final-cta p {
-      font-size: 16px;
-      color: var(--text-soft);
-      margin: 0 0 28px;
-      line-height: 1.75;
-    }
-    .final-cta .cta-row { justify-content: center; }
+    /* ── GET THE APP ── */
+    .getapp-sec { padding: 80px 0; text-align: center; border-top: 1px solid var(--border); }
+    .getapp-sec h2 { font-size: 42px; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 12px; }
+    .getapp-sec .sub { font-size: 16px; color: var(--soft); margin-bottom: 38px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .app-options { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .play-btn { display: inline-flex; align-items: center; gap: 12px; background: #000; border: 1.5px solid rgba(255,255,255,0.2); padding: 13px 26px; border-radius: 12px; color: #fff; font-size: 15px; font-weight: 700; transition: border-color 0.15s, transform 0.15s; }
+    .play-btn:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .play-icon { font-size: 22px; }
+    .ios-btn { display: inline-flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04); border: 1.5px solid rgba(255,255,255,0.1); padding: 12px 26px; border-radius: 12px; font-size: 14px; color: var(--muted); cursor: default; pointer-events: none; }
+    .app-or { color: var(--muted); font-size: 13px; letter-spacing: 0.1em; }
+    .browser-opt { font-size: 14px; color: var(--soft); display: inline-flex; align-items: center; gap: 5px; }
+    .browser-opt:hover { color: var(--accent); }
+    .browser-opt span { text-decoration: underline; text-underline-offset: 3px; }
 
-    /* ── QUOTES ── */
-    .quote-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 18px; }
-    .quote {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 14px;
-      padding: 16px;
-      font-size: 13px;
-      line-height: 1.7;
-      color: var(--text-soft);
-    }
-    .quote-attr { display: block; margin-top: 8px; font-size: 11px; color: var(--muted); }
-
-    /* ── MISC ── */
-    .small-print { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 12px; }
+    /* ── FINAL CTA ── */
+    .final-sec { padding: 80px 0; }
+    .final-inner { background: linear-gradient(135deg, rgba(0,255,106,0.05) 0%, transparent 70%); border: 1px solid rgba(0,255,106,0.14); border-radius: 22px; padding: 56px 40px; max-width: 680px; margin: 0 auto; text-align: center; }
+    .final-label { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+    .final-h { font-size: 52px; font-weight: 900; letter-spacing: -0.03em; line-height: 1; color: var(--accent); margin-bottom: 16px; }
+    .final-p { font-size: 16px; color: var(--soft); margin-bottom: 28px; }
+    .final-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 
     /* ── FOOTER ── */
-    .footer {
-      margin-top: 48px;
-      padding-top: 20px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      text-align: center;
-    }
-    .footer-story a { color: var(--purple); font-size: 12px; }
-    .footer-links { display: flex; flex-wrap: wrap; gap: 10px 14px; justify-content: center; }
-    .footer-links a { font-size: 11px; color: var(--accent); }
-
-    /* ── SECTION: DAY-1 OG ── */
-    .og-section-card {
-      position: relative;
-      overflow: hidden;
-      border-radius: 24px;
-      border: 1px solid rgba(255,204,51,0.35);
-      background: linear-gradient(135deg, rgba(60,44,0,0.82), rgba(14,10,0,0.96));
-      box-shadow: 0 0 48px rgba(255,204,51,0.14), 0 0 80px rgba(255,170,0,0.08);
-      padding: 28px 24px 24px;
-      margin-top: 16px;
-    }
-    .og-perks-grid {
-      display: grid;
-      grid-template-columns: repeat(2,minmax(0,1fr));
-      gap: 12px;
-      margin: 18px 0 22px;
-    }
-    .og-perk {
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: rgba(255,204,51,0.06);
-      border: 1px solid rgba(255,204,51,0.18);
-    }
-    .og-perk-icon { font-size: 22px; margin-bottom: 6px; display: block; }
-    .og-perk-title { font-size: 13px; font-weight: 800; color: var(--gold); margin-bottom: 4px; }
-    .og-perk-desc { font-size: 12px; color: var(--text-soft); line-height: 1.5; }
-    .og-cta-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; margin-top: 4px; }
-    @media (max-width: 640px) { .og-perks-grid { grid-template-columns: 1fr; } }
-
-    /* ── SECTION: LIVE JOBS PREVIEW ── */
-    .live-jobs-grid {
-      display: grid;
-      grid-template-columns: repeat(2,minmax(0,1fr));
-      gap: 12px;
-      margin-top: 16px;
-    }
-    .live-job-card {
-      display: block;
-      text-decoration: none;
-      padding: 16px;
-      border-radius: 16px;
-      background: rgba(0,255,106,0.04);
-      border: 1px solid rgba(0,255,106,0.15);
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .live-job-card:hover { background: rgba(0,255,106,0.08); border-color: rgba(0,255,106,0.3); }
-    .live-job-cat { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); background: rgba(0,255,106,0.1); border: 1px solid rgba(0,255,106,0.2); border-radius: 999px; padding: 3px 10px; margin-bottom: 8px; }
-    .live-job-urgent { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #ff9f0a; background: rgba(255,159,10,0.12); border: 1px solid rgba(255,159,10,0.3); border-radius: 999px; padding: 3px 10px; margin-left: 6px; margin-bottom: 8px; }
-    .live-job-title { font-size: 15px; font-weight: 800; color: var(--text); margin: 0 0 5px; }
-    .live-job-loc { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
-    .live-job-budget { font-size: 22px; font-weight: 900; color: var(--accent); margin: 0 0 10px; }
-    .live-job-action { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
-    @media (max-width: 640px) { .live-jobs-grid { grid-template-columns: 1fr; } }
+    .footer { padding: 32px 22px; border-top: 1px solid var(--border); }
+    .footer-story { text-align: center; margin-bottom: 14px; }
+    .footer-story a { font-size: 14px; color: var(--accent); }
+    .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 20px; }
+    .footer-links a { font-size: 12px; color: var(--muted); transition: color 0.15s; }
+    .footer-links a:hover { color: var(--text); }
 
     /* ── FLOATING OG ── */
-    .floating-og { position: fixed; right: 14px; bottom: 14px; z-index: 50; }
-    .floating-og a {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 11px;
-      border-radius: 999px;
-      background: radial-gradient(circle, rgba(255,204,51,0.98), rgba(24,18,0,0.96));
-      border: 1px solid rgba(0,0,0,0.4);
-      box-shadow: 0 0 18px rgba(255,204,51,0.55);
-    }
-    .floating-og img { width: 38px; height: auto; }
-    .floating-og span {
-      color: #000;
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
+    .float-og { position: fixed; bottom: 22px; right: 20px; z-index: 9000; }
+    .float-og a { display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; }
+    .float-og img { width: 54px; height: 54px; object-fit: contain; border-radius: 50%; border: 2px solid var(--gold); box-shadow: 0 4px 20px rgba(255,204,51,0.3); transition: transform 0.2s; }
+    .float-og img:hover { transform: scale(1.1); }
+    .float-og span { font-size: 9px; font-weight: 800; color: var(--gold); letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0,0,0,0.85); padding: 2px 6px; border-radius: 4px; }
+
+    /* Leaflet popup override */
+    .leaflet-popup-content-wrapper { background: #1a1a1a !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 12px !important; color: #f0f0f0 !important; box-shadow: 0 8px 32px rgba(0,0,0,0.7) !important; }
+    .leaflet-popup-tip { background: #1a1a1a !important; }
+    .leaflet-popup-content { margin: 16px 18px !important; min-width: 200px; }
+    .popup-cat { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 7px; }
+    .popup-cat-job { background: rgba(0,255,106,0.15); color: #00ff6a; }
+    .popup-cat-drop { background: rgba(255,204,51,0.15); color: #ffcc33; }
+    .popup-title { font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 5px; line-height: 1.3; }
+    .popup-amount { font-size: 22px; font-weight: 900; margin-bottom: 6px; }
+    .popup-amount-job { color: #00ff6a; }
+    .popup-amount-drop { color: #ffcc33; }
+    .popup-loc { font-size: 12px; color: #888; margin-bottom: 12px; }
+    .popup-cta { display: block; font-size: 13px; font-weight: 800; padding: 9px 16px; border-radius: 8px; text-align: center; text-decoration: none; }
+    .popup-cta-job { background: #00ff6a; color: #000; }
+    .popup-cta-drop { background: #ffcc33; color: #000; }
 
     /* ── RESPONSIVE ── */
-    @media (max-width: 980px) {
-      .hero { grid-template-columns: 1fr; }
-      .hero-right { min-height: 300px; order: -1; }
-      .action-tiles { grid-template-columns: 1fr; }
-      .action-tile { min-height: 220px; }
-      .jobs-section-inner { grid-template-columns: 1fr; }
-      .jobs-phone-visual { display: none; }
-      .contrast-grid { grid-template-columns: 1fr; }
-      .grid-3, .grid-4 { grid-template-columns: repeat(2,minmax(0,1fr)); }
-      .biz-resume-grid { grid-template-columns: 1fr; }
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 36px; }
+      .hero-frame { max-width: 280px; aspect-ratio: 9/16; }
+      .hero h1 { font-size: 38px; }
+      .hero-stats { grid-template-columns: 1fr 1fr; }
+      .ogdrop-grid { grid-template-columns: 1fr; }
+      .trust-grid { grid-template-columns: 1fr; }
+      .biz-grid { grid-template-columns: 1fr; }
+      .ai-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
-      .hero h1 { font-size: 36px; }
-      .hero-stat-row { grid-template-columns: 1fr; }
-      .grid-2, .grid-3, .grid-4, .quote-grid { grid-template-columns: 1fr; }
-      .banner-card h2 { font-size: 28px; }
-      .dopamine-content { padding: 28px 20px; }
-      .dopamine-content h2 { font-size: 34px; }
-      .final-cta h2 { font-size: 34px; }
-      .floating-og span { display: none; }
-      .section-title { font-size: 26px; }
+      .tiles-grid { grid-template-columns: 1fr; }
+      .ba-grid { grid-template-columns: 1fr; }
+      .vi-tiles { grid-template-columns: 1fr; }
+      .hero-stats { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 32px; }
+      .sec-title { font-size: 26px; }
+      .final-h { font-size: 38px; }
+      .final-inner { padding: 36px 20px; }
+      .getapp-sec h2 { font-size: 30px; }
+      .map-app-snap { display: block; }
+      #live-map { height: 280px; }
+      .dopamine-card { padding: 22px; }
+      .post-steps { flex-direction: column; }
+    }
+    @media (max-width: 480px) {
+      .header-nav .btn:first-child { display: none; }
     }
   </style>
 </head>
 <body>
-
 <div class="page">
 
-  <!-- header -->
+  <!-- ── HEADER ── -->
   <header class="header">
-    <div class="logo-wrap">
-      <img src="/Guberapplogo.png" alt="GUBER logo" />
-      <div class="brand-block">
-        <div class="brand-name">GUBER APP</div>
-        <div class="brand-tagline">WORK &#8226; HIRE &#8226; HELP &#8226; VERIFY</div>
-      </div>
+    <div class="wrap header-inner">
+      <a href="/" class="brand">
+        <img src="/Guberapplogo.png" alt="GUBER" />
+        GUBER
+      </a>
+      <nav class="header-nav">
+        <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
+        <a href="https://guberapp.app/signup" class="btn btn-green">Sign Up</a>
+      </nav>
     </div>
   </header>
 
-  <!-- section: hero -->
-  <section class="hero" id="top">
-    <div class="hero-left">
-      <div class="pill-row">
-        <div class="pill"><span class="pill-dot"></span><span>Early Access</span></div>
-        <div class="pill pill-gold">Day-1 OG Limited</div>
-      </div>
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div class="hero-left">
+          <div class="hero-pills">
+            <div class="pill"><span class="pill-dot"></span> Early Access</div>
+            <div class="pill pill-gold">👑 Day-1 OG — Limited</div>
+          </div>
 
-      <h1>Stop Watching.<br>Start Moving.<br>Verify Anything.</h1>
+          <h1>Stop Watching.<br>Start Moving.<br>Verify Anything.</h1>
 
-      <p class="hero-sub">
-        <strong>Too many people spend their lives watching other people earn, build, and move.</strong>
-        GUBER is the action engine built to break that cycle.
-      </p>
+          <p class="hero-sub">Too many people spend their lives watching other people earn, build, and move forward. GUBER is the action engine built to break that cycle.</p>
 
-      <div class="hero-stat-row">
-        <div class="hero-stat">
-          <b>Dopamine from action</b>
-          <span>Real movement, money, progress, and momentum — not endless scrolling.</span>
+          <p class="hero-tagline">Live your life through your phone — not someone else's.</p>
+
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <b>Dopamine from action</b>
+              <span>Real movement, money, and momentum — not endless scrolling.</span>
+            </div>
+            <div class="hero-stat">
+              <b>Visibility first</b>
+              <span>Show more of what's real before you commit time or trust.</span>
+            </div>
+            <div class="hero-stat">
+              <b>Proof over promises</b>
+              <span>GPS presence, photos, timestamps — not just words.</span>
+            </div>
+          </div>
+
+          <div class="hero-cta">
+            <a href="https://play.google.com/store" target="_blank" rel="noopener" class="btn btn-green btn-lg">&#128241; Get on Google Play</a>
+            <a href="https://guberapp.app/login" class="btn btn-ghost btn-lg">Continue in Browser →</a>
+          </div>
+          <div class="hero-ios">🍎 iOS — Coming Soon</div>
         </div>
-        <div class="hero-stat">
-          <b>Visibility first</b>
-          <span>Show more of what is real before you commit time, money, or trust.</span>
+
+        <div class="hero-visual">
+          <div class="hero-frame">
+            <img src="/app-phone-tilt.jpg" alt="GUBER app on phone" class="hero-frame-fallback" />
+            <video id="anim1" src="/GubermanOG.webm" muted playsinline></video>
+            <video id="anim2" src="/Guberman shooting laser.webm" muted playsinline></video>
+          </div>
         </div>
-        <div class="hero-stat">
-          <b>Proof over promises</b>
-          <span>GPS presence, photos, video, and timestamps — not just words.</span>
-        </div>
-      </div>
-
-      <div class="cta-row">
-        <a href="https://guberapp.app/login" class="btn btn-primary btn-lg">Enter GUBER</a>
-        <a href="/day1og.html" class="btn btn-secondary btn-lg">Claim Day-1 OG</a>
-      </div>
-
-      <div class="hero-note">
-        Built for real life, real movement, and the moments where waiting costs money, opportunity, or momentum.
-      </div>
-    </div>
-
-    <div class="hero-right">
-      <div class="hero-frame">
-        <video id="anim1" src="/GubermanOG.webm" muted playsinline></video>
-        <video id="anim2" src="/Guberman shooting laser.webm" muted playsinline></video>
       </div>
     </div>
   </section>
 
-  <!-- section: instant action options -->
-  <section class="section" id="action">
-    <div class="eyebrow">Start right now</div>
-    <h2 class="section-title">What do you need to do?</h2>
-    <p class="section-lead">Pick your move. Tap and you're already in motion.</p>
-
-    <div class="action-tiles">
-      <a href="https://guberapp.app/login" class="action-tile action-tile-green">
-        <img src="/action-findjobs.png" alt="Person accepting a job on their phone in a city at night" class="action-tile-img" />
-        <div class="action-tile-overlay"></div>
-        <div class="action-tile-content">
-          <span class="action-tile-icon">&#9889;</span>
-          <div class="action-tile-title">Find Jobs</div>
-          <div class="action-tile-sub">Real work near you. Accept a job. Get moving.</div>
-          <div class="action-tile-cta">Start Earning &#8594;</div>
-        </div>
-      </a>
-
-      <a href="https://guberapp.app/login" class="action-tile action-tile-magenta">
-        <img src="/action-postjob.png" alt="Business owner posting a task on their phone at night" class="action-tile-img" />
-        <div class="action-tile-overlay"></div>
-        <div class="action-tile-content">
-          <span class="action-tile-icon">&#128221;</span>
-          <div class="action-tile-title">Post a Job</div>
-          <div class="action-tile-sub">Need help? Post it in minutes. Real people, real action.</div>
-          <div class="action-tile-cta">Post Now &#8594;</div>
-        </div>
-      </a>
-
-      <a href="https://guberapp.app/login" class="action-tile action-tile-teal">
-        <img src="/action-verify.png" alt="Person photographing a car for verification" class="action-tile-img" />
-        <div class="action-tile-overlay"></div>
-        <div class="action-tile-content">
-          <span class="action-tile-icon">&#128269;</span>
-          <div class="action-tile-title">Verify &amp; Inspect</div>
-          <div class="action-tile-sub">See before you commit. Photos, video, GPS presence — real proof.</div>
-          <div class="action-tile-cta">Get Proof &#8594;</div>
-        </div>
-        <img src="/vi-logo.png" alt="Verify & Inspect" class="vi-logo-badge" />
-      </a>
+  <!-- ── STILL SCROLLING BANNER ── -->
+  <div class="scroll-banner">
+    <img src="/still-scrolling.png" alt="Still scrolling? Turn time into money with GUBER" />
+    <div class="scroll-banner-links">
+      <a href="https://guberapp.app/signup" class="btn btn-green">&#9889; Find Work</a>
+      <a href="https://guberapp.app/signup" class="btn btn-ghost">&#128221; Post a Job</a>
     </div>
+  </div>
 
-    <p class="action-psych">Tap an action and you&#8217;ve already started. Finish what you just began.</p>
-  </section>
+  <!-- ── LIVE MAP ── -->
+  <section class="map-sec sec">
+    <div class="wrap">
+      <div class="eyebrow eyebrow-green">Live opportunities</div>
+      <h2 class="sec-title">See what's happening right now.</h2>
+      <p class="sec-lead">Real jobs and Cash Drops near you — updated live. Tap any marker to see what's available. Sign up to accept or claim.</p>
 
-  <!-- section: live jobs preview -->
-  <section class="section" id="live-jobs">
-    <div class="eyebrow">Live opportunities</div>
-    <h2 class="section-title">Real work. Right now.</h2>
-    <p class="section-lead">These are actual jobs posted on GUBER. Sign up to accept, post your own, or verify anything before you commit.</p>
-
-    <div id="live-jobs-container" style="max-height:520px;overflow-y:auto;padding-right:2px;">
-      <div class="live-jobs-grid">
-        <div class="job-skeleton" style="min-height:130px;"></div>
-        <div class="job-skeleton" style="min-height:130px;"></div>
-        <div class="job-skeleton" style="min-height:130px;"></div>
-        <div class="job-skeleton" style="min-height:130px;"></div>
-      </div>
-    </div>
-
-    <p class="action-psych" style="margin-top:16px;">You can see it. Now sign up to move on it.</p>
-    <div class="cta-row" style="justify-content:center;margin-top:16px;">
-      <a href="https://guberapp.app/signup" class="btn btn-primary">Create Account</a>
-      <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
-    </div>
-  </section>
-
-  <!-- section: day-1 og -->
-  <section class="section" id="day1og-section">
-    <div class="eyebrow eyebrow-gold">Day-1 OG &#8212; Limited</div>
-    <h2 class="section-title"><span class="gold">Early supporter. Lifetime perks.</span></h2>
-    <p class="section-lead">Day-1 OG is not a subscription. It&#8217;s a one-time <strong style="color:#fff;">$1.99</strong> thank-you for believing in GUBER before the app fully launches. Very limited — may close without notice.</p>
-
-    <div class="og-section-card">
-      <p style="font-size:13px;color:var(--text-soft);margin:0 0 4px;">What Day-1 OG actually means:</p>
-      <div class="og-perks-grid">
-        <div class="og-perk">
-          <span class="og-perk-icon">&#128178;</span>
-          <div class="og-perk-title">15% Lifetime Service Fee</div>
-          <div class="og-perk-desc">Standard is 20%. As a Day-1 OG helper, your rate is locked at 15% for life — as long as your token is linked to a verified account.</div>
-        </div>
-        <div class="og-perk">
-          <span class="og-perk-icon">&#9889;</span>
-          <div class="og-perk-title">Urgent Job — FREE</div>
-          <div class="og-perk-desc">Marking a job urgent normally costs extra. Day-1 OGs post urgent jobs for free. Priority visibility, no extra charge.</div>
-        </div>
-        <div class="og-perk">
-          <span class="og-perk-icon">&#127941;</span>
-          <div class="og-perk-title">Numbered Founder Token</div>
-          <div class="og-perk-desc">Your NFT access token is numbered and one-of-a-kind. OG status. Founding-member record. Stays with your account.</div>
-        </div>
-        <div class="og-perk">
-          <span class="og-perk-icon">&#127965;</span>
-          <div class="og-perk-title">City Activation Power</div>
-          <div class="og-perk-desc">Day-1 OG support helps fund cash drops and city-level events. The more OGs in a city, the more likely something real happens there.</div>
-        </div>
-      </div>
-      <div class="og-cta-row">
-        <a href="/day1og.html" class="btn btn-secondary btn-lg">Get Day-1 OG &#8212; $1.99</a>
-      </div>
-    </div>
-    <p class="small-print" style="margin-top:12px;text-align:center;">One-time payment. No subscriptions. No renewal. Very limited pre-launch allocation.</p>
-  </section>
-
-  <!-- section: why guber feels different -->
-  <section class="section" id="why-different">
-    <div class="eyebrow">The real difference</div>
-    <h2 class="section-title">Other platforms ask you to trust what you&#8217;re told.</h2>
-
-    <div class="contrast-divider">
-      <span class="green">GUBER helps you see what&#8217;s real.</span>
-    </div>
-
-    <div class="contrast-grid">
-      <div class="card">
-        <h3>Promise-Based Platforms</h3>
-        <p>
-          You trust the listing. You trust the rating. You trust the profile.
-          Then you show up — and hope reality matches the description.
-          Most of the time it does. Sometimes it doesn&#8217;t. And that&#8217;s where time, money, and trust get wasted.
-        </p>
+      <div class="map-container">
+        <div id="live-map"></div>
+        <div class="map-badge">🔒 Sign up to accept jobs or claim Cash Drops</div>
       </div>
 
-      <div class="card card-green">
-        <h3>Visibility First</h3>
-        <p>
-          GUBER is built to make more of the real situation visible before you commit
-          your time, your money, or your trust. Not because everyone is dishonest —
-          because visibility reduces risk and makes everyone move with more confidence.
-        </p>
+      <div class="map-legend">
+        <div class="map-legend-item"><div class="ldot ldot-green"></div> Active Jobs</div>
+        <div class="map-legend-item"><div class="ldot ldot-gold"></div> Cash Drops</div>
       </div>
 
-      <div class="card card-green">
-        <h3>Accountability Changes Everything</h3>
-        <p>
-          When people know their work is documented, their presence is verifiable,
-          and their performance is on record — standards rise. That&#8217;s not a feature.
-          That&#8217;s a fundamental shift in how real-world work gets done.
-        </p>
-      </div>
-    </div>
-
-    <div class="quote-grid" style="margin-top:18px;">
-      <div class="quote">
-        &#8220;That&#8217;s dope. That makes anybody an independent contractor.&#8221;
-        <span class="quote-attr">&#8212; Customer</span>
-      </div>
-      <div class="quote">
-        &#8220;You&#8217;re going to make it bad for us business owners&#8230; everybody already wants to be their own boss, and now you&#8217;re about to give them the power.&#8221;
-        <span class="quote-attr">&#8212; Business owner</span>
+      <div class="map-app-snap">
+        <img src="/app-map-jobs.jpg" alt="GUBER app map showing active jobs and Cash Drops" />
       </div>
     </div>
   </section>
 
-  <!-- section: proof & visibility tools -->
-  <section class="section" id="proof-tools">
-    <div class="eyebrow">Show up. Show proof.</div>
-    <h2 class="section-title">Show what actually happened.</h2>
-    <p class="section-lead">
-      GUBER&#8217;s documentation tools help make real-world situations more visible —
-      before you commit, during a job, and after it&#8217;s done.
-    </p>
+  <hr class="divider" style="border-color:rgba(255,255,255,0.06);" />
 
-    <img src="/proof-tools.png" alt="GPS location pin and phone camera documenting a property, connected by green neon light" class="proof-hero-img" />
+  <!-- ── ACTION TILES ── -->
+  <section class="tiles-sec sec">
+    <div class="wrap">
+      <div class="eyebrow eyebrow-green">Start right now</div>
+      <h2 class="sec-title">What do you need to do?</h2>
+      <p class="sec-lead">Pick your move. Everything you need is one tap away.</p>
 
-    <div class="grid-4">
-      <div class="card card-green">
-        <h3>&#128205; GPS-Backed Presence</h3>
-        <p>Know someone was actually there — not just saying they were. Location-linked documentation when distance and timing matter.</p>
+      <div class="tiles-grid">
+        <a href="https://guberapp.app/login" class="tile tile-green">
+          <img src="/app-phone-home.jpg" alt="Find work on GUBER" class="tile-bg" />
+          <div class="tile-grad"></div>
+          <div class="tile-body">
+            <span class="tile-icon">⚡</span>
+            <div class="tile-title">Find Work</div>
+            <div class="tile-sub">Real jobs near you. Accept and get moving.</div>
+            <div class="tile-arrow">Start Earning →</div>
+          </div>
+        </a>
+
+        <a href="https://guberapp.app/login" class="tile tile-magenta">
+          <img src="/action-postjob.png" alt="Post a job on GUBER" class="tile-bg" />
+          <div class="tile-grad"></div>
+          <div class="tile-body">
+            <span class="tile-icon">📋</span>
+            <div class="tile-title">Post a Job</div>
+            <div class="tile-sub">Need help? Post it in minutes. Real people, real action.</div>
+            <div class="tile-arrow">Post Now →</div>
+          </div>
+        </a>
+
+        <a href="https://guberapp.app/login" class="tile tile-teal">
+          <img src="/action-verify.png" alt="Verify & Inspect on GUBER" class="tile-bg" />
+          <div class="tile-grad"></div>
+          <img src="/vi-logo.png" alt="Verify & Inspect" class="vi-badge" />
+          <div class="tile-body">
+            <span class="tile-icon">🔍</span>
+            <div class="tile-title">Verify &amp; Inspect</div>
+            <div class="tile-sub">See before you commit. GPS proof, photos, timestamps.</div>
+            <div class="tile-arrow">Get Proof →</div>
+          </div>
+        </a>
       </div>
 
-      <div class="card card-green">
-        <h3>&#128248; Photo Proof</h3>
-        <p>See the item, the condition, the location, or the finished work instead of relying only on words.</p>
-      </div>
-
-      <div class="card card-green">
-        <h3>&#127909; Video Proof</h3>
-        <p>A walkthrough, a condition check, a site visit — captured and time-linked so both sides see the same reality.</p>
-      </div>
-
-      <div class="card card-green">
-        <h3>&#9201; Time-Stamped Activity</h3>
-        <p>Documentation becomes more useful when it&#8217;s current. Timestamps help everyone move with more confidence.</p>
-      </div>
-    </div>
-
-    <p class="small-print">
-      Proof tools are designed to improve visibility and documentation support. They assist decision-making but do not replace independent judgment or guarantee outcomes.
-    </p>
-  </section>
-
-  <!-- section: real-life use cases -->
-  <section class="section" id="use-cases">
-    <div class="eyebrow">Why it makes sense</div>
-    <h2 class="section-title">Real situations. Real reasons.</h2>
-    <p class="section-lead">These are the moments where GUBER immediately clicks.</p>
-
-    <div class="grid-3">
-      <div class="card">
-        <h3>Need help today</h3>
-        <p>A truck to unload, a yard to cut, an errand to run, a move on short notice. Someone nearby can handle it now.</p>
-      </div>
-
-      <div class="card">
-        <h3>Need money today</h3>
-        <p>Take a real job right now instead of waiting on a traditional hiring cycle. Your time is already worth something.</p>
-      </div>
-
-      <div class="card">
-        <h3>Buying something sight-unseen</h3>
-        <p>Know if a vehicle, part, or marketplace item is actually what it claims to be before you drive or pay.</p>
-      </div>
-
-      <div class="card">
-        <h3>Sending someone to check</h3>
-        <p>Storage unit, property, lot, or business location in another city. Get eyes on it without being there.</p>
-      </div>
-
-      <div class="card">
-        <h3>Hiring for the day</h3>
-        <p>Events, pop-ups, rush overflow, extra hands. One more person can change everything when timing matters.</p>
-      </div>
-
-      <div class="card">
-        <h3>Reducing risk before you commit</h3>
-        <p>Don&#8217;t drive three hours on a promise. Don&#8217;t wire money blind. See the situation first. Move smarter.</p>
-      </div>
+      <p class="tiles-psych">Tap an action and you've already started. Finish what you just began.</p>
     </div>
   </section>
 
-  <!-- section: dopamine / action engine -->
-  <section class="section" id="action-engine">
-    <div class="dopamine-block">
-      <img src="/dopamine-action.png" alt="Person sprinting through city at night with green neon light trails" class="dopamine-bg" />
-      <div class="dopamine-overlay"></div>
-      <div class="dopamine-content">
-        <div class="eyebrow" style="color:var(--accent);">Stop watching. Start living.</div>
-        <h2>The dopamine you&#8217;ve been missing.</h2>
-        <p>
-          Too many people spend their lives watching other people earn, win, build, travel,
-          and move — while their own time keeps passing. Scrolling someone else&#8217;s highlight reel.
-          Watching other people&#8217;s success like it&#8217;s entertainment.
-        </p>
-        <p>
-          GUBER is built differently. Every job accepted, every task posted, every inspection
-          completed — that&#8217;s <strong>real movement</strong>. Real money. Real momentum.
-          The kind of dopamine that actually means something because something actually happened.
-        </p>
-        <p>
-          Equal opportunity is not a slogan here. Anyone can post a job. Anyone can take one.
-          Anyone can earn. Anyone can verify. Your effort, your consistency, your results — they matter.
-          <strong>Your GUBER performance trail may matter to employers and companies later.</strong>
-          Every move you make is building something.
-        </p>
+  <!-- ── STOP WATCHING / DOPAMINE ── -->
+  <section class="watching-sec sec" style="background:rgba(255,255,255,0.015);">
+    <div class="wrap">
+      <div class="eyebrow eyebrow-green">Stop watching. Start living.</div>
+      <h2 class="sec-title">The dopamine you've been missing.</h2>
+
+      <div class="ba-grid">
+        <div class="ba-img">
+          <img src="/lost-in-loop.png" alt="Lost in the loop vs. getting it done with GUBER" />
+        </div>
+        <div class="ba-img">
+          <img src="/life-comparison.jpg" alt="Watching others live vs. living your own life" />
+        </div>
+      </div>
+
+      <div class="dopamine-card">
+        <p>Too many people spend their lives scrolling someone else's highlight reel — watching other people earn, win, build, and move while their own time keeps slipping by. Scrolling is not living. Watching is not winning.</p>
+        <p>GUBER is built differently. Every job accepted, every task posted, every inspection completed — that's <strong>real movement</strong>. Real money. Real momentum. The kind of dopamine that actually means something because something actually happened in the real world.</p>
+        <p>You don't need a résumé. You don't need a referral. You need the will to show up — and GUBER puts the opportunity right in your city.</p>
+
         <div class="dopamine-finale">Give it your best. Give it your all. Give it the GUBER.</div>
+
+        <div class="eq-note">
+          Anyone can post a job. Anyone can take one. Anyone can earn. Anyone can verify. Your effort, your consistency, your results — they matter here. <strong>Your GUBER performance trail may matter to employers and companies in the future.</strong> Every move you make on this platform is building something — even when it doesn't feel like it. Equal opportunity is not a slogan here. It's the architecture.
+        </div>
       </div>
     </div>
   </section>
 
+  <!-- ── DAY-1 OG + CASH DROPS ── -->
+  <section class="ogdrop-sec sec">
+    <div class="wrap">
+      <div class="eyebrow eyebrow-gold">Community powered</div>
+      <h2 class="sec-title"><span class="gold">Day-1 OG</span> &amp; Cash Drops</h2>
 
-  <!-- section: cash drops -->
-  <section class="section" id="cash-drops">
-    <div class="cash-drop-block">
-      <img src="/cash-drop.png" alt="Money falling from sky in a city neighborhood at night with golden light" class="cash-drop-bg" />
-      <div class="cash-drop-inner">
-        <div class="eyebrow eyebrow-gold">Cash Drops</div>
-        <h2 class="section-title" style="margin-bottom:14px;">
-          <span class="gold">Real money. Real giving.</span><br>Real-world moments.
-        </h2>
+      <div class="ogdrop-connector">
+        <strong>OG members help fund Cash Drops in their city.</strong> The more OGs who join, the bigger the events. When the platform grows, the rewards grow. This is community-powered momentum — not corporate marketing.
+      </div>
 
-        <p class="section-lead">
-          GUBER gives back. Cash drops can happen across the nation &#8212; in your city,
-          your neighborhood, or right in your backyard.
-        </p>
+      <div class="ogdrop-grid">
 
-        <p class="section-lead">
-          GUBER is not some giant tech company burning investor money.
-          <strong style="color:#fff;">Cash drops are fueled by the people.</strong>
-        </p>
+        <!-- CASH DROPS -->
+        <div class="drops-card">
+          <img src="/cash-drop-badger.png" alt="GUBER Cash Drop" class="drops-card-img" style="object-position:top;" />
+          <div class="drops-card-body">
+            <div class="eyebrow eyebrow-gold">💰 Cash Drops</div>
+            <h3><span class="gold">Real cash. Real cities.</span><br>Real moments.</h3>
+            <p>Cash Drops are GPS-verified real-world cash events that can happen anywhere — your city, your neighborhood, or right in your backyard. Community-funded. Real prizes. Real presence required.</p>
+            <p>GUBER is not a giant tech company burning investor money. <strong>Cash Drops are fueled by the people.</strong> Day-1 OG memberships and platform activity make these moments possible.</p>
 
-        <p class="section-lead">
-          Day-1 OG memberships and platform fees help make these moments possible.
-          When people support GUBER, they help create real opportunities, real momentum,
-          and real giveaways in the real world. Without that support and activity,
-          this cannot happen at scale.
-        </p>
+            <div class="live-widget" id="drops-widget">
+              <span style="color:var(--muted);font-size:13px;">Checking for active drops...</span>
+            </div>
 
-        <p class="section-lead">
-          The more active your city becomes, the more visible it gets &#8212; and the more
-          likely it is that something real happens there.
-          <strong style="color:#fff;">Visibility creates opportunity. As GUBER grows, the drops grow too.</strong>
-        </p>
+            <div class="ref-strip">
+              <b>🔗 Save on platform fees — share your referral link.</b><br>
+              Every person who joins through your link saves you fees. The more you bring in, the more you keep. <a href="https://guberapp.app/profile">Get your referral link →</a>
+            </div>
 
-        <div class="referral-strip">
-          <b>&#128279; Save on platform fees — share your referral link.</b><br>
-          Every time someone joins GUBER through your link, you save on fees. The more people you bring in, the more you keep. <a href="https://guberapp.app/profile">Go to your profile to get your personal referral link &#8594;</a>
+            <div class="gold-strip">
+              Let us see you. Share GUBER. Activate your city.
+            </div>
+
+            <img src="/cash-drops-nationwide.jpg" alt="Cash Drops across the nation" style="width:100%;border-radius:8px;margin-top:14px;opacity:0.85;" />
+
+            <p class="small-print">Cash Drops are promotional events designed to support visibility, participation, and community activity. Availability, timing, locations, and eligibility may vary.</p>
+          </div>
         </div>
 
-        <div class="gold-strip">
-          <b>Let us see you. Share GUBER. Activate your city.</b><br>
-          Be active. Make your city the next one GUBER lights up.
+        <!-- DAY-1 OG -->
+        <div class="og-card">
+          <div class="og-ribbon">LIMITED</div>
+          <div class="og-card-logo">
+            <img src="/guber-gold-logo.png" alt="GUBER Gold" class="gold-shield" />
+            <img src="/day1og-mascot.jpg" alt="Day-1 OG" class="og-mascot-img" />
+          </div>
+          <div class="og-card-body">
+            <div class="eyebrow eyebrow-gold">👑 Day-1 OG — Founding Membership</div>
+            <div class="og-price">$1.99</div>
+            <div class="og-price-line">One Time &nbsp;·&nbsp; For Life &nbsp;·&nbsp; Never Again</div>
+            <p class="og-sub">Founding membership. Pay once today — never pay again. Locked in at the lowest price GUBER will ever offer. This is not a subscription.</p>
+            <p class="og-warn">⚠ Limited availability — may close without notice.</p>
+
+            <ul class="og-benefits">
+              <li><span class="og-check">✓</span> Lifetime access — pay once, done forever</li>
+              <li><span class="og-check">✓</span> Priority visibility on job listings</li>
+              <li><span class="og-check">✓</span> Urgent job posts included free</li>
+              <li><span class="og-check">✓</span> Reduced platform fee</li>
+              <li><span class="og-check">✓</span> Founding member status — locked in forever</li>
+              <li><span class="og-check">✓</span> Helps fund Cash Drops in your city</li>
+            </ul>
+
+            <a href="/day1og.html" class="btn btn-gold btn-lg" style="width:100%;justify-content:center;font-size:18px;letter-spacing:0.02em;">LOCK IN — $1.99</a>
+
+            <p class="og-fine" style="margin-top:12px;">One-time founding fee. No subscription. No renewals. No hidden charges.</p>
+          </div>
         </div>
 
-        <div class="cta-row" style="margin-top:20px;">
-          <a href="https://guberapp.app/login" class="btn btn-primary">Enter GUBER &#8594;</a>
-          <a href="/day1og.html" class="btn btn-secondary">Become Day-1 OG &#8594;</a>
-        </div>
-
-        <p class="small-print">
-          Cash drops are promotional events designed to support visibility, participation, and community activity.
-          Availability, timing, locations, and eligibility may vary.
-        </p>
       </div>
     </div>
   </section>
 
-  <!-- section: business + resume -->
-  <section class="section" id="business-resume">
-    <div class="eyebrow">Built for everyone</div>
-    <h2 class="section-title">For businesses. For workers. For the long run.</h2>
-    <p class="section-lead">GUBER works for people who need help, people who need money, and people building something bigger than a side hustle.</p>
+  <!-- ── VERIFY & INSPECT ── -->
+  <section class="vi-sec sec" style="background:rgba(0,229,229,0.02);">
+    <div class="wrap">
+      <div class="vi-hero">
+        <img src="/vi-marketplace-horror.png" alt="Verify & Inspect — Don't get haunted by a bad listing" />
+      </div>
+      <p class="vi-caption">Don't get haunted. Get verified.</p>
 
-    <div class="biz-resume-grid">
-      <div class="biz-card">
-        <div class="eyebrow eyebrow-gold">GUBER for Business</div>
-        <h3>Built for operations that move.</h3>
-        <p>
-          GUBER works for shops, companies, events, and operations that need
-          same-day help, flexible hands, or real-world documentation — without
-          long staffing cycles or overhead.
-        </p>
-        <ul>
-          <li>Find same-day or short-term help</li>
-          <li>Request vehicle, property, or equipment checks</li>
-          <li>Handle overflow without expanding headcount</li>
-          <li>Get support across multiple locations</li>
-          <li>Real-world documentation when you need proof</li>
-        </ul>
+      <div class="eyebrow eyebrow-teal">🔍 Verify &amp; Inspect</div>
+      <h2 class="sec-title"><span class="teal">See it before you commit.</span></h2>
+      <p class="sec-lead">Vehicle check. Property walk-through. Equipment inspection. GPS presence, photos, and timestamps — not promises. Don't get burned by a listing that lied.</p>
+
+      <div class="vi-tiles">
+        <div class="vi-tile">
+          <div class="vi-tile-icon">🚗</div>
+          <div class="vi-tile-title">Vehicle Check</div>
+          <div class="vi-tile-sub">Sends says "runs perfect." Our verified inspector shows what's actually there — frame, engine, everything.</div>
+        </div>
+        <div class="vi-tile">
+          <div class="vi-tile-icon">🏠</div>
+          <div class="vi-tile-title">Property Walk-Through</div>
+          <div class="vi-tile-sub">Buying or renting from far away? A verified local walks it, photographs it, confirms it's real.</div>
+        </div>
+        <div class="vi-tile">
+          <div class="vi-tile-icon">🔧</div>
+          <div class="vi-tile-title">Equipment &amp; Assets</div>
+          <div class="vi-tile-sub">Before you buy that tool, machine, or commercial asset — see it through verified eyes, GPS-stamped proof.</div>
+        </div>
       </div>
 
-      <div class="resume-card">
-        <img src="/guber-resume.png" alt="Worker completing a job handoff with client, both on smartphones" class="resume-card-bg" />
-        <div class="resume-card-inner">
-          <div class="eyebrow eyebrow-magenta">Your GUBER Resume</div>
-          <h3>What you do on GUBER matters.</h3>
-          <p>
-            Your effort, your consistency, and your results are building a performance trail.
-            Companies may one day evaluate workers based on their GUBER record.
-            Show up right. Do the work right. Leave a trail worth being proud of.
-          </p>
-          <ul>
-            <li>Build a verifiable work history</li>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:8px;">
+        <img src="/vi-logo.png" alt="Verify & Inspect" class="vi-logo-badge" />
+        <a href="https://guberapp.app/signup" class="btn btn-ghost" style="border-color:var(--teal);color:var(--teal);">Request a Verification →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── AI OR NOT ── -->
+  <section class="ai-sec sec">
+    <div class="wrap">
+      <div class="ai-grid">
+        <div class="ai-left">
+          <div class="eyebrow eyebrow-purple">🤖 AI or Not</div>
+          <h2 class="sec-title"><span class="purple">Real or AI?<br>Now you can tell.</span></h2>
+          <p class="sec-lead">AI-generated images are everywhere — in listings, profiles, job posts, and property photos. GUBER's AI or Not tool helps you learn to spot them before they fool you.</p>
+          <p style="font-size:15px;color:var(--soft);line-height:1.7;margin-bottom:24px;">Upload any image. Get a signal. Train your eye. Stay sharp in a world where you can't trust what you see — without verifying it first.</p>
+
+          <div class="ai-btns-row">
+            <div class="ai-btn ai-btn-ai">AI</div>
+            <div class="ai-btn ai-btn-real">REAL</div>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:12px;">These buttons are interactive inside the app. Sign in to try it on any image.</p>
+
+          <a href="https://guberapp.app/login" class="btn btn-ghost" style="border-color:var(--purple);color:var(--purple);margin-top:22px;">Try AI or Not →</a>
+        </div>
+        <div>
+          <div class="ai-screen">
+            <img src="/ai-or-not-screen.jpg" alt="AI or Not — can you tell which is real?" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TRUST SCORE / GUBER RESUME ── -->
+  <section class="trust-sec sec">
+    <div class="wrap">
+      <div class="eyebrow eyebrow-green">Your work record</div>
+      <h2 class="sec-title">What you do on GUBER matters.</h2>
+
+      <div class="trust-grid">
+        <div class="trust-phone">
+          <img src="/app-home-trust.jpg" alt="GUBER Trust Score 97 — Trusted Worker" />
+        </div>
+        <div class="trust-content">
+          <h3>Build a reputation that speaks for itself.</h3>
+          <p>Your GUBER Trust Score is built through real activity — jobs completed, proof submitted, consistency shown. It's not a rating someone else gives you. It's a record you build yourself.</p>
+          <p>A higher Trust Score unlocks faster payout modes, higher visibility, and more opportunity. Max trust means Instant payout — immediate, 5% fee. Your effort translates to real financial flexibility.</p>
+          <p><strong>Companies may one day evaluate workers based on their GUBER record.</strong> Show up right. Do the work right. Leave a trail worth being proud of.</p>
+          <ul class="trust-list">
+            <li>Build a verifiable work history — not just a bio</li>
             <li>Prove you show up when it counts</li>
-            <li>Create a record employers may look at</li>
-            <li>Equal opportunity — your reputation starts now</li>
+            <li>Unlock faster, better payout modes over time</li>
+            <li>Equal opportunity — your reputation starts now, from zero</li>
+            <li>Every move you make is building something</li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- section: final cta -->
-  <section class="section" id="final-cta">
-    <div class="final-cta">
-      <div class="eyebrow">The only move left</div>
-      <h2>is yours.</h2>
-      <p>
-        The opportunity is here. The work is real. The money is real.<br>
-        Stop watching. Start moving.
-      </p>
-      <div class="cta-row">
-        <a href="https://guberapp.app/login" class="btn btn-primary btn-lg">Enter GUBER</a>
-        <a href="/day1og.html" class="btn btn-secondary btn-lg">Become Day-1 OG</a>
+  <!-- ── BUSINESS + FOR EVERYONE ── -->
+  <section class="biz-sec sec" style="background:rgba(255,255,255,0.015);">
+    <div class="wrap">
+      <div class="eyebrow">Built for everyone</div>
+      <h2 class="sec-title">For businesses. For workers. For the long run.</h2>
+      <p class="sec-lead">GUBER works for people who need help, people who need money, and people building something bigger than a side hustle.</p>
+
+      <div class="biz-grid">
+        <div class="biz-plain">
+          <div class="eyebrow eyebrow-gold">GUBER for Business</div>
+          <h3>Built for operations that move.</h3>
+          <p>GUBER works for shops, companies, events, and operations that need same-day help, flexible hands, or real-world documentation — without long staffing cycles or overhead.</p>
+          <ul class="biz-list">
+            <li>Find same-day or short-term help fast</li>
+            <li>Request vehicle, property, or equipment verification</li>
+            <li>Handle overflow without expanding headcount</li>
+            <li>Get support across multiple locations</li>
+            <li>Real-world documentation when you need proof</li>
+          </ul>
+        </div>
+        <div class="biz-resume">
+          <img src="/guber-resume.png" alt="GUBER Resume" class="biz-resume-bg" />
+          <div class="biz-resume-inner">
+            <div class="eyebrow eyebrow-purple">Your GUBER Resume</div>
+            <h3>What you do on GUBER matters.</h3>
+            <p>Your effort, your consistency, and your results are building a performance trail. Companies may one day evaluate workers based on their GUBER record. Show up right. Do the work right. Leave a trail worth being proud of.</p>
+            <ul>
+              <li>Build a verifiable work history</li>
+              <li>Prove you show up when it counts</li>
+              <li>Create a record employers may look at</li>
+              <li>Equal opportunity — your reputation starts now</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- footer -->
-  <footer class="footer">
-    <div class="footer-story">
-      <a href="/my-story.html">My Story &#8594;</a>
+  <!-- ── INTERACTIVE JOB SEARCH DEMO ── -->
+  <section class="demo-sec sec">
+    <div class="wrap">
+      <div class="eyebrow eyebrow-green">Try it right now</div>
+      <h2 class="sec-title">See real jobs near you.</h2>
+      <p class="sec-lead">This is live data from GUBER — not a mockup. Search by keyword or ZIP code. To accept any job, you'll need an account. It's free.</p>
+
+      <div class="demo-search-row">
+        <input id="demo-search" class="demo-input" type="text" placeholder="Search jobs (e.g. cleaning, moving, inspection…)" />
+        <input id="demo-zip" class="demo-input" type="text" placeholder="ZIP code (optional)" style="flex:0 0 160px;" maxlength="5" />
+        <button onclick="runSearch()" class="btn btn-green" style="flex-shrink:0;">Search</button>
+      </div>
+
+      <div id="demo-results">
+        <div class="demo-loading">Loading live jobs...</div>
+      </div>
+
+      <div class="post-demo">
+        <div class="eyebrow eyebrow-green" style="margin-bottom:10px;">Posting a job is just as simple:</div>
+        <h4>Here's what it looks like to post on GUBER:</h4>
+        <div class="post-steps">
+          <div class="post-step">
+            <div class="step-num">1</div>
+            <div class="step-label">Pick a Category</div>
+            <div class="step-detail">Lawn, moving, delivery, V&I, and more</div>
+          </div>
+          <div class="post-step">
+            <div class="step-num">2</div>
+            <div class="step-label">Describe the Job</div>
+            <div class="step-detail">Title, details, what you need done</div>
+          </div>
+          <div class="post-step">
+            <div class="step-num">3</div>
+            <div class="step-label">Set Your Budget</div>
+            <div class="step-detail">Fixed price or hourly — your choice</div>
+          </div>
+          <div class="post-step">
+            <div class="step-num">4</div>
+            <div class="step-label">Post It</div>
+            <div class="step-detail">Workers in your area see it instantly</div>
+          </div>
+        </div>
+        <div class="demo-note">
+          To accept a job or post one, you need an account. It's free and takes 60 seconds. <a href="https://guberapp.app/signup">Create your account →</a>
+        </div>
+      </div>
     </div>
+  </section>
+
+  <!-- ── GET THE APP ── -->
+  <section class="getapp-sec sec">
+    <div class="wrap">
+      <h2>GUBER is ready.<br>Are you?</h2>
+      <p class="sub" style="margin-top:12px;">Download the app for the full experience — or jump straight in from your browser.</p>
+      <div class="app-options">
+        <a href="https://play.google.com/store" target="_blank" rel="noopener" class="play-btn">
+          <span class="play-icon">▶</span>
+          <span>Get it on Google Play</span>
+        </a>
+        <div class="ios-btn">
+          🍎 &nbsp;Apple App Store — Coming Soon
+        </div>
+        <span class="app-or">— or —</span>
+        <a href="https://guberapp.app/signup" class="browser-opt">
+          <span>Continue in browser</span> →
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FINAL CTA ── -->
+  <section class="final-sec">
+    <div class="wrap">
+      <div class="final-inner">
+        <div class="final-label">The only move left</div>
+        <div class="final-h">is yours.</div>
+        <p class="final-p">The opportunity is here. The work is real. The money is real.<br>Stop watching. Start moving.</p>
+        <div class="final-btns">
+          <a href="https://guberapp.app/login" class="btn btn-green btn-lg">Enter GUBER</a>
+          <a href="/day1og.html" class="btn btn-gold btn-lg">Become Day-1 OG</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ── -->
+  <footer class="footer">
+    <div class="footer-story"><a href="/my-story.html">My Story →</a></div>
     <div class="footer-links">
       <a href="/about.html">About GUBER</a>
       <a href="/safety-policy.html">Safety</a>
@@ -1383,102 +841,210 @@
 
 </div><!-- /.page -->
 
-
-<div class="floating-og">
+<!-- Floating Day-1 OG -->
+<div class="float-og">
   <a href="/day1og.html">
     <img src="/Gubergoldday1.png" alt="Day-1 OG" />
     <span>Day-1 OG</span>
   </a>
 </div>
 
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
 <script>
-  var anim1 = document.getElementById('anim1');
-  var anim2 = document.getElementById('anim2');
+// ── Hero video cycle ──
+(function () {
+  var v1 = document.getElementById('anim1');
+  var v2 = document.getElementById('anim2');
+  if (!v1 || !v2) return;
+  var cur = 1;
+  function play(v) { try { v.currentTime = 0; } catch(e){} v.play().catch(function(){}); }
+  function cycle() {
+    if (cur === 1) { v1.classList.add('active'); v2.classList.remove('active'); play(v1); }
+    else { v2.classList.add('active'); v1.classList.remove('active'); play(v2); }
+  }
+  v1.addEventListener('ended', function(){ cur = 2; cycle(); });
+  v2.addEventListener('ended', function(){ cur = 1; cycle(); });
+  v1.addEventListener('loadedmetadata', function(){ cur = 1; cycle(); });
+  setTimeout(function(){ if (v1.paused) { cur = 1; cycle(); } }, 1000);
+})();
 
-  if (anim1 && anim2) {
-    var current = 1;
+// ── Helpers ──
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function jitter() { return (Math.random() - 0.5) * 0.006; }
 
-    function playVideo(video) {
-      try { video.currentTime = 0; } catch (e) {}
-      video.play().catch(function () {});
-    }
+var ZIP_CENTROIDS = {
+  '36601':[30.694,-88.043],'36602':[30.690,-88.046],'36603':[30.685,-88.051],
+  '36604':[30.693,-88.065],'36605':[30.650,-88.108],'36606':[30.698,-88.043],
+  '36607':[30.720,-88.072],'36608':[30.703,-88.117],'36609':[30.662,-88.139],
+  '36610':[30.747,-88.084],'36611':[30.768,-88.075],'36612':[30.745,-88.048],
+  '36526':[30.604,-87.904],'36571':[30.820,-88.073],'36572':[30.856,-88.071],
+  '35203':[33.517,-86.809],'90001':[33.973,-118.248],'33101':[25.773,-80.194],
+  '60601':[41.882,-87.623],'77001':[29.749,-95.369],'10001':[40.748,-73.997],
+  '30301':[33.749,-84.388],'73301':[30.267,-97.743],'98101':[47.606,-122.332],
+  '85001':[33.449,-112.073],'80201':[39.739,-104.985],'19101':[39.952,-75.163]
+};
 
-    function cycle() {
-      if (current === 1) {
-        anim1.classList.add('active');
-        anim2.classList.remove('active');
-        playVideo(anim1);
-      } else {
-        anim2.classList.add('active');
-        anim1.classList.remove('active');
-        playVideo(anim2);
-      }
-    }
+// ── Live Leaflet Map ──
+(function() {
+  var map = L.map('live-map', {
+    center: [30.694, -88.043],
+    zoom: 10,
+    zoomControl: true,
+    scrollWheelZoom: false
+  });
 
-    anim1.addEventListener('ended', function () { current = 2; cycle(); });
-    anim2.addEventListener('ended', function () { current = 1; cycle(); });
-    anim1.addEventListener('loadedmetadata', function () { current = 1; cycle(); });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(map);
 
-    setTimeout(function () {
-      if (anim1.paused) { current = 1; cycle(); }
-    }, 1000);
+  function jobIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:14px;height:14px;background:#00ff6a;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(0,255,106,0.7);"></div>',
+      iconSize: [14,14], iconAnchor:[7,7], popupAnchor:[0,-10]
+    });
+  }
+  function dropIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:30px;height:30px;background:#ffcc33;border:2px solid #000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;color:#000;box-shadow:0 0 14px rgba(255,204,51,0.8);">$</div>',
+      iconSize: [30,30], iconAnchor:[15,15], popupAnchor:[0,-16]
+    });
   }
 
-  // ── Live Jobs Preview ──
-  (function () {
-    var container = document.getElementById('live-jobs-container');
-    if (!container) return;
+  var allLatLngs = [];
 
-    function esc(str) {
-      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function getLatLng(item) {
+    if (item.lat && item.lng) return [item.lat + jitter(), item.lng + jitter()];
+    if (item.gpsLat && item.gpsLng) return [item.gpsLat + jitter(), item.gpsLng + jitter()];
+    if (item.zip && ZIP_CENTROIDS[item.zip]) {
+      var c = ZIP_CENTROIDS[item.zip];
+      return [c[0] + jitter(), c[1] + jitter()];
     }
+    return null;
+  }
 
-    function showFallback() {
-      container.innerHTML =
-        '<div class="fallback-block">' +
-        '<div class="fallback-icon">&#128205;</div>' +
-        '<h3>Real work. Real money.</h3>' +
-        '<p>Sign up to see what\'s active in your area right now &#8212; and move on it.</p>' +
-        '<div class="cta-row" style="justify-content:center;">' +
-        '<a href="https://guberapp.app/signup" class="btn btn-primary btn-lg">Create Account</a>' +
-        '<a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>' +
-        '</div></div>';
-    }
-
-    // /api/public/jobs is the CORS-enabled public endpoint for guberapp.com previews
-    // /api/jobs requires auth and cannot be called cross-origin from GitHub Pages
-    fetch('https://guberapp.app/api/public/jobs?limit=6', {
-      method: 'GET',
-      credentials: 'omit',
-      headers: { 'Accept': 'application/json' }
-    })
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-    .then(function (jobs) {
-      if (!Array.isArray(jobs) || !jobs.length) { showFallback(); return; }
-      var slice = jobs.slice(0, 6);
-      var html = '<div class="live-jobs-grid">';
-      slice.forEach(function (job) {
+  // Fetch jobs
+  fetch('https://guberapp.app/api/public/jobs', { method:'GET', credentials:'omit', headers:{Accept:'application/json'} })
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(jobs) {
+      if (!Array.isArray(jobs)) return;
+      jobs.forEach(function(job) {
+        var ll = getLatLng(job);
+        if (!ll) return;
+        allLatLngs.push(ll);
         var budget = job.budget ? '$' + job.budget : '';
-        html += '<a href="https://guberapp.app/signup" class="live-job-card">';
-        html += '<div>';
-        if (job.category) html += '<span class="live-job-cat">' + esc(job.category) + '</span>';
-        if (job.urgentSwitch) html += '<span class="live-job-urgent">Urgent</span>';
-        html += '</div>';
-        html += '<div class="live-job-title">' + esc(job.title) + '</div>';
-        if (job.locationApprox) html += '<div class="live-job-loc">&#128205; ' + esc(job.locationApprox) + '</div>';
-        if (budget) html += '<div class="live-job-budget">' + esc(budget) + '</div>';
-        html += '<div class="live-job-action">Sign Up to Accept &#8594;</div>';
-        html += '</a>';
+        var popup = '<span class="popup-cat popup-cat-job">' + esc(job.category || 'Job') + '</span>' +
+          '<div class="popup-title">' + esc(job.title) + '</div>' +
+          (budget ? '<div class="popup-amount popup-amount-job">' + esc(budget) + '</div>' : '') +
+          (job.locationApprox ? '<div class="popup-loc">📍 ' + esc(job.locationApprox) + '</div>' : '') +
+          '<a href="https://guberapp.app/signup" class="popup-cta popup-cta-job">Sign Up to Accept →</a>';
+        L.marker(ll, {icon: jobIcon()}).addTo(map).bindPopup(popup, {maxWidth: 240});
       });
-      html += '</div>';
-      html += '<div style="text-align:center;margin-top:20px;">' +
-        '<a href="https://guberapp.app/signup" class="btn btn-primary btn-lg">Sign Up to See More Jobs</a>' +
-        '</div>';
+      if (allLatLngs.length > 1) {
+        try { map.fitBounds(allLatLngs, {padding:[40,40], maxZoom:12}); } catch(e){}
+      }
+    })
+    .catch(function(){});
+
+  // Fetch cash drops
+  fetch('https://guberapp.app/api/public/cash-drops', { method:'GET', credentials:'omit', headers:{Accept:'application/json'} })
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(drops) {
+      if (!Array.isArray(drops)) return;
+      drops.forEach(function(drop) {
+        var ll = getLatLng(drop);
+        if (!ll) return;
+        allLatLngs.push(ll);
+        var spotsLeft = (drop.winnerLimit || 1) - (drop.winnersFound || 0);
+        var reward = drop.rewardPerWinner ? '$' + drop.rewardPerWinner : '';
+        var popup = '<span class="popup-cat popup-cat-drop">💰 Cash Drop</span>' +
+          '<div class="popup-title">' + esc(drop.title) + '</div>' +
+          (reward ? '<div class="popup-amount popup-amount-drop">' + esc(reward) + ' reward</div>' : '') +
+          '<div class="popup-loc">' + spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' remaining</div>' +
+          '<a href="https://guberapp.app/signup" class="popup-cta popup-cta-drop">Sign Up to Claim →</a>';
+        L.marker(ll, {icon: dropIcon()}).addTo(map).bindPopup(popup, {maxWidth: 240});
+      });
+    })
+    .catch(function(){});
+})();
+
+// ── Cash Drops Live Widget ──
+(function() {
+  var el = document.getElementById('drops-widget');
+  if (!el) return;
+  fetch('https://guberapp.app/api/public/cash-drops', { method:'GET', credentials:'omit', headers:{Accept:'application/json'} })
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(drops) {
+      if (!Array.isArray(drops) || drops.length === 0) {
+        el.innerHTML = '<span style="color:var(--muted);font-size:13px;">No active Cash Drops right now — next one coming soon.</span>';
+        return;
+      }
+      var d = drops[0];
+      var spotsLeft = (d.winnerLimit || 1) - (d.winnersFound || 0);
+      el.innerHTML = '<span class="live-dot"></span><strong style="color:var(--gold);">' +
+        esc(d.title) + '</strong><br>' +
+        '<span style="font-size:20px;font-weight:900;color:var(--gold);">$' + (d.rewardPerWinner || 0) + '</span>' +
+        '<span style="color:var(--muted);font-size:13px;margin-left:10px;">' + spotsLeft + ' spot' + (spotsLeft !== 1 ? 's' : '') + ' left</span>';
+    })
+    .catch(function() {
+      el.innerHTML = '<span style="color:var(--muted);font-size:13px;">No active Cash Drops right now — check back soon.</span>';
+    });
+})();
+
+// ── Interactive Job Search Demo ──
+function runSearch() {
+  var search = document.getElementById('demo-search').value.trim();
+  var zip = document.getElementById('demo-zip').value.trim();
+  var container = document.getElementById('demo-results');
+  container.innerHTML = '<div class="demo-loading">Searching live jobs...</div>';
+
+  var url = 'https://guberapp.app/api/public/jobs?limit=6';
+  if (search) url += '&search=' + encodeURIComponent(search);
+  if (zip) url += '&zip=' + encodeURIComponent(zip);
+
+  fetch(url, { method:'GET', credentials:'omit', headers:{Accept:'application/json'} })
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(); })
+    .then(function(jobs) {
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        container.innerHTML = '<div class="demo-empty">No jobs found — try a different keyword or ZIP.<br><a href="https://guberapp.app/signup" style="color:var(--accent);">Sign up to see all available work →</a></div>';
+        return;
+      }
+      var html = '';
+      jobs.forEach(function(job) {
+        var budget = job.budget ? '$' + job.budget : '';
+        html += '<div class="demo-result">' +
+          '<div class="demo-result-left">' +
+          '<span class="demo-cat-badge">' + esc(job.category || 'General') + '</span>' +
+          (job.urgentSwitch ? '<span style="font-size:10px;font-weight:800;color:var(--gold);margin-left:6px;letter-spacing:0.06em;">⚡ URGENT</span>' : '') +
+          '<div class="demo-title">' + esc(job.title) + '</div>' +
+          (job.locationApprox ? '<div class="demo-loc">📍 ' + esc(job.locationApprox) + '</div>' : '') +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">' +
+          (budget ? '<div class="demo-budget">' + esc(budget) + '</div>' : '') +
+          '<a href="https://guberapp.app/signup" class="demo-accept">Accept →</a>' +
+          '</div>' +
+          '</div>';
+      });
       container.innerHTML = html;
     })
-    .catch(function () { showFallback(); });
-  })();
+    .catch(function() {
+      container.innerHTML = '<div class="demo-empty">Could not load live data. <a href="https://guberapp.app/browse-jobs" style="color:var(--accent);">View all jobs in the app →</a></div>';
+    });
+}
+
+// Auto-load on page ready
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('demo-search').addEventListener('keydown', function(e){ if (e.key === 'Enter') runSearch(); });
+  document.getElementById('demo-zip').addEventListener('keydown', function(e){ if (e.key === 'Enter') runSearch(); });
+  runSearch();
+});
 </script>
 
 </body>
