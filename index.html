@@ -98,17 +98,21 @@
     .hero-apps a:hover { color: var(--accent); }
 
     .cats-sec { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 36px 0; background: rgba(255,255,255,0.012); }
-    .cats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
-    .cat-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 10px; border-radius: var(--r); background: var(--card); border: 1px solid var(--border); cursor: pointer; transition: border-color 0.2s, transform 0.15s; text-decoration: none; }
-    .cat-tile:hover { border-color: rgba(255,255,255,0.2); transform: translateY(-2px); }
+    .cats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .cat-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 10px; border-radius: var(--r); cursor: pointer; transition: border-color 0.2s, transform 0.15s; text-decoration: none; }
+    .cat-tile:hover { border-color: rgba(255,255,255,0.25); transform: translateY(-2px); }
     .cat-icon { font-size: 28px; }
-    .cat-name { font-size: 11px; font-weight: 700; color: var(--soft); text-align: center; letter-spacing: 0.04em; }
+    .cat-name { font-size: 11px; font-weight: 700; text-align: center; letter-spacing: 0.04em; }
 
     .jobs-sec { padding: 48px 0; }
     .jobs-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
     .jobs-header h2 { font-size: 24px; font-weight: 900; letter-spacing: -0.02em; }
     .jobs-header a { font-size: 13px; color: var(--accent); font-weight: 700; }
     .jobs-count { font-size: 13px; color: var(--muted); font-weight: 600; margin-left: 8px; }
+    .jobs-scroll { max-height: 480px; overflow-y: auto; border-radius: var(--r); scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
+    .jobs-scroll::-webkit-scrollbar { width: 6px; }
+    .jobs-scroll::-webkit-scrollbar-track { background: transparent; }
+    .jobs-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
     .jobs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
     .job-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; transition: border-color 0.2s; display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit; }
     .job-card:hover { border-color: rgba(255,255,255,0.2); }
@@ -119,7 +123,6 @@
     .job-cat[data-c="Skilled Labor"] { background: rgba(220,38,38,0.12); color: #DC2626; }
     .job-cat[data-c="Verify & Inspect"] { background: rgba(139,92,246,0.12); color: #8B5CF6; }
     .job-cat[data-c="Barter Labor"] { background: rgba(14,165,233,0.12); color: #0EA5E9; }
-    .job-cat[data-c="Marketplace"] { background: rgba(250,204,21,0.12); color: #FACC15; }
     .job-urgent { font-size: 10px; font-weight: 700; color: var(--gold); white-space: nowrap; }
     .job-title { font-size: 16px; font-weight: 800; line-height: 1.2; color: var(--text); }
     .job-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
@@ -137,8 +140,8 @@
 
     .cash-sec { padding: 48px 0; border-top: 1px solid var(--border); }
     .cash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
-    .cash-img { border-radius: var(--r); overflow: hidden; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; background: var(--card); padding: 24px; min-height: 240px; }
-    .cash-img img { max-width: 220px; max-height: 220px; object-fit: contain; }
+    .cash-img { border-radius: var(--r); overflow: hidden; border: 1px solid var(--gold-border); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(255,204,51,0.06), var(--card)); padding: 32px; min-height: 320px; }
+    .cash-img img { max-width: 340px; max-height: 340px; object-fit: contain; }
     .cash-copy h2 { font-size: 28px; font-weight: 900; margin-bottom: 16px; line-height: 1.12; }
     .cash-faq { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
     .cash-q { font-size: 13px; font-weight: 800; color: var(--gold); margin-bottom: 2px; }
@@ -159,6 +162,24 @@
     .og-perks-mini { list-style: none; text-align: left; margin-bottom: 18px; }
     .og-perks-mini li { font-size: 13px; color: var(--soft); padding: 5px 0; display: flex; gap: 8px; }
     .og-perks-mini li::before { content: '✓'; color: var(--gold); font-weight: 800; }
+
+    .vi-sec { padding: 48px 0; border-top: 1px solid var(--border); }
+    .vi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+    .vi-img { border-radius: var(--r); overflow: hidden; border: 1px solid rgba(139,92,246,0.2); }
+    .vi-img img { width: 100%; height: auto; object-fit: cover; }
+    .vi-copy h2 { font-size: 28px; font-weight: 900; margin-bottom: 12px; line-height: 1.12; }
+    .vi-copy p { font-size: 14px; color: var(--soft); line-height: 1.7; margin-bottom: 16px; }
+    .vi-points { list-style: none; margin-bottom: 20px; }
+    .vi-points li { font-size: 13px; color: var(--soft); padding: 5px 0; display: flex; gap: 8px; }
+    .vi-points li::before { content: '🔍'; }
+
+    .more-sec { padding: 40px 0; border-top: 1px solid var(--border); }
+    .more-card { max-width: 600px; margin: 0 auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 24px; }
+    .more-card h3 { font-size: 16px; font-weight: 900; margin-bottom: 14px; color: var(--text); }
+    .more-items { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .more-item { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--soft); line-height: 1.5; }
+    .more-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .more-label { font-weight: 700; color: var(--text); display: block; font-size: 13px; margin-bottom: 2px; }
 
     .getapp-sec { text-align: center; border-top: 1px solid var(--border); padding: 56px 0; }
     .getapp-sec h2 { font-size: 34px; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 10px; }
@@ -190,7 +211,9 @@
       .cats-grid { grid-template-columns: repeat(3, 1fr); }
       .jobs-grid { grid-template-columns: 1fr; }
       .cash-row { grid-template-columns: 1fr; gap: 24px; }
+      .vi-row { grid-template-columns: 1fr; gap: 24px; }
       .how-steps { grid-template-columns: 1fr; gap: 16px; }
+      .more-items { grid-template-columns: 1fr; }
     }
     @media (max-width: 540px) {
       .hdr-nav .btn:first-child { display: none; }
@@ -242,29 +265,25 @@
 <section class="cats-sec">
   <div class="wrap">
     <div class="cats-grid">
-      <a href="/jobs?category=On-Demand+Help" class="cat-tile">
+      <a href="/jobs?category=On-Demand+Help" class="cat-tile" style="background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.22);">
         <div class="cat-icon">⚡</div>
-        <div class="cat-name">On-Demand Help</div>
+        <div class="cat-name" style="color:#F97316;">On-Demand Help</div>
       </a>
-      <a href="/jobs?category=General+Labor" class="cat-tile">
-        <div class="cat-icon">🔨</div>
-        <div class="cat-name">General Labor</div>
-      </a>
-      <a href="/jobs?category=Skilled+Labor" class="cat-tile">
-        <div class="cat-icon">🔧</div>
-        <div class="cat-name">Skilled Labor</div>
-      </a>
-      <a href="/jobs?category=Verify+%26+Inspect" class="cat-tile">
-        <div class="cat-icon">🔍</div>
-        <div class="cat-name">Verify & Inspect</div>
-      </a>
-      <a href="/jobs?category=Barter+Labor" class="cat-tile">
+      <a href="/jobs?category=General+Labor" class="cat-tile" style="background:rgba(22,163,74,0.1);border:1px solid rgba(22,163,74,0.22);">
         <div class="cat-icon">🤝</div>
-        <div class="cat-name">Barter Labor</div>
+        <div class="cat-name" style="color:#16A34A;">General Labor</div>
       </a>
-      <a href="/jobs?category=Marketplace" class="cat-tile">
-        <div class="cat-icon">🏪</div>
-        <div class="cat-name">Marketplace</div>
+      <a href="/jobs?category=Skilled+Labor" class="cat-tile" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.22);">
+        <div class="cat-icon">🔧</div>
+        <div class="cat-name" style="color:#DC2626;">Skilled Labor</div>
+      </a>
+      <a href="/jobs?category=Verify+%26+Inspect" class="cat-tile" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.22);">
+        <div class="cat-icon">🔍</div>
+        <div class="cat-name" style="color:#8B5CF6;">Verify & Inspect</div>
+      </a>
+      <a href="/jobs?category=Barter+Labor" class="cat-tile" style="background:rgba(14,165,233,0.1);border:1px solid rgba(14,165,233,0.22);">
+        <div class="cat-icon">🔄</div>
+        <div class="cat-name" style="color:#0EA5E9;">Barter Labor</div>
       </a>
     </div>
   </div>
@@ -276,8 +295,10 @@
       <h2>Live Jobs <span class="jobs-count" id="jobCount"></span></h2>
       <a href="https://guberapp.app/browse-jobs">See all on GUBER →</a>
     </div>
-    <div class="jobs-grid" id="jobsGrid">
-      <div class="jobs-loading">Loading live jobs...</div>
+    <div class="jobs-scroll">
+      <div class="jobs-grid" id="jobsGrid">
+        <div class="jobs-loading">Loading live jobs...</div>
+      </div>
     </div>
   </div>
 </section>
@@ -360,6 +381,61 @@
       </ul>
       <a href="/day1og.html" class="btn btn-gold" style="width:100%;justify-content:center;">👑 See Day-1 OG Details →</a>
       <p style="font-size:11px;color:var(--muted);margin-top:10px;">Limited spots. GUBER GLOBAL LLC.</p>
+    </div>
+  </div>
+</section>
+
+<section class="vi-sec">
+  <div class="wrap">
+    <div class="vi-row">
+      <div class="vi-img">
+        <img src="/verify-inspect-hero.png" alt="GUBER Verify & Inspect" />
+      </div>
+      <div class="vi-copy">
+        <h2><span style="color:#8B5CF6;">Verify & Inspect</span> — See It Before You Buy It</h2>
+        <p>GUBER sends a real person to physically inspect vehicles, properties, or items — and sends you photos, video, and a condition report before you spend a dime.</p>
+        <ul class="vi-points">
+          <li>Request an inspection from anywhere in the country</li>
+          <li>Get photos, video walk-arounds, and honest condition notes</li>
+          <li>Every inspector is GPS-verified at the location</li>
+          <li>Perfect for used cars, rentals, estate sales, and online purchases</li>
+        </ul>
+        <a href="https://guberapp.app/signup" class="btn" style="background:#8B5CF6;color:#fff;">Request an Inspection →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="more-sec">
+  <div class="wrap">
+    <div class="more-card">
+      <h3>More from GUBER</h3>
+      <div class="more-items">
+        <div class="more-item">
+          <div class="more-icon">🤖</div>
+          <div><span class="more-label">AI or Not</span>Detect AI-generated images and content. Built-in tool available to all GUBER users.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">🔗</div>
+          <div><span class="more-label">Referral Program</span>Share your referral link and earn rewards. Invite 25 friends to unlock Cash Drop eligibility.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">💰</div>
+          <div><span class="more-label">Save on Fees</span>No service fee for posters. Workers keep more of what they earn — low platform fee, transparent pricing.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">🏪</div>
+          <div><span class="more-label">Marketplace</span>Coming soon — buy and sell with GUBER-verified confidence. Get notified when it launches.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">📍</div>
+          <div><span class="more-label">GPS Verification</span>Every job, every inspection, every cash drop — GPS-verified in real time. No faking it.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">🛡️</div>
+          <div><span class="more-label">Accountability Built In</span>Photo proof, GPS check-in, mutual confirmation. Both parties are protected on every job.</div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
