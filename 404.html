@@ -243,7 +243,7 @@ function renderJobDetail(job) {
 
 function renderNotFound() {
   document.title = 'Page Not Found | GUBER';
-  document.getElementById('page').innerHTML = '<div style="text-align:center;padding:80px 20px;"><h1 style="font-size:36px;font-weight:900;margin-bottom:12px;">Page Not Found</h1><p style="color:var(--soft);margin-bottom:24px;">The page you\'re looking for doesn\'t exist or has been removed.</p><a href="/" class="btn btn-green">Back to Home →</a></div>';
+  document.getElementById('page').innerHTML = '<div style="text-align:center;padding:80px 20px;"><h1 style="font-size:36px;font-weight:900;margin-bottom:12px;">This Job Has Moved</h1><p style="color:var(--soft);margin-bottom:24px;">This listing may have been filled or is no longer available.<br/>Get GUBER to find more jobs near you.</p><a href="#" onclick="event.preventDefault();showGetApp(\'https://guberapp.app/browse-jobs\')" class="btn btn-green" style="padding:16px 36px;font-size:16px;">Get GUBER →</a><div style="margin-top:16px;"><a href="/" class="btn btn-ghost">Back to Home</a></div></div>';
 }
 
 window.doListSearch = function(e) {
