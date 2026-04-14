@@ -434,6 +434,8 @@ function timeAgo(d) {
   return days + 'd ago';
 }
 
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
 function renderJobs(jobs) {
   var grid = document.getElementById('jobsGrid');
   var count = document.getElementById('jobCount');
@@ -445,14 +447,14 @@ function renderJobs(jobs) {
   count.textContent = '(' + jobs.length + ' active)';
   grid.innerHTML = jobs.map(function(j) {
     var loc = parseLocation(j.locationApprox);
-    return '<a href="' + jobUrl(j) + '" class="job-card">' +
+    return '<a href="' + esc(jobUrl(j)) + '" class="job-card">' +
       '<div class="job-top">' +
-        '<span class="job-cat" data-c="' + j.category + '">' + j.category + '</span>' +
+        '<span class="job-cat" data-c="' + esc(j.category) + '">' + esc(j.category) + '</span>' +
         (j.urgentSwitch ? '<span class="job-urgent">⚡ URGENT</span>' : '') +
       '</div>' +
-      '<div class="job-title">' + j.title + '</div>' +
+      '<div class="job-title">' + esc(j.title) + '</div>' +
       '<div class="job-meta">' +
-        '<span>📍 ' + loc.city + ', ' + loc.state + '</span>' +
+        '<span>📍 ' + esc(loc.city) + ', ' + esc(loc.state) + '</span>' +
         '<span>🕐 ' + timeAgo(j.createdAt) + '</span>' +
         (j.proofRequired ? '<span>📸 Proof required</span>' : '') +
       '</div>' +

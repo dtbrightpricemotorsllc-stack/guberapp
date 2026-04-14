@@ -700,7 +700,8 @@ export async function registerRoutes(
 
       if (!rows.length) return res.status(404).json({ error: "Job not found" });
       const job = rows[0];
-      if (job.status === "draft") return res.status(404).json({ error: "Job not found" });
+      if (job.status !== "posted_public") return res.status(404).json({ error: "Job not found" });
+      if (job.expiresAt && new Date(job.expiresAt) < new Date()) return res.status(404).json({ error: "Job expired" });
 
       const desc = job.description ? filterContactInfo(job.description).clean.substring(0, 1000) : null;
       res.json({
