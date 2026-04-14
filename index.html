@@ -303,12 +303,11 @@
     .final-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 
     /* ── FOOTER ── */
-    .footer { padding: 32px 22px; border-top: 1px solid var(--border); }
-    .footer-story { text-align: center; margin-bottom: 14px; }
-    .footer-story a { font-size: 14px; color: var(--accent); }
-    .footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 20px; }
-    .footer-links a { font-size: 12px; color: var(--muted); transition: color 0.15s; }
-    .footer-links a:hover { color: var(--text); }
+    .footer { margin-top: 0; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding-bottom: 28px; }
+    .footer-story a { color: var(--purple); font-size: 12px; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 10px 14px; justify-content: center; }
+    .footer-links a { font-size: 11px; color: var(--accent); transition: opacity 0.15s; }
+    .footer-links a:hover { opacity: 0.7; }
 
     /* ── FLOATING OG ── */
     .float-og { position: fixed; bottom: 22px; right: 20px; z-index: 9000; }
@@ -376,7 +375,8 @@
         GUBER
       </a>
       <nav class="header-nav">
-        <a href="https://guberapp.app/login" class="btn btn-ghost">Log In</a>
+        <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
+        <a href="https://guberapp.app/signup" class="btn btn-green">Sign Up</a>
       </nav>
     </div>
   </header>
@@ -434,8 +434,8 @@
   <div class="scroll-banner">
     <img src="/still-scrolling.png" alt="Still scrolling? Turn time into money with GUBER" />
     <div class="scroll-banner-links" style="background:rgba(0,0,0,0.6);padding:16px 22px;">
-      <a href="https://guberapp.app/browse-jobs" class="btn btn-green">⚡ Find Work</a>
-      <a href="https://guberapp.app/login" class="btn btn-ghost">📋 Post a Job</a>
+      <a href="https://guberapp.app/signup" class="btn btn-green">⚡ Find Work</a>
+      <a href="https://guberapp.app/signup" class="btn btn-ghost">📋 Post a Job</a>
     </div>
   </div>
 
@@ -651,7 +651,7 @@
 
       <div style="display:flex;align-items:center;gap:14px;margin-top:8px;">
         <img src="/vi-logo.png" alt="Verify & Inspect" class="vi-logo-badge" />
-        <a href="https://guberapp.app/login" class="btn btn-ghost" style="border-color:var(--teal);color:var(--teal);">Request a Verification →</a>
+        <a href="https://guberapp.app/signup" class="btn btn-ghost" style="border-color:var(--teal);color:var(--teal);">Request a Verification →</a>
       </div>
     </div>
   </section>
@@ -672,7 +672,7 @@
           </div>
           <p style="font-size:12px;color:var(--muted);margin-top:12px;">These buttons are interactive inside the app. Sign in to try it on any image.</p>
 
-          <a href="https://guberapp.app/signup" class="btn btn-ghost" style="border-color:var(--purple);color:var(--purple);margin-top:20px;">Try AI or Not →</a>
+          <a href="https://guberapp.app/login" class="btn btn-ghost" style="border-color:var(--purple);color:var(--purple);margin-top:20px;">Try AI or Not →</a>
         </div>
         <div>
           <div class="ai-screen">
