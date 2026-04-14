@@ -271,10 +271,12 @@ export function setupPublicSeoRoutes(app: Express) {
 
       const cities = new Set<string>();
 
+      const today = new Date().toISOString().split("T")[0];
+
       let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
 
-      xml += `  <url><loc>https://guberapp.com/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n`;
-      xml += `  <url><loc>https://guberapp.com/jobs</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>\n`;
+      xml += `  <url><loc>https://guberapp.com/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>\n`;
+      xml += `  <url><loc>https://guberapp.com/jobs</loc><lastmod>${today}</lastmod><changefreq>hourly</changefreq><priority>0.9</priority></url>\n`;
 
       for (const job of rows) {
         const loc = parseLocation(job.locationApprox);
@@ -285,12 +287,12 @@ export function setupPublicSeoRoutes(app: Express) {
       }
 
       for (const city of cities) {
-        xml += `  <url><loc>https://guberapp.com/${city}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
+        xml += `  <url><loc>https://guberapp.com/${city}</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
       }
 
       const categorySlugs = ["on-demand-help", "general-labor", "skilled-labor", "verify-and-inspect", "barter-labor", "marketplace"];
       for (const cat of categorySlugs) {
-        xml += `  <url><loc>https://guberapp.com/${cat}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
+        xml += `  <url><loc>https://guberapp.com/${cat}</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
       }
 
       xml += `</urlset>`;
