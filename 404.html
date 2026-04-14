@@ -157,6 +157,7 @@ function renderJobList(jobs, title, subtitle, breakdownKey) {
     html += '<div style="text-align:center;padding:40px;color:var(--muted);">No jobs found. <a href="https://guberapp.app/signup" style="color:var(--accent);">Post one →</a></div>';
   } else {
     html += '<p style="font-size:13px;color:var(--muted);margin-bottom:4px;">' + jobs.length + ' job' + (jobs.length !== 1 ? 's' : '') + ' found</p>';
+    html += '<p style="font-size:11px;color:#666;margin-bottom:12px;line-height:1.5;">Jobs shown here are a sample of recently posted tasks. Availability changes fast \u2014 sign up or open the app to see the latest listings in real time.</p>';
     html += '<div class="jobs-list">';
     jobs.forEach(function(j) {
       var loc = parseLocation(j.locationApprox);
