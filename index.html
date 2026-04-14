@@ -89,8 +89,12 @@
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
 
     .hero h1 { font-size: 54px; font-weight: 900; line-height: 1.04; letter-spacing: -0.03em; margin-bottom: 18px; }
-    .hero-sub { font-size: 17px; color: var(--soft); line-height: 1.7; margin-bottom: 32px; max-width: 480px; }
+    .hero-sub { font-size: 17px; color: var(--soft); line-height: 1.7; margin-bottom: 20px; max-width: 480px; }
 
+    .hero-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 28px; }
+    .hero-stat { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 13px; }
+    .hero-stat b { display: block; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .hero-stat span { font-size: 11px; color: var(--muted); line-height: 1.45; }
     .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; }
     .hero-ios-note { font-size: 12px; color: var(--muted); margin-top: 6px; }
     .hero-browser-link { font-size: 13px; color: var(--soft); text-decoration: underline; text-underline-offset: 3px; }
@@ -180,8 +184,8 @@
     .footer-copy { font-size: 12px; color: var(--muted); }
 
     /* ── FLOATING OG BADGE ── */
-    .float-og { position: fixed; bottom: 20px; right: 18px; z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-    .float-og a { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .float-og { position: fixed; bottom: 22px; right: 20px; z-index: 9000; }
+    .float-og a { display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; }
     .float-og img { width: 54px; height: 54px; object-fit: contain; border-radius: 50%; border: 2px solid var(--gold); box-shadow: 0 4px 20px rgba(255,204,51,0.3); transition: transform 0.2s; }
     .float-og img:hover { transform: scale(1.1); }
     .float-og span { font-size: 9px; font-weight: 800; color: var(--gold); letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0,0,0,0.85); padding: 2px 6px; border-radius: 4px; }
@@ -233,6 +237,21 @@
         <h1>Stop Watching.<br>Start Moving.<br><span class="green">Verify Anything.</span></h1>
 
         <p class="hero-sub">Real work. Real money. Real proof. GUBER connects you to paid local jobs, lets you post what you need done, and gives you tools to verify people before you trust them.</p>
+
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <b>Action over scrolling</b>
+            <span>Real movement, real money — not endless feeds.</span>
+          </div>
+          <div class="hero-stat">
+            <b>Visibility first</b>
+            <span>See what's real before you commit time or trust.</span>
+          </div>
+          <div class="hero-stat">
+            <b>Proof not promises</b>
+            <span>GPS, photos, timestamps — accountability built in.</span>
+          </div>
+        </div>
 
         <div class="hero-cta">
           <a href="https://play.google.com/store/apps/details?id=com.guber.app" target="_blank" rel="noopener" class="btn btn-green btn-lg">▶ Get on Google Play</a>
