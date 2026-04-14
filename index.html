@@ -234,8 +234,8 @@
       GUBER
     </a>
     <nav class="hdr-nav">
-      <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
-      <a href="https://guberapp.app/signup" class="btn btn-green">Sign Up</a>
+      <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/login')" class="btn btn-ghost">Sign In</a>
+      <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" class="btn btn-green">Sign Up</a>
     </nav>
   </div>
 </header>
@@ -257,7 +257,7 @@
       <span>·</span>
       <span style="color:var(--muted)">🍎 iOS Coming Soon</span>
       <span>·</span>
-      <a href="https://guberapp.app/signup">Open in Browser →</a>
+      <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')">Open in Browser →</a>
     </div>
   </div>
 </section>
@@ -297,7 +297,7 @@
   <div class="wrap">
     <div class="jobs-header">
       <h2>Live Jobs <span class="jobs-count" id="jobCount"></span></h2>
-      <a href="https://guberapp.app/browse-jobs">See all on GUBER →</a>
+      <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/browse-jobs')">See all on GUBER →</a>
     </div>
     <p style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Jobs shown here are a sample of recently posted tasks. Availability changes fast — sign up or open the app to see the latest listings in real time.</p>
     <div class="jobs-scroll">
@@ -315,7 +315,7 @@
       <img src="/app-map-jobs.jpg" alt="Job map" />
       <div class="map-overlay">
         <p>See jobs on the map</p>
-        <a href="https://guberapp.app/browse-jobs" class="btn btn-green">Open Map View →</a>
+        <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/browse-jobs')" class="btn btn-green">Open Map View →</a>
       </div>
     </div>
   </div>
@@ -343,7 +343,7 @@
             <div class="cash-a">Sign up, open the map, and look for active drops near you. First person to arrive and check in wins the cash.</div>
           </div>
         </div>
-        <a href="https://guberapp.app/signup" class="btn btn-gold">See Active Drops →</a>
+        <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" class="btn btn-gold">See Active Drops →</a>
       </div>
     </div>
   </div>
@@ -405,7 +405,7 @@
           <li>Every inspector is GPS-verified at the location</li>
           <li>Perfect for used cars, rentals, estate sales, and online purchases</li>
         </ul>
-        <a href="https://guberapp.app/signup" class="btn" style="background:#8B5CF6;color:#fff;">Request an Inspection →</a>
+        <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" class="btn" style="background:#8B5CF6;color:#fff;">Request an Inspection →</a>
       </div>
     </div>
   </div>
@@ -456,7 +456,7 @@
       </a>
       <div class="ios-btn">🍎 &nbsp;App Store — Coming Soon</div>
     </div>
-    <a href="https://guberapp.app/signup" style="font-size:14px;color:var(--soft);text-decoration:underline;text-underline-offset:3px;">Continue in Browser →</a>
+    <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" style="font-size:14px;color:var(--soft);text-decoration:underline;text-underline-offset:3px;">Continue in Browser →</a>
   </div>
 </section>
 
@@ -469,8 +469,8 @@
       </div>
       <div class="footer-story"><a href="/story.html">Read the GUBER Story</a></div>
       <div class="footer-links">
-        <a href="https://guberapp.app/signup">Sign Up</a>
-        <a href="https://guberapp.app/login">Sign In</a>
+        <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')">Sign Up</a>
+        <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/login')">Sign In</a>
         <a href="/jobs">Browse Jobs</a>
         <a href="/day1og.html">Day-1 OG</a>
         <a href="https://guberapp.app/privacy">Privacy</a>
@@ -495,7 +495,40 @@
   <div style="font-size:12px;color:#666;margin-top:4px;">Buy and sell with GUBER-verified confidence.</div>
 </div>
 
+<div id="getapp-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
+  <div style="background:#111;border:1.5px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 12px 50px rgba(0,0,0,0.7);">
+    <img src="/Guberapplogo.png" alt="GUBER" style="width:48px;height:48px;margin:0 auto 12px;object-fit:contain;" />
+    <div style="font-size:20px;font-weight:900;color:#f0f0f0;margin-bottom:4px;">Get GUBER</div>
+    <p style="font-size:13px;color:#888;margin-bottom:20px;">Choose how you'd like to continue</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <a href="https://play.google.com/store/apps/details?id=com.guber.app" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;background:rgba(0,255,106,0.08);border:1.5px solid rgba(0,255,106,0.25);color:#00ff6a;font-size:15px;font-weight:700;text-decoration:none;transition:transform 0.15s;">
+        <span style="font-size:22px;">▶</span>
+        <span style="flex:1;text-align:left;">Google Play</span>
+        <span style="font-size:11px;color:#666;">Android</span>
+      </a>
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;background:rgba(255,255,255,0.02);border:1.5px solid rgba(255,255,255,0.08);color:#555;font-size:15px;font-weight:700;cursor:default;">
+        <span style="font-size:20px;">🍎</span>
+        <span style="flex:1;text-align:left;">App Store</span>
+        <span style="font-size:10px;color:#555;background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:6px;">Coming Soon</span>
+      </div>
+      <a id="getapp-browser" href="https://guberapp.app/signup" style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.12);color:#b8b8b8;font-size:15px;font-weight:700;text-decoration:none;transition:transform 0.15s;">
+        <span style="font-size:20px;">🌐</span>
+        <span style="flex:1;text-align:left;">Continue in Browser</span>
+        <span style="font-size:11px;color:#666;">Web App</span>
+      </a>
+    </div>
+    <button onclick="document.getElementById('getapp-modal').style.display='none'" style="margin-top:16px;background:none;border:none;color:#555;font-size:13px;cursor:pointer;font-weight:600;">Cancel</button>
+  </div>
+</div>
+
 <script>
+function showGetApp(browserUrl) {
+  var modal = document.getElementById('getapp-modal');
+  var link = document.getElementById('getapp-browser');
+  link.href = browserUrl || 'https://guberapp.app/signup';
+  modal.style.display = 'flex';
+}
+
 const API = 'https://guberapp.app/api/public/jobs';
 
 function slugify(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''); }
@@ -528,7 +561,7 @@ function renderJobs(jobs) {
   var grid = document.getElementById('jobsGrid');
   var count = document.getElementById('jobCount');
   if (!jobs.length) {
-    grid.innerHTML = '<div class="jobs-empty">No jobs available right now. Check back soon or <a href="https://guberapp.app/signup" style="color:var(--accent)">post one</a>.</div>';
+    grid.innerHTML = '<div class="jobs-empty">No jobs available right now. Check back soon or <a href="#" onclick="event.preventDefault();showGetApp(\'https://guberapp.app/signup\')" style="color:var(--accent)">post one</a>.</div>';
     count.textContent = '';
     return;
   }
