@@ -1903,11 +1903,11 @@ export async function registerRoutes(
   app.get("/api/auth/exchange-token", async (req: Request, res: Response) => {
     const token = req.query.t as string;
     if (!token) return res.status(400).json({ message: "Missing token" });
-    const result = await pool.query(`DELETE FROM login_tokens WHERE token = $1 AND expires_at >= $2 RETURNING user_id`, [token, Date.now()]);
+    const result = await pool.query<{ user_id: number }>(`DELETE FROM login_tokens WHERE token = $1 AND expires_at >= $2 RETURNING user_id`, [token, Date.now()]);
     if (!result.rows.length) {
       return res.status(401).json({ message: "Token expired or invalid" });
     }
-    req.session.userId = (result.rows[0] as any).user_id;
+    req.session.userId = result.rows[0].user_id;
     req.session.save((err) => {
       if (err) return res.status(500).json({ message: "Session error" });
       res.json({ ok: true });
