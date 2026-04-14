@@ -121,7 +121,7 @@ function injectSchema(j) {
   var loc = parseLocation(j.locationApprox);
   var vt = j.expiresAt ? new Date(j.expiresAt).toISOString() : new Date(Date.now()+30*86400000).toISOString();
   var s = {'@context':'https://schema.org/','@type':'JobPosting','title':j.title,'description':j.description||j.title,'datePosted':j.createdAt?new Date(j.createdAt).toISOString():new Date().toISOString(),'validThrough':vt,'hiringOrganization':{'@type':'Organization','name':'GUBER GLOBAL LLC','sameAs':'https://guberapp.com','logo':'https://guberapp.com/Guberapplogo.png'},'jobLocation':{'@type':'Place','address':{'@type':'PostalAddress','addressLocality':loc.city,'addressRegion':loc.state,'addressCountry':'US'}},'employmentType':'TEMPORARY'};
-  if (j.budget > 0) s.baseSalary = {'@type':'MonetaryAmount','currency':'USD','value':{'@type':'QuantitativeValue','value':j.budget,'unitText':'HOUR'}};
+  if (j.budget > 0) s.baseSalary = {'@type':'MonetaryAmount','currency':'USD','value':{'@type':'QuantitativeValue','value':j.budget,'unitText':'PER_JOB'}};
   var el = document.createElement('script'); el.type = 'application/ld+json'; el.textContent = JSON.stringify(s); document.head.appendChild(el);
 }
 
@@ -250,17 +250,13 @@ function route() {
     return;
   }
 
-  var catMatch = path.match(/^\/category\/(.+)$/);
-  if (catMatch) {
-    var catSlug = catMatch[1];
-    var catName = CATEGORY_MAP[catSlug];
-    if (catName) {
-      fetch(API + '?category=' + encodeURIComponent(catName) + '&limit=50').then(function(r) { return r.json(); }).then(function(jobs) {
-        renderJobList(jobs, catName, CATEGORY_DESCRIPTIONS[catName] || '');
-      }).catch(function() { renderJobList([], catName, 'Could not load jobs.'); });
-    } else {
-      renderNotFound();
-    }
+  var catMatch = path.match(/^\/(?:category\/)?(.+)$/);
+  var catSlug = catMatch ? catMatch[1] : null;
+  var catName = catSlug ? CATEGORY_MAP[catSlug] : null;
+  if (catName) {
+    fetch(API + '?category=' + encodeURIComponent(catName) + '&limit=50').then(function(r) { return r.json(); }).then(function(jobs) {
+      renderJobList(jobs, catName, CATEGORY_DESCRIPTIONS[catName] || '');
+    }).catch(function() { renderJobList([], catName, 'Could not load jobs.'); });
     return;
   }
 

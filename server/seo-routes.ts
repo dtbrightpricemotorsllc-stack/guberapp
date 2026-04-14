@@ -5,6 +5,30 @@ import { eq, and, or, desc, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 
+interface PublicJobData {
+  id: number;
+  title: string;
+  description: string | null;
+  category: string;
+  budget: number | null;
+  locationApprox: string | null;
+  zip: string | null;
+  urgentSwitch: boolean | null;
+  payType: string | null;
+  jobType: string | null;
+  proofRequired: boolean | null;
+  serviceType: string | null;
+  verifyInspectCategory: string | null;
+  expiresAt: Date | string | null;
+  status: string;
+  createdAt: Date | string | null;
+}
+
+interface ParsedLocation {
+  city: string;
+  state: string;
+}
+
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
@@ -30,7 +54,7 @@ function stripContactInfo(text: string): string {
   return clean.substring(0, 1000);
 }
 
-function parseLocation(locationApprox: string | null): { city: string; state: string } {
+function parseLocation(locationApprox: string | null): ParsedLocation {
   if (!locationApprox) return { city: "Unknown", state: "US" };
   const match = locationApprox.match(/^(.+?),\s*([A-Z]{2})/i);
   if (match) return { city: match[1].trim(), state: match[2].toUpperCase() };
@@ -38,20 +62,25 @@ function parseLocation(locationApprox: string | null): { city: string; state: st
   return { city: parts[0]?.trim() || "Unknown", state: parts[1]?.trim()?.toUpperCase() || "US" };
 }
 
-function isJobPublicAndActive(job: { status: string; expiresAt: Date | string | null }): boolean {
+function isJobPublicAndActive(job: Pick<PublicJobData, "status" | "expiresAt">): boolean {
   if (job.status !== "posted_public") return false;
   if (job.expiresAt && new Date(job.expiresAt) < new Date()) return false;
   return true;
 }
 
-function buildJobPostingJsonLd(job: any) {
+function makeJobSlug(job: Pick<PublicJobData, "id" | "title" | "locationApprox">): string {
+  const loc = parseLocation(job.locationApprox);
+  return `${slugify(job.title)}-${slugify(loc.city)}-${loc.state.toLowerCase()}-${job.id}`;
+}
+
+function buildJobPostingJsonLd(job: PublicJobData) {
   const loc = parseLocation(job.locationApprox);
   const sanitizedDesc = stripContactInfo(job.description || job.title);
   const validThrough = job.expiresAt
     ? new Date(job.expiresAt).toISOString()
     : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const schema: any = {
+  const schema: Record<string, unknown> = {
     "@context": "https://schema.org/",
     "@type": "JobPosting",
     "title": job.title,
@@ -74,7 +103,7 @@ function buildJobPostingJsonLd(job: any) {
       },
     },
     "employmentType": "TEMPORARY",
-    "url": `https://guberapp.app/public/jobs/${slugify(job.title)}-${slugify(loc.city)}-${loc.state.toLowerCase()}-${job.id}`,
+    "url": `https://guberapp.app/jobs/${makeJobSlug(job)}`,
   };
 
   if (job.budget && job.budget > 0) {
@@ -84,7 +113,7 @@ function buildJobPostingJsonLd(job: any) {
       "value": {
         "@type": "QuantitativeValue",
         "value": job.budget,
-        "unitText": "HOUR",
+        "unitText": "PER_JOB",
       },
     };
   }
@@ -92,14 +121,14 @@ function buildJobPostingJsonLd(job: any) {
   return schema;
 }
 
-function buildJobPageHtml(job: any, template: string): string {
+function buildJobPageHtml(job: PublicJobData, template: string): string {
   const loc = parseLocation(job.locationApprox);
   const jsonLd = JSON.stringify(buildJobPostingJsonLd(job));
   const safeTitle = escAttr(`${job.title} in ${loc.city}, ${loc.state} | GUBER`);
   const sanitizedDesc = stripContactInfo(job.description || job.title);
   const safeDesc = escAttr(sanitizedDesc.substring(0, 160));
-  const slug = `${slugify(job.title)}-${slugify(loc.city)}-${loc.state.toLowerCase()}-${job.id}`;
-  const url = `https://guberapp.app/public/jobs/${slug}`;
+  const slug = makeJobSlug(job);
+  const url = `https://guberapp.app/jobs/${slug}`;
   const proofType = job.proofRequired ? "Photo/GPS verification required" : "Standard completion";
 
   const seoHead = `
@@ -166,8 +195,27 @@ function buildJobPageHtml(job: any, template: string): string {
   return html;
 }
 
+const JOB_SELECT_FIELDS = {
+  id: jobsTable.id,
+  title: jobsTable.title,
+  description: jobsTable.description,
+  category: jobsTable.category,
+  budget: jobsTable.budget,
+  locationApprox: jobsTable.locationApprox,
+  zip: jobsTable.zip,
+  urgentSwitch: jobsTable.urgentSwitch,
+  payType: jobsTable.payType,
+  jobType: jobsTable.jobType,
+  proofRequired: jobsTable.proofRequired,
+  serviceType: jobsTable.serviceType,
+  verifyInspectCategory: jobsTable.verifyInspectCategory,
+  expiresAt: jobsTable.expiresAt,
+  status: jobsTable.status,
+  createdAt: jobsTable.createdAt,
+} as const;
+
 export function setupPublicSeoRoutes(app: Express) {
-  app.get("/public/jobs/:slug", async (req: Request, res: Response, next) => {
+  app.get("/jobs/:slug", async (req: Request, res: Response, next) => {
     try {
       const slug = req.params.slug;
       const idMatch = slug.match(/-(\d+)$/);
@@ -175,30 +223,13 @@ export function setupPublicSeoRoutes(app: Express) {
 
       const jobId = parseInt(idMatch[1], 10);
       const rows = await db
-        .select({
-          id: jobsTable.id,
-          title: jobsTable.title,
-          description: jobsTable.description,
-          category: jobsTable.category,
-          budget: jobsTable.budget,
-          locationApprox: jobsTable.locationApprox,
-          zip: jobsTable.zip,
-          urgentSwitch: jobsTable.urgentSwitch,
-          payType: jobsTable.payType,
-          jobType: jobsTable.jobType,
-          proofRequired: jobsTable.proofRequired,
-          serviceType: jobsTable.serviceType,
-          verifyInspectCategory: jobsTable.verifyInspectCategory,
-          expiresAt: jobsTable.expiresAt,
-          status: jobsTable.status,
-          createdAt: jobsTable.createdAt,
-        })
+        .select(JOB_SELECT_FIELDS)
         .from(jobsTable)
         .where(eq(jobsTable.id, jobId))
         .limit(1);
 
       if (!rows.length) return next();
-      const job = rows[0];
+      const job = rows[0] as PublicJobData;
       if (!isJobPublicAndActive(job)) return next();
 
       let template: string;
@@ -213,7 +244,7 @@ export function setupPublicSeoRoutes(app: Express) {
       const html = buildJobPageHtml(job, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(html);
     } catch (err) {
-      console.error("[seo] /public/jobs/:slug error:", err);
+      console.error("[seo] /jobs/:slug error:", err);
       next();
     }
   });
@@ -257,9 +288,9 @@ export function setupPublicSeoRoutes(app: Express) {
         xml += `  <url><loc>https://guberapp.com/${city}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
       }
 
-      const categoryNames = ["on-demand-help", "general-labor", "skilled-labor", "verify-and-inspect", "barter-labor", "marketplace"];
-      for (const cat of categoryNames) {
-        xml += `  <url><loc>https://guberapp.com/category/${cat}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
+      const categorySlugs = ["on-demand-help", "general-labor", "skilled-labor", "verify-and-inspect", "barter-labor", "marketplace"];
+      for (const cat of categorySlugs) {
+        xml += `  <url><loc>https://guberapp.com/${cat}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
       }
 
       xml += `</urlset>`;

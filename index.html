@@ -242,27 +242,27 @@
 <section class="cats-sec">
   <div class="wrap">
     <div class="cats-grid">
-      <a href="/jobs?category=On-Demand+Help" class="cat-tile">
+      <a href="/on-demand-help" class="cat-tile">
         <div class="cat-icon">⚡</div>
         <div class="cat-name">On-Demand Help</div>
       </a>
-      <a href="/jobs?category=General+Labor" class="cat-tile">
+      <a href="/general-labor" class="cat-tile">
         <div class="cat-icon">🔨</div>
         <div class="cat-name">General Labor</div>
       </a>
-      <a href="/jobs?category=Skilled+Labor" class="cat-tile">
+      <a href="/skilled-labor" class="cat-tile">
         <div class="cat-icon">🔧</div>
         <div class="cat-name">Skilled Labor</div>
       </a>
-      <a href="/jobs?category=Verify+%26+Inspect" class="cat-tile">
+      <a href="/verify-and-inspect" class="cat-tile">
         <div class="cat-icon">🔍</div>
         <div class="cat-name">Verify & Inspect</div>
       </a>
-      <a href="/jobs?category=Barter+Labor" class="cat-tile">
+      <a href="/barter-labor" class="cat-tile">
         <div class="cat-icon">🤝</div>
         <div class="cat-name">Barter Labor</div>
       </a>
-      <a href="/jobs?category=Marketplace" class="cat-tile">
+      <a href="/marketplace" class="cat-tile">
         <div class="cat-icon">🏪</div>
         <div class="cat-name">Marketplace</div>
       </a>
@@ -483,7 +483,7 @@ function injectJobPostingSchema(jobs) {
       'employmentType': 'TEMPORARY'
     };
     if (j.budget && j.budget > 0) {
-      schema.baseSalary = { '@type': 'MonetaryAmount', 'currency': 'USD', 'value': { '@type': 'QuantitativeValue', 'value': j.budget, 'unitText': 'HOUR' } };
+      schema.baseSalary = { '@type': 'MonetaryAmount', 'currency': 'USD', 'value': { '@type': 'QuantitativeValue', 'value': j.budget, 'unitText': 'PER_JOB' } };
     }
     var el = document.createElement('script');
     el.type = 'application/ld+json';
