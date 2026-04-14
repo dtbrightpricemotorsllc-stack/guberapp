@@ -267,7 +267,7 @@ export function setupPublicSeoRoutes(app: Express) {
           )
         )
         .orderBy(desc(jobsTable.createdAt))
-        .limit(1000);
+        .limit(50000);
 
       const cities = new Set<string>();
 

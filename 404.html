@@ -5,7 +5,7 @@
   <title>GUBER — Loading...</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/png" href="/favicon.png" />
-  <meta name="robots" content="noindex" />
+  <meta name="robots" content="index, follow" />
   <style>
     :root {
       --bg: #0a0a0a;
@@ -125,12 +125,33 @@ function injectSchema(j) {
   var el = document.createElement('script'); el.type = 'application/ld+json'; el.textContent = JSON.stringify(s); document.head.appendChild(el);
 }
 
-function renderJobList(jobs, title, subtitle) {
+function buildBreakdown(jobs, groupKey) {
+  var groups = {};
+  jobs.forEach(function(j) {
+    var key = j[groupKey] || 'Other';
+    if (!groups[key]) groups[key] = 0;
+    groups[key]++;
+  });
+  var keys = Object.keys(groups).sort();
+  if (!keys.length) return '';
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">';
+  keys.forEach(function(k) {
+    html += '<span style="display:inline-block;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--soft);">' + esc(k) + ' <span style="color:var(--accent);">(' + groups[k] + ')</span></span>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderJobList(jobs, title, subtitle, breakdownKey) {
   var html = '<div style="margin-bottom:8px;"><a href="/" style="font-size:13px;color:var(--accent);">← Home</a></div>';
   html += '<h1 style="font-size:28px;font-weight:900;margin-bottom:4px;">' + esc(title) + '</h1>';
   if (subtitle) html += '<p style="font-size:14px;color:var(--soft);margin-bottom:16px;">' + esc(subtitle) + '</p>';
 
   html += '<form class="search-box" onsubmit="doListSearch(event)"><input type="text" id="listQ" placeholder="Search jobs..." /><input type="text" id="listZip" placeholder="ZIP or city" /><button type="submit" class="search-btn">Search</button></form>';
+
+  if (breakdownKey && jobs.length) {
+    html += buildBreakdown(jobs, breakdownKey);
+  }
 
   if (!jobs.length) {
     html += '<div style="text-align:center;padding:40px;color:var(--muted);">No jobs found. <a href="https://guberapp.app/signup" style="color:var(--accent);">Post one →</a></div>';
@@ -151,8 +172,6 @@ function renderJobList(jobs, title, subtitle) {
   html += '<div style="margin-top:32px;text-align:center;"><a href="https://guberapp.app/browse-jobs" class="btn btn-green">Open Full App →</a></div>';
   document.getElementById('page').innerHTML = html;
   document.title = title + ' | GUBER';
-  var meta = document.querySelector('meta[name="robots"]');
-  if (meta) meta.content = 'index, follow';
 }
 
 function renderJobDetail(job) {
@@ -235,7 +254,8 @@ function route() {
     fetch(apiUrl).then(function(r) { return r.json(); }).then(function(jobs) {
       var title = cat ? cat + ' Jobs' : 'All Jobs';
       var sub = q ? 'Search: "' + q + '"' : (zip ? 'Near ' + zip : 'Browse all active jobs on GUBER');
-      renderJobList(jobs, title, sub);
+      var bk = cat ? 'serviceType' : 'category';
+      renderJobList(jobs, title, sub, bk);
     }).catch(function() { renderJobList([], 'Jobs', 'Could not load jobs.'); });
     return;
   }
@@ -255,7 +275,7 @@ function route() {
   var catName = catSlug ? CATEGORY_MAP[catSlug] : null;
   if (catName) {
     fetch(API + '?category=' + encodeURIComponent(catName) + '&limit=50').then(function(r) { return r.json(); }).then(function(jobs) {
-      renderJobList(jobs, catName, CATEGORY_DESCRIPTIONS[catName] || '');
+      renderJobList(jobs, catName, CATEGORY_DESCRIPTIONS[catName] || '', 'serviceType');
     }).catch(function() { renderJobList([], catName, 'Could not load jobs.'); });
     return;
   }
@@ -270,7 +290,7 @@ function route() {
         var loc = parseLocation(j.locationApprox);
         return slugify(loc.city) === citySlug && loc.state === stateCode;
       });
-      renderJobList(filtered, 'Jobs in ' + cityName + ', ' + stateCode, filtered.length + ' active jobs in your area');
+      renderJobList(filtered, 'Jobs in ' + cityName + ', ' + stateCode, filtered.length + ' active jobs in your area', 'category');
     }).catch(function() { renderJobList([], 'Jobs in ' + cityName + ', ' + stateCode, 'Could not load jobs.'); });
     return;
   }
