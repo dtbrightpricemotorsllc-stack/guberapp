@@ -98,7 +98,7 @@
     .hero-apps a:hover { color: var(--accent); }
 
     .cats-sec { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 36px 0; background: rgba(255,255,255,0.012); }
-    .cats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .cats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
     .cat-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 10px; border-radius: var(--r); cursor: pointer; transition: border-color 0.2s, transform 0.15s; text-decoration: none; }
     .cat-tile:hover { border-color: rgba(255,255,255,0.25); transform: translateY(-2px); }
     .cat-icon { font-size: 28px; }
@@ -140,8 +140,8 @@
 
     .cash-sec { padding: 48px 0; border-top: 1px solid var(--border); }
     .cash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
-    .cash-img { border-radius: var(--r); overflow: hidden; border: 1px solid var(--gold-border); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(255,204,51,0.06), var(--card)); padding: 32px; min-height: 320px; }
-    .cash-img img { max-width: 340px; max-height: 340px; object-fit: contain; }
+    .cash-img { border-radius: var(--r); overflow: hidden; border: 1px solid var(--gold-border); background: linear-gradient(135deg, rgba(255,204,51,0.06), var(--card)); }
+    .cash-img img { width: 100%; height: auto; display: block; }
     .cash-copy h2 { font-size: 28px; font-weight: 900; margin-bottom: 16px; line-height: 1.12; }
     .cash-faq { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
     .cash-q { font-size: 13px; font-weight: 800; color: var(--gold); margin-bottom: 2px; }
@@ -285,6 +285,10 @@
         <div class="cat-icon">🔄</div>
         <div class="cat-name" style="color:#0EA5E9;">Barter Labor</div>
       </a>
+      <a href="#" onclick="event.preventDefault();document.getElementById('mp-toast').style.display='flex';setTimeout(function(){document.getElementById('mp-toast').style.display='none'},3000);" class="cat-tile" style="background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.22);">
+        <div class="cat-icon">🏪</div>
+        <div class="cat-name" style="color:#FACC15;">Marketplace</div>
+      </a>
     </div>
   </div>
 </section>
@@ -295,6 +299,7 @@
       <h2>Live Jobs <span class="jobs-count" id="jobCount"></span></h2>
       <a href="https://guberapp.app/browse-jobs">See all on GUBER →</a>
     </div>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Jobs shown here are a sample of recently posted tasks. Availability changes fast — sign up or open the app to see the latest listings in real time.</p>
     <div class="jobs-scroll">
       <div class="jobs-grid" id="jobsGrid">
         <div class="jobs-loading">Loading live jobs...</div>
@@ -481,6 +486,13 @@
     <img src="/Gubergoldday1.png" alt="Day-1 OG" />
     <span>Day-1 OG</span>
   </a>
+</div>
+
+<div id="mp-toast" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:rgba(17,17,17,0.97);border:1.5px solid rgba(250,204,21,0.3);border-radius:16px;padding:28px 36px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.6);backdrop-filter:blur(12px);flex-direction:column;align-items:center;gap:8px;">
+  <div style="font-size:36px;">🏪</div>
+  <div style="font-size:18px;font-weight:900;color:#FACC15;">Marketplace</div>
+  <div style="font-size:14px;color:#b8b8b8;">Coming Soon</div>
+  <div style="font-size:12px;color:#666;margin-top:4px;">Buy and sell with GUBER-verified confidence.</div>
 </div>
 
 <script>
