@@ -484,10 +484,13 @@ export async function registerRoutes(
     })
   );
 
-  const loginTokens = new Map<string, { userId: number; expires: number }>();
+  await pool.query(`CREATE TABLE IF NOT EXISTS login_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at BIGINT NOT NULL
+  )`);
   setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of loginTokens) { if (v.expires < now) loginTokens.delete(k); }
+    pool.query(`DELETE FROM login_tokens WHERE expires_at < $1`, [Date.now()]).catch(() => {});
   }, 60_000);
 
   function requireAuth(req: Request, res: Response, next: Function) {
@@ -1852,24 +1855,14 @@ export async function registerRoutes(
 
       if (user.banned) return res.redirect("/login?error=banned");
       if (user.suspended) return res.redirect("/login?error=suspended");
-      // Detect native flow from state parameter (encoded as "native:<nonce>")
       const isNative = typeof state === "string" && state.startsWith("native:");
+      const loginToken = randomBytes(24).toString("hex");
+      const expiresAt = Date.now() + 60_000;
+      await pool.query(`INSERT INTO login_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)`, [loginToken, user.id, expiresAt]);
       if (isNative) {
-        // Native: use short-lived token exchange (app handles the deep link internally)
-        const loginToken = randomBytes(24).toString("hex");
-        loginTokens.set(loginToken, { userId: user.id, expires: Date.now() + 30_000 });
         return res.redirect(`guber://oauth-complete?t=${loginToken}`);
       }
-      // Web: set session directly in the callback response to avoid in-memory Map
-      // multi-instance issues (loginTokens Map is not shared across server instances)
-      req.session.userId = user.id;
-      req.session.save((err) => {
-        if (err) {
-          console.error("[GUBER] Google OAuth session save error:", err);
-          return res.redirect("/login?error=google_failed");
-        }
-        res.redirect("/dashboard");
-      });
+      res.redirect(`/login?t=${loginToken}`);
     } catch (err: any) {
       console.error("Google OAuth error:", err);
       res.redirect("/login?error=google_failed");
@@ -1910,13 +1903,11 @@ export async function registerRoutes(
   app.get("/api/auth/exchange-token", async (req: Request, res: Response) => {
     const token = req.query.t as string;
     if (!token) return res.status(400).json({ message: "Missing token" });
-    const entry = loginTokens.get(token);
-    if (!entry || entry.expires < Date.now()) {
-      loginTokens.delete(token);
+    const result = await pool.query(`DELETE FROM login_tokens WHERE token = $1 AND expires_at >= $2 RETURNING user_id`, [token, Date.now()]);
+    if (!result.rows.length) {
       return res.status(401).json({ message: "Token expired or invalid" });
     }
-    loginTokens.delete(token);
-    req.session.userId = entry.userId;
+    req.session.userId = (result.rows[0] as any).user_id;
     req.session.save((err) => {
       if (err) return res.status(500).json({ message: "Session error" });
       res.json({ ok: true });

@@ -42,8 +42,42 @@ export default function Login() {
     }, 1500);
   };
 
+  const [tokenExchanging, setTokenExchanging] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(search);
+    const token = params.get("t");
+    if (token) {
+      setTokenExchanging(true);
+      fetch(`/api/auth/exchange-token?t=${encodeURIComponent(token)}`, { credentials: "include" })
+        .then(async (res) => {
+          if (res.ok) {
+            await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+            await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+            const meRes = await fetch("/api/auth/me", { credentials: "include" });
+            if (meRes.ok) {
+              const me = await meRes.json();
+              const dest = me?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
+              window.history.replaceState({}, "", "/login");
+              setLocation(dest);
+            } else {
+              window.history.replaceState({}, "", "/login");
+              setTokenExchanging(false);
+              toast({ title: "Sign-In Failed", description: "Session could not be established. Please try again.", variant: "destructive" });
+            }
+          } else {
+            window.history.replaceState({}, "", "/login");
+            setTokenExchanging(false);
+            toast({ title: "Sign-In Failed", description: "Login token expired. Please try again.", variant: "destructive" });
+          }
+        })
+        .catch(() => {
+          window.history.replaceState({}, "", "/login");
+          setTokenExchanging(false);
+          toast({ title: "Sign-In Failed", description: "Network error. Please try again.", variant: "destructive" });
+        });
+      return;
+    }
     const error = params.get("error");
     if (error === "banned") toast({ title: "Account Banned", description: "This account has been permanently banned.", variant: "destructive" });
     else if (error === "suspended") toast({ title: "Account Suspended", description: "This account is currently suspended.", variant: "destructive" });
@@ -107,6 +141,16 @@ export default function Login() {
       setDemoLoading(null);
     }
   };
+
+  if (tokenExchanging) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6" data-testid="page-login-exchanging">
+        <GuberLogo size="lg" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary mt-6" />
+        <p className="text-muted-foreground/60 text-xs font-display tracking-[0.2em] mt-4">SIGNING YOU IN...</p>
+      </div>
+    );
+  }
 
   return (
     <InAppBrowserGate>
