@@ -627,7 +627,7 @@ fetch(API + '?limit=20')
   .then(function(r) { return r.json(); })
   .then(renderJobs)
   .catch(function() {
-    document.getElementById('jobsGrid').innerHTML = '<div class="jobs-empty">Could not load jobs. <a href="https://guberapp.app/browse-jobs" style="color:var(--accent)">View on GUBER →</a></div>';
+    document.getElementById('jobsGrid').innerHTML = '<div class="jobs-empty">Could not load jobs. <a href="#" onclick="event.preventDefault();showGetApp(\'https://guberapp.app/browse-jobs\')" style="color:var(--accent)">View on GUBER →</a></div>';
   });
 </script>
 
