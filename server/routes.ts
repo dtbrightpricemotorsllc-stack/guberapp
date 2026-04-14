@@ -3018,7 +3018,7 @@ export async function registerRoutes(
                       <p>Hi ${(matchedUser as any).firstName || "there"},</p>
                       <p>${welcomeBody}</p>
                       <p>If you have any questions, reach us at <a href="mailto:support@guberapp.com">support@guberapp.com</a>.</p>
-                      <p style="color:#888;font-size:12px">GUBER APP LLC · Greensboro, NC · <a href="https://guberapp.app">guberapp.app</a></p>
+                      <p style="color:#888;font-size:12px">GUBER GLOBAL LLC · Greensboro, NC · <a href="https://guberapp.app">guberapp.app</a></p>
                     </div>`,
                   });
                 }
@@ -9596,7 +9596,7 @@ export async function registerRoutes(
             html: `<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:24px">
               <h2 style="color:#22C55E">We got your feedback!</h2>
               <p>${autoResponse}</p>
-              <p style="color:#888;font-size:12px;margin-top:24px">GUBER APP LLC · Greensboro, NC · <a href="https://guberapp.app">guberapp.app</a></p>
+              <p style="color:#888;font-size:12px;margin-top:24px">GUBER GLOBAL LLC · Greensboro, NC · <a href="https://guberapp.app">guberapp.app</a></p>
             </div>`,
           });
         }

@@ -20,12 +20,12 @@ function PrivacyContent() {
       <div className="text-center mb-10">
         <GuberLogo size="md" />
         <h1 className="text-2xl font-display font-black mt-4 guber-text-green tracking-tight">PRIVACY POLICY</h1>
-        <p className="text-muted-foreground/50 text-xs font-display tracking-widest mt-2 uppercase">GUBER APP LLC · Last Updated: {LAST_UPDATED}</p>
+        <p className="text-muted-foreground/50 text-xs font-display tracking-widest mt-2 uppercase">GUBER GLOBAL LLC · Last Updated: {LAST_UPDATED}</p>
       </div>
 
       <div className="space-y-6">
         <Section title="1. Introduction">
-          <p>GUBER APP LLC ("GUBER," "we," "us") operates the GUBER platform ("Platform"). This Privacy Policy explains how we collect, use, store, and share information when you use our Platform. By using GUBER, you agree to this policy.</p>
+          <p>GUBER GLOBAL LLC ("GUBER," "we," "us") operates the GUBER platform ("Platform"). This Privacy Policy explains how we collect, use, store, and share information when you use our Platform. By using GUBER, you agree to this policy.</p>
           <p>The Platform is intended only for users 18 years of age or older. We do not knowingly collect personal information from anyone under 18.</p>
         </Section>
 
@@ -153,7 +153,7 @@ function PrivacyContent() {
 
         <Section title="11. Contact">
           <p>For privacy questions or requests: <span className="text-primary">support@guberapp.com</span></p>
-          <p>GUBER APP LLC | Greensboro, North Carolina, USA</p>
+          <p>GUBER GLOBAL LLC | Greensboro, North Carolina, USA</p>
           <p className="mt-2 text-xs">
             Also see: <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link> · <Link href="/acceptable-use" className="text-primary hover:underline">Acceptable Use Policy</Link>
           </p>

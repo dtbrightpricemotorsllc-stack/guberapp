@@ -103,7 +103,7 @@ function GateModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <p className="text-center text-muted-foreground/40 text-[10px] font-display tracking-wider mt-5">
-          FREE TO JOIN · GUBER APP LLC
+          FREE TO JOIN · GUBER GLOBAL LLC
         </p>
       </div>
     </div>
@@ -482,7 +482,7 @@ export default function Home() {
             <a href="https://guberapp.app" data-testid="link-footer-app">GUBER APP</a>
           </div>
           <p className="text-[10px] font-display tracking-wider text-muted-foreground/30">
-            GUBER APP LLC &mdash; GREENSBORO, NC
+            GUBER GLOBAL LLC &mdash; GREENSBORO, NC
           </p>
         </div>
       </footer>

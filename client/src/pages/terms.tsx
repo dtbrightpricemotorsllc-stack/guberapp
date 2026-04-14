@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Link } from "wouter";
 
 const LAST_UPDATED = "March 22, 2026";
-const CONTACT = "support@guberapp.com | GUBER APP LLC | Greensboro, North Carolina, USA";
+const CONTACT = "support@guberapp.com | GUBER GLOBAL LLC | Greensboro, North Carolina, USA";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -21,7 +21,7 @@ function TermsContent() {
       <div className="text-center mb-10">
         <GuberLogo size="md" />
         <h1 className="text-2xl font-display font-black mt-4 guber-text-green tracking-tight">TERMS OF SERVICE</h1>
-        <p className="text-muted-foreground/50 text-xs font-display tracking-widest mt-2 uppercase">GUBER APP LLC · Last Updated: {LAST_UPDATED}</p>
+        <p className="text-muted-foreground/50 text-xs font-display tracking-widest mt-2 uppercase">GUBER GLOBAL LLC · Last Updated: {LAST_UPDATED}</p>
       </div>
 
       {/* Plain-English Summary Box */}
@@ -41,7 +41,7 @@ function TermsContent() {
       <div className="space-y-6">
         <Section title="1. Acceptance of Terms">
           <p>By accessing or using the GUBER platform ("Platform"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Platform. You must be at least 18 years old to create an account.</p>
-          <p>GUBER APP LLC reserves the right to modify these Terms at any time. Continued use of the Platform after changes are posted constitutes acceptance of the updated Terms.</p>
+          <p>GUBER GLOBAL LLC reserves the right to modify these Terms at any time. Continued use of the Platform after changes are posted constitutes acceptance of the updated Terms.</p>
         </Section>
 
         <Section title="2. What GUBER Is — And Is Not">
@@ -124,12 +124,12 @@ function TermsContent() {
         </Section>
 
         <Section title="11. Limitation of Liability">
-          <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, GUBER APP LLC, ITS OFFICERS, DIRECTORS, EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE PLATFORM OR ANY SERVICES OBTAINED THROUGH IT.</p>
+          <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, GUBER GLOBAL LLC, ITS OFFICERS, DIRECTORS, EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE PLATFORM OR ANY SERVICES OBTAINED THROUGH IT.</p>
           <p>To the extent GUBER has any liability, it shall be limited to the platform fees paid by you for the specific transaction giving rise to the claim, not to exceed $100 in any case.</p>
         </Section>
 
         <Section title="12. Indemnification">
-          <p>You agree to defend, indemnify, and hold harmless GUBER APP LLC and its affiliates from and against any claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising out of or related to: your use of the Platform; any services you provide or receive; your violation of these Terms or any applicable law; any injury, loss, or damage caused by you to any person or property; or any content you submit to the Platform.</p>
+          <p>You agree to defend, indemnify, and hold harmless GUBER GLOBAL LLC and its affiliates from and against any claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising out of or related to: your use of the Platform; any services you provide or receive; your violation of these Terms or any applicable law; any injury, loss, or damage caused by you to any person or property; or any content you submit to the Platform.</p>
         </Section>
 
         <Section title="13. Account Suspension and Removal">
@@ -138,7 +138,7 @@ function TermsContent() {
         </Section>
 
         <Section title="14. Intellectual Property">
-          <p>All content, trademarks, logos, and technology on the Platform are owned by or licensed to GUBER APP LLC. You may not reproduce, distribute, or create derivative works without written permission.</p>
+          <p>All content, trademarks, logos, and technology on the Platform are owned by or licensed to GUBER GLOBAL LLC. You may not reproduce, distribute, or create derivative works without written permission.</p>
           <p>By submitting content to the Platform (photos, descriptions, proof submissions), you grant GUBER a non-exclusive, royalty-free license to use that content for the purposes described in these Terms and the Privacy Policy.</p>
         </Section>
 
