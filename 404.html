@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GUBER — Loading...</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <meta name="robots" content="noindex" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --card: #111111;
+      --border: rgba(255,255,255,0.08);
+      --accent: #00ff6a;
+      --gold: #ffcc33;
+      --teal: #00e5e5;
+      --text: #f0f0f0;
+      --soft: #b8b8b8;
+      --muted: #666;
+      --r: 14px;
+      --r-sm: 10px;
+      --max: 1060px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 22px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; border: none; text-decoration: none; white-space: nowrap; }
+    .btn-green { background: var(--accent); color: #000; }
+    .btn-ghost { background: transparent; border: 1.5px solid rgba(255,255,255,0.18); color: var(--soft); }
+
+    .hdr { position: sticky; top: 0; z-index: 200; background: rgba(10,10,10,0.94); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); padding: 13px 0; }
+    .hdr-inner { display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 900; color: var(--accent); }
+    .brand img { width: 32px; height: 32px; object-fit: contain; }
+    .hdr-nav { display: flex; gap: 8px; }
+    .hdr-nav .btn { padding: 9px 16px; font-size: 13px; }
+
+    #page { max-width: 720px; margin: 0 auto; padding: 40px 24px; }
+    .loading { text-align: center; padding: 80px 20px; color: var(--muted); }
+    .job-cat-badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: var(--soft); margin-bottom: 14px; }
+    .job-urgent-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: rgba(255,204,51,0.12); border: 1px solid rgba(255,204,51,0.3); color: var(--gold); margin-left: 8px; margin-bottom: 14px; }
+
+    .job-card-sm { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: inherit; transition: border-color 0.2s; }
+    .job-card-sm:hover { border-color: rgba(255,255,255,0.2); }
+    .job-card-sm .jt { font-size: 15px; font-weight: 800; color: var(--text); }
+    .job-card-sm .jm { font-size: 12px; color: var(--muted); }
+    .job-card-sm .jp { font-size: 18px; font-weight: 900; color: var(--accent); }
+    .jobs-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+
+    .search-box { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .search-box input { flex: 1; min-width: 160px; padding: 12px 14px; border-radius: var(--r-sm); border: 1.5px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: var(--text); font-size: 14px; outline: none; }
+    .search-box input:focus { border-color: var(--accent); }
+    .search-box input::placeholder { color: var(--muted); }
+    .search-btn { padding: 12px 20px; border-radius: var(--r-sm); background: var(--accent); color: #000; font-size: 14px; font-weight: 800; border: none; cursor: pointer; }
+
+    .footer { border-top: 1px solid var(--border); padding: 36px 0; text-align: center; margin-top: 48px; }
+    .footer-copy { font-size: 12px; color: var(--muted); }
+
+    .float-og { position: fixed; bottom: 22px; right: 20px; z-index: 9000; }
+    .float-og a { display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; }
+    .float-og img { width: 54px; height: 54px; object-fit: contain; border-radius: 50%; border: 2px solid var(--gold); box-shadow: 0 4px 20px rgba(255,204,51,0.3); }
+    .float-og span { font-size: 9px; font-weight: 800; color: var(--gold); letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0,0,0,0.85); padding: 2px 6px; border-radius: 4px; }
+
+    @media (max-width: 540px) {
+      .hdr-nav .btn:first-child { display: none; }
+      .search-box { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="wrap hdr-inner">
+    <a href="/" class="brand"><img src="/Guberapplogo.png" alt="GUBER" />GUBER</a>
+    <nav class="hdr-nav">
+      <a href="https://guberapp.app/login" class="btn btn-ghost">Sign In</a>
+      <a href="https://guberapp.app/signup" class="btn btn-green">Sign Up</a>
+    </nav>
+  </div>
+</header>
+
+<div id="page"><div class="loading">Loading...</div></div>
+
+<footer class="footer">
+  <div class="wrap"><div class="footer-copy">&copy; 2025 GUBER GLOBAL LLC. All rights reserved.</div></div>
+</footer>
+
+<div class="float-og">
+  <a href="/day1og.html"><img src="/Gubergoldday1.png" alt="Day-1 OG" /><span>Day-1 OG</span></a>
+</div>
+
+<script>
+var API = 'https://guberapp.app/api/public/jobs';
+var path = window.location.pathname.replace(/\/$/, '');
+var search = window.location.search;
+
+function slugify(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''); }
+function parseLocation(loc) {
+  if (!loc) return { city: 'Unknown', state: 'US' };
+  var m = loc.match(/^(.+?),\s*([A-Z]{2})/i);
+  if (m) return { city: m[1].trim(), state: m[2].toUpperCase() };
+  return { city: loc.replace(' area', ''), state: 'US' };
+}
+function jobUrl(j) {
+  var loc = parseLocation(j.locationApprox);
+  return '/jobs/' + slugify(j.title) + '-' + slugify(loc.city) + '-' + loc.state.toLowerCase() + '-' + j.id;
+}
+function timeAgo(d) {
+  if (!d) return 'Recently';
+  var h = Math.floor((Date.now() - new Date(d).getTime()) / 3600000);
+  if (h < 1) return 'Just now';
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function injectSchema(j) {
+  if (j.id < 0) return;
+  var loc = parseLocation(j.locationApprox);
+  var vt = j.expiresAt ? new Date(j.expiresAt).toISOString() : new Date(Date.now()+30*86400000).toISOString();
+  var s = {'@context':'https://schema.org/','@type':'JobPosting','title':j.title,'description':j.description||j.title,'datePosted':j.createdAt?new Date(j.createdAt).toISOString():new Date().toISOString(),'validThrough':vt,'hiringOrganization':{'@type':'Organization','name':'GUBER GLOBAL LLC','sameAs':'https://guberapp.com','logo':'https://guberapp.com/Guberapplogo.png'},'jobLocation':{'@type':'Place','address':{'@type':'PostalAddress','addressLocality':loc.city,'addressRegion':loc.state,'addressCountry':'US'}},'employmentType':'TEMPORARY'};
+  if (j.budget > 0) s.baseSalary = {'@type':'MonetaryAmount','currency':'USD','value':{'@type':'QuantitativeValue','value':j.budget,'unitText':'HOUR'}};
+  var el = document.createElement('script'); el.type = 'application/ld+json'; el.textContent = JSON.stringify(s); document.head.appendChild(el);
+}
+
+function renderJobList(jobs, title, subtitle) {
+  var html = '<div style="margin-bottom:8px;"><a href="/" style="font-size:13px;color:var(--accent);">← Home</a></div>';
+  html += '<h1 style="font-size:28px;font-weight:900;margin-bottom:4px;">' + esc(title) + '</h1>';
+  if (subtitle) html += '<p style="font-size:14px;color:var(--soft);margin-bottom:16px;">' + esc(subtitle) + '</p>';
+
+  html += '<form class="search-box" onsubmit="doListSearch(event)"><input type="text" id="listQ" placeholder="Search jobs..." /><input type="text" id="listZip" placeholder="ZIP or city" /><button type="submit" class="search-btn">Search</button></form>';
+
+  if (!jobs.length) {
+    html += '<div style="text-align:center;padding:40px;color:var(--muted);">No jobs found. <a href="https://guberapp.app/signup" style="color:var(--accent);">Post one →</a></div>';
+  } else {
+    html += '<p style="font-size:13px;color:var(--muted);margin-bottom:4px;">' + jobs.length + ' job' + (jobs.length !== 1 ? 's' : '') + ' found</p>';
+    html += '<div class="jobs-list">';
+    jobs.forEach(function(j) {
+      var loc = parseLocation(j.locationApprox);
+      html += '<a href="' + jobUrl(j) + '" class="job-card-sm">' +
+        '<div class="jt">' + esc(j.title) + '</div>' +
+        '<div class="jm">📍 ' + esc(loc.city + ', ' + loc.state) + ' · ' + timeAgo(j.createdAt) + (j.urgentSwitch ? ' · ⚡ Urgent' : '') + '</div>' +
+        '<div class="jp">' + (j.budget ? '$' + j.budget.toFixed(2) : 'Barter') + '</div>' +
+      '</a>';
+      injectSchema(j);
+    });
+    html += '</div>';
+  }
+  html += '<div style="margin-top:32px;text-align:center;"><a href="https://guberapp.app/browse-jobs" class="btn btn-green">Open Full App →</a></div>';
+  document.getElementById('page').innerHTML = html;
+  document.title = title + ' | GUBER';
+  var meta = document.querySelector('meta[name="robots"]');
+  if (meta) meta.content = 'index, follow';
+}
+
+function renderJobDetail(job) {
+  var loc = parseLocation(job.locationApprox);
+  var proof = job.proofRequired ? 'Photo/GPS verification required' : 'Standard completion';
+  document.title = job.title + ' in ' + loc.city + ', ' + loc.state + ' | GUBER';
+  var meta = document.querySelector('meta[name="robots"]');
+  if (meta) meta.content = 'index, follow';
+
+  var desc = document.createElement('meta');
+  desc.name = 'description';
+  desc.content = (job.description || job.title).substring(0, 160);
+  document.head.appendChild(desc);
+
+  injectSchema(job);
+
+  var html = '<div style="margin-bottom:8px;"><a href="/jobs" style="font-size:13px;color:var(--accent);">← All Jobs</a></div>';
+  html += '<span class="job-cat-badge">' + esc(job.category) + (job.serviceType ? ' · ' + esc(job.serviceType) : '') + '</span>';
+  if (job.urgentSwitch) html += '<span class="job-urgent-badge">⚡ URGENT</span>';
+  html += '<h1 style="font-size:32px;font-weight:900;line-height:1.1;margin-bottom:12px;">' + esc(job.title) + '</h1>';
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;font-size:14px;color:var(--soft);">';
+  html += '<span>📍 ' + esc(loc.city + ', ' + loc.state) + '</span>';
+  html += '<span>📋 ' + proof + '</span>';
+  html += '</div>';
+  html += '<div style="font-size:28px;font-weight:900;color:var(--accent);margin-bottom:20px;">' + (job.budget ? '$' + job.budget.toFixed(2) : 'Barter') + '</div>';
+  if (job.description) {
+    html += '<div style="font-size:14px;color:var(--soft);line-height:1.7;margin-bottom:28px;padding:18px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--r);">' + esc(job.description).replace(/\n/g, '<br/>') + '</div>';
+  }
+  html += '<a href="https://guberapp.app/jobs/' + job.id + '" class="btn btn-green" style="width:100%;justify-content:center;padding:16px 28px;font-size:16px;margin-bottom:14px;">Take This Job →</a>';
+  html += '<div style="display:flex;gap:12px;"><a href="https://guberapp.app/signup" class="btn btn-ghost" style="flex:1;justify-content:center;">Post a Job</a><a href="/" class="btn btn-ghost" style="flex:1;justify-content:center;">Back to GUBER</a></div>';
+  html += '<p style="font-size:12px;color:var(--muted);margin-top:28px;text-align:center;">Posted ' + timeAgo(job.createdAt) + ' · GUBER GLOBAL LLC</p>';
+
+  document.getElementById('page').innerHTML = html;
+}
+
+function renderNotFound() {
+  document.title = 'Page Not Found | GUBER';
+  document.getElementById('page').innerHTML = '<div style="text-align:center;padding:80px 20px;"><h1 style="font-size:36px;font-weight:900;margin-bottom:12px;">Page Not Found</h1><p style="color:var(--soft);margin-bottom:24px;">The page you\'re looking for doesn\'t exist or has been removed.</p><a href="/" class="btn btn-green">Back to Home →</a></div>';
+}
+
+window.doListSearch = function(e) {
+  e.preventDefault();
+  var q = document.getElementById('listQ').value.trim();
+  var zip = document.getElementById('listZip').value.trim();
+  var params = [];
+  if (q) params.push('q=' + encodeURIComponent(q));
+  if (zip) params.push('zip=' + encodeURIComponent(zip));
+  window.location.href = '/jobs' + (params.length ? '?' + params.join('&') : '');
+};
+
+var CATEGORY_MAP = {
+  'on-demand-help': 'On-Demand Help',
+  'general-labor': 'General Labor',
+  'skilled-labor': 'Skilled Labor',
+  'verify-and-inspect': 'Verify & Inspect',
+  'barter-labor': 'Barter Labor',
+  'marketplace': 'Marketplace'
+};
+
+var CATEGORY_DESCRIPTIONS = {
+  'On-Demand Help': 'Pet care, errands, delivery, tutoring, tech support, event help — tasks that need doing right now.',
+  'General Labor': 'Moving, lawn care, cleaning, hauling, demolition, pressure washing, junk removal.',
+  'Skilled Labor': 'Plumbing, electrical, HVAC, carpentry, painting, welding, auto repair, roofing, flooring.',
+  'Verify & Inspect': 'Property walk-throughs, vehicle inspections, marketplace item verification, GPS-verified proof.',
+  'Barter Labor': 'Trade services, skill exchange, item exchange — work without cash.',
+  'Marketplace': 'Buy, sell, rent items locally with optional GUBER verification.'
+};
+
+function route() {
+  var params = new URLSearchParams(search);
+
+  if (path === '/jobs' || path === '/jobs/') {
+    var q = params.get('q') || '';
+    var zip = params.get('zip') || '';
+    var cat = params.get('category') || '';
+    var apiUrl = API + '?limit=50';
+    if (q) apiUrl += '&search=' + encodeURIComponent(q);
+    if (zip) apiUrl += '&zip=' + encodeURIComponent(zip);
+    if (cat) apiUrl += '&category=' + encodeURIComponent(cat);
+    fetch(apiUrl).then(function(r) { return r.json(); }).then(function(jobs) {
+      var title = cat ? cat + ' Jobs' : 'All Jobs';
+      var sub = q ? 'Search: "' + q + '"' : (zip ? 'Near ' + zip : 'Browse all active jobs on GUBER');
+      renderJobList(jobs, title, sub);
+    }).catch(function() { renderJobList([], 'Jobs', 'Could not load jobs.'); });
+    return;
+  }
+
+  var jobMatch = path.match(/^\/jobs\/(.+)-(\d+)$/);
+  if (jobMatch) {
+    var jobId = jobMatch[2];
+    fetch(API.replace('/jobs', '/jobs/' + jobId)).then(function(r) {
+      if (!r.ok) throw new Error('Not found');
+      return r.json();
+    }).then(renderJobDetail).catch(renderNotFound);
+    return;
+  }
+
+  var catMatch = path.match(/^\/category\/(.+)$/);
+  if (catMatch) {
+    var catSlug = catMatch[1];
+    var catName = CATEGORY_MAP[catSlug];
+    if (catName) {
+      fetch(API + '?category=' + encodeURIComponent(catName) + '&limit=50').then(function(r) { return r.json(); }).then(function(jobs) {
+        renderJobList(jobs, catName, CATEGORY_DESCRIPTIONS[catName] || '');
+      }).catch(function() { renderJobList([], catName, 'Could not load jobs.'); });
+    } else {
+      renderNotFound();
+    }
+    return;
+  }
+
+  var cityMatch = path.match(/^\/([a-z0-9-]+)-([a-z]{2})$/);
+  if (cityMatch) {
+    var citySlug = cityMatch[1];
+    var stateCode = cityMatch[2].toUpperCase();
+    var cityName = citySlug.replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+    fetch(API + '?limit=50').then(function(r) { return r.json(); }).then(function(jobs) {
+      var filtered = jobs.filter(function(j) {
+        var loc = parseLocation(j.locationApprox);
+        return slugify(loc.city) === citySlug && loc.state === stateCode;
+      });
+      renderJobList(filtered, 'Jobs in ' + cityName + ', ' + stateCode, filtered.length + ' active jobs in your area');
+    }).catch(function() { renderJobList([], 'Jobs in ' + cityName + ', ' + stateCode, 'Could not load jobs.'); });
+    return;
+  }
+
+  renderNotFound();
+}
+
+route();
+</script>
+
+</body>
+</html>

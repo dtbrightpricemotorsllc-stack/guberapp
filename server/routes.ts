@@ -606,10 +606,11 @@ export async function registerRoutes(
     setPublicCors(req, res);
     try {
       const { zip, search, category, limit: limitParam } = req.query as Record<string, string | undefined>;
-      const limitVal = Math.min(20, Math.max(1, parseInt(limitParam || '20', 10) || 20));
+      const limitVal = Math.min(50, Math.max(1, parseInt(limitParam || '50', 10) || 50));
 
       const conditions = [
         eq(jobsTable.status, "posted_public"),
+        or(sql`${jobsTable.expiresAt} IS NULL`, sql`${jobsTable.expiresAt} > NOW()`),
         ...(zip ? [eq(jobsTable.zip, zip)] : []),
         ...(search ? [sql`lower(${jobsTable.title}) LIKE ${"%" + search.toLowerCase() + "%"}`] : []),
         ...(category ? [eq(jobsTable.category, category)] : []),
@@ -619,6 +620,7 @@ export async function registerRoutes(
         .select({
           id: jobsTable.id,
           title: jobsTable.title,
+          description: jobsTable.description,
           category: jobsTable.category,
           budget: jobsTable.budget,
           locationApprox: jobsTable.locationApprox,
@@ -632,6 +634,7 @@ export async function registerRoutes(
           serviceType: jobsTable.serviceType,
           verifyInspectCategory: jobsTable.verifyInspectCategory,
           jobImage: jobsTable.jobImage,
+          expiresAt: jobsTable.expiresAt,
           createdAt: jobsTable.createdAt,
         })
         .from(jobsTable)
@@ -648,14 +651,67 @@ export async function registerRoutes(
         { id: -6, title: "Office Deep Clean — After Hours", category: "Cleaning", budget: 90, locationApprox: "Prichard, AL area", zip: "36610", lat: 30.747, lng: -88.084, urgentSwitch: false, payType: "fixed", jobType: "in-person", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date().toISOString(), appUrl: "https://guberapp.app/browse-jobs" },
       ];
 
+      const sanitizeDesc = (d: string | null) => d ? filterContactInfo(d).clean.substring(0, 500) : null;
       const jobs = rows.length > 0
-        ? rows.map((j) => ({ ...j, appUrl: `https://guberapp.app/jobs/${j.id}` }))
+        ? rows.map((j) => ({ ...j, description: sanitizeDesc(j.description), appUrl: `https://guberapp.app/jobs/${j.id}` }))
         : FALLBACK_JOBS;
 
       res.json(jobs);
     } catch (err) {
       console.error("[public/jobs] error:", err);
       res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
+
+  app.options("/api/public/jobs/:id", (req: Request, res: Response) => {
+    setPublicCors(req, res);
+    res.sendStatus(204);
+  });
+
+  app.get("/api/public/jobs/:id", async (req: Request, res: Response) => {
+    setPublicCors(req, res);
+    try {
+      const jobId = parseInt(req.params.id, 10);
+      if (isNaN(jobId)) return res.status(400).json({ error: "Invalid job ID" });
+
+      const rows = await db
+        .select({
+          id: jobsTable.id,
+          title: jobsTable.title,
+          description: jobsTable.description,
+          category: jobsTable.category,
+          budget: jobsTable.budget,
+          locationApprox: jobsTable.locationApprox,
+          zip: jobsTable.zip,
+          urgentSwitch: jobsTable.urgentSwitch,
+          payType: jobsTable.payType,
+          jobType: jobsTable.jobType,
+          proofRequired: jobsTable.proofRequired,
+          serviceType: jobsTable.serviceType,
+          verifyInspectCategory: jobsTable.verifyInspectCategory,
+          jobImage: jobsTable.jobImage,
+          expiresAt: jobsTable.expiresAt,
+          status: jobsTable.status,
+          createdAt: jobsTable.createdAt,
+        })
+        .from(jobsTable)
+        .where(eq(jobsTable.id, jobId))
+        .limit(1);
+
+      if (!rows.length) return res.status(404).json({ error: "Job not found" });
+      const job = rows[0];
+      if (job.status === "draft") return res.status(404).json({ error: "Job not found" });
+
+      const desc = job.description ? filterContactInfo(job.description).clean.substring(0, 1000) : null;
+      res.json({
+        ...job,
+        description: desc,
+        location: undefined,
+        appUrl: `https://guberapp.app/jobs/${job.id}`,
+      });
+    } catch (err) {
+      console.error("[public/jobs/:id] error:", err);
+      res.status(500).json({ error: "Failed to fetch job" });
     }
   });
 

@@ -291,6 +291,12 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
+  // ── PUBLIC SEO ROUTES (SSR job pages + sitemap) ──
+  // These must be registered BEFORE the Vite/static catch-all so they intercept first.
+
+  const { setupPublicSeoRoutes } = await import("./seo-routes");
+  setupPublicSeoRoutes(app);
+
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
