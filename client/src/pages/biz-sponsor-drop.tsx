@@ -431,12 +431,14 @@ export default function BizSponsorDrop() {
                   data-testid="input-number-of-winners"
                   {...register("numberOfWinners", {
                     validate: (v) => {
-                      if (!v) return true;
                       const n = parseInt(v);
-                      if (isNaN(n) || n < 1 || !Number.isInteger(Number(v))) return "Must be a whole number, 1 or more.";
+                      if (!v || isNaN(n) || n < 1 || !Number.isInteger(Number(v))) return "Must be a whole number, 1 or more.";
                       return true;
                     },
                   })}
+                  onBlur={(e) => {
+                    if (!e.target.value || parseInt(e.target.value) < 1) setValue("numberOfWinners", "1");
+                  }}
                   style={errors.numberOfWinners ? { borderColor: "#ef4444" } : {}}
                 />
                 {errors.numberOfWinners && (
