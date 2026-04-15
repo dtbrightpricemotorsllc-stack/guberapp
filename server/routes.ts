@@ -2663,6 +2663,79 @@ export async function registerRoutes(
           });
           console.log(`[GUBER][webhook/main] business_extra_unlocks: biz ${bizId} +${qty} unlocks`);
 
+        } else if (metadata?.type === "sponsor_drop") {
+          if (session.payment_status !== "paid") {
+            console.log(`[GUBER][webhook/main] sponsor_drop: session ${session.id} payment_status=${session.payment_status} — skipping (not paid)`);
+            return res.json({ received: true });
+          }
+
+          const existingSponsors = await storage.getDropSponsors();
+          const alreadyProcessed = existingSponsors.find((s: any) => s.stripeCheckoutSessionId === session.id);
+          if (alreadyProcessed) {
+            console.log(`[GUBER][webhook/main] sponsor_drop: session ${session.id} already processed as sponsor #${alreadyProcessed.id} — skipping duplicate`);
+            return res.json({ received: true });
+          }
+
+          const m = metadata;
+          const sponsorAmount = parseFloat(m.sponsor_amount || "0");
+          const platformAmt = parseFloat(m.platform_amount || "0");
+          const dropPoolAmt = parseFloat(m.drop_pool_amount || "0");
+          const winnerCount = parseInt(m.winner_count || "1") || 1;
+          const prizePerWinner = parseFloat(m.prize_per_winner || "0");
+
+          const sponsor = await storage.createDropSponsor({
+            businessProfileId: m.business_profile_id ? parseInt(m.business_profile_id) : null,
+            businessId: m.user_id ? parseInt(m.user_id) : null,
+            companyName: m.company_name || "Unknown",
+            logoUrl: m.logo_url || null,
+            contactEmail: m.contact_email || "",
+            contactName: m.contact_name || null,
+            contactPhone: m.contact_phone || null,
+            businessAddress: m.business_address || null,
+            websiteUrl: m.website_url || null,
+            requestedDropDate: m.requested_drop_date || null,
+            targetZipCode: m.target_zip_code || null,
+            targetCityState: m.target_city_state || null,
+            proposedBudget: m.proposed_budget ? parseFloat(m.proposed_budget) : null,
+            cashContribution: sponsorAmount,
+            sponsorMessage: m.sponsor_message || null,
+            sponsorshipType: m.sponsorship_type || "cash",
+            promotionGoal: m.promotion_goal || null,
+            preferredTime: m.preferred_time || null,
+            finalLocationRequested: m.final_location_requested === "true",
+            brandingEnabled: m.branding_enabled === "true",
+            rewardType: m.reward_type || "cash",
+            rewardDescription: m.reward_description || null,
+            rewardQuantity: m.reward_quantity ? parseInt(m.reward_quantity) : null,
+            noPurchaseRequiredText: m.no_purchase_required_text || null,
+            disclaimerText: m.disclaimer_text || null,
+            finalLocationMode: m.final_location_mode || "name_only",
+            redemptionType: m.redemption_type || "visit_store",
+            redemptionInstructions: m.redemption_instructions || null,
+            paymentStatus: "paid",
+            status: "pending",
+            stripeCheckoutSessionId: session.id,
+            stripePaymentIntentId: (session.payment_intent as string) || null,
+            platformAmount: platformAmt,
+            dropPoolAmount: dropPoolAmt,
+            numberOfWinners: winnerCount,
+            estimatedPrizePerWinner: prizePerWinner,
+            paidAt: new Date(),
+          });
+
+          const allUsers = await storage.getAllUsers();
+          const admins = allUsers.filter((u: any) => u.role === "admin");
+          for (const admin of admins) {
+            await storage.createNotification({
+              userId: admin.id,
+              title: "New Paid Sponsor Drop Request",
+              body: `${m.company_name} paid $${sponsorAmount} for a sponsored drop. Review in Admin → Sponsors.`,
+              type: "sponsor_request",
+            });
+          }
+
+          console.log(`[GUBER][webhook/main] sponsor_drop: created sponsor #${sponsor.id} for ${m.company_name} ($${sponsorAmount}, platform: $${platformAmt}, pool: $${dropPoolAmt})`);
+
         } else {
           console.log(`[GUBER][webhook/main] checkout.session.completed: unhandled session type "${metadata?.type || "none"}" — ignored`);
         }
@@ -8980,6 +9053,119 @@ export async function registerRoutes(
 
   // ==================== SPONSORED CASH DROPS ====================
 
+  // ==================== SPONSOR DROP STRIPE CHECKOUT ====================
+
+  app.post("/api/stripe/create-sponsor-drop-session", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user || user.accountType !== "business") {
+        return res.status(403).json({ error: "Business account required" });
+      }
+      const bizProfile = await storage.getBusinessProfile(userId);
+
+      const {
+        companyName, contactEmail, contactName, contactPhone, businessAddress, websiteUrl,
+        requestedDropDate, targetZipCode, targetCityState, proposedBudget, cashContribution,
+        sponsorMessage, sponsorshipType, promotionGoal, preferredTime,
+        finalLocationRequested, brandingEnabled,
+        rewardType, rewardDescription, rewardQuantity, noPurchaseRequiredText,
+        disclaimerText, finalLocationMode, redemptionType, redemptionInstructions,
+        numberOfWinners,
+      } = req.body;
+
+      if (!companyName || !contactEmail) {
+        return res.status(400).json({ error: "Company name and contact email are required" });
+      }
+
+      const sponsorAmount = parseFloat(cashContribution);
+      if (!sponsorAmount || sponsorAmount < 100) {
+        return res.status(400).json({ error: "Minimum sponsor amount is $100" });
+      }
+
+      const winnersCount = Math.max(1, parseInt(numberOfWinners) || 1);
+      const platformAmountCents = Math.round(sponsorAmount * 0.35 * 100);
+      const dropPoolAmountCents = Math.round(sponsorAmount * 0.65 * 100);
+      const totalCents = Math.round(sponsorAmount * 100);
+      const estimatedPrizePerWinner = Math.round((sponsorAmount * 0.65) / winnersCount * 100) / 100;
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.host}`;
+
+      const session = await stripeMain.checkout.sessions.create({
+        mode: "payment",
+        success_url: `${baseUrl}/biz/sponsor-drop/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/biz/sponsor-drop/cancel`,
+        customer_email: contactEmail || undefined,
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "GUBER Sponsor a Drop",
+                description: "Sponsor a local GUBER cash drop",
+              },
+              unit_amount: totalCents,
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          type: "sponsor_drop",
+          user_id: String(userId),
+          business_profile_id: String(bizProfile?.id || ""),
+          company_name: companyName || bizProfile?.companyName || "",
+          logo_url: bizProfile?.companyLogo || "",
+          contact_email: contactEmail,
+          contact_name: contactName || "",
+          contact_phone: contactPhone || "",
+          business_address: businessAddress || "",
+          website_url: websiteUrl || "",
+          requested_drop_date: requestedDropDate || "",
+          target_zip_code: targetZipCode || "",
+          target_city_state: targetCityState || "",
+          proposed_budget: String(proposedBudget || ""),
+          sponsor_amount: String(sponsorAmount),
+          platform_amount: String(Math.round(sponsorAmount * 0.35 * 100) / 100),
+          drop_pool_amount: String(Math.round(sponsorAmount * 0.65 * 100) / 100),
+          winner_count: String(winnersCount),
+          prize_per_winner: String(estimatedPrizePerWinner),
+          sponsorship_type: sponsorshipType || "cash",
+          sponsor_message: (sponsorMessage || "").substring(0, 500),
+          promotion_goal: (promotionGoal || "").substring(0, 500),
+          preferred_time: preferredTime || "",
+          final_location_requested: finalLocationRequested ? "true" : "false",
+          branding_enabled: brandingEnabled ? "true" : "false",
+          reward_type: rewardType || "cash",
+          reward_description: (rewardDescription || "").substring(0, 500),
+          reward_quantity: String(rewardQuantity || ""),
+          final_location_mode: finalLocationMode || "name_only",
+          redemption_type: redemptionType || "visit_store",
+          redemption_instructions: (redemptionInstructions || "").substring(0, 500),
+          no_purchase_required_text: (noPurchaseRequiredText || "").substring(0, 500),
+          disclaimer_text: (disclaimerText || "").substring(0, 500),
+        },
+        payment_intent_data: {
+          metadata: {
+            type: "sponsor_drop",
+            user_id: String(userId),
+            company_name: companyName || bizProfile?.companyName || "",
+            sponsor_amount: String(sponsorAmount),
+            platform_amount: String(Math.round(sponsorAmount * 0.35 * 100) / 100),
+            drop_pool_amount: String(Math.round(sponsorAmount * 0.65 * 100) / 100),
+            winner_count: String(winnersCount),
+            prize_per_winner: String(estimatedPrizePerWinner),
+          },
+        },
+      });
+
+      console.log(`[GUBER] Sponsor drop checkout session created: ${session.id} for ${companyName} ($${sponsorAmount})`);
+      res.json({ checkoutUrl: session.url });
+    } catch (err: any) {
+      console.error("[GUBER] Sponsor drop checkout session error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/business/sponsor-drop", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
@@ -9006,7 +9192,7 @@ export async function registerRoutes(
         businessProfileId: bizProfile?.id || null,
         businessId: userId,
         companyName: companyName || bizProfile?.companyName,
-        logoUrl: bizProfile?.logoUrl || null,
+        logoUrl: bizProfile?.companyLogo || null,
         contactEmail,
         contactName: contactName || null,
         contactPhone: contactPhone || null,

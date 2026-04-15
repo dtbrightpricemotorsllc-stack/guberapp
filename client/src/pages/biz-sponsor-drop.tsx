@@ -193,9 +193,16 @@ export default function BizSponsorDrop() {
   const isBelowMinimum = cashContribution !== "" && cashAmount < 100;
 
   const submitMutation = useMutation({
-    mutationFn: (data: FormData) => apiRequest("POST", "/api/business/sponsor-drop", data),
-    onSuccess: () => {
-      setSubmitted(true);
+    mutationFn: async (data: FormData) => {
+      const res = await apiRequest("POST", "/api/stripe/create-sponsor-drop-session", data);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast({ title: "Error", description: "Could not create payment session", variant: "destructive" });
+      }
     },
     onError: (err: any) => {
       toast({ title: "Submission failed", description: err.message, variant: "destructive" });
@@ -674,13 +681,13 @@ export default function BizSponsorDrop() {
             ) : (
               <>
                 <Sparkles style={{ width: 16, height: 16 }} />
-                SUBMIT SPONSOR REQUEST
+                PROCEED TO PAYMENT
               </>
             )}
           </button>
 
           <p style={{ color: MUTED, fontSize: "11px", textAlign: "center", lineHeight: 1.5 }}>
-            Submission does not commit you to any payment. Our team will follow up with pricing and logistics.
+            You will be redirected to Stripe to complete payment. Your drop request will be submitted after successful payment.
           </p>
         </form>
       </div>

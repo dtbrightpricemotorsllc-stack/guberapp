@@ -62,6 +62,8 @@ const BizTemplates = lazy(() => import("@/pages/biz-templates"));
 const BizAccount = lazy(() => import("@/pages/biz-account"));
 const BizObservations = lazy(() => import("@/pages/biz-observations"));
 const BizSponsorDrop = lazy(() => import("@/pages/biz-sponsor-drop"));
+const BizSponsorDropSuccess = lazy(() => import("@/pages/biz-sponsor-drop-success"));
+const BizSponsorDropCancel = lazy(() => import("@/pages/biz-sponsor-drop-cancel"));
 const BizTalentExplorer = lazy(() => import("@/pages/biz-talent-explorer"));
 const BizVerification = lazy(() => import("@/pages/biz-verification"));
 const BizOffers = lazy(() => import("@/pages/biz-offers"));
@@ -210,6 +212,8 @@ function Router() {
       <Route path="/biz/bulk-post" component={() => <BizRoute component={BizBulkPost} />} />
       <Route path="/biz/templates" component={() => <BizRoute component={BizTemplates} />} />
       <Route path="/biz/observations" component={() => <BizRoute component={BizObservations} />} />
+      <Route path="/biz/sponsor-drop/success" component={() => <BizRoute component={BizSponsorDropSuccess} />} />
+      <Route path="/biz/sponsor-drop/cancel" component={() => <BizRoute component={BizSponsorDropCancel} />} />
       <Route path="/biz/sponsor-drop" component={() => <BizRoute component={BizSponsorDrop} />} />
       <Route path="/biz/talent-explorer" component={() => <BizRoute component={BizTalentExplorer} />} />
       <Route path="/biz/verification" component={() => <BizRoute component={BizVerification} />} />
