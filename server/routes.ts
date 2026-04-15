@@ -1872,7 +1872,7 @@ export async function registerRoutes(
         details: [
           {
             appID: `${process.env.APPLE_TEAM_ID || "XXXXXXXXXX"}.com.guber.app`,
-            paths: ["/oauth-complete", "/join/*", "/dashboard", "/biz/*"],
+            paths: ["/login", "/oauth-complete", "/join/*", "/dashboard", "/biz/*"],
           },
         ],
       },
