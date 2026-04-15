@@ -3365,7 +3365,7 @@ Reject
 <div key={attempt.id} className="flex items-center gap-3 py-1.5 border-t border-border/10">
 <div className="flex-1 min-w-0">
 <p className="text-[11px] font-semibold">{attempt.user_name || `User #${attempt.user_id}`}</p>
-{(attempt.status === "won" || attempt.status === "submitted") && (attempt.payoutMethod || attempt.payout_method) && (
+{(attempt.payoutMethod || attempt.payout_method) && (
 <div>
 <p className="text-[9px] text-muted-foreground/50">
 Payout: {(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")} {(attempt.payoutHandle || attempt.payout_handle) ? `(${attempt.payoutHandle || attempt.payout_handle})` : ""}
