@@ -410,7 +410,7 @@ export default function BizSponsorDrop() {
                 <p style={{ color: MUTED, fontSize: "11px", marginTop: 5, fontStyle: "italic" }} data-testid="text-recommended-hint">
                   For better results, most businesses start around $150 or more.
                 </p>
-                {cashContribution !== "" && cashAmount >= 100 && (
+                {cashContribution !== "" && (
                   <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(168,138,67,0.08)", border: `1px solid ${GOLD_BORDER}`, borderRadius: "10px" }} data-testid="calculator-section">
                     <p style={{ color: GOLD, fontSize: "12px", fontWeight: 600 }} data-testid="text-estimated-drop-value">
                       Estimated Drop Value: ${estimatedDropValue}
@@ -429,8 +429,21 @@ export default function BizSponsorDrop() {
                   step="1"
                   placeholder="1"
                   data-testid="input-number-of-winners"
-                  {...register("numberOfWinners")}
+                  {...register("numberOfWinners", {
+                    validate: (v) => {
+                      if (!v) return true;
+                      const n = parseInt(v);
+                      if (isNaN(n) || n < 1 || !Number.isInteger(Number(v))) return "Must be a whole number, 1 or more.";
+                      return true;
+                    },
+                  })}
+                  style={errors.numberOfWinners ? { borderColor: "#ef4444" } : {}}
                 />
+                {errors.numberOfWinners && (
+                  <p style={{ color: "#ef4444", fontSize: "11px", marginTop: 4 }} data-testid="text-winners-error">
+                    {errors.numberOfWinners.message as string}
+                  </p>
+                )}
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <SectionLabel>Sponsorship Type</SectionLabel>
