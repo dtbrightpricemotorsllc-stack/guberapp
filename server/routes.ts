@@ -9084,10 +9084,10 @@ export async function registerRoutes(
       }
 
       const winnersCount = Math.max(1, parseInt(numberOfWinners) || 1);
-      const platformAmountCents = Math.round(sponsorAmount * 0.35 * 100);
-      const dropPoolAmountCents = Math.round(sponsorAmount * 0.65 * 100);
       const totalCents = Math.round(sponsorAmount * 100);
-      const estimatedPrizePerWinner = Math.round((sponsorAmount * 0.65) / winnersCount * 100) / 100;
+      const platformAmountDollars = Math.round(sponsorAmount * 0.35 * 100) / 100;
+      const dropPoolAmountDollars = Math.round(sponsorAmount * 0.65 * 100) / 100;
+      const estimatedPrizePerWinner = Math.round((dropPoolAmountDollars / winnersCount) * 100) / 100;
 
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.host}`;
 
@@ -9125,8 +9125,8 @@ export async function registerRoutes(
           target_city_state: targetCityState || "",
           proposed_budget: String(proposedBudget || ""),
           sponsor_amount: String(sponsorAmount),
-          platform_amount: String(Math.round(sponsorAmount * 0.35 * 100) / 100),
-          drop_pool_amount: String(Math.round(sponsorAmount * 0.65 * 100) / 100),
+          platform_amount: String(platformAmountDollars),
+          drop_pool_amount: String(dropPoolAmountDollars),
           winner_count: String(winnersCount),
           prize_per_winner: String(estimatedPrizePerWinner),
           sponsorship_type: sponsorshipType || "cash",
@@ -9150,8 +9150,8 @@ export async function registerRoutes(
             user_id: String(userId),
             company_name: companyName || bizProfile?.companyName || "",
             sponsor_amount: String(sponsorAmount),
-            platform_amount: String(Math.round(sponsorAmount * 0.35 * 100) / 100),
-            drop_pool_amount: String(Math.round(sponsorAmount * 0.65 * 100) / 100),
+            platform_amount: String(platformAmountDollars),
+            drop_pool_amount: String(dropPoolAmountDollars),
             winner_count: String(winnersCount),
             prize_per_winner: String(estimatedPrizePerWinner),
           },
@@ -9172,6 +9172,10 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user || user.accountType !== "business") {
         return res.status(403).json({ error: "Business account required" });
+      }
+
+      if (user.role !== "admin") {
+        return res.status(400).json({ error: "Please use the Stripe payment flow to submit a sponsor request. This endpoint is reserved for admin use." });
       }
       const bizProfile = await storage.getBusinessProfile(userId);
 
