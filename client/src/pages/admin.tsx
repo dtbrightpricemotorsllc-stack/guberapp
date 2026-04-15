@@ -3313,12 +3313,20 @@ GPS: {(attempt.gpsLat || attempt.gps_lat) ? `${parseFloat(attempt.gpsLat || atte
 )}
 
 {(attempt.payoutMethod || attempt.payout_method) && (
-<div className="bg-muted/10 rounded-lg px-3 py-2" data-testid={`attempt-payout-info-${attempt.id}`}>
+<div className="bg-muted/10 rounded-lg px-3 py-2 space-y-1" data-testid={`attempt-payout-info-${attempt.id}`}>
 <p className="text-[9px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase mb-1">Payout Details</p>
 <p className="text-[11px] text-foreground/80">
 Method: <span className="font-semibold capitalize">{(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")}</span>
 {(attempt.payoutHandle || attempt.payout_handle) && <span className="ml-2 text-muted-foreground">({attempt.payoutHandle || attempt.payout_handle})</span>}
 </p>
+{(attempt.payoutBankName || attempt.payout_bank_name) && (
+<p className="text-[10px] text-muted-foreground/70">
+Bank: <span className="text-foreground/80">{attempt.payoutBankName || attempt.payout_bank_name}</span>
+{(attempt.payoutAccountType || attempt.payout_account_type) && <span className="ml-1">({attempt.payoutAccountType || attempt.payout_account_type})</span>}
+{(attempt.payoutRoutingNumber || attempt.payout_routing_number) && <span className="ml-2">Routing: •••{(attempt.payoutRoutingNumber || attempt.payout_routing_number).slice(-4)}</span>}
+{(attempt.payoutAccountNumber || attempt.payout_account_number) && <span className="ml-2">Acct: •••{(attempt.payoutAccountNumber || attempt.payout_account_number).slice(-4)}</span>}
+</p>
+)}
 </div>
 )}
 
@@ -3358,10 +3366,19 @@ Reject
 <div className="flex-1 min-w-0">
 <p className="text-[11px] font-semibold">{attempt.user_name || `User #${attempt.user_id}`}</p>
 {(attempt.status === "won" || attempt.status === "submitted") && (attempt.payoutMethod || attempt.payout_method) && (
+<div>
 <p className="text-[9px] text-muted-foreground/50">
 Payout: {(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")} {(attempt.payoutHandle || attempt.payout_handle) ? `(${attempt.payoutHandle || attempt.payout_handle})` : ""}
 {(attempt.payoutStatus || attempt.payout_status) === "paid" && " — PAID"}
 </p>
+{(attempt.payoutBankName || attempt.payout_bank_name) && (
+<p className="text-[9px] text-muted-foreground/50">
+Bank: {attempt.payoutBankName || attempt.payout_bank_name}
+{(attempt.payoutAccountType || attempt.payout_account_type) && ` (${attempt.payoutAccountType || attempt.payout_account_type})`}
+{(attempt.payoutAccountNumber || attempt.payout_account_number) && ` •••${(attempt.payoutAccountNumber || attempt.payout_account_number).slice(-4)}`}
+</p>
+)}
+</div>
 )}
 </div>
 <div className="flex items-center gap-2">
