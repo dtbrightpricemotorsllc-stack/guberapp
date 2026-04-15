@@ -1725,10 +1725,7 @@ export async function registerRoutes(
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) return res.status(503).json({ message: "Google Sign-In not configured" });
     const redirectUri = `${getBaseUrl(req)}/api/auth/google/callback`;
-    // Encode native flag in the state so we don't rely on session for this
-    const nonce = randomBytes(16).toString("hex");
-    const isNative = req.query.native === "1";
-    const state = isNative ? `native:${nonce}` : nonce;
+    const state = randomBytes(16).toString("hex");
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -1855,13 +1852,9 @@ export async function registerRoutes(
 
       if (user.banned) return res.redirect("/login?error=banned");
       if (user.suspended) return res.redirect("/login?error=suspended");
-      const isNative = typeof state === "string" && state.startsWith("native:");
       const loginToken = randomBytes(24).toString("hex");
       const expiresAt = Date.now() + 60_000;
       await pool.query(`INSERT INTO login_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)`, [loginToken, user.id, expiresAt]);
-      if (isNative) {
-        return res.redirect(`guber://oauth-complete?t=${loginToken}`);
-      }
       res.redirect(`/login?t=${loginToken}`);
     } catch (err: any) {
       console.error("Google OAuth error:", err);

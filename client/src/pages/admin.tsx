@@ -3295,16 +3295,16 @@ attempts.filter((a: any) => a.status === "submitted").map((attempt: any) => (
 <div>
 <p className="text-sm font-semibold">{attempt.user_name || `User #${attempt.user_id}`}</p>
 <p className="text-[10px] text-muted-foreground/50">
-Submitted {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : "—"} ·
-GPS: {attempt.gps_lat ? `${parseFloat(attempt.gps_lat).toFixed(4)}, ${parseFloat(attempt.gps_lng).toFixed(4)}` : "N/A"}
+Submitted {(attempt.submittedAt || attempt.submitted_at) ? new Date(attempt.submittedAt || attempt.submitted_at).toLocaleString() : "—"} ·
+GPS: {(attempt.gpsLat || attempt.gps_lat) ? `${parseFloat(attempt.gpsLat || attempt.gps_lat).toFixed(4)}, ${parseFloat(attempt.gpsLng || attempt.gps_lng).toFixed(4)}` : "N/A"}
 </p>
 </div>
 <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">Pending Review</Badge>
 </div>
 
-{attempt.proof_urls && attempt.proof_urls.length > 0 && (
+{(attempt.proofUrls || attempt.proof_urls) && (attempt.proofUrls || attempt.proof_urls).length > 0 && (
 <div className="grid grid-cols-3 gap-1.5">
-{attempt.proof_urls.map((url: string, i: number) => (
+{(attempt.proofUrls || attempt.proof_urls).map((url: string, i: number) => (
 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-lg overflow-hidden border border-border/10" data-testid={`proof-photo-${attempt.id}-${i}`}>
 <img src={url} className="w-full h-full object-cover" alt={`proof ${i + 1}`} />
 </a>
@@ -3347,16 +3347,16 @@ Reject
 <div key={attempt.id} className="flex items-center gap-3 py-1.5 border-t border-border/10">
 <div className="flex-1 min-w-0">
 <p className="text-[11px] font-semibold">{attempt.user_name || `User #${attempt.user_id}`}</p>
-{attempt.status === "won" && attempt.payout_method && (
+{(attempt.status === "won" || attempt.status === "submitted") && (attempt.payoutMethod || attempt.payout_method) && (
 <p className="text-[9px] text-muted-foreground/50">
-Payout: {attempt.payout_method?.replace("_", " ")} {attempt.payout_handle ? `(${attempt.payout_handle})` : ""}
-{attempt.payout_status === "paid" && " — PAID"}
+Payout: {(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")} {(attempt.payoutHandle || attempt.payout_handle) ? `(${attempt.payoutHandle || attempt.payout_handle})` : ""}
+{(attempt.payoutStatus || attempt.payout_status) === "paid" && " — PAID"}
 </p>
 )}
 </div>
 <div className="flex items-center gap-2">
 <Badge variant="outline" className="text-[9px] capitalize">{attempt.status}</Badge>
-{attempt.status === "won" && attempt.payout_status !== "paid" && attempt.payout_method && (
+{attempt.status === "won" && (attempt.payoutStatus || attempt.payout_status) !== "paid" && (attempt.payoutMethod || attempt.payout_method) && (
 <Button
 size="sm"
 className="h-6 text-[9px] px-2 bg-emerald-500 text-white"

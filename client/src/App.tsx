@@ -236,24 +236,13 @@ function NativeDeepLinkHandler() {
     CapApp.addListener("appUrlOpen", (event: { url: string }) => {
       const url = event.url;
 
-      // Custom scheme: guber://oauth-complete?t=TOKEN
-      if (url.startsWith("guber://oauth-complete")) {
-        const qs = url.split("?")[1] || "";
-        const params = new URLSearchParams(qs);
-        const token = params.get("t");
-        if (token) {
-          setLocation(`/oauth-complete?t=${token}`);
-        }
-        return;
-      }
-
       // Universal Links: https://guberapp.app/<path>
       // Triggered when the OS routes a guberapp.app URL into the installed app
       try {
         const parsed = new URL(url);
         const path = parsed.pathname + (parsed.search || "");
-        // Route known deep-linkable paths into the app router
         if (
+          path.startsWith("/login") ||
           path.startsWith("/join/") ||
           path.startsWith("/dashboard") ||
           path.startsWith("/biz/") ||

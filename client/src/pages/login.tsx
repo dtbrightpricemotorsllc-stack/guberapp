@@ -110,7 +110,7 @@ export default function Login() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const authUrl = `${window.location.origin}/api/auth/google${Capacitor.isNativePlatform() ? "?native=1" : ""}`;
+    const authUrl = `${window.location.origin}/api/auth/google`;
     if (Capacitor.isNativePlatform()) {
       await Browser.open({ url: authUrl });
       setGoogleLoading(false);

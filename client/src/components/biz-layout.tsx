@@ -43,7 +43,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
       className="flex flex-col h-full"
       style={{ background: "#000000", width: "100%", borderRight: "1px solid rgba(255,255,255,0.06)" }}
     >
-      <div className="flex items-center justify-between px-5 pt-7 pb-5">
+      <div className="flex items-center justify-between px-5 pb-5" style={{ paddingTop: "max(1.75rem, env(safe-area-inset-top, 1.75rem))" }}>
         <Link href="/biz/dashboard">
           <div className="flex items-center gap-2.5 cursor-pointer group">
             <div
@@ -161,8 +161,8 @@ export function BizLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0">
         <div
-          className="lg:hidden flex items-center gap-3 px-4 py-3 sticky top-0 z-40"
-          style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          className="lg:hidden flex items-center gap-3 px-4 sticky top-0 z-40"
+          style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingTop: "max(0.75rem, env(safe-area-inset-top, 0.75rem))", paddingBottom: "0.75rem" }}
         >
           <button
             onClick={() => setMobileSidebarOpen(true)}
