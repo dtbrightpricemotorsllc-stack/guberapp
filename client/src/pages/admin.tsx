@@ -3312,6 +3312,16 @@ GPS: {(attempt.gpsLat || attempt.gps_lat) ? `${parseFloat(attempt.gpsLat || atte
 </div>
 )}
 
+{(attempt.payoutMethod || attempt.payout_method) && (
+<div className="bg-muted/10 rounded-lg px-3 py-2" data-testid={`attempt-payout-info-${attempt.id}`}>
+<p className="text-[9px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase mb-1">Payout Details</p>
+<p className="text-[11px] text-foreground/80">
+Method: <span className="font-semibold capitalize">{(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")}</span>
+{(attempt.payoutHandle || attempt.payout_handle) && <span className="ml-2 text-muted-foreground">({attempt.payoutHandle || attempt.payout_handle})</span>}
+</p>
+</div>
+)}
+
 <div className="flex gap-2 pt-1">
 <Button
 size="sm"
