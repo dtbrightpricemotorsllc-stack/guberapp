@@ -23,6 +23,7 @@ type FormData = {
   targetCityState: string;
   proposedBudget: string;
   cashContribution: string;
+  numberOfWinners: string;
   sponsorshipType: string;
   sponsorMessage: string;
   promotionGoal: string;
@@ -146,6 +147,7 @@ export default function BizSponsorDrop() {
       targetCityState: "",
       proposedBudget: "",
       cashContribution: "",
+      numberOfWinners: "1",
       sponsorshipType: "cash",
       sponsorMessage: "",
       promotionGoal: "",
@@ -181,6 +183,14 @@ export default function BizSponsorDrop() {
   const rewardType = watch("rewardType");
   const finalLocationMode = watch("finalLocationMode");
   const redemptionType = watch("redemptionType");
+  const cashContribution = watch("cashContribution");
+  const numberOfWinners = watch("numberOfWinners");
+
+  const cashAmount = parseFloat(cashContribution) || 0;
+  const winnersCount = Math.max(1, parseInt(numberOfWinners) || 1);
+  const estimatedDropValue = Math.round(cashAmount * 0.65);
+  const estimatedPrizePerWinner = Math.round(estimatedDropValue / winnersCount);
+  const isBelowMinimum = cashContribution !== "" && cashAmount < 100;
 
   const submitMutation = useMutation({
     mutationFn: (data: FormData) => apiRequest("POST", "/api/business/sponsor-drop", data),
@@ -380,14 +390,46 @@ export default function BizSponsorDrop() {
                 />
               </div>
               <div>
-                <SectionLabel>Cash Contribution ($)</SectionLabel>
+                <SectionLabel>Cash Contribution ($) *</SectionLabel>
                 <StyledInput
                   type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Amount you'd contribute directly"
+                  min="100"
+                  step="1"
+                  placeholder="Minimum $100"
                   data-testid="input-cash-contribution"
-                  {...register("cashContribution")}
+                  {...register("cashContribution", {
+                    validate: (v) => !v || parseFloat(v) >= 100 || "Minimum sponsor amount is $100.",
+                  })}
+                  style={isBelowMinimum ? { borderColor: "#ef4444" } : {}}
+                />
+                {isBelowMinimum && (
+                  <p style={{ color: "#ef4444", fontSize: "11px", marginTop: 4 }} data-testid="text-min-amount-error">
+                    Minimum sponsor amount is $100.
+                  </p>
+                )}
+                <p style={{ color: MUTED, fontSize: "11px", marginTop: 5, fontStyle: "italic" }} data-testid="text-recommended-hint">
+                  For better results, most businesses start around $150 or more.
+                </p>
+                {cashContribution !== "" && cashAmount >= 100 && (
+                  <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(168,138,67,0.08)", border: `1px solid ${GOLD_BORDER}`, borderRadius: "10px" }} data-testid="calculator-section">
+                    <p style={{ color: GOLD, fontSize: "12px", fontWeight: 600 }} data-testid="text-estimated-drop-value">
+                      Estimated Drop Value: ${estimatedDropValue}
+                    </p>
+                    <p style={{ color: "#A1A1AA", fontSize: "12px", fontWeight: 600, marginTop: 4 }} data-testid="text-estimated-prize-per-winner">
+                      Estimated Prize Per Winner: ${estimatedPrizePerWinner}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div>
+                <SectionLabel>Number of Winners</SectionLabel>
+                <StyledInput
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="1"
+                  data-testid="input-number-of-winners"
+                  {...register("numberOfWinners")}
                 />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -590,12 +632,12 @@ export default function BizSponsorDrop() {
 
           <button
             type="submit"
-            disabled={submitMutation.isPending}
+            disabled={submitMutation.isPending || isBelowMinimum}
             data-testid="button-submit-sponsor"
             style={{
               width: "100%",
               height: 52,
-              background: submitMutation.isPending
+              background: (submitMutation.isPending || isBelowMinimum)
                 ? "rgba(168,138,67,0.3)"
                 : `linear-gradient(135deg, ${GOLD}, ${GOLD_DK}, ${GOLD})`,
               border: `1px solid ${GOLD_BORDER}`,
@@ -605,7 +647,7 @@ export default function BizSponsorDrop() {
               fontWeight: 900,
               letterSpacing: "0.15em",
               boxShadow: `0 4px 20px ${GOLD_GLOW}`,
-              cursor: submitMutation.isPending ? "not-allowed" : "pointer",
+              cursor: (submitMutation.isPending || isBelowMinimum) ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
