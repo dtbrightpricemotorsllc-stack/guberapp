@@ -112,7 +112,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
         })}
       </div>
 
-      <div className="px-3 pb-5 mt-2 border-t border-white/[0.04] pt-3 space-y-0.5">
+      <div className="px-3 mt-2 border-t border-white/[0.04] pt-3 space-y-0.5" style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 1.25rem))" }}>
         <Link href="/dashboard">
           <button
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left hover:bg-white/[0.02]"
