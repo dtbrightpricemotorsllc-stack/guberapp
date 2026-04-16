@@ -36,9 +36,9 @@ const authLimiter = rateLimit({
 });
 
 app.use("/api", generalLimiter);
-app.use("/api/login", authLimiter);
-app.use("/api/register", authLimiter);
-app.use("/api/request-password-reset", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/signup", authLimiter);
+app.use("/api/auth/forgot-password", authLimiter);
 
 // Use type: () => true so the body is always captured as a raw Buffer regardless
 // of how the production proxy may modify the Content-Type header.

@@ -6,14 +6,14 @@ import { pool } from "./db";
 import { ALL_GAME_IMAGES } from "./game-images";
 import { storage } from "./storage";
 import { signupSchema, loginSchema, businessSignupSchema, businessAccessRequestSchema, businessVerificationSchema, businessOfferSchema } from "@shared/schema";
-import { scrypt, randomBytes, timingSafeEqual, createHmac } from "crypto";
-import { promisify } from "util";
+import { randomBytes, createHmac } from "crypto";
 import Stripe from "stripe";
 import express from "express";
 import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
+import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword } from "./auth";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, type User } from "@shared/schema";
@@ -53,7 +53,6 @@ async function notify(
   }).catch(() => {});
 }
 
-const scryptAsync = promisify(scrypt);
 const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
 const stripeMain = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
 
@@ -65,24 +64,6 @@ const URGENT_FEE = 10;
 const STRIPE_PCT = 0.029;
 const STRIPE_FIXED = 0.30;
 
-function regenerateSession(req: Request): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const prevData: Record<string, any> = {};
-    const keysToPreserve = ["pendingReferralCode", "oauthState"];
-    for (const key of keysToPreserve) {
-      if ((req.session as any)[key] !== undefined) {
-        prevData[key] = (req.session as any)[key];
-      }
-    }
-    req.session.regenerate((err) => {
-      if (err) return reject(err);
-      for (const [key, value] of Object.entries(prevData)) {
-        (req.session as any)[key] = value;
-      }
-      resolve();
-    });
-  });
-}
 
 function grossUpForStripe(netNeeded: number): { gross: number; stripeFee: number } {
   const gross = Math.ceil((netNeeded + STRIPE_FIXED) / (1 - STRIPE_PCT) * 100) / 100;
@@ -390,30 +371,6 @@ const PREDEFINED_SERVICES: Record<string, string[]> = {
 
 const TIER_ORDER = ["community", "verified", "credentialed", "elite"];
 
-function contactInfoPattern(): RegExp {
-  return /(\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b)|(\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)|(@\w{2,})|((facebook|instagram|snapchat|twitter|tiktok|linkedin|whatsapp|telegram|signal|venmo|cashapp|zelle)[\s.:\/]*\w*)/gi;
-}
-
-function filterContactInfo(text: string): { clean: string; blocked: boolean } {
-  if (!text) return { clean: text, blocked: false };
-  const pattern = contactInfoPattern();
-  if (pattern.test(text)) {
-    return { clean: text.replace(pattern, "[blocked]"), blocked: true };
-  }
-  return { clean: text, blocked: false };
-}
-
-async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
-}
-
-async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
-  const [hashedPassword, salt] = stored.split(".");
-  const buf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(Buffer.from(hashedPassword, "hex"), buf);
-}
 
 declare module "express-session" {
   interface SessionData {
@@ -421,10 +378,6 @@ declare module "express-session" {
   }
 }
 
-function sanitizeUser(user: any) {
-  const { password, ...safe } = user;
-  return safe;
-}
 
 function generateGuberId(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -837,12 +790,6 @@ export async function registerRoutes(
   });
 
   // AUTH
-  function validatePasswordStrength(password: string): string | null {
-    if (password.length < 8) return "Password must be at least 8 characters";
-    if (!/[A-Z]/.test(password)) return "Password must contain at least one capital letter";
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) return "Password must contain at least one symbol";
-    return null;
-  }
 
   async function runNSOPWBackgroundCheck(userId: number, fullName: string): Promise<void> {
     try {
@@ -1718,9 +1665,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
-    req.session.destroy(() => { res.json({ message: "Logged out" }); });
-  });
+  app.post("/api/auth/logout", handleLogout());
 
   // ── Demo login — for App Store / Play Store reviewers only ─────────────────
   // Hidden behind 5-taps on the logo in the login UI. Never shown to regular users.
@@ -1747,12 +1692,7 @@ export async function registerRoutes(
   });
   // ───────────────────────────────────────────────────────────────────────────
 
-  app.get("/api/auth/me", async (req: Request, res: Response) => {
-    if (!req.session.userId) return res.status(401).json({ message: "Not authenticated" });
-    const user = await storage.getUser(req.session.userId);
-    if (!user) return res.status(401).json({ message: "User not found" });
-    res.json(sanitizeUser(user));
-  });
+  app.get("/api/auth/me", handleMe(storage));
 
   const getBaseUrl = (req: Request) => {
     if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, "");
@@ -2057,24 +1997,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
-    try {
-      const { token, password } = req.body;
-      if (!token || !password) return res.status(400).json({ message: "Token and password required" });
-      const pwError = validatePasswordStrength(password);
-      if (pwError) return res.status(400).json({ message: pwError });
-      const resetToken = await storage.getPasswordResetToken(token);
-      if (!resetToken) return res.status(400).json({ message: "Invalid or expired reset link" });
-      if (resetToken.used) return res.status(400).json({ message: "This reset link has already been used" });
-      if (new Date() > resetToken.expiresAt) return res.status(400).json({ message: "Reset link has expired" });
-      const hashedPassword = await hashPassword(password);
-      await storage.updateUser(resetToken.userId, { password: hashedPassword });
-      await storage.invalidatePasswordResetToken(token);
-      res.json({ message: "Password updated successfully" });
-    } catch (err: any) {
-      res.status(500).json({ message: "Error resetting password" });
-    }
-  });
+  app.post("/api/auth/reset-password", handleResetPassword(storage));
 
   // Change password (authenticated user, requires current password)
   app.post("/api/auth/change-password", requireAuth, async (req: Request, res: Response) => {
