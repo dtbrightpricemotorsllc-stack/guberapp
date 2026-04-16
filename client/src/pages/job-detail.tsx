@@ -2562,8 +2562,8 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   "I am responsible for complying with all applicable laws, safety rules, licensing requirements, and insurance requirements",
                   "I will not perform work beyond my qualifications or physical ability",
                 ].map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-[11px] text-muted-foreground/70 leading-relaxed">
-                    <span className="text-primary/50 mt-0.5 flex-shrink-0">·</span>
+                  <li key={item} className="flex items-start gap-2 text-[12px] text-muted-foreground leading-relaxed">
+                    <span className="text-primary mt-0.5 flex-shrink-0">·</span>
                     {item}
                   </li>
                 ))}
@@ -2572,13 +2572,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <div
                   onClick={() => setWaiverChecked(!waiverChecked)}
                   className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                    waiverChecked ? "bg-primary border-primary" : "border-white/20 bg-transparent group-hover:border-primary/40"
+                    waiverChecked ? "bg-primary border-primary" : "border-white/60 bg-white/10 group-hover:border-primary/70"
                   }`}
                   data-testid="checkbox-waiver"
                 >
                   {waiverChecked && <CheckCircle className="w-3 h-3 text-background" strokeWidth={3} />}
                 </div>
-                <span className="text-[11px] text-muted-foreground/70 leading-relaxed font-medium">
+                <span className="text-[12px] text-muted-foreground leading-relaxed font-medium">
                   I understand and accept these conditions
                 </span>
               </label>
@@ -2587,7 +2587,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             {(job.category === "Verify & Inspect" || job.category === "Skilled Labor" || job.category === "General Labor" || job.category === "On-Demand Help" || job.category === "Marketplace") && (
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 space-y-3">
                 <p className="text-[10px] font-display font-bold tracking-widest text-amber-400/80 uppercase">Category Notice</p>
-                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                <p className="text-[12px] text-muted-foreground leading-relaxed">
                   {job.category === "Verify & Inspect"
                     ? "This task is limited to visual verification and documentation only. It does not constitute a mechanical diagnosis, fitment guarantee, safety certification, structural opinion, or any form of professional advice. I may only document what is visually present or absent."
                     : job.category === "Skilled Labor"
@@ -2603,13 +2603,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   <div
                     onClick={() => setCategoryWaiverChecked(!categoryWaiverChecked)}
                     className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      categoryWaiverChecked ? "bg-amber-500 border-amber-500" : "border-amber-500/30 bg-transparent group-hover:border-amber-500/50"
+                      categoryWaiverChecked ? "bg-amber-500 border-amber-500" : "border-amber-400/70 bg-amber-500/10 group-hover:border-amber-400"
                     }`}
                     data-testid="checkbox-category-waiver"
                   >
                     {categoryWaiverChecked && <CheckCircle className="w-3 h-3 text-background" strokeWidth={3} />}
                   </div>
-                  <span className="text-[11px] text-muted-foreground/70 leading-relaxed font-medium">
+                  <span className="text-[12px] text-muted-foreground leading-relaxed font-medium">
                     I understand the scope and limitations of this category
                   </span>
                 </label>
