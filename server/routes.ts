@@ -12,6 +12,7 @@ import Stripe from "stripe";
 import express from "express";
 import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
+import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
@@ -1742,35 +1743,14 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
-  app.get("/api/auth/google", (req: Request, res: Response) => {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) return res.status(503).json({ message: "Google Sign-In not configured" });
-    const redirectUri = `${getBaseUrl(req)}/api/auth/google/callback`;
-    const state = randomBytes(16).toString("hex");
-    (req.session as any).oauthState = state;
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "openid email profile",
-      state,
-      access_type: "offline",
-      prompt: "select_account",
-    });
-    req.session.save((err) => {
-      if (err) return res.redirect("/login?error=google_failed");
-      res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-    });
-  });
+  app.get("/api/auth/google", handleGoogleAuthStart);
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
-    const { code, state, error } = req.query as Record<string, string>;
-    if (error || !code) return res.redirect("/login?error=google_cancelled");
-    const expectedState = (req.session as any).oauthState;
-    delete (req.session as any).oauthState;
-    if (!state || !expectedState || state !== expectedState) {
-      return res.redirect("/login?error=invalid_state");
+    const stateResult = validateOAuthState(req);
+    if (!stateResult.valid) {
+      return res.redirect(`/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`);
     }
+    const code = stateResult.code;
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) return res.redirect("/login?error=not_configured");

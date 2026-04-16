@@ -43,6 +43,12 @@ GUBER employs a modern full-stack architecture with a focus on security, user ex
 - **Capacitor Integration:** Mobile app support using Capacitor for native functionality, including native OAuth flows and deep linking.
 - **Google Play Compliance (Store Build Gating):** Runtime platform detection via `client/src/lib/platform.ts` using Capacitor's `getPlatform()`. Digital purchase UI (Day-1 OG, Trust Box, Marketplace Boost, Biz Verification fee) is hidden in Android/iOS store builds (`isStoreBuild`). Real-world service payments (job posting, V&I) and Stripe Connect onboarding are left untouched. AI or Not iframe gets `hideCheckout=1` query param in store builds and the postMessage checkout handler is blocked. Entitlements sync from backend via `/api/auth/me` regardless of platform.
 
+## Testing
+- **Test Framework:** Vitest + Supertest for server integration tests
+- **Test Location:** `server/tests/`
+- **Run Tests:** `npx vitest run --config vitest.config.ts`
+- **OAuth State Tests:** `server/tests/oauth-state.test.ts` — validates Google OAuth state parameter handling (valid state, mismatched state, missing state, replay protection, session cleanup)
+
 ## External Dependencies
 - **Stripe Connect:** For handling all payment processing, including destination charges, connected accounts, and manual payouts.
 - **Google Maps JS API:** Provides interactive mapping capabilities for job and worker locations.
