@@ -588,7 +588,12 @@ export default function Profile() {
           )}
         </Card>
 
-        {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && (
+        {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && (() => {
+          const u = displayUser as any;
+          const profileIncomplete = !u.userBio || !u.profilePhoto || !u.publicUsername || !u.zipcode;
+          const ogManuallyHidden = typeof window !== "undefined" && localStorage.getItem("guber_og_card_hidden") === "true";
+          if (!profileIncomplete || ogManuallyHidden) return null;
+          return (
           <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-2" style={{ border: "1px solid hsl(45 100% 50% / 0.25)", boxShadow: "0 0 18px hsl(45 100% 50% / 0.08)" }}>
             <div className="flex items-start gap-3 mb-4">
               <div className="w-10 h-10 rounded-md flex items-center justify-center shrink-0">
@@ -611,8 +616,16 @@ export default function Profile() {
               {ogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Day1OGLogo size="sm" />}
               <span className="ml-1">Activate Day-1 OG — $1.99</span>
             </Button>
+            <button
+              onClick={() => { localStorage.setItem("guber_og_card_hidden", "true"); window.location.reload(); }}
+              className="mt-2 w-full text-[10px] text-muted-foreground/70 hover:text-foreground transition"
+              data-testid="button-dismiss-og-card"
+            >
+              Not now
+            </button>
           </Card>
-        )}
+          );
+        })()}
 
         <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-3">
           <div className="flex items-center justify-between mb-3">
