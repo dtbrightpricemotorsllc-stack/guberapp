@@ -244,22 +244,43 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 
 const TEN_MILES_METERS = 16093;
 
-async function notifyOGUsersAboutCashDrop(drop: { id: number; title: string; description?: string | null }) {
+async function notifyCashDropLive(drop: { id: number; title: string; description?: string | null; gpsLat?: number | null; gpsLng?: number | null; gpsRadius?: number | null }) {
   try {
-    const rows = await db.execute(sql`SELECT id FROM users WHERE day1_og = true`);
-    for (const u of rows.rows as { id: number }[]) {
-      await storage.createNotification({
-        userId: u.id,
-        title: "GUBER Cash Drop is LIVE!",
-        body: `"${drop.title}" — A Cash Drop just went active in your area. Check the map now!`,
-        type: "cash_drop",
-        jobId: null,
-        cashDropId: drop.id,
-      });
+    const notifTitle = "Cash Drop is LIVE!";
+    const notifBody = `"${drop.title}" — A Cash Drop just went active near you. Check the map now!`;
+    const notifiedIds = new Set<number>();
+
+    const ogRows = await db.execute(sql`SELECT id FROM users WHERE day1_og = true AND notif_cash_drops = true`);
+    for (const u of ogRows.rows as { id: number }[]) {
+      notifiedIds.add(u.id);
+      await storage.createNotification({ userId: u.id, title: notifTitle, body: notifBody, type: "cash_drop", jobId: null, cashDropId: drop.id });
+      sendPushToUser(u.id, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-${drop.id}` }).catch(() => {});
     }
-    console.log(`[GUBER] Notified ${rows.rows.length} OG users about Cash Drop #${drop.id}`);
+
+    if (drop.gpsLat != null && drop.gpsLng != null) {
+      const radiusMiles = Math.max((drop.gpsRadius || 200) / 1609.34, 15);
+      const latRange = radiusMiles / 69.0;
+      const lngRange = radiusMiles / (69.0 * Math.cos((drop.gpsLat * Math.PI) / 180));
+      const localRows = await db.execute(sql`
+        SELECT DISTINCT u.id FROM users u
+        INNER JOIN jobs j ON j.posted_by_id = u.id OR j.assigned_helper_id = u.id
+        WHERE u.notif_cash_drops = true
+          AND j.lat IS NOT NULL AND j.lng IS NOT NULL
+          AND j.lat BETWEEN ${drop.gpsLat - latRange} AND ${drop.gpsLat + latRange}
+          AND j.lng BETWEEN ${drop.gpsLng - lngRange} AND ${drop.gpsLng + lngRange}
+        LIMIT 500
+      `);
+      for (const u of localRows.rows as { id: number }[]) {
+        if (notifiedIds.has(u.id)) continue;
+        notifiedIds.add(u.id);
+        await storage.createNotification({ userId: u.id, title: notifTitle, body: notifBody, type: "cash_drop", jobId: null, cashDropId: drop.id });
+        sendPushToUser(u.id, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-${drop.id}` }).catch(() => {});
+      }
+    }
+
+    console.log(`[GUBER] Notified ${notifiedIds.size} users about Cash Drop #${drop.id} (${ogRows.rows.length} OG + ${notifiedIds.size - ogRows.rows.length} local)`);
   } catch (e: any) {
-    console.error("[GUBER] notifyOGUsersAboutCashDrop error:", e.message);
+    console.error("[GUBER] notifyCashDropLive error:", e.message);
   }
 }
 
@@ -8805,7 +8826,7 @@ export async function registerRoutes(
         disclaimerText: disclaimerText || null,
         status: finalStatus,
       });
-      if (finalStatus === "active") notifyOGUsersAboutCashDrop(drop).catch(() => {});
+      if (finalStatus === "active") notifyCashDropLive(drop).catch(() => {});
       res.json(drop);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -8818,7 +8839,7 @@ export async function registerRoutes(
       const previousDrop = await storage.getCashDrop(id);
       const drop = await storage.updateCashDrop(id, req.body);
       if (drop && req.body.status === "active" && previousDrop?.status !== "active") {
-        notifyOGUsersAboutCashDrop(drop).catch(() => {});
+        notifyCashDropLive(drop).catch(() => {});
       }
       res.json(drop);
     } catch (err: any) {

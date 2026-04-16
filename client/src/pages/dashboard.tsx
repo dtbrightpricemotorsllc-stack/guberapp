@@ -27,7 +27,16 @@ import {
 type PromoId = "cashdrop" | "day1og";
 type PromoCard = { id: PromoId; title: string; subtitle: string; buttonText: string; href: string; accent: string };
 
-const PROMOS: PromoCard[] = [];
+const PROMOS: PromoCard[] = [
+  {
+    id: "day1og",
+    title: "Day-1 OG — Get 5% For Life",
+    subtitle: "Lock in the lowest rate GUBER will ever offer. Gold badge, priority placement, and founding perks — $1.99 one-time.",
+    buttonText: "See Day-1 OG Details",
+    href: "/profile",
+    accent: "from-amber-500/30 to-yellow-600/20",
+  },
+];
 
 function promoIsNewUser(): boolean {
   const key = "guber_first_seen_at";
@@ -54,6 +63,11 @@ function DashboardPromoModal({ promo, open, onClose, onAction }: { promo: PromoC
     <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/50 px-4 pb-6 sm:items-center" data-testid="modal-dashboard-promo">
       <div className={`w-full max-w-md rounded-3xl bg-gradient-to-br ${promo.accent} p-[1px]`}>
         <div className="rounded-3xl bg-neutral-950/95 p-5">
+          {promo.id === "day1og" && (
+            <div className="flex justify-center -mt-1 mb-3">
+              <img src="/day1og-badge.png" alt="" className="w-16 h-16 object-contain" style={{ filter: "drop-shadow(0 0 12px rgba(245,165,0,0.4))" }} />
+            </div>
+          )}
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-xl font-display font-extrabold tracking-tight text-white" data-testid="text-promo-title">{promo.title}</h3>
@@ -173,19 +187,20 @@ export default function Dashboard() {
     // If still declined after modal, allow action prompts to appear
   };
 
-  // Promo modal — occasional, spaced out, dismissible
   useEffect(() => {
     if (!user) return;
+    if (user.day1OG) return;
     const isNew = promoIsNewUser();
-    const cooldown = isNew ? 12 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    const cooldown = isNew ? 12 * 60 * 60 * 1000 : 3 * 24 * 60 * 60 * 1000;
     if (Date.now() - promoGetLastShownAt() <= cooldown) return;
     const next = promoGetNext();
     if (!next) return;
+    const delay = 4000 + Math.random() * 3000;
     const t = setTimeout(() => {
       setActivePromo(next);
       setPromoOpen(true);
       promoSetLastShownAt();
-    }, 1400);
+    }, delay);
     return () => clearTimeout(t);
   }, [user?.id]);
 
