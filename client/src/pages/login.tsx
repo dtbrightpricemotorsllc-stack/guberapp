@@ -86,6 +86,7 @@ export default function Login() {
     else if (error === "suspended") toast({ title: "Account Suspended", description: "This account is currently suspended.", variant: "destructive" });
     else if (error === "google_failed") toast({ title: "Google Sign-In Failed", description: "Please try again.", variant: "destructive" });
     else if (error === "google_cancelled") toast({ title: "Sign-In Cancelled", description: "Google sign-in was cancelled." });
+    else if (error === "invalid_state") toast({ title: "Sign-In Failed", description: "Security validation failed. Please try again.", variant: "destructive" });
     else if (error === "not_configured") toast({ title: "Not Available", description: "Google Sign-In is not configured yet.", variant: "destructive" });
   }, [search]);
 
