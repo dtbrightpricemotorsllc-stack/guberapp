@@ -124,6 +124,9 @@ export default function Profile() {
   const [pubUsernameSaving, setPubUsernameSaving] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [ogCardHidden, setOgCardHidden] = useState<boolean>(() =>
+    typeof window !== "undefined" && localStorage.getItem("guber_og_card_hidden") === "true"
+  );
   const [feedbackCategory, setFeedbackCategory] = useState("general");
   const [feedbackSent, setFeedbackSent] = useState(false);
   const feedbackMutation = useMutation({
@@ -588,11 +591,11 @@ export default function Profile() {
           )}
         </Card>
 
-        {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && (() => {
-          const u = displayUser as any;
-          const profileIncomplete = !u.userBio || !u.profilePhoto || !u.publicUsername || !u.zipcode;
-          const ogManuallyHidden = typeof window !== "undefined" && localStorage.getItem("guber_og_card_hidden") === "true";
-          if (!profileIncomplete || ogManuallyHidden) return null;
+        {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && !ogCardHidden && (() => {
+          const profileIncomplete = !displayUser.userBio || !displayUser.profilePhoto || !displayUser.publicUsername || !displayUser.zipcode;
+          const accountAgeMs = displayUser.createdAt ? Date.now() - new Date(displayUser.createdAt).getTime() : 0;
+          const isOnboardingWindow = accountAgeMs > 0 && accountAgeMs < 14 * 24 * 60 * 60 * 1000;
+          if (!profileIncomplete || !isOnboardingWindow) return null;
           return (
           <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-2" style={{ border: "1px solid hsl(45 100% 50% / 0.25)", boxShadow: "0 0 18px hsl(45 100% 50% / 0.08)" }}>
             <div className="flex items-start gap-3 mb-4">
@@ -617,7 +620,7 @@ export default function Profile() {
               <span className="ml-1">Activate Day-1 OG — $1.99</span>
             </Button>
             <button
-              onClick={() => { localStorage.setItem("guber_og_card_hidden", "true"); window.location.reload(); }}
+              onClick={() => { localStorage.setItem("guber_og_card_hidden", "true"); setOgCardHidden(true); }}
               className="mt-2 w-full text-[10px] text-muted-foreground/70 hover:text-foreground transition"
               data-testid="button-dismiss-og-card"
             >
