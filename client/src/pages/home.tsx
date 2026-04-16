@@ -269,7 +269,7 @@ export default function Home() {
               <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
                 style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>LIMITED</span>
             </div>
-            <p className="text-[10px] text-amber-200/60 font-display">Founding status · $1.99 one-time · Free urgent forever</p>
+            <p className="text-[10px] text-amber-200/70 font-display">Founding status · Limited spots</p>
           </div>
           <Crown className="w-4 h-4 text-amber-400/60 shrink-0" />
         </a>

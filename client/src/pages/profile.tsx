@@ -545,13 +545,6 @@ export default function Profile() {
                 </Dialog>
               )}
 
-              {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && (
-                <Button onClick={() => ogMutation.mutate()} disabled={ogMutation.isPending}
-                  size="sm" className="font-display bg-gradient-to-r from-amber-600 to-yellow-600 text-white border border-amber-500/30 hover:from-amber-500 hover:to-yellow-500" data-testid="button-buy-og">
-                  {ogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Day1OGLogo size="sm" />}
-                  Activate Day-1 OG — $1.99
-                </Button>
-              )}
             </div>
           </div>
           {isOwnProfile && (
@@ -596,18 +589,28 @@ export default function Profile() {
         </Card>
 
         {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && (
-          <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-2" style={{ border: "1px solid hsl(45 100% 50% / 0.2)", boxShadow: "0 0 15px hsl(45 100% 50% / 0.05)" }}>
-            <div className="flex items-start gap-3">
+          <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-2" style={{ border: "1px solid hsl(45 100% 50% / 0.25)", boxShadow: "0 0 18px hsl(45 100% 50% / 0.08)" }}>
+            <div className="flex items-start gap-3 mb-4">
               <div className="w-10 h-10 rounded-md flex items-center justify-center shrink-0">
                 <Day1OGLogo size="md" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <h3 className="font-display font-bold text-sm text-amber-400">Day-1 OG Badge</h3>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  One-time purchase for $1.99. Permanent badge with FREE urgent toggle on all your job postings (normally $10 each).
+                <p className="text-xs text-foreground mt-1 leading-relaxed">
+                  Permanent founding-member badge with FREE urgent toggle on every job you post (normally $10 each). One-time <span className="font-semibold text-amber-300">$1.99</span> — never billed again.
                 </p>
               </div>
             </div>
+            <Button
+              onClick={() => ogMutation.mutate()}
+              disabled={ogMutation.isPending}
+              size="sm"
+              className="w-full font-display bg-gradient-to-r from-amber-600 to-yellow-600 text-white border border-amber-500/30 hover:from-amber-500 hover:to-yellow-500"
+              data-testid="button-buy-og"
+            >
+              {ogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Day1OGLogo size="sm" />}
+              <span className="ml-1">Activate Day-1 OG — $1.99</span>
+            </Button>
           </Card>
         )}
 

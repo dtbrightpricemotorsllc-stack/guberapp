@@ -277,7 +277,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="text-[11px] text-amber-200/70 font-display leading-snug">
-                Founding member status — $1.99 one-time. Free urgent on every job, forever.
+                Founding member status. Free urgent on every job, forever.
               </p>
             </div>
             <ChevronRight className="w-4 h-4 text-amber-400/50 shrink-0 relative z-10" />

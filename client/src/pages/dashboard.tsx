@@ -27,16 +27,7 @@ import {
 type PromoId = "cashdrop" | "day1og";
 type PromoCard = { id: PromoId; title: string; subtitle: string; buttonText: string; href: string; accent: string };
 
-const PROMOS: PromoCard[] = [
-  {
-    id: "day1og",
-    title: "Day-1 OG — Get 5% For Life",
-    subtitle: "Lock in the lowest rate GUBER will ever offer. Gold badge, priority placement, and founding perks — $1.99 one-time.",
-    buttonText: "See Day-1 OG Details",
-    href: "/profile",
-    accent: "from-amber-500/30 to-yellow-600/20",
-  },
-];
+const PROMOS: PromoCard[] = [];
 
 function promoIsNewUser(): boolean {
   const key = "guber_first_seen_at";
