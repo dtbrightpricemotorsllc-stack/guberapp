@@ -2570,7 +2570,17 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </ul>
               <label className="flex items-start gap-3 cursor-pointer group mt-3" data-testid="label-waiver-check">
                 <div
+                  role="checkbox"
+                  aria-checked={waiverChecked}
+                  aria-label="I understand and accept these conditions"
+                  tabIndex={0}
                   onClick={() => setWaiverChecked(!waiverChecked)}
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      setWaiverChecked(!waiverChecked);
+                    }
+                  }}
                   className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                     waiverChecked ? "bg-primary border-primary" : "border-white/60 bg-white/10 group-hover:border-primary/70"
                   }`}
@@ -2601,7 +2611,17 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </p>
                 <label className="flex items-start gap-3 cursor-pointer group mt-2" data-testid="label-category-waiver-check">
                   <div
+                    role="checkbox"
+                    aria-checked={categoryWaiverChecked}
+                    aria-label="I understand the scope and limitations of this category"
+                    tabIndex={0}
                     onClick={() => setCategoryWaiverChecked(!categoryWaiverChecked)}
+                    onKeyDown={(e) => {
+                      if (e.key === " " || e.key === "Enter") {
+                        e.preventDefault();
+                        setCategoryWaiverChecked(!categoryWaiverChecked);
+                      }
+                    }}
                     className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                       categoryWaiverChecked ? "bg-amber-500 border-amber-500" : "border-amber-400/70 bg-amber-500/10 group-hover:border-amber-400"
                     }`}
