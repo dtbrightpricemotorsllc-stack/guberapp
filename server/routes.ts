@@ -1855,7 +1855,7 @@ export async function registerRoutes(
       const loginToken = randomBytes(24).toString("hex");
       const expiresAt = Date.now() + 60_000;
       await pool.query(`INSERT INTO login_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)`, [loginToken, user.id, expiresAt]);
-      res.redirect(`/login?t=${loginToken}`);
+      res.redirect(`/oauth-landing?t=${loginToken}`);
     } catch (err: any) {
       console.error("Google OAuth error:", err);
       res.redirect("/login?error=google_failed");
@@ -1910,6 +1910,67 @@ export async function registerRoutes(
       console.error("[GUBER] Token exchange DB error:", err);
       return res.status(500).json({ message: "Internal error" });
     }
+  });
+
+  app.get("/oauth-landing", (req: Request, res: Response) => {
+    const token = req.query.t as string;
+    if (!token) return res.redirect("/login");
+    const ua = (req.headers["user-agent"] || "").toLowerCase();
+    const isAndroid = ua.includes("android");
+    const isIOS = /iphone|ipad|ipod/.test(ua);
+    const base = getBaseUrl(req);
+    const loginUrl = `${base}/login?t=${encodeURIComponent(token)}`;
+    const host = new URL(base).host;
+    const intentUrl = `intent://${host}/login?t=${encodeURIComponent(token)}#Intent;scheme=https;package=com.guber.app;S.browser_fallback_url=${encodeURIComponent(loginUrl)};end`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.send(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signing in to GUBER...</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
+  .c{padding:2rem}
+  .logo{font-size:2rem;font-weight:900;letter-spacing:0.1em;color:#00e5e5;margin-bottom:1rem}
+  .msg{font-size:1rem;color:#94a3b8;margin-bottom:2rem}
+  .spinner{width:32px;height:32px;border:3px solid #1e293b;border-top-color:#00e5e5;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 1.5rem}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .btn{display:none;background:#00e5e5;color:#0a0e14;border:none;padding:14px 32px;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;text-decoration:none;margin-top:1rem}
+  .btn.show{display:inline-block}
+  .sub{font-size:0.75rem;color:#475569;margin-top:1rem}
+</style>
+</head><body>
+<div class="c">
+  <div class="logo">GUBER</div>
+  <div class="spinner"></div>
+  <div class="msg">Signing you in...</div>
+  <a id="fallback" class="btn" href="${loginUrl}">Open GUBER</a>
+  <p class="sub">If the app doesn't open automatically, tap the button above.</p>
+</div>
+<script>
+(function(){
+  var isAndroid = ${isAndroid};
+  var isIOS = ${isIOS};
+  var loginUrl = ${JSON.stringify(loginUrl)};
+  var intentUrl = ${JSON.stringify(intentUrl)};
+
+  if (isAndroid) {
+    window.location.href = intentUrl;
+  } else if (isIOS) {
+    window.location.href = loginUrl;
+  } else {
+    window.location.href = loginUrl;
+    return;
+  }
+  setTimeout(function(){
+    document.getElementById('fallback').classList.add('show');
+  }, 3000);
+})();
+</script>
+</body></html>`);
   });
 
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {

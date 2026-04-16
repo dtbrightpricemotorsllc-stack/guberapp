@@ -49,6 +49,9 @@ export default function Login() {
     const token = params.get("t");
     if (token) {
       setTokenExchanging(true);
+      if (Capacitor.isNativePlatform()) {
+        try { Browser.close(); } catch (_) {}
+      }
       fetch(`/api/auth/exchange-token?t=${encodeURIComponent(token)}`, { credentials: "include" })
         .then(async (res) => {
           if (res.ok) {

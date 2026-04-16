@@ -178,6 +178,12 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/oauth-complete" component={OAuthComplete} />
+      <Route path="/oauth-landing" component={() => {
+        const s = useSearch();
+        const [, nav] = useLocation();
+        useEffect(() => { const t = new URLSearchParams(s).get("t"); nav(t ? `/login?t=${t}` : "/login"); }, []);
+        return null;
+      }} />
       <Route path="/dashboard" component={() => <ConsumerRoute component={Dashboard} />} />
       <Route path="/browse-jobs" component={() => <ProtectedRoute component={BrowseJobs} />} />
       <Route path="/jobs/:id" component={() => <ProtectedRoute component={JobDetail} />} />
@@ -245,7 +251,11 @@ function NativeDeepLinkHandler() {
       try {
         const parsed = new URL(url);
         const path = parsed.pathname + (parsed.search || "");
-        if (
+        if (path.startsWith("/oauth-landing")) {
+          const params = new URL(url).searchParams;
+          const t = params.get("t");
+          setLocation(t ? `/login?t=${t}` : "/login");
+        } else if (
           path.startsWith("/login") ||
           path.startsWith("/join/") ||
           path.startsWith("/dashboard") ||
