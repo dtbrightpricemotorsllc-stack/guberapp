@@ -3314,14 +3314,14 @@ GPS: {(attempt.gpsLat || attempt.gps_lat) ? `${parseFloat(attempt.gpsLat || atte
 
 {(attempt.payoutMethod || attempt.payout_method) && (
 <div className="bg-muted/10 rounded-lg px-3 py-2 space-y-1" data-testid={`attempt-payout-info-${attempt.id}`}>
-<p className="text-[9px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase mb-1">Payout Details</p>
-<p className="text-[11px] text-foreground/80">
+<p className="text-[10px] font-display font-bold tracking-widest text-foreground uppercase mb-1">Payout Details</p>
+<p className="text-[12px] text-foreground">
 Method: <span className="font-semibold capitalize">{(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")}</span>
-{(attempt.payoutHandle || attempt.payout_handle) && <span className="ml-2 text-muted-foreground">({attempt.payoutHandle || attempt.payout_handle})</span>}
+{(attempt.payoutHandle || attempt.payout_handle) && <span className="ml-2 text-foreground font-semibold">({attempt.payoutHandle || attempt.payout_handle})</span>}
 </p>
 {(attempt.payoutBankName || attempt.payout_bank_name) && (
-<p className="text-[10px] text-muted-foreground/70">
-Bank: <span className="text-foreground/80">{attempt.payoutBankName || attempt.payout_bank_name}</span>
+<p className="text-[11px] text-foreground">
+Bank: <span className="text-foreground font-semibold">{attempt.payoutBankName || attempt.payout_bank_name}</span>
 {(attempt.payoutAccountType || attempt.payout_account_type) && <span className="ml-1">({attempt.payoutAccountType || attempt.payout_account_type})</span>}
 {(attempt.payoutRoutingNumber || attempt.payout_routing_number) && <span className="ml-2">Routing: •••{(attempt.payoutRoutingNumber || attempt.payout_routing_number).slice(-4)}</span>}
 {(attempt.payoutAccountNumber || attempt.payout_account_number) && <span className="ml-2">Acct: •••{(attempt.payoutAccountNumber || attempt.payout_account_number).slice(-4)}</span>}
@@ -3360,19 +3360,19 @@ Reject
 
 {attempts && attempts.filter((a: any) => a.status !== "submitted").length > 0 && (
 <div>
-<p className="text-[9px] font-display text-muted-foreground/30 uppercase tracking-widest mb-2">Other attempts</p>
+<p className="text-[10px] font-display text-foreground/70 uppercase tracking-widest mb-2 font-bold">Other attempts</p>
 {attempts.filter((a: any) => a.status !== "submitted").map((attempt: any) => (
 <div key={attempt.id} className="flex items-center gap-3 py-1.5 border-t border-border/10">
 <div className="flex-1 min-w-0">
-<p className="text-[11px] font-semibold">{attempt.user_name || `User #${attempt.user_id}`}</p>
+<p className="text-[12px] font-semibold text-foreground">{attempt.user_name || `User #${attempt.user_id}`}</p>
 {(attempt.payoutMethod || attempt.payout_method) && (
 <div>
-<p className="text-[9px] text-muted-foreground/50">
-Payout: {(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")} {(attempt.payoutHandle || attempt.payout_handle) ? `(${attempt.payoutHandle || attempt.payout_handle})` : ""}
-{(attempt.payoutStatus || attempt.payout_status) === "paid" && " — PAID"}
+<p className="text-[11px] text-foreground font-medium">
+Payout: <span className="font-semibold capitalize">{(attempt.payoutMethod || attempt.payout_method)?.replace("_", " ")}</span> {(attempt.payoutHandle || attempt.payout_handle) ? <span className="font-semibold">({attempt.payoutHandle || attempt.payout_handle})</span> : ""}
+{(attempt.payoutStatus || attempt.payout_status) === "paid" && <span className="text-emerald-400 font-bold"> — PAID</span>}
 </p>
 {(attempt.payoutBankName || attempt.payout_bank_name) && (
-<p className="text-[9px] text-muted-foreground/50">
+<p className="text-[11px] text-foreground font-medium">
 Bank: {attempt.payoutBankName || attempt.payout_bank_name}
 {(attempt.payoutAccountType || attempt.payout_account_type) && ` (${attempt.payoutAccountType || attempt.payout_account_type})`}
 {(attempt.payoutAccountNumber || attempt.payout_account_number) && ` •••${(attempt.payoutAccountNumber || attempt.payout_account_number).slice(-4)}`}

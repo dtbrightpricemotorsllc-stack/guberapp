@@ -9003,6 +9003,34 @@ export async function registerRoutes(
 
       await storage.updateCashDropAttempt(attempt.id, updateData);
 
+      try {
+        const drop = await storage.getCashDrop(dropId);
+        const submitter = await storage.getUser(userId);
+        const admins = await storage.getAllUsers();
+        const adminUser = admins.find((u: any) => u.role === "admin");
+        if (adminUser && payoutMethod !== "guber_credit") {
+          const methodLabel = payoutMethod.replace(/_/g, " ");
+          const handleLabel = updateData.payoutHandle ? ` (${updateData.payoutHandle})` : "";
+          await storage.createNotification({
+            userId: adminUser.id,
+            title: "💸 Winner Chose Payout Method",
+            body: `${submitter?.fullName || "Winner"} picked ${methodLabel}${handleLabel} for "${drop?.title || "Cash Drop"}". Ready to mark paid.`,
+            type: "cash_drop",
+            cashDropId: dropId,
+          });
+          try {
+            const { sendPushToUser } = await import("./push");
+            await sendPushToUser(adminUser.id, {
+              title: "💸 Winner Chose Payout Method",
+              body: `${submitter?.fullName || "Winner"} picked ${methodLabel} for "${drop?.title || "Cash Drop"}".`,
+              data: { type: "cash_drop", cashDropId: String(dropId) },
+            });
+          } catch (e) { /* push optional */ }
+        }
+      } catch (e) {
+        console.error("[cash-drop] admin notify failed", e);
+      }
+
       res.json({ success: true, payoutMethod });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
