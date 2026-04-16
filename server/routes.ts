@@ -65,6 +65,25 @@ const URGENT_FEE = 10;
 const STRIPE_PCT = 0.029;
 const STRIPE_FIXED = 0.30;
 
+function regenerateSession(req: Request): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const prevData: Record<string, any> = {};
+    const keysToPreserve = ["pendingReferralCode", "oauthState"];
+    for (const key of keysToPreserve) {
+      if ((req.session as any)[key] !== undefined) {
+        prevData[key] = (req.session as any)[key];
+      }
+    }
+    req.session.regenerate((err) => {
+      if (err) return reject(err);
+      for (const [key, value] of Object.entries(prevData)) {
+        (req.session as any)[key] = value;
+      }
+      resolve();
+    });
+  });
+}
+
 function grossUpForStripe(netNeeded: number): { gross: number; stripeFee: number } {
   const gross = Math.ceil((netNeeded + STRIPE_FIXED) / (1 - STRIPE_PCT) * 100) / 100;
   const stripeFee = Math.round((gross - netNeeded) * 100) / 100;
@@ -943,6 +962,7 @@ export async function registerRoutes(
         await storage.createNotification({ userId: user.id, title: "Welcome to GUBER!", body: "Your account has been created. Complete your profile to start posting and accepting jobs.", type: "system" });
       }
 
+      await regenerateSession(req);
       req.session.userId = user.id;
 
       req.session.save((err) => {
@@ -1032,6 +1052,7 @@ export async function registerRoutes(
         type: "system",
       });
 
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
@@ -1129,6 +1150,7 @@ export async function registerRoutes(
         type: "system",
       });
 
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
@@ -1685,6 +1707,7 @@ export async function registerRoutes(
         }
       }
 
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
@@ -1711,6 +1734,7 @@ export async function registerRoutes(
       const email = type === "consumer" ? DEMO_CONSUMER_EMAIL : DEMO_BUSINESS_EMAIL;
       const user = await storage.getUserByEmail(email);
       if (!user) return res.status(404).json({ message: "Demo account not found. Please contact support." });
+      await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
@@ -1911,6 +1935,7 @@ export async function registerRoutes(
       if (!result.rows.length) {
         return res.status(401).json({ message: "Token expired or invalid" });
       }
+      await regenerateSession(req);
       req.session.userId = result.rows[0].user_id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
@@ -6302,7 +6327,7 @@ export async function registerRoutes(
         }
 
         const user = await storage.getUser(userId);
-        // Restore session so user is logged in after Stripe redirect (session may have expired)
+        await regenerateSession(req);
         req.session.userId = userId;
         await new Promise<void>((resolve) => req.session.save(() => resolve()));
         res.json(sanitizeUser(user!));
