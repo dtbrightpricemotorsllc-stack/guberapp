@@ -246,21 +246,14 @@ function NativeDeepLinkHandler() {
     CapApp.addListener("appUrlOpen", (event: { url: string }) => {
       const url = event.url;
 
+      // Universal Links: https://guberapp.app/<path>
+      // Triggered when the OS routes a guberapp.app URL into the installed app
       try {
         const parsed = new URL(url);
-
-        // Custom scheme: guberapp://oauth-complete?t=TOKEN
-        // Used to break out of Chrome Custom Tabs after Google OAuth
-        if (parsed.protocol === "guberapp:") {
-          const t = parsed.searchParams.get("t");
-          setLocation(t ? `/login?t=${t}` : "/login");
-          return;
-        }
-
-        // Universal Links / App Links: https://guberapp.app/<path>
         const path = parsed.pathname + (parsed.search || "");
         if (path.startsWith("/oauth-landing")) {
-          const t = parsed.searchParams.get("t");
+          const params = new URL(url).searchParams;
+          const t = params.get("t");
           setLocation(t ? `/login?t=${t}` : "/login");
         } else if (
           path.startsWith("/login") ||
