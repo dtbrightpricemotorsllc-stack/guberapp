@@ -6572,21 +6572,23 @@ export async function registerRoutes(
   });
 
   // ADMIN
-  app.get("/api/admin/users", requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/admin/users", requireAdmin, async (req: Request, res: Response) => {
     const allUsers = await storage.getAllUsers();
-    res.json(allUsers.map(u => {
-      const safe = sanitizeUser(u);
-      // Strip email/phone from admin view too if it's supposed to be "ALL user profile API responses"
-      // Wait, admin might need to see it. But "Strip email/phone from ALL user profile API responses"
-      // is pretty broad. I'll stick to the public/self ones first. 
-      // Actually, if I want to be safe and follow "ALL", I should do it here too.
-      return safe;
-    }));
+    const includeDemo = req.query.includeDemo === "1" || req.query.includeDemo === "true";
+    const filtered = includeDemo
+      ? allUsers
+      : allUsers.filter(u => !(u.email && u.email.toLowerCase().endsWith("@guberapp.internal")));
+    res.json(filtered.map(u => sanitizeUser(u)));
   });
 
-  app.get("/api/admin/jobs", requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/admin/jobs", requireAdmin, async (req: Request, res: Response) => {
     const allJobs = await storage.getJobs(false);
-    res.json(allJobs);
+    const includeDemo = req.query.includeDemo === "1" || req.query.includeDemo === "true";
+    if (includeDemo) {
+      return res.json(allJobs);
+    }
+    const demoIds = await getDemoUserIds();
+    res.json(allJobs.filter(j => !demoIds.has(j.postedById)));
   });
 
   app.post("/api/admin/jobs/:id/remove", requireAdmin, async (req: Request, res: Response) => {
@@ -8707,12 +8709,18 @@ export async function registerRoutes(
   app.get("/api/admin/cash-drops/:id/attempts", requireAdmin, async (req: Request, res: Response) => {
     try {
       const dropId = parseInt(req.params.id);
+      const includeDemo = req.query.includeDemo === "1" || req.query.includeDemo === "true";
       const attempts = await storage.getCashDropAttempts(dropId);
+      const demoIds = includeDemo ? new Set<number>() : await getDemoUserIds();
       const enriched = await Promise.all(attempts.map(async (a: any) => {
-        const user = await storage.getUser(a.user_id || a.userId);
-        return { ...a, user_name: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username : `User #${a.user_id || a.userId}` };
+        const uid = a.user_id || a.userId;
+        const user = await storage.getUser(uid);
+        return { ...a, user_name: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username : `User #${uid}` };
       }));
-      res.json(enriched);
+      const filtered = includeDemo
+        ? enriched
+        : enriched.filter((a: any) => !demoIds.has(a.user_id || a.userId));
+      res.json(filtered);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
