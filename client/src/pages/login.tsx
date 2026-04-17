@@ -11,6 +11,7 @@ import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-rea
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
+import { nativeGoogleSignIn } from "@/lib/native-google-signin";
 
 export default function Login() {
   const { login } = useAuth();
@@ -114,11 +115,32 @@ export default function Login() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const authUrl = `${window.location.origin}/api/auth/google`;
     if (Capacitor.isNativePlatform()) {
-      await Browser.open({ url: authUrl });
-      setGoogleLoading(false);
+      try {
+        const result = await nativeGoogleSignIn({ authPathBase: "/api/auth/google" });
+        if (result.ok) {
+          await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+          const meRes = await fetch("/api/auth/me", { credentials: "include" });
+          if (meRes.ok) {
+            const me = await meRes.json();
+            const dest = me?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
+            setLocation(dest);
+          } else {
+            toast({ title: "Sign-In Failed", description: "Session could not be established.", variant: "destructive" });
+          }
+        } else if (result.reason === "timeout") {
+          toast({ title: "Sign-In Timed Out", description: "Please try again.", variant: "destructive" });
+        } else if (result.reason === "cancelled") {
+          // user closed the browser — silent
+        } else {
+          toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
+        }
+      } finally {
+        setGoogleLoading(false);
+      }
     } else {
+      const authUrl = `${window.location.origin}/api/auth/google`;
       window.location.href = authUrl;
     }
   };

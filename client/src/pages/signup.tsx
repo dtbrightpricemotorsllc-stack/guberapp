@@ -86,14 +86,25 @@ export default function Signup() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     const isNative = Capacitor.isNativePlatform();
-    const authUrl = `${window.location.origin}/api/auth/google${isNative ? "?native=1" : ""}`;
     if (refCode) {
       await fetch("/api/auth/store-ref", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ref: refCode }) }).catch(() => {});
     }
     if (isNative) {
-      await Browser.open({ url: authUrl });
-      setGoogleLoading(false);
+      try {
+        const result = await nativeGoogleSignIn({ authPathBase: "/api/auth/google" });
+        if (result.ok) {
+          localStorage.removeItem("guber_ref");
+          setLocation(returnTo || "/dashboard");
+        } else if (result.reason === "timeout") {
+          toast({ title: "Sign-In Timed Out", description: "Please try again.", variant: "destructive" });
+        } else if (result.reason !== "cancelled") {
+          toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
+        }
+      } finally {
+        setGoogleLoading(false);
+      }
     } else {
+      const authUrl = `${window.location.origin}/api/auth/google`;
       window.location.href = authUrl;
     }
   };

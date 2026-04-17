@@ -483,6 +483,8 @@ export async function registerRoutes(
     user_id INTEGER NOT NULL,
     expires_at BIGINT NOT NULL
   )`);
+  await pool.query(`ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS pickup_sid TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_tokens_pickup_sid ON login_tokens(pickup_sid) WHERE pickup_sid IS NOT NULL`);
   setInterval(() => {
     pool.query(`DELETE FROM login_tokens WHERE expires_at < $1`, [Date.now()]).catch(() => {});
   }, 60_000);
@@ -1827,8 +1829,21 @@ export async function registerRoutes(
       if (user.banned) return res.redirect("/login?error=banned");
       if (user.suspended) return res.redirect("/login?error=suspended");
       const loginToken = randomBytes(24).toString("hex");
-      const expiresAt = Date.now() + 60_000;
-      await pool.query(`INSERT INTO login_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)`, [loginToken, user.id, expiresAt]);
+      const expiresAt = Date.now() + 5 * 60_000;
+      const pickupSid = (req.session as any).oauthPickupSid as string | undefined;
+      delete (req.session as any).oauthPickupSid;
+      await pool.query(
+        `INSERT INTO login_tokens (token, user_id, expires_at, pickup_sid) VALUES ($1, $2, $3, $4)`,
+        [loginToken, user.id, expiresAt, pickupSid || null]
+      );
+      if (pickupSid) {
+        // Native app is polling /api/auth/oauth-pickup?sid=... for the token.
+        // Just show a "you can close this" page; no deep link needed.
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signed in</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0e14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:2rem}.logo{font-size:2rem;font-weight:900;letter-spacing:0.1em;color:#00e5e5;margin-bottom:1.5rem}.check{width:64px;height:64px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:2rem}.msg{font-size:1.1rem;color:#e2e8f0;margin-bottom:0.5rem;font-weight:600}.sub{font-size:0.9rem;color:#94a3b8}</style></head><body><div><div class="logo">GUBER</div><div class="check">✓</div><div class="msg">Signed in successfully</div><div class="sub">You can close this tab and return to the app.</div></div><script>setTimeout(function(){try{window.close();}catch(_){}}, 800);</script></body></html>`);
+        return;
+      }
       res.redirect(`/oauth-landing?t=${loginToken}`);
     } catch (err: any) {
       console.error("Google OAuth error:", err);
@@ -1868,6 +1883,28 @@ export async function registerRoutes(
         },
       },
     ]);
+  });
+
+  // Native app polls this with the sid it generated before opening OAuth.
+  // Returns { token } once OAuth completed and we stored a token for that sid.
+  app.get("/api/auth/oauth-pickup", async (req: Request, res: Response) => {
+    const sid = (req.query.sid as string | undefined)?.trim();
+    if (!sid || !/^[a-zA-Z0-9_-]{8,128}$/.test(sid)) {
+      return res.status(400).json({ message: "Invalid sid" });
+    }
+    try {
+      const result = await pool.query<{ token: string }>(
+        `DELETE FROM login_tokens WHERE pickup_sid = $1 AND expires_at >= $2 RETURNING token`,
+        [sid, Date.now()]
+      );
+      if (!result.rows.length) {
+        return res.json({ token: null });
+      }
+      return res.json({ token: result.rows[0].token });
+    } catch (err) {
+      console.error("[GUBER] OAuth pickup error:", err);
+      return res.status(500).json({ message: "Internal error" });
+    }
   });
 
   app.get("/api/auth/exchange-token", async (req: Request, res: Response) => {
