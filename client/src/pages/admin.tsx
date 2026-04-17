@@ -1536,6 +1536,25 @@ data-testid={`button-ai-check-${v.id}`}
 </div>
 </div>
 <p className="text-[10px] opacity-80">Account: {aiResult.accountAgeDays}d old · {aiResult.totalSubmissions} submissions</p>
+{aiResult.vision && !aiResult.vision.error && (
+<div className={`rounded-md px-2 py-1.5 text-[10px] space-y-0.5 ${aiResult.vision.nonUsIdDetected ? "bg-red-500/15 border border-red-500/30" : aiResult.vision.isUsIssued ? "bg-green-500/10 border border-green-500/20" : "bg-muted/20 border border-border/20"}`} data-testid={`vision-result-${v.id}`}>
+<div className="flex items-center justify-between gap-2">
+<span className="font-display font-bold uppercase tracking-wider opacity-70">Document Vision</span>
+<span className="opacity-60">{Math.round((aiResult.vision.confidence || 0) * 100)}% conf</span>
+</div>
+<p>
+<span className="opacity-60">Country:</span>{" "}
+<span className="font-bold" data-testid={`text-vision-country-${v.id}`}>{aiResult.vision.documentCountry}</span>
+{aiResult.vision.countryCode && <span className="opacity-50"> ({aiResult.vision.countryCode})</span>}
+</p>
+<p>
+<span className="opacity-60">Kind:</span>{" "}
+<span className="font-bold">{aiResult.vision.documentKind}</span>
+{aiResult.vision.nonUsIdDetected && <span className="ml-1.5 text-red-400 font-black">· NON-US</span>}
+</p>
+{aiResult.vision.reasoning && <p className="opacity-60 italic">"{aiResult.vision.reasoning}"</p>}
+</div>
+)}
 {aiResult.flags?.length > 0 && (
 <ul className="space-y-0.5">
 {aiResult.flags.map((f: string, i: number) => (

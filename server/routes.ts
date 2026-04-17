@@ -3592,6 +3592,39 @@ export async function registerRoutes(
       const hasDocType = docType.length > 0;
       if (!hasDocType) { flags.push("No document type specified by user"); riskScore += 10; }
 
+      // Vision-based country / document analysis (ID submissions only)
+      const isIdSubmission = log.action === "id_upload" || log.action === "verification_submitted_id";
+      let visionResult: import("./id-vision").IdVisionResult | null = parsedDetails.aiAnalysis || null;
+
+      if (isIdSubmission && !visionResult && parsedDetails.imageBase64) {
+        const { analyzeIdImage } = await import("./id-vision");
+        visionResult = await analyzeIdImage(parsedDetails.imageBase64);
+        // Cache on the audit log so repeated admin clicks don't re-bill
+        try {
+          const merged = { ...parsedDetails, aiAnalysis: visionResult };
+          await db.update(auditLogsTable)
+            .set({ details: JSON.stringify(merged) })
+            .where(sqlEq(auditLogsTable.id, logId));
+        } catch (e) { /* non-fatal — keep going with the in-memory result */ }
+      }
+
+      if (visionResult) {
+        if (visionResult.error) {
+          flags.push(`ID image analysis unavailable (${visionResult.error}) — review document manually`);
+        } else if (visionResult.nonUsIdDetected) {
+          const country = visionResult.documentCountry || "non-US country";
+          const kind = visionResult.documentKind || "identity document";
+          flags.push(`Non-US identity document detected (${country} ${kind})`);
+          riskScore += 80;
+        } else if (visionResult.isIdentityDocument && visionResult.isUsIssued) {
+          // Positive signal — slight risk reduction
+          riskScore = Math.max(0, riskScore - 5);
+        } else if (!visionResult.isIdentityDocument && visionResult.confidence >= 0.6) {
+          flags.push(`Image does not appear to be a government photo ID (looks like: ${visionResult.documentKind})`);
+          riskScore += 40;
+        }
+      }
+
       const clampedRisk = Math.min(100, riskScore);
       let recommendation: "approve" | "review" | "reject";
       if (clampedRisk <= 20) recommendation = "approve";
@@ -3610,6 +3643,17 @@ export async function registerRoutes(
         totalSubmissions: submissions,
         registeredName: user.fullName || user.username,
         flags,
+        vision: visionResult ? {
+          documentCountry: visionResult.documentCountry,
+          countryCode: visionResult.countryCode,
+          documentKind: visionResult.documentKind,
+          isIdentityDocument: visionResult.isIdentityDocument,
+          isUsIssued: visionResult.isUsIssued,
+          nonUsIdDetected: visionResult.nonUsIdDetected,
+          confidence: visionResult.confidence,
+          reasoning: visionResult.reasoning,
+          error: visionResult.error,
+        } : null,
         checkedAt: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -4194,6 +4238,22 @@ export async function registerRoutes(
       return res.status(409).json({ message: `You already have a pending ${type === "id" ? "ID" : type === "selfie" ? "selfie" : "credential"} submission under review.` });
     }
 
+    // For ID submissions, run vision pre-check and block obvious non-US IDs
+    // before they ever reach the admin queue.
+    let aiAnalysis: any = null;
+    if (type === "id") {
+      const { analyzeIdImage } = await import("./id-vision");
+      aiAnalysis = await analyzeIdImage(imageBase64);
+      if (aiAnalysis.nonUsIdDetected) {
+        return res.status(400).json({
+          message: `GUBER currently only accepts US-issued government photo IDs (driver's license, state ID, US passport, US military ID, or US permanent resident card). Your upload looks like a ${aiAnalysis.documentCountry} ${aiAnalysis.documentKind}. Please upload a US ID to continue.`,
+          code: "non_us_id",
+          documentCountry: aiAnalysis.documentCountry,
+          documentKind: aiAnalysis.documentKind,
+        });
+      }
+    }
+
     await storage.createAuditLog({
       userId,
       action: `verification_submitted_${type}`,
@@ -4201,6 +4261,7 @@ export async function registerRoutes(
         message: `User submitted ${type} verification document for review`,
         documentType: documentType || null,
         imageBase64,
+        ...(aiAnalysis ? { aiAnalysis } : {}),
       }),
     });
 
