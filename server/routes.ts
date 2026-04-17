@@ -1895,6 +1895,7 @@ export async function registerRoutes(
     const isIOS = /iphone|ipad|ipod/.test(ua);
     const base = getBaseUrl(req);
     const loginUrl = `${base}/login?t=${encodeURIComponent(token)}`;
+    const customSchemeUrl = `guberapp://oauth-complete?t=${encodeURIComponent(token)}`;
     const host = new URL(base).host;
     const intentUrl = `intent://${host}/login?t=${encodeURIComponent(token)}#Intent;scheme=https;package=com.guber.app;S.browser_fallback_url=${encodeURIComponent(loginUrl)};end`;
 
@@ -1931,9 +1932,14 @@ export async function registerRoutes(
   var isIOS = ${isIOS};
   var loginUrl = ${JSON.stringify(loginUrl)};
   var intentUrl = ${JSON.stringify(intentUrl)};
+  var customSchemeUrl = ${JSON.stringify(customSchemeUrl)};
 
   if (isAndroid) {
-    window.location.href = intentUrl;
+    // Custom scheme breaks out of Chrome Custom Tabs back into the native app.
+    // After ~1.2s, fall through to intent:// (App Links) and finally to the PWA URL.
+    window.location.href = customSchemeUrl;
+    setTimeout(function(){ window.location.href = intentUrl; }, 1200);
+    setTimeout(function(){ window.location.href = loginUrl; }, 2400);
   } else if (isIOS) {
     window.location.href = loginUrl;
   } else {
