@@ -1349,13 +1349,20 @@ onDelete?: () => void;
 isDeleting?: boolean;
 }) {
 const { toast } = useToast();
-const [aiResult, setAiResult] = useState<any>(null);
+// Preload cached vision analysis so the non-US approve-confirm fires
+// even if the admin hasn't manually clicked "Run AI Pre-Check" yet.
+const cachedVision = v.parsedDetails?.aiAnalysis || null;
+const [aiResult, setAiResult] = useState<any>(
+cachedVision && !cachedVision.error
+? { vision: cachedVision, flags: [], riskScore: cachedVision.nonUsIdDetected ? 80 : 0, recommendation: cachedVision.nonUsIdDetected ? "reject" : "review", accountAgeDays: 0, totalSubmissions: v.totalSubmissions ?? 1, fromCache: true }
+: null
+);
 const [aiLoading, setAiLoading] = useState(false);
 const [rejectOpen, setRejectOpen] = useState(false);
 const [rejectReason, setRejectReason] = useState("");
 const [flagsExpanded, setFlagsExpanded] = useState(false);
 const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
-const nonUsFlagged = aiResult?.vision?.nonUsIdDetected === true;
+const nonUsFlagged = (aiResult?.vision?.nonUsIdDetected === true) || (cachedVision?.nonUsIdDetected === true);
 
 const docType = v.action === "id_upload" || v.action === "verification_submitted_id"
 ? "ID Document" : v.action === "verification_submitted_selfie"
