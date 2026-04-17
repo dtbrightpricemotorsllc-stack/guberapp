@@ -1861,7 +1861,10 @@ export async function registerRoutes(
         target: {
           namespace: "android_app",
           package_name: "com.guber.app",
-          sha256_cert_fingerprints: ["3E:7D:66:29:CF:7F:F0:38:57:64:1D:D1:61:3C:0E:C6:2A:7A:0B:E5:B9:6C:F9:71:76:9E:6F:1B:C8:0C:E1:0B"],
+          sha256_cert_fingerprints: [
+            "3E:7D:66:29:CF:7F:F0:38:57:64:1D:D1:61:3C:0E:C6:2A:7A:0B:E5:B9:6C:F9:71:76:9E:6F:1B:C8:0C:E1:0B",
+            "C4:C4:B9:0E:B5:08:EC:5F:BD:EB:B9:ED:24:9D:02:EF:E7:C9:5D:BE:A3:43:97:9F:E8:09:3E:5A:AB:79:8A:21",
+          ],
         },
       },
     ]);
