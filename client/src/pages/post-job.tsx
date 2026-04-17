@@ -289,35 +289,40 @@ export default function PostJob() {
     return "";
   }, [isBarter, pricingSuggestion, budgetNum]);
 
-  const canSubmit = useMemo(() => {
-    if (!category) return false;
+  const missingReason = useMemo(() => {
+    if (!category) return "Pick a category";
     if (category === "Verify & Inspect") {
-      if (!isVIJob) return false;
-      if (budgetNum <= 0 || minPayoutError) return false;
-      return true;
+      if (!isVIJob) return "Complete the Verify & Inspect details";
+      if (budgetNum <= 0) return "Enter a budget";
+      if (minPayoutError) return minPayoutError;
+      return "";
     }
-    if (!serviceType) return false;
-    if (!isBarter && budgetNum <= 0) return false;
-    if (!isBarter && minPayoutError) return false;
-    if (isBarter && (!barterNeed.trim() || !barterOffering.trim())) return false;
-    if (locationRequired && zip.length < 5) return false;
+    if (!serviceType) return "Pick a service type";
+    if (!isBarter && budgetNum <= 0) return "Enter a budget";
+    if (!isBarter && minPayoutError) return minPayoutError;
+    if (isBarter && !barterNeed.trim()) return "Tell us what you need";
+    if (isBarter && !barterOffering.trim()) return "Tell us what you're offering";
+    if (locationRequired && zip.length < 5) return "Enter a 5-digit ZIP code";
 
     if (checklists) {
       const requiredChecklists = checklists.filter(c => c.required);
       for (const rc of requiredChecklists) {
         const val = jobDetails[rc.name];
         if (val === undefined || val === null || val === "" || (Array.isArray(val) && val.length === 0)) {
-          return false;
+          return `Fill in: ${rc.label || rc.name}`;
         }
       }
     }
     if (!isBarter && autoIncreaseEnabled) {
       const amt = parseFloat(autoIncreaseAmount);
       const max = parseFloat(autoIncreaseMax);
-      if (!amt || amt <= 0 || !max || max <= budgetNum) return false;
+      if (!amt || amt <= 0) return "Enter a valid auto-increase amount";
+      if (!max || max <= budgetNum) return "Auto-increase max must be higher than budget";
     }
-    return true;
+    return "";
   }, [category, isVIJob, serviceType, isBarter, budgetNum, minPayoutError, locationRequired, zip, checklists, jobDetails, barterNeed, barterOffering, autoIncreaseEnabled, autoIncreaseAmount, autoIncreaseMax]);
+
+  const canSubmit = !missingReason;
 
   const handleJobDetailChange = (name: string, value: any) => {
     setJobDetails(prev => ({ ...prev, [name]: value }));
@@ -1075,6 +1080,11 @@ export default function PostJob() {
               <><Lock className="w-5 h-5" /> POST JOB — FREE</>
             )}
           </Button>
+          {missingReason && !checkoutMutation.isPending && (
+            <p className="text-xs text-center text-muted-foreground -mt-2" data-testid="text-missing-reason">
+              {missingReason}
+            </p>
+          )}
         </Card>
       </div>
     </GuberLayout>
