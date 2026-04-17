@@ -1353,6 +1353,9 @@ const [aiResult, setAiResult] = useState<any>(null);
 const [aiLoading, setAiLoading] = useState(false);
 const [rejectOpen, setRejectOpen] = useState(false);
 const [rejectReason, setRejectReason] = useState("");
+const [flagsExpanded, setFlagsExpanded] = useState(false);
+const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
+const nonUsFlagged = aiResult?.vision?.nonUsIdDetected === true;
 
 const docType = v.action === "id_upload" || v.action === "verification_submitted_id"
 ? "ID Document" : v.action === "verification_submitted_selfie"
@@ -1556,6 +1559,15 @@ data-testid={`button-ai-check-${v.id}`}
 </div>
 )}
 {aiResult.flags?.length > 0 && (
+nonUsFlagged && !flagsExpanded ? (
+<button
+className="text-[10px] underline opacity-70 hover:opacity-100"
+onClick={() => setFlagsExpanded(true)}
+data-testid={`button-show-flags-${v.id}`}
+>
+Show {aiResult.flags.length} other risk flag{aiResult.flags.length === 1 ? "" : "s"}
+</button>
+) : (
 <ul className="space-y-0.5">
 {aiResult.flags.map((f: string, i: number) => (
 <li key={i} className="text-[10px] flex items-start gap-1 opacity-80">
@@ -1563,6 +1575,7 @@ data-testid={`button-ai-check-${v.id}`}
 </li>
 ))}
 </ul>
+)
 )}
 <button className="text-[9px] opacity-50 underline" onClick={() => setAiResult(null)}>Re-run</button>
 </div>
@@ -1584,7 +1597,7 @@ data-testid={`button-ai-check-${v.id}`}
 <Button
 size="sm"
 className="font-display text-xs h-8 flex-1"
-onClick={onApprove}
+onClick={() => { if (nonUsFlagged) { setConfirmApproveOpen(true); } else { onApprove(); } }}
 disabled={isApproving || isRejecting}
 data-testid={`button-approve-verif-${v.id}`}
 >
@@ -1617,6 +1630,37 @@ data-testid={`button-delete-verif-${v.id}`}
 </Button>
 )}
 </div>
+
+{/* Approve-anyway confirm for non-US flagged IDs */}
+<Dialog open={confirmApproveOpen} onOpenChange={setConfirmApproveOpen}>
+<DialogContent className="max-w-sm">
+<DialogHeader>
+<DialogTitle className="font-display text-sm">Approve a non-US ID?</DialogTitle>
+</DialogHeader>
+<div className="space-y-3 py-2">
+<div className="rounded-md bg-red-500/10 border border-red-500/30 p-3 space-y-1">
+<p className="text-xs font-display font-bold text-red-400">Document Vision flagged this as non-US</p>
+<p className="text-[11px] text-muted-foreground">
+Country: <span className="font-bold text-foreground">{aiResult?.vision?.documentCountry || "Unknown"}</span>
+{aiResult?.vision?.documentKind ? <> · Kind: <span className="font-bold text-foreground">{aiResult.vision.documentKind}</span></> : null}
+</p>
+{aiResult?.vision?.reasoning && <p className="text-[10px] text-muted-foreground italic">"{aiResult.vision.reasoning}"</p>}
+</div>
+<p className="text-xs text-muted-foreground">GUBER currently only accepts US-issued IDs. Approving this will mark the user as ID-verified anyway. Proceed?</p>
+</div>
+<DialogFooter className="gap-2">
+<Button variant="outline" size="sm" onClick={() => setConfirmApproveOpen(false)} data-testid={`button-cancel-non-us-approve-${v.id}`}>Cancel</Button>
+<Button
+size="sm"
+className="bg-red-500 hover:bg-red-600 text-white"
+onClick={() => { setConfirmApproveOpen(false); onApprove(); }}
+data-testid={`button-confirm-non-us-approve-${v.id}`}
+>
+Yes, approve anyway
+</Button>
+</DialogFooter>
+</DialogContent>
+</Dialog>
 
 {/* Reject dialog */}
 <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
