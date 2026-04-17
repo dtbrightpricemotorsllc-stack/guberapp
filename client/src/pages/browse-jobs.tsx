@@ -147,7 +147,7 @@ export default function BrowseJobs() {
             <h1 className="text-xl font-display font-bold tracking-tight mb-1" data-testid="text-browse-title">
               Browse Jobs
             </h1>
-            <p className="text-sm text-muted-foreground/60">Find opportunities that match your skills</p>
+            <p className="text-sm text-muted-foreground">Find opportunities that match your skills</p>
           </div>
         )}
 
@@ -157,7 +157,7 @@ export default function BrowseJobs() {
               <ShieldCheck className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-display font-bold text-destructive tracking-wide">Category Restrictions Active</p>
-                <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                <p className="text-[10px] text-muted-foreground mt-0.5">
                   Due to background check status, some categories are restricted: {restrictions.join(", ")}. Contact support if you believe this is an error.
                 </p>
               </div>
@@ -281,7 +281,7 @@ export default function BrowseJobs() {
                           {selectedPin.category}
                         </Badge>
                         {selectedPin.serviceType && (
-                          <span className="text-[10px] font-display text-muted-foreground/60 tracking-wider">
+                          <span className="text-[10px] font-display text-muted-foreground tracking-wider">
                             {selectedPin.serviceType}
                           </span>
                         )}
@@ -291,13 +291,13 @@ export default function BrowseJobs() {
 
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-display text-muted-foreground/50 tracking-widest uppercase mb-0.5">Budget</span>
+                      <span className="text-[10px] font-display text-muted-foreground tracking-widest uppercase mb-0.5">Budget</span>
                       <span className="text-xl font-display font-black guber-text-green">
                         {selectedPin.budget ? `$${selectedPin.budget.toFixed(2)}` : "Barter"}
                       </span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-display text-muted-foreground/50 tracking-widest uppercase mb-0.5">Posted</span>
+                      <span className="text-[10px] font-display text-muted-foreground tracking-widest uppercase mb-0.5">Posted</span>
                       <div className="flex items-center gap-1.5 text-xs font-display text-muted-foreground/80">
                         <Clock className="w-3.5 h-3.5" />
                         {selectedPin.createdAt ? new Date(selectedPin.createdAt).toLocaleDateString() : "Recently"}
@@ -323,7 +323,7 @@ export default function BrowseJobs() {
                 { label: "Barter",   color: "#0EA5E9" },
                 { label: "Market",   color: "#FACC15" },
               ].map(({ label, color }) => (
-                <span key={label} className="flex items-center gap-1 text-[9px] font-display font-bold tracking-wider text-muted-foreground/50">
+                <span key={label} className="flex items-center gap-1 text-[9px] font-display font-bold tracking-wider text-muted-foreground">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
                   {label}
                 </span>
@@ -340,7 +340,7 @@ export default function BrowseJobs() {
           <div className="text-center py-16 animate-fade-in" data-testid="section-empty-state">
             <p className="text-2xl mb-3">💰</p>
             <p className="font-display font-bold text-foreground text-base mb-2" data-testid="text-empty-title">Waiting on the next move</p>
-            <p className="text-sm text-muted-foreground/60 mb-1">Jobs appear in real-time based on your area.</p>
+            <p className="text-sm text-muted-foreground mb-1">Jobs appear in real-time based on your area.</p>
             {(alertsOff || availableOff) && (
               <div className="mt-5 flex flex-col gap-2 items-center">
                 {alertsOff && (

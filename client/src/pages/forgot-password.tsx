@@ -47,7 +47,7 @@ export default function ForgotPassword() {
 
         <div className="text-center space-y-3 mb-10 animate-fade-in">
           <GuberLogo size="lg" />
-          <p className="text-muted-foreground/60 text-xs font-display tracking-[0.2em]">RESET YOUR PASSWORD</p>
+          <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">RESET YOUR PASSWORD</p>
         </div>
 
         {sent ? (
@@ -58,7 +58,7 @@ export default function ForgotPassword() {
               </div>
             </div>
             <h2 className="font-display font-bold text-lg mb-2">Check your email</h2>
-            <p className="text-sm text-muted-foreground/70 mb-6">
+            <p className="text-sm text-muted-foreground mb-6">
               If <span className="text-foreground font-semibold">{email}</span> has an account, a reset link has been sent.
             </p>
             {devResetUrl && (
@@ -84,7 +84,7 @@ export default function ForgotPassword() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">EMAIL ADDRESS</Label>
+                <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">EMAIL ADDRESS</Label>
                 <Input
                   type="email"
                   value={email}

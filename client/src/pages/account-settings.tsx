@@ -257,7 +257,7 @@ export default function AccountSettings() {
 
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
           <h3 className="font-display font-semibold text-sm mb-1 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-muted-foreground/50" />
+            <Shield className="w-4 h-4 text-muted-foreground" />
             Safety &amp; Support
           </h3>
           <div className="space-y-2">
@@ -267,7 +267,7 @@ export default function AccountSettings() {
               <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
               <div>
                 <p className="font-display font-semibold text-[12px]">Report a Safety Issue</p>
-                <p className="text-[10px] text-muted-foreground/50">support@guberapp.com</p>
+                <p className="text-[10px] text-muted-foreground">support@guberapp.com</p>
               </div>
             </a>
             <a href="mailto:support@guberapp.com?subject=Abuse or Fraud Report"
@@ -276,11 +276,11 @@ export default function AccountSettings() {
               <ShieldCheck className="w-4 h-4 text-destructive/70 flex-shrink-0" />
               <div>
                 <p className="font-display font-semibold text-[12px]">Report Abuse or Fraud</p>
-                <p className="text-[10px] text-muted-foreground/50">support@guberapp.com</p>
+                <p className="text-[10px] text-muted-foreground">support@guberapp.com</p>
               </div>
             </a>
             <div className="p-3 rounded-xl border border-white/[0.06] bg-muted/10">
-              <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
                 Always meet in safe, public, well-lit locations. Do not perform tasks beyond your qualifications. For emergencies, call 911.
               </p>
             </div>
@@ -297,7 +297,7 @@ export default function AccountSettings() {
         {user?.accountType === "business" ? (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
             <h3 className="font-display font-semibold text-sm">Business Portal</h3>
-            <p className="text-[11px] text-muted-foreground/50 leading-relaxed">Manage your business profile, post jobs in bulk, and access business-only tools.</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">Manage your business profile, post jobs in bulk, and access business-only tools.</p>
             <Link href="/biz/dashboard">
               <Button variant="outline" className="w-full border-border/30 font-display text-sm gap-2" data-testid="button-go-biz-portal">
                 <Building2 className="w-4 h-4" />
@@ -308,10 +308,10 @@ export default function AccountSettings() {
         ) : user?.accountType === "pending_business" ? (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
             <h3 className="font-display font-semibold text-sm flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-muted-foreground/50" />
+              <Building2 className="w-4 h-4 text-muted-foreground" />
               GUBER Business Mode
             </h3>
-            <p className="text-[11px] text-muted-foreground/50 leading-relaxed">Your business access has been approved. Complete setup to activate your Business Portal.</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">Your business access has been approved. Complete setup to activate your Business Portal.</p>
             <Link href="/business-onboarding">
               <Button variant="outline" className="w-full border-border/30 font-display text-sm gap-2" data-testid="button-switch-to-business">
                 <Building2 className="w-4 h-4" />
@@ -333,14 +333,14 @@ export default function AccountSettings() {
         {/* Feedback */}
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3" data-testid="card-feedback">
           <h3 className="font-display font-semibold text-sm flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-muted-foreground/50" />
+            <MessageSquare className="w-4 h-4 text-muted-foreground" />
             Send Feedback
           </h3>
           {feedbackSent ? (
             <div className="flex flex-col items-center gap-2 py-4 text-center">
               <CheckCircle className="w-8 h-8 text-primary" />
               <p className="text-sm font-display font-semibold text-primary">Thank you!</p>
-              <p className="text-[11px] text-muted-foreground/70 leading-relaxed max-w-xs">We take every submission into consideration to make GUBER the world's greatest economic platform. We're nothing without you. 💚</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">We take every submission into consideration to make GUBER the world's greatest economic platform. We're nothing without you. 💚</p>
               <button className="text-[11px] text-primary/60 hover:text-primary underline-offset-2 hover:underline mt-1" onClick={() => setFeedbackSent(false)}>
                 Send another
               </button>

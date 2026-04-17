@@ -77,7 +77,7 @@ function ObservationCard({ obs, onView }: { obs: ObsWithMeta; onView: (o: ObsWit
             <MapPin className="w-3 h-3 shrink-0" />
             {obs.address}
           </p>
-          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground/50">
+          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
             <Calendar className="w-3 h-3" />
             {new Date(obs.createdAt!).toLocaleDateString()}
             {daysLeft !== null && (
@@ -92,7 +92,7 @@ function ObservationCard({ obs, onView }: { obs: ObsWithMeta; onView: (o: ObsWit
       {obs.tags && obs.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {obs.tags.map((t: string) => (
-            <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground/60">
+            <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground">
               {t}
             </span>
           ))}
@@ -101,7 +101,7 @@ function ObservationCard({ obs, onView }: { obs: ObsWithMeta; onView: (o: ObsWit
 
       {!isPurchased && (
         <div className="flex items-center gap-2 pt-1 border-t border-border/10">
-          <span className="text-[10px] text-muted-foreground/50">Purchase for:</span>
+          <span className="text-[10px] text-muted-foreground">Purchase for:</span>
           {[5, 10, 20].map(price => (
             <span
               key={price}
@@ -218,7 +218,7 @@ export default function ObservationMarketplace() {
       <GuberLayout>
         <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
           <AlertCircle className="w-10 h-10 text-muted-foreground/20 mx-auto" />
-          <p className="font-display font-bold text-muted-foreground/50">Business account required</p>
+          <p className="font-display font-bold text-muted-foreground">Business account required</p>
           <p className="text-sm text-muted-foreground/40">The Observation Marketplace is only accessible to business accounts.</p>
           <Button onClick={() => navigate("/business-onboarding")} className="font-display" data-testid="button-setup-business-obs">
             Set Up Business Account
@@ -276,7 +276,7 @@ export default function ObservationMarketplace() {
               if (val !== "any" && !gpsLocation) requestGps();
             }}>
               <SelectTrigger className="premium-input rounded-md flex-1" data-testid="select-radius-filter">
-                <Navigation className="w-3 h-3 mr-1.5 text-muted-foreground/60" />
+                <Navigation className="w-3 h-3 mr-1.5 text-muted-foreground" />
                 <SelectValue placeholder="Radius" />
               </SelectTrigger>
               <SelectContent>
@@ -363,7 +363,7 @@ export default function ObservationMarketplace() {
                     )}
                     {selectedObs.tags && selectedObs.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        <Tag className="w-3 h-3 text-muted-foreground/50 mt-0.5" />
+                        <Tag className="w-3 h-3 text-muted-foreground mt-0.5" />
                         {selectedObs.tags.map((t: string) => (
                           <Badge key={t} variant="secondary" className="text-[10px]">{t}</Badge>
                         ))}
@@ -391,7 +391,7 @@ export default function ObservationMarketplace() {
                           </button>
                         ))}
                       </div>
-                      <p className="text-[10px] text-muted-foreground/50 text-center">
+                      <p className="text-[10px] text-muted-foreground text-center">
                         Higher tiers get more detail and GPS coordinates
                       </p>
                       <Button

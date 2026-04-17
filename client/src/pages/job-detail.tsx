@@ -889,9 +889,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                     <div>
                       <p className="text-[11px] font-display font-semibold">{item.label}</p>
-                      {item.instruction && <p className="text-[10px] text-muted-foreground/70">{item.instruction}</p>}
+                      {item.instruction && <p className="text-[10px] text-muted-foreground">{item.instruction}</p>}
                       <div className="flex gap-2 mt-0.5">
-                        <span className="text-[9px] text-muted-foreground/50">{item.mediaType === "video" ? "Video" : "Photo"}{item.quantityRequired > 1 ? ` x${item.quantityRequired}` : ""}</span>
+                        <span className="text-[9px] text-muted-foreground">{item.mediaType === "video" ? "Video" : "Photo"}{item.quantityRequired > 1 ? ` x${item.quantityRequired}` : ""}</span>
                         {item.geoRequired && <span className="text-[9px] text-green-400/60 flex items-center gap-0.5"><MapPinned className="w-2.5 h-2.5" /> GPS</span>}
                       </div>
                     </div>
@@ -1024,7 +1024,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
           {poster && (
             <div className="pt-3 border-t border-border/20">
-              <p className="text-[10px] font-display font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">Posted By</p>
+              <p className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-2">Posted By</p>
               <Link href={`/profile/${job.postedById}`}>
                 <div className="flex items-center gap-3 rounded-xl p-2.5 -mx-1 transition-all hover:bg-white/[0.03] active:scale-[0.98] cursor-pointer" data-testid="link-poster-profile">
                   <div className="w-10 h-10 rounded-full bg-muted overflow-hidden shrink-0 ring-2 ring-border/20">
@@ -1049,7 +1049,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                           {poster.rating.toFixed(1)}
                           {(poster as any).reviewCount > 0 && (
-                            <span className="text-muted-foreground/50">({(poster as any).reviewCount})</span>
+                            <span className="text-muted-foreground">({(poster as any).reviewCount})</span>
                           )}
                         </span>
                       )}
@@ -1060,7 +1060,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       )}
                     </div>
                     {(poster as any).jobsCompleted > 0 && (
-                      <p className="text-[10px] text-muted-foreground/50 mt-0.5">{(poster as any).jobsCompleted} jobs completed</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{(poster as any).jobsCompleted} jobs completed</p>
                     )}
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
@@ -1134,7 +1134,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               <div className="space-y-2 pt-1" data-testid="section-navigation">
                 <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/40 uppercase px-1">Get Directions</p>
                 {job.location && (
-                  <p className="text-xs text-muted-foreground/60 px-1 flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground px-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3 shrink-0" /> {job.location}
                   </p>
                 )}
@@ -1150,7 +1150,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs font-display font-bold text-blue-400 truncate">Google Maps</p>
-                      <p className="text-[10px] text-muted-foreground/50">Directions</p>
+                      <p className="text-[10px] text-muted-foreground">Directions</p>
                     </div>
                   </button>
                   <button
@@ -1164,7 +1164,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs font-display font-bold text-emerald-400 truncate">Waze</p>
-                      <p className="text-[10px] text-muted-foreground/50">Live traffic</p>
+                      <p className="text-[10px] text-muted-foreground">Live traffic</p>
                     </div>
                   </button>
                 </div>
@@ -1327,7 +1327,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               {(job as any).helperObservationNotes && (
                 <p className="text-xs text-muted-foreground italic">"{(job as any).helperObservationNotes}"</p>
               )}
-              <div className="mt-3 p-3 rounded-xl text-[10px] text-muted-foreground/60" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="mt-3 p-3 rounded-xl text-[10px] text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
                 Verification confirms visual presence only at time of inspection. GUBER does not guarantee ownership, pricing, fitment, compatibility, future availability, or mechanical condition.
               </div>
             </div>
@@ -1645,7 +1645,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="space-y-3">
               {assignedWorker && (
                 <div className="bg-card rounded-xl border border-yellow-500/20 p-4" data-testid="card-who-accepted">
-                  <p className="text-[10px] font-display font-semibold text-muted-foreground/60 uppercase tracking-wider mb-3">Who Accepted</p>
+                  <p className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-3">Who Accepted</p>
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-full bg-muted overflow-hidden shrink-0 ring-2 ring-yellow-500/20">
                       {assignedWorker.profilePhoto ? (
@@ -1690,19 +1690,19 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     <div className="mt-3 pt-3 border-t border-border/10 grid grid-cols-4 gap-2" data-testid="section-helper-reliability">
                       <div className="text-center">
                         <p className="text-sm font-display font-bold text-primary">{helperReliability.jobsCompleted}</p>
-                        <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Done</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Done</p>
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-display font-bold text-emerald-400">{helperReliability.completionRate}%</p>
-                        <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Rate</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Rate</p>
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-display font-bold text-amber-400">{helperReliability.avgRating.toFixed(1)}</p>
-                        <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Rating</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Rating</p>
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-display font-bold text-blue-400">{helperReliability.avgResponseTimeMins}m</p>
-                        <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">Resp.</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Resp.</p>
                       </div>
                     </div>
                   )}
@@ -1756,13 +1756,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 );
               })()}
               <div className="bg-card rounded-xl border border-white/[0.06] p-3">
-                <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
                   Payments processed by Stripe. Funds are held until job completion and confirmation by both parties. Refunds are case-by-case. GUBER may assist in disputes but does not guarantee any outcome.
                 </p>
               </div>
               {(job as any).assignment?.workerAvailableFrom && (
                 <div className="bg-card rounded-xl border border-emerald-500/20 p-4 space-y-2" data-testid="card-worker-availability">
-                  <p className="text-[10px] font-display font-semibold text-muted-foreground/60 uppercase tracking-wider">Worker Availability</p>
+                  <p className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider">Worker Availability</p>
                   <div className="flex items-center gap-2 text-xs text-emerald-400">
                     <Clock className="w-4 h-4" />
                     <span>
@@ -1836,7 +1836,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               <div className="bg-card rounded-2xl border border-amber-500/20 p-4 text-center" data-testid="card-helper-waiting-buyer">
                 <Clock className="w-5 h-5 text-amber-400 mx-auto mb-2" />
                 <p className="text-xs font-display text-muted-foreground font-semibold">You confirmed completion.</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Waiting for the poster to confirm — your payout releases once both sides confirm.</p>
+                <p className="text-xs text-muted-foreground mt-1">Waiting for the poster to confirm — your payout releases once both sides confirm.</p>
               </div>
             ) : !(job as any).arrivedAt ? (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-center" data-testid="card-gps-required">
@@ -1882,7 +1882,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       }
                     }}
                     disabled={escalateMutation.isPending}
-                    className="text-[11px] text-muted-foreground/50 hover:text-destructive/70 transition-colors underline-offset-2 hover:underline"
+                    className="text-[11px] text-muted-foreground hover:text-destructive/70 transition-colors underline-offset-2 hover:underline"
                     data-testid="button-poster-dispute"
                   >
                     Not satisfied? File a dispute instead
@@ -1893,7 +1893,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               <div className="bg-card rounded-2xl border border-border/20 p-4 text-center" data-testid="card-waiting-proof">
                 <Clock className="w-5 h-5 text-muted-foreground mx-auto mb-2" />
                 <p className="text-xs font-display text-muted-foreground">Worker is on their way. You'll be notified when they confirm completion.</p>
-                <p className="text-[10px] text-muted-foreground/50 mt-1">Your payout is released after both parties confirm.</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Your payout is released after both parties confirm.</p>
               </div>
             )
           )}
@@ -1915,7 +1915,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-display font-bold text-indigo-400 mb-0.5">Download Verification Report</p>
-                <p className="text-xs text-muted-foreground/60 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Print or save as PDF — includes job details, proof photos, GPS data &amp; legal disclaimer.
                 </p>
               </div>
@@ -1940,7 +1940,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-display font-bold text-emerald-400 mb-0.5">Sell This Item in Marketplace</p>
-                <p className="text-xs text-muted-foreground/60 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Inspection completed. List it with your GUBER Verified badge — all photos &amp; details auto-attached.
                 </p>
               </div>
@@ -1960,7 +1960,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                     <div>
                       <p className="font-display font-bold text-sm text-emerald-400">{transferSent ? "Payout Sent" : "Payout Ready"}</p>
-                      <p className="text-[10px] text-muted-foreground/50">{transferSent ? "Transfer sent to your Stripe account" : "Your earnings are in your GUBER wallet"}</p>
+                      <p className="text-[10px] text-muted-foreground">{transferSent ? "Transfer sent to your Stripe account" : "Your earnings are in your GUBER wallet"}</p>
                     </div>
                   </div>
                   <div className="rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 p-3">
@@ -1987,7 +1987,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                     <div>
                       <p className="font-display font-bold text-sm text-emerald-400">Payout Ready</p>
-                      <p className="text-[10px] text-muted-foreground/50">Choose how you want to receive your earnings</p>
+                      <p className="text-[10px] text-muted-foreground">Choose how you want to receive your earnings</p>
                     </div>
                   </div>
                   {payoutOptions?.trustLevel && (
@@ -2039,7 +2039,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-display font-bold" style={{ color: isUnlocked ? modeColors.text : "#475569" }}>{modeLabels.label}</p>
-                          <p className="text-[10px] text-muted-foreground/50">{modeLabels.sub}</p>
+                          <p className="text-[10px] text-muted-foreground">{modeLabels.sub}</p>
                           {!isUnlocked && modeLabels.requirement && (
                             <p className="text-[9px] text-slate-500 mt-0.5 font-display">{modeLabels.requirement}</p>
                           )}
@@ -2056,7 +2056,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
                 {!payoutOptions?.eligible && (
                   <div className="rounded-xl bg-muted/10 border border-border/20 p-3 text-center">
-                    <p className="text-xs text-muted-foreground/60">{payoutOptions?.reason || "Loading payout options…"}</p>
+                    <p className="text-xs text-muted-foreground">{payoutOptions?.reason || "Loading payout options…"}</p>
                   </div>
                 )}
 
@@ -2090,7 +2090,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </div>
                 <div>
                   <p className="font-display font-bold text-sm text-blue-400">Payout Processing</p>
-                  <p className="text-[10px] text-muted-foreground/50">Your earnings are being transferred to your payout account</p>
+                  <p className="text-[10px] text-muted-foreground">Your earnings are being transferred to your payout account</p>
                 </div>
               </div>
               <div className="rounded-xl bg-blue-500/[0.06] border border-blue-500/15 p-3">
@@ -2133,7 +2133,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </div>
                 <div>
                   <p className="font-display font-bold text-sm text-rose-400">Payment Authorization Expired</p>
-                  <p className="text-[10px] text-muted-foreground/60 leading-relaxed mt-1">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">
                     The payment hold on this job expired before it could be captured. This typically happens when a job goes unconfirmed for more than 7 days. No funds were charged.
                   </p>
                 </div>
@@ -2175,7 +2175,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
                   {expired
                     ? "The review window has expired. The job will auto-confirm and your earnings will be released shortly."
                     : "The poster has a review window to verify your work. If no dispute is filed, the job auto-confirms and your earnings become available."}
@@ -2214,7 +2214,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-display font-extrabold">Launch Navigation</h2>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">GPS logged • Choose your nav app</p>
+                <p className="text-xs text-muted-foreground mt-0.5">GPS logged • Choose your nav app</p>
               </div>
               <button onClick={() => setShowNavModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
                 <X className="w-5 h-5 text-muted-foreground" />
@@ -2233,7 +2233,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-display font-bold text-blue-400">Open in Google Maps</p>
-                    <p className="text-xs text-muted-foreground/50">Turn-by-turn navigation</p>
+                    <p className="text-xs text-muted-foreground">Turn-by-turn navigation</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-blue-400/50 ml-auto" />
                 </button>
@@ -2250,7 +2250,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-display font-bold text-emerald-400">Open in Waze</p>
-                    <p className="text-xs text-muted-foreground/50">Real-time traffic routing</p>
+                    <p className="text-xs text-muted-foreground">Real-time traffic routing</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-400/50 ml-auto" />
                 </button>
@@ -2280,7 +2280,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-display font-extrabold text-destructive">Cancel This Job?</h2>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">This will re-open the job for other helpers</p>
+                <p className="text-xs text-muted-foreground mt-0.5">This will re-open the job for other helpers</p>
               </div>
               <button onClick={() => setShowCancelModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
                 <X className="w-5 h-5 text-muted-foreground" />
@@ -2289,7 +2289,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="space-y-3 mb-5">
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">REASON (REQUIRED)</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">REASON (REQUIRED)</label>
                 <Select value={cancelReason} onValueChange={setCancelReason}>
                   <SelectTrigger className="bg-background border-border/30 rounded-xl" data-testid="select-cancel-reason">
                     <SelectValue placeholder="Select a reason..." />
@@ -2302,7 +2302,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </Select>
               </div>
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ADDITIONAL NOTES (OPTIONAL)</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ADDITIONAL NOTES (OPTIONAL)</label>
                 <Textarea
                   value={cancelNotes}
                   onChange={(e) => setCancelNotes(e.target.value)}
@@ -2346,7 +2346,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-display font-extrabold text-destructive">Cancel This Job?</h2>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {job && ["funded", "active", "in_progress"].includes(job.status)
                     ? "This job is already in progress — cancelling may affect your account"
                     : "The helper will be notified and the job will be closed"}
@@ -2359,7 +2359,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="space-y-3 mb-5">
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">REASON (REQUIRED)</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">REASON (REQUIRED)</label>
                 <Select value={posterCancelReason} onValueChange={setPosterCancelReason}>
                   <SelectTrigger className="bg-background border-border/30 rounded-xl" data-testid="select-poster-cancel-reason">
                     <SelectValue placeholder="Select a reason..." />
@@ -2372,7 +2372,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </Select>
               </div>
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ADDITIONAL NOTES (OPTIONAL)</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ADDITIONAL NOTES (OPTIONAL)</label>
                 <Textarea
                   value={posterCancelNote}
                   onChange={(e) => setPosterCancelNote(e.target.value)}
@@ -2419,7 +2419,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-display font-extrabold">List in Marketplace</h2>
-                <p className="text-xs text-muted-foreground/50 mt-0.5">GUBER Verified badge auto-attached ✓</p>
+                <p className="text-xs text-muted-foreground mt-0.5">GUBER Verified badge auto-attached ✓</p>
               </div>
               <button onClick={() => setShowSellModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
                 <X className="w-5 h-5 text-muted-foreground" />
@@ -2428,7 +2428,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="space-y-3 mb-5">
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ITEM CATEGORY</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ITEM CATEGORY</label>
                 <select className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                   value={sellForm.category} onChange={e => setSellForm(f => ({ ...f, category: e.target.value }))}
                   data-testid="select-sell-category">
@@ -2439,7 +2439,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </select>
               </div>
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">CONDITION</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">CONDITION</label>
                 <select className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                   value={sellForm.condition} onChange={e => setSellForm(f => ({ ...f, condition: e.target.value }))}
                   data-testid="select-sell-condition">
@@ -2448,7 +2448,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </select>
               </div>
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ASKING TYPE</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ASKING TYPE</label>
                 <div className="flex gap-2">
                   {[["fixed", "Fixed"], ["obo", "OBO"], ["free", "Free"]].map(([v, l]) => (
                     <button key={v} onClick={() => setSellForm(f => ({ ...f, askingType: v }))}
@@ -2463,7 +2463,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
               {sellForm.askingType !== "free" && (
                 <div>
-                  <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ASKING PRICE ($)</label>
+                  <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ASKING PRICE ($)</label>
                   <input type="number" placeholder="0.00"
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                     value={sellForm.price} onChange={e => setSellForm(f => ({ ...f, price: e.target.value }))}
@@ -2508,7 +2508,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               data-testid="input-reject-feedback"
             />
 
-            <p className="text-[11px] text-muted-foreground/70">
+            <p className="text-[11px] text-muted-foreground">
               Feedback is optional but helps the worker fix the issue. The worker can resubmit proof or request admin review.
             </p>
 
@@ -2544,7 +2544,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 </div>
                 <div>
                   <h3 className="font-display font-black text-base">Before You Accept</h3>
-                  <p className="text-[11px] text-muted-foreground/60">Please read and acknowledge</p>
+                  <p className="text-[11px] text-muted-foreground">Please read and acknowledge</p>
                 </div>
               </div>
               <button onClick={() => setShowWaiverModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground" data-testid="button-close-waiver">
@@ -2553,7 +2553,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </div>
 
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
-              <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/60 uppercase">Contractor Acknowledgment</p>
+              <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Contractor Acknowledgment</p>
               <ul className="space-y-2">
                 {[
                   "I am acting as an independent contractor — not an employee of GUBER",
@@ -2638,7 +2638,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 space-y-3">
               <p className="text-[10px] font-display font-bold tracking-widest text-emerald-400/80 uppercase">Your Availability</p>
-              <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 When are you available to do this job? The hirer will pick a start time within your window.
               </p>
               <div className="grid grid-cols-2 gap-3">

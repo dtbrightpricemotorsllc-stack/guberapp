@@ -118,7 +118,7 @@ export default function VIRequests() {
             </div>
             <div>
               <h1 className="font-display font-bold text-lg text-foreground tracking-tight leading-none">Open Requests</h1>
-              <p className="text-[11px] text-muted-foreground/60 font-display tracking-wider mt-0.5">VERIFY & INSPECT</p>
+              <p className="text-[11px] text-muted-foreground font-display tracking-wider mt-0.5">VERIFY & INSPECT</p>
             </div>
           </div>
         </div>
@@ -160,7 +160,7 @@ export default function VIRequests() {
               </div>
               <div className="text-center">
                 <p className="font-display font-bold text-foreground/70">No open requests yet</p>
-                <p className="text-xs text-muted-foreground/50 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {filter !== "All" ? `No ${filter} requests open right now` : "Check back soon or post your own request"}
                 </p>
               </div>
@@ -233,13 +233,13 @@ export default function VIRequests() {
                           </Badge>
                         )}
                         {job.catalogServiceTypeName && (
-                          <Badge variant="outline" className="text-[10px] font-display text-muted-foreground/60">
+                          <Badge variant="outline" className="text-[10px] font-display text-muted-foreground">
                             {job.catalogServiceTypeName}
                           </Badge>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-4 text-[10px] text-muted-foreground/50 font-display mb-4">
+                      <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-display mb-4">
                         {job.locationApprox && (
                           <span className="flex items-center gap-1">
                             <MapPin className="w-2.5 h-2.5" /> {job.locationApprox}

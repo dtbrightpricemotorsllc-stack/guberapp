@@ -712,7 +712,7 @@ export default function VerifyInspect() {
               <div className="flex-1 min-w-0">
                 <p className="text-[9px] font-display font-bold tracking-widest text-primary/80 uppercase mb-1">GUBER</p>
                 <h1 className="text-2xl font-display font-black text-white tracking-tight leading-tight">Verify &amp; Inspect</h1>
-                <p className="text-white/50 text-xs mt-1">Visual proof jobs — on-site verification</p>
+                <p className="text-white/80 text-xs mt-1">Visual proof jobs — on-site verification</p>
               </div>
               <img
                 src={viLogoImg}
@@ -724,7 +724,7 @@ export default function VerifyInspect() {
           </div>
 
           <div className="mb-4">
-            <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 mb-3 uppercase">Inspection Categories</p>
+            <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground mb-3 uppercase">Inspection Categories</p>
             {catsError ? (
               <div className="text-center py-10">
                 <AlertCircle className="w-8 h-8 text-destructive/50 mx-auto mb-3" />
@@ -769,7 +769,7 @@ export default function VerifyInspect() {
                             <span className="text-[9px] font-bold text-yellow-400/90 uppercase tracking-widest">Bounty Mode</span>
                           </div>
                           <p className="text-white font-display font-black text-sm tracking-tight">PART AVAILABILITY VERIFICATION</p>
-                          <p className="text-white/50 text-[10px] mt-0.5">Salvage yards · Shops · Private sellers · Auction lots</p>
+                          <p className="text-white/80 text-[10px] mt-0.5">Salvage yards · Shops · Private sellers · Auction lots</p>
                         </div>
                       )}
                     </button>
@@ -919,12 +919,12 @@ export default function VerifyInspect() {
                               {meta.estimatedTime}
                             </Badge>
                           </div>
-                          <p className="text-[11px] text-muted-foreground/70 italic mt-1 leading-relaxed">
+                          <p className="text-[11px] text-muted-foreground italic mt-1 leading-relaxed">
                             "{meta.typicalUse}"
                           </p>
                           {isSelected && (
                             <div className="mt-2.5 space-y-1 border-t border-white/5 pt-2.5">
-                              <span className="text-[9px] font-display text-muted-foreground/50 uppercase tracking-widest">
+                              <span className="text-[9px] font-display text-muted-foreground uppercase tracking-widest">
                                 Helper will provide
                               </span>
                               {meta.proofItems.map((item, idx) => (
@@ -975,7 +975,7 @@ export default function VerifyInspect() {
                         </Badge>
                       </div>
                       <div className="mt-3 space-y-1 border-t border-white/5 pt-2.5">
-                        <span className="text-[9px] font-display text-muted-foreground/50 uppercase tracking-widest">
+                        <span className="text-[9px] font-display text-muted-foreground uppercase tracking-widest">
                           Helper will provide
                         </span>
                         {previewMeta.proofItems.map((item: string, idx: number) => (
@@ -1100,7 +1100,7 @@ export default function VerifyInspect() {
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
-                      Item Category <span className="text-muted-foreground/50 text-[10px]">(optional)</span>
+                      Item Category <span className="text-muted-foreground text-[10px]">(optional)</span>
                     </label>
                     <Select value={smartFormValues.itemCategory || ""} onValueChange={(v) => handleSmartFormChange("itemCategory", v)}>
                       <SelectTrigger className="premium-input rounded-md" data-testid="select-online-item-category">
@@ -1115,7 +1115,7 @@ export default function VerifyInspect() {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
-                      Online Platform <span className="text-muted-foreground/50 text-[10px]">(optional)</span>
+                      Online Platform <span className="text-muted-foreground text-[10px]">(optional)</span>
                     </label>
                     <Select value={smartFormValues.onlinePlatform || ""} onValueChange={(v) => handleSmartFormChange("onlinePlatform", v)}>
                       <SelectTrigger className="premium-input rounded-md" data-testid="select-online-platform">
@@ -1557,7 +1557,7 @@ export default function VerifyInspect() {
                   Auto-selected
                 </Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 mb-3 pl-9 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground mb-3 pl-9 leading-relaxed">
                 Your helper must submit this proof before you can approve and release payment. It's matched to your service type automatically.
               </p>
               <div className="bg-muted/30 rounded-xl p-3.5 space-y-2.5 border border-white/[0.06]">
@@ -1586,7 +1586,7 @@ export default function VerifyInspect() {
                 </div>
                 {proofTemplate.checklistItems && proofTemplate.checklistItems.length > 0 && (
                   <div className="mt-2 space-y-1.5 border-t border-white/[0.05] pt-2.5">
-                    <span className="text-[10px] font-display text-muted-foreground/50 uppercase tracking-wider">
+                    <span className="text-[10px] font-display text-muted-foreground uppercase tracking-wider">
                       Helper checklist ({proofTemplate.checklistItems.length} items)
                     </span>
                     {proofTemplate.checklistItems.map((item: any) => (
@@ -1705,7 +1705,7 @@ export default function VerifyInspect() {
                       data-testid="input-vi-budget"
                     />
                   </div>
-                  <p className="text-[10px] text-muted-foreground/50 mt-1">This is what you'll offer to pay the verifier.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">This is what you'll offer to pay the verifier.</p>
                 </div>
 
                 <div
@@ -1716,7 +1716,7 @@ export default function VerifyInspect() {
                 >
                   <div>
                     <p className="text-sm font-display font-semibold" style={{ color: viurgent ? "#f59e0b" : "#9ca3af" }}>URGENT REQUEST</p>
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
                       {isOG ? "FREE for Day-1 OG members" : isDemoUser ? "Urgent fee applies" : "+ $10 urgent fee"}
                     </p>
                   </div>

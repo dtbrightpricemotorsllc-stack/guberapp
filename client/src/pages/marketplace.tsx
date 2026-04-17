@@ -112,12 +112,12 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
         )}
       </div>
       <div className="p-3.5">
-        <p className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider mb-1">{item.category}</p>
+        <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-1">{item.category}</p>
         <h3 className="text-sm font-bold text-foreground leading-snug mb-2 line-clamp-2" data-testid={`text-item-title-${item.id}`}>{item.title}</h3>
         <div className="flex items-center justify-between">
           <PriceDisplay item={item} />
           {item.locationApprox && (
-            <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
               <MapPin className="w-2.5 h-2.5" />
               {item.locationApprox}
             </span>
@@ -192,7 +192,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1">
-              <p className="text-xs font-display font-bold text-muted-foreground/50 tracking-wider mb-1">{item.category}</p>
+              <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-1">{item.category}</p>
               <h2 className="text-xl font-display font-extrabold text-foreground leading-tight">{item.title}</h2>
             </div>
             <button onClick={onClose} className="ml-3 p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid="button-close-modal">
@@ -217,7 +217,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   <span className="text-sm font-display font-bold text-emerald-400">GUBER Verified Item</span>
                 </div>
-                <p className="text-xs text-muted-foreground/70 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   This item was physically inspected by a certified GUBER inspector
                   {item.verifiedByName ? ` (${item.verifiedByName})` : ""}
                   {verificationDate ? ` on ${verificationDate}` : ""}.
@@ -227,10 +227,10 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
             ) : (
               <>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <AlertCircle className="w-4 h-4 text-muted-foreground/50" />
-                  <span className="text-sm font-display font-bold text-muted-foreground/60">Not Yet Verified</span>
+                  <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-display font-bold text-muted-foreground">Not Yet Verified</span>
                 </div>
-                <p className="text-xs text-muted-foreground/50 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   This item has not been verified by a GUBER inspector. Consider requesting a V&I inspection for buyer confidence.
                 </p>
               </>
@@ -239,12 +239,12 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
           {item.description && (
             <div className="mb-4">
-              <h4 className="text-xs font-display font-bold text-muted-foreground/50 tracking-wider mb-2">DESCRIPTION</h4>
+              <h4 className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-2">DESCRIPTION</h4>
               <p className="text-sm text-foreground/80 leading-relaxed">{item.description}</p>
             </div>
           )}
 
-          <div className="flex flex-wrap gap-3 mb-4 text-xs text-muted-foreground/60">
+          <div className="flex flex-wrap gap-3 mb-4 text-xs text-muted-foreground">
             {item.locationApprox && (
               <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{item.locationApprox}</span>
             )}
@@ -347,7 +347,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               <ShieldCheck className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs font-display font-bold text-emerald-400 mb-0.5">Boost trust with GUBER Verification</p>
-                <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Link a completed V&I job ID to get the GUBER Verified badge. Buyers trust verified items more and listings sell faster.
                 </p>
               </div>
@@ -356,13 +356,13 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">TITLE *</label>
+              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">TITLE *</label>
               <input className={inputClass} placeholder="e.g. 2019 Honda Civic – pre-inspected" value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))} data-testid="input-listing-title" />
             </div>
 
             <div>
-              <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">CATEGORY *</label>
+              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">CATEGORY *</label>
               <select className={inputClass} value={form.category}
                 onChange={e => setForm(f => ({ ...f, category: e.target.value }))} data-testid="select-listing-category">
                 <option value="">Select category</option>
@@ -373,7 +373,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             </div>
 
             <div>
-              <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">CONDITION</label>
+              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">CONDITION</label>
               <select className={inputClass} value={form.condition}
                 onChange={e => setForm(f => ({ ...f, condition: e.target.value }))} data-testid="select-listing-condition">
                 <option value="">Select condition</option>
@@ -382,7 +382,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             </div>
 
             <div>
-              <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ASKING TYPE</label>
+              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ASKING TYPE</label>
               <div className="flex gap-2">
                 {[["fixed", "Fixed Price"], ["obo", "OBO"], ["free", "Free"]].map(([val, label]) => (
                   <button key={val} onClick={() => setForm(f => ({ ...f, askingType: val }))}
@@ -398,21 +398,21 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
             {form.askingType !== "free" && (
               <div>
-                <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">PRICE ($)</label>
+                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">PRICE ($)</label>
                 <input className={inputClass} type="number" placeholder="0.00" value={form.price}
                   onChange={e => setForm(f => ({ ...f, price: e.target.value }))} data-testid="input-listing-price" />
               </div>
             )}
 
             <div>
-              <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">DESCRIPTION</label>
+              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">DESCRIPTION</label>
               <textarea className={`${inputClass} resize-none`} rows={3} placeholder="Describe the item, its history, any issues..."
                 value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 data-testid="textarea-listing-description" />
             </div>
 
             <div>
-              <label className="text-xs font-display font-bold text-muted-foreground/60 tracking-wider block mb-1.5">ZIP CODE</label>
+              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ZIP CODE</label>
               <input className={inputClass} placeholder="e.g. 27401" value={form.zipcode}
                 onChange={e => setForm(f => ({ ...f, zipcode: e.target.value }))} data-testid="input-listing-zip" />
             </div>
@@ -443,7 +443,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-display font-bold text-emerald-400 mb-0.5">Item not yet inspected?</p>
-                <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Get a V&I first — then list with the GUBER Verified badge for higher buyer trust.
                 </p>
               </div>
@@ -512,7 +512,7 @@ export default function Marketplace() {
           <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-display font-bold text-emerald-400 mb-0.5">What is GUBER Marketplace?</p>
-            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               Items for sale that have been physically verified by a GUBER inspector — not just described, but actually checked.
               Got a car inspected but the buyer backed out? List it here with your verification report attached.
               Everything legal is welcome.
@@ -550,7 +550,7 @@ export default function Marketplace() {
               <Package className="w-7 h-7 text-muted-foreground/20" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-display font-bold text-muted-foreground/50">No listings yet</p>
+              <p className="text-sm font-display font-bold text-muted-foreground">No listings yet</p>
               <p className="text-xs text-muted-foreground/30 mt-1">
                 {activeCategory !== "All" ? `No ${activeCategory} items listed.` : "Be the first to list a verified item."}
               </p>
@@ -583,7 +583,7 @@ export default function Marketplace() {
               <div className="mt-6 rounded-2xl p-4 text-center"
                 style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                 <p className="text-sm font-display font-bold mb-1">Want to sell?</p>
-                <p className="text-xs text-muted-foreground/50 mb-3">Sign in to list your verified items</p>
+                <p className="text-xs text-muted-foreground mb-3">Sign in to list your verified items</p>
                 <Button size="sm" onClick={() => navigate("/login")} className="premium-btn font-display text-xs"
                   data-testid="button-signin-to-list">
                   SIGN IN TO LIST

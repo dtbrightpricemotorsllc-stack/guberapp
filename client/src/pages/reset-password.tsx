@@ -18,7 +18,7 @@ function PasswordStrength({ password }: { password: string }) {
   return (
     <div className="space-y-1.5 mt-2">
       {checks.map((c) => (
-        <div key={c.label} className={`flex items-center gap-2 text-[11px] font-display transition-colors ${c.ok ? "text-primary" : "text-muted-foreground/50"}`}>
+        <div key={c.label} className={`flex items-center gap-2 text-[11px] font-display transition-colors ${c.ok ? "text-primary" : "text-muted-foreground"}`}>
           {c.ok ? <Check className="w-3 h-3 flex-shrink-0" /> : <X className="w-3 h-3 flex-shrink-0" />}
           {c.label}
         </div>
@@ -76,7 +76,7 @@ export default function ResetPassword() {
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div className="text-center">
           <p className="text-foreground font-display font-bold mb-2">Invalid Reset Link</p>
-          <p className="text-sm text-muted-foreground/60 mb-6">This link is invalid or has expired.</p>
+          <p className="text-sm text-muted-foreground mb-6">This link is invalid or has expired.</p>
           <Link href="/forgot-password">
             <Button className="premium-btn rounded-xl font-display tracking-wider">Request New Link</Button>
           </Link>
@@ -100,7 +100,7 @@ export default function ResetPassword() {
 
         <div className="text-center space-y-3 mb-10 animate-fade-in">
           <GuberLogo size="lg" />
-          <p className="text-muted-foreground/60 text-xs font-display tracking-[0.2em]">CREATE NEW PASSWORD</p>
+          <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">CREATE NEW PASSWORD</p>
         </div>
 
         {done ? (
@@ -111,7 +111,7 @@ export default function ResetPassword() {
               </div>
             </div>
             <h2 className="font-display font-bold text-lg mb-2">Password Updated!</h2>
-            <p className="text-sm text-muted-foreground/70 mb-6">Your password has been successfully updated. You can now log in.</p>
+            <p className="text-sm text-muted-foreground mb-6">Your password has been successfully updated. You can now log in.</p>
             <Link href="/login">
               <Button className="w-full h-12 rounded-xl premium-btn font-display tracking-wider">
                 GO TO LOGIN
@@ -122,7 +122,7 @@ export default function ResetPassword() {
           <div className="glass-card rounded-2xl p-7 premium-border-glow animate-slide-up">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">NEW PASSWORD</Label>
+                <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">NEW PASSWORD</Label>
                 <div className="relative">
                   <Input
                     type={showPassword ? "text" : "password"}
@@ -141,7 +141,7 @@ export default function ResetPassword() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">CONFIRM PASSWORD</Label>
+                <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">CONFIRM PASSWORD</Label>
                 <div className="relative">
                   <Input
                     type={showConfirm ? "text" : "password"}

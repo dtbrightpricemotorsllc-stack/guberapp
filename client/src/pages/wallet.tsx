@@ -36,7 +36,7 @@ function TrustWidget({ trustScore }: { trustScore: number }) {
           <p className="text-xs font-display font-black tracking-wider uppercase" style={{ color: trust.color }}>Trust Level</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground/50 font-display">{trustScore} pts</span>
+          <span className="text-[10px] text-muted-foreground font-display">{trustScore} pts</span>
           <div className="px-2 py-0.5 rounded-full text-[9px] font-display font-black tracking-widest uppercase border" style={{ background: trust.bg, borderColor: trust.border, color: trust.color }} data-testid="badge-trust-level">
             {trust.label}
           </div>
@@ -74,7 +74,7 @@ function TrustWidget({ trustScore }: { trustScore: number }) {
       </div>
 
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.05] p-2.5 space-y-1">
-        <p className="text-[9px] font-display font-bold tracking-wider text-muted-foreground/50 uppercase">How to earn points</p>
+        <p className="text-[9px] font-display font-bold tracking-wider text-muted-foreground uppercase">How to earn points</p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
           {["+5 each completed job", "+2 5-star review", "+10 ID verified", "−10 per dispute"].map((tip) => (
             <p key={tip} className={`text-[9px] ${tip.startsWith("−") ? "text-red-400/50" : "text-muted-foreground/40"}`}>{tip}</p>
@@ -226,7 +226,7 @@ export default function WalletPage() {
               })}
             </div>
             <div className="px-4 py-2.5 bg-primary/[0.03]">
-              <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
                 Funds are held by Stripe until you confirm. If you don't confirm within 12 hours, it auto-confirms and releases payment to the worker.
               </p>
             </div>
@@ -271,8 +271,8 @@ export default function WalletPage() {
         {!isLoading && !isConnectActive && !hasUnsent && !hasPendingConfirms && (
           <div className="mb-4 rounded-xl border border-border/20 bg-card p-3 flex items-center justify-between gap-3" data-testid="banner-payout-nudge">
             <div className="flex items-center gap-2.5 min-w-0">
-              <Banknote className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-              <p className="text-[11px] text-muted-foreground/70 leading-snug">
+              <Banknote className="w-4 h-4 text-muted-foreground shrink-0" />
+              <p className="text-[11px] text-muted-foreground leading-snug">
                 {hasConnect ? "Finish setting up your payout account to receive earnings." : "Set up a payout account to get paid for completed jobs."}
               </p>
             </div>

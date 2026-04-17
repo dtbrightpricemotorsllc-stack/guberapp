@@ -505,7 +505,7 @@ Cancel
 ))}
 </div>
 ) : (
-<p className="text-[10px] text-muted-foreground/60">No checklist items yet</p>
+<p className="text-[10px] text-muted-foreground">No checklist items yet</p>
 )}
 
 <div className="pt-2 border-t border-border/10 space-y-2">
@@ -616,7 +616,7 @@ filtered.map(log => (
 </span>
 <span className="text-muted-foreground truncate" data-testid={`audit-user-${log.id}`}>
 {(log as any).username || log.userId || "-"}
-{log.userId && <span className="text-[9px] text-muted-foreground/50 ml-0.5">#{log.userId}</span>}
+{log.userId && <span className="text-[9px] text-muted-foreground ml-0.5">#{log.userId}</span>}
 </span>
 <Badge variant="outline" className={`text-[8px] ${getActionColor(log.action)}`} data-testid={`audit-action-${log.id}`}>
 {log.action}
@@ -639,7 +639,7 @@ queryKey: ["/api/admin/jobs", jobId, "proof"],
 });
 
 if (isLoading) return <Skeleton className="h-8 rounded" />;
-if (!proofs || proofs.length === 0) return <p className="text-[10px] text-muted-foreground/60">No proof submissions</p>;
+if (!proofs || proofs.length === 0) return <p className="text-[10px] text-muted-foreground">No proof submissions</p>;
 
 return (
 <div className="space-y-2 mt-2">
@@ -692,7 +692,7 @@ data-testid="modal-proof-viewer"
 <div className="flex items-center justify-between mb-4">
 <div>
 <h2 className="text-base font-display font-bold">Proof Photos</h2>
-<p className="text-[11px] text-muted-foreground/60 mt-0.5 truncate max-w-[250px]">{jobTitle}</p>
+<p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[250px]">{jobTitle}</p>
 </div>
 <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10" data-testid="button-close-proof-modal">
 <X className="w-5 h-5 text-muted-foreground" />
@@ -735,7 +735,7 @@ return (
 ))}
 </div>
 ) : (
-<p className="text-[10px] text-muted-foreground/50">No photos attached</p>
+<p className="text-[10px] text-muted-foreground">No photos attached</p>
 )}
 {p.notes && <p className="text-[11px] text-muted-foreground bg-muted/10 rounded p-2">{p.notes}</p>}
 {p.notEncounteredReason && (
@@ -1043,14 +1043,14 @@ return (
 <Day1OGLogo size="sm" />
 <span className="text-sm font-display font-bold text-amber-400">Day-1 OG Members</span>
 </div>
-<p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+<p className="text-[11px] text-muted-foreground leading-relaxed">
 These users paid $1.99 via Stripe and were automatically granted Day-1 OG status. OG status is permanent, tied to their registered email.
 </p>
 </div>
 
 <div className="glass-card rounded-xl p-4 space-y-3">
 <p className="text-xs font-display font-bold text-foreground/80">Sync from Stripe</p>
-<p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+<p className="text-[11px] text-muted-foreground leading-relaxed">
 Scan all Stripe checkout sessions and activate OG for any user who paid but wasn't yet activated (e.g. webhook missed). Requires a valid Stripe secret key in Secrets — if this fails, use Manual Grant below.
 </p>
 <Button
@@ -1079,8 +1079,8 @@ SYNC STRIPE TRUST BOX
 {syncResult.activated.length > 0 && <p className="text-green-400">Newly activated ({syncResult.activated.length}): {syncResult.activated.join(", ")}</p>}
 {syncResult.preapproved.length > 0 && <p className="text-amber-400">No GUBER account yet — locked in ({syncResult.preapproved.length}): {syncResult.preapproved.join(", ")}</p>}
 {(syncResult.emailMismatch?.length ?? 0) > 0 && <p className="text-orange-400">Email mismatch — paid w/ different email ({syncResult.emailMismatch.length}): {syncResult.emailMismatch.join(", ")}</p>}
-{syncResult.alreadyActive.length > 0 && <p className="text-muted-foreground/60">Already active: {syncResult.alreadyActive.length}</p>}
-{syncResult.activated.length === 0 && syncResult.preapproved.length === 0 && <p className="text-muted-foreground/60">All OG payments are already activated.</p>}
+{syncResult.alreadyActive.length > 0 && <p className="text-muted-foreground">Already active: {syncResult.alreadyActive.length}</p>}
+{syncResult.activated.length === 0 && syncResult.preapproved.length === 0 && <p className="text-muted-foreground">All OG payments are already activated.</p>}
 </div>
 )}
 {tbSyncResult && (
@@ -1088,15 +1088,15 @@ SYNC STRIPE TRUST BOX
 <p className="font-display font-bold text-foreground/80">Trust Box sync complete — {tbSyncResult.totalScanned} accounts checked</p>
 {tbSyncResult.activated.length > 0 && <p className="text-green-400">Newly activated: {tbSyncResult.activated.join(", ")}</p>}
 {tbSyncResult.preapproved.length > 0 && <p className="text-amber-400">Locked in (no account yet): {tbSyncResult.preapproved.join(", ")}</p>}
-{tbSyncResult.alreadyActive.length > 0 && <p className="text-muted-foreground/60">Already active: {tbSyncResult.alreadyActive.length}</p>}
-{tbSyncResult.activated.length === 0 && tbSyncResult.preapproved.length === 0 && <p className="text-muted-foreground/60">All Trust Box subscriptions are already activated.</p>}
+{tbSyncResult.alreadyActive.length > 0 && <p className="text-muted-foreground">Already active: {tbSyncResult.alreadyActive.length}</p>}
+{tbSyncResult.activated.length === 0 && tbSyncResult.preapproved.length === 0 && <p className="text-muted-foreground">All Trust Box subscriptions are already activated.</p>}
 </div>
 )}
 </div>
 
 <div className="glass-card rounded-xl p-4 space-y-3">
 <p className="text-xs font-display font-bold text-foreground/80">Manual Grant by Email</p>
-<p className="text-[11px] text-muted-foreground/60">For users who paid but their email doesn't match any Stripe session metadata.</p>
+<p className="text-[11px] text-muted-foreground">For users who paid but their email doesn't match any Stripe session metadata.</p>
 <div className="flex gap-2">
 <Input
 placeholder="user@email.com"
@@ -1121,7 +1121,7 @@ GRANT
 
 <div className="glass-card rounded-xl p-4 space-y-3">
 <p className="text-xs font-display font-bold text-foreground/80">Reset User Password</p>
-<p className="text-[11px] text-muted-foreground/60">Set a new password for any user by email. Use this when a user is locked out and forgot-password email isn't available.</p>
+<p className="text-[11px] text-muted-foreground">Set a new password for any user by email. Use this when a user is locked out and forgot-password email isn't available.</p>
 <Input placeholder="user@email.com" value={resetEmail} onChange={e => setResetEmail(e.target.value)} className="h-9 text-xs rounded-xl w-full" data-testid="input-reset-email" />
 <div className="flex gap-2">
 <Input placeholder="New password (min 8 chars)" value={resetPassword} onChange={e => setResetPassword(e.target.value)} className="h-9 text-xs rounded-xl flex-1 min-w-0" type="password" data-testid="input-reset-password" />
@@ -1141,13 +1141,13 @@ data-testid="button-reset-password"
 ) : (
 <>
 <div className="flex items-center justify-between px-1">
-<span className="text-[11px] text-muted-foreground/60 font-display">
+<span className="text-[11px] text-muted-foreground font-display">
 {allUsers?.filter(u => u.day1OG).length ?? 0} total OG members
 </span>
 </div>
 {allUsers?.filter(u => u.day1OG).length === 0 && (
 <div className="glass-card rounded-xl p-6 text-center" data-testid="text-no-og-members">
-<p className="text-sm text-muted-foreground/60 font-display">No Day-1 OG members yet.</p>
+<p className="text-sm text-muted-foreground font-display">No Day-1 OG members yet.</p>
 </div>
 )}
 {allUsers?.filter(u => u.day1OG).map(u => (
@@ -1165,10 +1165,10 @@ style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.25), rgba(251,19
 <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">Day-1 OG</Badge>
 <Badge variant="outline" className="text-[8px]">{u.tier}</Badge>
 </div>
-<p className="text-[11px] text-muted-foreground/70 truncate mt-0.5" data-testid={`og-member-email-${u.id}`}>{u.email}</p>
+<p className="text-[11px] text-muted-foreground truncate mt-0.5" data-testid={`og-member-email-${u.id}`}>{u.email}</p>
 </div>
 <div className="flex flex-col items-end gap-1 shrink-0">
-<span className="text-[10px] text-muted-foreground/50 font-display">#{u.id}</span>
+<span className="text-[10px] text-muted-foreground font-display">#{u.id}</span>
 <span className="text-[10px] text-amber-500/70 font-display font-bold">ACTIVE</span>
 </div>
 </div>
@@ -1225,14 +1225,14 @@ return (
 <div className="flex items-center gap-2 mb-1">
 <span className="text-sm font-display font-bold text-blue-400">Trust Box — AI or Not Premium ($4.99/mo)</span>
 </div>
-<p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+<p className="text-[11px] text-muted-foreground leading-relaxed">
 Active subscribers with AI or Not premium access. Grant manually for pre-Stripe subscribers, or add to pre-approval list for auto-activation on signup.
 </p>
 </div>
 
 <div className="glass-card rounded-xl p-4 space-y-3">
 <p className="text-xs font-display font-bold text-foreground/80">Grant Trust Box by Email</p>
-<p className="text-[11px] text-muted-foreground/60">If the user already has an account, activates immediately. If not found, adds to the pre-approval list — they'll get Trust Box automatically on signup.</p>
+<p className="text-[11px] text-muted-foreground">If the user already has an account, activates immediately. If not found, adds to the pre-approval list — they'll get Trust Box automatically on signup.</p>
 <div className="flex gap-2">
 <Input
 placeholder="user@email.com"
@@ -1280,7 +1280,7 @@ data-testid="button-revoke-trust-box"
 {(preapproved?.length ?? 0) > 0 && (
 <div className="glass-card rounded-xl p-4 space-y-2">
 <p className="text-xs font-display font-bold text-foreground/80">Pre-Approval List ({preapproved!.length} emails)</p>
-<p className="text-[11px] text-muted-foreground/60">These emails auto-get Trust Box on signup.</p>
+<p className="text-[11px] text-muted-foreground">These emails auto-get Trust Box on signup.</p>
 {preapproved!.map(row => (
 <div key={row.email} className="flex items-center justify-between py-1 border-b border-border/20 last:border-0">
 <span className="text-[11px] font-mono text-muted-foreground">{row.email}</span>
@@ -1297,7 +1297,7 @@ data-testid={`button-remove-tb-preapproved-${row.email}`}
 )}
 
 <div className="flex items-center justify-between px-1">
-<span className="text-[11px] text-muted-foreground/60 font-display">
+<span className="text-[11px] text-muted-foreground font-display">
 {tbUsers.length} active Trust Box subscriber{tbUsers.length !== 1 ? "s" : ""}
 </span>
 </div>
@@ -1306,7 +1306,7 @@ data-testid={`button-remove-tb-preapproved-${row.email}`}
 <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
 ) : tbUsers.length === 0 ? (
 <div className="glass-card rounded-xl p-6 text-center">
-<p className="text-sm text-muted-foreground/60 font-display">No active Trust Box subscribers yet.</p>
+<p className="text-sm text-muted-foreground font-display">No active Trust Box subscribers yet.</p>
 </div>
 ) : (
 tbUsers.map(u => (
@@ -1324,10 +1324,10 @@ style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.25), rgba(99,179
 <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-400 border-blue-500/30">Trust Box</Badge>
 {u.day1OG && <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">OG</Badge>}
 </div>
-<p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">{u.email}</p>
+<p className="text-[11px] text-muted-foreground truncate mt-0.5">{u.email}</p>
 </div>
 <div className="flex flex-col items-end gap-1 shrink-0">
-<span className="text-[10px] text-muted-foreground/50 font-display">#{u.id}</span>
+<span className="text-[10px] text-muted-foreground font-display">#{u.id}</span>
 <span className="text-[10px] text-blue-500/70 font-display font-bold">ACTIVE</span>
 </div>
 </div>
@@ -1408,7 +1408,7 @@ return (
 <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/20">OG</Badge>
 )}
 </div>
-<p className="text-[10px] text-muted-foreground/50">
+<p className="text-[10px] text-muted-foreground">
 {v.createdAt ? new Date(v.createdAt).toLocaleString() : ""}
 </p>
 </div>
@@ -1416,7 +1416,7 @@ return (
 <div className="grid md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-border/10">
 {/* LEFT: User profile info */}
 <div className="p-4 space-y-3">
-<p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1">Registered Profile</p>
+<p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Registered Profile</p>
 <div className="flex items-center gap-3">
 <Avatar className="w-12 h-12 border-2 border-border/20">
 {v.profilePhoto && <AvatarImage src={v.profilePhoto} />}
@@ -1425,7 +1425,7 @@ return (
 </AvatarFallback>
 </Avatar>
 <div>
-<p className="text-base font-display font-black text-foreground leading-tight">{v.fullName || <span className="text-muted-foreground/50 italic">No full name</span>}</p>
+<p className="text-base font-display font-black text-foreground leading-tight">{v.fullName || <span className="text-muted-foreground italic">No full name</span>}</p>
 <p className="text-[11px] text-muted-foreground">@{v.username}</p>
 </div>
 </div>
@@ -1466,19 +1466,19 @@ return (
 </div>
 
 {v.userBio && (
-<p className="text-[11px] text-muted-foreground/70 italic line-clamp-2 border-l-2 border-border/20 pl-2">"{v.userBio}"</p>
+<p className="text-[11px] text-muted-foreground italic line-clamp-2 border-l-2 border-border/20 pl-2">"{v.userBio}"</p>
 )}
 
 {/* Name to match callout */}
 <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2">
-<p className="text-[9px] text-muted-foreground/60 uppercase tracking-wider mb-0.5 font-semibold">Name to match on document</p>
+<p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5 font-semibold">Name to match on document</p>
 <p className="text-sm font-display font-black text-primary tracking-wide">{v.fullName || "— not set —"}</p>
 </div>
 </div>
 
 {/* RIGHT: Document */}
 <div className="p-4 space-y-3">
-<p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1">Submitted Document</p>
+<p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Submitted Document</p>
 
 {docImageSrc && isImageDoc ? (
 <div className="rounded-lg overflow-hidden border border-border/20 bg-black/20">
@@ -1506,7 +1506,7 @@ win?.document.write(`<iframe src="${docImageSrc}" frameborder="0" style="border:
 ) : (
 <div className="rounded-lg border border-border/10 bg-muted/10 p-6 flex flex-col items-center gap-2 min-h-[120px] justify-center">
 <FileText className="w-8 h-8 text-muted-foreground/20" />
-<p className="text-xs text-muted-foreground/50">No document image</p>
+<p className="text-xs text-muted-foreground">No document image</p>
 </div>
 )}
 
@@ -1685,7 +1685,7 @@ Document History
 {isLoading ? (
 <Skeleton className="h-12 rounded-lg" />
 ) : docs?.length === 0 ? (
-<p className="text-[10px] text-muted-foreground/50">No verification documents submitted.</p>
+<p className="text-[10px] text-muted-foreground">No verification documents submitted.</p>
 ) : (
 docs?.map(doc => {
 const docType = doc.action === "id_upload" || doc.action === "verification_submitted_id"
@@ -1701,7 +1701,7 @@ return (
 <div className="flex items-center gap-2">
 <Badge variant="outline" className="text-[9px]">{docType}</Badge>
 <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${statusColor}`}>{statusLabel}</span>
-<span className="text-[9px] text-muted-foreground/50">{doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : ""}</span>
+<span className="text-[9px] text-muted-foreground">{doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : ""}</span>
 </div>
 <div className="flex items-center gap-1">
 {(doc.parsedDetails?.imageBase64 || doc.parsedDetails?.base64) && (
@@ -1819,7 +1819,7 @@ data-testid={`filter-tab-${tab.value}`}
 {verifications?.length === 0 ? (
 <div className="glass-card rounded-xl p-10 text-center">
 <BadgeCheck className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
-<p className="text-sm text-muted-foreground/60 font-display">
+<p className="text-sm text-muted-foreground font-display">
 {statusFilter === "pending" ? "All clear — no pending verifications." : `No ${statusFilter} verifications found.`}
 </p>
 </div>
@@ -2543,7 +2543,7 @@ function PayoutsTab() {
               <div key={r.jobId} className={`text-[10px] flex items-center gap-2 ${r.status === "success" ? "text-green-400" : r.status === "failed" ? "text-red-400" : "text-muted-foreground"}`}>
                 <span className="font-mono w-4">{r.status === "success" ? "✓" : r.status === "failed" ? "✗" : "—"}</span>
                 <span>Job #{r.jobId} — {r.title} — ${r.amount.toFixed(2)}</span>
-                {r.transferId && <span className="text-muted-foreground/50 font-mono">{r.transferId}</span>}
+                {r.transferId && <span className="text-muted-foreground font-mono">{r.transferId}</span>}
                 {r.error && <span className="text-red-400/70">{r.error}</span>}
               </div>
             ))}
@@ -2659,7 +2659,7 @@ function PlatformSettingsTab() {
                 <div key={s.key} className="bg-card rounded-xl border border-border/20 p-3 flex items-center justify-between gap-3" data-testid={`setting-${s.key}`}>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-display font-semibold">{s.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</p>
-                    <p className="text-[10px] text-muted-foreground/50 truncate">{s.description}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{s.description}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {isBool ? (
@@ -2985,7 +2985,7 @@ return (
 <div className="flex items-center justify-between">
 <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Sponsored Drop</label>
 <div className="flex items-center gap-2">
-<span className="text-[10px] text-muted-foreground/50 font-display">Mark as Sponsored</span>
+<span className="text-[10px] text-muted-foreground font-display">Mark as Sponsored</span>
 <Switch checked={form.isSponsored} onCheckedChange={(v) => setForm(f => ({ ...f, isSponsored: v }))} data-testid="toggle-is-sponsored" />
 </div>
 </div>
@@ -3122,7 +3122,7 @@ data-testid="input-drop-address"
 <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Arrival Radius</label>
 <div className="flex items-center gap-3">
 <Input type="number" value={form.gpsRadius} onChange={(e) => setForm(f => ({ ...f, gpsRadius: parseInt(e.target.value) || 200 }))} className="premium-input rounded-md w-28" data-testid="input-drop-radius" />
-<span className="text-[10px] text-muted-foreground/50 font-display">{form.gpsRadius <= 100 ? "Very close — same building" : form.gpsRadius <= 250 ? "~1 city block" : form.gpsRadius <= 500 ? "~2-3 blocks" : "Wide area"} ({form.gpsRadius}m)</span>
+<span className="text-[10px] text-muted-foreground font-display">{form.gpsRadius <= 100 ? "Very close — same building" : form.gpsRadius <= 250 ? "~1 city block" : form.gpsRadius <= 500 ? "~2-3 blocks" : "Wide area"} ({form.gpsRadius}m)</span>
 </div>
 </div>
 
@@ -3175,7 +3175,7 @@ data-testid="select-final-location-mode"
 
 <div className="space-y-3">
 <div className="flex items-center gap-2">
-<Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
+<Clock className="w-3.5 h-3.5 text-muted-foreground" />
 <span className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Schedule (optional)</span>
 </div>
 <div className="grid grid-cols-2 gap-3">
@@ -3192,7 +3192,7 @@ data-testid="select-final-location-mode"
 
 <div className="space-y-3">
 <div className="flex items-center gap-2">
-<Eye className="w-3.5 h-3.5 text-muted-foreground/50" />
+<Eye className="w-3.5 h-3.5 text-muted-foreground" />
 <span className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Mission Config</span>
 </div>
 <div className="space-y-2">
@@ -3202,14 +3202,14 @@ data-testid="select-final-location-mode"
 <div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border">
 <div>
 <p className="text-sm font-display">Reveal clue on arrival</p>
-<p className="text-[10px] text-muted-foreground/50">Only show after GPS confirms they're close</p>
+<p className="text-[10px] text-muted-foreground">Only show after GPS confirms they're close</p>
 </div>
 <Switch checked={form.clueRevealOnArrival} onCheckedChange={(v) => setForm(f => ({ ...f, clueRevealOnArrival: v }))} data-testid="switch-clue-on-arrival" />
 </div>
 <div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border">
 <div>
 <p className="text-sm font-display">In-app camera only</p>
-<p className="text-[10px] text-muted-foreground/50">Disables gallery uploads — live proof only</p>
+<p className="text-[10px] text-muted-foreground">Disables gallery uploads — live proof only</p>
 </div>
 <Switch checked={form.requireInAppCamera} onCheckedChange={(v) => setForm(f => ({ ...f, requireInAppCamera: v }))} data-testid="switch-in-app-camera" />
 </div>
@@ -3217,7 +3217,7 @@ data-testid="select-final-location-mode"
 
 <div className="space-y-3">
 <div className="flex items-center gap-2">
-<Camera className="w-3.5 h-3.5 text-muted-foreground/50" />
+<Camera className="w-3.5 h-3.5 text-muted-foreground" />
 <span className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Proof Items</span>
 </div>
 {form.proofItems.map((item, i) => (
@@ -3262,7 +3262,7 @@ data-testid="select-final-location-mode"
 <p className="text-sm font-display font-semibold truncate">{drop.title}</p>
 <Badge variant="outline" className={`text-[9px] capitalize ${statusColor[drop.status] || "bg-muted/20 text-muted-foreground"}`}>{drop.status}</Badge>
 </div>
-<p className="text-[10px] text-muted-foreground/50">${drop.reward_per_winner} × {drop.winner_limit} winner{drop.winner_limit !== 1 ? "s" : ""} · {drop.winners_found || 0} found</p>
+<p className="text-[10px] text-muted-foreground">${drop.reward_per_winner} × {drop.winner_limit} winner{drop.winner_limit !== 1 ? "s" : ""} · {drop.winners_found || 0} found</p>
 </div>
 <div className="flex items-center gap-1.5 flex-shrink-0">
 {drop.status === "draft" && (
@@ -3285,7 +3285,7 @@ data-testid="select-final-location-mode"
 
 {reviewDrop === drop.id && (
 <div className="pt-2 border-t border-border/10 space-y-3">
-<p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Submissions</p>
+<p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Submissions</p>
 {!attempts || attempts.length === 0 ? (
 <p className="text-[11px] text-muted-foreground/40 text-center py-4">No submissions yet</p>
 ) : (
@@ -3294,7 +3294,7 @@ attempts.filter((a: any) => a.status === "submitted").map((attempt: any) => (
 <div className="flex items-center justify-between">
 <div>
 <p className="text-sm font-semibold">{attempt.user_name || `User #${attempt.user_id}`}</p>
-<p className="text-[10px] text-muted-foreground/50">
+<p className="text-[10px] text-muted-foreground">
 Submitted {(attempt.submittedAt || attempt.submitted_at) ? new Date(attempt.submittedAt || attempt.submitted_at).toLocaleString() : "—"} ·
 GPS: {(attempt.gpsLat || attempt.gps_lat) ? `${parseFloat(attempt.gpsLat || attempt.gps_lat).toFixed(4)}, ${parseFloat(attempt.gpsLng || attempt.gps_lng).toFixed(4)}` : "N/A"}
 </p>
@@ -3499,7 +3499,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
           </div>
           <div>
             <p className="text-sm font-display font-bold">Cash Drop Sponsors</p>
-            <p className="text-[11px] text-muted-foreground/50">{allSponsors.length} total · {pendingCount} pending review</p>
+            <p className="text-[11px] text-muted-foreground">{allSponsors.length} total · {pendingCount} pending review</p>
           </div>
         </div>
         {pendingCount > 0 && (
@@ -3518,7 +3518,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
             className={`px-3 py-1 rounded-full text-[10px] font-display font-bold tracking-widest uppercase transition-colors ${
               statusFilter === key
                 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                : "text-muted-foreground/40 border border-border/20 hover:text-muted-foreground/60"
+                : "text-muted-foreground/40 border border-border/20 hover:text-muted-foreground"
             }`}
           >
             {label}
@@ -3559,7 +3559,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                       {sponsor.status}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60">{sponsor.contactEmail}</p>
+                  <p className="text-[11px] text-muted-foreground">{sponsor.contactEmail}</p>
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     {sponsor.targetCityState && (
                       <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
@@ -3609,7 +3609,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                 </button>
               </div>
 
-              <div className="space-y-2 text-[12px] text-muted-foreground/70">
+              <div className="space-y-2 text-[12px] text-muted-foreground">
                 <div className="grid grid-cols-2 gap-2">
                   <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Contact</span><br />{selectedSponsor.contactName || "—"} · {selectedSponsor.contactEmail}</div>
                   <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Budget</span><br />{selectedSponsor.proposedBudget ? `$${selectedSponsor.proposedBudget}` : "Not specified"}</div>
@@ -3642,7 +3642,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
 
               {/* Payment Status section */}
               <div className="border-t border-border/20 pt-4">
-                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase mb-2">Payment Status</p>
+                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase mb-2">Payment Status</p>
                 <div className="flex gap-2 flex-wrap">
                   {[
                     { key: "pending", label: "Pending", cls: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
@@ -3788,7 +3788,7 @@ function FeedbackTab() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <p className="text-sm font-display font-bold text-foreground">User Feedback</p>
-          <p className="text-[11px] text-muted-foreground/50">{unreadData?.count ?? 0} unread</p>
+          <p className="text-[11px] text-muted-foreground">{unreadData?.count ?? 0} unread</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -3824,12 +3824,12 @@ function FeedbackTab() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-display font-bold text-xs text-foreground">{item.userName || "Anonymous"}</span>
-                  {item.userEmail && <span className="text-[10px] text-muted-foreground/50">{item.userEmail}</span>}
+                  {item.userEmail && <span className="text-[10px] text-muted-foreground">{item.userEmail}</span>}
                   <Badge variant="outline" className={`text-[9px] font-display ${statusColors[item.status] || statusColors.new}`}>
                     {item.status === "new" ? "New" : item.status === "read" ? "Read" : "Addressed"}
                   </Badge>
                   {item.category && item.category !== "general" && (
-                    <Badge variant="outline" className="text-[9px] border-muted-foreground/20 text-muted-foreground/50">{item.category}</Badge>
+                    <Badge variant="outline" className="text-[9px] border-muted-foreground/20 text-muted-foreground">{item.category}</Badge>
                   )}
                 </div>
                 {item.subject && <p className="text-xs font-semibold text-foreground/80 mb-0.5">{item.subject}</p>}
@@ -3840,7 +3840,7 @@ function FeedbackTab() {
 
             {item.adminNote && (
               <div className="rounded-lg bg-muted/10 border border-border/10 p-2.5">
-                <p className="text-[10px] text-muted-foreground/50 font-display mb-0.5">Admin Note</p>
+                <p className="text-[10px] text-muted-foreground font-display mb-0.5">Admin Note</p>
                 <p className="text-xs text-muted-foreground">{item.adminNote}</p>
               </div>
             )}
@@ -4432,7 +4432,7 @@ data-testid={`button-grant-business-${u.id}`}
 <p className="text-[10px] text-destructive/70 mt-0.5 font-display">Removed: {(j as any).removedByAdminReason || "Admin action"}</p>
 )}
 {(j as any).payoutStatus && (j as any).payoutStatus !== "pending" && (
-<p className="text-[10px] text-muted-foreground/50 mt-0.5">
+<p className="text-[10px] text-muted-foreground mt-0.5">
 Payout: <span className={`font-semibold ${(j as any).payoutStatus === "paid_out" ? "text-emerald-400" : (j as any).payoutStatus === "payout_processing" ? "text-blue-400" : (j as any).payoutStatus === "refunded" ? "text-red-400" : "text-amber-400"}`}>{String((j as any).payoutStatus).replace(/_/g, " ")}</span>
 </p>
 )}

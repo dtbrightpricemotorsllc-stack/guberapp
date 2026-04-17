@@ -148,7 +148,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
 
             <div className="flex items-center gap-0.5">
               <Link href="/notifications">
-                <Button variant="ghost" size="icon" className="relative text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.04] transition-all rounded-xl w-10 h-10" data-testid="button-notifications">
+                <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-all rounded-xl w-10 h-10" data-testid="button-notifications">
                   <Bell className="w-[18px] h-[18px]" />
                   {unreadCount > 0 && (
                     <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-destructive text-[9px] flex items-center justify-center text-white font-bold ring-2 ring-background animate-pulse-glow">
@@ -180,22 +180,22 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                   <DropdownMenuSeparator className="bg-white/[0.06] mx-1" />
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm">
-                      <User className="w-4 h-4 text-muted-foreground/60" /> My Profile
+                      <User className="w-4 h-4 text-muted-foreground" /> My Profile
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/wallet" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm">
-                      <Wallet className="w-4 h-4 text-muted-foreground/60" /> Wallet
+                      <Wallet className="w-4 h-4 text-muted-foreground" /> Wallet
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/account-settings" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm">
-                      <Settings className="w-4 h-4 text-muted-foreground/60" /> Settings
+                      <Settings className="w-4 h-4 text-muted-foreground" /> Settings
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/ai-or-not" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm">
-                      <FileText className="w-4 h-4 text-muted-foreground/60" /> AI or Not
+                      <FileText className="w-4 h-4 text-muted-foreground" /> AI or Not
                     </Link>
                   </DropdownMenuItem>
                   {isAdmin && (
@@ -210,17 +210,17 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                   )}
                   <DropdownMenuSeparator className="bg-white/[0.06] mx-1" />
                   <DropdownMenuItem asChild>
-                    <Link href="/terms" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-xs text-muted-foreground/50">
+                    <Link href="/terms" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-xs text-muted-foreground">
                       <Lock className="w-3.5 h-3.5" /> Terms of Service
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/privacy" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-xs text-muted-foreground/50">
+                    <Link href="/privacy" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-xs text-muted-foreground">
                       <Lock className="w-3.5 h-3.5" /> Privacy Policy
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/acceptable-use" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-xs text-muted-foreground/50">
+                    <Link href="/acceptable-use" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-xs text-muted-foreground">
                       <Lock className="w-3.5 h-3.5" /> Acceptable Use
                     </Link>
                   </DropdownMenuItem>
@@ -240,7 +240,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                     }}
                     data-testid="button-add-to-home"
                   >
-                    <Download className="w-4 h-4 text-muted-foreground/60" /> Add to Home Screen
+                    <Download className="w-4 h-4 text-muted-foreground" /> Add to Home Screen
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-white/[0.06] mx-1" />
                   <DropdownMenuItem
@@ -279,7 +279,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                   )}
                   <div className={`p-1 rounded-xl transition-all duration-200 ${isActive ? "bg-primary/[0.08]" : ""}`}>
                     <Icon
-                      className={`w-[20px] h-[20px] transition-all duration-200 ${isActive ? "text-primary" : "text-muted-foreground/50"}`}
+                      className={`w-[20px] h-[20px] transition-all duration-200 ${isActive ? "text-primary" : "text-muted-foreground"}`}
                       strokeWidth={isActive ? 2.2 : 1.5}
                     />
                   </div>

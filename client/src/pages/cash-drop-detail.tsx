@@ -367,7 +367,7 @@ export default function CashDropDetail() {
   return (
     <GuberLayout>
       <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
-        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 text-muted-foreground/60 hover:text-foreground text-xs font-display tracking-wider transition-colors mb-2" data-testid="button-back">
+        <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider transition-colors mb-2" data-testid="button-back">
           <ChevronLeft className="w-3.5 h-3.5" /> Back
         </button>
 
@@ -491,7 +491,7 @@ export default function CashDropDetail() {
         {isClosed && (
           <div className="rounded-xl border border-border/20 bg-muted/10 p-5 text-center">
             <Trophy className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-            <p className="font-display font-bold text-sm text-muted-foreground/50">This Cash Drop has ended</p>
+            <p className="font-display font-bold text-sm text-muted-foreground">This Cash Drop has ended</p>
           </div>
         )}
 
@@ -504,7 +504,7 @@ export default function CashDropDetail() {
               </div>
               <ol className="space-y-1.5 ml-6">
                 {["Accept the Cash Drop", "Travel to the location area", "Confirm your arrival (GPS check)", ...(drop.clueRevealOnArrival ? ["Clue revealed after arrival"] : []), "Submit your proof photos", "Admin reviews and confirms winner", "Choose your payout method (Cash App, Venmo, PayPal, etc.)"].map((step, i) => (
-                  <li key={i} className="text-[11px] text-muted-foreground/60 flex items-start gap-2">
+                  <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-2">
                     <span className="text-amber-400/50 font-bold flex-shrink-0">{i + 1}.</span>
                     {step}
                   </li>
@@ -531,7 +531,7 @@ export default function CashDropDetail() {
                 <MapPin className="w-4 h-4 text-amber-400" />
                 <p className="text-sm font-display font-bold text-amber-400">Get to the Location</p>
               </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Travel to the drop area. When you are within <strong className="text-amber-400">{drop.gpsRadius || 200} meters</strong> of the target, tap "I Arrived" to confirm your position. Your GPS will be verified.
               </p>
             </div>
@@ -552,7 +552,7 @@ export default function CashDropDetail() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-display font-bold text-blue-400">Open in Google Maps</p>
-                    <p className="text-xs text-muted-foreground/50">Turn-by-turn navigation</p>
+                    <p className="text-xs text-muted-foreground">Turn-by-turn navigation</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-blue-400/50 flex-shrink-0" />
                 </a>
@@ -575,7 +575,7 @@ export default function CashDropDetail() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-display font-bold text-emerald-400">Open in Waze</p>
-                    <p className="text-xs text-muted-foreground/50">Real-time traffic routing</p>
+                    <p className="text-xs text-muted-foreground">Real-time traffic routing</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-400/50 flex-shrink-0" />
                 </a>
@@ -583,7 +583,7 @@ export default function CashDropDetail() {
             ) : (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/10 border border-white/[0.05]">
                 <MapPin className="w-4 h-4 text-muted-foreground/40" />
-                <p className="text-[11px] text-muted-foreground/50">Exact coordinates will be revealed when you get close. Head to the general area shown on the map.</p>
+                <p className="text-[11px] text-muted-foreground">Exact coordinates will be revealed when you get close. Head to the general area shown on the map.</p>
               </div>
             )}
 
@@ -615,7 +615,7 @@ export default function CashDropDetail() {
               </div>
               {proofItems.length === 0 ? (
                 <div>
-                  <p className="text-[11px] text-muted-foreground/60 mb-2">Capture at least one photo as proof</p>
+                  <p className="text-[11px] text-muted-foreground mb-2">Capture at least one photo as proof</p>
                   <label className="flex items-center gap-2 p-3 rounded-xl border border-dashed border-primary/30 cursor-pointer hover:border-primary/50 transition-colors" data-testid="label-capture-photo">
                     <Camera className="w-4 h-4 text-primary" />
                     <span className="text-sm text-primary font-display">{capturedPhotos[0] ? "Re-take Photo" : "Take Photo"}</span>
@@ -634,10 +634,10 @@ export default function CashDropDetail() {
               ) : (
                 proofItems.map((item, i) => (
                   <div key={i} className="space-y-1.5">
-                    <p className="text-[11px] text-muted-foreground/70 font-medium">{item.label}</p>
+                    <p className="text-[11px] text-muted-foreground font-medium">{item.label}</p>
                     <label className={`flex items-center gap-2 p-3 rounded-xl border border-dashed cursor-pointer transition-colors ${capturedPhotos[i] ? "border-primary/50 bg-primary/5" : "border-white/10 hover:border-primary/30"}`} data-testid={`label-proof-item-${i}`}>
-                      {capturedPhotos[i] ? <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" /> : <Camera className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />}
-                      <span className="text-sm font-display text-muted-foreground/70">{capturedPhotos[i] ? "Captured ✓" : `Capture ${item.type}`}</span>
+                      {capturedPhotos[i] ? <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" /> : <Camera className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                      <span className="text-sm font-display text-muted-foreground">{capturedPhotos[i] ? "Captured ✓" : `Capture ${item.type}`}</span>
                       <input
                         type="file"
                         accept={item.type === "video" ? "video/*" : "image/*"}
@@ -678,7 +678,7 @@ export default function CashDropDetail() {
               <Clock className="w-5 h-5 text-primary" />
             </div>
             <p className="font-display font-bold text-sm text-primary">Proof Submitted — Pending Review</p>
-            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               Admin is reviewing your submission. You'll get a notification the moment a decision is made — tap it to come straight back here and collect your reward.
             </p>
           </div>
@@ -689,7 +689,7 @@ export default function CashDropDetail() {
         {attempt?.status === "rejected" && (
           <div className="rounded-xl border border-destructive/20 bg-destructive/[0.04] p-5 text-center space-y-2">
             <p className="font-display font-bold text-sm text-destructive">Submission Rejected</p>
-            <p className="text-[11px] text-muted-foreground/60">{attempt.rejectionReason || "Your submission did not meet the requirements."}</p>
+            <p className="text-[11px] text-muted-foreground">{attempt.rejectionReason || "Your submission did not meet the requirements."}</p>
             {slotsLeft > 0 && (
               <Button
                 size="sm"

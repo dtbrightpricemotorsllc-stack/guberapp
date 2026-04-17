@@ -73,7 +73,7 @@ export default function BusinessTemplates() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link href="/business-dashboard">
-              <button className="flex items-center gap-1 text-muted-foreground/60 hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="button-back">
+              <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="button-back">
                 <ChevronLeft className="w-3.5 h-3.5" /> Back
               </button>
             </Link>
@@ -91,7 +91,7 @@ export default function BusinessTemplates() {
 
         {showForm && (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4 animate-fade-in">
-            <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">New Template</p>
+            <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">New Template</p>
 
             <div className="space-y-1.5">
               <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Template Name</Label>
@@ -107,7 +107,7 @@ export default function BusinessTemplates() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-display font-medium">GPS Required</p>
-                <p className="text-[10px] text-muted-foreground/50">Require GPS at submission</p>
+                <p className="text-[10px] text-muted-foreground">Require GPS at submission</p>
               </div>
               <Switch checked={form.geoRequired} onCheckedChange={(v) => setForm((f) => ({ ...f, geoRequired: v }))} data-testid="switch-geo-required" />
             </div>
@@ -115,7 +115,7 @@ export default function BusinessTemplates() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-display font-medium">Video Required</p>
-                <p className="text-[10px] text-muted-foreground/50">Add a video requirement</p>
+                <p className="text-[10px] text-muted-foreground">Add a video requirement</p>
               </div>
               <Switch checked={form.requiredVideo} onCheckedChange={(v) => setForm((f) => ({ ...f, requiredVideo: v }))} data-testid="switch-video-required" />
             </div>
@@ -189,7 +189,7 @@ export default function BusinessTemplates() {
                     </div>
                     <div>
                       <p className="text-sm font-display font-semibold">{tpl.name}</p>
-                      <p className="text-[10px] text-muted-foreground/50">
+                      <p className="text-[10px] text-muted-foreground">
                         {tpl.required_photo_count} photo{tpl.required_photo_count !== 1 ? "s" : ""}
                         {tpl.required_video ? " · video" : ""}
                         {tpl.geo_required ? " · GPS" : ""}
@@ -211,7 +211,7 @@ export default function BusinessTemplates() {
         ) : (
           <div className="text-center py-12">
             <FileText className="w-10 h-10 text-muted-foreground/15 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground/50 font-display">No templates yet</p>
+            <p className="text-sm text-muted-foreground font-display">No templates yet</p>
             <p className="text-[11px] text-muted-foreground/30 mt-1">Create one to start bulk posting jobs</p>
           </div>
         )}

@@ -87,7 +87,7 @@ export default function BusinessOnboarding() {
   return (
     <GuberLayout>
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        <button onClick={() => navigate("/account-settings")} className="flex items-center gap-1.5 text-muted-foreground/60 hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="button-back">
+        <button onClick={() => navigate("/account-settings")} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="button-back">
           <ChevronLeft className="w-3.5 h-3.5" /> Back
         </button>
 
@@ -97,12 +97,12 @@ export default function BusinessOnboarding() {
           </div>
           <div>
             <h1 className="font-display font-black text-xl">Business Setup</h1>
-            <p className="text-xs text-muted-foreground/50">Set up your business account for bulk verification jobs</p>
+            <p className="text-xs text-muted-foreground">Set up your business account for bulk verification jobs</p>
           </div>
         </div>
 
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-5">
-          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Company Info</p>
+          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Company Info</p>
 
           <div className="space-y-1.5">
             <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Company Logo</Label>
@@ -119,7 +119,7 @@ export default function BusinessOnboarding() {
                 )}
               </div>
               <div>
-                <p className="text-xs text-muted-foreground/60">Upload a square logo</p>
+                <p className="text-xs text-muted-foreground">Upload a square logo</p>
                 <p className="text-[10px] text-muted-foreground/40">PNG, JPG — shown on your posts</p>
               </div>
               <input
@@ -169,7 +169,7 @@ export default function BusinessOnboarding() {
         </div>
 
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-5">
-          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Contact Info</p>
+          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Contact Info</p>
 
           <div className="space-y-1.5">
             <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Contact Person</Label>
@@ -217,11 +217,11 @@ export default function BusinessOnboarding() {
         </Button>
 
         <div className="rounded-xl border border-white/[0.06] bg-muted/10 p-4 space-y-2">
-          <p className="text-[11px] font-display font-bold text-muted-foreground/60 uppercase tracking-widest">What you get</p>
+          <p className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-widest">What you get</p>
           {["Post bulk verification jobs via CSV upload", "Create custom inspection templates", "Business dashboard with stats + proof review", "Task tier pricing guidance for accurate budgets", "Downloadable GUBER Verification Reports"].map((item) => (
             <div key={item} className="flex items-start gap-2">
               <span className="text-primary/50 mt-0.5">·</span>
-              <p className="text-[11px] text-muted-foreground/60">{item}</p>
+              <p className="text-[11px] text-muted-foreground">{item}</p>
             </div>
           ))}
         </div>

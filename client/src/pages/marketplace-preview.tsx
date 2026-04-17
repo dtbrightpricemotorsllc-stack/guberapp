@@ -210,7 +210,7 @@ function FakeListingCard({ listing }: { listing: typeof ALL_LISTINGS[0] }) {
           {listing.category.toUpperCase()}
         </p>
         <h3 className="text-sm font-bold text-foreground leading-snug mb-0.5 line-clamp-1">{listing.title}</h3>
-        <p className="text-[10px] text-muted-foreground/50 mb-2 line-clamp-1">{listing.subtitle}</p>
+        <p className="text-[10px] text-muted-foreground mb-2 line-clamp-1">{listing.subtitle}</p>
         <div className="flex items-center justify-between">
           <span className="text-base font-display font-black" style={{ color: listing.accent }}>{listing.price}</span>
           <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
@@ -244,7 +244,7 @@ export default function MarketplacePreview() {
         {/* Back button */}
         <button
           onClick={() => navigate("/")}
-          className="flex items-center gap-2 mb-5 text-muted-foreground/60 hover:text-foreground transition-colors"
+          className="flex items-center gap-2 mb-5 text-muted-foreground hover:text-foreground transition-colors"
           data-testid="button-back-marketplace"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -257,7 +257,7 @@ export default function MarketplacePreview() {
             <h1 className="text-2xl font-display font-extrabold text-foreground tracking-tight">Marketplace</h1>
             <span className="text-xl">🚧</span>
           </div>
-          <p className="text-sm text-muted-foreground/60 font-display">
+          <p className="text-sm text-muted-foreground font-display">
             A smarter way to buy and sell — powered by real verification.
           </p>
         </div>
@@ -283,7 +283,7 @@ export default function MarketplacePreview() {
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground/60 italic leading-relaxed">
+          <p className="text-[11px] text-muted-foreground italic leading-relaxed">
             This isn't just listings — it's proof-backed buying.
           </p>
         </div>
@@ -305,7 +305,7 @@ export default function MarketplacePreview() {
         {/* Example Listings */}
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
-            <Tag className="w-3.5 h-3.5 text-muted-foreground/50" />
+            <Tag className="w-3.5 h-3.5 text-muted-foreground" />
             <p className="text-xs font-display font-bold text-foreground/70 tracking-[0.15em] uppercase">Example Listings</p>
             <span className="text-[10px] font-display text-muted-foreground/40 ml-1">· Display only</span>
           </div>

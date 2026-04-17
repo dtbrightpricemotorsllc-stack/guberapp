@@ -70,7 +70,7 @@ export default function BusinessBulkPost() {
       <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
         <div className="flex items-center gap-2">
           <Link href="/business-dashboard">
-            <button className="flex items-center gap-1 text-muted-foreground/60 hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="button-back">
+            <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="button-back">
               <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
           </Link>
@@ -84,7 +84,7 @@ export default function BusinessBulkPost() {
             </div>
             <div>
               <p className="font-display font-black text-xl text-primary">{result.jobsCreated} Jobs Created!</p>
-              <p className="text-sm text-muted-foreground/60 mt-1">Batch ID: {result.batchId}</p>
+              <p className="text-sm text-muted-foreground mt-1">Batch ID: {result.batchId}</p>
             </div>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => setResult(null)} className="font-display border-border/30" data-testid="button-post-more">Post More</Button>
@@ -96,7 +96,7 @@ export default function BusinessBulkPost() {
         ) : (
           <>
             <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4">
-              <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Step 1 — Select Template</p>
+              <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Step 1 — Select Template</p>
               {templatesLoading ? (
                 <Skeleton className="h-10 rounded-lg" />
               ) : templates && templates.length > 0 ? (
@@ -111,7 +111,7 @@ export default function BusinessBulkPost() {
                       <FileText className={`w-4 h-4 flex-shrink-0 ${selectedTemplate === tpl.id ? "text-primary" : "text-muted-foreground/40"}`} />
                       <div className="min-w-0">
                         <p className="text-sm font-display font-semibold truncate">{tpl.name}</p>
-                        <p className="text-[10px] text-muted-foreground/50">{tpl.required_photo_count} photos{tpl.geo_required ? " · GPS" : ""}</p>
+                        <p className="text-[10px] text-muted-foreground">{tpl.required_photo_count} photos{tpl.geo_required ? " · GPS" : ""}</p>
                       </div>
                       {selectedTemplate === tpl.id && <CheckCircle className="w-4 h-4 text-primary ml-auto flex-shrink-0" />}
                     </button>
@@ -119,7 +119,7 @@ export default function BusinessBulkPost() {
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground/50 font-display mb-2">No templates yet</p>
+                  <p className="text-sm text-muted-foreground font-display mb-2">No templates yet</p>
                   <Link href="/business-templates">
                     <Button size="sm" variant="outline" className="font-display border-border/30 text-xs" data-testid="button-create-template">Create Template First</Button>
                   </Link>
@@ -128,10 +128,10 @@ export default function BusinessBulkPost() {
             </div>
 
             <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4">
-              <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Step 2 — Upload CSV</p>
+              <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Step 2 — Upload CSV</p>
               <div className="rounded-xl border border-dashed border-border/30 p-6 text-center cursor-pointer hover:border-primary/30 transition-colors" onClick={() => fileRef.current?.click()} data-testid="button-upload-csv">
                 <Upload className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground/60 font-display font-medium">Click to upload CSV</p>
+                <p className="text-sm text-muted-foreground font-display font-medium">Click to upload CSV</p>
                 <p className="text-[10px] text-muted-foreground/40 mt-1">Columns: address, instructions, budget, zipcode, deadline</p>
                 <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
               </div>
@@ -147,7 +147,7 @@ export default function BusinessBulkPost() {
             {parsedRows.length > 0 && (
               <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase">Preview — {parsedRows.length} Rows</p>
+                  <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Preview — {parsedRows.length} Rows</p>
                   <button onClick={() => setParsedRows([])} className="text-[10px] text-muted-foreground/40 hover:text-destructive font-display">Clear</button>
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-1.5">
@@ -156,7 +156,7 @@ export default function BusinessBulkPost() {
                       <span className="text-[9px] text-muted-foreground/30 font-mono mt-0.5 flex-shrink-0">{String(i + 1).padStart(2, "0")}</span>
                       <div className="min-w-0">
                         <p className="text-[11px] font-medium truncate">{row.address || "(no address)"}</p>
-                        {row.instructions && <p className="text-[10px] text-muted-foreground/50 truncate">{row.instructions}</p>}
+                        {row.instructions && <p className="text-[10px] text-muted-foreground truncate">{row.instructions}</p>}
                         <p className="text-[9px] text-primary/60">${row.budget || "25"}</p>
                       </div>
                     </div>

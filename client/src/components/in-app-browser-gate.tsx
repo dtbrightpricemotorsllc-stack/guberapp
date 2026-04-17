@@ -68,7 +68,7 @@ export function InAppBrowserGate({ children }: { children: React.ReactNode }) {
             <p className="font-display font-black text-base tracking-wider text-foreground">
               OPEN IN YOUR BROWSER
             </p>
-            <p className="text-sm text-muted-foreground/70 leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Google Sign-In doesn't work inside {iab.name}. Tap the button to open Chrome.
               If it doesn't open, copy the link below and paste it into Chrome or Safari.
             </p>
@@ -93,7 +93,7 @@ export function InAppBrowserGate({ children }: { children: React.ReactNode }) {
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
             >
               <p
-                className="text-left text-xs text-muted-foreground/60 select-all break-all"
+                className="text-left text-xs text-muted-foreground select-all break-all"
                 data-testid="text-referral-url"
               >
                 {url}
@@ -118,7 +118,7 @@ export function InAppBrowserGate({ children }: { children: React.ReactNode }) {
               </p>
             )}
             {copyFailed && (
-              <p className="text-[11px] text-muted-foreground/50 font-display tracking-wider">
+              <p className="text-[11px] text-muted-foreground font-display tracking-wider">
                 Copy failed — long-press the link above to copy manually.
               </p>
             )}

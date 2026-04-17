@@ -274,13 +274,13 @@ export function PlacesAutocomplete({
               <div className="shrink-0 mt-0.5">
                 {r.isEstablishment
                   ? <Building2 className="w-3.5 h-3.5 text-primary/60" />
-                  : <MapPin className="w-3.5 h-3.5 text-muted-foreground/50" />
+                  : <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
                 }
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-display font-semibold truncate">{r.main}</p>
                 {r.secondary && (
-                  <p className="text-[11px] text-muted-foreground/60 truncate">{r.secondary}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{r.secondary}</p>
                 )}
               </div>
             </button>
@@ -293,7 +293,7 @@ export function PlacesAutocomplete({
   return (
     <div className="relative">
       <div className="relative">
-        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 pointer-events-none" />
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
         <input
           ref={inputRef}
           type="text"
@@ -306,7 +306,7 @@ export function PlacesAutocomplete({
           data-testid={testId}
         />
         {(loading || selecting) && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 animate-spin" />
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
         )}
       </div>
       {dropdown}

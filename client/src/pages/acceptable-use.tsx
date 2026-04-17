@@ -20,7 +20,7 @@ function AUPContent() {
       <div className="text-center mb-10">
         <GuberLogo size="md" />
         <h1 className="text-2xl font-display font-black mt-4 guber-text-green tracking-tight">ACCEPTABLE USE POLICY</h1>
-        <p className="text-muted-foreground/50 text-xs font-display tracking-widest mt-2 uppercase">GUBER GLOBAL LLC · Last Updated: {LAST_UPDATED}</p>
+        <p className="text-muted-foreground text-xs font-display tracking-widest mt-2 uppercase">GUBER GLOBAL LLC · Last Updated: {LAST_UPDATED}</p>
       </div>
 
       <div className="space-y-6">

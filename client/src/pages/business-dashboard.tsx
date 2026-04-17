@@ -16,7 +16,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
     <div className="bg-card rounded-xl border border-border/20 p-3 text-center">
       <p className="font-display font-black text-xl" style={{ color }}>{value}</p>
       {sub && <p className="text-[9px] text-muted-foreground/40 font-display">{sub}</p>}
-      <p className="text-[9px] font-display tracking-widest uppercase text-muted-foreground/50 mt-0.5">{label}</p>
+      <p className="text-[9px] font-display tracking-widest uppercase text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
 }
@@ -34,7 +34,7 @@ function statusColor(status: string) {
     disputed: "bg-destructive/10 text-destructive border-destructive/30",
     cancelled: "bg-muted/20 text-muted-foreground border-border/20",
     canceled_by_hirer: "bg-muted/20 text-muted-foreground border-border/20",
-    expired: "bg-muted/20 text-muted-foreground/60 border-border/20",
+    expired: "bg-muted/20 text-muted-foreground border-border/20",
   };
   return map[status] || "bg-muted/20 text-muted-foreground border-border/20";
 }
@@ -70,7 +70,7 @@ export default function BusinessDashboard() {
       <GuberLayout>
         <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
           <Building2 className="w-12 h-12 text-muted-foreground/20 mx-auto" />
-          <p className="font-display font-bold text-muted-foreground/50">No business profile found</p>
+          <p className="font-display font-bold text-muted-foreground">No business profile found</p>
           <Link href="/business-onboarding">
             <Button className="font-display bg-primary text-primary-foreground" data-testid="button-setup-business">Set Up Business Account</Button>
           </Link>
@@ -180,7 +180,7 @@ export default function BusinessDashboard() {
         </div>
 
         <div className="space-y-3">
-          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/50 uppercase px-1">Jobs</p>
+          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Jobs</p>
 
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -222,7 +222,7 @@ export default function BusinessDashboard() {
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{job.title}</p>
-                    <p className="text-[10px] text-muted-foreground/50 truncate">{job.location || ""}{job.zip ? ` · ${job.zip}` : ""}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{job.location || ""}{job.zip ? ` · ${job.zip}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <p className="text-sm font-display font-bold text-primary">${job.budget || 0}</p>
@@ -245,7 +245,7 @@ export default function BusinessDashboard() {
           ) : (
             <div className="text-center py-10">
               <Briefcase className="w-10 h-10 text-muted-foreground/15 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground/50 font-display">
+              <p className="text-sm text-muted-foreground font-display">
                 {total === 0 ? "No jobs posted yet" : "No jobs match your filters"}
               </p>
               {total === 0 && (

@@ -114,7 +114,7 @@ export default function NotificationsPage() {
                   <div className="flex-1 min-w-0 text-left">
                     <p className="font-semibold text-sm">{n.title}</p>
                     {n.body && <p className="text-sm text-muted-foreground mt-0.5">{n.body}</p>}
-                    <p className="text-[11px] text-muted-foreground/60 mt-1">
+                    <p className="text-[11px] text-muted-foreground mt-1">
                       {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
                     </p>
                   </div>

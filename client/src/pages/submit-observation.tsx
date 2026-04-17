@@ -217,7 +217,7 @@ export default function SubmitObservation() {
           <div className="space-y-2">
             <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
               Photos <span className="text-destructive">*</span>
-              <span className="text-muted-foreground/50 ml-2 normal-case tracking-normal">(min 1, max 5)</span>
+              <span className="text-muted-foreground ml-2 normal-case tracking-normal">(min 1, max 5)</span>
             </Label>
             <div className="flex flex-wrap gap-2">
               {photos.map((p, idx) => (
@@ -284,7 +284,7 @@ export default function SubmitObservation() {
           </div>
 
           <div className="space-y-3 pt-1">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <Eye className="w-3 h-3" />
               <span>Businesses will see blurred photos and hidden address until they purchase</span>
             </div>

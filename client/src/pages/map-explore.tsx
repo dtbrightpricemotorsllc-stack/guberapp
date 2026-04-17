@@ -951,7 +951,7 @@ export default function MapExplore() {
                 <div className="flex items-center gap-1.5 text-amber-400">
                   <Star className="w-3.5 h-3.5 fill-current" />
                   <span className="text-sm font-bold">{selectedWorker.rating.toFixed(1)}</span>
-                  <span className="text-xs text-muted-foreground/60">({selectedWorker.reviewCount} reviews)</span>
+                  <span className="text-xs text-muted-foreground">({selectedWorker.reviewCount} reviews)</span>
                 </div>
               </div>
             </div>

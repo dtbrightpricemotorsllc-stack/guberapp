@@ -21,7 +21,7 @@ function PasswordStrength({ password }: { password: string }) {
   return (
     <div className="space-y-1.5 mt-2">
       {checks.map((c) => (
-        <div key={c.label} className={`flex items-center gap-2 text-[11px] font-display transition-colors ${c.ok ? "text-primary" : "text-muted-foreground/50"}`}>
+        <div key={c.label} className={`flex items-center gap-2 text-[11px] font-display transition-colors ${c.ok ? "text-primary" : "text-muted-foreground"}`}>
           {c.ok ? <Check className="w-3 h-3 flex-shrink-0" /> : <X className="w-3 h-3 flex-shrink-0" />}
           {c.label}
         </div>
@@ -116,7 +116,7 @@ export default function Signup() {
 
         <div className="text-center space-y-2 mb-8 animate-fade-in">
           <GuberLogo size="lg" />
-          <p className="text-muted-foreground/60 text-xs font-display tracking-[0.2em]">CREATE YOUR ACCOUNT</p>
+          <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">CREATE YOUR ACCOUNT</p>
           <p className="text-muted-foreground/40 text-[11px] font-display leading-relaxed max-w-[240px] mx-auto">
             Start earning in your neighborhood today
           </p>
@@ -152,27 +152,27 @@ export default function Signup() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">EMAIL ADDRESS</Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">EMAIL ADDRESS</Label>
               <Input value={form.email} onChange={update("email")} type="email" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="your@email.com" required data-testid="input-email" />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">USERNAME</Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">USERNAME</Label>
               <Input value={form.username} onChange={update("username")} type="text" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="Choose a username" required data-testid="input-username" />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">FULL NAME</Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">FULL NAME</Label>
               <Input value={form.fullName} onChange={update("fullName")} type="text" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="Your full name" required data-testid="input-fullname" />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">ZIP CODE <span className="text-muted-foreground/30 text-[10px]">(Optional)</span></Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">ZIP CODE <span className="text-muted-foreground/30 text-[10px]">(Optional)</span></Label>
               <Input value={form.zipcode} onChange={update("zipcode")} type="text" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="Your zip code" data-testid="input-zipcode" />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">
                 REFERRAL CODE <span className="text-muted-foreground/30 text-[10px]">(Optional)</span>
               </Label>
               <div className="relative">
@@ -194,7 +194,7 @@ export default function Signup() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]">PASSWORD</Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">PASSWORD</Label>
               <div className="relative">
                 <Input
                   value={form.password}
@@ -220,7 +220,7 @@ export default function Signup() {
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 space-y-3">
               <div className="flex items-center gap-2 mb-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
-                <span className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/60 uppercase">By creating an account, you acknowledge that:</span>
+                <span className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">By creating an account, you acknowledge that:</span>
               </div>
               <ul className="space-y-1.5 pl-1">
                 {[
@@ -229,7 +229,7 @@ export default function Signup() {
                   "GUBER is not responsible for the acts, quality, safety, legality, or performance of services",
                   "You are responsible for complying with applicable laws and acting safely",
                 ].map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-[11px] text-muted-foreground/50 leading-relaxed">
+                  <li key={item} className="flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed">
                     <span className="text-primary/40 mt-0.5 flex-shrink-0">·</span>
                     {item}
                   </li>
@@ -247,7 +247,7 @@ export default function Signup() {
                 >
                   {termsAgreed && <Check className="w-3 h-3 text-background font-bold" strokeWidth={3} />}
                 </div>
-                <span className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                <span className="text-[11px] text-muted-foreground leading-relaxed">
                   I agree to the GUBER{" "}
                   <Link href="/terms" className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>Terms of Service</Link>,{" "}
                   <Link href="/privacy" className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>Privacy Policy</Link>, and{" "}
@@ -270,7 +270,7 @@ export default function Signup() {
           </form>
         </div>
 
-        <p className="text-center text-sm text-muted-foreground/60 mt-8 animate-fade-in stagger-3">
+        <p className="text-center text-sm text-muted-foreground mt-8 animate-fade-in stagger-3">
           Already have an account?{" "}
           <Link href="/login" className="guber-text-green font-display font-semibold hover:underline tracking-wider" data-testid="link-login">
             LOG IN

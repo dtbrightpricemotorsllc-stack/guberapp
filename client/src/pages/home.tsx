@@ -282,7 +282,7 @@ export default function Home() {
             { icon: Users,      label: "GET HIRED"  },
             { icon: ShieldCheck,label: "TRUST FIRST" },
           ].map(({ icon: Icon, label }) => (
-            <div key={label} className="flex items-center gap-1.5 text-muted-foreground/50">
+            <div key={label} className="flex items-center gap-1.5 text-muted-foreground">
               <Icon className="w-3.5 h-3.5" />
               <span className="text-[10px] font-display tracking-wider">{label}</span>
             </div>
@@ -363,7 +363,7 @@ export default function Home() {
               )}
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <p className="text-[11px] font-display font-black tracking-widest text-white mb-0.5">{label}</p>
-                <p className="text-[10px] text-white/60 leading-tight">{desc}</p>
+                <p className="text-[10px] text-white/85 leading-tight">{desc}</p>
               </div>
             </a>
           ))}
@@ -429,7 +429,7 @@ export default function Home() {
               <p className="text-sm text-muted-foreground leading-relaxed mb-4">&ldquo;{q.text}&rdquo;</p>
               <div>
                 <p className="text-xs font-display font-bold tracking-wider">{q.name}</p>
-                <p className="text-[10px] text-muted-foreground/50 font-display">{q.location}</p>
+                <p className="text-[10px] text-muted-foreground font-display">{q.location}</p>
               </div>
             </div>
           ))}
@@ -474,7 +474,7 @@ export default function Home() {
       <footer className="relative z-10 border-t border-border py-8 px-5">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <img src={logoImg} alt="GUBER" className="h-8 object-contain" style={{ mixBlendMode: "screen" }} />
-          <div className="flex items-center gap-6 text-[10px] font-display tracking-wider text-muted-foreground/50">
+          <div className="flex items-center gap-6 text-[10px] font-display tracking-wider text-muted-foreground">
             <Link href="/terms" data-testid="link-footer-terms">TERMS</Link>
             <span className="w-px h-3 bg-white/10" />
             <Link href="/privacy" data-testid="link-footer-privacy">PRIVACY</Link>

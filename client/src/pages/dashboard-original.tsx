@@ -238,7 +238,7 @@ export default function Dashboard() {
               <h1 className="text-2xl font-display font-extrabold text-foreground tracking-tight" data-testid="text-greeting">
                 Ready Set Go!!
               </h1>
-              <p className="text-xs text-muted-foreground/50 font-display tracking-wider mt-1">
+              <p className="text-xs text-muted-foreground font-display tracking-wider mt-1">
                 {user?.zipcode ? `ZIP ${user.zipcode}` : "Set your zip for local jobs"}
               </p>
             </div>
@@ -442,7 +442,7 @@ export default function Dashboard() {
                       "{job.title}" hasn't been accepted yet. Increasing the reward may help it get picked up faster.
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground/60 font-display">
+                      <span className="text-[10px] text-muted-foreground font-display">
                         ${job.budget} → <span className="text-amber-400 font-bold">${job.suggestedBudget}</span>
                       </span>
                     </div>
@@ -477,7 +477,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-display font-bold text-foreground leading-tight">My Activity</p>
-                <p className="text-[10px] text-muted-foreground/50 font-display mt-0.5">
+                <p className="text-[10px] text-muted-foreground font-display mt-0.5">
                   {mode === "hire"
                     ? `${postedJobs.length} posted · ${awaitingHireAction.length} need attention`
                     : `${acceptedJobs.length} accepted · ${awaitingWorkAction.length} need attention`}
@@ -561,7 +561,7 @@ export default function Dashboard() {
           <div className="glass-card-strong rounded-2xl p-4 relative">
             <div className="flex items-center gap-2 mb-3">
               <div className="relative flex-1">
-                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
+                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input
                   value={zipOverride}
                   onChange={(e) => setZipOverride(e.target.value)}
@@ -700,7 +700,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1.5 text-amber-400">
                         <Star className="w-3 h-3 fill-current" />
                         <span className="text-[11px] font-bold">{selectedWorker.rating.toFixed(1)}</span>
-                        <span className="text-[11px] text-muted-foreground/60">({selectedWorker.reviewCount} reviews)</span>
+                        <span className="text-[11px] text-muted-foreground">({selectedWorker.reviewCount} reviews)</span>
                       </div>
                     </div>
                   </div>
@@ -771,7 +771,7 @@ export default function Dashboard() {
                           {selectedPin.category}
                         </Badge>
                         {selectedPin.serviceType && (
-                          <span className="text-[10px] font-display text-muted-foreground/60 tracking-wider">
+                          <span className="text-[10px] font-display text-muted-foreground tracking-wider">
                             {selectedPin.serviceType}
                           </span>
                         )}
@@ -781,13 +781,13 @@ export default function Dashboard() {
 
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-display text-muted-foreground/50 tracking-widest uppercase mb-0.5">Budget</span>
+                      <span className="text-[10px] font-display text-muted-foreground tracking-widest uppercase mb-0.5">Budget</span>
                       <span className="text-xl font-display font-black guber-text-green">
                         {selectedPin.budget ? `$${selectedPin.budget.toFixed(2)}` : "Barter"}
                       </span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-display text-muted-foreground/50 tracking-widest uppercase mb-0.5">Posted</span>
+                      <span className="text-[10px] font-display text-muted-foreground tracking-widest uppercase mb-0.5">Posted</span>
                       <div className="flex items-center gap-1.5 text-xs font-display text-muted-foreground/80">
                         <Clock className="w-3.5 h-3.5" />
                         {selectedPin.createdAt ? new Date(selectedPin.createdAt).toLocaleDateString() : "Recently"}
@@ -815,7 +815,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-2xl font-display font-extrabold guber-text-green">{user?.jobsCompleted || 0}</p>
-            <p className="text-[9px] text-muted-foreground/50 mt-1.5 font-display tracking-wider uppercase">Jobs Done</p>
+            <p className="text-[9px] text-muted-foreground mt-1.5 font-display tracking-wider uppercase">Jobs Done</p>
           </div>
           <div className="stat-card rounded-2xl p-4 text-center" data-testid="stat-rating">
             <div className="flex justify-center mb-2">
@@ -824,7 +824,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-2xl font-display font-extrabold guber-text-green">{user?.rating?.toFixed(1) || "0.0"}</p>
-            <p className="text-[9px] text-muted-foreground/50 mt-1.5 font-display tracking-wider uppercase">Rating</p>
+            <p className="text-[9px] text-muted-foreground mt-1.5 font-display tracking-wider uppercase">Rating</p>
           </div>
           <div className="stat-card rounded-2xl p-4 text-center" data-testid="stat-trust-score">
             <div className="flex justify-center mb-2">
@@ -833,7 +833,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-2xl font-display font-extrabold guber-text-green">{user?.trustScore || 0}</p>
-            <p className="text-[9px] text-muted-foreground/50 mt-1.5 font-display tracking-wider uppercase">Trust</p>
+            <p className="text-[9px] text-muted-foreground mt-1.5 font-display tracking-wider uppercase">Trust</p>
           </div>
         </div>
       </div>

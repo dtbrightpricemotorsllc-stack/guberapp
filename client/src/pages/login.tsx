@@ -151,7 +151,7 @@ export default function Login() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6" data-testid="page-login-exchanging">
         <GuberLogo size="lg" />
         <Loader2 className="w-8 h-8 animate-spin text-primary mt-6" />
-        <p className="text-muted-foreground/60 text-xs font-display tracking-[0.2em] mt-4">SIGNING YOU IN...</p>
+        <p className="text-muted-foreground text-xs font-display tracking-[0.2em] mt-4">SIGNING YOU IN...</p>
       </div>
     );
   }
@@ -180,7 +180,7 @@ export default function Login() {
           >
             <GuberLogo size="lg" />
           </div>
-          <p className="text-muted-foreground/60 text-xs font-display tracking-[0.2em]">SIGN IN TO YOUR ACCOUNT</p>
+          <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">SIGN IN TO YOUR ACCOUNT</p>
         </div>
 
         <div className="glass-card rounded-2xl p-7 premium-border-glow animate-slide-up stagger-1">
@@ -213,7 +213,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]" data-testid="label-email">EMAIL ADDRESS</Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]" data-testid="label-email">EMAIL ADDRESS</Label>
               <Input
                 type="email"
                 value={email}
@@ -227,7 +227,7 @@ export default function Login() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-muted-foreground/70 text-[11px] font-display tracking-[0.15em]" data-testid="label-password">PASSWORD</Label>
+                <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]" data-testid="label-password">PASSWORD</Label>
                 <Link href="/forgot-password" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-forgot-password">
                   Forgot password?
                 </Link>
@@ -304,7 +304,7 @@ export default function Login() {
           )}
         </div>
 
-        <p className="text-center text-sm text-muted-foreground/60 mt-8 animate-fade-in stagger-3">
+        <p className="text-center text-sm text-muted-foreground mt-8 animate-fade-in stagger-3">
           New to GUBER?{" "}
           <Link href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"} className="guber-text-purple font-display font-semibold hover:underline tracking-wider" data-testid="link-signup">
             SIGN UP

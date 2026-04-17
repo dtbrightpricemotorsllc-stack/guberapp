@@ -648,7 +648,7 @@ export default function PostJob() {
                   <AlertTriangle className="w-3.5 h-3.5 text-orange-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[11px] font-display font-bold text-orange-400 mb-0.5">Tier requirement may apply</p>
-                    <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
                       This service type may require <strong>Verified</strong> tier or higher to post. If your tier is too low you'll be notified at checkout. Upgrade via your profile.
                     </p>
                   </div>
@@ -715,7 +715,7 @@ export default function PostJob() {
                 </div>
               </div>
               {pricingSuggestion.minPayout > 0 && (
-                <p className="text-[10px] text-muted-foreground/70 text-center">
+                <p className="text-[10px] text-muted-foreground text-center">
                   Minimum payout: <strong>${pricingSuggestion.minPayout}</strong>
                 </p>
               )}
@@ -756,7 +756,7 @@ export default function PostJob() {
                         <p className="text-sm font-display font-bold">${selectedTier.typicalPayMin}–${selectedTier.typicalPayMax}</p>
                       </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground/60">Examples: {selectedTier.examples.join(", ")}</p>
+                    <p className="text-[10px] text-muted-foreground">Examples: {selectedTier.examples.join(", ")}</p>
                     {budgetNum > 0 && budgetNum < selectedTier.typicalPayMin && (
                       <div className="flex items-center gap-1.5 p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
                         <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />
@@ -781,13 +781,13 @@ export default function PostJob() {
                       <div className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 transition-colors ${pricingModeSelection === mode.id ? "border-indigo-400 bg-indigo-400" : "border-border/40"}`} />
                       <div>
                         <p className="text-sm font-display font-semibold">{mode.label}</p>
-                        <p className="text-[10px] text-muted-foreground/60">{mode.description}</p>
+                        <p className="text-[10px] text-muted-foreground">{mode.description}</p>
                       </div>
                     </button>
                   ))}
                 </div>
                 {pricingModeSelection === "request_quotes" && (
-                  <p className="text-[10px] text-muted-foreground/50 italic">Quote requests are visible — workers will respond with bids. Full submission flow coming soon.</p>
+                  <p className="text-[10px] text-muted-foreground italic">Quote requests are visible — workers will respond with bids. Full submission flow coming soon.</p>
                 )}
               </div>
             </div>
@@ -933,7 +933,7 @@ export default function PostJob() {
               data-testid="input-location"
             />
             {locationRequired && zip.length < 5 && (
-              <p className="text-[10px] text-muted-foreground/60 font-display mt-1">ZIP code required — select an address from the suggestions</p>
+              <p className="text-[10px] text-muted-foreground font-display mt-1">ZIP code required — select an address from the suggestions</p>
             )}
           </div>
 
@@ -992,11 +992,11 @@ export default function PostJob() {
                     <div>
                       <p className="text-[11px] font-display font-semibold">{item.label}</p>
                       {item.instruction && (
-                        <p className="text-[10px] text-muted-foreground/70">{item.instruction}</p>
+                        <p className="text-[10px] text-muted-foreground">{item.instruction}</p>
                       )}
                       <div className="flex gap-2 mt-0.5">
                         {item.quantityRequired > 1 && (
-                          <span className="text-[9px] text-muted-foreground/50">{item.quantityRequired}x required</span>
+                          <span className="text-[9px] text-muted-foreground">{item.quantityRequired}x required</span>
                         )}
                         {item.geoRequired && (
                           <span className="text-[9px] text-green-400/60 flex items-center gap-0.5"><MapPinned className="w-2.5 h-2.5" /> GPS verified</span>
@@ -1027,10 +1027,10 @@ export default function PostJob() {
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
               <p className="text-[10px] font-display font-bold tracking-widest text-amber-400/80 uppercase">Posting Rules</p>
             </div>
-            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               You are responsible for the accuracy of your job posting. Illegal, unsafe, or prohibited jobs are not allowed and may be removed without notice.
             </p>
-            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               GUBER allows visual verification, errands, inspections, documentation, and general task-based services. Jobs involving <strong className="text-muted-foreground/80">illegal activity</strong>, <strong className="text-muted-foreground/80">hazardous physical labor</strong>, or <strong className="text-muted-foreground/80">licensed professional services without credentials</strong> are prohibited.
             </p>
             {(category === "Skilled Labor" || category === "General Labor") && (

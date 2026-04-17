@@ -37,7 +37,7 @@ import type { User, Review } from "@shared/schema";
 function VerifBadge({ verified, pending }: { verified: boolean; pending?: boolean }) {
   if (verified) return <span className="text-[10px] font-display text-primary flex items-center gap-0.5"><CheckCircle className="w-2.5 h-2.5" />Verified</span>;
   if (pending) return <span className="text-[10px] font-display text-amber-400 flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />Pending</span>;
-  return <span className="text-[10px] font-display text-muted-foreground/50">Not submitted</span>;
+  return <span className="text-[10px] font-display text-muted-foreground">Not submitted</span>;
 }
 
 function compressImage(file: File, maxWidth = 1200): Promise<string> {
@@ -454,7 +454,7 @@ export default function Profile() {
               {(displayUser as any).publicUsername ? `@${(displayUser as any).publicUsername}` : ((displayUser as any).guberId || "GUBER Member")}
             </h1>
             {isOwnProfile && displayUser.fullName && (
-              <p className="text-xs text-muted-foreground/50 mb-0.5">{displayUser.fullName} <span className="text-[10px]">(private)</span></p>
+              <p className="text-xs text-muted-foreground mb-0.5">{displayUser.fullName} <span className="text-[10px]">(private)</span></p>
             )}
             <p className="text-[11px] font-mono text-primary/70 mb-2.5 tracking-wider" data-testid="text-guber-id">{(displayUser as any).guberId || ""}</p>
             <div className="flex items-center gap-2 mb-3">
@@ -553,7 +553,7 @@ export default function Profile() {
           {isOwnProfile && (
             <div className="mt-4 pt-4 border-t border-border/10">
               <p className="text-xs font-display font-bold text-foreground/60 mb-2 uppercase tracking-widest">Public Username</p>
-              <p className="text-[11px] text-muted-foreground/60 mb-3 leading-relaxed">Choose a public name others see. No real names, phone numbers, emails, or social handles.</p>
+              <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">Choose a public name others see. No real names, phone numbers, emails, or social handles.</p>
               <div className="flex gap-2 items-start">
                 <div className="flex-1">
                   <div className="flex items-center rounded-lg border border-border/20 bg-background/50 overflow-hidden">
@@ -621,7 +621,7 @@ export default function Profile() {
             </Button>
             <button
               onClick={() => { localStorage.setItem("guber_og_card_hidden", "true"); setOgCardHidden(true); }}
-              className="mt-2 w-full text-[10px] text-muted-foreground/70 hover:text-foreground transition"
+              className="mt-2 w-full text-[10px] text-muted-foreground hover:text-foreground transition"
               data-testid="button-dismiss-og-card"
             >
               Not now
@@ -682,7 +682,7 @@ export default function Profile() {
                 {displayUser.tier}
               </Badge>
             </div>
-            <p className="text-[11px] text-muted-foreground/70 mt-1">
+            <p className="text-[11px] text-muted-foreground mt-1">
               {nextTier[displayUser.tier]}
             </p>
           </div>
@@ -721,7 +721,7 @@ export default function Profile() {
                     <p className="text-xs font-display font-bold" style={{ color: levelColor }}>{levelLabel}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <p className="text-[10px] text-muted-foreground/50 font-display">Trust Score</p>
+                    <p className="text-[10px] text-muted-foreground font-display">Trust Score</p>
                     <p className="text-sm font-display font-black tabular-nums" style={{ color: levelColor }} data-testid="text-trust-score-profile">{score}</p>
                   </div>
                 </div>
@@ -875,7 +875,7 @@ export default function Profile() {
             </div>
 
             <div className="bg-muted/20 rounded-lg p-3 mb-4 border border-border/20">
-              <p className="text-[11px] text-muted-foreground/70 font-display">
+              <p className="text-[11px] text-muted-foreground font-display">
                 <span className="text-foreground font-bold">Current: {tierLabel[displayUser.tier] || "Community"}</span>
                 {displayUser.tier !== "elite" && (
                   <span className="ml-2">→ Next: {nextTier[displayUser.tier]}</span>
@@ -1002,7 +1002,7 @@ export default function Profile() {
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                   <div>
                     <p className="text-xs font-display font-semibold text-green-400">Payouts Enabled</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">Earnings are transferred automatically when jobs are confirmed complete.</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Earnings are transferred automatically when jobs are confirmed complete.</p>
                   </div>
                 </div>
                 <Button
@@ -1019,7 +1019,7 @@ export default function Profile() {
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   {connectStatus?.status === "pending"
                     ? "Your payout account is created but setup is not complete. Continue where you left off."
                     : "Set up your payout account to receive earnings when jobs are confirmed. You only need to do this once."}
@@ -1028,7 +1028,7 @@ export default function Profile() {
                   <DollarSign className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[10px] font-display font-semibold text-foreground">How it works</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-relaxed">When a poster confirms your work, GUBER transfers your earnings directly to your bank account. Powered by Stripe.</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">When a poster confirms your work, GUBER transfers your earnings directly to your bank account. Powered by Stripe.</p>
                   </div>
                 </div>
                 <Button
@@ -1069,8 +1069,8 @@ export default function Profile() {
                     <p className="text-[11px] font-mono text-green-300 mt-0.5" data-testid="text-countdown">{countdownLabel}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[9px] text-muted-foreground/50">Expires</p>
-                    <p className="text-[10px] text-muted-foreground/70">
+                    <p className="text-[9px] text-muted-foreground">Expires</p>
+                    <p className="text-[10px] text-muted-foreground">
                       {new Date(referralData.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                     </p>
                   </div>
@@ -1079,7 +1079,7 @@ export default function Profile() {
 
               <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/20 border border-border/20">
                 <div>
-                  <p className="text-[10px] text-muted-foreground/60 mb-0.5">Your referral code</p>
+                  <p className="text-[10px] text-muted-foreground mb-0.5">Your referral code</p>
                   <p className="font-mono font-bold text-sm tracking-widest text-foreground" data-testid="text-referral-code">{referralData.code}</p>
                 </div>
                 <Button
@@ -1098,7 +1098,7 @@ export default function Profile() {
               </div>
 
               <div className="flex items-center gap-2">
-                <p className="text-[10px] text-muted-foreground/50 truncate flex-1 font-mono" data-testid="text-referral-link">{referralData.link}</p>
+                <p className="text-[10px] text-muted-foreground truncate flex-1 font-mono" data-testid="text-referral-link">{referralData.link}</p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1142,7 +1142,7 @@ export default function Profile() {
 
               <div className="pt-1">
                 <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[10px] text-muted-foreground/60" data-testid="text-referral-count">
+                  <p className="text-[10px] text-muted-foreground" data-testid="text-referral-count">
                     {referralData.count} verified referral{referralData.count !== 1 ? "s" : ""}
                   </p>
                   {referralData.atMax && referralData.discountActive ? (
@@ -1150,7 +1150,7 @@ export default function Profile() {
                   ) : referralData.atMax ? (
                     <p className="text-[10px] text-amber-400 font-display font-semibold">Max tier — discount lapsed</p>
                   ) : (
-                    <p className="text-[10px] text-muted-foreground/50">{referralData.progress}/10 toward next −5% fee</p>
+                    <p className="text-[10px] text-muted-foreground">{referralData.progress}/10 toward next −5% fee</p>
                   )}
                 </div>
                 {!referralData.atMax && (
@@ -1165,7 +1165,7 @@ export default function Profile() {
 
               <div className="flex items-start gap-2.5 p-3 rounded-lg bg-primary/5 border border-primary/10">
                 <TrendingUp className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
                   Every 10 verified referrals earns a <span className="text-foreground font-semibold">−5% platform fee for 30 days</span>. Max −15% at 30 referrals. Referral counts when they complete Stripe Connect. Day-1 OG fee is separate.
                 </p>
               </div>
@@ -1176,7 +1176,7 @@ export default function Profile() {
         {isOwnProfile && (
           <Card className="glass-card rounded-xl p-5 animate-fade-in stagger-5">
             <h3 className="font-display font-semibold text-sm mb-4 tracking-wide flex items-center gap-2">
-              <Shield className="w-4 h-4 text-muted-foreground/50" />
+              <Shield className="w-4 h-4 text-muted-foreground" />
               Safety &amp; Support
             </h3>
             <div className="space-y-2">
@@ -1186,7 +1186,7 @@ export default function Profile() {
                 <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <div>
                   <p className="font-display font-semibold text-[12px]">Report a Safety Issue</p>
-                  <p className="text-[10px] text-muted-foreground/50">support@guberapp.com</p>
+                  <p className="text-[10px] text-muted-foreground">support@guberapp.com</p>
                 </div>
               </a>
               <a href="mailto:support@guberapp.com?subject=Abuse or Fraud Report"
@@ -1195,11 +1195,11 @@ export default function Profile() {
                 <ShieldCheck className="w-4 h-4 text-destructive/70 flex-shrink-0" />
                 <div>
                   <p className="font-display font-semibold text-[12px]">Report Abuse or Fraud</p>
-                  <p className="text-[10px] text-muted-foreground/50">support@guberapp.com</p>
+                  <p className="text-[10px] text-muted-foreground">support@guberapp.com</p>
                 </div>
               </a>
               <div className="p-3 rounded-xl border border-white/[0.06] bg-muted/10">
-                <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
                   Always meet in safe, public, well-lit locations. Do not perform tasks beyond your qualifications. For emergencies, call 911.
                 </p>
               </div>
@@ -1236,7 +1236,7 @@ export default function Profile() {
                 >
                   <div>
                     <p className="font-display text-xs font-semibold tracking-wide text-foreground/90">{label}</p>
-                    <p className="text-[11px] text-muted-foreground/50 mt-0.5">{desc}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
                   </div>
                   <Switch
                     checked={notifPrefs?.[key] ?? true}
@@ -1267,14 +1267,14 @@ export default function Profile() {
                     ))}
                   </div>
                   {r.comment && <p className="text-sm text-muted-foreground leading-relaxed">{r.comment}</p>}
-                  <p className="text-[11px] text-muted-foreground/50 mt-1 font-display">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1 font-display">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</p>
                 </div>
               ))}
             </div>
           ) : (
             <div className="text-center py-6">
               <Star className="w-8 h-8 text-muted-foreground/15 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground/50 font-display">No reviews yet</p>
+              <p className="text-sm text-muted-foreground font-display">No reviews yet</p>
             </div>
           )}
         </Card>
@@ -1289,7 +1289,7 @@ export default function Profile() {
           </div>
           <DialogHeader className="text-center space-y-1">
             <DialogTitle className="font-display text-base text-center">Secure Payout Setup</DialogTitle>
-            <DialogDescription className="text-[11px] text-muted-foreground/60 text-center leading-relaxed">
+            <DialogDescription className="text-[11px] text-muted-foreground text-center leading-relaxed">
               Stripe powers payments for Amazon, Lyft, Shopify, and millions of businesses worldwide.
             </DialogDescription>
           </DialogHeader>
@@ -1300,7 +1300,7 @@ export default function Profile() {
               <AlertCircle className="w-3.5 h-3.5 text-primary shrink-0" />
               Why do we need this?
             </p>
-            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
               We need this to send you money, not to charge you. No credit check. No subscription. You're in control.
             </p>
           </div>

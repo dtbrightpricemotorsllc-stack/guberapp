@@ -64,11 +64,11 @@ function DashboardPromoModal({ promo, open, onClose, onAction }: { promo: PromoC
               <h3 className="text-xl font-display font-extrabold tracking-tight text-white" data-testid="text-promo-title">{promo.title}</h3>
               <p className="mt-2 text-sm text-white/65">{promo.subtitle}</p>
             </div>
-            <button onClick={onClose} className="rounded-full border border-white/10 px-3 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white transition" aria-label="Close promo" data-testid="button-close-promo">✕</button>
+            <button onClick={onClose} className="rounded-full border border-white/10 px-3 py-1 text-sm text-white/85 hover:bg-white/5 hover:text-white transition" aria-label="Close promo" data-testid="button-close-promo">✕</button>
           </div>
           <div className="mt-5 flex gap-3">
             <button onClick={() => onAction(promo)} className="flex-1 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-black hover:opacity-90 transition" data-testid="button-promo-action">{promo.buttonText}</button>
-            <button onClick={onClose} className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white transition" data-testid="button-promo-later">Maybe later</button>
+            <button onClick={onClose} className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-white/90 hover:bg-white/5 hover:text-white transition" data-testid="button-promo-later">Maybe later</button>
           </div>
         </div>
       </div>
@@ -543,7 +543,7 @@ export default function Dashboard() {
                         <p className="text-xs font-display font-bold" style={{ color: levelColor }}>{levelLabel}</p>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <p className="text-[10px] text-muted-foreground/50 font-display">Trust Score</p>
+                        <p className="text-[10px] text-muted-foreground font-display">Trust Score</p>
                         <p className="text-sm font-display font-black tabular-nums" style={{ color: levelColor }} data-testid="text-trust-score">{score}</p>
                       </div>
                     </div>
@@ -578,7 +578,7 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <Link href="/profile">
-                      <p className="text-[9px] text-muted-foreground/40 text-center font-display hover:text-muted-foreground/60 transition-colors cursor-pointer">Complete jobs to raise your trust score →</p>
+                      <p className="text-[9px] text-muted-foreground/40 text-center font-display hover:text-muted-foreground transition-colors cursor-pointer">Complete jobs to raise your trust score →</p>
                     </Link>
                   </div>
                 );
@@ -603,7 +603,7 @@ export default function Dashboard() {
                     <p className="text-xs font-display font-bold text-amber-400 tracking-wider mb-0.5">BOOST REWARD</p>
                     <p className="text-[11px] text-muted-foreground leading-snug mb-2">"{job.title}" hasn't been accepted yet. Boost the reward to get picked up faster.</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground/60 font-display">${job.budget} → <span className="text-amber-400 font-bold">${job.suggestedBudget}</span></span>
+                      <span className="text-[10px] text-muted-foreground font-display">${job.budget} → <span className="text-amber-400 font-bold">${job.suggestedBudget}</span></span>
                     </div>
                     <Button size="sm" className="mt-2 h-8 px-4 rounded-xl font-display text-xs font-bold tracking-wider bg-amber-500 hover:bg-amber-600 text-black"
                       onClick={() => boostMutation.mutate({ jobId: job.id, newBudget: job.suggestedBudget })} disabled={boostMutation.isPending}
@@ -693,7 +693,7 @@ export default function Dashboard() {
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedPin.color || "#22C55E" }} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{selectedPin.title}</p>
-                <p className="text-[10px] text-muted-foreground/60">{selectedPin.category} · ${selectedPin.budget}</p>
+                <p className="text-[10px] text-muted-foreground">{selectedPin.category} · ${selectedPin.budget}</p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
             </div>
@@ -845,7 +845,7 @@ export default function Dashboard() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-display font-bold text-foreground leading-tight">Invite friends, earn together</p>
-            <p className="text-[10px] text-muted-foreground/50 mt-0.5">You both get GUBER Credit when they complete their first job.</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">You both get GUBER Credit when they complete their first job.</p>
           </div>
           <span className="text-[10px] font-display font-black text-primary/70 shrink-0 tracking-wide">INVITE</span>
         </div>
@@ -862,7 +862,7 @@ export default function Dashboard() {
           <p className="text-sm font-display font-bold text-amber-400/60 leading-snug mb-0.5">
             Own a business?
           </p>
-          <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
             Turn your location into the final stop.
           </p>
           <p className="text-[11px] text-muted-foreground/40 leading-relaxed mb-2">

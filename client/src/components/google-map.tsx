@@ -478,7 +478,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     return (
       <div className={`glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-2 ${className ?? ""}`} data-testid="map-container">
         <MapPinIcon className="w-10 h-10 text-muted-foreground/20" />
-        <p className="text-sm text-muted-foreground/50 font-display text-center" data-testid="text-no-api-key">Google Maps not configured</p>
+        <p className="text-sm text-muted-foreground font-display text-center" data-testid="text-no-api-key">Google Maps not configured</p>
       </div>
     );
   }
@@ -487,7 +487,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     return (
       <div className={`glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-2 ${className ?? ""}`} data-testid="map-container">
         <AlertTriangle className="w-8 h-8 text-destructive/40" />
-        <p className="text-sm text-muted-foreground/50 font-display text-center" data-testid="text-map-error">Map could not load</p>
+        <p className="text-sm text-muted-foreground font-display text-center" data-testid="text-map-error">Map could not load</p>
         <p className="text-[10px] text-muted-foreground/30 font-display text-center max-w-[200px]">{loadErr}</p>
         <button
           onClick={() => {
@@ -516,7 +516,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           <Skeleton className="w-full h-full" />
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <Navigation className="w-6 h-6 text-primary animate-pulse" />
-            <span className="text-xs text-muted-foreground/60 font-display tracking-wider">
+            <span className="text-xs text-muted-foreground font-display tracking-wider">
               {locating ? "Detecting your location…" : "LOADING MAP..."}
             </span>
           </div>
@@ -530,7 +530,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           data-testid="banner-location-denied"
         >
           <LocateOff className="w-3.5 h-3.5 text-red-400 shrink-0" />
-          <span className="text-[10px] text-white/70 font-display flex-1">Location unavailable</span>
+          <span className="text-[10px] text-white/90 font-display flex-1">Location unavailable</span>
           <button
             onClick={handleRetryLocation}
             className="text-[10px] font-display font-bold text-primary flex items-center gap-1"
@@ -541,7 +541,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           <span className="text-white/20 text-[10px]">·</span>
           <button
             onClick={() => setShowZipInput(true)}
-            className="text-[10px] font-display font-bold text-white/60"
+            className="text-[10px] font-display font-bold text-white/85"
             data-testid="button-enter-zip-map"
           >
             Enter ZIP
