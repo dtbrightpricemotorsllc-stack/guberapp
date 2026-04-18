@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { signupSchema, loginSchema } from "../shared/schema";
+import { generateJWT } from "./jwt";
 
 const scryptAsync = promisify(scrypt);
 
@@ -105,7 +106,7 @@ export function handleLogin(storage: AuthStorage) {
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
-        res.json(sanitizeUser(user));
+        res.json({ ...sanitizeUser(user), token: generateJWT(user) });
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -148,7 +149,7 @@ export function handleSignup(storage: AuthStorage) {
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
-        res.status(201).json(sanitizeUser(user));
+        res.status(201).json({ ...sanitizeUser(user), token: generateJWT(user) });
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

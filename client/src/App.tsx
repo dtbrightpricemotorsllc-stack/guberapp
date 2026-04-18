@@ -19,6 +19,7 @@ import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import OAuthComplete from "@/pages/oauth-complete";
+import AuthSuccess from "@/pages/auth-success";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import AcceptableUse from "@/pages/acceptable-use";
@@ -225,6 +226,7 @@ function Router() {
       <Route path="/biz/verification" component={() => <BizRoute component={BizVerification} />} />
       <Route path="/biz/offers" component={() => <BizRoute component={BizOffers} />} />
       <Route path="/biz/account" component={() => <BizRoute component={BizAccount} />} />
+      <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
@@ -251,16 +253,13 @@ function NativeDeepLinkHandler() {
       try {
         const parsed = new URL(url);
         const path = parsed.pathname + (parsed.search || "");
-        if (path.startsWith("/oauth-landing")) {
-          const params = new URL(url).searchParams;
-          const t = params.get("t");
-          setLocation(t ? `/login?t=${t}` : "/login");
+        if (path.startsWith("/auth-success")) {
+          setLocation("/auth-success" + (parsed.search || ""));
         } else if (
           path.startsWith("/login") ||
           path.startsWith("/join/") ||
           path.startsWith("/dashboard") ||
-          path.startsWith("/biz/") ||
-          path.startsWith("/oauth-complete")
+          path.startsWith("/biz/")
         ) {
           setLocation(path);
         }

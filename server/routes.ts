@@ -14,6 +14,7 @@ import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword } from "./auth";
+import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, type User } from "@shared/schema";
@@ -478,16 +479,19 @@ export async function registerRoutes(
     })
   );
 
-  await pool.query(`CREATE TABLE IF NOT EXISTS login_tokens (
-    token TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    expires_at BIGINT NOT NULL
-  )`);
-  await pool.query(`ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS pickup_sid TEXT`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_tokens_pickup_sid ON login_tokens(pickup_sid) WHERE pickup_sid IS NOT NULL`);
-  setInterval(() => {
-    pool.query(`DELETE FROM login_tokens WHERE expires_at < $1`, [Date.now()]).catch(() => {});
-  }, 60_000);
+  // Bearer-token middleware: reads Authorization: Bearer <jwt>, verifies it,
+  // and populates req.session.userId — keeps all downstream auth checks working.
+  app.use((req: Request, _res: Response, next: Function) => {
+    if (!req.session.userId) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        const token = authHeader.slice(7);
+        const payload = verifyJWT(token);
+        if (payload) req.session.userId = payload.sub;
+      }
+    }
+    next();
+  });
 
   function requireAuth(req: Request, res: Response, next: Function) {
     if (!req.session.userId) {
@@ -916,7 +920,7 @@ export async function registerRoutes(
 
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
-        res.status(201).json(sanitizeUser(user));
+        res.status(201).json({ ...sanitizeUser(user), token: generateJWT(user) });
         runNSOPWBackgroundCheck(user.id, fullName).catch(() => {});
       });
     } catch (err: any) {
@@ -1660,7 +1664,7 @@ export async function registerRoutes(
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
-        res.json(sanitizeUser(user));
+        res.json({ ...sanitizeUser(user), token: generateJWT(user) });
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1828,23 +1832,8 @@ export async function registerRoutes(
 
       if (user.banned) return res.redirect("/login?error=banned");
       if (user.suspended) return res.redirect("/login?error=suspended");
-      const loginToken = randomBytes(24).toString("hex");
-      const expiresAt = Date.now() + 5 * 60_000;
-      const pickupSid = (req.session as any).oauthPickupSid as string | undefined;
-      delete (req.session as any).oauthPickupSid;
-      await pool.query(
-        `INSERT INTO login_tokens (token, user_id, expires_at, pickup_sid) VALUES ($1, $2, $3, $4)`,
-        [loginToken, user.id, expiresAt, pickupSid || null]
-      );
-      if (pickupSid) {
-        // Native app is polling /api/auth/oauth-pickup?sid=... for the token.
-        // Just show a "you can close this" page; no deep link needed.
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "no-store");
-        res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signed in</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0e14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:2rem}.logo{font-size:2rem;font-weight:900;letter-spacing:0.1em;color:#00e5e5;margin-bottom:1.5rem}.check{width:64px;height:64px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:2rem}.msg{font-size:1.1rem;color:#e2e8f0;margin-bottom:0.5rem;font-weight:600}.sub{font-size:0.9rem;color:#94a3b8}</style></head><body><div><div class="logo">GUBER</div><div class="check">✓</div><div class="msg">Signed in successfully</div><div class="sub">You can close this tab and return to the app.</div></div><script>setTimeout(function(){try{window.close();}catch(_){}}, 800);</script></body></html>`);
-        return;
-      }
-      res.redirect(`/oauth-landing?t=${loginToken}`);
+      const jwtToken = generateJWT(user);
+      res.redirect(`/auth-success?token=${encodeURIComponent(jwtToken)}`);
     } catch (err: any) {
       console.error("Google OAuth error:", err);
       res.redirect("/login?error=google_failed");
@@ -1861,7 +1850,7 @@ export async function registerRoutes(
         details: [
           {
             appID: `${process.env.APPLE_TEAM_ID || "XXXXXXXXXX"}.com.guber.app`,
-            paths: ["/login", "/oauth-complete", "/join/*", "/dashboard", "/biz/*"],
+            paths: ["/login", "/auth-success", "/join/*", "/dashboard", "/biz/*"],
           },
         ],
       },
@@ -1885,107 +1874,12 @@ export async function registerRoutes(
     ]);
   });
 
-  // Native app polls this with the sid it generated before opening OAuth.
-  // Returns { token } once OAuth completed and we stored a token for that sid.
-  app.get("/api/auth/oauth-pickup", async (req: Request, res: Response) => {
-    const sid = (req.query.sid as string | undefined)?.trim();
-    if (!sid || !/^[a-zA-Z0-9_-]{8,128}$/.test(sid)) {
-      return res.status(400).json({ message: "Invalid sid" });
-    }
-    try {
-      const result = await pool.query<{ token: string }>(
-        `DELETE FROM login_tokens WHERE pickup_sid = $1 AND expires_at >= $2 RETURNING token`,
-        [sid, Date.now()]
-      );
-      if (!result.rows.length) {
-        return res.json({ token: null });
-      }
-      return res.json({ token: result.rows[0].token });
-    } catch (err) {
-      console.error("[GUBER] OAuth pickup error:", err);
-      return res.status(500).json({ message: "Internal error" });
-    }
+  app.get("/api/auth/oauth-pickup", (_req: Request, res: Response) => {
+    res.status(410).json({ message: "Gone — use the JWT redirect flow" });
   });
 
-  app.get("/api/auth/exchange-token", async (req: Request, res: Response) => {
-    const token = req.query.t as string;
-    if (!token) return res.status(400).json({ message: "Missing token" });
-    try {
-      const result = await pool.query<{ user_id: number }>(`DELETE FROM login_tokens WHERE token = $1 AND expires_at >= $2 RETURNING user_id`, [token, Date.now()]);
-      if (!result.rows.length) {
-        return res.status(401).json({ message: "Token expired or invalid" });
-      }
-      await regenerateSession(req);
-      req.session.userId = result.rows[0].user_id;
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ message: "Session error" });
-        res.json({ ok: true });
-      });
-    } catch (err) {
-      console.error("[GUBER] Token exchange DB error:", err);
-      return res.status(500).json({ message: "Internal error" });
-    }
-  });
-
-  app.get("/oauth-landing", (req: Request, res: Response) => {
-    const token = req.query.t as string;
-    if (!token) return res.redirect("/login");
-    const ua = (req.headers["user-agent"] || "").toLowerCase();
-    const isAndroid = ua.includes("android");
-    const isIOS = /iphone|ipad|ipod/.test(ua);
-    const base = getBaseUrl(req);
-    const loginUrl = `${base}/login?t=${encodeURIComponent(token)}`;
-    const host = new URL(base).host;
-    const intentUrl = `intent://${host}/login?t=${encodeURIComponent(token)}#Intent;scheme=https;package=com.guber.app;S.browser_fallback_url=${encodeURIComponent(loginUrl)};end`;
-
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.send(`<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Signing in to GUBER...</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{background:#0a0e14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
-  .c{padding:2rem}
-  .logo{font-size:2rem;font-weight:900;letter-spacing:0.1em;color:#00e5e5;margin-bottom:1rem}
-  .msg{font-size:1rem;color:#94a3b8;margin-bottom:2rem}
-  .spinner{width:32px;height:32px;border:3px solid #1e293b;border-top-color:#00e5e5;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 1.5rem}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .btn{display:none;background:#00e5e5;color:#0a0e14;border:none;padding:14px 32px;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;text-decoration:none;margin-top:1rem}
-  .btn.show{display:inline-block}
-  .sub{font-size:0.75rem;color:#475569;margin-top:1rem}
-</style>
-</head><body>
-<div class="c">
-  <div class="logo">GUBER</div>
-  <div class="spinner"></div>
-  <div class="msg">Signing you in...</div>
-  <a id="fallback" class="btn" href="${loginUrl}">Open GUBER</a>
-  <p class="sub">If the app doesn't open automatically, tap the button above.</p>
-</div>
-<script>
-(function(){
-  var isAndroid = ${isAndroid};
-  var isIOS = ${isIOS};
-  var loginUrl = ${JSON.stringify(loginUrl)};
-  var intentUrl = ${JSON.stringify(intentUrl)};
-
-  if (isAndroid) {
-    window.location.href = intentUrl;
-  } else if (isIOS) {
-    window.location.href = loginUrl;
-  } else {
-    window.location.href = loginUrl;
-    return;
-  }
-  setTimeout(function(){
-    document.getElementById('fallback').classList.add('show');
-  }, 3000);
-})();
-</script>
-</body></html>`);
+  app.get("/api/auth/exchange-token", (_req: Request, res: Response) => {
+    res.status(410).json({ message: "Gone — use the JWT redirect flow" });
   });
 
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {

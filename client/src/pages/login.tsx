@@ -9,9 +9,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
-import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
-import { nativeGoogleSignIn } from "@/lib/native-google-signin";
 
 export default function Login() {
   const { login } = useAuth();
@@ -43,45 +40,8 @@ export default function Login() {
     }, 1500);
   };
 
-  const [tokenExchanging, setTokenExchanging] = useState(false);
-
   useEffect(() => {
     const params = new URLSearchParams(search);
-    const token = params.get("t");
-    if (token) {
-      setTokenExchanging(true);
-      fetch(`/api/auth/exchange-token?t=${encodeURIComponent(token)}`, { credentials: "include" })
-        .then(async (res) => {
-          if (res.ok) {
-            if (Capacitor.isNativePlatform()) {
-              try { Browser.close(); } catch (_) {}
-            }
-            await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-            await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
-            const meRes = await fetch("/api/auth/me", { credentials: "include" });
-            if (meRes.ok) {
-              const me = await meRes.json();
-              const dest = me?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
-              window.history.replaceState({}, "", "/login");
-              setLocation(dest);
-            } else {
-              window.history.replaceState({}, "", "/login");
-              setTokenExchanging(false);
-              toast({ title: "Sign-In Failed", description: "Session could not be established. Please try again.", variant: "destructive" });
-            }
-          } else {
-            window.history.replaceState({}, "", "/login");
-            setTokenExchanging(false);
-            toast({ title: "Sign-In Failed", description: "Login token expired. Please try again.", variant: "destructive" });
-          }
-        })
-        .catch(() => {
-          window.history.replaceState({}, "", "/login");
-          setTokenExchanging(false);
-          toast({ title: "Sign-In Failed", description: "Network error. Please try again.", variant: "destructive" });
-        });
-      return;
-    }
     const error = params.get("error");
     if (error === "banned") toast({ title: "Account Banned", description: "This account has been permanently banned.", variant: "destructive" });
     else if (error === "suspended") toast({ title: "Account Suspended", description: "This account is currently suspended.", variant: "destructive" });
@@ -113,36 +73,9 @@ export default function Login() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setGoogleLoading(true);
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const result = await nativeGoogleSignIn({ authPathBase: "/api/auth/google" });
-        if (result.ok) {
-          await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          await queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
-          const meRes = await fetch("/api/auth/me", { credentials: "include" });
-          if (meRes.ok) {
-            const me = await meRes.json();
-            const dest = me?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
-            setLocation(dest);
-          } else {
-            toast({ title: "Sign-In Failed", description: "Session could not be established.", variant: "destructive" });
-          }
-        } else if (result.reason === "timeout") {
-          toast({ title: "Sign-In Timed Out", description: "Please try again.", variant: "destructive" });
-        } else if (result.reason === "cancelled") {
-          // user closed the browser — silent
-        } else {
-          toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
-        }
-      } finally {
-        setGoogleLoading(false);
-      }
-    } else {
-      const authUrl = `${window.location.origin}/api/auth/google`;
-      window.location.href = authUrl;
-    }
+    window.location.href = `${window.location.origin}/api/auth/google`;
   };
 
   const handleDemoLogin = async (type: "consumer" | "business") => {
@@ -167,16 +100,6 @@ export default function Login() {
       setDemoLoading(null);
     }
   };
-
-  if (tokenExchanging) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6" data-testid="page-login-exchanging">
-        <GuberLogo size="lg" />
-        <Loader2 className="w-8 h-8 animate-spin text-primary mt-6" />
-        <p className="text-muted-foreground text-xs font-display tracking-[0.2em] mt-4">SIGNING YOU IN...</p>
-      </div>
-    );
-  }
 
   return (
     <InAppBrowserGate>

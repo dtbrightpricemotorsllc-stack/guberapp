@@ -19,7 +19,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const token = localStorage.getItem("guber_token");
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch("/api/auth/me", { headers, credentials: "include" });
         if (res.status === 401) return null;
         if (!res.ok) return null;
         return await res.json();
@@ -34,10 +36,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }): Promise<User | null> => {
-      await apiRequest("POST", "/api/auth/login", { email, password });
-      const res = await fetch("/api/auth/me", { credentials: "include" });
-      if (!res.ok) return null;
-      return res.json();
+      const res = await apiRequest("POST", "/api/auth/login", { email, password });
+      const data = await res.json();
+      if (data.token) localStorage.setItem("guber_token", data.token);
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -46,7 +48,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signupMutation = useMutation({
     mutationFn: async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => {
-      await apiRequest("POST", "/api/auth/signup", data);
+      const res = await apiRequest("POST", "/api/auth/signup", data);
+      const body = await res.json();
+      if (body.token) localStorage.setItem("guber_token", body.token);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -55,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      localStorage.removeItem("guber_token");
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {

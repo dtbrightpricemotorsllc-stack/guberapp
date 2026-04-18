@@ -17,15 +17,6 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
   const redirectUri = `${getBaseUrl(req)}/api/auth/google/callback`;
   const state = randomBytes(16).toString("hex");
   (req.session as any).oauthState = state;
-  // Native pickup sid: when the native app opens OAuth in an in-app browser
-  // (separate cookie jar), it passes ?sid=XYZ. After OAuth completes we stash
-  // the login token keyed by sid so the native app can poll for it.
-  const sid = (req.query.sid as string | undefined)?.trim();
-  if (sid && /^[a-zA-Z0-9_-]{8,128}$/.test(sid)) {
-    (req.session as any).oauthPickupSid = sid;
-  } else {
-    delete (req.session as any).oauthPickupSid;
-  }
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
