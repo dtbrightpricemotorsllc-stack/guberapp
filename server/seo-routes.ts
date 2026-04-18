@@ -99,6 +99,7 @@ function buildJobPostingJsonLd(job: PublicJobData) {
         "@type": "PostalAddress",
         "addressLocality": loc.city,
         "addressRegion": loc.state,
+        ...(job.zip && job.zip.trim() ? { "postalCode": job.zip.trim() } : {}),
         "addressCountry": "US",
       },
     },
@@ -106,17 +107,26 @@ function buildJobPostingJsonLd(job: PublicJobData) {
     "url": `https://guberapp.app/jobs/${makeJobSlug(job)}`,
   };
 
-  if (job.budget && job.budget > 0) {
-    schema.baseSalary = {
-      "@type": "MonetaryAmount",
-      "currency": "USD",
-      "value": {
-        "@type": "QuantitativeValue",
-        "value": job.budget,
-        "unitText": "PER_JOB",
-      },
-    };
-  }
+  schema.baseSalary = (job.budget && job.budget > 0)
+    ? {
+        "@type": "MonetaryAmount",
+        "currency": "USD",
+        "value": {
+          "@type": "QuantitativeValue",
+          "value": job.budget,
+          "unitText": "PER_JOB",
+        },
+      }
+    : {
+        "@type": "MonetaryAmount",
+        "currency": "USD",
+        "value": {
+          "@type": "QuantitativeValue",
+          "minValue": 25,
+          "maxValue": 200,
+          "unitText": "PER_JOB",
+        },
+      };
 
   return schema;
 }

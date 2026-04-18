@@ -593,6 +593,8 @@ function injectJobPostingSchema(jobs) {
     if (j.id < 0) return;
     var loc = parseLocation(j.locationApprox);
     var vt = j.expiresAt ? new Date(j.expiresAt).toISOString() : new Date(Date.now() + 30*86400000).toISOString();
+    var addr = { '@type': 'PostalAddress', 'addressLocality': loc.city, 'addressRegion': loc.state, 'addressCountry': 'US' };
+    if (j.zip && String(j.zip).trim()) addr.postalCode = String(j.zip).trim();
     var schema = {
       '@context': 'https://schema.org/',
       '@type': 'JobPosting',
@@ -601,12 +603,12 @@ function injectJobPostingSchema(jobs) {
       'datePosted': j.createdAt ? new Date(j.createdAt).toISOString() : new Date().toISOString(),
       'validThrough': vt,
       'hiringOrganization': { '@type': 'Organization', 'name': 'GUBER GLOBAL LLC', 'sameAs': 'https://guberapp.com', 'logo': 'https://guberapp.com/Guberapplogo.png' },
-      'jobLocation': { '@type': 'Place', 'address': { '@type': 'PostalAddress', 'addressLocality': loc.city, 'addressRegion': loc.state, 'addressCountry': 'US' } },
+      'jobLocation': { '@type': 'Place', 'address': addr },
       'employmentType': 'TEMPORARY'
     };
-    if (j.budget && j.budget > 0) {
-      schema.baseSalary = { '@type': 'MonetaryAmount', 'currency': 'USD', 'value': { '@type': 'QuantitativeValue', 'value': j.budget, 'unitText': 'PER_JOB' } };
-    }
+    schema.baseSalary = (j.budget && j.budget > 0)
+      ? { '@type': 'MonetaryAmount', 'currency': 'USD', 'value': { '@type': 'QuantitativeValue', 'value': j.budget, 'unitText': 'PER_JOB' } }
+      : { '@type': 'MonetaryAmount', 'currency': 'USD', 'value': { '@type': 'QuantitativeValue', 'minValue': 25, 'maxValue': 200, 'unitText': 'PER_JOB' } };
     var el = document.createElement('script');
     el.type = 'application/ld+json';
     el.textContent = JSON.stringify(schema);
