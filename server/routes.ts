@@ -13,7 +13,7 @@ import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
-import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword } from "./auth";
+import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword } from "./auth";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
@@ -829,104 +829,55 @@ export async function registerRoutes(
     }
   }
 
-  app.post("/api/auth/signup", async (req: Request, res: Response) => {
-    try {
-      const parsed = signupSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      }
-      const { email, username, fullName, password, zipcode } = parsed.data;
-      const incomingRefCode = (req.body.referralCode || "").toString().trim().toUpperCase() || null;
-
-      const pwError = validatePasswordStrength(password);
-      if (pwError) return res.status(400).json({ message: pwError });
-
-      const bioCheck = filterContactInfo(fullName);
-      if (bioCheck.blocked) {
-        return res.status(400).json({ message: "Contact info not allowed in names" });
-      }
-
-      const existingEmail = await storage.getUserByEmail(email);
-      if (existingEmail) return res.status(400).json({ message: "Email already in use" });
-
-      const existingUsername = await storage.getUserByUsername(username);
-      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
-
-      const hashedPassword = await hashPassword(password);
-      let newGuberId = generateGuberId();
-      while (await storage.getUserByGuberId(newGuberId)) { newGuberId = generateGuberId(); }
-
-      let newRefCode = generateReferralCode();
-      while (true) {
-        const clash = await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${newRefCode} LIMIT 1`);
-        if (!clash.rows.length) break;
-        newRefCode = generateReferralCode();
-      }
-
-      let referrerId: number | null = null;
-      if (incomingRefCode) {
-        const refOwner = await db.execute(sql`SELECT id FROM users WHERE referral_code = ${incomingRefCode} LIMIT 1`);
-        if (refOwner.rows.length) referrerId = (refOwner.rows[0] as any).id;
-      }
-
-      const user = await storage.createUser({
-        email,
-        username,
-        fullName,
-        password: hashedPassword,
-        zipcode: zipcode || null,
-        role: "buyer",
-        tier: "community",
-        day1OG: false,
-        guberId: newGuberId,
-        referralCode: newRefCode,
-        referredBy: referrerId,
-        termsAcceptedAt: new Date(),
-      } as any);
-
-      if (referrerId) {
-        await db.insert(referrals).values({ referrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();
-      }
-
+  app.post("/api/auth/signup", handleSignup(storage, {
+    generateGuberId,
+    isGuberIdTaken: async (id) => !!(await storage.getUserByGuberId(id)),
+    generateReferralCode,
+    isReferralCodeTaken: async (code) => {
+      const clash = await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${code} LIMIT 1`);
+      return clash.rows.length > 0;
+    },
+    findUserIdByReferralCode: async (code) => {
+      const refOwner = await db.execute(sql`SELECT id FROM users WHERE referral_code = ${code} LIMIT 1`);
+      return refOwner.rows.length ? (refOwner.rows[0] as any).id : null;
+    },
+    recordReferral: async (referrerId, referredId) => {
+      await db.insert(referrals).values({ referrerId, referredId, status: "pending" }).onConflictDoNothing();
+    },
+    checkPreapprovedStatus: async (email) => {
       const ogCheck = await db.execute(sql`SELECT 1 FROM og_preapproved_emails WHERE email = ${email.toLowerCase()} LIMIT 1`);
       const tbCheck = await db.execute(sql`SELECT 1 FROM trust_box_preapproved_emails WHERE LOWER(email) = ${email.toLowerCase()} LIMIT 1`);
       const stripeStatus = await checkStripeForOGStatus(email);
-
-      const updates: Record<string, any> = {};
-      const isOG = ogCheck.rows.length > 0 || stripeStatus.isOG;
-      const hasTB = tbCheck.rows.length > 0 || stripeStatus.hasTrustBox;
-      if (isOG) { updates.day1OG = true; if (!user.aiOrNotCredits || user.aiOrNotCredits < 5) updates.aiOrNotCredits = 5; }
-      if (hasTB) { updates.trustBoxPurchased = true; updates.aiOrNotUnlimitedText = true; if ((user.aiOrNotCredits || 0) < 5) updates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5; }
-      if (Object.keys(updates).length > 0) await storage.updateUser(user.id, updates);
-      if (stripeStatus.isOG && ogCheck.rows.length === 0) {
+      return {
+        isOG: ogCheck.rows.length > 0 || stripeStatus.isOG,
+        hasTrustBox: tbCheck.rows.length > 0 || stripeStatus.hasTrustBox,
+        ogTablePresent: ogCheck.rows.length > 0,
+        tbTablePresent: tbCheck.rows.length > 0,
+      };
+    },
+    recordPreapproved: async (email, opts) => {
+      if (opts.og) {
         await db.execute(sql`INSERT INTO og_preapproved_emails (email) VALUES (${email.toLowerCase()}) ON CONFLICT DO NOTHING`);
       }
-      if (stripeStatus.hasTrustBox && tbCheck.rows.length === 0) {
+      if (opts.tb) {
         await db.execute(sql`INSERT INTO trust_box_preapproved_emails (email) VALUES (${email.toLowerCase()}) ON CONFLICT DO NOTHING`);
       }
-
-      if (isOG && hasTB) {
-        await storage.createNotification({ userId: user.id, title: "Welcome, OG + Trust Box!", body: "Day-1 OG status and Trust Box are both active. Thanks for your early support!", type: "system" });
-      } else if (isOG) {
-        await storage.createNotification({ userId: user.id, title: "Welcome, Day-1 OG!", body: "You're a Day-1 OG member — your perks are already active. Thank you for your early support!", type: "system" });
-      } else if (hasTB) {
-        await storage.createNotification({ userId: user.id, title: "Trust Box Activated!", body: "Your AI or Not premium access is ready. Thanks for subscribing!", type: "system" });
+    },
+    sendWelcomeNotification: async (userId, kind) => {
+      if (kind === "og+tb") {
+        await storage.createNotification({ userId, title: "Welcome, OG + Trust Box!", body: "Day-1 OG status and Trust Box are both active. Thanks for your early support!", type: "system" });
+      } else if (kind === "og") {
+        await storage.createNotification({ userId, title: "Welcome, Day-1 OG!", body: "You're a Day-1 OG member — your perks are already active. Thank you for your early support!", type: "system" });
+      } else if (kind === "tb") {
+        await storage.createNotification({ userId, title: "Trust Box Activated!", body: "Your AI or Not premium access is ready. Thanks for subscribing!", type: "system" });
       } else {
-        await storage.createNotification({ userId: user.id, title: "Welcome to GUBER!", body: "Your account has been created. Complete your profile to start posting and accepting jobs.", type: "system" });
+        await storage.createNotification({ userId, title: "Welcome to GUBER!", body: "Your account has been created. Complete your profile to start posting and accepting jobs.", type: "system" });
       }
-
-      await regenerateSession(req);
-      req.session.userId = user.id;
-
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ message: "Session error" });
-        res.status(201).json({ ...sanitizeUser(user), token: generateJWT(user) });
-        runNSOPWBackgroundCheck(user.id, fullName).catch(() => {});
-      });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+    },
+    runBackgroundCheck: (userId, fullName) => {
+      runNSOPWBackgroundCheck(userId, fullName).catch(() => {});
+    },
+  }));
 
   app.post("/api/auth/business-signup", async (req: Request, res: Response) => {
     try {
@@ -1604,72 +1555,36 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
-    try {
-      const parsed = loginSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      const { email, password } = parsed.data;
-
-      let user = await storage.getUserByEmail(email);
-      if (!user) return res.status(401).json({ message: "Invalid credentials" });
-      if (user.banned) return res.status(403).json({ message: "Account permanently banned" });
-      if (user.suspended) return res.status(403).json({ message: "Account suspended" });
-
-      // Guard: if password is null/missing (shouldn't happen but protect against it)
-      if (!user.password || !user.password.includes(".")) {
-        if (user.authProvider === "google") {
-          return res.status(401).json({ message: "This account was created with Google Sign-In. Please tap 'Sign in with Google', or use 'Forgot Password' to set an email/password login." });
-        }
-        return res.status(401).json({ message: "Password not set. Please use 'Forgot Password' to reset your account." });
+  app.post("/api/auth/login", handleLogin(storage, {
+    syncPreapprovedStatus: async (user, email) => {
+      if (user.day1OG && user.trustBoxPurchased) return user;
+      const [loginOgCheck, loginTbCheck, stripeCheck] = await Promise.all([
+        db.execute(sql`SELECT 1 FROM og_preapproved_emails WHERE email = ${email.toLowerCase()} LIMIT 1`),
+        db.execute(sql`SELECT 1 FROM trust_box_preapproved_emails WHERE LOWER(email) = ${email.toLowerCase()} LIMIT 1`),
+        checkStripeForOGStatus(email),
+      ]);
+      const loginUpdates: Record<string, any> = {};
+      if (!user.day1OG && (loginOgCheck.rows.length > 0 || stripeCheck.isOG)) {
+        loginUpdates.day1OG = true;
+        if (!user.aiOrNotCredits || user.aiOrNotCredits < 5) loginUpdates.aiOrNotCredits = 5;
       }
-
-      const valid = await comparePasswords(password, user.password);
-      if (!valid) {
-        if (user.authProvider === "google") {
-          return res.status(401).json({ message: "Incorrect password. If you usually sign in with Google, try 'Sign in with Google' instead, or use 'Forgot Password' to set a new password." });
-        }
-        return res.status(401).json({ message: "Invalid credentials" });
+      if (!user.trustBoxPurchased && (loginTbCheck.rows.length > 0 || stripeCheck.hasTrustBox)) {
+        loginUpdates.trustBoxPurchased = true;
+        loginUpdates.aiOrNotUnlimitedText = true;
+        if ((user.aiOrNotCredits || 0) < 5) loginUpdates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5;
       }
-
-      // Sync OG / TrustBox on every login — check both local table and Stripe directly
-      if (!user.day1OG || !user.trustBoxPurchased) {
-        const [loginOgCheck, loginTbCheck, stripeCheck] = await Promise.all([
-          db.execute(sql`SELECT 1 FROM og_preapproved_emails WHERE email = ${email.toLowerCase()} LIMIT 1`),
-          db.execute(sql`SELECT 1 FROM trust_box_preapproved_emails WHERE LOWER(email) = ${email.toLowerCase()} LIMIT 1`),
-          checkStripeForOGStatus(email),
-        ]);
-        const loginUpdates: Record<string, any> = {};
-        if (!user.day1OG && (loginOgCheck.rows.length > 0 || stripeCheck.isOG)) {
-          loginUpdates.day1OG = true;
-          if (!user.aiOrNotCredits || user.aiOrNotCredits < 5) loginUpdates.aiOrNotCredits = 5;
-        }
-        if (!user.trustBoxPurchased && (loginTbCheck.rows.length > 0 || stripeCheck.hasTrustBox)) {
-          loginUpdates.trustBoxPurchased = true;
-          loginUpdates.aiOrNotUnlimitedText = true;
-          if ((user.aiOrNotCredits || 0) < 5) loginUpdates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5;
-        }
-        if (Object.keys(loginUpdates).length > 0) {
-          await storage.updateUser(user.id, loginUpdates);
-          user = (await storage.getUser(user.id))!;
-          if (loginUpdates.day1OG) {
-            await storage.createNotification({ userId: user.id, title: "Day-1 OG Activated!", body: "You're a Day-1 OG member — your perks are now active.", type: "system" });
-          }
-          if (loginUpdates.trustBoxPurchased) {
-            await storage.createNotification({ userId: user.id, title: "Trust Box Activated!", body: "Your AI or Not premium access is now active.", type: "system" });
-          }
-        }
+      if (Object.keys(loginUpdates).length === 0) return user;
+      await storage.updateUser(user.id, loginUpdates);
+      const refreshed = (await storage.getUser(user.id))!;
+      if (loginUpdates.day1OG) {
+        await storage.createNotification({ userId: refreshed.id, title: "Day-1 OG Activated!", body: "You're a Day-1 OG member — your perks are now active.", type: "system" });
       }
-
-      await regenerateSession(req);
-      req.session.userId = user.id;
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ message: "Session error" });
-        res.json({ ...sanitizeUser(user), token: generateJWT(user) });
-      });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+      if (loginUpdates.trustBoxPurchased) {
+        await storage.createNotification({ userId: refreshed.id, title: "Trust Box Activated!", body: "Your AI or Not premium access is now active.", type: "system" });
+      }
+      return refreshed;
+    },
+  }));
 
   app.post("/api/auth/logout", handleLogout());
 
@@ -1882,27 +1797,18 @@ export async function registerRoutes(
     res.status(410).json({ message: "Gone — use the JWT redirect flow" });
   });
 
-  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
-    try {
-      const { email } = req.body;
-      if (!email) return res.status(400).json({ message: "Email is required" });
-      const user = await storage.getUserByEmail(email);
-      if (!user) return res.json({ message: "If that email exists, a reset link has been sent." });
-      const token = randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-      await storage.createPasswordResetToken(user.id, token, expiresAt);
-      const resetUrl = `${getBaseUrl(req)}/reset-password?token=${token}`;
-      console.log(`[GUBER] Password reset link for ${email}: ${resetUrl}`);
-      if (process.env.RESEND_API_KEY) {
-        try {
-          const { Resend } = await import("resend");
-          const resend = new Resend(process.env.RESEND_API_KEY);
-          const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
-          const { data, error } = await resend.emails.send({
-            from: `GUBER <noreply@${fromDomain}>`,
-            to: email,
-            subject: "Reset your GUBER password",
-            html: `
+  app.post("/api/auth/forgot-password", handleForgotPassword(storage, {
+    getBaseUrl,
+    sendResetEmail: async (to, resetUrl, user) => {
+      if (!process.env.RESEND_API_KEY) return;
+      const { Resend } = await import("resend");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+      const { data, error } = await resend.emails.send({
+        from: `GUBER <noreply@${fromDomain}>`,
+        to,
+        subject: "Reset your GUBER password",
+        html: `
               <div style="font-family: Inter, sans-serif; max-width: 480px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 40px 32px; border-radius: 16px;">
                 <h1 style="font-size: 28px; font-weight: 800; color: #22c55e; letter-spacing: -0.5px; margin: 0 0 8px;">GUBER</h1>
                 <p style="font-size: 11px; color: #666; letter-spacing: 0.2em; text-transform: uppercase; margin: 0 0 32px;">RESET YOUR PASSWORD</p>
@@ -1917,19 +1823,11 @@ export async function registerRoutes(
                 </p>
               </div>
             `,
-          });
-          if (error) console.error("[GUBER] Resend error:", error.message);
-          else console.log("[GUBER] Reset email sent, id:", data?.id);
-        } catch (emailErr: any) {
-          console.error("[GUBER] Failed to send reset email:", emailErr.message);
-        }
-      }
-      res.json({ message: "If that email exists, a reset link has been sent.", resetUrl: process.env.NODE_ENV !== "production" ? resetUrl : undefined });
-    } catch (err: any) {
-      console.error("[GUBER] forgot-password error:", err);
-      res.status(500).json({ message: "Error processing request" });
-    }
-  });
+      });
+      if (error) console.error("[GUBER] Resend error:", error.message);
+      else console.log("[GUBER] Reset email sent, id:", data?.id);
+    },
+  }));
 
   app.post("/api/auth/reset-password", handleResetPassword(storage));
 

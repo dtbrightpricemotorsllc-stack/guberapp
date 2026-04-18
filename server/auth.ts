@@ -1,8 +1,11 @@
 import type { Request, Response } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import type { z } from "zod";
 import { signupSchema, loginSchema } from "../shared/schema";
 import { generateJWT } from "./jwt";
+
+type SignupInput = z.infer<typeof signupSchema>;
 
 const scryptAsync = promisify(scrypt);
 
@@ -63,18 +66,75 @@ export function regenerateSession(req: Request): Promise<void> {
   });
 }
 
+/**
+ * Minimal user shape the auth handlers depend on. The real `User` row from
+ * Drizzle has many more columns; handlers only read the fields enumerated
+ * here, so this narrow type is sufficient and keeps the surface explicit.
+ */
+export interface AuthUser {
+  id: number;
+  email: string;
+  username: string;
+  fullName: string;
+  password: string;
+  authProvider?: string | null;
+  banned?: boolean | null;
+  suspended?: boolean | null;
+  day1OG?: boolean | null;
+  trustBoxPurchased?: boolean | null;
+  aiOrNotCredits?: number | null;
+  [key: string]: unknown;
+}
+
 export interface AuthStorage {
-  getUserByEmail(email: string): Promise<any>;
-  getUserByUsername(username: string): Promise<any>;
-  createUser(data: any): Promise<any>;
-  getUser(id: number): Promise<any>;
-  updateUser(id: number, data: any): Promise<any>;
+  getUserByEmail(email: string): Promise<AuthUser | undefined>;
+  getUserByUsername(username: string): Promise<AuthUser | undefined>;
+  createUser(data: Record<string, unknown>): Promise<AuthUser>;
+  getUser(id: number): Promise<AuthUser | undefined>;
+  updateUser(id: number, data: Record<string, unknown>): Promise<AuthUser | undefined>;
   createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void>;
   getPasswordResetToken(token: string): Promise<{ userId: number; expiresAt: Date; used: boolean } | undefined>;
   invalidatePasswordResetToken(token: string): Promise<void>;
 }
 
-export function handleLogin(storage: AuthStorage) {
+/**
+ * Optional production-only hooks. Tests typically pass none and the handler
+ * runs in its minimal/portable form. routes.ts wires the production extras
+ * (referrals, OG/TrustBox sync, NSOPW, email delivery, etc.). When a hook
+ * throws, the error propagates to the handler's outer catch and the request
+ * fails — matching the prior inline behavior in routes.ts.
+ */
+export interface SignupDeps {
+  generateGuberId?: () => string;
+  isGuberIdTaken?: (id: string) => Promise<boolean>;
+  generateReferralCode?: () => string;
+  isReferralCodeTaken?: (code: string) => Promise<boolean>;
+  findUserIdByReferralCode?: (code: string) => Promise<number | null>;
+  recordReferral?: (referrerId: number, referredId: number) => Promise<void>;
+  checkPreapprovedStatus?: (email: string) => Promise<{
+    isOG: boolean;
+    hasTrustBox: boolean;
+    ogTablePresent: boolean;
+    tbTablePresent: boolean;
+  }>;
+  recordPreapproved?: (email: string, opts: { og: boolean; tb: boolean }) => Promise<void>;
+  sendWelcomeNotification?: (
+    userId: number,
+    kind: "og+tb" | "og" | "tb" | "default",
+  ) => Promise<void>;
+  runBackgroundCheck?: (userId: number, fullName: string) => void;
+}
+
+export interface LoginDeps {
+  syncPreapprovedStatus?: (user: AuthUser, email: string) => Promise<AuthUser>;
+}
+
+export interface ForgotPasswordDeps {
+  getBaseUrl?: (req: Request) => string;
+  sendResetEmail?: (to: string, resetUrl: string, user: AuthUser) => Promise<void>;
+}
+
+export function handleLogin(storage: AuthStorage, deps: LoginDeps = {}) {
   return async (req: Request, res: Response) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
@@ -82,7 +142,7 @@ export function handleLogin(storage: AuthStorage) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       const { email, password } = parsed.data;
 
-      const user = await storage.getUserByEmail(email);
+      let user = await storage.getUserByEmail(email);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
       if (user.banned) return res.status(403).json({ message: "Account permanently banned" });
       if (user.suspended) return res.status(403).json({ message: "Account suspended" });
@@ -102,26 +162,38 @@ export function handleLogin(storage: AuthStorage) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
+      if (deps.syncPreapprovedStatus) {
+        user = await deps.syncPreapprovedStatus(user, email);
+      }
+
       await regenerateSession(req);
       req.session.userId = user.id;
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
         res.json({ ...sanitizeUser(user), token: generateJWT(user) });
       });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      res.status(500).json({ message });
     }
   };
 }
 
-export function handleSignup(storage: AuthStorage) {
+export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
+  const productionMode = deps.generateGuberId !== undefined;
+
   return async (req: Request, res: Response) => {
     try {
       const parsed = signupSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { email, username, fullName, password } = parsed.data;
+      const { email, username, fullName, password, zipcode } = parsed.data as SignupInput;
+      const rawRefCode = req.body?.referralCode;
+      const incomingRefCode =
+        typeof rawRefCode === "string" && rawRefCode.trim()
+          ? rawRefCode.trim().toUpperCase()
+          : null;
 
       const pwError = validatePasswordStrength(password);
       if (pwError) return res.status(400).json({ message: pwError });
@@ -138,26 +210,123 @@ export function handleSignup(storage: AuthStorage) {
       if (existingUsername) return res.status(400).json({ message: "Username already taken" });
 
       const hashedPassword = await hashPassword(password);
-      const user = await storage.createUser({
+
+      // Generate unique GUBER ID (production-only)
+      let newGuberId: string | undefined;
+      if (deps.generateGuberId) {
+        newGuberId = deps.generateGuberId();
+        if (deps.isGuberIdTaken) {
+          while (await deps.isGuberIdTaken(newGuberId)) {
+            newGuberId = deps.generateGuberId();
+          }
+        }
+      }
+
+      // Generate unique referral code (production-only)
+      let newRefCode: string | undefined;
+      if (deps.generateReferralCode) {
+        newRefCode = deps.generateReferralCode();
+        if (deps.isReferralCodeTaken) {
+          while (await deps.isReferralCodeTaken(newRefCode)) {
+            newRefCode = deps.generateReferralCode();
+          }
+        }
+      }
+
+      // Resolve incoming referral (production-only)
+      let referrerId: number | null = null;
+      if (incomingRefCode && deps.findUserIdByReferralCode) {
+        referrerId = await deps.findUserIdByReferralCode(incomingRefCode);
+      }
+
+      const createPayload: Record<string, unknown> = {
         email,
         username,
         fullName,
         password: hashedPassword,
-      });
+      };
+      if (newGuberId) createPayload.guberId = newGuberId;
+      if (newRefCode) createPayload.referralCode = newRefCode;
+      if (referrerId) createPayload.referredBy = referrerId;
+      if (productionMode) {
+        createPayload.zipcode = zipcode || null;
+        createPayload.role = "buyer";
+        createPayload.tier = "community";
+        createPayload.day1OG = false;
+        createPayload.termsAcceptedAt = new Date();
+      } else if (zipcode !== undefined) {
+        createPayload.zipcode = zipcode || null;
+      }
+
+      const user = await storage.createUser(createPayload);
+
+      if (referrerId && deps.recordReferral) {
+        await deps.recordReferral(referrerId, user.id);
+      }
+
+      // OG / TrustBox preapproval check & welcome notification (production-only)
+      if (deps.checkPreapprovedStatus) {
+        const status = await deps.checkPreapprovedStatus(email);
+        const updates: Record<string, unknown> = {};
+        if (status.isOG) {
+          updates.day1OG = true;
+          if (!user.aiOrNotCredits || user.aiOrNotCredits < 5) updates.aiOrNotCredits = 5;
+        }
+        if (status.hasTrustBox) {
+          updates.trustBoxPurchased = true;
+          updates.aiOrNotUnlimitedText = true;
+          const credited = updates.aiOrNotCredits as number | undefined;
+          const base = credited ?? user.aiOrNotCredits ?? 0;
+          if (base < 5) updates.aiOrNotCredits = base + 5;
+        }
+        if (Object.keys(updates).length > 0) {
+          await storage.updateUser(user.id, updates);
+        }
+        if (
+          deps.recordPreapproved &&
+          ((status.isOG && !status.ogTablePresent) ||
+            (status.hasTrustBox && !status.tbTablePresent))
+        ) {
+          await deps.recordPreapproved(email, {
+            og: status.isOG && !status.ogTablePresent,
+            tb: status.hasTrustBox && !status.tbTablePresent,
+          });
+        }
+        if (deps.sendWelcomeNotification) {
+          const kind: "og+tb" | "og" | "tb" | "default" =
+            status.isOG && status.hasTrustBox
+              ? "og+tb"
+              : status.isOG
+                ? "og"
+                : status.hasTrustBox
+                  ? "tb"
+                  : "default";
+          await deps.sendWelcomeNotification(user.id, kind);
+        }
+      } else if (deps.sendWelcomeNotification) {
+        await deps.sendWelcomeNotification(user.id, "default");
+      }
 
       await regenerateSession(req);
       req.session.userId = user.id;
+
       req.session.save((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
         res.status(201).json({ ...sanitizeUser(user), token: generateJWT(user) });
+        // Background check is fire-and-forget by contract: the hook itself
+        // owns its error handling (production wires `.catch(() => {})`).
+        if (deps.runBackgroundCheck) {
+          deps.runBackgroundCheck(user.id, fullName);
+        }
       });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Signup failed";
+      res.status(500).json({ message });
     }
   };
 }
 
-export function handleForgotPassword(storage: AuthStorage) {
+export function handleForgotPassword(storage: AuthStorage, deps: ForgotPasswordDeps = {}) {
   return async (req: Request, res: Response) => {
     try {
       const { email } = req.body;
@@ -168,16 +337,32 @@ export function handleForgotPassword(storage: AuthStorage) {
       const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
       await storage.createPasswordResetToken(user.id, token, expiresAt);
-      const baseUrl = process.env.APP_BASE_URL
-        ? process.env.APP_BASE_URL.replace(/\/$/, "")
-        : `${req.protocol}://${req.get("host")}`;
+
+      const baseUrl = deps.getBaseUrl
+        ? deps.getBaseUrl(req)
+        : (process.env.APP_BASE_URL
+            ? process.env.APP_BASE_URL.replace(/\/$/, "")
+            : `${req.protocol}://${req.get("host")}`);
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
       console.log(`[GUBER] Password reset link for ${email}: ${resetUrl}`);
+
+      if (deps.sendResetEmail) {
+        // Email delivery failures are logged but do not fail the request —
+        // matching the original inline behavior in routes.ts. The reset
+        // token is still created and the dev-mode resetUrl is still returned.
+        try {
+          await deps.sendResetEmail(email, resetUrl, user);
+        } catch (emailErr) {
+          const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+          console.error("[GUBER] Failed to send reset email:", msg);
+        }
+      }
+
       res.json({
         message: "If that email exists, a reset link has been sent.",
         resetUrl: process.env.NODE_ENV !== "production" ? resetUrl : undefined,
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("[GUBER] forgot-password error:", err);
       res.status(500).json({ message: "Error processing request" });
     }
@@ -203,7 +388,8 @@ export function handleResetPassword(storage: AuthStorage) {
       await storage.updateUser(resetToken.userId, { password: hashedPassword });
       await storage.invalidatePasswordResetToken(token);
       res.json({ message: "Password updated successfully" });
-    } catch (err: any) {
+    } catch (err) {
+      console.error("[GUBER] reset-password error:", err);
       res.status(500).json({ message: "Error resetting password" });
     }
   };
