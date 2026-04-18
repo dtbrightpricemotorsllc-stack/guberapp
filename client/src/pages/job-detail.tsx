@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AccessibleCheckbox } from "@/components/ui/accessible-checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   MapPin, DollarSign, AlertTriangle, User,
@@ -2568,30 +2569,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   </li>
                 ))}
               </ul>
-              <label className="flex items-start gap-3 cursor-pointer group mt-3" data-testid="label-waiver-check">
-                <div
-                  role="checkbox"
-                  aria-checked={waiverChecked}
-                  aria-label="I understand and accept these conditions"
-                  tabIndex={0}
-                  onClick={() => setWaiverChecked(!waiverChecked)}
-                  onKeyDown={(e) => {
-                    if (e.key === " " || e.key === "Enter") {
-                      e.preventDefault();
-                      setWaiverChecked(!waiverChecked);
-                    }
-                  }}
-                  className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                    waiverChecked ? "bg-primary border-primary" : "border-white/60 bg-white/10 group-hover:border-primary/70"
-                  }`}
-                  data-testid="checkbox-waiver"
-                >
-                  {waiverChecked && <CheckCircle className="w-3 h-3 text-background" strokeWidth={3} />}
-                </div>
-                <span className="text-[12px] text-muted-foreground leading-relaxed font-medium">
-                  I understand and accept these conditions
-                </span>
-              </label>
+              <AccessibleCheckbox
+                checked={waiverChecked}
+                onCheckedChange={setWaiverChecked}
+                ariaLabel="I understand and accept these conditions"
+                label="I understand and accept these conditions"
+                variant="primary"
+                className="mt-3"
+                boxTestId="checkbox-waiver"
+                labelTestId="label-waiver-check"
+              />
             </div>
 
             {(job.category === "Verify & Inspect" || job.category === "Skilled Labor" || job.category === "General Labor" || job.category === "On-Demand Help" || job.category === "Marketplace") && (
@@ -2609,30 +2596,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     : "This task may involve meeting or interacting with another user. I should exercise caution and meet in safe, well-lit locations when possible. GUBER does not guarantee the conduct of other users."
                   }
                 </p>
-                <label className="flex items-start gap-3 cursor-pointer group mt-2" data-testid="label-category-waiver-check">
-                  <div
-                    role="checkbox"
-                    aria-checked={categoryWaiverChecked}
-                    aria-label="I understand the scope and limitations of this category"
-                    tabIndex={0}
-                    onClick={() => setCategoryWaiverChecked(!categoryWaiverChecked)}
-                    onKeyDown={(e) => {
-                      if (e.key === " " || e.key === "Enter") {
-                        e.preventDefault();
-                        setCategoryWaiverChecked(!categoryWaiverChecked);
-                      }
-                    }}
-                    className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      categoryWaiverChecked ? "bg-amber-500 border-amber-500" : "border-amber-400/70 bg-amber-500/10 group-hover:border-amber-400"
-                    }`}
-                    data-testid="checkbox-category-waiver"
-                  >
-                    {categoryWaiverChecked && <CheckCircle className="w-3 h-3 text-background" strokeWidth={3} />}
-                  </div>
-                  <span className="text-[12px] text-muted-foreground leading-relaxed font-medium">
-                    I understand the scope and limitations of this category
-                  </span>
-                </label>
+                <AccessibleCheckbox
+                  checked={categoryWaiverChecked}
+                  onCheckedChange={setCategoryWaiverChecked}
+                  ariaLabel="I understand the scope and limitations of this category"
+                  label="I understand the scope and limitations of this category"
+                  variant="amber"
+                  className="mt-2"
+                  boxTestId="checkbox-category-waiver"
+                  labelTestId="label-category-waiver-check"
+                />
               </div>
             )}
 
