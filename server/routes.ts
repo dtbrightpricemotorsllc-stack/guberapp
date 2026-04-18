@@ -8730,11 +8730,14 @@ export async function registerRoutes(
         cashWinnerCount, rewardWinnerCount, finalLocationMode,
         rewardType, rewardDescription, rewardQuantity, rewardRedemptionType,
         redemptionType, redemptionInstructions, noPurchaseRequiredText, disclaimerText, status,
+        physicalCashDrop,
       } = req.body;
       const cashWinnersCap = cashWinnerCount ? parseInt(cashWinnerCount) : 1;
       const rewardWinnersCap = rewardWinnerCount ? parseInt(rewardWinnerCount) : 0;
       const isRewardOnly = cashWinnersCap === 0 && rewardWinnersCap > 0;
-      if (!title || (isRewardOnly ? false : !rewardPerWinner)) return res.status(400).json({ error: "Title is required" });
+      const isPhysical = !!physicalCashDrop;
+      if (!title) return res.status(400).json({ error: "Title is required" });
+      if (!isPhysical && !isRewardOnly && !rewardPerWinner) return res.status(400).json({ error: "Reward amount is required (or use Physical Cash Drop)" });
 
       const finalStatus = status === "active" ? "active" : "draft";
       const drop = await storage.createCashDrop({
@@ -8777,7 +8780,22 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const previousDrop = await storage.getCashDrop(id);
-      const drop = await storage.updateCashDrop(id, req.body);
+      // Sanitize: convert date strings to Date objects and strip non-schema fields
+      const { startTime, endTime, physicalCashDrop, winnerProofRequirement, ...rest } = req.body;
+      const patchData: Record<string, any> = { ...rest };
+      if (startTime !== undefined) patchData.startTime = startTime ? new Date(startTime) : null;
+      if (endTime !== undefined) patchData.endTime = endTime ? new Date(endTime) : null;
+      // Parse numeric strings that Drizzle needs as numbers
+      if (patchData.rewardPerWinner !== undefined) patchData.rewardPerWinner = parseFloat(patchData.rewardPerWinner) || 0;
+      if (patchData.winnerLimit !== undefined) patchData.winnerLimit = parseInt(patchData.winnerLimit) || 1;
+      if (patchData.cashWinnerCount !== undefined) patchData.cashWinnerCount = parseInt(patchData.cashWinnerCount) || 0;
+      if (patchData.rewardWinnerCount !== undefined) patchData.rewardWinnerCount = parseInt(patchData.rewardWinnerCount) || 0;
+      if (patchData.gpsLat !== undefined) patchData.gpsLat = patchData.gpsLat ? parseFloat(patchData.gpsLat) : null;
+      if (patchData.gpsLng !== undefined) patchData.gpsLng = patchData.gpsLng ? parseFloat(patchData.gpsLng) : null;
+      if (patchData.gpsRadius !== undefined) patchData.gpsRadius = parseInt(patchData.gpsRadius) || 200;
+      if (patchData.rewardQuantity !== undefined) patchData.rewardQuantity = patchData.rewardQuantity ? parseInt(patchData.rewardQuantity) : null;
+      if (patchData.sponsorId !== undefined) patchData.sponsorId = patchData.sponsorId ? parseInt(patchData.sponsorId) : null;
+      const drop = await storage.updateCashDrop(id, patchData);
       if (drop && req.body.status === "active" && previousDrop?.status !== "active") {
         notifyCashDropLive(drop).catch(() => {});
       }
