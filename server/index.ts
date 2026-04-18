@@ -27,18 +27,48 @@ const generalLimiter = rateLimit({
   skip: (req) => req.path.startsWith("/api/webhooks"),
 });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 15,
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: "Too many login attempts, please try again later." },
+  skipSuccessfulRequests: true,
+  message: {
+    message:
+      "Too many failed login attempts. Please wait a minute and try again.",
+  },
+});
+
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message:
+      "Too many signup attempts from this IP. Please try again in an hour.",
+  },
+});
+
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message:
+      "Too many password reset requests. Please try again in a few minutes.",
+  },
 });
 
 app.use("/api", generalLimiter);
-app.use("/api/auth/login", authLimiter);
-app.use("/api/auth/signup", authLimiter);
-app.use("/api/auth/forgot-password", authLimiter);
+app.use("/api/auth/login", loginLimiter);
+app.use("/api/demo-login", loginLimiter);
+app.use("/api/auth/signup", signupLimiter);
+app.use("/api/auth/business-signup", signupLimiter);
+app.use("/api/auth/business-access-request", signupLimiter);
+app.use("/api/auth/forgot-password", passwordResetLimiter);
+app.use("/api/auth/reset-password", passwordResetLimiter);
 
 // Use type: () => true so the body is always captured as a raw Buffer regardless
 // of how the production proxy may modify the Content-Type header.
