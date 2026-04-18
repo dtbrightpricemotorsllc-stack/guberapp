@@ -12,8 +12,9 @@ import type { Job } from "@shared/schema";
 import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat, ShoppingBag,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
-  TrendingUp, X, Loader2, Rocket, UserCircle, Users, Lock, Banknote, Clock,
+  TrendingUp, X, Loader2, Rocket, UserCircle, Users, Lock, Banknote, Clock, Bell,
 } from "lucide-react";
+import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import { getPushStatus, subscribeToPush } from "@/lib/push";
 import { buildReferralShareText } from "@/lib/referral";
@@ -97,6 +98,113 @@ const WORK_CATEGORIES = [
 ];
 
 type DashboardMode = "hire" | "work";
+
+// ─── To-Do Reminder Box ───────────────────────────────────────────────────────
+
+interface TodoItem { id: string; icon: string; text: string; sub: string; href?: string }
+
+function getTodoDismissed(id: string) { return localStorage.getItem(`guber_todo_dismissed_${id}`) === "true"; }
+function setTodoDismissed(id: string) { localStorage.setItem(`guber_todo_dismissed_${id}`, "true"); }
+function getDay1OgLastSuggested() { return Number(localStorage.getItem("guber_todo_day1og_last") || "0"); }
+function setDay1OgLastSuggested() { localStorage.setItem("guber_todo_day1og_last", Date.now().toString()); }
+
+function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAvailable: boolean; referralCount: number }) {
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+  const [blink, setBlink] = useState(false);
+  const [, navigate] = useLocation();
+
+  const allItems = useMemo<TodoItem[]>(() => {
+    const items: TodoItem[] = [];
+    if (!user?.day1OG && Date.now() - getDay1OgLastSuggested() > 7 * 24 * 60 * 60 * 1000) {
+      items.push({ id: "day1og", icon: "🥇", text: "Become a Day 1 OG", sub: "Lock in exclusive early-access perks before they're gone.", href: "/join" });
+    }
+    if (isAvailable && user?.stripeAccountStatus !== "active") {
+      items.push({ id: "payout", icon: "💳", text: "Set up payouts", sub: "Complete Stripe verification to get paid for tasks." });
+    }
+    if (referralCount < 25) {
+      items.push({ id: "city", icon: "🏙️", text: "Unlock your city", sub: `${referralCount}/25 invites — help activate local cash drops.` });
+    }
+    return items;
+  }, [user, isAvailable, referralCount]);
+
+  const visibleItems = allItems.filter(item => !dismissed[item.id] && !getTodoDismissed(item.id));
+
+  useEffect(() => {
+    if (visibleItems.length === 0) return;
+    setBlink(true);
+    const t = setTimeout(() => setBlink(false), 1400);
+    const interval = setInterval(() => {
+      setBlink(true);
+      setTimeout(() => setBlink(false), 1400);
+    }, 9000);
+    return () => { clearTimeout(t); clearInterval(interval); };
+  }, [visibleItems.length]);
+
+  const dismiss = (id: string) => {
+    if (id === "day1og") setDay1OgLastSuggested();
+    setTodoDismissed(id);
+    setDismissed(p => ({ ...p, [id]: true }));
+  };
+
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div className="mb-4 animate-fade-in" data-testid="section-todo-box">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl transition-all active:scale-[0.99]"
+        style={{
+          background: "rgba(201,168,76,0.06)",
+          border: blink ? "1.5px solid rgba(201,168,76,0.75)" : "1.5px solid rgba(201,168,76,0.22)",
+          boxShadow: blink ? "0 0 14px rgba(201,168,76,0.28)" : "none",
+          transition: "border-color 0.4s ease, box-shadow 0.4s ease",
+        }}
+        data-testid="button-todo-box"
+      >
+        <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+        <span className="flex-1 text-left text-xs font-display font-bold text-amber-400/90 tracking-wide">
+          Reminders <span className="ml-1 text-amber-400/60">({visibleItems.length})</span>
+        </span>
+        <span className="text-[10px] text-amber-400/45 font-display">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div
+          className="mt-1.5 rounded-2xl overflow-hidden"
+          style={{ border: "1px solid rgba(201,168,76,0.18)", background: "rgba(5,5,5,0.85)" }}
+        >
+          {visibleItems.map((item, i) => (
+            <div
+              key={item.id}
+              className="flex items-start gap-3 px-4 py-3"
+              style={{ borderTop: i > 0 ? "1px solid rgba(201,168,76,0.08)" : "none" }}
+            >
+              <span className="text-base mt-0.5 shrink-0">{item.icon}</span>
+              <div
+                className="flex-1 min-w-0"
+                style={{ cursor: item.href ? "pointer" : "default" }}
+                onClick={() => item.href && navigate(item.href)}
+              >
+                <p className="text-xs font-display font-bold text-foreground/90 leading-tight">{item.text}</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-snug">{item.sub}</p>
+              </div>
+              <button
+                onClick={() => dismiss(item.id)}
+                className="shrink-0 mt-0.5 p-1 rounded-full text-muted-foreground/25 hover:text-muted-foreground transition-colors"
+                aria-label="Dismiss"
+                data-testid={`button-todo-dismiss-${item.id}`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -241,6 +349,11 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  const { data: activeCashDrops } = useQuery<any[]>({
+    queryKey: ["/api/cash-drops/active"],
+    enabled: !!user,
+  });
+
   const { data: referralData } = useQuery<{ code: string; link: string; count: number }>({
     queryKey: ["/api/users/me/referral"],
     enabled: !!user,
@@ -293,6 +406,16 @@ export default function Dashboard() {
 
   const filteredPins = (mapPins || []).filter(p => !mapCatFilter || p.category === mapCatFilter);
   const nearbyCount = filteredPins.length;
+
+  const activeCashDropPins: CashDropPin[] = (activeCashDrops || [])
+    .filter((d: any) => d.gpsLat && d.gpsLng)
+    .map((d: any) => ({
+      id: d.id,
+      lat: parseFloat(d.gpsLat),
+      lng: parseFloat(d.gpsLng),
+      title: d.title || "Cash Drop",
+      amount: d.rewardPerWinner,
+    }));
 
   const isSharingRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -398,8 +521,125 @@ export default function Dashboard() {
           </button>
         </div>
 
+        {/* ── To-Do Reminder Box ── */}
+        <TodoReminderBox
+          user={user}
+          isAvailable={!!(user as any)?.isAvailable}
+          referralCount={referralData?.count ?? 0}
+        />
+
+        {/* ── Nearby Jobs / Map ── */}
+        <div className="mb-5 animate-fade-in stagger-2" data-testid="section-nearby-jobs">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <span className="text-xs font-display font-bold text-foreground/90 tracking-[0.15em] uppercase">
+                {mode === "hire" ? "Nearby Help" : "Nearby Jobs"}
+              </span>
+              {nearbyCount > 0 && (
+                <span className="ml-2 text-[10px] font-display text-primary/60">{nearbyCount} active</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5">
+              {mode === "work" && (
+                <div className="flex items-center gap-1.5" data-testid="section-availability">
+                  <span className="text-[10px] font-display text-muted-foreground/60 leading-none">Available</span>
+                  <Switch
+                    checked={!!(user as any)?.isAvailable}
+                    onCheckedChange={(v) => {
+                      availabilityMutation.mutate(v);
+                      if (v) triggerActionPrompt("Enable alerts to hear about new jobs");
+                    }}
+                    disabled={availabilityMutation.isPending}
+                    data-testid="toggle-availability"
+                  />
+                </div>
+              )}
+              <Link href="/map">
+                <span className="text-[10px] font-display text-primary/70 tracking-wider hover:text-primary transition-colors cursor-pointer font-semibold uppercase">
+                  View All →
+                </span>
+              </Link>
+            </div>
+          </div>
+          <div className="glass-card-strong rounded-2xl overflow-hidden relative" style={{ height: 200 }}>
+            {mapCenter ? (
+              <GoogleMap
+                center={mapCenter}
+                pins={mode === "work" ? filteredPins : []}
+                workerPins={mode === "hire" ? (workerPins || []) : []}
+                cashDrops={activeCashDropPins}
+                onPinClick={setSelectedPin}
+                onWorkerPinClick={setSelectedWorker}
+                className="w-full h-full"
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center gap-3">
+                <div className="flex flex-col items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter zip code..."
+                    value={zipOverride}
+                    onChange={(e) => setZipOverride(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && zipOverride.trim()) {
+                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}`)
+                          .then(r => r.ok ? r.json() : null)
+                          .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
+                          .catch(() => {});
+                      }
+                    }}
+                    className="bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none w-48 text-center"
+                    data-testid="input-zip-map"
+                  />
+                  <button
+                    onClick={() => {
+                      if (zipOverride.trim()) {
+                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}`)
+                          .then(r => r.ok ? r.json() : null)
+                          .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
+                          .catch(() => {});
+                      }
+                    }}
+                    className="text-[11px] font-display font-bold text-primary px-4 py-1.5 rounded-lg"
+                    style={{ background: "hsl(152 70% 40% / 0.2)", border: "1px solid hsl(152 70% 40% / 0.3)" }}
+                    data-testid="button-go-zip"
+                  >
+                    GO
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {selectedPin && (
+            <div className="mt-3 rounded-xl p-3 flex items-center gap-3 cursor-pointer" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border) / 0.3)" }}
+              onClick={() => navigate(`/jobs/${selectedPin.id}`)} data-testid="card-selected-pin">
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedPin.color || "#22C55E" }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{selectedPin.title}</p>
+                <p className="text-[10px] text-muted-foreground">{selectedPin.category} · ${selectedPin.budget}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
+            </div>
+          )}
+          {mode === "work" && !!(user as any)?.isAvailable && (user as any)?.stripeAccountStatus !== "active" && (
+            <div className="mt-3 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5" data-testid="banner-stripe-required">
+              <div className="flex gap-3">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-[11px] font-display font-bold text-foreground leading-tight mb-1 uppercase tracking-wider">Payout Setup Required</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed mb-2">Complete your Stripe verification to receive payments.</p>
+                  <Button size="sm" variant="ghost" className="h-7 px-0 text-[10px] font-display font-bold text-emerald-400 hover:text-emerald-300 hover:bg-transparent flex items-center gap-1 group"
+                    onClick={() => onboardMutation.mutate()} disabled={onboardMutation.isPending} data-testid="link-setup-payouts-dashboard">
+                    {onboardMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><span>SET UP NOW</span><ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" /></>}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ── Mode-Based CTAs ── */}
-        <div className="mb-6 animate-fade-in stagger-2 space-y-2">
+        <div className="mb-6 animate-fade-in stagger-3 space-y-2">
           {mode === "hire" ? (
             <>
               <Link href="/post-job">
@@ -488,41 +728,6 @@ export default function Dashboard() {
                   🚀 Invite &amp; Activate Your City
                 </button>
               </div>
-
-              <div className="flex items-center justify-between px-1 pt-1" data-testid="section-availability">
-                <div>
-                  <p className="text-sm font-display font-semibold text-foreground leading-tight">Available for Work</p>
-                  <p className="text-xs text-muted-foreground/55 mt-0.5">Get notified of jobs posted within 10 miles</p>
-                </div>
-                <Switch
-                  checked={!!(user as any)?.isAvailable}
-                  onCheckedChange={(v) => {
-                    availabilityMutation.mutate(v);
-                    if (v) triggerActionPrompt("Enable alerts to hear about new jobs");
-                  }}
-                  disabled={availabilityMutation.isPending}
-                  data-testid="toggle-availability"
-                />
-              </div>
-              {!!(user as any)?.isAvailable && (user as any)?.stripeAccountStatus !== "active" && (
-                <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5" data-testid="banner-stripe-required">
-                  <div className="flex gap-3">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-[11px] font-display font-bold text-foreground leading-tight mb-1 uppercase tracking-wider">Payout Setup Required</p>
-                      <p className="text-[10px] text-muted-foreground leading-relaxed mb-2">Complete your Stripe verification to receive payments.</p>
-                      <Button size="sm" variant="ghost" className="h-7 px-0 text-[10px] font-display font-bold text-emerald-400 hover:text-emerald-300 hover:bg-transparent flex items-center gap-1 group"
-                        onClick={() => onboardMutation.mutate()} disabled={onboardMutation.isPending} data-testid="link-setup-payouts-dashboard">
-                        {onboardMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><span>SET UP NOW</span><ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" /></>}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <p className="text-[10px] text-muted-foreground/40 font-display text-center px-2">
-                Your activity builds trust and unlocks access
-              </p>
 
               {/* ── Trust Level Widget ── */}
               {(() => {
@@ -617,88 +822,6 @@ export default function Dashboard() {
             ))}
           </div>
         )}
-
-        {/* ── Map Section ── */}
-        <div className="mb-6 animate-fade-in stagger-3" data-testid="section-nearby-jobs">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <span className="text-xs font-display font-bold text-foreground/90 tracking-[0.15em] uppercase">
-                {mode === "hire" ? "Nearby Help" : "Nearby Jobs"}
-              </span>
-              {nearbyCount > 0 && (
-                <span className="ml-2 text-[10px] font-display text-primary/60">{nearbyCount} active</span>
-              )}
-            </div>
-            <Link href="/map">
-              <span className="text-[10px] font-display text-primary/70 tracking-wider hover:text-primary transition-colors cursor-pointer font-semibold uppercase">
-                View All →
-              </span>
-            </Link>
-          </div>
-          <div className="glass-card-strong rounded-2xl overflow-hidden relative" style={{ height: 200 }}>
-            {mapCenter ? (
-              <GoogleMap
-                center={mapCenter}
-                pins={mode === "hire" ? [] : filteredPins}
-                workerPins={mode === "hire" ? (workerPins || []) : []}
-                cashDrops={[]}
-                onPinClick={setSelectedPin}
-                onWorkerPinClick={setSelectedWorker}
-                className="w-full h-full"
-              />
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center gap-3">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Enter zip code..."
-                      value={zipOverride}
-                      onChange={(e) => setZipOverride(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && zipOverride.trim()) {
-                          fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}`)
-                            .then(r => r.ok ? r.json() : null)
-                            .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
-                            .catch(() => {});
-                        }
-                      }}
-                      className="bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none w-48 text-center"
-                      data-testid="input-zip-map"
-                    />
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (zipOverride.trim()) {
-                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}`)
-                          .then(r => r.ok ? r.json() : null)
-                          .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
-                          .catch(() => {});
-                      }
-                    }}
-                    className="text-[11px] font-display font-bold text-primary px-4 py-1.5 rounded-lg"
-                    style={{ background: "hsl(152 70% 40% / 0.2)", border: "1px solid hsl(152 70% 40% / 0.3)" }}
-                    data-testid="button-go-zip"
-                  >
-                    GO
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {selectedPin && (
-            <div className="mt-3 rounded-xl p-3 flex items-center gap-3 cursor-pointer" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border) / 0.3)" }}
-              onClick={() => navigate(`/jobs/${selectedPin.id}`)} data-testid="card-selected-pin">
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedPin.color || "#22C55E" }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{selectedPin.title}</p>
-                <p className="text-[10px] text-muted-foreground">{selectedPin.category} · ${selectedPin.budget}</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
-            </div>
-          )}
-        </div>
 
         {/* ── Verify & Inspect Strip ── */}
         <Link href="/verify-inspect">

@@ -2794,6 +2794,8 @@ const BLANK_FORM = {
   gpsLat: "", gpsLng: "", gpsRadius: 200, clueText: "", clueRevealOnArrival: false,
   requireInAppCamera: false, proofItems: [] as { label: string; type: string }[],
   startTime: "", endTime: "",
+  physicalCashDrop: false,
+  winnerProofRequirement: "none",
 };
 const [form, setForm] = useState({ ...BLANK_FORM });
 const [reviewDrop, setReviewDrop] = useState<number | null>(null);
@@ -2862,6 +2864,8 @@ requireInAppCamera: drop.requireInAppCamera ?? drop.require_in_app_camera ?? fal
 proofItems: drop.proofItems || drop.proof_items || [],
 startTime: drop.startTime ? drop.startTime.slice(0, 16) : "",
 endTime: drop.endTime ? drop.endTime.slice(0, 16) : "",
+physicalCashDrop: drop.physicalCashDrop ?? drop.physical_cash_drop ?? false,
+winnerProofRequirement: drop.winnerProofRequirement || drop.winner_proof_requirement || "none",
 });
 setAddressInput("");
 setZipInput("");
@@ -3196,6 +3200,15 @@ data-testid="input-drop-address"
 </div>
 </div>
 
+<div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border">
+<div>
+<p className="text-sm font-display flex items-center gap-1.5"><span>📍</span> Physical Cash Drop</p>
+<p className="text-[10px] text-muted-foreground">GUBER acts as GPS only — no digital cash amount needed. You hand the money in person.</p>
+</div>
+<Switch checked={form.physicalCashDrop} onCheckedChange={(v) => setForm(f => ({ ...f, physicalCashDrop: v, rewardPerWinner: v ? 0 : f.rewardPerWinner }))} data-testid="switch-physical-cash-drop" />
+</div>
+
+{!form.physicalCashDrop && (
 <div className="grid grid-cols-2 gap-3">
 <div className="space-y-2">
 <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Per Winner ($)</label>
@@ -3206,6 +3219,19 @@ data-testid="input-drop-address"
 <Input type="number" value={form.winnerLimit} onChange={(e) => setForm(f => ({ ...f, winnerLimit: parseInt(e.target.value) || 1 }))} className="premium-input rounded-md" data-testid="input-drop-winner-limit" />
 </div>
 </div>
+)}
+
+{form.physicalCashDrop && (
+<div className="grid grid-cols-2 gap-3">
+<div className="space-y-2">
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Max Winners</label>
+<Input type="number" value={form.winnerLimit} onChange={(e) => setForm(f => ({ ...f, winnerLimit: parseInt(e.target.value) || 1 }))} className="premium-input rounded-md" data-testid="input-drop-winner-limit" />
+</div>
+<div className="flex flex-col justify-end pb-1">
+<p className="text-[10px] text-amber-400/60 font-display leading-relaxed">Physical drop — winner gets GPS confirmation only. You pay in person.</p>
+</div>
+</div>
+)}
 
 <div className="grid grid-cols-2 gap-3 rounded-xl border border-border/20 p-3">
 <div className="space-y-2">
@@ -3234,12 +3260,17 @@ data-testid="select-final-location-mode"
 </select>
 </div>
 
-{(form.rewardPerWinner > 0 && form.winnerLimit > 0) && (
+{!form.physicalCashDrop && (form.rewardPerWinner > 0 && form.winnerLimit > 0) && (
 <div className="p-3 rounded-md glass-card-strong premium-border-glow">
 <div className="flex justify-between items-center text-sm">
 <span className="text-muted-foreground font-display flex items-center gap-1"><DollarSign className="w-3 h-3" /> Total Payout</span>
 <span className="guber-text-green font-display font-bold" data-testid="text-total-payout">${(form.rewardPerWinner * form.winnerLimit).toFixed(2)}</span>
 </div>
+</div>
+)}
+{form.physicalCashDrop && (
+<div className="p-3 rounded-md" style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)" }}>
+<p className="text-[11px] font-display text-amber-400/70 flex items-center gap-1.5"><span>📍</span> Physical drop — GUBER confirms GPS arrival. You distribute cash in person.</p>
 </div>
 )}
 
@@ -3282,6 +3313,36 @@ data-testid="select-final-location-mode"
 <p className="text-[10px] text-muted-foreground">Disables gallery uploads — live proof only</p>
 </div>
 <Switch checked={form.requireInAppCamera} onCheckedChange={(v) => setForm(f => ({ ...f, requireInAppCamera: v }))} data-testid="switch-in-app-camera" />
+</div>
+
+<div className="space-y-2 pt-1">
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display flex items-center gap-1">
+<span>🏆</span> Winner Proof Requirement <span className="text-muted-foreground/40 normal-case tracking-normal ml-1">(optional)</span>
+</label>
+<p className="text-[10px] text-muted-foreground/50">Ask winners to prove it publicly. Builds trust and social reach. Leave as None to skip.</p>
+<div className="grid grid-cols-3 gap-2">
+{[
+  { value: "none", label: "None", icon: "—", sub: "No proof needed" },
+  { value: "selfie", label: "Selfie", icon: "🤳", sub: "In-app photo with winnings" },
+  { value: "social_post", label: "Social Post", icon: "📲", sub: "Post on social media" },
+].map(opt => (
+  <button
+    key={opt.value}
+    type="button"
+    onClick={() => setForm(f => ({ ...f, winnerProofRequirement: opt.value }))}
+    className="rounded-xl p-3 text-center transition-all"
+    style={{
+      background: form.winnerProofRequirement === opt.value ? "rgba(201,168,76,0.12)" : "rgba(255,255,255,0.03)",
+      border: form.winnerProofRequirement === opt.value ? "1.5px solid rgba(201,168,76,0.55)" : "1px solid rgba(255,255,255,0.08)",
+    }}
+    data-testid={`button-winner-proof-${opt.value}`}
+  >
+    <p className="text-base mb-0.5">{opt.icon}</p>
+    <p className="text-[11px] font-display font-bold" style={{ color: form.winnerProofRequirement === opt.value ? "#C9A84C" : "#a1a1aa" }}>{opt.label}</p>
+    <p className="text-[9px] text-muted-foreground/40 mt-0.5 leading-tight">{opt.sub}</p>
+  </button>
+))}
+</div>
 </div>
 </div>
 
