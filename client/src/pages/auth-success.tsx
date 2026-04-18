@@ -22,8 +22,8 @@ export default function AuthSuccess() {
 
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     queryClient.fetchQuery({ queryKey: ["/api/auth/me"] })
-      .then((me: any) => {
-        const dest = me?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
+      .then((me) => {
+        const dest = (me as { accountType?: string } | null)?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
         setLocation(dest);
       })
       .catch(() => {

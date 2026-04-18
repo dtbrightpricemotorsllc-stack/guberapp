@@ -51,7 +51,6 @@ outputType = "webview"
 [userenv.shared]
 VAPID_PUBLIC_KEY = "BIDPBGWY1Ar0cylNhaYThfgDHkIGXVf-z_ZeOQF6IkGysIAsB-k9NqFE7ET8GiVuWjKUmlnbFc0JknsdtHblC2s"
 VAPID_EMAIL = "mailto:noreply@guberapp.app"
-JWT_SECRET = "2ec405e731204a42768b044f1d00a1b0375cb90e6b6d210575b54b47765dfd8f08e1e293e96e0eab872b9d6125b8174cbee20688515564abfed32e6cea6c5d73"
 
 [userenv.production]
 APP_BASE_URL = "https://guberapp.app"
