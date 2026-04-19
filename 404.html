@@ -300,8 +300,8 @@ function route() {
 
   var jobMatch = path.match(/^\/jobs\/(.+)-(\d+)$/);
   if (jobMatch) {
-    var jobId = jobMatch[2];
-    fetch(API.replace('/jobs', '/jobs/' + jobId)).then(function(r) {
+    var jobId = parseInt(jobMatch[2], 10);
+    fetch('https://guberapp.app/api/public/jobs/' + jobId).then(function(r) {
       if (!r.ok) throw new Error('Not found');
       return r.json();
     }).then(renderJobDetail).catch(renderNotFound);
