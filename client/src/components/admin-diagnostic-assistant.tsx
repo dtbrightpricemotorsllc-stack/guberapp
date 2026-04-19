@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked } from "lucide-react";
+import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked, Pencil, Check } from "lucide-react";
 
 interface Message {
   id: number;
@@ -17,6 +17,7 @@ interface PinnedFinding {
   id: string;
   content: string;
   pinnedAt: string;
+  note: string;
 }
 
 const STORAGE_KEY = "admin_pinned_findings";
@@ -32,14 +33,21 @@ function loadPinnedFindings(): PinnedFinding[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is PinnedFinding =>
-        item !== null &&
-        typeof item === "object" &&
-        typeof item.id === "string" &&
-        typeof item.content === "string" &&
-        typeof item.pinnedAt === "string"
-    );
+    return parsed
+      .filter(
+        (item): item is Record<string, unknown> =>
+          item !== null &&
+          typeof item === "object" &&
+          typeof item.id === "string" &&
+          typeof item.content === "string" &&
+          typeof item.pinnedAt === "string"
+      )
+      .map((item) => ({
+        id: item.id as string,
+        content: item.content as string,
+        pinnedAt: item.pinnedAt as string,
+        note: typeof item.note === "string" ? item.note : "",
+      }));
   } catch {
     return [];
   }
@@ -67,8 +75,14 @@ export function AdminDiagnosticAssistant() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [pinnedFindings, setPinnedFindings] = useState<PinnedFinding[]>(loadPinnedFindings);
   const [pinnedContentSet, setPinnedContentSet] = useState<Set<string>>(() => buildContentSet(loadPinnedFindings()));
+  const [pendingPinContent, setPendingPinContent] = useState<string | null>(null);
+  const [pendingPinNote, setPendingPinNote] = useState("");
+  const [editingPinId, setEditingPinId] = useState<string | null>(null);
+  const [editingPinNote, setEditingPinNote] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingNoteRef = useRef<HTMLTextAreaElement>(null);
+  const editingNoteRef = useRef<HTMLTextAreaElement>(null);
   const isAutoScanRef = useRef(false);
   const msgIdCounter = useRef(0);
 
@@ -87,20 +101,30 @@ export function AdminDiagnosticAssistant() {
     });
   }
 
-  function handlePin(content: string) {
-    if (pinnedContentSet.has(content)) {
-      handleUnpinByContent(content);
-      return;
-    }
+  function startPinFlow(content: string) {
+    setPendingPinContent(content);
+    setPendingPinNote("");
+    setTimeout(() => pendingNoteRef.current?.focus(), 50);
+  }
+
+  function cancelPinFlow() {
+    setPendingPinContent(null);
+    setPendingPinNote("");
+  }
+
+  function confirmPin(content: string) {
     const finding: PinnedFinding = {
       id: generateId(),
       content,
       pinnedAt: new Date().toISOString(),
+      note: pendingPinNote.trim(),
     };
     const updated = [finding, ...pinnedFindings];
     setPinnedFindings(updated);
     setPinnedContentSet(buildContentSet(updated));
     savePinnedFindings(updated);
+    setPendingPinContent(null);
+    setPendingPinNote("");
   }
 
   function handleUnpinByContent(content: string) {
@@ -108,6 +132,7 @@ export function AdminDiagnosticAssistant() {
     setPinnedFindings(updated);
     setPinnedContentSet(buildContentSet(updated));
     savePinnedFindings(updated);
+    if (pendingPinContent === content) cancelPinFlow();
   }
 
   function handleDismiss(id: string) {
@@ -115,13 +140,15 @@ export function AdminDiagnosticAssistant() {
     setPinnedFindings(updated);
     setPinnedContentSet(buildContentSet(updated));
     savePinnedFindings(updated);
+    if (editingPinId === id) setEditingPinId(null);
   }
 
   function handleExport() {
     if (pinnedFindings.length === 0) return;
     const lines = pinnedFindings.map((f) => {
       const date = new Date(f.pinnedAt).toLocaleString();
-      return `[${date}]\n${f.content}\n${"─".repeat(60)}`;
+      const noteSection = f.note ? `Note: ${f.note}\n` : "";
+      return `[${date}]\n${noteSection}${f.content}\n${"─".repeat(60)}`;
     });
     const text = `Pinned Diagnostic Findings\nExported: ${new Date().toLocaleString()}\n${"═".repeat(60)}\n\n${lines.join("\n\n")}`;
     const blob = new Blob([text], { type: "text/plain" });
@@ -131,6 +158,29 @@ export function AdminDiagnosticAssistant() {
     a.download = `diagnostic-findings-${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function startEditNote(finding: PinnedFinding) {
+    setEditingPinId(finding.id);
+    setEditingPinNote(finding.note);
+    setTimeout(() => editingNoteRef.current?.focus(), 50);
+  }
+
+  function saveEditNote(id: string) {
+    const updated = pinnedFindings.map((f) => f.id === id ? { ...f, note: editingPinNote.trim() } : f);
+    setPinnedFindings(updated);
+    savePinnedFindings(updated);
+    setEditingPinId(null);
+  }
+
+  function handleEditNoteKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, id: string) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveEditNote(id);
+    }
+    if (e.key === "Escape") {
+      setEditingPinId(null);
+    }
   }
 
   useEffect(() => {
@@ -360,6 +410,7 @@ export function AdminDiagnosticAssistant() {
 
                 {visibleMessages.map((msg, i) => {
                   const msgIsPinned = msg.role === "assistant" && pinnedContentSet.has(msg.content);
+                  const msgIsPending = msg.role === "assistant" && pendingPinContent === msg.content;
                   return (
                     <div
                       key={msg.id}
@@ -399,43 +450,97 @@ export function AdminDiagnosticAssistant() {
                           </p>
                         )}
                         {msg.role === "assistant" && (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(msg.content, i)}
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
-                              style={{
-                                color: copiedIndex === i ? "hsl(142 70% 55%)" : copiedIndex === -1 - i ? "hsl(0 70% 60%)" : "hsl(0 0% 45%)",
-                                opacity: (copiedIndex === i || copiedIndex === -1 - i) ? 1 : 0.7,
-                              }}
-                              aria-label={copiedIndex === i ? "Copied to clipboard" : copiedIndex === -1 - i ? "Copy failed" : "Copy finding to clipboard"}
-                              data-testid={`button-copy-diagnostic-${i}`}
-                            >
-                              {copiedIndex === i ? (
-                                <ClipboardCheck className="w-3 h-3" />
-                              ) : (
-                                <Clipboard className="w-3 h-3" />
-                              )}
-                              <span>{copiedIndex === i ? "Copied" : copiedIndex === -1 - i ? "Failed" : "Copy"}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handlePin(msg.content)}
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
-                              style={{
-                                color: msgIsPinned ? "hsl(263 70% 65%)" : "hsl(0 0% 45%)",
-                                opacity: msgIsPinned ? 1 : 0.7,
-                              }}
-                              aria-label={msgIsPinned ? "Unpin finding" : "Pin finding"}
-                              data-testid={`button-pin-diagnostic-${i}`}
-                            >
-                              {msgIsPinned ? (
-                                <PinOff className="w-3 h-3" />
-                              ) : (
-                                <Pin className="w-3 h-3" />
-                              )}
-                              <span>{msgIsPinned ? "Unpin" : "Pin"}</span>
-                            </button>
+                          <div className="flex flex-col gap-1 w-full">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(msg.content, i)}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
+                                style={{
+                                  color: copiedIndex === i ? "hsl(142 70% 55%)" : copiedIndex === -1 - i ? "hsl(0 70% 60%)" : "hsl(0 0% 45%)",
+                                  opacity: (copiedIndex === i || copiedIndex === -1 - i) ? 1 : 0.7,
+                                }}
+                                aria-label={copiedIndex === i ? "Copied to clipboard" : copiedIndex === -1 - i ? "Copy failed" : "Copy finding to clipboard"}
+                                data-testid={`button-copy-diagnostic-${i}`}
+                              >
+                                {copiedIndex === i ? (
+                                  <ClipboardCheck className="w-3 h-3" />
+                                ) : (
+                                  <Clipboard className="w-3 h-3" />
+                                )}
+                                <span>{copiedIndex === i ? "Copied" : copiedIndex === -1 - i ? "Failed" : "Copy"}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (msgIsPinned) {
+                                    handleUnpinByContent(msg.content);
+                                  } else if (msgIsPending) {
+                                    cancelPinFlow();
+                                  } else {
+                                    startPinFlow(msg.content);
+                                  }
+                                }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
+                                style={{
+                                  color: msgIsPinned || msgIsPending ? "hsl(263 70% 65%)" : "hsl(0 0% 45%)",
+                                  opacity: msgIsPinned || msgIsPending ? 1 : 0.7,
+                                }}
+                                aria-label={msgIsPinned ? "Unpin finding" : "Pin finding"}
+                                data-testid={`button-pin-diagnostic-${i}`}
+                              >
+                                {msgIsPinned ? (
+                                  <PinOff className="w-3 h-3" />
+                                ) : (
+                                  <Pin className="w-3 h-3" />
+                                )}
+                                <span>{msgIsPinned ? "Unpin" : msgIsPending ? "Cancel" : "Pin"}</span>
+                              </button>
+                            </div>
+
+                            {msgIsPending && (
+                              <div
+                                className="ml-0.5 mt-0.5 rounded-xl overflow-hidden"
+                                style={{ border: "1px solid hsl(263 70% 50% / 0.3)", background: "hsl(230 30% 11%)" }}
+                                data-testid={`pin-note-input-area-${i}`}
+                              >
+                                <textarea
+                                  ref={pendingNoteRef}
+                                  value={pendingPinNote}
+                                  onChange={(e) => setPendingPinNote(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      confirmPin(msg.content);
+                                    }
+                                    if (e.key === "Escape") cancelPinFlow();
+                                  }}
+                                  placeholder="Add a note (optional)…"
+                                  rows={2}
+                                  className="w-full text-xs px-2.5 py-2 resize-none focus:outline-none bg-transparent"
+                                  style={{ color: "hsl(0 0% 85%)" }}
+                                  data-testid={`input-pin-note-${i}`}
+                                />
+                                <div
+                                  className="flex justify-end px-2 py-1.5 border-t"
+                                  style={{ borderColor: "hsl(263 70% 50% / 0.2)" }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => confirmPin(msg.content)}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-150"
+                                    style={{
+                                      background: "linear-gradient(135deg, hsl(263 70% 50%), hsl(220 80% 55%))",
+                                      color: "white",
+                                    }}
+                                    data-testid={`button-confirm-pin-${i}`}
+                                  >
+                                    <Pin className="w-3 h-3" />
+                                    Pin
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -537,6 +642,66 @@ export function AdminDiagnosticAssistant() {
                       <p className="text-xs text-white/80 leading-relaxed whitespace-pre-wrap pr-5">
                         {finding.content}
                       </p>
+
+                      {editingPinId === finding.id ? (
+                        <div className="mt-2 flex items-end gap-1.5">
+                          <textarea
+                            ref={editingNoteRef}
+                            value={editingPinNote}
+                            onChange={(e) => setEditingPinNote(e.target.value)}
+                            onKeyDown={(e) => handleEditNoteKeyDown(e, finding.id)}
+                            placeholder="Add a note…"
+                            rows={2}
+                            className="flex-1 text-xs rounded-lg px-2 py-1.5 resize-none focus:outline-none"
+                            style={{
+                              background: "hsl(230 30% 15%)",
+                              border: "1px solid hsl(263 70% 50% / 0.35)",
+                              color: "hsl(0 0% 85%)",
+                            }}
+                            data-testid={`input-edit-note-${finding.id}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => saveEditNote(finding.id)}
+                            className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-all duration-150 mb-0.5"
+                            style={{ background: "hsl(263 70% 50% / 0.25)", color: "hsl(263 70% 70%)" }}
+                            aria-label="Save note"
+                            data-testid={`button-save-note-${finding.id}`}
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditNote(finding)}
+                          className="mt-1.5 flex items-center gap-1 group transition-opacity duration-150"
+                          aria-label={finding.note ? "Edit note" : "Add a note"}
+                          data-testid={`button-edit-note-${finding.id}`}
+                        >
+                          {finding.note ? (
+                            <span
+                              className="text-[11px] leading-snug text-left"
+                              style={{ color: "hsl(263 70% 68%)" }}
+                              data-testid={`text-pin-note-${finding.id}`}
+                            >
+                              {finding.note}
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[11px] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                              style={{ color: "hsl(0 0% 40%)" }}
+                            >
+                              Add a note…
+                            </span>
+                          )}
+                          <Pencil
+                            className="w-2.5 h-2.5 flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity duration-150"
+                            style={{ color: "hsl(263 70% 65%)" }}
+                          />
+                        </button>
+                      )}
+
                       <p className="text-[10px] mt-2" style={{ color: "hsl(0 0% 38%)" }}>
                         Pinned {new Date(finding.pinnedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
