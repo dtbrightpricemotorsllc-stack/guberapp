@@ -17,6 +17,14 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
   const redirectUri = `${getBaseUrl(req)}/api/auth/google/callback`;
   const state = randomBytes(16).toString("hex");
   (req.session as any).oauthState = state;
+
+  const returnTo = req.query.returnTo as string | undefined;
+  if (returnTo && returnTo.startsWith("/")) {
+    (req.session as any).oauthReturnTo = returnTo;
+  } else {
+    delete (req.session as any).oauthReturnTo;
+  }
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -36,7 +44,7 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
 }
 
 export type StateValidationResult =
-  | { valid: true; code: string }
+  | { valid: true; code: string; returnTo: string | null }
   | { valid: false; reason: "cancelled" | "invalid_state" };
 
 export function validateOAuthState(req: Request): StateValidationResult {
@@ -53,5 +61,8 @@ export function validateOAuthState(req: Request): StateValidationResult {
     return { valid: false, reason: "invalid_state" };
   }
 
-  return { valid: true, code };
+  const returnTo = (req.session as any).oauthReturnTo ?? null;
+  delete (req.session as any).oauthReturnTo;
+
+  return { valid: true, code, returnTo };
 }

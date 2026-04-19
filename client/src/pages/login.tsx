@@ -77,7 +77,11 @@ export default function Login() {
 
   const handleGoogleSignIn = () => {
     setGoogleLoading(true);
-    window.location.href = `${window.location.origin}/api/auth/google`;
+    const params = new URLSearchParams(search);
+    const returnTo = params.get("returnTo");
+    const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
+    if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
+    window.location.href = googleUrl.toString();
   };
 
   const handleDemoLogin = async (type: "consumer" | "business") => {

@@ -1716,7 +1716,11 @@ export async function registerRoutes(
       if (user.banned) return res.redirect("/login?error=banned");
       if (user.suspended) return res.redirect("/login?error=suspended");
       const jwtToken = generateJWT(user);
-      res.redirect(`/auth-success?token=${encodeURIComponent(jwtToken)}`);
+      const returnTo = stateResult.returnTo;
+      const authSuccessUrl = returnTo
+        ? `/auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
+        : `/auth-success?token=${encodeURIComponent(jwtToken)}`;
+      res.redirect(authSuccessUrl);
     } catch (err: any) {
       console.error("Google OAuth error:", err);
       res.redirect("/login?error=google_failed");

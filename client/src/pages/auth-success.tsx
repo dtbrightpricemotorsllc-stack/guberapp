@@ -17,6 +17,8 @@ export default function AuthSuccess() {
       return;
     }
 
+    const returnTo = params.get("returnTo");
+
     void setToken(token)
       .then(() => {
         window.history.replaceState({}, "", "/auth-success");
@@ -25,6 +27,10 @@ export default function AuthSuccess() {
         return queryClient.fetchQuery({ queryKey: ["/api/auth/me"] });
       })
       .then((me) => {
+        if (returnTo && returnTo.startsWith("/")) {
+          setLocation(returnTo);
+          return;
+        }
         const dest = (me as { accountType?: string } | null)?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
         setLocation(dest);
       })
