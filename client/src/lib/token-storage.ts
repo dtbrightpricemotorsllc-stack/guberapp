@@ -1,10 +1,16 @@
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
+import { getBiometricEnabled, ensureBiometricUnlocked } from "./biometric";
 
 const TOKEN_KEY = "guber_token";
 
 export async function getToken(): Promise<string | null> {
   if (Capacitor.isNativePlatform()) {
+    const enabled = await getBiometricEnabled();
+    if (enabled) {
+      const unlocked = await ensureBiometricUnlocked();
+      if (!unlocked) return null;
+    }
     const { value } = await Preferences.get({ key: TOKEN_KEY });
     return value;
   }

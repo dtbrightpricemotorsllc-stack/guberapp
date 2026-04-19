@@ -11,6 +11,7 @@ import InstallPrompt from "@/components/install-prompt";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
+import { lockBiometricSession } from "@/lib/biometric";
 
 // Core pages — eagerly loaded (fast path for first-visit users)
 import NotFound from "@/pages/not-found";
@@ -245,7 +246,9 @@ function NativeDeepLinkHandler() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    let handle: { remove: () => void } | null = null;
+    let urlHandle: { remove: () => void } | null = null;
+    let stateHandle: { remove: () => void } | null = null;
+
     CapApp.addListener("appUrlOpen", (event: { url: string }) => {
       const url = event.url;
 
@@ -267,9 +270,18 @@ function NativeDeepLinkHandler() {
       } catch {
         // Non-URL format — ignore
       }
-    }).then((h) => { handle = h; });
+    }).then((h) => { urlHandle = h; });
 
-    return () => { handle?.remove(); };
+    CapApp.addListener("appStateChange", ({ isActive }: { isActive: boolean }) => {
+      if (!isActive) {
+        lockBiometricSession();
+      }
+    }).then((h) => { stateHandle = h; });
+
+    return () => {
+      urlHandle?.remove();
+      stateHandle?.remove();
+    };
   }, []);
 
   return null;

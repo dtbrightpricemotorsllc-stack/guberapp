@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Sun, Moon } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Sun, Moon, Fingerprint } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/lib/theme-context";
+import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled } from "@/lib/biometric";
 
 async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<string> {
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -53,6 +54,31 @@ export default function AccountSettings() {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricEnabled, setBiometricEnabledState] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const supported = await isBiometricSupported();
+      setBiometricSupported(supported);
+      if (supported) {
+        const enabled = await getBiometricEnabled();
+        setBiometricEnabledState(enabled);
+      }
+    })();
+  }, []);
+
+  const handleBiometricToggle = async (value: boolean) => {
+    setBiometricEnabledState(value);
+    try {
+      await setBiometricEnabled(value);
+      toast({ title: value ? "Biometric unlock enabled" : "Biometric unlock disabled" });
+    } catch {
+      setBiometricEnabledState(!value);
+      toast({ title: "Could not update biometric setting", variant: "destructive" });
+    }
+  };
 
   const [feedbackCategory, setFeedbackCategory] = useState("general");
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -254,6 +280,26 @@ export default function AccountSettings() {
             >
               {changePasswordMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "UPDATE PASSWORD"}
             </Button>
+          </div>
+        )}
+
+        {biometricSupported && (
+          <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3" data-testid="card-biometric">
+            <div className="flex items-center gap-2 mb-1">
+              <Fingerprint className="w-4 h-4 text-primary" />
+              <h3 className="font-display font-semibold text-sm">Biometric Unlock</h3>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+              <div>
+                <p className="font-display font-semibold text-sm">Require biometric to open app</p>
+                <p className="text-[11px] text-muted-foreground">Face ID or fingerprint gates access to your session</p>
+              </div>
+              <Switch
+                checked={biometricEnabled}
+                onCheckedChange={handleBiometricToggle}
+                data-testid="switch-biometric-unlock"
+              />
+            </div>
           </div>
         )}
 
