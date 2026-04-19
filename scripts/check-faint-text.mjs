@@ -27,8 +27,8 @@ const PATTERNS = [
     re: /color:\s*["']rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0?\.[0-7]\d*\s*\)/,
   },
   {
-    name: "Inline #ffffff with low alpha (8-digit hex) used as text color",
-    re: /color:\s*["']#(?:f{6}|F{6})(?:0[0-9a-fA-F]|1[0-9a-fA-F]|[2-9a-bA-B][0-9a-fA-F])["']/,
+    name: "Inline hex color with low alpha (8-digit hex, alpha < 0xCC) used as text color",
+    re: /color:\s*["']#[0-9a-fA-F]{6}(?:[0-9a-bA-B][0-9a-fA-F]|[cC][0-9a-bA-B])["']/,
   },
 ];
 
