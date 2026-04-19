@@ -152,8 +152,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl max-h-[90vh] overflow-y-auto"
-        style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
         data-testid="modal-item-detail"
       >
@@ -330,8 +329,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl max-h-[92vh] overflow-y-auto"
-        style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl max-h-[92vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
         data-testid="modal-post-listing"
       >

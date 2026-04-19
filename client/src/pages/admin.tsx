@@ -685,8 +685,7 @@ queryKey: ["/api/admin/jobs", jobId, "proof"],
 return (
 <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
 <div
-className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto"
-style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto"
 onClick={e => e.stopPropagation()}
 data-testid="modal-proof-viewer"
 >
