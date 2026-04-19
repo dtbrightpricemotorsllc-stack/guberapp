@@ -9,6 +9,7 @@ import { Activity, Send, Bot, Loader2, RefreshCw } from "lucide-react";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  scanTimestamp?: Date;
 }
 
 const AUTO_SCAN_MESSAGE = "Give me a quick system health summary. Flag anything that needs my attention.";
@@ -20,6 +21,7 @@ export function AdminDiagnosticAssistant() {
   const [hasAutoScanned, setHasAutoScanned] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isAutoScanRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -35,9 +37,19 @@ export function AdminDiagnosticAssistant() {
       return res.json() as Promise<{ reply: string }>;
     },
     onSuccess: (data) => {
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+      const isAutoScan = isAutoScanRef.current;
+      isAutoScanRef.current = false;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.reply,
+          ...(isAutoScan ? { scanTimestamp: new Date() } : {}),
+        },
+      ]);
     },
     onError: () => {
+      isAutoScanRef.current = false;
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Unable to run diagnostic right now. Please try again in a moment." },
@@ -50,6 +62,7 @@ export function AdminDiagnosticAssistant() {
       setHasAutoScanned(true);
       const initialMsg: Message = { role: "user", content: AUTO_SCAN_MESSAGE };
       setMessages([initialMsg]);
+      isAutoScanRef.current = true;
       sendMutation.mutate([initialMsg]);
     }
   }, [open, hasAutoScanned]);
@@ -83,6 +96,7 @@ export function AdminDiagnosticAssistant() {
     const rescanMsg: Message = { role: "user", content: AUTO_SCAN_MESSAGE };
     const updatedMessages = [...messages, rescanMsg];
     setMessages(updatedMessages);
+    isAutoScanRef.current = true;
     sendMutation.mutate(updatedMessages);
   }
 
@@ -175,19 +189,30 @@ export function AdminDiagnosticAssistant() {
                     <Bot className="w-3.5 h-3.5" style={{ color: "hsl(263 70% 70%)" }} />
                   </div>
                 )}
-                <div
-                  className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                    msg.role === "user"
-                      ? "rounded-tr-sm text-white font-medium"
-                      : "rounded-tl-sm text-white/90"
-                  }`}
-                  style={
-                    msg.role === "user"
-                      ? { background: "linear-gradient(135deg, hsl(263 70% 45%), hsl(220 80% 50%))" }
-                      : { background: "hsl(230 30% 12%)", border: "1px solid hsl(230 30% 18%)" }
-                  }
-                >
-                  {msg.content}
+                <div className="flex flex-col gap-1 max-w-[82%]">
+                  <div
+                    className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                      msg.role === "user"
+                        ? "rounded-tr-sm text-white font-medium"
+                        : "rounded-tl-sm text-white/90"
+                    }`}
+                    style={
+                      msg.role === "user"
+                        ? { background: "linear-gradient(135deg, hsl(263 70% 45%), hsl(220 80% 50%))" }
+                        : { background: "hsl(230 30% 12%)", border: "1px solid hsl(230 30% 18%)" }
+                    }
+                  >
+                    {msg.content}
+                  </div>
+                  {msg.scanTimestamp && (
+                    <p
+                      className="text-[10px] pl-1"
+                      style={{ color: "hsl(0 0% 40%)" }}
+                      data-testid={`text-scan-timestamp-${i}`}
+                    >
+                      Scanned at {msg.scanTimestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
