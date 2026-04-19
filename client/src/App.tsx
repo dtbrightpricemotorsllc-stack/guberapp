@@ -11,7 +11,12 @@ import InstallPrompt from "@/components/install-prompt";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
-import { lockBiometricSession } from "@/lib/biometric";
+import {
+  lockBiometricSession,
+  getBiometricEnabled,
+  ensureBiometricUnlocked,
+  isBiometricSessionUnlocked,
+} from "@/lib/biometric";
 
 // Core pages — eagerly loaded (fast path for first-visit users)
 import NotFound from "@/pages/not-found";
@@ -242,6 +247,8 @@ function Router() {
 
 function NativeDeepLinkHandler() {
   const [, setLocation] = useLocation();
+  const { logout } = useAuth();
+  const [biometricLocked, setBiometricLocked] = useState(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -275,14 +282,54 @@ function NativeDeepLinkHandler() {
     CapApp.addListener("appStateChange", ({ isActive }: { isActive: boolean }) => {
       if (!isActive) {
         lockBiometricSession();
+        return;
       }
+
+      // App returned to foreground — re-prompt if biometric is enabled and session is locked
+      (async () => {
+        try {
+          const enabled = await getBiometricEnabled();
+          if (!enabled || isBiometricSessionUnlocked()) return;
+
+          setBiometricLocked(true);
+          const unlocked = await ensureBiometricUnlocked();
+          if (unlocked) {
+            setBiometricLocked(false);
+          } else {
+            // Failed or cancelled — sign the user out before clearing overlay
+            // so content is never visible in an unauthenticated state
+            try {
+              await logout();
+            } finally {
+              setBiometricLocked(false);
+            }
+          }
+        } catch {
+          // Unexpected error — fail closed: keep locked and attempt sign-out
+          try {
+            await logout();
+          } finally {
+            setBiometricLocked(false);
+          }
+        }
+      })();
     }).then((h) => { stateHandle = h; });
 
     return () => {
       urlHandle?.remove();
       stateHandle?.remove();
     };
-  }, []);
+  }, [logout]);
+
+  if (biometricLocked) {
+    return (
+      <div
+        data-testid="biometric-lock-overlay"
+        className="fixed inset-0 z-[9999] bg-background"
+        aria-hidden="true"
+      />
+    );
+  }
 
   return null;
 }
