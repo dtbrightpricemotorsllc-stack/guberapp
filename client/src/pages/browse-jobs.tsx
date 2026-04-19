@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { shouldShowAlertPrompt } from "@/components/alert-prompt-modal";
 import { subscribeToPush, getPushStatus } from "@/lib/push";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import type { Job, ServiceType } from "@shared/schema";
 import onDemandImg from "@assets/category-images/on_demand_help.png";
 import skilledImg from "@assets/category-images/skilled_labor.png";
@@ -84,11 +85,9 @@ export default function BrowseJobs() {
   const availabilityMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("PATCH", `/api/users/${user!.id}`, { isAvailable: true });
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (pos) => {
-          await apiRequest("POST", "/api/users/location", { lat: pos.coords.latitude, lng: pos.coords.longitude });
-        });
-      }
+      gpsGetCurrentPosition().then(async (pos) => {
+        await apiRequest("POST", "/api/users/location", { lat: pos.coords.latitude, lng: pos.coords.longitude });
+      }).catch(() => {});
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] }),
   });

@@ -22,6 +22,7 @@ import {
   AlertPromptModal, AlertActionPrompt, MissedEventBanner,
   getAlertStatus, setAlertStatus, shouldShowAlertPrompt,
 } from "@/components/alert-prompt-modal";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 
 // ─── Promo Modal System ───────────────────────────────────────────────────────
 
@@ -325,10 +326,10 @@ export default function Dashboard() {
   const availabilityMutation = useMutation({
     mutationFn: async (v: boolean) => {
       await apiRequest("PATCH", `/api/users/${user!.id}`, { isAvailable: v });
-      if (v && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (pos) => {
+      if (v) {
+        gpsGetCurrentPosition().then(async (pos) => {
           await apiRequest("POST", "/api/users/location", { lat: pos.coords.latitude, lng: pos.coords.longitude });
-        });
+        }).catch(() => {});
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] }),
@@ -359,31 +360,22 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
-  useEffect(() => {
-    if (!user) return;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setMapCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {
-          if ((user as any).lat && (user as any).lng) {
-            setMapCenter({ lat: (user as any).lat, lng: (user as any).lng });
-          } else if (user.zipcode) {
-            fetch(`/api/geocode?address=${encodeURIComponent(user.zipcode + ", USA")}`)
-              .then(r => r.ok ? r.json() : null)
-              .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
-              .catch(() => {});
-          }
-        },
-        { timeout: 5000, maximumAge: 60000 }
-      );
-    } else if ((user as any).lat && (user as any).lng) {
-      setMapCenter({ lat: (user as any).lat, lng: (user as any).lng });
-    } else if (user.zipcode) {
-      fetch(`/api/geocode?address=${encodeURIComponent(user.zipcode + ", USA")}`)
+  const fallbackMapCenter = (u: typeof user) => {
+    if ((u as any)?.lat && (u as any)?.lng) {
+      setMapCenter({ lat: (u as any).lat, lng: (u as any).lng });
+    } else if (u?.zipcode) {
+      fetch(`/api/geocode?address=${encodeURIComponent(u.zipcode + ", USA")}`)
         .then(r => r.ok ? r.json() : null)
         .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
         .catch(() => {});
     }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    gpsGetCurrentPosition({ timeout: 5000, maximumAge: 60000 })
+      .then((pos) => setMapCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }))
+      .catch(() => fallbackMapCenter(user));
   }, [user?.id]);
 
   const postedJobs = myJobs?.filter((j) => j.postedById === user?.id) || [];

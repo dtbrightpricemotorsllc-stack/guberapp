@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, MapPin, Clock, Trophy, Camera, AlertCircle, CheckCircle, Navigation, ChevronLeft, Car, ChevronRight, DollarSign, CreditCard, Wallet, Banknote } from "lucide-react";
 import type { CashDrop, CashDropAttempt } from "@shared/schema";
 import { Link } from "wouter";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
@@ -258,9 +259,7 @@ export default function CashDropDetail() {
 
   const arrivedMutation = useMutation({
     mutationFn: async () => {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
+      const pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
       const res = await apiRequest("POST", `/api/cash-drops/${id}/arrived`, {
         gpsLat: pos.coords.latitude,
         gpsLng: pos.coords.longitude,
@@ -280,13 +279,11 @@ export default function CashDropDetail() {
 
   const submitProofMutation = useMutation({
     mutationFn: async () => {
-      if (!gpsPos && navigator.geolocation) {
-        await new Promise<void>((resolve) => {
-          navigator.geolocation.getCurrentPosition((pos) => {
-            setGpsPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-            resolve();
-          }, () => resolve());
-        });
+      if (!gpsPos) {
+        try {
+          const pos = await gpsGetCurrentPosition();
+          setGpsPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        } catch {}
       }
       const res = await apiRequest("POST", `/api/cash-drops/${id}/submit-proof`, {
         proofUrls: capturedPhotos,

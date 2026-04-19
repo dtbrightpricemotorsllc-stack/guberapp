@@ -5,6 +5,7 @@ import { subscribeToPush } from "@/lib/push";
 import { playGuberPing, unlockAudio } from "@/lib/notification-sound";
 import { isNativeApp, isAndroid } from "@/lib/platform";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
+import { GpsDisclaimerModal } from "@/components/gps-disclaimer-modal";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "./guber-logo";
@@ -257,6 +258,8 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
           <div className="guber-gradient-line" />
         </header>
       )}
+
+      <GpsDisclaimerModal />
 
       <main className="flex-1" style={{ paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
         <PushNotificationBanner />

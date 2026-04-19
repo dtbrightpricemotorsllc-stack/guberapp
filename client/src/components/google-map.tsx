@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin as MapPinIcon, AlertTriangle, Navigation, LocateOff, RefreshCw } from "lucide-react";
+import { gpsStartWatchPosition } from "@/lib/gps";
 
 export interface JobPin {
   id: number;
@@ -154,15 +155,9 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   };
 
   const startWatchPosition = () => {
-    if (!navigator.geolocation) {
-      setLocating(false);
-      setLocationDenied(true);
-      console.warn("[GUBER] Geolocation API not available in this browser/context");
-      return;
-    }
     setLocating(true);
     setLocationDenied(false);
-    const id = navigator.geolocation.watchPosition(
+    gpsStartWatchPosition(
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserPos(coords);
@@ -187,8 +182,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
-    );
-    watchIdRef.current = id;
+    ).then((id) => { watchIdRef.current = id; }).catch(() => { setLocating(false); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {

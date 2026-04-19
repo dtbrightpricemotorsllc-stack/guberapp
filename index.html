@@ -626,7 +626,7 @@ function doSearch(e) {
   window.location.href = '/jobs' + (params.length ? '?' + params.join('&') : '');
 }
 
-fetch(API + '?limit=20')
+fetch(API + '?limit=50')
   .then(function(r) { return r.json(); })
   .then(renderJobs)
   .catch(function() {

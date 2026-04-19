@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Star } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { isNativeApp, isAndroid } from "@/lib/platform";
+import { gpsStartWatchPosition } from "@/lib/gps";
 
 interface ZipJob {
   id: number;
@@ -233,15 +234,9 @@ export default function MapExplore() {
   };
 
   const startWatchPosition = () => {
-    if (!navigator.geolocation) {
-      console.warn("[GUBER] Geolocation API not available");
-      setLocating(false);
-      setLocationDenied(true);
-      return;
-    }
     setLocating(true);
     setLocationDenied(false);
-    const id = navigator.geolocation.watchPosition(
+    gpsStartWatchPosition(
       (pos) => {
         if (pos.coords.accuracy > 300) return;
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -266,8 +261,7 @@ export default function MapExplore() {
         setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
-    );
-    watchIdRef2.current = id;
+    ).then((id) => { watchIdRef2.current = id; }).catch(() => { setLocating(false); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {
