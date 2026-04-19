@@ -170,6 +170,20 @@ describe("Login page — post-login returnTo redirect", () => {
     });
   });
 
+  it("rejects protocol-relative returnTo URLs (//evil.com) and falls back to /dashboard", async () => {
+    mockLogin.mockResolvedValue({ accountType: "consumer" });
+    renderLogin(`?returnTo=${encodeURIComponent("//evil.com")}`);
+
+    await userEvent.type(screen.getByTestId("input-email"), "user@example.com");
+    await userEvent.type(screen.getByTestId("input-password"), "Password1!");
+    fireEvent.click(screen.getByTestId("button-login-submit"));
+
+    await waitFor(() => {
+      expect(mockSetLocation).not.toHaveBeenCalledWith("//evil.com");
+      expect(mockSetLocation).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
   it("rejects javascript: scheme returnTo URLs and falls back to /dashboard", async () => {
     mockLogin.mockResolvedValue({ accountType: "consumer" });
     renderLogin(`?returnTo=${encodeURIComponent("javascript:alert(1)")}`);

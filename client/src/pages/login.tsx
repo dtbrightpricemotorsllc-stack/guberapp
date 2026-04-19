@@ -65,7 +65,7 @@ export default function Login() {
   }, [search]);
 
   const rawReturnTo = new URLSearchParams(search).get("returnTo") || "";
-  const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "";
+  const returnTo = rawReturnTo.startsWith("/") && !rawReturnTo.startsWith("//") ? rawReturnTo : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
