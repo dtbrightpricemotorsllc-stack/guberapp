@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Send, Bot, Loader2 } from "lucide-react";
+import { Activity, Send, Bot, Loader2, RefreshCw } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -78,6 +78,14 @@ export function AdminDiagnosticAssistant() {
     }
   }
 
+  function handleRescan() {
+    if (sendMutation.isPending) return;
+    const rescanMsg: Message = { role: "user", content: AUTO_SCAN_MESSAGE };
+    const updatedMessages = [...messages, rescanMsg];
+    setMessages(updatedMessages);
+    sendMutation.mutate(updatedMessages);
+  }
+
   return (
     <>
       {!open && (
@@ -110,10 +118,27 @@ export function AdminDiagnosticAssistant() {
               >
                 <Activity className="w-4 h-4" style={{ color: "hsl(263 70% 70%)" }} />
               </div>
-              <div>
+              <div className="flex-1">
                 <SheetTitle className="text-left text-base font-display font-bold text-white">System Diagnostic</SheetTitle>
                 <p className="text-[11px] text-muted-foreground mt-0.5">Live data · Admin only</p>
               </div>
+              <Button
+                onClick={handleRescan}
+                disabled={sendMutation.isPending}
+                size="sm"
+                variant="ghost"
+                className="flex items-center gap-1.5 text-xs font-medium rounded-xl px-3 py-1.5 h-auto flex-shrink-0 transition-all duration-150"
+                style={{
+                  background: sendMutation.isPending ? "hsl(230 30% 12%)" : "hsl(263 70% 50% / 0.15)",
+                  border: "1px solid hsl(263 70% 50% / 0.3)",
+                  color: sendMutation.isPending ? "hsl(0 0% 40%)" : "hsl(263 70% 70%)",
+                }}
+                data-testid="button-rescan-diagnostic"
+                aria-label="Re-scan system"
+              >
+                <RefreshCw className={`w-3 h-3 ${sendMutation.isPending ? "animate-spin" : ""}`} />
+                Re-scan
+              </Button>
             </div>
           </SheetHeader>
 
