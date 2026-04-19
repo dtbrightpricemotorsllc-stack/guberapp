@@ -355,3 +355,184 @@ describe("isAllowedReturnTo — returnTo allowlist validation", () => {
     expect(checkRes.body.oauthReturnTo).toBe("/dashboard");
   });
 });
+
+describe("Google OAuth returnTo — end-to-end flow (start → callback)", () => {
+  function buildReturnToApp() {
+    const app = express();
+    app.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+
+    app.get("/api/auth/google", handleGoogleAuthStart);
+
+    app.get("/api/auth/google/callback", (req, res) => {
+      const stateResult = validateOAuthState(req);
+      if (!stateResult.valid) {
+        return res.redirect(
+          `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`
+        );
+      }
+      req.session.save((err) => {
+        if (err) return res.redirect("/login?error=session_save_failed");
+        res.json({
+          success: true,
+          code: stateResult.code,
+          returnTo: stateResult.returnTo,
+          isNative: stateResult.isNative,
+        });
+      });
+    });
+
+    return app;
+  }
+
+  let savedClientId: string | undefined;
+
+  beforeAll(() => {
+    savedClientId = process.env.GOOGLE_CLIENT_ID;
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+  });
+
+  afterAll(() => {
+    if (savedClientId === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = savedClientId;
+    }
+  });
+
+  it("passes returnTo=/wallet through the full OAuth start → callback flow", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2Fwallet")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.returnTo).toBe("/wallet");
+  });
+
+  it("passes returnTo=/biz/dashboard through the full OAuth start → callback flow", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2Fbiz%2Fdashboard")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.returnTo).toBe("/biz/dashboard");
+  });
+
+  it("returns returnTo=null when no returnTo is provided", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.returnTo).toBeNull();
+  });
+
+  it("drops a disallowed returnTo so callback receives null", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2Fevil-path")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.returnTo).toBeNull();
+  });
+
+  it("drops an open-redirect returnTo so callback receives null", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2F%2Fevil.com%2Fdashboard")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.returnTo).toBeNull();
+  });
+
+  it("includes returnTo in the /auth-success redirect URL produced by the callback", async () => {
+    const app = express();
+    app.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+
+    app.get("/api/auth/google", handleGoogleAuthStart);
+
+    app.get("/api/auth/google/callback", (req, res) => {
+      const stateResult = validateOAuthState(req);
+      if (!stateResult.valid) {
+        return res.redirect("/login?error=invalid_state");
+      }
+      const mockToken = "mock-jwt-token";
+      const { returnTo } = stateResult;
+      const dest = returnTo
+        ? `/auth-success?token=${encodeURIComponent(mockToken)}&returnTo=${encodeURIComponent(returnTo)}`
+        : `/auth-success?token=${encodeURIComponent(mockToken)}`;
+      req.session.save(() => res.redirect(dest));
+    });
+
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2Fwallet")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    const redirectUrl = new URL(callbackRes.headers.location, "http://localhost");
+    expect(redirectUrl.pathname).toBe("/auth-success");
+    expect(redirectUrl.searchParams.get("returnTo")).toBe("/wallet");
+  });
+});
