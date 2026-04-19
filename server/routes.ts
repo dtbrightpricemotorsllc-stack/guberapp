@@ -1717,6 +1717,12 @@ export async function registerRoutes(
       if (user.suspended) return res.redirect("/login?error=suspended");
       const jwtToken = generateJWT(user);
       const returnTo = stateResult.returnTo;
+      if (stateResult.isNative) {
+        const nativeUrl = returnTo
+          ? `guber://auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
+          : `guber://auth-success?token=${encodeURIComponent(jwtToken)}`;
+        return res.redirect(nativeUrl);
+      }
       const authSuccessUrl = returnTo
         ? `/auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
         : `/auth-success?token=${encodeURIComponent(jwtToken)}`;

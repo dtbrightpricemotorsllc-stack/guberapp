@@ -25,6 +25,9 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
     delete (req.session as any).oauthReturnTo;
   }
 
+  const isNative = req.query.source === "native";
+  (req.session as any).oauthIsNative = isNative;
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -44,7 +47,7 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
 }
 
 export type StateValidationResult =
-  | { valid: true; code: string; returnTo: string | null }
+  | { valid: true; code: string; returnTo: string | null; isNative: boolean }
   | { valid: false; reason: "cancelled" | "invalid_state" };
 
 export function validateOAuthState(req: Request): StateValidationResult {
@@ -64,5 +67,8 @@ export function validateOAuthState(req: Request): StateValidationResult {
   const returnTo = (req.session as any).oauthReturnTo ?? null;
   delete (req.session as any).oauthReturnTo;
 
-  return { valid: true, code, returnTo };
+  const isNative = (req.session as any).oauthIsNative === true;
+  delete (req.session as any).oauthIsNative;
+
+  return { valid: true, code, returnTo, isNative };
 }

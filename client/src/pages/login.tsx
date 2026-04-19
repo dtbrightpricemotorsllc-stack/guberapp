@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 export default function Login() {
   const { login } = useAuth();
@@ -39,6 +41,15 @@ export default function Login() {
       tapCountRef.current = 0;
     }, 1500);
   };
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let handle: { remove: () => void } | null = null;
+    Browser.addListener("browserFinished", () => {
+      setGoogleLoading(false);
+    }).then((h) => { handle = h; });
+    return () => { handle?.remove(); };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -75,13 +86,18 @@ export default function Login() {
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     const params = new URLSearchParams(search);
     const returnTo = params.get("returnTo");
     const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
     if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
-    window.location.href = googleUrl.toString();
+    if (Capacitor.isNativePlatform()) {
+      googleUrl.searchParams.set("source", "native");
+      await Browser.open({ url: googleUrl.toString() });
+    } else {
+      window.location.href = googleUrl.toString();
+    }
   };
 
   const handleDemoLogin = async (type: "consumer" | "business") => {

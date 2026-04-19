@@ -259,10 +259,20 @@ function NativeDeepLinkHandler() {
     CapApp.addListener("appUrlOpen", (event: { url: string }) => {
       const url = event.url;
 
-      // Universal Links: https://guberapp.app/<path>
-      // Triggered when the OS routes a guberapp.app URL into the installed app
       try {
         const parsed = new URL(url);
+
+        // guber:// custom scheme (Android/iOS native OAuth callback)
+        // e.g. guber://auth-success?token=... → host="auth-success", pathname=""
+        if (parsed.protocol === "guber:") {
+          const path = "/" + parsed.host + (parsed.search || "");
+          if (path.startsWith("/auth-success")) {
+            setLocation("/auth-success" + (parsed.search || ""));
+          }
+          return;
+        }
+
+        // Universal Links: https://guberapp.app/<path>
         const path = parsed.pathname + (parsed.search || "");
         if (path.startsWith("/auth-success")) {
           setLocation("/auth-success" + (parsed.search || ""));
