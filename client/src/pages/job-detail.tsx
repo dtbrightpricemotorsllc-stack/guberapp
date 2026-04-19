@@ -2198,7 +2198,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <h2 className="text-lg font-display font-extrabold">Launch Navigation</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">GPS logged • Choose your nav app</p>
               </div>
-              <button onClick={() => setShowNavModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
+              <button onClick={() => setShowNavModal(false)} className="p-1.5 rounded-full hover:bg-muted">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
@@ -2246,7 +2246,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </div>
 
             <Button onClick={() => setShowNavModal(false)} variant="outline"
-              className="w-full rounded-2xl border-white/10 font-display tracking-wider" data-testid="button-close-nav">
+              className="w-full rounded-2xl border-border font-display tracking-wider" data-testid="button-close-nav">
               CLOSE
             </Button>
           </div>
@@ -2264,7 +2264,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <h2 className="text-lg font-display font-extrabold text-destructive">Cancel This Job?</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">This will re-open the job for other helpers</p>
               </div>
-              <button onClick={() => setShowCancelModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
+              <button onClick={() => setShowCancelModal(false)} className="p-1.5 rounded-full hover:bg-muted">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
@@ -2304,7 +2304,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowCancelModal(false)}
-                className="flex-1 rounded-xl border-white/10 font-display tracking-wider" data-testid="button-cancel-abort">
+                className="flex-1 rounded-xl border-border font-display tracking-wider" data-testid="button-cancel-abort">
                 GO BACK
               </Button>
               <Button
@@ -2334,7 +2334,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     : "The helper will be notified and the job will be closed"}
                 </p>
               </div>
-              <button onClick={() => setShowPosterCancelModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
+              <button onClick={() => setShowPosterCancelModal(false)} className="p-1.5 rounded-full hover:bg-muted">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
@@ -2376,7 +2376,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowPosterCancelModal(false)}
-                className="flex-1 rounded-xl border-white/10 font-display tracking-wider" data-testid="button-poster-cancel-abort">
+                className="flex-1 rounded-xl border-border font-display tracking-wider" data-testid="button-poster-cancel-abort">
                 GO BACK
               </Button>
               <Button
@@ -2403,7 +2403,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <h2 className="text-lg font-display font-extrabold">List in Marketplace</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">GUBER Verified badge auto-attached ✓</p>
               </div>
-              <button onClick={() => setShowSellModal(false)} className="p-1.5 rounded-full hover:bg-white/10">
+              <button onClick={() => setShowSellModal(false)} className="p-1.5 rounded-full hover:bg-muted">
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
             </div>
@@ -2411,7 +2411,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="space-y-3 mb-5">
               <div>
                 <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ITEM CATEGORY</label>
-                <select className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                <select className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                   value={sellForm.category} onChange={e => setSellForm(f => ({ ...f, category: e.target.value }))}
                   data-testid="select-sell-category">
                   <option value="">Select a category</option>
@@ -2422,7 +2422,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </div>
               <div>
                 <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">CONDITION</label>
-                <select className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                <select className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                   value={sellForm.condition} onChange={e => setSellForm(f => ({ ...f, condition: e.target.value }))}
                   data-testid="select-sell-condition">
                   <option value="">Select condition</option>
@@ -2434,10 +2434,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <div className="flex gap-2">
                   {[["fixed", "Fixed"], ["obo", "OBO"], ["free", "Free"]].map(([v, l]) => (
                     <button key={v} onClick={() => setSellForm(f => ({ ...f, askingType: v }))}
-                      className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
-                      style={sellForm.askingType === v
-                        ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                        : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b7280" }}>
+                      className={`flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all ${sellForm.askingType === v ? "bg-primary/15 border border-primary/40 text-primary" : "bg-input border border-border text-muted-foreground"}`}>
                       {l}
                     </button>
                   ))}
@@ -2447,7 +2444,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <div>
                   <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">ASKING PRICE ($)</label>
                   <input type="number" placeholder="0.00"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                    className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                     value={sellForm.price} onChange={e => setSellForm(f => ({ ...f, price: e.target.value }))}
                     data-testid="input-sell-price" />
                 </div>
@@ -2477,7 +2474,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <h3 className="font-display font-bold text-base">Not Satisfied?</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">Tell the worker exactly what needs to be fixed. They'll get your feedback instantly.</p>
               </div>
-              <button onClick={() => setShowRejectDialog(false)} className="p-2 rounded-full hover:bg-white/10" data-testid="button-close-reject-dialog">
+              <button onClick={() => setShowRejectDialog(false)} className="p-2 rounded-full hover:bg-muted" data-testid="button-close-reject-dialog">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -2529,7 +2526,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   <p className="text-[11px] text-muted-foreground">Please read and acknowledge</p>
                 </div>
               </div>
-              <button onClick={() => setShowWaiverModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground" data-testid="button-close-waiver">
+              <button onClick={() => setShowWaiverModal(false)} className="p-2 rounded-full hover:bg-muted text-muted-foreground" data-testid="button-close-waiver">
                 <X className="w-4 h-4" />
               </button>
             </div>

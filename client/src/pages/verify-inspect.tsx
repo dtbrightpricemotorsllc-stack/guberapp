@@ -906,7 +906,7 @@ export default function VerifyInspect() {
                     >
                       <div className="flex items-start gap-3">
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          isSelected ? "bg-purple-500/20" : "bg-white/5"
+                          isSelected ? "bg-purple-500/20" : "bg-muted"
                         }`}>
                           <Icon className={`w-4.5 h-4.5 ${isSelected ? "text-purple-400" : "text-muted-foreground"}`} />
                         </div>
@@ -1146,7 +1146,7 @@ export default function VerifyInspect() {
                               key={opt}
                               type="button"
                               onClick={() => handleDetailChange(field.name, opt)}
-                              className={`flex-1 h-9 rounded-lg text-xs font-display font-bold tracking-wider transition-all ${detailValues[field.name] === opt ? "bg-primary text-primary-foreground shadow-[0_0_8px_hsl(152_100%_44%/0.3)]" : "bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10"}`}
+                              className={`flex-1 h-9 rounded-lg text-xs font-display font-bold tracking-wider transition-all ${detailValues[field.name] === opt ? "bg-primary text-primary-foreground shadow-[0_0_8px_hsl(152_100%_44%/0.3)]" : "bg-input border border-border text-muted-foreground hover:bg-muted"}`}
                               data-testid={`btn-detail-${field.name}-${opt.toLowerCase()}`}
                             >
                               {opt}
@@ -1737,7 +1737,7 @@ export default function VerifyInspect() {
                         <span className="font-bold" style={{ color: "#f59e0b" }}>+${urgentFee.toFixed(2)}</span>
                       </div>
                     )}
-                    <div className="border-t border-white/10 mt-2 pt-2 flex items-center justify-between">
+                    <div className="border-t border-border mt-2 pt-2 flex items-center justify-between">
                       <span className="text-xs font-display font-bold text-muted-foreground tracking-wider">TOTAL</span>
                       <span className="font-display font-black text-lg" style={{ color: "#00e676" }}>{isDemoUser ? `$${budgetNum.toFixed(2)}` : `$${totalCharge.toFixed(2)}`}</span>
                     </div>
