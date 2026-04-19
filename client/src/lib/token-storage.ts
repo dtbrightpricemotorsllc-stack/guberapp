@@ -1,8 +1,10 @@
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
-import { getBiometricEnabled, ensureBiometricUnlocked } from "./biometric";
+import { getBiometricEnabled, ensureBiometricUnlocked, lockBiometricSession } from "./biometric";
 
 const TOKEN_KEY = "guber_token";
+
+let _cachedToken: string | null = null;
 
 export async function getToken(): Promise<string | null> {
   if (Capacitor.isNativePlatform()) {
@@ -11,13 +13,19 @@ export async function getToken(): Promise<string | null> {
       const unlocked = await ensureBiometricUnlocked();
       if (!unlocked) return null;
     }
+    if (_cachedToken !== null) return _cachedToken;
     const { value } = await Preferences.get({ key: TOKEN_KEY });
-    return value;
+    _cachedToken = value;
+    return _cachedToken;
   }
-  return localStorage.getItem(TOKEN_KEY);
+
+  if (_cachedToken !== null) return _cachedToken;
+  _cachedToken = localStorage.getItem(TOKEN_KEY);
+  return _cachedToken;
 }
 
 export async function setToken(token: string): Promise<void> {
+  _cachedToken = token;
   if (Capacitor.isNativePlatform()) {
     await Preferences.set({ key: TOKEN_KEY, value: token });
   } else {
@@ -26,6 +34,8 @@ export async function setToken(token: string): Promise<void> {
 }
 
 export async function clearToken(): Promise<void> {
+  _cachedToken = null;
+  lockBiometricSession();
   if (Capacitor.isNativePlatform()) {
     await Preferences.remove({ key: TOKEN_KEY });
   } else {
