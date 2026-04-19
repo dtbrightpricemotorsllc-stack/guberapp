@@ -4,12 +4,19 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck } from "lucide-react";
+import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, ChevronDown, ChevronUp, X } from "lucide-react";
 
 interface Message {
+  id: number;
   role: "user" | "assistant";
   content: string;
   scanTimestamp?: Date;
+}
+
+interface PinnedItem {
+  id: number;
+  messageId: number;
+  content: string;
 }
 
 const AUTO_SCAN_MESSAGE = "Give me a quick system health summary. Flag anything that needs my attention.";
@@ -20,9 +27,23 @@ export function AdminDiagnosticAssistant() {
   const [input, setInput] = useState("");
   const [hasAutoScanned, setHasAutoScanned] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([]);
+  const [pinnedExpanded, setPinnedExpanded] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isAutoScanRef = useRef(false);
+  const msgIdCounter = useRef(0);
+  const pinIdCounter = useRef(0);
+
+  function nextMsgId() {
+    msgIdCounter.current += 1;
+    return msgIdCounter.current;
+  }
+
+  function nextPinId() {
+    pinIdCounter.current += 1;
+    return pinIdCounter.current;
+  }
 
   function handleCopy(content: string, index: number) {
     navigator.clipboard.writeText(content).then(() => {
@@ -32,6 +53,23 @@ export function AdminDiagnosticAssistant() {
       setCopiedIndex(-1 - index);
       setTimeout(() => setCopiedIndex(null), 2000);
     });
+  }
+
+  function handlePin(messageId: number, content: string) {
+    setPinnedItems((prev) => [...prev, { id: nextPinId(), messageId, content }]);
+    setPinnedExpanded(true);
+  }
+
+  function handleUnpinByMessageId(messageId: number) {
+    setPinnedItems((prev) => prev.filter((item) => item.messageId !== messageId));
+  }
+
+  function handleUnpinById(id: number) {
+    setPinnedItems((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  function isPinned(messageId: number) {
+    return pinnedItems.some((item) => item.messageId === messageId);
   }
 
   useEffect(() => {
@@ -53,6 +91,7 @@ export function AdminDiagnosticAssistant() {
       setMessages((prev) => [
         ...prev,
         {
+          id: nextMsgId(),
           role: "assistant",
           content: data.reply,
           ...(isAutoScan ? { scanTimestamp: new Date() } : {}),
@@ -63,7 +102,7 @@ export function AdminDiagnosticAssistant() {
       isAutoScanRef.current = false;
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Unable to run diagnostic right now. Please try again in a moment." },
+        { id: nextMsgId(), role: "assistant", content: "Unable to run diagnostic right now. Please try again in a moment." },
       ]);
     },
   });
@@ -71,7 +110,7 @@ export function AdminDiagnosticAssistant() {
   useEffect(() => {
     if (open && !hasAutoScanned && !sendMutation.isPending) {
       setHasAutoScanned(true);
-      const initialMsg: Message = { role: "user", content: AUTO_SCAN_MESSAGE };
+      const initialMsg: Message = { id: nextMsgId(), role: "user", content: AUTO_SCAN_MESSAGE };
       setMessages([initialMsg]);
       isAutoScanRef.current = true;
       sendMutation.mutate([initialMsg]);
@@ -81,7 +120,7 @@ export function AdminDiagnosticAssistant() {
   function handleSend() {
     const text = input.trim();
     if (!text || sendMutation.isPending) return;
-    const newMessages: Message[] = [...messages, { role: "user", content: text }];
+    const newMessages: Message[] = [...messages, { id: nextMsgId(), role: "user", content: text }];
     setMessages(newMessages);
     setInput("");
     sendMutation.mutate(newMessages);
@@ -104,7 +143,7 @@ export function AdminDiagnosticAssistant() {
 
   function handleRescan() {
     if (sendMutation.isPending) return;
-    const rescanMsg: Message = { role: "user", content: AUTO_SCAN_MESSAGE };
+    const rescanMsg: Message = { id: nextMsgId(), role: "user", content: AUTO_SCAN_MESSAGE };
     const updatedMessages = [...messages, rescanMsg];
     setMessages(updatedMessages);
     isAutoScanRef.current = true;
@@ -168,6 +207,74 @@ export function AdminDiagnosticAssistant() {
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" data-testid="diagnostic-message-thread">
+
+            {pinnedItems.length > 0 && (
+              <div
+                className="rounded-2xl overflow-hidden flex-shrink-0"
+                style={{ background: "hsl(230 30% 10%)", border: "1px solid hsl(263 70% 50% / 0.25)" }}
+                data-testid="panel-pinned-findings"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPinnedExpanded((v) => !v)}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 transition-colors duration-150"
+                  style={{ color: "hsl(263 70% 70%)" }}
+                  data-testid="button-toggle-pinned-panel"
+                  aria-expanded={pinnedExpanded}
+                  aria-label={pinnedExpanded ? "Collapse pinned findings" : "Expand pinned findings"}
+                >
+                  <div className="flex items-center gap-2">
+                    <Pin className="w-3 h-3" />
+                    <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: "hsl(263 70% 70%)" }}>
+                      Pinned
+                    </span>
+                    <span
+                      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                      style={{ background: "hsl(263 70% 50% / 0.2)", color: "hsl(263 70% 75%)" }}
+                      data-testid="text-pinned-count"
+                    >
+                      {pinnedItems.length}
+                    </span>
+                  </div>
+                  {pinnedExpanded ? (
+                    <ChevronUp className="w-3.5 h-3.5 opacity-60" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                  )}
+                </button>
+
+                {pinnedExpanded && (
+                  <div className="border-t border-white/[0.06]">
+                    {pinnedItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-2 px-3.5 py-2.5 border-b border-white/[0.04] last:border-b-0"
+                        data-testid={`pinned-item-${item.id}`}
+                      >
+                        <p
+                          className="flex-1 text-xs leading-relaxed line-clamp-2"
+                          style={{ color: "hsl(0 0% 72%)" }}
+                          data-testid={`text-pinned-preview-${item.id}`}
+                        >
+                          {item.content}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleUnpinById(item.id)}
+                          className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center transition-all duration-150 mt-0.5 hover:opacity-100 opacity-60"
+                          style={{ color: "hsl(0 0% 55%)" }}
+                          aria-label="Unpin finding"
+                          data-testid={`button-unpin-${item.id}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {messages.length === 0 && sendMutation.isPending && (
               <div className="flex gap-2 justify-start">
                 <div
@@ -188,7 +295,7 @@ export function AdminDiagnosticAssistant() {
 
             {messages.filter(m => m.role === "assistant" || (m.role === "user" && m.content !== AUTO_SCAN_MESSAGE)).map((msg, i) => (
               <div
-                key={i}
+                key={msg.id}
                 className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 data-testid={`diagnostic-message-${msg.role}-${i}`}
               >
@@ -225,24 +332,45 @@ export function AdminDiagnosticAssistant() {
                     </p>
                   )}
                   {msg.role === "assistant" && (
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(msg.content, i)}
-                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
-                      style={{
-                        color: copiedIndex === i ? "hsl(142 70% 55%)" : copiedIndex === -1 - i ? "hsl(0 70% 60%)" : "hsl(0 0% 45%)",
-                        opacity: (copiedIndex === i || copiedIndex === -1 - i) ? 1 : 0.7,
-                      }}
-                      aria-label={copiedIndex === i ? "Copied to clipboard" : copiedIndex === -1 - i ? "Copy failed" : "Copy finding to clipboard"}
-                      data-testid={`button-copy-diagnostic-${i}`}
-                    >
-                      {copiedIndex === i ? (
-                        <ClipboardCheck className="w-3 h-3" />
-                      ) : (
-                        <Clipboard className="w-3 h-3" />
-                      )}
-                      <span>{copiedIndex === i ? "Copied" : copiedIndex === -1 - i ? "Failed" : "Copy"}</span>
-                    </button>
+                    <div className="flex items-center gap-0.5 pl-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(msg.content, i)}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
+                        style={{
+                          color: copiedIndex === i ? "hsl(142 70% 55%)" : copiedIndex === -1 - i ? "hsl(0 70% 60%)" : "hsl(0 0% 45%)",
+                          opacity: (copiedIndex === i || copiedIndex === -1 - i) ? 1 : 0.7,
+                        }}
+                        aria-label={copiedIndex === i ? "Copied to clipboard" : copiedIndex === -1 - i ? "Copy failed" : "Copy finding to clipboard"}
+                        data-testid={`button-copy-diagnostic-${i}`}
+                      >
+                        {copiedIndex === i ? (
+                          <ClipboardCheck className="w-3 h-3" />
+                        ) : (
+                          <Clipboard className="w-3 h-3" />
+                        )}
+                        <span>{copiedIndex === i ? "Copied" : copiedIndex === -1 - i ? "Failed" : "Copy"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => isPinned(msg.id) ? handleUnpinByMessageId(msg.id) : handlePin(msg.id, msg.content)}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
+                        style={{
+                          color: isPinned(msg.id) ? "hsl(263 70% 65%)" : "hsl(0 0% 45%)",
+                          opacity: isPinned(msg.id) ? 1 : 0.7,
+                        }}
+                        aria-label={isPinned(msg.id) ? "Unpin finding" : "Pin finding"}
+                        data-testid={`button-pin-diagnostic-${i}`}
+                      >
+                        {isPinned(msg.id) ? (
+                          <PinOff className="w-3 h-3" />
+                        ) : (
+                          <Pin className="w-3 h-3" />
+                        )}
+                        <span>{isPinned(msg.id) ? "Pinned" : "Pin"}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
