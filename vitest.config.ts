@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["server/tests/**/*.test.ts"],
+    include: ["server/tests/**/*.test.ts", "client/src/**/*.test.ts"],
     globals: false,
     testTimeout: 10000,
   },
