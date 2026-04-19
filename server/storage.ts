@@ -1346,16 +1346,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(pinnedFindings.pinnedAt));
   }
 
-  async createPinnedFinding(adminUserId: number, content: string, note?: string, assignee?: string): Promise<PinnedFinding> {
+  async createPinnedFinding(adminUserId: number, content: string, note?: string, assignee?: string, category?: string | null): Promise<PinnedFinding> {
     const [finding] = await db.insert(pinnedFindings)
-      .values({ adminUserId, content, note: note ?? "", assignee: assignee ?? "", pinnedAt: new Date() })
+      .values({ adminUserId, content, note: note ?? "", assignee: assignee ?? "", category: category ?? null, pinnedAt: new Date() })
       .returning();
     return finding;
   }
 
-  async updatePinnedFinding(id: number, adminUserId: number, note: string, assignee: string): Promise<PinnedFinding | undefined> {
+  async updatePinnedFinding(id: number, adminUserId: number, note: string, assignee: string, category?: string | null): Promise<PinnedFinding | undefined> {
     const [finding] = await db.update(pinnedFindings)
-      .set({ note, assignee })
+      .set({ note, assignee, ...(category !== undefined ? { category: category ?? null } : {}) })
       .where(and(eq(pinnedFindings.id, id), eq(pinnedFindings.adminUserId, adminUserId)))
       .returning();
     return finding;

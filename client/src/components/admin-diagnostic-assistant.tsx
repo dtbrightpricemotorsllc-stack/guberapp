@@ -13,11 +13,25 @@ interface Message {
   scanTimestamp?: Date;
 }
 
+const CATEGORY_OPTIONS = [
+  { label: "Critical", color: "hsl(0 70% 60%)", bg: "hsl(0 70% 60% / 0.15)", border: "hsl(0 70% 60% / 0.4)" },
+  { label: "Billing", color: "hsl(30 85% 60%)", bg: "hsl(30 85% 60% / 0.15)", border: "hsl(30 85% 60% / 0.4)" },
+  { label: "Performance", color: "hsl(210 80% 65%)", bg: "hsl(210 80% 65% / 0.15)", border: "hsl(210 80% 65% / 0.4)" },
+  { label: "Fix before launch", color: "hsl(45 90% 58%)", bg: "hsl(45 90% 58% / 0.15)", border: "hsl(45 90% 58% / 0.4)" },
+] as const;
+
+type CategoryLabel = typeof CATEGORY_OPTIONS[number]["label"];
+
+function getCategoryStyle(label: string | null | undefined) {
+  return CATEGORY_OPTIONS.find((c) => c.label === label) ?? null;
+}
+
 interface PinnedFinding {
   id: number;
   adminUserId: number;
   content: string;
   note: string;
+  category: string | null;
   pinnedAt: string;
   createdAt: string;
   assignee: string;
@@ -41,10 +55,13 @@ export function AdminDiagnosticAssistant() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [pendingPinContent, setPendingPinContent] = useState<string | null>(null);
   const [pendingPinNote, setPendingPinNote] = useState("");
+  const [pendingPinCategory, setPendingPinCategory] = useState<string | null>(null);
   const [editingPinId, setEditingPinId] = useState<number | null>(null);
   const [editingPinNote, setEditingPinNote] = useState("");
   const [editingPinAssignee, setEditingPinAssignee] = useState("");
   const [pendingPinAssignee, setPendingPinAssignee] = useState("");
+  const [editingPinCategory, setEditingPinCategory] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [pinnedSearch, setPinnedSearch] = useState("");
   const [pinnedDateFrom, setPinnedDateFrom] = useState("");
   const [pinnedDateTo, setPinnedDateTo] = useState("");
@@ -101,8 +118,8 @@ export function AdminDiagnosticAssistant() {
   const pinnedContentSet = buildContentSet(pinnedFindings);
 
   const pinMutation = useMutation({
-    mutationFn: async ({ content, note, assignee }: { content: string; note: string; assignee: string }) => {
-      const res = await apiRequest("POST", "/api/admin/pinned-findings", { content, note, assignee });
+    mutationFn: async ({ content, note, assignee, category }: { content: string; note: string; assignee: string; category: string | null }) => {
+      const res = await apiRequest("POST", "/api/admin/pinned-findings", { content, note, assignee, category });
       return res.json() as Promise<PinnedFinding>;
     },
     onSuccess: () => {
@@ -112,8 +129,8 @@ export function AdminDiagnosticAssistant() {
   });
 
   const updateNoteMutation = useMutation({
-    mutationFn: async ({ id, note, assignee }: { id: number; note: string; assignee: string }) => {
-      const res = await apiRequest("PATCH", `/api/admin/pinned-findings/${id}`, { note, assignee });
+    mutationFn: async ({ id, note, assignee, category }: { id: number; note: string; assignee: string; category: string | null | undefined }) => {
+      const res = await apiRequest("PATCH", `/api/admin/pinned-findings/${id}`, { note, assignee, category });
       return res.json() as Promise<PinnedFinding>;
     },
     onSuccess: () => {
@@ -151,6 +168,7 @@ export function AdminDiagnosticAssistant() {
     setPendingPinContent(content);
     setPendingPinNote("");
     setPendingPinAssignee("");
+    setPendingPinCategory(null);
     setTimeout(() => pendingNoteRef.current?.focus(), 50);
   }
 
@@ -158,6 +176,7 @@ export function AdminDiagnosticAssistant() {
     setPendingPinContent(null);
     setPendingPinNote("");
     setPendingPinAssignee("");
+    setPendingPinCategory(null);
   }
 
   function confirmPin(content: string) {
@@ -165,10 +184,11 @@ export function AdminDiagnosticAssistant() {
       cancelPinFlow();
       return;
     }
-    pinMutation.mutate({ content, note: pendingPinNote.trim(), assignee: pendingPinAssignee.trim() });
+    pinMutation.mutate({ content, note: pendingPinNote.trim(), assignee: pendingPinAssignee.trim(), category: pendingPinCategory });
     setPendingPinContent(null);
     setPendingPinNote("");
     setPendingPinAssignee("");
+    setPendingPinCategory(null);
   }
 
   function handleUnpinByContent(content: string) {
@@ -204,11 +224,12 @@ export function AdminDiagnosticAssistant() {
     setEditingPinId(finding.id);
     setEditingPinNote(finding.note ?? "");
     setEditingPinAssignee(finding.assignee ?? "");
+    setEditingPinCategory(finding.category ?? null);
     setTimeout(() => editingNoteRef.current?.focus(), 50);
   }
 
   function saveEditNote(id: number) {
-    updateNoteMutation.mutate({ id, note: editingPinNote.trim(), assignee: editingPinAssignee.trim() });
+    updateNoteMutation.mutate({ id, note: editingPinNote.trim(), assignee: editingPinAssignee.trim(), category: editingPinCategory });
     setEditingPinId(null);
   }
 
@@ -324,6 +345,7 @@ export function AdminDiagnosticAssistant() {
     const pinnedDate = new Date(f.pinnedAt);
     if (fromDateLocal && pinnedDate < fromDateLocal) return false;
     if (toDateLocal && pinnedDate > toDateLocal) return false;
+    if (categoryFilter && f.category !== categoryFilter) return false;
     return true;
   });
 
@@ -613,6 +635,32 @@ export function AdminDiagnosticAssistant() {
                                   data-testid={`input-pin-note-${i}`}
                                 />
                                 <div
+                                  className="flex flex-wrap gap-1 px-2.5 pt-1.5 pb-1"
+                                  data-testid={`pin-category-chips-${i}`}
+                                >
+                                  {CATEGORY_OPTIONS.map((cat) => {
+                                    const active = pendingPinCategory === cat.label;
+                                    return (
+                                      <button
+                                        key={cat.label}
+                                        type="button"
+                                        onClick={() => setPendingPinCategory(active ? null : cat.label)}
+                                        className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-150"
+                                        style={{
+                                          background: active ? cat.bg : "hsl(230 30% 15%)",
+                                          border: `1px solid ${active ? cat.border : "hsl(230 30% 22%)"}`,
+                                          color: active ? cat.color : "hsl(0 0% 45%)",
+                                        }}
+                                        data-testid={`chip-category-${cat.label.replace(/\s+/g, "-").toLowerCase()}-${i}`}
+                                        aria-pressed={active}
+                                        aria-label={`Label as ${cat.label}`}
+                                      >
+                                        {cat.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <div
                                   className="flex justify-end px-2 py-1.5 border-t"
                                   style={{ borderColor: "hsl(263 70% 50% / 0.2)" }}
                                 >
@@ -781,6 +829,42 @@ export function AdminDiagnosticAssistant() {
                       "From" date must be before or equal to "To" date.
                     </p>
                   )}
+                  <div className="flex flex-wrap gap-1" data-testid="category-filter-chips">
+                    {CATEGORY_OPTIONS.map((cat) => {
+                      const active = categoryFilter === cat.label;
+                      return (
+                        <button
+                          key={cat.label}
+                          type="button"
+                          onClick={() => setCategoryFilter(active ? null : cat.label)}
+                          className="px-2.5 py-1 rounded-full text-[10px] font-medium transition-all duration-150"
+                          style={{
+                            background: active ? cat.bg : "hsl(230 30% 12%)",
+                            border: `1px solid ${active ? cat.border : "hsl(230 30% 20%)"}`,
+                            color: active ? cat.color : "hsl(0 0% 42%)",
+                          }}
+                          aria-pressed={active}
+                          aria-label={`Filter by ${cat.label}`}
+                          data-testid={`button-filter-category-${cat.label.replace(/\s+/g, "-").toLowerCase()}`}
+                        >
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                    {categoryFilter && (
+                      <button
+                        type="button"
+                        onClick={() => setCategoryFilter(null)}
+                        className="px-2 py-0.5 rounded-full text-[10px] transition-all duration-150 flex items-center gap-0.5"
+                        style={{ color: "hsl(0 0% 40%)", border: "1px solid hsl(230 30% 20%)" }}
+                        aria-label="Clear category filter"
+                        data-testid="button-clear-category-filter"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                        All
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -840,9 +924,23 @@ export function AdminDiagnosticAssistant() {
                       >
                         <X className="w-3 h-3" />
                       </button>
-                      <p className="text-xs text-white/80 leading-relaxed whitespace-pre-wrap pr-5">
-                        {finding.content}
-                      </p>
+                      <div className="flex items-start gap-2 pr-5">
+                        <p className="flex-1 text-xs text-white/80 leading-relaxed whitespace-pre-wrap">
+                          {finding.content}
+                        </p>
+                      </div>
+                      {finding.category && !editingPinId && (() => {
+                        const style = getCategoryStyle(finding.category);
+                        return style ? (
+                          <span
+                            className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}
+                            data-testid={`badge-category-${finding.id}`}
+                          >
+                            {finding.category}
+                          </span>
+                        ) : null;
+                      })()}
 
                       {editingPinId === finding.id ? (
                         <div className="mt-2 flex flex-col gap-1.5">
@@ -891,6 +989,29 @@ export function AdminDiagnosticAssistant() {
                             >
                               <Check className="w-3 h-3" />
                             </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1" data-testid={`edit-category-chips-${finding.id}`}>
+                            {CATEGORY_OPTIONS.map((cat) => {
+                              const active = editingPinCategory === cat.label;
+                              return (
+                                <button
+                                  key={cat.label}
+                                  type="button"
+                                  onClick={() => setEditingPinCategory(active ? null : cat.label)}
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-150"
+                                  style={{
+                                    background: active ? cat.bg : "hsl(230 30% 15%)",
+                                    border: `1px solid ${active ? cat.border : "hsl(230 30% 22%)"}`,
+                                    color: active ? cat.color : "hsl(0 0% 45%)",
+                                  }}
+                                  aria-pressed={active}
+                                  aria-label={`Label as ${cat.label}`}
+                                  data-testid={`chip-edit-category-${cat.label.replace(/\s+/g, "-").toLowerCase()}-${finding.id}`}
+                                >
+                                  {cat.label}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (

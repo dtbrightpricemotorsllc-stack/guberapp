@@ -7665,7 +7665,7 @@ YOUR BEHAVIOR:
 
   app.post("/api/admin/pinned-findings", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { content, note, assignee } = req.body;
+      const { content, note, assignee, category } = req.body;
       if (!content || typeof content !== "string" || !content.trim()) {
         return res.status(400).json({ message: "content is required" });
       }
@@ -7674,6 +7674,7 @@ YOUR BEHAVIOR:
         content.trim(),
         typeof note === "string" ? note.trim() : "",
         typeof assignee === "string" ? assignee.trim() : "",
+        typeof category === "string" && category.trim() ? category.trim() : null,
       );
       res.status(201).json(finding);
     } catch (err: any) {
@@ -7685,13 +7686,17 @@ YOUR BEHAVIOR:
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
-      const { note, assignee } = req.body;
+      const { note, assignee, category } = req.body;
       if (typeof note !== "string") return res.status(400).json({ message: "note must be a string" });
+      const categoryValue = "category" in req.body
+        ? (typeof category === "string" && category.trim() ? category.trim() : null)
+        : undefined;
       const finding = await storage.updatePinnedFinding(
         id,
         req.session.userId!,
         note.trim(),
         typeof assignee === "string" ? assignee.trim() : "",
+        categoryValue,
       );
       if (!finding) return res.status(404).json({ message: "Finding not found" });
       res.json(finding);

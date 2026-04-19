@@ -1226,6 +1226,7 @@ export const pinnedFindings = pgTable("pinned_findings", {
   content: text("content").notNull(),
   note: text("note").default(""),
   assignee: text("assignee").default(""),
+  category: text("category").default(null),
   pinnedAt: timestamp("pinned_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
