@@ -10,6 +10,12 @@
  * are invisible in outdoor sunlight but are not caught by the Tailwind-class
  * faint-text checker because they use inline styles, not utility classes.
  *
+ * Multi-line style objects are also caught, e.g.:
+ *   style={{
+ *     background:
+ *       "linear-gradient(135deg, #001a0a, #002d12)",
+ *   }}
+ *
  * What counts as "dark"?
  *   A hex color where every RGB channel is <= 0x44 (68 out of 255, ≈ 27%).
  *   This captures #000, #0a0a0a, #001a0a, #0d0d1a, and similar near-blacks
@@ -64,30 +70,12 @@ const GRADIENT_RE =
   /(?:linear|radial|conic|repeating-linear|repeating-radial)-gradient\s*\(/i;
 
 /**
- * Return true when `line` references a JSX inline-style background/
- * backgroundImage that contains a CSS gradient function with at least one
- * near-black hex stop.
- *
- * Flat-colour dark backgrounds (e.g. background: "#000") are NOT flagged
- * because they are a normal way to build dark overlays and do not create
- * the "invisible card" problem that this check targets.  The danger arises
- * specifically when a gradient bakes darkness into a surface meant to hold
- * legible text.
+ * Background-property regex.  Matches:
+ *   background[Image]?: "..." | '...' | `...`
+ * across a single (possibly newline-collapsed) string.
  */
-function lineHasDarkGradient(line) {
-  // Match: background[Image]?: "..." or '...' or `...`
-  const bgRe =
-    /\bbackground(?:Image)?\s*:\s*(?:"([^"\\]*)"|'([^'\\]*)'|`([^`\\]*)`)/gi;
-  let m;
-  while ((m = bgRe.exec(line)) !== null) {
-    const value = m[1] ?? m[2] ?? m[3];
-    // Only flag if the value is a gradient function.
-    if (!GRADIENT_RE.test(value)) continue;
-    const hexColors = extractHexColors(value);
-    if (hexColors.some(isDarkHex)) return true;
-  }
-  return false;
-}
+const BG_RE =
+  /\bbackground(?:Image)?\s*:\s*(?:"([^"\\]*)"|'([^'\\]*)'|`([^`\\]*)`)/gi;
 
 // ---------------------------------------------------------------------------
 // Walk the source tree
@@ -111,21 +99,71 @@ for await (const file of walk(SCAN_DIR)) {
   const text = await readFile(file, "utf8");
   const lines = text.split("\n");
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  // Build a parallel "flat" string where every newline is replaced by a
+  // single space.  This collapses multi-line style objects so the BG_RE regex
+  // can match a `background:` key and its quoted value even when they appear
+  // on different lines.
+  const flat = text.replace(/\n/g, " ");
 
-    // Allow-list: skip if this line or the previous one carries the token.
-    if (line.includes(ALLOW_TOKEN)) continue;
-    const prev = i > 0 ? lines[i - 1] : "";
-    if (prev.includes(ALLOW_TOKEN)) continue;
+  // Pre-compute the character offset at which each original line starts so we
+  // can map a match position in `flat` back to a 1-based line number.
+  const lineStartOffsets = [];
+  let off = 0;
+  for (const line of lines) {
+    lineStartOffsets.push(off);
+    off += line.length + 1; // +1 for the newline that was replaced by a space
+  }
 
-    if (lineHasDarkGradient(line)) {
-      findings.push({
-        file: relative(ROOT, file),
-        line: i + 1,
-        snippet: line.trim().slice(0, 200),
-      });
+  BG_RE.lastIndex = 0;
+  let m;
+  while ((m = BG_RE.exec(flat)) !== null) {
+    const value = m[1] ?? m[2] ?? m[3];
+    if (!GRADIENT_RE.test(value)) continue;
+    const hexColors = extractHexColors(value);
+    if (!hexColors.some(isDarkHex)) continue;
+
+    // Map the match start offset back to a 0-based line index.
+    const matchStart = m.index;
+    const matchEnd = m.index + m[0].length;
+
+    // Binary-search for the line that contains matchStart.
+    let lo = 0,
+      hi = lineStartOffsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStartOffsets[mid] <= matchStart) lo = mid;
+      else hi = mid - 1;
     }
+    const startLineIdx = lo;
+
+    // Find the line that contains matchEnd (for allow-list spanning).
+    let lo2 = startLineIdx,
+      hi2 = lineStartOffsets.length - 1;
+    while (lo2 < hi2) {
+      const mid = (lo2 + hi2 + 1) >> 1;
+      if (lineStartOffsets[mid] <= matchEnd) lo2 = mid;
+      else hi2 = mid - 1;
+    }
+    const endLineIdx = lo2;
+
+    // Allow-list: skip if any line within the match span, or up to 2 lines
+    // before it (covering patterns where the comment precedes `style={{` which
+    // itself precedes the `background:` key), carries the allow token.
+    const checkFrom = Math.max(0, startLineIdx - 2);
+    let allowed = false;
+    for (let l = checkFrom; l <= endLineIdx; l++) {
+      if (lines[l].includes(ALLOW_TOKEN)) {
+        allowed = true;
+        break;
+      }
+    }
+    if (allowed) continue;
+
+    findings.push({
+      file: relative(ROOT, file),
+      line: startLineIdx + 1,
+      snippet: flat.slice(matchStart, matchStart + 200).trim(),
+    });
   }
 }
 
