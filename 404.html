@@ -125,6 +125,9 @@ function showGetApp(browserUrl) {
   modal.style.display = 'flex';
 }
 
+// This file runs on GitHub Pages (guberapp.com) and always fetches from the production
+// Replit backend at guberapp.app. The URL is intentionally hardcoded — there is no
+// staging deployment of this static file, and guberapp.app IS the production API.
 var API = 'https://guberapp.app/api/public/jobs';
 var path = window.location.pathname.replace(/\/$/, '');
 var search = window.location.search;

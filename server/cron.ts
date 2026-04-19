@@ -1,10 +1,9 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops, cashDropAttempts } from "@shared/schema";
+import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
 import { and, eq, lt, lte, isNull, isNotNull, inArray, desc, notInArray } from "drizzle-orm";
 import { storage } from "./storage";
-import { notifyNearbyAvailableWorkers } from "./notify-helpers";
-import { sendPushToUser } from "./push";
+import { notifyNearbyAvailableWorkers, notifyCashDropExpired } from "./notify-helpers";
 import { TRUST_ADJUSTMENTS } from "./pricing";
 import { getDemoUserIds } from "./demo-guard";
 import Stripe from "stripe";
@@ -487,25 +486,7 @@ async function autoExpireCashDrops(): Promise<number> {
       .set({ status: "expired", closedAt: now })
       .where(eq(cashDrops.id, drop.id));
 
-    const participants = await db
-      .select({ userId: cashDropAttempts.userId })
-      .from(cashDropAttempts)
-      .where(
-        and(
-          eq(cashDropAttempts.cashDropId, drop.id),
-          inArray(cashDropAttempts.status, ["pending", "accepted"])
-        )
-      );
-
-    for (const p of participants) {
-      try {
-        await sendPushToUser(p.userId, {
-          title: "Cash Drop Expired",
-          body: `"${drop.title || "Cash Drop"}" has expired before being fully claimed.`,
-          data: { url: `/cash-drop/${drop.id}` },
-        });
-      } catch {}
-    }
+    notifyCashDropExpired(drop.id, drop.title || "Cash Drop").catch(() => {});
   }
 
   return toExpire.length;

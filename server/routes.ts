@@ -17,7 +17,7 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
-import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, type User } from "@shared/schema";
+import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, type User, type CashDrop } from "@shared/schema";
 import {
   calculateJobPricing,
   getTrustInfo,
@@ -8912,7 +8912,7 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       const newConfirmedReward2 = confirmedRewardWinners + (isRewardWinner ? 1 : 0) + autoRewardWinners.length;
       const allSlotsFilled = newConfirmedCash2 >= cashCap && (rewardCap === 0 || newConfirmedReward2 >= rewardCap);
       const newStatus = (allSlotsFilled || totalWinnersFound >= effectiveLimit) ? "closed" : drop.status;
-      const closureUpdate: any = { winnersFound: totalWinnersFound, status: newStatus };
+      const closureUpdate: Partial<CashDrop> = { winnersFound: totalWinnersFound, status: newStatus };
       if (newStatus === "closed" && drop.status !== "closed") closureUpdate.closedAt = new Date();
       await storage.updateCashDrop(dropId, closureUpdate);
 

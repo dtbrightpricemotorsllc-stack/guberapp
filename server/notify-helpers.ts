@@ -46,3 +46,23 @@ export async function notifyNearbyAvailableWorkers(
     console.error("[GUBER] notifyNearbyAvailableWorkers error:", e.message);
   }
 }
+
+export async function notifyCashDropExpired(dropId: number, dropTitle: string) {
+  try {
+    const allAttempts = await storage.getCashDropAttempts(dropId);
+    const notifyUserIds = [...new Set(
+      allAttempts
+        .filter((a) => a.status !== "confirmed" && a.status !== "won")
+        .map((a) => a.userId)
+    )];
+    const notifTitle = "Cash Drop Expired";
+    const notifBody = `"${dropTitle}" passed its end time without being fully claimed.`;
+    for (const uid of notifyUserIds) {
+      await storage.createNotification({ userId: uid, title: notifTitle, body: notifBody, type: "cash_drop", cashDropId: dropId, jobId: null });
+      sendPushToUser(uid, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-expired-${dropId}` }).catch(() => {});
+    }
+    console.log(`[GUBER] Notified ${notifyUserIds.length} participants that Cash Drop #${dropId} expired`);
+  } catch (e: any) {
+    console.error("[GUBER] notifyCashDropExpired error:", e.message);
+  }
+}
