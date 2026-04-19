@@ -27,3 +27,16 @@ export async function clearToken(): Promise<void> {
   }
 }
 
+export async function migrateToken(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+
+  const { value: existing } = await Preferences.get({ key: TOKEN_KEY });
+  if (existing !== null) return;
+
+  const legacy = localStorage.getItem(TOKEN_KEY);
+  if (!legacy) return;
+
+  await Preferences.set({ key: TOKEN_KEY, value: legacy });
+  localStorage.removeItem(TOKEN_KEY);
+}
+
