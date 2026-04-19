@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked, Pencil, Check } from "lucide-react";
+import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked, Pencil, Check, Search, CalendarRange } from "lucide-react";
 
 interface Message {
   id: number;
@@ -45,6 +45,10 @@ export function AdminDiagnosticAssistant() {
   const [pendingPinNote, setPendingPinNote] = useState("");
   const [editingPinId, setEditingPinId] = useState<number | null>(null);
   const [editingPinNote, setEditingPinNote] = useState("");
+  const [pinnedSearch, setPinnedSearch] = useState("");
+  const [pinnedDateFrom, setPinnedDateFrom] = useState("");
+  const [pinnedDateTo, setPinnedDateTo] = useState("");
+  const [showDateFilter, setShowDateFilter] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingNoteRef = useRef<HTMLTextAreaElement>(null);
@@ -302,6 +306,29 @@ export function AdminDiagnosticAssistant() {
   const visibleMessages = messages.filter(
     (m) => m.role === "assistant" || (m.role === "user" && m.content !== AUTO_SCAN_MESSAGE)
   );
+
+  function parseDateLocal(dateStr: string, endOfDay: boolean): Date {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return endOfDay
+      ? new Date(y, m - 1, d, 23, 59, 59, 999)
+      : new Date(y, m - 1, d, 0, 0, 0, 0);
+  }
+
+  const fromDateLocal = pinnedDateFrom ? parseDateLocal(pinnedDateFrom, false) : null;
+  const toDateLocal = pinnedDateTo ? parseDateLocal(pinnedDateTo, true) : null;
+  const dateRangeValid = !fromDateLocal || !toDateLocal || fromDateLocal <= toDateLocal;
+
+  const filteredFindings = pinnedFindings.filter((f) => {
+    const searchLower = pinnedSearch.trim().toLowerCase();
+    if (searchLower && !f.content.toLowerCase().includes(searchLower) && !f.note.toLowerCase().includes(searchLower)) {
+      return false;
+    }
+    if (!dateRangeValid) return false;
+    const pinnedDate = new Date(f.pinnedAt);
+    if (fromDateLocal && pinnedDate < fromDateLocal) return false;
+    if (toDateLocal && pinnedDate > toDateLocal) return false;
+    return true;
+  });
 
   return (
     <>
@@ -645,7 +672,94 @@ export function AdminDiagnosticAssistant() {
           )}
 
           {tab === "pinned" && (
-            <div className="flex-1 overflow-y-auto px-4 py-4" data-testid="pinned-findings-list">
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {pinnedFindings.length > 0 && (
+                <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-2">
+                  <div
+                    className="flex items-center gap-2 rounded-xl px-3 py-2"
+                    style={{ background: "hsl(230 30% 10%)", border: "1px solid hsl(230 30% 18%)" }}
+                  >
+                    <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "hsl(0 0% 45%)" }} />
+                    <input
+                      type="text"
+                      value={pinnedSearch}
+                      onChange={(e) => setPinnedSearch(e.target.value)}
+                      placeholder="Search findings…"
+                      className="flex-1 bg-transparent text-xs text-white placeholder:text-muted-foreground focus:outline-none"
+                      data-testid="input-pinned-search"
+                    />
+                    {pinnedSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setPinnedSearch("")}
+                        className="flex-shrink-0"
+                        style={{ color: "hsl(0 0% 40%)" }}
+                        aria-label="Clear search"
+                        data-testid="button-clear-pinned-search"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowDateFilter((v) => !v)}
+                      className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150"
+                      style={{
+                        color: showDateFilter || pinnedDateFrom || pinnedDateTo ? "hsl(263 70% 70%)" : "hsl(0 0% 45%)",
+                        background: showDateFilter || pinnedDateFrom || pinnedDateTo ? "hsl(263 70% 50% / 0.15)" : "transparent",
+                      }}
+                      aria-label="Toggle date filter"
+                      data-testid="button-toggle-date-filter"
+                    >
+                      <CalendarRange className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {showDateFilter && (
+                    <div
+                      className="flex items-center gap-2 rounded-xl px-3 py-2"
+                      style={{ background: "hsl(230 30% 10%)", border: "1px solid hsl(263 70% 50% / 0.2)" }}
+                    >
+                      <span className="text-[10px] flex-shrink-0" style={{ color: "hsl(0 0% 45%)" }}>From</span>
+                      <input
+                        type="date"
+                        value={pinnedDateFrom}
+                        onChange={(e) => setPinnedDateFrom(e.target.value)}
+                        className="flex-1 bg-transparent text-xs text-white focus:outline-none"
+                        style={{ colorScheme: "dark" }}
+                        data-testid="input-pinned-date-from"
+                      />
+                      <span className="text-[10px] flex-shrink-0" style={{ color: "hsl(0 0% 45%)" }}>To</span>
+                      <input
+                        type="date"
+                        value={pinnedDateTo}
+                        onChange={(e) => setPinnedDateTo(e.target.value)}
+                        className="flex-1 bg-transparent text-xs text-white focus:outline-none"
+                        style={{ colorScheme: "dark" }}
+                        data-testid="input-pinned-date-to"
+                      />
+                      {(pinnedDateFrom || pinnedDateTo) && (
+                        <button
+                          type="button"
+                          onClick={() => { setPinnedDateFrom(""); setPinnedDateTo(""); }}
+                          style={{ color: "hsl(0 0% 40%)" }}
+                          aria-label="Clear date filter"
+                          data-testid="button-clear-date-filter"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {showDateFilter && !dateRangeValid && (
+                    <p className="text-[10px] px-1" style={{ color: "hsl(0 70% 60%)" }} data-testid="text-invalid-date-range">
+                      "From" date must be before or equal to "To" date.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto px-4 py-2" data-testid="pinned-findings-list">
               {pinnedFindings.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 pb-12">
                   <div
@@ -659,9 +773,22 @@ export function AdminDiagnosticAssistant() {
                     Pin assistant messages from the Chat tab to save them here across sessions.
                   </p>
                 </div>
+              ) : filteredFindings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 pb-12">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                    style={{ background: "hsl(263 70% 50% / 0.1)", border: "1px solid hsl(263 70% 50% / 0.2)" }}
+                  >
+                    <Search className="w-5 h-5" style={{ color: "hsl(263 70% 50% / 0.5)" }} />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">No findings match your search</p>
+                  <p className="text-xs text-center" style={{ color: "hsl(0 0% 35%)" }}>
+                    Try different keywords or clear the filters.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {pinnedFindings.map((finding) => (
+                  {filteredFindings.map((finding) => (
                     <div
                       key={finding.id}
                       className="rounded-2xl p-3.5 relative"
@@ -749,6 +876,7 @@ export function AdminDiagnosticAssistant() {
                   ))}
                 </div>
               )}
+              </div>
             </div>
           )}
         </SheetContent>
