@@ -93,7 +93,9 @@ export function AdminDiagnosticAssistant() {
 
   const { data: dbFindings } = useQuery<any[]>({
     queryKey: ["/api/admin/pinned-findings"],
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: open ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 
   useEffect(() => {
