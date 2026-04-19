@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import type { z } from "zod";
-import { signupSchema, loginSchema } from "../shared/schema";
+import { signupSchema, loginSchema, businessSignupSchema } from "../shared/schema";
 import { generateJWT } from "./jwt";
 
 type SignupInput = z.infer<typeof signupSchema>;
@@ -410,5 +410,155 @@ export function handleLogout() {
     req.session.destroy(() => {
       res.json({ message: "Logged out" });
     });
+  };
+}
+
+/**
+ * Storage interface for business signup. Extends AuthStorage with the two
+ * additional operations required by the business signup flow.
+ */
+export interface BusinessSignupStorage extends AuthStorage {
+  getUserByGuberId(guberId: string): Promise<{ id: number } | undefined>;
+  createBusinessProfile(data: Record<string, unknown>): Promise<{ id: number; [key: string]: unknown }>;
+}
+
+/**
+ * Optional production-only hooks for business signup. Tests can omit all of
+ * these. When a hook is absent the handler falls back to the minimal path.
+ */
+export interface BusinessSignupDeps {
+  generateGuberId?: () => string;
+  isGuberIdTaken?: (id: string) => Promise<boolean>;
+  generateReferralCode?: () => string;
+  isReferralCodeTaken?: (code: string) => Promise<boolean>;
+  /** Return true when the EIN is not yet registered. Omit to skip the check. */
+  isEinAvailable?: (ein: string) => Promise<boolean>;
+  /**
+   * Wraps the user + business-profile creation in a single atomic operation.
+   * If omitted (test mode) the two storage calls run sequentially without a
+   * transaction wrapper.
+   */
+  runTransaction?: (fn: () => Promise<void>) => Promise<void>;
+  sendWelcomeNotification?: (userId: number) => Promise<void>;
+  runBackgroundCheck?: (userId: number, fullName: string) => void;
+}
+
+export function handleBusinessSignup(storage: BusinessSignupStorage, deps: BusinessSignupDeps = {}) {
+  return async (req: Request, res: Response) => {
+    try {
+      const parsed = businessSignupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const {
+        ein,
+        legalBusinessName,
+        email,
+        username,
+        fullName,
+        password,
+        industry,
+        contactPhone,
+        billingEmail,
+        description,
+      } = parsed.data;
+
+      const pwError = validatePasswordStrength(password);
+      if (pwError) return res.status(400).json({ message: pwError });
+
+      const bioCheck = filterContactInfo(fullName);
+      if (bioCheck.blocked) {
+        return res.status(400).json({ message: "Contact info not allowed in names" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) return res.status(400).json({ message: "Email already in use" });
+
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
+
+      if (deps.isEinAvailable) {
+        const einFree = await deps.isEinAvailable(ein);
+        if (!einFree) return res.status(400).json({ message: "EIN already registered" });
+      }
+
+      const hashedPassword = await hashPassword(password);
+
+      let newGuberId: string | undefined;
+      if (deps.generateGuberId) {
+        newGuberId = deps.generateGuberId();
+        if (deps.isGuberIdTaken) {
+          while (await deps.isGuberIdTaken(newGuberId)) {
+            newGuberId = deps.generateGuberId();
+          }
+        }
+      }
+
+      let newRefCode: string | undefined;
+      if (deps.generateReferralCode) {
+        newRefCode = deps.generateReferralCode();
+        if (deps.isReferralCodeTaken) {
+          while (await deps.isReferralCodeTaken(newRefCode)) {
+            newRefCode = deps.generateReferralCode();
+          }
+        }
+      }
+
+      let user: AuthUser | undefined;
+
+      const doCreate = async () => {
+        const createPayload: Record<string, unknown> = {
+          email,
+          username,
+          fullName,
+          password: hashedPassword,
+          role: "buyer",
+          tier: "community",
+          day1OG: false,
+          accountType: "business",
+          termsAcceptedAt: new Date(),
+        };
+        if (newGuberId) createPayload.guberId = newGuberId;
+        if (newRefCode) createPayload.referralCode = newRefCode;
+
+        user = await storage.createUser(createPayload);
+
+        await storage.createBusinessProfile({
+          userId: user.id,
+          companyName: legalBusinessName.trim(),
+          ein,
+          legalBusinessName: legalBusinessName.trim(),
+          industry: industry || null,
+          contactPhone: contactPhone || null,
+          billingEmail: billingEmail || null,
+          description: description || null,
+        });
+      };
+
+      if (deps.runTransaction) {
+        await deps.runTransaction(doCreate);
+      } else {
+        await doCreate();
+      }
+
+      if (!user) return res.status(500).json({ message: "User creation failed" });
+
+      if (deps.sendWelcomeNotification) {
+        await deps.sendWelcomeNotification(user.id);
+      }
+
+      await regenerateSession(req);
+      req.session.userId = user.id;
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ message: "Session error" });
+        res.status(201).json(sanitizeUser(user));
+        if (deps.runBackgroundCheck) {
+          deps.runBackgroundCheck(user!.id, fullName);
+        }
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Business signup failed";
+      res.status(500).json({ message });
+    }
   };
 }

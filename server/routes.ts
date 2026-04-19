@@ -13,7 +13,7 @@ import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
-import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword } from "./auth";
+import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup } from "./auth";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
@@ -901,94 +901,40 @@ export async function registerRoutes(
     },
   }));
 
-  app.post("/api/auth/business-signup", async (req: Request, res: Response) => {
-    try {
-      const parsed = businessSignupSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      }
-      const { ein, legalBusinessName, email, username, fullName, password, industry, contactPhone, billingEmail, description } = parsed.data;
-
-      const pwError = validatePasswordStrength(password);
-      if (pwError) return res.status(400).json({ message: pwError });
-
-      const bioCheck = filterContactInfo(fullName);
-      if (bioCheck.blocked) {
-        return res.status(400).json({ message: "Contact info not allowed in names" });
-      }
-
-      const existingEmail = await storage.getUserByEmail(email);
-      if (existingEmail) return res.status(400).json({ message: "Email already in use" });
-
-      const existingUsername = await storage.getUserByUsername(username);
-      if (existingUsername) return res.status(400).json({ message: "Username already taken" });
-
-      const hashedPassword = await hashPassword(password);
-      let newGuberId = generateGuberId();
-      while (await storage.getUserByGuberId(newGuberId)) { newGuberId = generateGuberId(); }
-
-      let newRefCode = generateReferralCode();
-      while (true) {
-        const clash = await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${newRefCode} LIMIT 1`);
-        if (!clash.rows.length) break;
-        newRefCode = generateReferralCode();
-      }
-
-      let user: Awaited<ReturnType<typeof storage.createUser>>;
-      let businessProfile: Awaited<ReturnType<typeof storage.createBusinessProfile>>;
-
+  app.post("/api/auth/business-signup", handleBusinessSignup(storage, {
+    generateGuberId,
+    isGuberIdTaken: async (id) => !!(await storage.getUserByGuberId(id)),
+    generateReferralCode,
+    isReferralCodeTaken: async (code) => {
+      const clash = await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${code} LIMIT 1`);
+      return clash.rows.length > 0;
+    },
+    isEinAvailable: async (ein) => {
+      const existing = await db.execute(sql`SELECT 1 FROM business_profiles WHERE ein = ${ein} LIMIT 1`);
+      return existing.rows.length === 0;
+    },
+    runTransaction: async (fn) => {
       try {
         await db.execute(sql`BEGIN`);
-
-        user = await storage.createUser({
-          email,
-          username,
-          fullName,
-          password: hashedPassword,
-          role: "buyer",
-          tier: "community",
-          day1OG: false,
-          guberId: newGuberId,
-          referralCode: newRefCode,
-          accountType: "business",
-          termsAcceptedAt: new Date(),
-        });
-
-        businessProfile = await storage.createBusinessProfile({
-          userId: user.id,
-          companyName: legalBusinessName.trim(),
-          ein,
-          legalBusinessName: legalBusinessName.trim(),
-          industry: industry || null,
-          contactPhone: contactPhone || null,
-          billingEmail: billingEmail || null,
-          description: description || null,
-        });
-
+        await fn();
         await db.execute(sql`COMMIT`);
       } catch (txErr) {
         await db.execute(sql`ROLLBACK`).catch(() => {});
         throw txErr;
       }
-
+    },
+    sendWelcomeNotification: async (userId) => {
       await storage.createNotification({
-        userId: user.id,
+        userId,
         title: "Welcome to GUBER Business!",
         body: "Your business account has been created. Complete your profile and start posting jobs.",
         type: "system",
       });
-
-      await regenerateSession(req);
-      req.session.userId = user.id;
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ message: "Session error" });
-        res.status(201).json(sanitizeUser(user));
-        runNSOPWBackgroundCheck(user.id, fullName).catch(() => {});
-      });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+    },
+    runBackgroundCheck: (userId, fullName) => {
+      runNSOPWBackgroundCheck(userId, fullName).catch(() => {});
+    },
+  }));
 
   app.post("/api/auth/business-access-request", async (req: Request, res: Response) => {
     try {

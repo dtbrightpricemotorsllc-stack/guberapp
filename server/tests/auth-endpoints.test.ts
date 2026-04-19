@@ -16,7 +16,9 @@ import {
   handleResetPassword,
   handleMe,
   handleLogout,
+  handleBusinessSignup,
   type AuthStorage,
+  type BusinessSignupStorage,
 } from "../auth";
 
 interface MockUser {
@@ -28,6 +30,9 @@ interface MockUser {
   authProvider?: string;
   banned?: boolean;
   suspended?: boolean;
+  guberId?: string;
+  referralCode?: string;
+  accountType?: string;
 }
 
 interface MockResetToken {
@@ -939,6 +944,416 @@ describe("Auth rate limiting (express-rate-limit)", () => {
       .expect(429);
 
     expect(res.body.message).toContain("Too many");
+  });
+});
+
+interface MockBusinessProfile {
+  id: number;
+  userId: number;
+  ein: string;
+  legalBusinessName: string;
+  companyName: string;
+  industry?: string | null;
+  contactPhone?: string | null;
+  billingEmail?: string | null;
+  description?: string | null;
+}
+
+function createMockBusinessStorage(): BusinessSignupStorage & {
+  reset(): void;
+  getUsers(): MockUser[];
+  getProfiles(): MockBusinessProfile[];
+} {
+  let users: MockUser[] = [];
+  let resetTokens: MockResetToken[] = [];
+  let profiles: MockBusinessProfile[] = [];
+  let nextUserId = 1;
+  let nextProfileId = 1;
+
+  return {
+    reset() {
+      users = [];
+      resetTokens = [];
+      profiles = [];
+      nextUserId = 1;
+      nextProfileId = 1;
+    },
+    getUsers() {
+      return users;
+    },
+    getProfiles() {
+      return profiles;
+    },
+    async getUserByEmail(email: string) {
+      return users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    },
+    async getUserByUsername(username: string) {
+      return users.find((u) => u.username.toLowerCase() === username.toLowerCase());
+    },
+    async getUserByGuberId(guberId: string) {
+      return users.find((u) => u.guberId === guberId);
+    },
+    async createUser(data: Record<string, unknown>) {
+      const user: MockUser = {
+        id: nextUserId++,
+        email: data.email as string,
+        username: data.username as string,
+        fullName: data.fullName as string,
+        password: data.password as string,
+        authProvider: data.authProvider as string | undefined,
+        banned: (data.banned as boolean | undefined) ?? false,
+        suspended: (data.suspended as boolean | undefined) ?? false,
+        guberId: data.guberId as string | undefined,
+        referralCode: data.referralCode as string | undefined,
+        accountType: data.accountType as string | undefined,
+      };
+      users.push(user);
+      return user;
+    },
+    async createBusinessProfile(data: Record<string, unknown>) {
+      const profile: MockBusinessProfile = {
+        id: nextProfileId++,
+        userId: data.userId as number,
+        ein: data.ein as string,
+        legalBusinessName: data.legalBusinessName as string,
+        companyName: data.companyName as string,
+        industry: (data.industry as string | null | undefined) ?? null,
+        contactPhone: (data.contactPhone as string | null | undefined) ?? null,
+        billingEmail: (data.billingEmail as string | null | undefined) ?? null,
+        description: (data.description as string | null | undefined) ?? null,
+      };
+      profiles.push(profile);
+      return profile;
+    },
+    async getUser(id: number) {
+      return users.find((u) => u.id === id);
+    },
+    async updateUser(id: number, data: Partial<MockUser>) {
+      const user = users.find((u) => u.id === id);
+      if (!user) return undefined;
+      Object.assign(user, data);
+      return user;
+    },
+    async createPasswordResetToken(userId: number, token: string, expiresAt: Date) {
+      resetTokens.push({ userId, token, expiresAt, used: false });
+    },
+    async getPasswordResetToken(token: string) {
+      return resetTokens.find((t) => t.token === token);
+    },
+    async invalidatePasswordResetToken(token: string) {
+      const t = resetTokens.find((rt) => rt.token === token);
+      if (t) t.used = true;
+    },
+  };
+}
+
+function buildBusinessTestApp(mockStorage: ReturnType<typeof createMockBusinessStorage>) {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    session({
+      secret: "test-secret",
+      resave: false,
+      saveUninitialized: false,
+      cookie: { secure: false },
+    })
+  );
+
+  app.post("/api/auth/business-signup", handleBusinessSignup(mockStorage));
+
+  return app;
+}
+
+const VALID_BUSINESS_SIGNUP = {
+  ein: "123456789",
+  legalBusinessName: "Acme Corp LLC",
+  email: "biz@example.com",
+  username: "acmecorp",
+  fullName: "Jane Doe",
+  password: "StrongPass!1",
+  industry: "Technology",
+  contactPhone: "555-000-0000",
+  billingEmail: "billing@example.com",
+  description: "We do stuff.",
+};
+
+describe("POST /api/auth/business-signup (handleBusinessSignup)", () => {
+  let app: express.Express;
+  let mockStorage: ReturnType<typeof createMockBusinessStorage>;
+
+  beforeEach(() => {
+    mockStorage = createMockBusinessStorage();
+    app = buildBusinessTestApp(mockStorage);
+  });
+
+  it("should create a user and business profile with valid data and return 201", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    expect(res.body).toHaveProperty("id");
+    expect(res.body.email).toBe("biz@example.com");
+    expect(res.body.username).toBe("acmecorp");
+    expect(res.body).not.toHaveProperty("password");
+
+    const profiles = mockStorage.getProfiles();
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].ein).toBe("123456789");
+    expect(profiles[0].legalBusinessName).toBe("Acme Corp LLC");
+    expect(profiles[0].billingEmail).toBe("billing@example.com");
+
+    const users = mockStorage.getUsers();
+    expect(users[0].accountType).toBe("business");
+  });
+
+  it("should set a session cookie after signup", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    const cookies = res.headers["set-cookie"];
+    expect(cookies).toBeDefined();
+    expect(cookies.some((c: string) => c.includes("connect.sid"))).toBe(true);
+  });
+
+  it("should reject invalid EIN (not 9 digits)", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, ein: "12345" })
+      .expect(400);
+
+    expect(res.body.message).toBeDefined();
+  });
+
+  it("should reject missing legalBusinessName", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, legalBusinessName: "A" })
+      .expect(400);
+
+    expect(res.body.message).toBeDefined();
+  });
+
+  it("should reject weak password", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, password: "weak" })
+      .expect(400);
+
+    expect(res.body.message).toContain("8 characters");
+  });
+
+  it("should reject password without symbol", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, password: "NoSymbol123" })
+      .expect(400);
+
+    expect(res.body.message).toContain("symbol");
+  });
+
+  it("should reject contact info in fullName", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, fullName: "Jane 555-123-4567" })
+      .expect(400);
+
+    expect(res.body.message).toBe("Contact info not allowed in names");
+  });
+
+  it("should reject duplicate email", async () => {
+    await supertest(app)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, username: "othercorp", ein: "987654321" })
+      .expect(400);
+
+    expect(res.body.message).toBe("Email already in use");
+  });
+
+  it("should reject duplicate username", async () => {
+    await supertest(app)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({ ...VALID_BUSINESS_SIGNUP, email: "other@example.com", ein: "987654321" })
+      .expect(400);
+
+    expect(res.body.message).toBe("Username already taken");
+  });
+
+  it("should reject duplicate EIN when isEinAvailable dep is wired", async () => {
+    const einsInUse = new Set<string>();
+    const app2 = express();
+    app2.use(express.json());
+    app2.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+    app2.post(
+      "/api/auth/business-signup",
+      handleBusinessSignup(mockStorage, {
+        isEinAvailable: async (ein) => !einsInUse.has(ein),
+      })
+    );
+
+    einsInUse.add("123456789");
+
+    const res = await supertest(app2)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(400);
+
+    expect(res.body.message).toBe("EIN already registered");
+  });
+
+  it("should hash the password (not store plaintext)", async () => {
+    await supertest(app)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    const users = mockStorage.getUsers();
+    expect(users[0].password).not.toBe("StrongPass!1");
+    expect(users[0].password).toContain(".");
+  });
+
+  it("should call sendWelcomeNotification when dep is provided", async () => {
+    let notifiedUserId: number | null = null;
+    const app2 = express();
+    app2.use(express.json());
+    app2.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+    app2.post(
+      "/api/auth/business-signup",
+      handleBusinessSignup(mockStorage, {
+        sendWelcomeNotification: async (userId) => {
+          notifiedUserId = userId;
+        },
+      })
+    );
+
+    const res = await supertest(app2)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    expect(notifiedUserId).toBe(res.body.id);
+  });
+
+  it("should call runBackgroundCheck when dep is provided", async () => {
+    let checkedUserId: number | null = null;
+    const app2 = express();
+    app2.use(express.json());
+    app2.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+    app2.post(
+      "/api/auth/business-signup",
+      handleBusinessSignup(mockStorage, {
+        runBackgroundCheck: (userId) => {
+          checkedUserId = userId;
+        },
+      })
+    );
+
+    const res = await supertest(app2)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    expect(checkedUserId).toBe(res.body.id);
+  });
+
+  it("should roll back and return 500 when runTransaction dep throws", async () => {
+    const app2 = express();
+    app2.use(express.json());
+    app2.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+    app2.post(
+      "/api/auth/business-signup",
+      handleBusinessSignup(mockStorage, {
+        runTransaction: async (_fn) => {
+          throw new Error("DB hiccup");
+        },
+      })
+    );
+
+    const res = await supertest(app2)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(500);
+
+    expect(res.body.message).toBe("DB hiccup");
+    expect(mockStorage.getUsers()).toHaveLength(0);
+    expect(mockStorage.getProfiles()).toHaveLength(0);
+  });
+
+  it("should use GUBER ID from generateGuberId dep", async () => {
+    const app2 = express();
+    app2.use(express.json());
+    app2.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+    app2.post(
+      "/api/auth/business-signup",
+      handleBusinessSignup(mockStorage, {
+        generateGuberId: () => "GUB-TESTID1",
+        isGuberIdTaken: async () => false,
+      })
+    );
+
+    await supertest(app2)
+      .post("/api/auth/business-signup")
+      .send(VALID_BUSINESS_SIGNUP)
+      .expect(201);
+
+    const users = mockStorage.getUsers();
+    expect(users[0].guberId).toBe("GUB-TESTID1");
+  });
+
+  it("should reject missing required fields", async () => {
+    const res = await supertest(app)
+      .post("/api/auth/business-signup")
+      .send({})
+      .expect(400);
+
+    expect(res.body.message).toBeDefined();
   });
 });
 
