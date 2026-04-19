@@ -10,7 +10,9 @@ async function handleExpiredSession() {
   const token = await getToken();
   if (token) {
     await clearToken();
-    window.location.href = "/login?reason=session_expired";
+    const currentPath = window.location.pathname + window.location.search;
+    const returnTo = currentPath !== "/" ? `&returnTo=${encodeURIComponent(currentPath)}` : "";
+    window.location.href = `/login?reason=session_expired${returnTo}`;
   }
 }
 
