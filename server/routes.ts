@@ -7057,6 +7057,8 @@ export async function registerRoutes(
       let users = await storage.getAllUsers();
       if (audience === "og") {
         users = users.filter((u: any) => u.day1OG);
+      } else if (audience === "non_og") {
+        users = users.filter((u: any) => !u.day1OG);
       } else if (audience === "trustbox") {
         users = users.filter((u: any) => u.trustBoxPurchased);
       }

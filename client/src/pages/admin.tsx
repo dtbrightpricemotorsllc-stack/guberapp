@@ -1988,6 +1988,7 @@ Sends a push notification to all users who have enabled notifications. Reaches A
 <SelectContent>
 <SelectItem value="all">All subscribers</SelectItem>
 <SelectItem value="og">Day-1 OG only</SelectItem>
+<SelectItem value="non_og">Non-Day-1 OG only</SelectItem>
 <SelectItem value="trustbox">Trust Box subscribers only</SelectItem>
 </SelectContent>
 </Select>
@@ -2080,6 +2081,7 @@ Sends from <span className="font-mono">noreply@guberapp.app</span> — no-reply,
 <SelectContent>
 <SelectItem value="all">All users</SelectItem>
 <SelectItem value="og">Day-1 OG only</SelectItem>
+<SelectItem value="non_og">Non-Day-1 OG only</SelectItem>
 <SelectItem value="trustbox">Trust Box subscribers only</SelectItem>
 </SelectContent>
 </Select>

@@ -99,7 +99,7 @@ export async function removeSubscription(endpoint: string): Promise<void> {
 
 export async function sendPushBroadcast(
   payload: { title: string; body: string; url?: string },
-  audience: "all" | "og" | "trustbox" = "all"
+  audience: "all" | "og" | "non_og" | "trustbox" = "all"
 ): Promise<{ sent: number; failed: number; total: number }> {
   if (!vapidConfigured) return { sent: 0, failed: 0, total: 0 };
 
@@ -110,6 +110,7 @@ export async function sendPushBroadcast(
     WHERE u.role != 'admin'
   `;
   if (audience === "og") query += ` AND u.day1_og = TRUE`;
+  if (audience === "non_og") query += ` AND (u.day1_og = FALSE OR u.day1_og IS NULL)`;
   if (audience === "trustbox") query += ` AND u.trust_box_purchased = TRUE`;
 
   const result = await db.execute(sql.raw(query));
