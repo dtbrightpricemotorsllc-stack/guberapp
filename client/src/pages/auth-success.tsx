@@ -4,34 +4,7 @@ import { queryClient } from "@/lib/queryClient";
 import { setToken } from "@/lib/token-storage";
 import { GuberLogo } from "@/components/guber-logo";
 import { Loader2 } from "lucide-react";
-
-const ALLOWED_RETURN_TO_PREFIXES: readonly string[] = [
-  "/dashboard",
-  "/biz/",
-  "/browse-jobs",
-  "/jobs/",
-  "/post-job",
-  "/my-jobs",
-  "/profile",
-  "/account-settings",
-  "/notifications",
-  "/admin",
-  "/ai-or-not",
-  "/verify-inspect",
-  "/wallet",
-  "/job-payment-success",
-  "/og-success",
-  "/worker-clipboard/",
-  "/vi-requests",
-  "/marketplace",
-  "/marketplace-preview",
-  "/map",
-  "/cash-drop/",
-  "/business-onboarding",
-  "/resume",
-  "/submit-observation",
-  "/observations",
-];
+import { ALLOWED_RETURN_TO_PREFIXES } from "@shared/oauth-config";
 
 function isAllowedReturnTo(value: string): boolean {
   if (!value || !value.startsWith("/")) return false;

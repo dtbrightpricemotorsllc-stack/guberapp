@@ -1,33 +1,8 @@
 import type { Request, Response } from "express";
 import { randomBytes } from "crypto";
+import { ALLOWED_RETURN_TO_PREFIXES } from "../shared/oauth-config";
 
-export const ALLOWED_RETURN_TO_PREFIXES: readonly string[] = [
-  "/dashboard",
-  "/biz/",
-  "/browse-jobs",
-  "/jobs/",
-  "/post-job",
-  "/my-jobs",
-  "/profile",
-  "/account-settings",
-  "/notifications",
-  "/admin",
-  "/ai-or-not",
-  "/verify-inspect",
-  "/wallet",
-  "/job-payment-success",
-  "/og-success",
-  "/worker-clipboard/",
-  "/vi-requests",
-  "/marketplace",
-  "/marketplace-preview",
-  "/map",
-  "/cash-drop/",
-  "/business-onboarding",
-  "/resume",
-  "/submit-observation",
-  "/observations",
-];
+export { ALLOWED_RETURN_TO_PREFIXES };
 
 export function isAllowedReturnTo(value: string): boolean {
   if (!value || !value.startsWith("/")) return false;
