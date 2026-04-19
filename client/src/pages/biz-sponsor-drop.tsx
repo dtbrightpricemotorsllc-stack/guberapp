@@ -42,11 +42,11 @@ type FormData = {
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
-const CARD_BG = "#0A0A0A";
-const BORDER = "rgba(255,255,255,0.06)";
+const CARD_BG = "hsl(var(--card))";
+const BORDER = "hsl(var(--border) / 0.5)";
 const GOLD_BORDER = "rgba(198,168,92,0.22)";
 const GOLD_GLOW = "rgba(168,138,67,0.18)";
-const MUTED = "#6B6B6B";
+const MUTED = "hsl(var(--muted-foreground) / 0.7)";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -66,7 +66,7 @@ function StyledInput({ ...props }: React.InputHTMLAttributes<HTMLInputElement> &
         border: `1px solid ${BORDER}`,
         borderRadius: "10px",
         padding: "10px 14px",
-        color: "#F4F4F5",
+        color: "hsl(var(--card-foreground))",
         fontSize: "14px",
         outline: "none",
         ...props.style,
@@ -85,7 +85,7 @@ function StyledTextarea({ ...props }: React.TextareaHTMLAttributes<HTMLTextAreaE
         border: `1px solid ${BORDER}`,
         borderRadius: "10px",
         padding: "10px 14px",
-        color: "#F4F4F5",
+        color: "hsl(var(--card-foreground))",
         fontSize: "14px",
         outline: "none",
         resize: "vertical",
@@ -107,7 +107,7 @@ function StyledSelect({ value, onValueChange, children, placeholder, testId }: {
           background: "rgba(255,255,255,0.04)",
           border: `1px solid ${BORDER}`,
           borderRadius: "10px",
-          color: value ? "#F4F4F5" : MUTED,
+          color: value ? "hsl(var(--card-foreground))" : MUTED,
           fontSize: "14px",
         }}
       >
@@ -231,7 +231,7 @@ export default function BizSponsorDrop() {
             <p style={{ color: GOLD, fontSize: "11px", fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 12 }}>
               Request Received
             </p>
-            <h2 style={{ color: "#F4F4F5", fontSize: "22px", fontWeight: 900, marginBottom: 12, lineHeight: 1.2 }}>
+            <h2 style={{ color: "hsl(var(--card-foreground))", fontSize: "22px", fontWeight: 900, marginBottom: 12, lineHeight: 1.2 }}>
               We'll bring the crowd.<br />You keep the customers.
             </h2>
             <p style={{ color: MUTED, fontSize: "13px", lineHeight: 1.6, marginBottom: 28 }}>
@@ -289,7 +289,7 @@ export default function BizSponsorDrop() {
               <Flame style={{ width: 18, height: 18, color: GOLD }} />
             </div>
             <div>
-              <p style={{ color: "#FFFFFF", fontSize: "20px", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em" }}>Sponsor a Campaign</p>
+              <p style={{ color: "hsl(var(--card-foreground))", fontSize: "20px", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em" }}>Sponsor a Campaign</p>
               <p style={{ color: MUTED, fontSize: "12px", marginTop: 2 }}>Drive real foot traffic with a live GUBER cash drop event</p>
             </div>
           </div>
@@ -314,7 +314,7 @@ export default function BizSponsorDrop() {
         <form onSubmit={handleSubmit((d) => submitMutation.mutate(d))} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
           <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: "16px", padding: "20px", overflow: "hidden", position: "relative" }}>
-            <p style={{ color: "#FFFFFF", fontSize: "14px", fontWeight: 900, marginBottom: 4, letterSpacing: "-0.01em" }}>Contact Information</p>
+            <p style={{ color: "hsl(var(--card-foreground))", fontSize: "14px", fontWeight: 900, marginBottom: 4, letterSpacing: "-0.01em" }}>Contact Information</p>
             <p style={{ color: MUTED, fontSize: "11px", marginBottom: 16 }}>Pre-filled from your business profile when available</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
@@ -374,7 +374,7 @@ export default function BizSponsorDrop() {
           </div>
 
           <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: "16px", padding: "20px" }}>
-            <p style={{ color: "#FFFFFF", fontSize: "14px", fontWeight: 900, marginBottom: 4, letterSpacing: "-0.01em" }}>Drop Details</p>
+            <p style={{ color: "hsl(var(--card-foreground))", fontSize: "14px", fontWeight: 900, marginBottom: 4, letterSpacing: "-0.01em" }}>Drop Details</p>
             <p style={{ color: MUTED, fontSize: "11px", marginBottom: 16 }}>When, where, and how you want the drop to run</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
@@ -561,7 +561,7 @@ export default function BizSponsorDrop() {
           <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: "16px", padding: "20px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <Gift style={{ width: 15, height: 15, color: GOLD }} />
-              <p style={{ color: "#F4F4F5", fontSize: "14px", fontWeight: 700 }}>Reward Structure</p>
+              <p style={{ color: "hsl(var(--card-foreground))", fontSize: "14px", fontWeight: 700 }}>Reward Structure</p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
@@ -642,7 +642,7 @@ export default function BizSponsorDrop() {
           </div>
 
           <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: "16px", padding: "20px" }}>
-            <p style={{ color: "#FFFFFF", fontSize: "14px", fontWeight: 900, marginBottom: 4, letterSpacing: "-0.01em" }}>Additional Notes</p>
+            <p style={{ color: "hsl(var(--card-foreground))", fontSize: "14px", fontWeight: 900, marginBottom: 4, letterSpacing: "-0.01em" }}>Additional Notes</p>
             <p style={{ color: MUTED, fontSize: "11px", marginBottom: 12 }}>Tell us anything else about your goals or requirements</p>
             <StyledTextarea
               placeholder="Tell us about your business, your goals for this drop, or any special requirements..."

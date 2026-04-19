@@ -17,14 +17,14 @@ import {
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
 const PURPLE = "#7B3FE4";
-const SURFACE = "#0A0A0A";
-const SURFACE2 = "#111111";
-const BORDER = "rgba(255,255,255,0.06)";
+const SURFACE = "hsl(var(--card))";
+const SURFACE2 = "hsl(var(--muted))";
+const BORDER = "hsl(var(--border) / 0.5)";
 const GOLD_BORDER = "rgba(198,168,92,0.22)";
 const GOLD_GLOW = "rgba(168,138,67,0.18)";
-const TEXT_PRIMARY = "#FFFFFF";
-const TEXT_SECONDARY = "#A1A1A1";
-const TEXT_MUTED = "#6B6B6B";
+const TEXT_PRIMARY = "hsl(var(--card-foreground))";
+const TEXT_SECONDARY = "hsl(var(--muted-foreground))";
+const TEXT_MUTED = "hsl(var(--muted-foreground) / 0.7)";
 const SUCCESS = "#22C55E";
 
 const CATEGORIES = [
@@ -295,7 +295,7 @@ export default function BizTalentExplorer() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
-              <h1 className="text-xl font-black tracking-tight text-white">Talent Explorer</h1>
+              <h1 className="text-xl font-black tracking-tight text-foreground">Talent Explorer</h1>
               {data?.candidates?.length ? (
                 <span className="text-[9px] px-2 py-0.5 rounded-full font-bold tracking-[0.12em]" style={{ background: `${PURPLE}10`, color: PURPLE, border: `1px solid ${PURPLE}20` }}>
                   {data.candidates.length} FOUND
@@ -475,7 +475,7 @@ export default function BizTalentExplorer() {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${BORDER}` }}>
               <User className="w-7 h-7" style={{ color: "#3F3F46" }} />
             </div>
-            <p className="text-sm font-bold text-white mb-2">No matches yet</p>
+            <p className="text-sm font-bold text-foreground mb-2">No matches yet</p>
             <p className="text-xs leading-relaxed max-w-sm mx-auto mb-5" style={{ color: TEXT_MUTED }}>
               Try expanding your radius or adjusting your filters.<br />New workers are added as the GUBER network grows.
             </p>
@@ -519,7 +519,7 @@ export default function BizTalentExplorer() {
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: GOLD_GLOW, border: `1px solid ${GOLD_BORDER}`, boxShadow: `0 4px 16px ${GOLD_GLOW}` }}>
                 <Lock className="w-6 h-6" style={{ color: GOLD }} />
               </div>
-              <p className="text-sm font-black text-white mb-2">Unlock Full Scouting Access</p>
+              <p className="text-sm font-black text-foreground mb-2">Unlock Full Scouting Access</p>
               <p className="text-xs mb-1 leading-relaxed max-w-md mx-auto" style={{ color: TEXT_SECONDARY }}>
                 {isDemoUser ? "Subscribe to the Scout Plan for full talent search, monthly profile unlocks, and direct outreach to proven workers." : "Subscribe to the Scout Plan ($99/mo) for full talent search, 20 monthly profile unlocks, and direct outreach to proven workers."}
               </p>

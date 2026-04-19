@@ -12,13 +12,13 @@ import { Shield, Lock, CheckCircle2, CreditCard, Loader2, ShieldCheck, ArrowRigh
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
-const SURFACE = "#0A0A0A";
-const SURFACE2 = "#111111";
-const BORDER = "rgba(255,255,255,0.06)";
+const SURFACE = "hsl(var(--card))";
+const SURFACE2 = "hsl(var(--muted))";
+const BORDER = "hsl(var(--border) / 0.5)";
 const GOLD_BORDER = "rgba(198,168,92,0.22)";
 const GOLD_GLOW = "rgba(168,138,67,0.18)";
-const TEXT_MUTED = "#6B6B6B";
-const TEXT_SEC = "#A1A1A1";
+const TEXT_MUTED = "hsl(var(--muted-foreground) / 0.7)";
+const TEXT_SEC = "hsl(var(--muted-foreground))";
 const SUCCESS = "#22C55E";
 
 export default function BizVerification() {
@@ -84,7 +84,7 @@ export default function BizVerification() {
     <BizLayout>
       <div className="max-w-lg mx-auto" data-testid="page-biz-verification">
         <div className="mb-8">
-          <h1 className="text-xl font-black tracking-tight text-white mb-1">Business Verification</h1>
+          <h1 className="text-xl font-black tracking-tight text-foreground mb-1">Business Verification</h1>
           <p className="text-xs leading-relaxed" style={{ color: TEXT_MUTED }}>
             Required to unlock full candidate visibility and direct outreach through GUBER Business
           </p>
@@ -97,7 +97,7 @@ export default function BizVerification() {
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: `${SUCCESS}08`, border: `1px solid ${SUCCESS}18` }}>
                 <CheckCircle2 className="w-8 h-8" style={{ color: SUCCESS }} />
               </div>
-              <p className="text-lg font-black text-white mb-1.5">Verified Business</p>
+              <p className="text-lg font-black text-foreground mb-1.5">Verified Business</p>
               <p className="text-xs leading-relaxed max-w-xs mx-auto" style={{ color: TEXT_MUTED }}>
                 Your company is fully verified. You have access to all scouting, outreach, and profile unlock features.
               </p>
@@ -119,7 +119,7 @@ export default function BizVerification() {
                     {feePaid ? <CheckCircle2 className="w-4.5 h-4.5" style={{ color: SUCCESS }} /> : <CreditCard className="w-4.5 h-4.5" style={{ color: GOLD }} />}
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-white">Step 1 · Verification Fee</p>
+                    <p className="text-sm font-bold text-foreground">Step 1 · Verification Fee</p>
                     <p className="text-[11px]" style={{ color: feePaid ? SUCCESS : TEXT_MUTED }}>
                       {feePaid ? "Payment received" : isDemoUser ? "Verification required to begin secure company review" : "One-time $49 fee to begin secure company review"}
                     </p>
@@ -151,7 +151,7 @@ export default function BizVerification() {
                 )}
                 {!feePaid && (isStoreBuild || isDemoUser) && (
                   <p className="text-[11px] leading-relaxed" style={{ color: TEXT_MUTED }}>
-                    Visit <span className="font-bold text-white">guberapp.app</span> on your browser to complete business verification.
+                    Visit <span className="font-bold text-foreground">guberapp.app</span> on your browser to complete business verification.
                   </p>
                 )}
               </div>
@@ -165,7 +165,7 @@ export default function BizVerification() {
                     <ShieldCheck className="w-4.5 h-4.5" style={{ color: GOLD }} />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-white">Step 2 · Business Details</p>
+                    <p className="text-sm font-bold text-foreground">Step 2 · Business Details</p>
                     <p className="text-[11px]" style={{ color: TEXT_MUTED }}>
                       Submit EIN and billing details for verification
                     </p>
@@ -185,23 +185,23 @@ export default function BizVerification() {
 
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold tracking-[0.14em] uppercase" style={{ color: GOLD_DK }}>EIN / FEDERAL TAX ID *</Label>
-                      <Input value={form.ein} onChange={update("ein")} type="text" className="rounded-xl h-11 text-sm px-4 border-0 font-mono tracking-widest" style={{ background: SURFACE2, color: "#fff" }} placeholder="XX-XXXXXXX" maxLength={10} data-testid="input-ein" />
+                      <Input value={form.ein} onChange={update("ein")} type="text" className="rounded-xl h-11 text-sm px-4 border-0 font-mono tracking-widest" style={{ background: SURFACE2, color: "hsl(var(--card-foreground))" }} placeholder="XX-XXXXXXX" maxLength={10} data-testid="input-ein" />
                       <p className="text-[10px]" style={{ color: "#3F3F46" }}>Format: 12-3456789 (9 digits)</p>
                     </div>
 
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold tracking-[0.14em] uppercase" style={{ color: GOLD_DK }}>BUSINESS ADDRESS *</Label>
-                      <Input value={form.businessAddress} onChange={update("businessAddress")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: SURFACE2, color: "#fff" }} placeholder="123 Main St, City, State ZIP" data-testid="input-business-address" />
+                      <Input value={form.businessAddress} onChange={update("businessAddress")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: SURFACE2, color: "hsl(var(--card-foreground))" }} placeholder="123 Main St, City, State ZIP" data-testid="input-business-address" />
                     </div>
 
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold tracking-[0.14em] uppercase" style={{ color: GOLD_DK }}>BILLING EMAIL *</Label>
-                      <Input value={form.billingEmail} onChange={update("billingEmail")} type="email" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: SURFACE2, color: "#fff" }} placeholder="billing@company.com" data-testid="input-billing-email" />
+                      <Input value={form.billingEmail} onChange={update("billingEmail")} type="email" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: SURFACE2, color: "hsl(var(--card-foreground))" }} placeholder="billing@company.com" data-testid="input-billing-email" />
                     </div>
 
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold tracking-[0.14em] uppercase" style={{ color: GOLD_DK }}>AUTHORIZED CONTACT NAME *</Label>
-                      <Input value={form.authorizedContactName} onChange={update("authorizedContactName")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: SURFACE2, color: "#fff" }} placeholder="Full name" data-testid="input-authorized-contact" />
+                      <Input value={form.authorizedContactName} onChange={update("authorizedContactName")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: SURFACE2, color: "hsl(var(--card-foreground))" }} placeholder="Full name" data-testid="input-authorized-contact" />
                     </div>
 
                     <Button

@@ -5,8 +5,8 @@ import { Link } from "wouter";
 const GOLD = "#C6A85C";
 const GOLD_BORDER = "rgba(198,168,92,0.22)";
 const GOLD_GLOW = "rgba(168,138,67,0.18)";
-const CARD_BG = "#0A0A0A";
-const MUTED = "#6B6B6B";
+const CARD_BG = "hsl(var(--card))";
+const MUTED = "hsl(var(--muted-foreground) / 0.7)";
 
 export default function BizSponsorDropSuccess() {
   return (
@@ -30,7 +30,7 @@ export default function BizSponsorDropSuccess() {
           <p style={{ color: GOLD, fontSize: "11px", fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 12 }}>
             Payment Received
           </p>
-          <h2 style={{ color: "#F4F4F5", fontSize: "22px", fontWeight: 900, marginBottom: 12, lineHeight: 1.2 }} data-testid="text-success-title">
+          <h2 style={{ color: "hsl(var(--card-foreground))", fontSize: "22px", fontWeight: 900, marginBottom: 12, lineHeight: 1.2 }} data-testid="text-success-title">
             Your drop sponsorship has been received.
           </h2>
           <p style={{ color: MUTED, fontSize: "13px", lineHeight: 1.6, marginBottom: 28 }} data-testid="text-success-message">

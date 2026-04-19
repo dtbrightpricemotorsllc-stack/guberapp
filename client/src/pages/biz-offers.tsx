@@ -9,10 +9,10 @@ const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
 const GOLD_BORDER = "rgba(198,168,92,0.22)";
 const GOLD_GLOW = "rgba(168,138,67,0.18)";
-const SURFACE = "#0A0A0A";
-const BORDER = "rgba(255,255,255,0.06)";
-const TEXT_MUTED = "#6B6B6B";
-const TEXT_SEC = "#A1A1A1";
+const SURFACE = "hsl(var(--card))";
+const BORDER = "hsl(var(--border) / 0.5)";
+const TEXT_MUTED = "hsl(var(--muted-foreground) / 0.7)";
+const TEXT_SEC = "hsl(var(--muted-foreground))";
 const SUCCESS = "#22C55E";
 
 function statusInfo(status: string) {
@@ -34,7 +34,7 @@ export default function BizOffers() {
     <BizLayout>
       <div className="max-w-4xl mx-auto" data-testid="page-biz-offers">
         <div className="mb-8">
-          <h1 className="text-xl font-black tracking-tight text-white mb-1">Outreach</h1>
+          <h1 className="text-xl font-black tracking-tight text-foreground mb-1">Outreach</h1>
           <p className="text-xs leading-relaxed" style={{ color: TEXT_MUTED }}>
             Track offers and outreach sent to candidates through the Talent Explorer
           </p>
@@ -49,7 +49,7 @@ export default function BizOffers() {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${BORDER}` }}>
               <Send className="w-7 h-7" style={{ color: "#3F3F46" }} />
             </div>
-            <p className="text-sm font-bold text-white mb-2">No outreach yet</p>
+            <p className="text-sm font-bold text-foreground mb-2">No outreach yet</p>
             <p className="text-xs leading-relaxed max-w-sm mx-auto mb-6" style={{ color: TEXT_MUTED }}>
               Use the Talent Explorer to identify and contact proven workers directly through the GUBER Business network.
             </p>
@@ -77,7 +77,7 @@ export default function BizOffers() {
                     <Icon className="w-4 h-4" style={{ color: info.color }} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-white truncate">{offer.subject}</p>
+                    <p className="text-sm font-bold text-foreground truncate">{offer.subject}</p>
                     <p className="text-[11px]" style={{ color: TEXT_MUTED }}>
                       {offer.offerType?.replace(/_/g, " ")} · Candidate #{offer.userId}
                     </p>
