@@ -1,6 +1,64 @@
 import type { Request, Response } from "express";
 import { randomBytes } from "crypto";
 
+export const ALLOWED_RETURN_TO_PREFIXES: readonly string[] = [
+  "/dashboard",
+  "/biz/",
+  "/browse-jobs",
+  "/jobs/",
+  "/post-job",
+  "/my-jobs",
+  "/profile",
+  "/account-settings",
+  "/notifications",
+  "/admin",
+  "/ai-or-not",
+  "/verify-inspect",
+  "/wallet",
+  "/job-payment-success",
+  "/og-success",
+  "/worker-clipboard/",
+  "/vi-requests",
+  "/marketplace",
+  "/marketplace-preview",
+  "/map",
+  "/cash-drop/",
+  "/business-onboarding",
+  "/resume",
+  "/submit-observation",
+  "/observations",
+];
+
+export function isAllowedReturnTo(value: string): boolean {
+  if (!value || !value.startsWith("/")) return false;
+  if (value.startsWith("//")) return false;
+
+  const lowerValue = value.toLowerCase();
+  if (
+    lowerValue.includes("/..") ||
+    lowerValue.includes("%2e") ||
+    lowerValue.includes("%2f")
+  ) {
+    return false;
+  }
+
+  let normalized: string;
+  try {
+    const url = new URL(value, "https://example.com");
+    if (url.hostname !== "example.com") return false;
+    normalized = url.pathname;
+  } catch {
+    return false;
+  }
+
+  return ALLOWED_RETURN_TO_PREFIXES.some((prefix) => {
+    if (prefix.endsWith("/")) {
+      return normalized === prefix.slice(0, -1) || normalized.startsWith(prefix);
+    }
+    return normalized === prefix || normalized.startsWith(prefix + "/");
+  });
+}
+
 export function getBaseUrl(req: Request): string {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, "");
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
@@ -19,7 +77,7 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
   (req.session as any).oauthState = state;
 
   const returnTo = req.query.returnTo as string | undefined;
-  if (returnTo && returnTo.startsWith("/")) {
+  if (returnTo && isAllowedReturnTo(returnTo)) {
     (req.session as any).oauthReturnTo = returnTo;
   } else {
     delete (req.session as any).oauthReturnTo;

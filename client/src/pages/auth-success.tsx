@@ -5,6 +5,64 @@ import { setToken } from "@/lib/token-storage";
 import { GuberLogo } from "@/components/guber-logo";
 import { Loader2 } from "lucide-react";
 
+const ALLOWED_RETURN_TO_PREFIXES: readonly string[] = [
+  "/dashboard",
+  "/biz/",
+  "/browse-jobs",
+  "/jobs/",
+  "/post-job",
+  "/my-jobs",
+  "/profile",
+  "/account-settings",
+  "/notifications",
+  "/admin",
+  "/ai-or-not",
+  "/verify-inspect",
+  "/wallet",
+  "/job-payment-success",
+  "/og-success",
+  "/worker-clipboard/",
+  "/vi-requests",
+  "/marketplace",
+  "/marketplace-preview",
+  "/map",
+  "/cash-drop/",
+  "/business-onboarding",
+  "/resume",
+  "/submit-observation",
+  "/observations",
+];
+
+function isAllowedReturnTo(value: string): boolean {
+  if (!value || !value.startsWith("/")) return false;
+  if (value.startsWith("//")) return false;
+
+  const lowerValue = value.toLowerCase();
+  if (
+    lowerValue.includes("/..") ||
+    lowerValue.includes("%2e") ||
+    lowerValue.includes("%2f")
+  ) {
+    return false;
+  }
+
+  let normalized: string;
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin) return false;
+    normalized = url.pathname;
+  } catch {
+    return false;
+  }
+
+  return ALLOWED_RETURN_TO_PREFIXES.some((prefix) => {
+    if (prefix.endsWith("/")) {
+      return normalized === prefix.slice(0, -1) || normalized.startsWith(prefix);
+    }
+    return normalized === prefix || normalized.startsWith(prefix + "/");
+  });
+}
+
 export default function AuthSuccess() {
   const [, setLocation] = useLocation();
 
@@ -27,7 +85,7 @@ export default function AuthSuccess() {
         return queryClient.fetchQuery({ queryKey: ["/api/auth/me"] });
       })
       .then((me) => {
-        if (returnTo && returnTo.startsWith("/")) {
+        if (returnTo && isAllowedReturnTo(returnTo)) {
           setLocation(returnTo);
           return;
         }

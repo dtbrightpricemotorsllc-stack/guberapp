@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import express from "express";
 import session from "express-session";
 import supertest from "supertest";
-import { handleGoogleAuthStart, validateOAuthState } from "../oauth";
+import { handleGoogleAuthStart, validateOAuthState, isAllowedReturnTo } from "../oauth";
 
 function buildTestApp() {
   const app = express();
@@ -201,5 +201,157 @@ describe("Google OAuth state validation (production handlers)", () => {
 
       expect(res.headers.location).toBe("/login?error=invalid_state");
     });
+  });
+});
+
+describe("isAllowedReturnTo — returnTo allowlist validation", () => {
+  it("allows exact known paths", () => {
+    expect(isAllowedReturnTo("/dashboard")).toBe(true);
+    expect(isAllowedReturnTo("/browse-jobs")).toBe(true);
+    expect(isAllowedReturnTo("/post-job")).toBe(true);
+    expect(isAllowedReturnTo("/my-jobs")).toBe(true);
+    expect(isAllowedReturnTo("/profile")).toBe(true);
+    expect(isAllowedReturnTo("/account-settings")).toBe(true);
+    expect(isAllowedReturnTo("/notifications")).toBe(true);
+    expect(isAllowedReturnTo("/wallet")).toBe(true);
+    expect(isAllowedReturnTo("/marketplace")).toBe(true);
+    expect(isAllowedReturnTo("/marketplace-preview")).toBe(true);
+    expect(isAllowedReturnTo("/map")).toBe(true);
+    expect(isAllowedReturnTo("/resume")).toBe(true);
+    expect(isAllowedReturnTo("/submit-observation")).toBe(true);
+    expect(isAllowedReturnTo("/observations")).toBe(true);
+  });
+
+  it("allows paths that start with a known prefix", () => {
+    expect(isAllowedReturnTo("/biz/dashboard")).toBe(true);
+    expect(isAllowedReturnTo("/biz/post-job")).toBe(true);
+    expect(isAllowedReturnTo("/jobs/42")).toBe(true);
+    expect(isAllowedReturnTo("/profile/123")).toBe(true);
+    expect(isAllowedReturnTo("/worker-clipboard/abc")).toBe(true);
+    expect(isAllowedReturnTo("/cash-drop/99")).toBe(true);
+    expect(isAllowedReturnTo("/resume/456")).toBe(true);
+  });
+
+  it("rejects paths not in the allowlist", () => {
+    expect(isAllowedReturnTo("/unknown-page")).toBe(false);
+    expect(isAllowedReturnTo("/evil")).toBe(false);
+    expect(isAllowedReturnTo("/login")).toBe(false);
+    expect(isAllowedReturnTo("/signup")).toBe(false);
+    expect(isAllowedReturnTo("/auth-success")).toBe(false);
+  });
+
+  it("rejects boundary-bypass attempts where a known prefix is only a substring", () => {
+    expect(isAllowedReturnTo("/dashboard-evil")).toBe(false);
+    expect(isAllowedReturnTo("/admin123")).toBe(false);
+    expect(isAllowedReturnTo("/marketplace-extra")).toBe(false);
+    expect(isAllowedReturnTo("/marketplace-preview-extra")).toBe(false);
+    expect(isAllowedReturnTo("/administer")).toBe(false);
+    expect(isAllowedReturnTo("/walletx")).toBe(false);
+    expect(isAllowedReturnTo("/observationsxyz")).toBe(false);
+  });
+
+  it("rejects dot-segment traversal attempts", () => {
+    expect(isAllowedReturnTo("/dashboard/../../login")).toBe(false);
+    expect(isAllowedReturnTo("/biz/../../../etc/passwd")).toBe(false);
+    expect(isAllowedReturnTo("/dashboard/../signup")).toBe(false);
+    expect(isAllowedReturnTo("/jobs/42/../../admin")).toBe(false);
+  });
+
+  it("rejects percent-encoded traversal and slash attempts", () => {
+    expect(isAllowedReturnTo("/dashboard%2f..%2flogin")).toBe(false);
+    expect(isAllowedReturnTo("/dashboard%2F%2Fevil")).toBe(false);
+    expect(isAllowedReturnTo("/%2e%2e/login")).toBe(false);
+  });
+
+  it("rejects external URLs even if they start with a slash-like pattern", () => {
+    expect(isAllowedReturnTo("//evil.com/dashboard")).toBe(false);
+    expect(isAllowedReturnTo("https://evil.com/dashboard")).toBe(false);
+    expect(isAllowedReturnTo("http://evil.com/biz/dashboard")).toBe(false);
+  });
+
+  it("rejects empty string and non-string-like values", () => {
+    expect(isAllowedReturnTo("")).toBe(false);
+    expect(isAllowedReturnTo("dashboard")).toBe(false);
+  });
+
+  it("rejects disallowed returnTo during OAuth flow start", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    const app = buildTestApp();
+    const agent = supertest.agent(app);
+
+    const res = await agent
+      .get("/api/auth/google?returnTo=%2Fevil-path")
+      .expect(302);
+
+    expect(res.headers.location).toContain("accounts.google.com");
+
+    const state = extractStateFromRedirect(res.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+  });
+
+  it("does not store disallowed returnTo in session during OAuth flow", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+
+    const app2 = express();
+    app2.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+
+    let capturedReturnTo: string | null = "NOT_SET";
+
+    app2.get("/api/auth/google", handleGoogleAuthStart);
+    app2.get("/api/auth/google/callback/check-return", (req, res) => {
+      capturedReturnTo = (req.session as any).oauthReturnTo ?? null;
+      res.json({ oauthReturnTo: capturedReturnTo });
+    });
+
+    const agent = supertest.agent(app2);
+
+    await agent.get("/api/auth/google?returnTo=%2Fevil-redirect").expect(302);
+
+    const checkRes = await agent
+      .get("/api/auth/google/callback/check-return")
+      .expect(200);
+
+    expect(checkRes.body.oauthReturnTo).toBeNull();
+  });
+
+  it("stores allowed returnTo in session during OAuth flow", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+
+    const app3 = express();
+    app3.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+
+    app3.get("/api/auth/google", handleGoogleAuthStart);
+    app3.get("/api/auth/google/callback/check-return", (req, res) => {
+      res.json({ oauthReturnTo: (req.session as any).oauthReturnTo ?? null });
+    });
+
+    const agent = supertest.agent(app3);
+
+    await agent.get("/api/auth/google?returnTo=%2Fdashboard").expect(302);
+
+    const checkRes = await agent
+      .get("/api/auth/google/callback/check-return")
+      .expect(200);
+
+    expect(checkRes.body.oauthReturnTo).toBe("/dashboard");
   });
 });
