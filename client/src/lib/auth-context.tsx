@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "./queryClient";
+import { getToken, setToken, clearToken } from "./token-storage";
 import type { User } from "@shared/schema";
 
 type AuthContextType = {
@@ -19,7 +20,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
       try {
-        const token = localStorage.getItem("guber_token");
+        const token = await getToken();
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch("/api/auth/me", { headers, credentials: "include" });
         if (res.status === 401) return null;
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mutationFn: async ({ email, password }: { email: string; password: string }): Promise<User | null> => {
       const res = await apiRequest("POST", "/api/auth/login", { email, password });
       const data = await res.json();
-      if (data.token) localStorage.setItem("guber_token", data.token);
+      if (data.token) await setToken(data.token);
       return data;
     },
     onSuccess: () => {
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mutationFn: async (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => {
       const res = await apiRequest("POST", "/api/auth/signup", data);
       const body = await res.json();
-      if (body.token) localStorage.setItem("guber_token", body.token);
+      if (body.token) await setToken(body.token);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -59,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      localStorage.removeItem("guber_token");
+      await clearToken();
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {

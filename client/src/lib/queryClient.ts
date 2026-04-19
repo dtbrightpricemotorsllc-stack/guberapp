@@ -1,13 +1,15 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getToken, clearToken } from "./token-storage";
 
-function getBearerHeader(): Record<string, string> {
-  const token = localStorage.getItem("guber_token");
+async function getBearerHeader(): Promise<Record<string, string>> {
+  const token = await getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function handleExpiredSession() {
-  if (localStorage.getItem("guber_token")) {
-    localStorage.removeItem("guber_token");
+async function handleExpiredSession() {
+  const token = await getToken();
+  if (token) {
+    await clearToken();
     window.location.href = "/login?reason=session_expired";
   }
 }
@@ -15,7 +17,7 @@ function handleExpiredSession() {
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     if (res.status === 401) {
-      handleExpiredSession();
+      await handleExpiredSession();
     }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
@@ -28,7 +30,7 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const headers: Record<string, string> = {
-    ...getBearerHeader(),
+    ...(await getBearerHeader()),
     ...(data ? { "Content-Type": "application/json" } : {}),
   };
   const res = await fetch(url, {
@@ -49,12 +51,12 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
-      headers: getBearerHeader(),
+      headers: await getBearerHeader(),
       credentials: "include",
     });
 
     if (res.status === 401) {
-      handleExpiredSession();
+      await handleExpiredSession();
       if (unauthorizedBehavior === "returnNull") return null;
     }
 

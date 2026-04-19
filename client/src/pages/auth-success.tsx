@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
+import { setToken } from "@/lib/token-storage";
 import { GuberLogo } from "@/components/guber-logo";
 import { Loader2 } from "lucide-react";
 
@@ -16,18 +17,19 @@ export default function AuthSuccess() {
       return;
     }
 
-    localStorage.setItem("guber_token", token);
+    void setToken(token)
+      .then(() => {
+        window.history.replaceState({}, "", "/auth-success");
 
-    window.history.replaceState({}, "", "/auth-success");
-
-    queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    queryClient.fetchQuery({ queryKey: ["/api/auth/me"] })
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        return queryClient.fetchQuery({ queryKey: ["/api/auth/me"] });
+      })
       .then((me) => {
         const dest = (me as { accountType?: string } | null)?.accountType === "business" ? "/biz/dashboard" : "/dashboard";
         setLocation(dest);
       })
       .catch(() => {
-        setLocation("/dashboard");
+        setLocation("/login");
       });
   }, []);
 
