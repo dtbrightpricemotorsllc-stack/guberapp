@@ -155,7 +155,7 @@ export default function BusinessTemplates() {
                     <option value="video">Video</option>
                     <option value="text">Text</option>
                   </select>
-                  <button onClick={() => removeChecklistItem(i)} className="text-muted-foreground/40 hover:text-destructive transition-colors" data-testid={`button-remove-checklist-${i}`}>
+                  <button onClick={() => removeChecklistItem(i)} className="text-muted-foreground hover:text-destructive transition-colors" data-testid={`button-remove-checklist-${i}`}>
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -199,7 +199,7 @@ export default function BusinessTemplates() {
                   </div>
                   <button
                     onClick={() => { if (confirm("Delete this template?")) deleteMutation.mutate(tpl.id); }}
-                    className="text-muted-foreground/30 hover:text-destructive transition-colors"
+                    className="text-muted-foreground hover:text-destructive transition-colors"
                     data-testid={`button-delete-template-${tpl.id}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -212,7 +212,7 @@ export default function BusinessTemplates() {
           <div className="text-center py-12">
             <FileText className="w-10 h-10 text-muted-foreground/15 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground font-display">No templates yet</p>
-            <p className="text-[11px] text-muted-foreground/30 mt-1">Create one to start bulk posting jobs</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Create one to start bulk posting jobs</p>
           </div>
         )}
       </div>

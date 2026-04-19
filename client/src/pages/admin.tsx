@@ -703,7 +703,7 @@ data-testid="modal-proof-viewer"
 
 {!isLoading && (!proofs || proofs.length === 0) && (
 <div className="text-center py-10">
-<Image className="w-10 h-10 text-muted-foreground/20 mx-auto mb-2" />
+<Image className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
 <p className="text-sm text-muted-foreground font-display">No proof submissions yet</p>
 </div>
 )}
@@ -1500,11 +1500,11 @@ className="w-full h-auto max-h-72 object-contain hover:opacity-90 transition-opa
 data-testid={`img-verif-doc-${v.id}`}
 />
 </a>
-<p className="text-[9px] text-muted-foreground/40 text-center py-1">Tap to open full size</p>
+<p className="text-[9px] text-muted-foreground text-center py-1">Tap to open full size</p>
 </div>
 ) : docImageSrc ? (
 <div className="rounded-lg border border-border/20 bg-black/10 p-4 flex flex-col items-center gap-2 min-h-[120px] justify-center">
-<FileText className="w-10 h-10 text-muted-foreground/30" />
+<FileText className="w-10 h-10 text-muted-foreground" />
 <p className="text-xs text-muted-foreground">{v.parsedDetails?.fileName || "Document file"}</p>
 <Button variant="ghost" size="sm" className="text-primary text-[11px]" onClick={() => {
 const win = window.open();
@@ -1515,7 +1515,7 @@ win?.document.write(`<iframe src="${docImageSrc}" frameborder="0" style="border:
 </div>
 ) : (
 <div className="rounded-lg border border-border/10 bg-muted/10 p-6 flex flex-col items-center gap-2 min-h-[120px] justify-center">
-<FileText className="w-8 h-8 text-muted-foreground/20" />
+<FileText className="w-8 h-8 text-muted-foreground" />
 <p className="text-xs text-muted-foreground">No document image</p>
 </div>
 )}
@@ -1550,19 +1550,19 @@ data-testid={`button-ai-check-${v.id}`}
 <div className={`rounded-md px-2 py-1.5 text-[10px] space-y-0.5 ${aiResult.vision.nonUsIdDetected ? "bg-red-500/15 border border-red-500/30" : aiResult.vision.isUsIssued ? "bg-green-500/10 border border-green-500/20" : "bg-muted/20 border border-border/20"}`} data-testid={`vision-result-${v.id}`}>
 <div className="flex items-center justify-between gap-2">
 <span className="font-display font-bold uppercase tracking-wider opacity-70">Document Vision</span>
-<span className="opacity-60">{Math.round((aiResult.vision.confidence || 0) * 100)}% conf</span>
+<span className="text-muted-foreground">{Math.round((aiResult.vision.confidence || 0) * 100)}% conf</span>
 </div>
 <p>
-<span className="opacity-60">Country:</span>{" "}
+<span className="text-muted-foreground">Country:</span>{" "}
 <span className="font-bold" data-testid={`text-vision-country-${v.id}`}>{aiResult.vision.documentCountry}</span>
-{aiResult.vision.countryCode && <span className="opacity-50"> ({aiResult.vision.countryCode})</span>}
+{aiResult.vision.countryCode && <span className="text-muted-foreground"> ({aiResult.vision.countryCode})</span>}
 </p>
 <p>
-<span className="opacity-60">Kind:</span>{" "}
+<span className="text-muted-foreground">Kind:</span>{" "}
 <span className="font-bold">{aiResult.vision.documentKind}</span>
 {aiResult.vision.nonUsIdDetected && <span className="ml-1.5 text-red-400 font-black">· NON-US</span>}
 </p>
-{aiResult.vision.reasoning && <p className="opacity-60 italic">"{aiResult.vision.reasoning}"</p>}
+{aiResult.vision.reasoning && <p className="text-muted-foreground italic">"{aiResult.vision.reasoning}"</p>}
 </div>
 )}
 {aiResult.flags?.length > 0 && (
@@ -1584,7 +1584,7 @@ Show {aiResult.flags.length} other risk flag{aiResult.flags.length === 1 ? "" : 
 </ul>
 )
 )}
-<button className="text-[9px] opacity-50 underline" onClick={() => setAiResult(null)}>Re-run</button>
+<button className="text-[9px] text-muted-foreground underline" onClick={() => setAiResult(null)}>Re-run</button>
 </div>
 )}
 </div>
@@ -1596,7 +1596,7 @@ Show {aiResult.flags.length} other risk flag{aiResult.flags.length === 1 ? "" : 
 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-display font-semibold ${v.reviewStatus === "approved" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
 {v.reviewStatus === "approved" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
 {v.reviewStatus === "approved" ? "Approved" : "Rejected"}
-{v.reviewedAt && <span className="text-[9px] opacity-60 ml-1">{new Date(v.reviewedAt).toLocaleDateString()}</span>}
+{v.reviewedAt && <span className="text-[9px] ml-1">{new Date(v.reviewedAt).toLocaleDateString()}</span>}
 </div>
 )}
 {showActions && (!v.reviewStatus || v.reviewStatus === "pending") && (
@@ -1888,7 +1888,7 @@ data-testid={`filter-tab-${tab.value}`}
 
 {verifications?.length === 0 ? (
 <div className="glass-card rounded-xl p-10 text-center">
-<BadgeCheck className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+<BadgeCheck className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
 <p className="text-sm text-muted-foreground font-display">
 {statusFilter === "pending" ? "All clear — no pending verifications." : `No ${statusFilter} verifications found.`}
 </p>
@@ -2447,7 +2447,7 @@ function WalletTab({ allUsers }: { allUsers: User[] | undefined }) {
                           <span className="text-[10px] text-muted-foreground">{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : "—"}</span>
                           {t.jobId && <span className="text-[10px] text-muted-foreground">Job #{t.jobId}</span>}
                           <span className="text-[10px] text-muted-foreground">ID #{t.id}</span>
-                          {(t as any).stripeTransferId && <span className="text-[10px] text-muted-foreground/40 truncate max-w-[120px]">{(t as any).stripeTransferId}</span>}
+                          {(t as any).stripeTransferId && <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{(t as any).stripeTransferId}</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -2718,7 +2718,7 @@ function PlatformSettingsTab() {
             <div className="mb-1">
               <h3 className="text-sm font-display font-bold text-muted-foreground uppercase tracking-wider">{categoryLabels[cat] || cat}</h3>
               {categoryDescriptions[cat] && (
-                <p className="text-[10px] text-muted-foreground/40 mt-0.5">{categoryDescriptions[cat]}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{categoryDescriptions[cat]}</p>
               )}
             </div>
             {catSettings.map((s) => {
@@ -3092,7 +3092,7 @@ return (
 <div className="flex items-center justify-between">
 <div>
 <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Show Sponsor Branding</label>
-<p className="text-[10px] text-muted-foreground/40">Display sponsor name/logo on drop card and detail</p>
+<p className="text-[10px] text-muted-foreground">Display sponsor name/logo on drop card and detail</p>
 </div>
 <Switch checked={form.brandingEnabled} onCheckedChange={(v) => setForm(f => ({ ...f, brandingEnabled: v }))} data-testid="toggle-branding-enabled" />
 </div>
@@ -3185,7 +3185,7 @@ data-testid="input-drop-address"
 {form.gpsLat && form.gpsLng && (
 <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
 <p className="text-[11px] text-primary font-mono font-semibold" data-testid="text-drop-coordinates">{form.gpsLat}, {form.gpsLng}</p>
-<button type="button" onClick={() => setForm(f => ({ ...f, gpsLat: "", gpsLng: "" }))} className="text-muted-foreground/40 hover:text-destructive" data-testid="button-clear-coordinates">
+<button type="button" onClick={() => setForm(f => ({ ...f, gpsLat: "", gpsLng: "" }))} className="text-muted-foreground hover:text-destructive" data-testid="button-clear-coordinates">
 <X className="w-3.5 h-3.5" />
 </button>
 </div>
@@ -3237,12 +3237,12 @@ data-testid="input-drop-address"
 <div className="space-y-2">
 <label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Cash Winner Cap</label>
 <Input type="number" min={0} value={form.cashWinnerCount} onChange={(e) => { const v = parseInt(e.target.value); setForm(f => ({ ...f, cashWinnerCount: isNaN(v) ? 1 : Math.max(0, v) })); }} className="premium-input rounded-md" data-testid="input-cash-winner-count" />
-<p className="text-[10px] text-muted-foreground/40">Admin confirms up to N cash winners</p>
+<p className="text-[10px] text-muted-foreground">Admin confirms up to N cash winners</p>
 </div>
 <div className="space-y-2">
 <label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-display">Reward Winner Cap</label>
 <Input type="number" min={0} value={form.rewardWinnerCount} onChange={(e) => setForm(f => ({ ...f, rewardWinnerCount: parseInt(e.target.value) || 0 }))} className="premium-input rounded-md" data-testid="input-reward-winner-count" />
-<p className="text-[10px] text-muted-foreground/40">Auto-selected by arrival after cash cap hit</p>
+<p className="text-[10px] text-muted-foreground">Auto-selected by arrival after cash cap hit</p>
 </div>
 </div>
 
@@ -3317,9 +3317,9 @@ data-testid="select-final-location-mode"
 
 <div className="space-y-2 pt-1">
 <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display flex items-center gap-1">
-<span>🏆</span> Winner Proof Requirement <span className="text-muted-foreground/40 normal-case tracking-normal ml-1">(optional)</span>
+<span>🏆</span> Winner Proof Requirement <span className="text-muted-foreground normal-case tracking-normal ml-1">(optional)</span>
 </label>
-<p className="text-[10px] text-muted-foreground/50">Ask winners to prove it publicly. Builds trust and social reach. Leave as None to skip.</p>
+<p className="text-[10px] text-muted-foreground">Ask winners to prove it publicly. Builds trust and social reach. Leave as None to skip.</p>
 <div className="grid grid-cols-3 gap-2">
 {[
   { value: "none", label: "None", icon: "—", sub: "No proof needed" },
@@ -3339,7 +3339,7 @@ data-testid="select-final-location-mode"
   >
     <p className="text-base mb-0.5">{opt.icon}</p>
     <p className="text-[11px] font-display font-bold" style={{ color: form.winnerProofRequirement === opt.value ? "#C9A84C" : "#a1a1aa" }}>{opt.label}</p>
-    <p className="text-[9px] text-muted-foreground/40 mt-0.5 leading-tight">{opt.sub}</p>
+    <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{opt.sub}</p>
   </button>
 ))}
 </div>
@@ -3358,7 +3358,7 @@ data-testid="select-final-location-mode"
 <option value="photo">Photo</option>
 <option value="video">Video</option>
 </select>
-<button type="button" onClick={() => setForm(f => ({ ...f, proofItems: f.proofItems.filter((_, idx) => idx !== i) }))} className="text-muted-foreground/30 hover:text-destructive p-1" data-testid={`button-remove-proof-${i}`}><Trash2 className="w-3.5 h-3.5" /></button>
+<button type="button" onClick={() => setForm(f => ({ ...f, proofItems: f.proofItems.filter((_, idx) => idx !== i) }))} className="text-muted-foreground hover:text-destructive p-1" data-testid={`button-remove-proof-${i}`}><Trash2 className="w-3.5 h-3.5" /></button>
 </div>
 ))}
 <Button type="button" variant="outline" onClick={() => setForm(f => ({ ...f, proofItems: [...f.proofItems, { label: "", type: "photo" }] }))} className="w-full h-9 font-display text-[11px] border-dashed border-border/30 text-muted-foreground hover:text-foreground" data-testid="button-add-proof-item">
@@ -3408,7 +3408,7 @@ data-testid="select-final-location-mode"
 <Button size="sm" variant="ghost" onClick={() => openEdit(drop)} className="h-7 text-[10px] font-display px-2 text-amber-400 hover:text-amber-300" data-testid={`button-edit-drop-${drop.id}`}>
 <Edit className="w-3.5 h-3.5" />
 </Button>
-<Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this Cash Drop?")) deleteMutation.mutate(drop.id); }} disabled={deleteMutation.isPending} className="h-7 text-[10px] font-display px-2 text-muted-foreground/40 hover:text-destructive" data-testid={`button-delete-drop-${drop.id}`}>
+<Button size="sm" variant="ghost" onClick={() => { if (confirm("Delete this Cash Drop?")) deleteMutation.mutate(drop.id); }} disabled={deleteMutation.isPending} className="h-7 text-[10px] font-display px-2 text-muted-foreground hover:text-destructive" data-testid={`button-delete-drop-${drop.id}`}>
 <Trash2 className="w-3.5 h-3.5" />
 </Button>
 </div>
@@ -3418,7 +3418,7 @@ data-testid="select-final-location-mode"
 <div className="pt-2 border-t border-border/10 space-y-3">
 <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Submissions</p>
 {!attempts || attempts.length === 0 ? (
-<p className="text-[11px] text-muted-foreground/40 text-center py-4">No submissions yet</p>
+<p className="text-[11px] text-muted-foreground text-center py-4">No submissions yet</p>
 ) : (
 attempts.filter((a: any) => a.status === "submitted").map((attempt: any) => (
 <div key={attempt.id} className="bg-background rounded-xl border border-border/10 p-4 space-y-3" data-testid={`attempt-card-${attempt.id}`}>
@@ -3491,7 +3491,7 @@ Reject
 
 {attempts && attempts.filter((a: any) => a.status !== "submitted").length > 0 && (
 <div>
-<p className="text-[10px] font-display text-foreground/70 uppercase tracking-widest mb-2 font-bold">Other attempts</p>
+<p className="text-[10px] font-display text-foreground uppercase tracking-widest mb-2 font-bold">Other attempts</p>
 {attempts.filter((a: any) => a.status !== "submitted").map((attempt: any) => (
 <div key={attempt.id} className="flex items-center gap-3 py-1.5 border-t border-border/10">
 <div className="flex-1 min-w-0">
@@ -3537,7 +3537,7 @@ Mark Paid
 </div>
 ) : (
 <div className="text-center py-12">
-<p className="text-sm text-muted-foreground/40 font-display">No Cash Drops created yet</p>
+<p className="text-sm text-muted-foreground font-display">No Cash Drops created yet</p>
 <p className="text-[11px] text-muted-foreground/25 mt-1">Create one above; activate it to make it live</p>
 </div>
 )}
@@ -3649,7 +3649,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
             className={`px-3 py-1 rounded-full text-[10px] font-display font-bold tracking-widest uppercase transition-colors ${
               statusFilter === key
                 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                : "text-muted-foreground/40 border border-border/20 hover:text-muted-foreground"
+                : "text-muted-foreground border border-border/20 hover:text-muted-foreground"
             }`}
           >
             {label}
@@ -3663,7 +3663,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
       {isLoading ? (
         <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
       ) : sponsors.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground/40 font-display text-sm">
+        <div className="text-center py-12 text-muted-foreground font-display text-sm">
           No sponsor requests yet
         </div>
       ) : (
@@ -3693,32 +3693,32 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                   <p className="text-[11px] text-muted-foreground">{sponsor.contactEmail}</p>
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     {sponsor.targetCityState && (
-                      <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <MapPin className="w-3 h-3" />{sponsor.targetCityState}
                       </span>
                     )}
                     {sponsor.cashContribution ? (
-                      <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <DollarSign className="w-3 h-3" />${sponsor.cashContribution} contrib
                       </span>
                     ) : sponsor.proposedBudget ? (
-                      <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <DollarSign className="w-3 h-3" />${sponsor.proposedBudget} budget
                       </span>
                     ) : null}
                     <span className={`text-[9px] font-display font-bold uppercase px-1.5 py-0.5 rounded-full border ${
                       sponsor.paymentStatus === "received" ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
                       sponsor.paymentStatus === "donated" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" :
-                      "text-muted-foreground/40 bg-muted/10 border-border/20"
+                      "text-muted-foreground bg-muted/10 border-border/20"
                     }`} data-testid={`text-payment-status-${sponsor.id}`}>
                       pay: {sponsor.paymentStatus || "pending"}
                     </span>
-                    <span className="text-[10px] text-muted-foreground/30">
+                    <span className="text-[10px] text-muted-foreground">
                       {new Date(sponsor.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground/30 flex-shrink-0 mt-1" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
               </div>
             </div>
           ))}
@@ -3735,39 +3735,39 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="font-display font-bold text-base">{selectedSponsor.companyName}</p>
-                <button onClick={() => setSelectedSponsor(null)} className="text-muted-foreground/40 hover:text-muted-foreground">
+                <button onClick={() => setSelectedSponsor(null)} className="text-muted-foreground hover:text-muted-foreground">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-2 text-[12px] text-muted-foreground">
                 <div className="grid grid-cols-2 gap-2">
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Contact</span><br />{selectedSponsor.contactName || "—"} · {selectedSponsor.contactEmail}</div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Budget</span><br />{selectedSponsor.proposedBudget ? `$${selectedSponsor.proposedBudget}` : "Not specified"}</div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Location</span><br />{selectedSponsor.targetCityState || "—"} {selectedSponsor.targetZipCode && `(${selectedSponsor.targetZipCode})`}</div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Preferred Date</span><br />{selectedSponsor.requestedDropDate || "Flexible"}</div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Sponsorship Type</span><br /><span className="capitalize">{selectedSponsor.sponsorshipType || "cash"}</span></div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Cash Contribution</span><br />{selectedSponsor.cashContribution ? `$${selectedSponsor.cashContribution}` : "—"}</div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Reward Type</span><br />{selectedSponsor.rewardType}</div>
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Redemption</span><br />{selectedSponsor.redemptionType?.replace(/_/g, " ") || "—"}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Contact</span><br />{selectedSponsor.contactName || "—"} · {selectedSponsor.contactEmail}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Budget</span><br />{selectedSponsor.proposedBudget ? `$${selectedSponsor.proposedBudget}` : "Not specified"}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Location</span><br />{selectedSponsor.targetCityState || "—"} {selectedSponsor.targetZipCode && `(${selectedSponsor.targetZipCode})`}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Preferred Date</span><br />{selectedSponsor.requestedDropDate || "Flexible"}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Sponsorship Type</span><br /><span className="capitalize">{selectedSponsor.sponsorshipType || "cash"}</span></div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Cash Contribution</span><br />{selectedSponsor.cashContribution ? `$${selectedSponsor.cashContribution}` : "—"}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Reward Type</span><br />{selectedSponsor.rewardType}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Redemption</span><br />{selectedSponsor.redemptionType?.replace(/_/g, " ") || "—"}</div>
                 </div>
                 {selectedSponsor.rewardDescription && (
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Reward Description</span><br />{selectedSponsor.rewardDescription}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Reward Description</span><br />{selectedSponsor.rewardDescription}</div>
                 )}
                 {selectedSponsor.sponsorMessage && (
                   <div className="rounded-lg bg-muted/10 p-3">
-                    <p className="text-muted-foreground/40 font-display uppercase text-[10px] mb-1">Message</p>
+                    <p className="text-muted-foreground font-display uppercase text-[10px] mb-1">Message</p>
                     <p>{selectedSponsor.sponsorMessage}</p>
                   </div>
                 )}
                 {selectedSponsor.redemptionInstructions && (
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Redemption Instructions</span><br />{selectedSponsor.redemptionInstructions}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Redemption Instructions</span><br />{selectedSponsor.redemptionInstructions}</div>
                 )}
                 {selectedSponsor.noPurchaseRequiredText && (
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">No Purchase Required Text</span><br />{selectedSponsor.noPurchaseRequiredText}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">No Purchase Required Text</span><br />{selectedSponsor.noPurchaseRequiredText}</div>
                 )}
                 {selectedSponsor.disclaimerText && (
-                  <div><span className="text-muted-foreground/40 font-display uppercase text-[10px]">Disclaimer</span><br />{selectedSponsor.disclaimerText}</div>
+                  <div><span className="text-muted-foreground font-display uppercase text-[10px]">Disclaimer</span><br />{selectedSponsor.disclaimerText}</div>
                 )}
               </div>
 
@@ -3784,7 +3784,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                       key={key}
                       onClick={() => updateMutation.mutate({ id: selectedSponsor.id, data: { paymentStatus: key } })}
                       data-testid={`button-payment-status-${key}`}
-                      className={`text-[10px] font-display font-black tracking-widest uppercase px-3 py-1.5 rounded-full border transition-all ${cls} ${selectedSponsor.paymentStatus === key ? "ring-2 ring-offset-1 ring-current ring-offset-background" : "opacity-60 hover:opacity-100"}`}
+                      className={`text-[10px] font-display font-black tracking-widest uppercase px-3 py-1.5 rounded-full border transition-all ${cls} ${selectedSponsor.paymentStatus === key ? "ring-2 ring-offset-1 ring-current ring-offset-background" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       {label}
                     </button>
@@ -3799,7 +3799,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                     value={adminNotes}
                     onChange={(e) => setAdminNotes(e.target.value)}
                     placeholder="Internal notes about this sponsor..."
-                    className="w-full rounded-xl border border-border/30 bg-muted/10 p-3 text-sm text-foreground placeholder:text-muted-foreground/30 resize-none focus:outline-none"
+                    className="w-full rounded-xl border border-border/30 bg-muted/10 p-3 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none"
                     rows={3}
                     data-testid="input-sponsor-admin-notes"
                   />
@@ -3835,7 +3835,7 @@ function SponsorsTab({ onCreateDrop }: { onCreateDrop?: (sponsor: any) => void }
                     <Flame className="w-3.5 h-3.5 mr-2" />
                     Create Drop from this Sponsor
                   </Button>
-                  <p className="text-[10px] text-muted-foreground/40 text-center mt-1.5">Switches to Cash Drops tab and pre-fills form</p>
+                  <p className="text-[10px] text-muted-foreground text-center mt-1.5">Switches to Cash Drops tab and pre-fills form</p>
                 </div>
               )}
 
@@ -3939,12 +3939,12 @@ function FeedbackTab() {
         </div>
       </div>
 
-      {isLoading && <div className="text-center py-8 text-xs text-muted-foreground/40">Loading feedback…</div>}
+      {isLoading && <div className="text-center py-8 text-xs text-muted-foreground">Loading feedback…</div>}
 
       {!isLoading && (!feedbackList || feedbackList.length === 0) && (
         <div className="text-center py-12">
-          <MessageSquare className="w-8 h-8 mx-auto text-muted-foreground/20 mb-3" />
-          <p className="text-sm text-muted-foreground/40 font-display">No feedback {statusFilter !== "all" ? `with status "${statusFilter}"` : "yet"}</p>
+          <MessageSquare className="w-8 h-8 mx-auto text-muted-foreground mb-3" />
+          <p className="text-sm text-muted-foreground font-display">No feedback {statusFilter !== "all" ? `with status "${statusFilter}"` : "yet"}</p>
         </div>
       )}
 
@@ -3965,7 +3965,7 @@ function FeedbackTab() {
                 </div>
                 {item.subject && <p className="text-xs font-semibold text-foreground/80 mb-0.5">{item.subject}</p>}
                 <p className="text-xs text-muted-foreground leading-relaxed">{item.message}</p>
-                <p className="text-[10px] text-muted-foreground/30 mt-1">{relativeTime(item.createdAt)}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">{relativeTime(item.createdAt)}</p>
               </div>
             </div>
 
@@ -3979,7 +3979,7 @@ function FeedbackTab() {
             <div className="space-y-2">
               <div className="flex gap-1">
                 <input
-                  className="flex-1 text-xs bg-background/50 border border-border/20 rounded-lg px-2.5 py-1.5 outline-none text-foreground placeholder:text-muted-foreground/30"
+                  className="flex-1 text-xs bg-background/50 border border-border/20 rounded-lg px-2.5 py-1.5 outline-none text-foreground placeholder:text-muted-foreground"
                   placeholder="Add admin note…"
                   value={noteInputs[item.id] ?? item.adminNote ?? ""}
                   onChange={e => setNoteInputs(n => ({ ...n, [item.id]: e.target.value }))}
@@ -4270,7 +4270,7 @@ onError: (err: any) => toast({ title: "Refund failed", description: err.message,
 });
 
 if (user?.role !== "admin") {
-return <GuberLayout><div className="text-center py-20"><Shield className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" /><p className="text-muted-foreground font-display">Admin access required</p></div></GuberLayout>;
+return <GuberLayout><div className="text-center py-20"><Shield className="w-12 h-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground font-display">Admin access required</p></div></GuberLayout>;
 }
 
 const disputedJobs = allJobs?.filter((j) => j.status === "disputed") || [];
@@ -4554,7 +4554,7 @@ data-testid={`button-grant-business-${u.id}`}
 {jobsLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div> : (
 <div className="space-y-2">
 {allJobs?.map((j) => (
-<div key={j.id} className={`bg-card rounded-xl border p-3 ${(j as any).removedByAdmin ? "border-destructive/30 opacity-60" : "border-border/20"}`} data-testid={`admin-job-${j.id}`}>
+<div key={j.id} className={`bg-card rounded-xl border p-3 ${(j as any).removedByAdmin ? "border-destructive/30 opacity-60" : "border-border/20"}`} data-testid={`admin-job-${j.id}`}> {/* faint-text-allow: removed jobs intentionally dimmed */}
 <div className="flex items-start justify-between gap-3">
 <div className="min-w-0 flex-1">
 <p className="text-sm font-semibold truncate">{j.title}</p>

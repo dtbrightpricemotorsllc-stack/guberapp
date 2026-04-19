@@ -186,7 +186,7 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
                 onClick={() => item.href && navigate(item.href)}
               >
                 <p className="text-xs font-display font-bold text-foreground/90 leading-tight">{item.text}</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-snug">{item.sub}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{item.sub}</p>
               </div>
               <button
                 onClick={() => dismiss(item.id)}
@@ -542,7 +542,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2.5">
               {mode === "work" && (
                 <div className="flex items-center gap-1.5" data-testid="section-availability">
-                  <span className="text-[10px] font-display text-muted-foreground/60 leading-none">Available</span>
+                  <span className="text-[10px] font-display text-muted-foreground leading-none">Available</span>
                   <Switch
                     checked={!!(user as any)?.isAvailable}
                     onCheckedChange={(v) => {
@@ -588,7 +588,7 @@ export default function Dashboard() {
                           .catch(() => {});
                       }
                     }}
-                    className="bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none w-48 text-center"
+                    className="bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/85 focus:outline-none w-48 text-center"
                     data-testid="input-zip-map"
                   />
                   <button
@@ -618,7 +618,7 @@ export default function Dashboard() {
                 <p className="text-sm font-semibold truncate">{selectedPin.title}</p>
                 <p className="text-[10px] text-muted-foreground">{selectedPin.category} · ${selectedPin.budget}</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </div>
           )}
           {mode === "work" && !!(user as any)?.isAvailable && (user as any)?.stripeAccountStatus !== "active" && (
@@ -646,10 +646,10 @@ export default function Dashboard() {
                 <Button className="w-full h-14 gap-3 rounded-2xl premium-btn font-display tracking-[0.12em] text-sm font-bold shadow-lg" data-testid="button-post-job">
                   <Plus className="w-5 h-5" />
                   POST A JOB
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
                 </Button>
               </Link>
-              <p className="text-[10px] text-muted-foreground/40 font-display text-center pt-0.5">
+              <p className="text-[10px] text-muted-foreground font-display text-center pt-0.5">
                 Be the first to bring opportunities to your city
               </p>
             </>
@@ -679,7 +679,7 @@ export default function Dashboard() {
                   >
                     <span>🔥</span>
                     FIND LIVE TASKS
-                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
                   </Button>
                 </Link>
               )}
@@ -758,7 +758,7 @@ export default function Dashboard() {
                         <div className="h-1.5 w-full rounded-full bg-black/30 overflow-hidden">
                           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progressPct}%`, background: levelColor }} data-testid="bar-trust-progress" />
                         </div>
-                        <p className="text-[9px] text-muted-foreground/40 font-display">
+                        <p className="text-[9px] text-muted-foreground font-display">
                           {score} / {nextThreshold} — {nextThreshold - score} pts to {nextLabel}
                         </p>
                       </div>
@@ -783,7 +783,7 @@ export default function Dashboard() {
                       ))}
                     </div>
                     <Link href="/profile">
-                      <p className="text-[9px] text-muted-foreground/40 text-center font-display hover:text-muted-foreground transition-colors cursor-pointer">Complete jobs to raise your trust score →</p>
+                      <p className="text-[9px] text-muted-foreground text-center font-display hover:text-muted-foreground transition-colors cursor-pointer">Complete jobs to raise your trust score →</p>
                     </Link>
                   </div>
                 );
@@ -944,7 +944,7 @@ export default function Dashboard() {
             <div className="flex-1 relative">
               <p className="font-display font-bold text-white text-sm leading-tight mb-0.5">AI or Not</p>
               <p className="text-[10px] font-display tracking-wider mb-1.5" style={{ color: "hsl(190 85% 60%)" }}>DETECT AI-GENERATED MEDIA</p>
-              <p className="text-[10px] text-white/40 leading-relaxed">Upload any image or video to check if it's real or AI-made</p>
+              <p className="text-[10px] text-white/85 leading-relaxed">Upload any image or video to check if it's real or AI-made</p>
             </div>
             <span className="text-[10px] font-display font-black tracking-widest text-black uppercase px-3 py-1.5 rounded-full shrink-0 group-active:scale-95 transition-transform"
               style={{ background: "linear-gradient(135deg,hsl(190 85% 55%),hsl(175 85% 45%))", boxShadow: "0 0 12px hsl(190 85% 50% / 0.35)" }}>
@@ -988,7 +988,7 @@ export default function Dashboard() {
           <p className="text-[11px] text-muted-foreground leading-relaxed">
             Turn your location into the final stop.
           </p>
-          <p className="text-[11px] text-muted-foreground/40 leading-relaxed mb-2">
+          <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
             We bring the crowd. You keep the customers.
           </p>
           <a

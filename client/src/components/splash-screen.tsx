@@ -210,7 +210,7 @@ export default function SplashScreen({ onDone }: SplashScreenProps) {
       <p style={{
         position: "absolute",
         bottom: 28,
-        color: "rgba(255,255,255,0.1)",
+        color: "rgba(255,255,255,0.85)",
         fontSize: 10,
         fontFamily: "Oxanium, sans-serif",
         letterSpacing: "0.08em",

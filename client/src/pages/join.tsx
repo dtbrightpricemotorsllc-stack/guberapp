@@ -29,7 +29,7 @@ export default function JoinPage() {
     >
       <GuberLogo size="md" />
       <div style={{ textAlign: "center" }}>
-        <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, fontFamily: "Oxanium,sans-serif", letterSpacing: "0.05em" }}>
+        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontFamily: "Oxanium,sans-serif", letterSpacing: "0.05em" }}>
           You've been invited.
         </p>
         <p style={{ color: "#C9A84C", fontSize: 11, fontFamily: "Oxanium,sans-serif", marginTop: 6, opacity: 0.75 }}>

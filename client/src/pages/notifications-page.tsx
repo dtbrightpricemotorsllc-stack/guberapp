@@ -88,7 +88,7 @@ export default function NotificationsPage() {
           </div>
         ) : !notifications || notifications.length === 0 ? (
           <div className="text-center py-16">
-            <Bell className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
+            <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground font-display">No notifications</p>
           </div>
         ) : (
@@ -120,7 +120,7 @@ export default function NotificationsPage() {
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
                     {!n.read && <div className="w-2 h-2 rounded-full bg-primary" />}
-                    {navUrl && <ChevronRight className="w-4 h-4 text-muted-foreground/40" />}
+                    {navUrl && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                   </div>
                 </button>
               );

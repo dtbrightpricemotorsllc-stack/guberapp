@@ -286,9 +286,9 @@ export default function AccountSettings() {
             </div>
             <div className="flex gap-3 pt-1">
               <Link href="/terms" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-terms-settings">Terms</Link>
-              <span className="text-muted-foreground/20 text-[10px]">·</span>
+              <span className="text-muted-foreground text-[10px]">·</span>
               <Link href="/privacy" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-privacy-settings">Privacy</Link>
-              <span className="text-muted-foreground/20 text-[10px]">·</span>
+              <span className="text-muted-foreground text-[10px]">·</span>
               <Link href="/acceptable-use" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-aup-settings">Acceptable Use</Link>
             </div>
           </div>
@@ -322,11 +322,11 @@ export default function AccountSettings() {
         ) : (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
             <h3 className="font-display font-semibold text-sm flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-muted-foreground/30" />
+              <Building2 className="w-4 h-4 text-muted-foreground" />
               GUBER Business
             </h3>
-            <p className="text-[11px] text-muted-foreground/40 leading-relaxed">Business accounts are reviewed and approved by the GUBER team. Contact support to apply.</p>
-            <p className="text-[10px] text-muted-foreground/30 font-display tracking-wider" data-testid="text-biz-apply-info">support@guberapp.com</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">Business accounts are reviewed and approved by the GUBER team. Contact support to apply.</p>
+            <p className="text-[10px] text-muted-foreground font-display tracking-wider" data-testid="text-biz-apply-info">support@guberapp.com</p>
           </div>
         )}
 

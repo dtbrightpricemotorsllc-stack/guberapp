@@ -166,7 +166,7 @@ export default function InstallPrompt() {
     >
       <button
         onClick={() => handleDismiss(true)}
-        style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", padding: 4 }}
+        style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: 4 }}
         aria-label="Not now"
         data-testid="button-dismiss-ios"
       >
@@ -195,7 +195,7 @@ export default function InstallPrompt() {
 
       <button
         onClick={() => handleDismiss(true)}
-        style={{ marginTop: 14, width: "100%", background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", padding: "6px 0" }}
+        style={{ marginTop: 14, width: "100%", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 12, cursor: "pointer", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", padding: "6px 0" }}
         data-testid="button-not-now-ios"
       >
         Not now
@@ -220,7 +220,7 @@ export default function InstallPrompt() {
     >
       <button
         onClick={() => handleDismiss(true)}
-        style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", padding: 4 }}
+        style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: 4 }}
         aria-label="Not now"
         data-testid="button-dismiss-ios-chrome"
       >
@@ -235,13 +235,13 @@ export default function InstallPrompt() {
         <span style={{ fontSize: 22 }}>🧭</span>
         <div>
           <p style={{ color: "#0A84FF", fontWeight: 700, fontSize: 12, margin: 0, fontFamily: "Oxanium, sans-serif" }}>Open in Safari</p>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, margin: "2px 0 0" }}>guberapp.app — then tap Share ↑</p>
+          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, margin: "2px 0 0" }}>guberapp.app — then tap Share ↑</p>
         </div>
       </div>
 
       <button
         onClick={() => handleDismiss(true)}
-        style={{ marginTop: 14, width: "100%", background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", padding: "6px 0" }}
+        style={{ marginTop: 14, width: "100%", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 12, cursor: "pointer", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", padding: "6px 0" }}
         data-testid="button-not-now-ios-chrome"
       >
         Not now
@@ -278,7 +278,7 @@ export default function InstallPrompt() {
       >
         <button
           onClick={() => handleDismiss(true)}
-          style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", padding: 4 }}
+          style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: 4 }}
           aria-label="Not now"
           data-testid="button-dismiss-android-chrome"
         >
@@ -320,7 +320,7 @@ export default function InstallPrompt() {
 
         <button
           onClick={() => handleDismiss(true)}
-          style={{ marginTop: 12, width: "100%", background: "none", border: "none", color: "rgba(255,255,255,0.25)", fontSize: 12, cursor: "pointer", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", padding: "4px 0" }}
+          style={{ marginTop: 12, width: "100%", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 12, cursor: "pointer", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", padding: "4px 0" }}
           data-testid="button-not-now-android-chrome"
         >
           Not now
@@ -359,14 +359,14 @@ export default function InstallPrompt() {
           >
             <button
               onClick={() => handleDismiss()}
-              style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
+              style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
               data-testid="button-dismiss-install"
               aria-label="Dismiss"
             >
               <X style={{ width: 17, height: 17 }} />
             </button>
             <p style={{ color: "#fff", fontWeight: 900, fontSize: 17, margin: "0 0 3px", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", textTransform: "uppercase" }}>INSTALL GUBER</p>
-            <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: "0 0 14px", lineHeight: 1.4 }}>Install GUBER — takes 2 seconds</p>
+            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: "0 0 14px", lineHeight: 1.4 }}>Install GUBER — takes 2 seconds</p>
             <button
               onClick={handleInstall}
               style={{ background: "#22C55E", color: "#000", border: "none", borderRadius: 12, padding: "11px 22px", fontWeight: 900, fontSize: 14, fontFamily: "Oxanium, sans-serif", letterSpacing: "0.06em", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, boxShadow: "0 0 20px rgba(34,197,94,0.4)" }}
@@ -412,7 +412,7 @@ function AppCard() {
       <div style={{ width: 28, height: 28, borderRadius: 7, background: "#22C55E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 900, color: "#000", fontFamily: "Oxanium, sans-serif" }}>G</div>
       <div>
         <p style={{ color: "#fff", fontWeight: 700, fontSize: 12, margin: 0, fontFamily: "Oxanium, sans-serif" }}>GUBER</p>
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, margin: 0 }}>guberapp.app</p>
+        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 10, margin: 0 }}>guberapp.app</p>
       </div>
       <div style={{ marginLeft: "auto" }}>
         <div style={{ background: "#22C55E", color: "#000", borderRadius: 8, padding: "4px 12px", fontSize: 11, fontWeight: 900, fontFamily: "Oxanium, sans-serif" }}>FREE</div>

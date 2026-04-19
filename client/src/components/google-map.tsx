@@ -477,7 +477,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   if (config && !apiKey) {
     return (
       <div className={`glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-2 ${className ?? ""}`} data-testid="map-container">
-        <MapPinIcon className="w-10 h-10 text-muted-foreground/20" />
+        <MapPinIcon className="w-10 h-10 text-muted-foreground" />
         <p className="text-sm text-muted-foreground font-display text-center" data-testid="text-no-api-key">Google Maps not configured</p>
       </div>
     );
@@ -488,7 +488,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       <div className={`glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-2 ${className ?? ""}`} data-testid="map-container">
         <AlertTriangle className="w-8 h-8 text-destructive/40" />
         <p className="text-sm text-muted-foreground font-display text-center" data-testid="text-map-error">Map could not load</p>
-        <p className="text-[10px] text-muted-foreground/30 font-display text-center max-w-[200px]">{loadErr}</p>
+        <p className="text-[10px] text-muted-foreground font-display text-center max-w-[200px]">{loadErr}</p>
         <button
           onClick={() => {
             setLoadErr(null);
@@ -538,7 +538,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           >
             <RefreshCw className="w-3 h-3" /> Retry
           </button>
-          <span className="text-white/20 text-[10px]">·</span>
+          <span className="text-white/85 text-[10px]">·</span>
           <button
             onClick={() => setShowZipInput(true)}
             className="text-[10px] font-display font-bold text-white/85"
@@ -561,7 +561,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
             value={zipInput}
             onChange={(e) => setZipInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleZipFallback(); }}
-            className="flex-1 bg-transparent text-[11px] text-white font-display outline-none placeholder:text-white/30"
+            className="flex-1 bg-transparent text-[11px] text-white font-display outline-none placeholder:text-white/85"
             data-testid="input-zip-map"
             autoFocus
           />
@@ -575,7 +575,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           </button>
           <button
             onClick={() => setShowZipInput(false)}
-            className="text-[10px] text-white/30 font-display"
+            className="text-[10px] text-white/85 font-display"
             data-testid="button-zip-cancel"
           >
             ✕

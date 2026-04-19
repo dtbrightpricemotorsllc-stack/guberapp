@@ -55,7 +55,7 @@ export function PushNotificationBanner() {
         </div>
         <button
           onClick={handleDismiss}
-          className="text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0 mt-0.5"
+          className="text-muted-foreground hover:text-muted-foreground transition-colors shrink-0 mt-0.5"
           data-testid="button-dismiss-push-banner"
         >
           <X className="w-3.5 h-3.5" />
@@ -75,12 +75,12 @@ export function PushNotificationBanner() {
           <p className="text-xs font-semibold text-red-300">Alerts are blocked</p>
           <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
             Go to your browser or phone settings and allow notifications for{" "}
-            <span className="text-foreground/70 font-semibold">guberapp.app</span> to receive job updates.
+            <span className="text-foreground font-semibold">guberapp.app</span> to receive job updates.
           </p>
         </div>
         <button
           onClick={handleDismiss}
-          className="text-muted-foreground/40 hover:text-muted-foreground transition-colors shrink-0 mt-0.5"
+          className="text-muted-foreground hover:text-muted-foreground transition-colors shrink-0 mt-0.5"
           data-testid="button-dismiss-push-banner"
         >
           <X className="w-3.5 h-3.5" />
@@ -113,7 +113,7 @@ export function PushNotificationBanner() {
         </Button>
         <button
           onClick={handleDismiss}
-          className="text-muted-foreground/40 hover:text-muted-foreground transition-colors p-0.5"
+          className="text-muted-foreground hover:text-muted-foreground transition-colors p-0.5"
           data-testid="button-dismiss-push-banner"
         >
           <X className="w-3.5 h-3.5" />

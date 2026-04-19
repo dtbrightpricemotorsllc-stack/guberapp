@@ -175,7 +175,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                       {(user as any)?.publicUsername ? `@${(user as any).publicUsername}` : ((user as any)?.guberId || user?.fullName || "GUBER Member")}
                     </p>
                     <p className="text-[11px] text-primary/60 font-mono truncate mt-0.5">{(user as any)?.guberId || ""}</p>
-                    <p className="text-[10px] text-muted-foreground/40 truncate mt-0.5">{user?.email}</p>
+                    <p className="text-[10px] text-muted-foreground truncate mt-0.5">{user?.email}</p>
                   </div>
                   <DropdownMenuSeparator className="bg-white/[0.06] mx-1" />
                   <DropdownMenuItem asChild>
@@ -283,7 +283,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                       strokeWidth={isActive ? 2.2 : 1.5}
                     />
                   </div>
-                  <span className={`text-[10px] font-display tracking-wider transition-all duration-200 ${isActive ? "text-primary font-bold" : "text-muted-foreground/40"}`}>
+                  <span className={`text-[10px] font-display tracking-wider transition-all duration-200 ${isActive ? "text-primary font-bold" : "text-muted-foreground"}`}>
                     {tab.label}
                   </span>
                 </div>

@@ -48,10 +48,10 @@ function TrustWidget({ trustScore }: { trustScore: number }) {
           <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(progressPct, 100)}%`, background: trust.color }} />
         </div>
         {trust.next && (
-          <p className="text-[10px] text-muted-foreground/40">{trust.next - trustScore} more points to {trust.next === 60 ? "Verified" : "Trusted"}</p>
+          <p className="text-[10px] text-muted-foreground">{trust.next - trustScore} more points to {trust.next === 60 ? "Verified" : "Trusted"}</p>
         )}
         {trust.level === "trusted" && (
-          <p className="text-[10px] text-muted-foreground/40">Maximum trust level reached</p>
+          <p className="text-[10px] text-muted-foreground">Maximum trust level reached</p>
         )}
       </div>
 
@@ -61,13 +61,13 @@ function TrustWidget({ trustScore }: { trustScore: number }) {
           const isPassed = (tier.level === "new") || (tier.level === "verified" && trust.level === "trusted");
           return (
             <div key={tier.level} className="rounded-xl p-2.5 space-y-1.5 relative" style={{ background: isActive || isPassed ? `${tier.color}15` : "rgba(255,255,255,0.02)", border: `1px solid ${isActive || isPassed ? `${tier.color}30` : "rgba(255,255,255,0.05)"}` }} data-testid={`tier-card-${tier.level}`}>
-              {tier.locked && <Lock className="absolute top-2 right-2 w-2.5 h-2.5 text-muted-foreground/30" />}
+              {tier.locked && <Lock className="absolute top-2 right-2 w-2.5 h-2.5 text-muted-foreground" />}
               <div className="flex items-center gap-1" style={{ color: isActive || isPassed ? tier.color : "#475569" }}>
                 {tier.icon}
                 <span className="text-[9px] font-display font-black tracking-wider uppercase">{tier.label}</span>
               </div>
-              <p className="text-[9px] text-muted-foreground/40 leading-tight">{tier.unlocks}</p>
-              <p className="text-[8px] text-muted-foreground/30">{tier.score} pts</p>
+              <p className="text-[9px] text-muted-foreground leading-tight">{tier.unlocks}</p>
+              <p className="text-[8px] text-muted-foreground">{tier.score} pts</p>
             </div>
           );
         })}
@@ -77,7 +77,7 @@ function TrustWidget({ trustScore }: { trustScore: number }) {
         <p className="text-[9px] font-display font-bold tracking-wider text-muted-foreground uppercase">How to earn points</p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
           {["+5 each completed job", "+2 5-star review", "+10 ID verified", "−10 per dispute"].map((tip) => (
-            <p key={tip} className={`text-[9px] ${tip.startsWith("−") ? "text-red-400/50" : "text-muted-foreground/40"}`}>{tip}</p>
+            <p key={tip} className={`text-[9px] ${tip.startsWith("−") ? "text-red-400/50" : "text-muted-foreground"}`}>{tip}</p>
           ))}
         </div>
       </div>
@@ -418,7 +418,7 @@ function TransactionList({ items }: { items: WalletTransaction[] }) {
   if (items.length === 0) {
     return (
       <div className="text-center py-12">
-        <Wallet className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
+        <Wallet className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
         <p className="text-muted-foreground font-display">No transactions yet</p>
       </div>
     );

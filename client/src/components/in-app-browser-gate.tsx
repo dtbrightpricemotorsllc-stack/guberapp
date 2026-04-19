@@ -85,7 +85,7 @@ export function InAppBrowserGate({ children }: { children: React.ReactNode }) {
           </Button>
 
           <div className="w-full space-y-2">
-            <p className="text-[10px] text-muted-foreground/40 font-display tracking-widest uppercase">
+            <p className="text-[10px] text-muted-foreground font-display tracking-widest uppercase">
               Or copy this link
             </p>
             <div

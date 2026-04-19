@@ -58,6 +58,7 @@ export function JobCard({ job }: { job: Job }) {
         className="glass-card rounded-xl overflow-visible cursor-pointer transition-all duration-200 hover-elevate active-elevate-2"
         data-testid={`card-job-${job.id}`}
       >
+        {/* faint-text-allow: decorative gradient overlay, not text */}
         <div className={`absolute inset-0 rounded-xl bg-gradient-to-r ${categoryAccent[job.category] || "from-primary/10 to-transparent"} opacity-50 pointer-events-none`} />
         <div className="relative p-4">
           <div className="flex items-start justify-between gap-2 mb-2">
@@ -155,7 +156,7 @@ export function JobCard({ job }: { job: Job }) {
                 }
                 return (
                   <Badge key={key} variant="secondary" className="text-[10px] px-2 py-0 h-5 font-normal bg-secondary/30 border-secondary/10 text-muted-foreground truncate max-w-[120px]">
-                    <span className="font-bold mr-1 text-foreground/70">{key.replace(/_/g, ' ')}:</span> {String(displayValue)}
+                    <span className="font-bold mr-1 text-foreground">{key.replace(/_/g, ' ')}:</span> {String(displayValue)}
                   </Badge>
                 );
               })}

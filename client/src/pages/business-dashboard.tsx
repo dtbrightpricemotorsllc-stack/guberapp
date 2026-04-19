@@ -15,7 +15,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
   return (
     <div className="bg-card rounded-xl border border-border/20 p-3 text-center">
       <p className="font-display font-black text-xl" style={{ color }}>{value}</p>
-      {sub && <p className="text-[9px] text-muted-foreground/40 font-display">{sub}</p>}
+      {sub && <p className="text-[9px] text-muted-foreground font-display">{sub}</p>}
       <p className="text-[9px] font-display tracking-widest uppercase text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
@@ -69,7 +69,7 @@ export default function BusinessDashboard() {
     return (
       <GuberLayout>
         <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
-          <Building2 className="w-12 h-12 text-muted-foreground/20 mx-auto" />
+          <Building2 className="w-12 h-12 text-muted-foreground mx-auto" />
           <p className="font-display font-bold text-muted-foreground">No business profile found</p>
           <Link href="/business-onboarding">
             <Button className="font-display bg-primary text-primary-foreground" data-testid="button-setup-business">Set Up Business Account</Button>
@@ -121,7 +121,7 @@ export default function BusinessDashboard() {
                   <Shield className="w-4 h-4 text-primary" title="Verified Company" data-testid="badge-verified-company" />
                 )}
               </div>
-              <p className="text-[10px] text-muted-foreground/40 font-display">
+              <p className="text-[10px] text-muted-foreground font-display">
                 {(profile as any).industry || "Business"} Dashboard
               </p>
             </div>
@@ -150,7 +150,7 @@ export default function BusinessDashboard() {
               </div>
               <div>
                 <p className="text-sm font-display font-semibold">Templates</p>
-                <p className="text-[10px] text-muted-foreground/40">Inspection forms</p>
+                <p className="text-[10px] text-muted-foreground">Inspection forms</p>
               </div>
             </button>
           </Link>
@@ -161,7 +161,7 @@ export default function BusinessDashboard() {
               </div>
               <div>
                 <p className="text-sm font-display font-semibold">Bulk Post</p>
-                <p className="text-[10px] text-muted-foreground/40">Upload CSV</p>
+                <p className="text-[10px] text-muted-foreground">Upload CSV</p>
               </div>
             </button>
           </Link>
@@ -172,9 +172,9 @@ export default function BusinessDashboard() {
               </div>
               <div>
                 <p className="text-sm font-display font-semibold">Observation Marketplace</p>
-                <p className="text-[10px] text-muted-foreground/40">Browse & purchase field observations</p>
+                <p className="text-[10px] text-muted-foreground">Browse & purchase field observations</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/30 ml-auto" />
+              <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto" />
             </button>
           </Link>
         </div>
@@ -184,7 +184,7 @@ export default function BusinessDashboard() {
 
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}

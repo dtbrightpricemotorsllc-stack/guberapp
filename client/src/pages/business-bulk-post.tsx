@@ -108,7 +108,7 @@ export default function BusinessBulkPost() {
                       className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedTemplate === tpl.id ? "border-primary/50 bg-primary/5" : "border-border/20 bg-muted/5 hover:border-border/40"}`}
                       data-testid={`button-select-template-${tpl.id}`}
                     >
-                      <FileText className={`w-4 h-4 flex-shrink-0 ${selectedTemplate === tpl.id ? "text-primary" : "text-muted-foreground/40"}`} />
+                      <FileText className={`w-4 h-4 flex-shrink-0 ${selectedTemplate === tpl.id ? "text-primary" : "text-muted-foreground"}`} />
                       <div className="min-w-0">
                         <p className="text-sm font-display font-semibold truncate">{tpl.name}</p>
                         <p className="text-[10px] text-muted-foreground">{tpl.required_photo_count} photos{tpl.geo_required ? " · GPS" : ""}</p>
@@ -130,15 +130,15 @@ export default function BusinessBulkPost() {
             <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4">
               <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Step 2 — Upload CSV</p>
               <div className="rounded-xl border border-dashed border-border/30 p-6 text-center cursor-pointer hover:border-primary/30 transition-colors" onClick={() => fileRef.current?.click()} data-testid="button-upload-csv">
-                <Upload className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
+                <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground font-display font-medium">Click to upload CSV</p>
-                <p className="text-[10px] text-muted-foreground/40 mt-1">Columns: address, instructions, budget, zipcode, deadline</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Columns: address, instructions, budget, zipcode, deadline</p>
                 <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
               </div>
 
               <div className="bg-muted/10 rounded-lg p-3 border border-white/[0.06]">
-                <p className="text-[10px] font-display font-bold text-muted-foreground/40 uppercase tracking-wider mb-1">Example CSV</p>
-                <pre className="text-[9px] text-muted-foreground/40 font-mono leading-relaxed overflow-x-auto">{`address,instructions,budget,zipcode
+                <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-wider mb-1">Example CSV</p>
+                <pre className="text-[9px] text-muted-foreground font-mono leading-relaxed overflow-x-auto">{`address,instructions,budget,zipcode
 "123 Main St, Chicago",Check storefront signage and hours,25,60601
 "456 Oak Ave, Chicago",Verify parking lot condition,25,60602`}</pre>
               </div>
@@ -148,12 +148,12 @@ export default function BusinessBulkPost() {
               <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase">Preview — {parsedRows.length} Rows</p>
-                  <button onClick={() => setParsedRows([])} className="text-[10px] text-muted-foreground/40 hover:text-destructive font-display">Clear</button>
+                  <button onClick={() => setParsedRows([])} className="text-[10px] text-muted-foreground hover:text-destructive font-display">Clear</button>
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-1.5">
                   {parsedRows.map((row, i) => (
                     <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-muted/10 border border-border/10" data-testid={`preview-row-${i}`}>
-                      <span className="text-[9px] text-muted-foreground/30 font-mono mt-0.5 flex-shrink-0">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="text-[9px] text-muted-foreground font-mono mt-0.5 flex-shrink-0">{String(i + 1).padStart(2, "0")}</span>
                       <div className="min-w-0">
                         <p className="text-[11px] font-medium truncate">{row.address || "(no address)"}</p>
                         {row.instructions && <p className="text-[10px] text-muted-foreground truncate">{row.instructions}</p>}

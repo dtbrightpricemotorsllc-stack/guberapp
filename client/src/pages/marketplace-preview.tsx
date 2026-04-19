@@ -213,7 +213,7 @@ function FakeListingCard({ listing }: { listing: typeof ALL_LISTINGS[0] }) {
         <p className="text-[10px] text-muted-foreground mb-2 line-clamp-1">{listing.subtitle}</p>
         <div className="flex items-center justify-between">
           <span className="text-base font-display font-black" style={{ color: listing.accent }}>{listing.price}</span>
-          <span className="text-[10px] text-muted-foreground/40 flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
             <MapPin className="w-2.5 h-2.5" />{listing.location}
           </span>
         </div>
@@ -306,8 +306,8 @@ export default function MarketplacePreview() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
             <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-            <p className="text-xs font-display font-bold text-foreground/70 tracking-[0.15em] uppercase">Example Listings</p>
-            <span className="text-[10px] font-display text-muted-foreground/40 ml-1">· Display only</span>
+            <p className="text-xs font-display font-bold text-foreground tracking-[0.15em] uppercase">Example Listings</p>
+            <span className="text-[10px] font-display text-muted-foreground ml-1">· Display only</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {listings.map((listing) => (

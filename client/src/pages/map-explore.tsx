@@ -618,7 +618,7 @@ export default function MapExplore() {
           data-testid="banner-location-denied-explore"
         >
           <LocateOff className="w-3.5 h-3.5 shrink-0" style={{ color: "#f59e0b" }} />
-          <span className="flex-1 text-[10px] font-bold tracking-wide" style={{ color: "rgba(255,255,255,0.65)", fontFamily: "Inter, sans-serif" }}>
+          <span className="flex-1 text-[10px] font-bold tracking-wide" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "Inter, sans-serif" }}>
             Location unavailable — enter a ZIP above to browse nearby jobs
           </span>
           <button

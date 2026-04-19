@@ -530,7 +530,7 @@ export default function Profile() {
                           data-testid="textarea-profile-feedback"
                         />
                         <div className="flex justify-between items-center">
-                          <span className="text-[10px] text-muted-foreground/40">{feedbackMessage.length}/1000</span>
+                          <span className="text-[10px] text-muted-foreground">{feedbackMessage.length}/1000</span>
                           <Button
                             size="sm"
                             onClick={() => feedbackMutation.mutate()}
@@ -552,7 +552,7 @@ export default function Profile() {
           </div>
           {isOwnProfile && (
             <div className="mt-4 pt-4 border-t border-border/10">
-              <p className="text-xs font-display font-bold text-foreground/60 mb-2 uppercase tracking-widest">Public Username</p>
+              <p className="text-xs font-display font-bold text-foreground/85 mb-2 uppercase tracking-widest">Public Username</p>
               <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">Choose a public name others see. No real names, phone numbers, emails, or social handles.</p>
               <div className="flex gap-2 items-start">
                 <div className="flex-1">
@@ -563,7 +563,7 @@ export default function Profile() {
                       value={pubUsernameInput}
                       maxLength={20}
                       placeholder="your_handle"
-                      className="flex-1 bg-transparent text-sm py-2 pr-3 outline-none text-foreground placeholder:text-muted-foreground/40"
+                      className="flex-1 bg-transparent text-sm py-2 pr-3 outline-none text-foreground placeholder:text-muted-foreground"
                       data-testid="input-public-username"
                       onChange={e => { setPubUsernameInput(e.target.value); validatePubUsername(e.target.value); }}
                     />
@@ -574,7 +574,7 @@ export default function Profile() {
                     </p>
                   )}
                   {!pubUsernameValidation && pubUsernameInput.trim().length === 0 && (
-                    <p className="text-[10px] text-muted-foreground/40 mt-1">3–20 characters, letters/numbers/underscore/dash only</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">3–20 characters, letters/numbers/underscore/dash only</p>
                   )}
                 </div>
                 <Button
@@ -661,7 +661,7 @@ export default function Profile() {
                       />
                       <Upload className="w-8 h-8 text-muted-foreground mb-2" />
                       <p className="text-xs font-display text-muted-foreground">Click or drag to upload document</p>
-                      <p className="text-[10px] text-muted-foreground/40 mt-1">PDF or Images (Max 5MB)</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">PDF or Images (Max 5MB)</p>
                     </div>
                     {displayUser.credentialUploadPending && (
                       <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
@@ -731,7 +731,7 @@ export default function Profile() {
                     <div className="h-1.5 w-full rounded-full bg-black/30 overflow-hidden">
                       <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progressPct}%`, background: levelColor }} />
                     </div>
-                    <p className="text-[9px] text-muted-foreground/40 font-display">
+                    <p className="text-[9px] text-muted-foreground font-display">
                       {score} / {nextThreshold} — {nextThreshold - score} pts to {nextLabel}
                     </p>
                   </div>
@@ -974,7 +974,7 @@ export default function Profile() {
               )}
             </div>
 
-            <p className="text-[10px] text-muted-foreground/40 font-display mt-4 leading-relaxed">
+            <p className="text-[10px] text-muted-foreground font-display mt-4 leading-relaxed">
               Uploads are reviewed by the GUBER trust team within 24-48 hours. Approval unlocks higher trust tiers and skilled labor jobs.
             </p>
           </Card>
@@ -1205,9 +1205,9 @@ export default function Profile() {
               </div>
               <div className="flex gap-3 pt-1">
                 <Link href="/terms" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-terms-profile">Terms</Link>
-                <span className="text-muted-foreground/20 text-[10px]">·</span>
+                <span className="text-muted-foreground text-[10px]">·</span>
                 <Link href="/privacy" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-privacy-profile">Privacy</Link>
-                <span className="text-muted-foreground/20 text-[10px]">·</span>
+                <span className="text-muted-foreground text-[10px]">·</span>
                 <Link href="/acceptable-use" className="text-[10px] text-primary/60 hover:text-primary font-display tracking-wider transition-colors" data-testid="link-aup-profile">Acceptable Use</Link>
               </div>
             </div>
@@ -1263,7 +1263,7 @@ export default function Profile() {
                 <div key={r.id} className="bg-muted/20 rounded-md p-3 premium-border">
                   <div className="flex items-center gap-0.5 mb-1">
                     {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} className={`w-3 h-3 ${i < r.rating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground/20"}`} />
+                      <Star key={i} className={`w-3 h-3 ${i < r.rating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`} />
                     ))}
                   </div>
                   {r.comment && <p className="text-sm text-muted-foreground leading-relaxed">{r.comment}</p>}
@@ -1354,7 +1354,7 @@ export default function Profile() {
             </span>
           </label>
 
-          <p className="text-[10px] text-muted-foreground/40 text-center">
+          <p className="text-[10px] text-muted-foreground text-center">
             Secured by Stripe · Bank-grade encryption · guberapp.app
           </p>
 

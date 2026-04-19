@@ -1064,7 +1064,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{(poster as any).jobsCompleted} jobs completed</p>
                     )}
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                 </div>
               </Link>
             </div>
@@ -1133,7 +1133,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             {isActiveJob && ((job as any).lat || job.location) && (
               <div className="space-y-2 pt-1" data-testid="section-navigation">
-                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/40 uppercase px-1">Get Directions</p>
+                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Get Directions</p>
                 {job.location && (
                   <p className="text-xs text-muted-foreground px-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3 shrink-0" /> {job.location}
@@ -1750,7 +1750,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                         <span className="text-emerald-400">${helperPayout.toFixed(2)}</span>
                       </div>
                     </div>
-                    <p className="text-[9px] text-muted-foreground/40 leading-relaxed pt-0.5">
+                    <p className="text-[9px] text-muted-foreground leading-relaxed pt-0.5">
                       No service fee on your end. GUBER's fee is deducted from the worker's share. Processing fee passed through at cost. Funds held until both parties confirm completion.
                     </p>
                   </div>
@@ -2191,7 +2191,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((s) => (
                   <button key={s} onClick={() => setReviewRating(s)} data-testid={`button-star-${s}`}>
-                    <Star className={`w-6 h-6 ${s <= reviewRating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground/30"}`} />
+                    <Star className={`w-6 h-6 ${s <= reviewRating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`} />
                   </button>
                 ))}
               </div>

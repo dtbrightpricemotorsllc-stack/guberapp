@@ -128,7 +128,7 @@ export default function Signup() {
         <div className="text-center space-y-2 mb-8 animate-fade-in">
           <GuberLogo size="lg" />
           <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">CREATE YOUR ACCOUNT</p>
-          <p className="text-muted-foreground/40 text-[11px] font-display leading-relaxed max-w-[240px] mx-auto">
+          <p className="text-muted-foreground text-[11px] font-display leading-relaxed max-w-[240px] mx-auto">
             Start earning in your neighborhood today
           </p>
         </div>
@@ -157,7 +157,7 @@ export default function Signup() {
 
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[10px] text-muted-foreground/40 font-display tracking-widest">OR</span>
+            <span className="text-[10px] text-muted-foreground font-display tracking-widest">OR</span>
             <div className="flex-1 h-px bg-white/[0.06]" />
           </div>
 
@@ -178,13 +178,13 @@ export default function Signup() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">ZIP CODE <span className="text-muted-foreground/30 text-[10px]">(Optional)</span></Label>
+              <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">ZIP CODE <span className="text-muted-foreground text-[10px]">(Optional)</span></Label>
               <Input value={form.zipcode} onChange={update("zipcode")} type="text" className="premium-input rounded-xl h-12 text-foreground text-sm px-4" placeholder="Your zip code" data-testid="input-zipcode" />
             </div>
 
             <div className="space-y-2">
               <Label className="text-muted-foreground text-[11px] font-display tracking-[0.15em]">
-                REFERRAL CODE <span className="text-muted-foreground/30 text-[10px]">(Optional)</span>
+                REFERRAL CODE <span className="text-muted-foreground text-[10px]">(Optional)</span>
               </Label>
               <div className="relative">
                 <Input
@@ -219,7 +219,7 @@ export default function Signup() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-muted-foreground transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground transition-colors p-1"
                   data-testid="button-toggle-password"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

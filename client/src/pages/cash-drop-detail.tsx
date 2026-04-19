@@ -74,11 +74,11 @@ function CashDropPayoutSelector({ dropId, attempt, rewardAmount, drop }: { dropI
             <span className="text-[11px] font-display font-bold text-amber-300">{drop.sponsorName}</span>
           </div>
         )}
-        <p className="text-[10px] text-muted-foreground/40 text-center">
+        <p className="text-[10px] text-muted-foreground text-center">
           {noPurchaseText || "No purchase required. GUBER selects and verifies all winners. Sponsor does not influence outcome."}
         </p>
         {disclaimerText && (
-          <p className="text-[10px] text-muted-foreground/30 text-center italic">{disclaimerText}</p>
+          <p className="text-[10px] text-muted-foreground text-center italic">{disclaimerText}</p>
         )}
       </div>
     );
@@ -476,21 +476,21 @@ export default function CashDropDetail() {
 
         {drop.isSponsored && (
           <div className="rounded-xl px-4 py-2.5 space-y-1" data-testid="section-legal-block">
-            <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.22)" }}>
+            <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.85)" }}>
               No purchase required. GUBER selects and verifies all winners. Sponsor does not influence outcome.
             </p>
             {drop.noPurchaseRequiredText && drop.noPurchaseRequiredText !== "No purchase necessary to participate." && (
-              <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.18)" }}>{drop.noPurchaseRequiredText}</p>
+              <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.85)" }}>{drop.noPurchaseRequiredText}</p>
             )}
             {drop.disclaimerText && (
-              <p className="text-[9px] italic" style={{ color: "rgba(255,255,255,0.15)" }}>{drop.disclaimerText}</p>
+              <p className="text-[9px] italic" style={{ color: "rgba(255,255,255,0.85)" }}>{drop.disclaimerText}</p>
             )}
           </div>
         )}
 
         {isClosed && (
           <div className="rounded-xl border border-border/20 bg-muted/10 p-5 text-center">
-            <Trophy className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+            <Trophy className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
             <p className="font-display font-bold text-sm text-muted-foreground">This Cash Drop has ended</p>
           </div>
         )}
@@ -538,7 +538,7 @@ export default function CashDropDetail() {
 
             {(drop.gpsLat && drop.gpsLng) ? (
               <div className="space-y-2">
-                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground/40 uppercase px-1">Navigation</p>
+                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Navigation</p>
                 <a
                   href={`https://www.google.com/maps/dir/?api=1&destination=${drop.gpsLat},${drop.gpsLng}`}
                   target="_blank"
@@ -582,7 +582,7 @@ export default function CashDropDetail() {
               </div>
             ) : (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/10 border border-white/[0.05]">
-                <MapPin className="w-4 h-4 text-muted-foreground/40" />
+                <MapPin className="w-4 h-4 text-muted-foreground" />
                 <p className="text-[11px] text-muted-foreground">Exact coordinates will be revealed when you get close. Head to the general area shown on the map.</p>
               </div>
             )}

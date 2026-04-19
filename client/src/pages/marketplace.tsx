@@ -84,7 +84,7 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
         {hasPhoto ? (
           <img src={photos![0]} alt={item.title} className="w-full h-full object-cover" />
         ) : (
-          <div className="flex flex-col items-center gap-2 text-muted-foreground/30">
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
             <Package className="w-10 h-10" />
             <span className="text-[10px] font-display tracking-wider">NO PHOTO</span>
           </div>
@@ -171,7 +171,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
           </div>
         ) : (
           <div className="h-32 flex items-center justify-center bg-muted/20">
-            <Package className="w-12 h-12 text-muted-foreground/20" />
+            <Package className="w-12 h-12 text-muted-foreground" />
           </div>
         )}
 
@@ -183,7 +183,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 <Zap className="w-3 h-3" /> FEATURED LISTING
               </span>
               {item.boostedUntil && (
-                <span className="text-[10px] text-muted-foreground/40 font-display">
+                <span className="text-[10px] text-muted-foreground font-display">
                   until {new Date(item.boostedUntil).toLocaleDateString()}
                 </span>
               )}
@@ -326,7 +326,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     });
   };
 
-  const inputClass = "w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50";
+  const inputClass = "w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
@@ -425,7 +425,7 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               <input className={inputClass} placeholder="Paste the V&I job ID if already inspected"
                 value={form.viJobId} onChange={e => setForm(f => ({ ...f, viJobId: e.target.value }))}
                 data-testid="input-listing-vi-job" />
-              <p className="text-[10px] text-muted-foreground/40 mt-1.5 leading-relaxed">
+              <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">
                 If a V&I inspector already verified this item (e.g. car inspection, property check), enter the job ID to auto-attach the verification report and earn the GUBER Verified badge.
               </p>
             </div>
@@ -495,7 +495,7 @@ export default function Marketplace() {
           <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between">
             <div>
               <p className="font-display font-extrabold text-white text-lg tracking-tight leading-none">GUBER Marketplace</p>
-              <p className="text-white/70 text-xs mt-0.5">Verified items only — real people, real inspections</p>
+              <p className="text-white/90 text-xs mt-0.5">Verified items only — real people, real inspections</p>
             </div>
             {user && (
               <Button size="sm" onClick={() => setShowPostModal(true)}
@@ -547,11 +547,11 @@ export default function Marketplace() {
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <Package className="w-7 h-7 text-muted-foreground/20" />
+              <Package className="w-7 h-7 text-muted-foreground" />
             </div>
             <div className="text-center">
               <p className="text-sm font-display font-bold text-muted-foreground">No listings yet</p>
-              <p className="text-xs text-muted-foreground/30 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {activeCategory !== "All" ? `No ${activeCategory} items listed.` : "Be the first to list a verified item."}
               </p>
             </div>

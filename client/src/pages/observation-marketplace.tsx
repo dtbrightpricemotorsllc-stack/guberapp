@@ -59,8 +59,8 @@ function ObservationCard({ obs, onView }: { obs: ObsWithMeta; onView: (o: ObsWit
             <img src={obs.photoURLs[0]} alt="obs" className="w-full h-full object-cover" />
           ) : (
             <div className="flex flex-col items-center gap-1">
-              <Lock className="w-5 h-5 text-muted-foreground/30" />
-              <span className="text-[8px] text-muted-foreground/30">Locked</span>
+              <Lock className="w-5 h-5 text-muted-foreground" />
+              <span className="text-[8px] text-muted-foreground">Locked</span>
             </div>
           )}
         </div>
@@ -217,9 +217,9 @@ export default function ObservationMarketplace() {
     return (
       <GuberLayout>
         <div className="max-w-lg mx-auto px-4 py-20 text-center space-y-4">
-          <AlertCircle className="w-10 h-10 text-muted-foreground/20 mx-auto" />
+          <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto" />
           <p className="font-display font-bold text-muted-foreground">Business account required</p>
-          <p className="text-sm text-muted-foreground/40">The Observation Marketplace is only accessible to business accounts.</p>
+          <p className="text-sm text-muted-foreground">The Observation Marketplace is only accessible to business accounts.</p>
           <Button onClick={() => navigate("/business-onboarding")} className="font-display" data-testid="button-setup-business-obs">
             Set Up Business Account
           </Button>
@@ -314,8 +314,8 @@ export default function ObservationMarketplace() {
         ) : !observations || observations.length === 0 ? (
           <div className="text-center py-20">
             <ShoppingBag className="w-10 h-10 text-muted-foreground/15 mx-auto mb-3" />
-            <p className="font-display font-bold text-muted-foreground/40">No observations found</p>
-            <p className="text-sm text-muted-foreground/30 mt-1">Try adjusting your filters</p>
+            <p className="font-display font-bold text-muted-foreground">No observations found</p>
+            <p className="text-sm text-muted-foreground mt-1">Try adjusting your filters</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -342,8 +342,8 @@ export default function ObservationMarketplace() {
                     </div>
                   ) : (
                     <div className="w-full h-32 rounded-lg border border-border/20 bg-muted/20 flex flex-col items-center justify-center gap-2">
-                      <Lock className="w-6 h-6 text-muted-foreground/30" />
-                      <p className="text-xs text-muted-foreground/40">Photos locked — purchase to unlock</p>
+                      <Lock className="w-6 h-6 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">Photos locked — purchase to unlock</p>
                     </div>
                   )}
 

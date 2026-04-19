@@ -152,7 +152,7 @@ export default function Login() {
 
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[10px] text-muted-foreground/40 font-display tracking-widest">OR</span>
+            <span className="text-[10px] text-muted-foreground font-display tracking-widest">OR</span>
             <div className="flex-1 h-px bg-white/[0.06]" />
           </div>
 
@@ -190,7 +190,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-muted-foreground transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground transition-colors p-1"
                   data-testid="button-toggle-password"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -212,7 +212,7 @@ export default function Login() {
           {/* Demo login — revealed after 5 taps on the GUBER logo */}
           {demoVisible && (
             <div className="mt-5 pt-5 border-t border-white/[0.06]" data-testid="demo-login-section">
-              <p className="text-[10px] text-muted-foreground/40 font-display tracking-widest text-center mb-3">REVIEWER DEMO ACCESS</p>
+              <p className="text-[10px] text-muted-foreground font-display tracking-widest text-center mb-3">REVIEWER DEMO ACCESS</p>
               <div className="flex gap-2">
                 <Button
                   type="button"

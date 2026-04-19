@@ -75,7 +75,7 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
           <p style={{ color: "#22C55E", fontWeight: 900, fontSize: 18, fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", margin: "0 0 6px" }}>
             ALERTS ARE ON
           </p>
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, margin: 0 }}>
+          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, margin: 0 }}>
             You won't miss a job or cash drop
           </p>
         </div>
@@ -106,7 +106,7 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
       }}>
         <button
           onClick={handleNotNow}
-          style={{ position: "absolute", top: 16, right: 18, background: "none", border: "none", color: "rgba(255,255,255,0.25)", cursor: "pointer", padding: 4 }}
+          style={{ position: "absolute", top: 16, right: 18, background: "none", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", padding: 4 }}
           data-testid="button-close-alert-modal"
         >
           <X style={{ width: 18, height: 18 }} />
@@ -119,7 +119,7 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
         <p style={{ color: "#fff", fontWeight: 900, fontSize: 20, fontFamily: "Oxanium, sans-serif", letterSpacing: "-0.01em", margin: "0 0 10px", lineHeight: 1.2 }}>
           💰 Don't miss jobs or cash drops
         </p>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, margin: "0 0 28px", lineHeight: 1.55 }}>
+        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 14, margin: "0 0 28px", lineHeight: 1.55 }}>
           GUBER moves fast. Jobs and money can be gone in seconds.
         </p>
 
@@ -145,7 +145,7 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
           data-testid="button-not-now-alerts"
           style={{
             width: "100%", background: "none", border: "none",
-            color: "rgba(255,255,255,0.3)", fontSize: 13,
+            color: "rgba(255,255,255,0.85)", fontSize: 13,
             cursor: "pointer", fontFamily: "Oxanium, sans-serif",
             letterSpacing: "0.04em", padding: "8px 0",
           }}
@@ -187,7 +187,7 @@ export function AlertActionPrompt({ onEnable, onDismiss, message }: AlertActionP
         <p style={{ color: "#fff", fontWeight: 800, fontSize: 13, fontFamily: "Oxanium, sans-serif", margin: "0 0 2px", letterSpacing: "0.02em" }}>
           {message || "Stay in sync"}
         </p>
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, margin: 0, lineHeight: 1.4 }}>
+        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, margin: 0, lineHeight: 1.4 }}>
           You'll miss jobs and money without alerts.
         </p>
       </div>
@@ -207,7 +207,7 @@ export function AlertActionPrompt({ onEnable, onDismiss, message }: AlertActionP
         <button
           onClick={onDismiss}
           data-testid="button-dismiss-action-prompt"
-          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.25)", fontSize: 10, cursor: "pointer", padding: "2px 0", fontFamily: "Oxanium, sans-serif" }}
+          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 10, cursor: "pointer", padding: "2px 0", fontFamily: "Oxanium, sans-serif" }}
         >
           Skip
         </button>
@@ -252,7 +252,7 @@ export function MissedEventBanner({ type, onEnable, onDismiss }: MissedEventBann
         <p style={{ color: "#F59E0B", fontWeight: 900, fontSize: 12, fontFamily: "Oxanium, sans-serif", margin: "0 0 1px", letterSpacing: "0.04em", textTransform: "uppercase" }}>
           {label}
         </p>
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, margin: 0, lineHeight: 1.3 }}>
+        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, margin: 0, lineHeight: 1.3 }}>
           Turn on alerts so this doesn't happen again.
         </p>
       </div>
@@ -272,7 +272,7 @@ export function MissedEventBanner({ type, onEnable, onDismiss }: MissedEventBann
         <button
           onClick={onDismiss}
           data-testid="button-dismiss-missed-event"
-          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.2)", fontSize: 10, cursor: "pointer", padding: "1px 0", fontFamily: "Oxanium, sans-serif" }}
+          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 10, cursor: "pointer", padding: "1px 0", fontFamily: "Oxanium, sans-serif" }}
         >
           Dismiss
         </button>

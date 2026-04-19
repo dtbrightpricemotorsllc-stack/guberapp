@@ -211,7 +211,7 @@ export default function AiOrNot() {
           <img src={shieldLogo} alt="GUBER" style={{ width: 90, height: 90, objectFit: "contain", filter: "drop-shadow(0 0 24px rgba(180,60,255,0.55)) drop-shadow(0 0 12px rgba(0,230,200,0.4))" }} />
           <div style={{ textAlign: "center" }}>
             <p style={{ color: "#fff", fontWeight: 800, fontSize: 20, margin: 0, fontFamily: "Oxanium, sans-serif", letterSpacing: "-0.02em" }}>AI or Not</p>
-            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>This browser is blocking the embedded game. Open it directly to play.</p>
+            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>This browser is blocking the embedded game. Open it directly to play.</p>
           </div>
           <button
             onClick={() => window.open(externalUrl, "_blank", "noopener")}
@@ -220,7 +220,7 @@ export default function AiOrNot() {
           >
             Open AI or Not
           </button>
-          <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, textAlign: "center" }}>
+          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, textAlign: "center" }}>
             {(isStoreBuild || isDemoUser) ? "Opens in browser. Premium features available at guberapp.app." : "Opens in a new tab. Your credits and status sync automatically."}
           </p>
         </div>
@@ -239,7 +239,7 @@ export default function AiOrNot() {
         <img src={shieldLogo} alt="GUBER" style={{ width: 130, height: 130, objectFit: "contain", filter: "drop-shadow(0 0 28px rgba(180,60,255,0.55)) drop-shadow(0 0 14px rgba(0,230,200,0.4))" }} />
         <div style={{ textAlign: "center" }}>
           <p style={{ color: "#fff", fontWeight: 800, fontSize: 20, margin: 0, fontFamily: "Oxanium, sans-serif", letterSpacing: "-0.02em" }}>AI or Not</p>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 5 }}>
+          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 5 }}>
             {purchaseActivating ? "Activating your purchase…" : "Powered by GUBER"}
           </p>
         </div>

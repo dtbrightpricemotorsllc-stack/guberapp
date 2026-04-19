@@ -28,7 +28,7 @@ export function GuberLogo({ size = "md", variant = "text" }: { size?: "sm" | "md
         style={{ imageRendering: "crisp-edges" }}
       />
       <span
-        className="relative font-semibold text-white/70 leading-none"
+        className="relative font-semibold text-white/90 leading-none"
         style={{ fontSize: tm.fontSize, top: tm.top, marginLeft: tm.marginLeft }}
       >™</span>
     </div>

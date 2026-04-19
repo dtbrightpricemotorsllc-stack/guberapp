@@ -781,7 +781,7 @@ export default function VerifyInspect() {
 
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-white/8" />
-            <span className="text-[10px] font-display text-muted-foreground/40 tracking-widest">OR</span>
+            <span className="text-[10px] font-display text-muted-foreground tracking-widest">OR</span>
             <div className="flex-1 h-px bg-white/8" />
           </div>
 
@@ -1592,7 +1592,7 @@ export default function VerifyInspect() {
                     {proofTemplate.checklistItems.map((item: any) => (
                       <div key={item.id} className="flex items-start gap-2 text-xs text-muted-foreground">
                         <CheckCircle className="w-3 h-3 text-primary shrink-0 mt-0.5" />
-                        <span>{item.label}{item.instruction ? <span className="opacity-50"> — {item.instruction}</span> : null}</span>
+                        <span>{item.label}{item.instruction ? <span className="text-muted-foreground"> — {item.instruction}</span> : null}</span>
                       </div>
                     ))}
                   </div>

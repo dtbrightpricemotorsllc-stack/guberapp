@@ -115,12 +115,12 @@ export default function BusinessOnboarding() {
                 {logoPreview ? (
                   <img src={logoPreview} className="w-full h-full object-cover" alt="logo" />
                 ) : (
-                  uploading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground/40" /> : <Upload className="w-5 h-5 text-muted-foreground/30" />
+                  uploading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : <Upload className="w-5 h-5 text-muted-foreground" />
                 )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Upload a square logo</p>
-                <p className="text-[10px] text-muted-foreground/40">PNG, JPG — shown on your posts</p>
+                <p className="text-[10px] text-muted-foreground">PNG, JPG — shown on your posts</p>
               </div>
               <input
                 ref={fileInputRef}

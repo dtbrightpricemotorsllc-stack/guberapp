@@ -159,7 +159,7 @@ export default function VIRequests() {
                 <Shield className="w-7 h-7" style={{ color: "#a78bfa" }} />
               </div>
               <div className="text-center">
-                <p className="font-display font-bold text-foreground/70">No open requests yet</p>
+                <p className="font-display font-bold text-foreground">No open requests yet</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {filter !== "All" ? `No ${filter} requests open right now` : "Check back soon or post your own request"}
                 </p>
@@ -174,7 +174,7 @@ export default function VIRequests() {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-[10px] font-display text-muted-foreground/40 tracking-widest uppercase">
+              <p className="text-[10px] font-display text-muted-foreground tracking-widest uppercase">
                 {jobs.length} open request{jobs.length !== 1 ? "s" : ""}
               </p>
               {jobs.map((job) => {

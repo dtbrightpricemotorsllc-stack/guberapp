@@ -357,7 +357,7 @@ export default function Dashboard() {
               <Button className="w-full h-14 gap-3 rounded-2xl premium-btn font-display tracking-[0.12em] text-sm font-bold shadow-lg" data-testid="button-post-job">
                 <Plus className="w-5 h-5" />
                 POST A JOB
-                <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
               </Button>
             </Link>
           ) : (
@@ -366,7 +366,7 @@ export default function Dashboard() {
                 <Button className="w-full h-14 gap-3 rounded-2xl premium-btn font-display tracking-[0.12em] text-sm font-bold shadow-lg" data-testid="button-find-jobs">
                   <Search className="w-5 h-5" />
                   FIND JOBS
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
                 </Button>
               </Link>
               <div className="flex items-center justify-between px-1 pt-1" data-testid="section-availability">
@@ -484,7 +484,7 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground/40" />
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </Link>
 

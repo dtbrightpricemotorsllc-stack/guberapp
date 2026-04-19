@@ -126,11 +126,11 @@ function StatusTimeline({ status, timeline }: { status: string; timeline: { key:
               ) : isCurrent ? (
                 <Circle className="w-4 h-4 text-primary fill-primary drop-shadow-[0_0_4px_hsl(152_100%_44%/0.5)]" />
               ) : (
-                <Circle className="w-4 h-4 text-muted-foreground/30" />
+                <Circle className="w-4 h-4 text-muted-foreground" />
               )}
               <span
                 className={`text-[9px] mt-0.5 whitespace-nowrap font-display ${
-                  isCurrent ? "text-foreground font-semibold" : isPast ? "text-muted-foreground" : "text-muted-foreground/40"
+                  isCurrent ? "text-foreground font-semibold" : isPast ? "text-muted-foreground" : "text-muted-foreground"
                 }`}
               >
                 {step.label}
@@ -250,7 +250,7 @@ function MyJobCard({ job, mode }: { job: Job; mode: Mode }) {
             }
             return (
               <Badge key={key} variant="secondary" className="text-[9px] px-1.5 py-0 h-4 font-normal bg-secondary/30 border-secondary/10 text-muted-foreground truncate max-w-[100px]">
-                <span className="font-bold mr-1 text-foreground/70">{key.replace(/_/g, ' ')}:</span> {String(displayValue)}
+                <span className="font-bold mr-1 text-foreground">{key.replace(/_/g, ' ')}:</span> {String(displayValue)}
               </Badge>
             );
           })}
