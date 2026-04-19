@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked, Pencil, Check, Search, CalendarRange } from "lucide-react";
+import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked, Pencil, Check, Search, CalendarRange, UserRound } from "lucide-react";
 
 interface Message {
   id: number;
@@ -20,6 +20,7 @@ interface PinnedFinding {
   note: string;
   pinnedAt: string;
   createdAt: string;
+  assignee: string;
 }
 
 const AUTO_SCAN_MESSAGE = "Give me a quick system health summary. Flag anything that needs my attention.";
@@ -42,6 +43,8 @@ export function AdminDiagnosticAssistant() {
   const [pendingPinNote, setPendingPinNote] = useState("");
   const [editingPinId, setEditingPinId] = useState<number | null>(null);
   const [editingPinNote, setEditingPinNote] = useState("");
+  const [editingPinAssignee, setEditingPinAssignee] = useState("");
+  const [pendingPinAssignee, setPendingPinAssignee] = useState("");
   const [pinnedSearch, setPinnedSearch] = useState("");
   const [pinnedDateFrom, setPinnedDateFrom] = useState("");
   const [pinnedDateTo, setPinnedDateTo] = useState("");
@@ -52,7 +55,7 @@ export function AdminDiagnosticAssistant() {
   const editingNoteRef = useRef<HTMLTextAreaElement>(null);
   const isAutoScanRef = useRef(false);
   const msgIdCounter = useRef(0);
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
   const channelRef = useRef<BroadcastChannel | null>(null);
   const STORAGE_PING_KEY = "admin_pinned_findings_ping";
@@ -62,7 +65,7 @@ export function AdminDiagnosticAssistant() {
       const channel = new BroadcastChannel("admin-pinned-findings");
       channelRef.current = channel;
       channel.onmessage = () => {
-        qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
       };
       return () => {
         channel.close();
@@ -71,13 +74,13 @@ export function AdminDiagnosticAssistant() {
     } else {
       const handleStorage = (e: StorageEvent) => {
         if (e.key === STORAGE_PING_KEY) {
-          qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
         }
       };
       window.addEventListener("storage", handleStorage);
       return () => window.removeEventListener("storage", handleStorage);
     }
-  }, [qc]);
+  }, [queryClient]);
 
   function notifyOtherTabs() {
     if (channelRef.current) {
@@ -90,8 +93,6 @@ export function AdminDiagnosticAssistant() {
     }
   }
 
-  const queryClient = useQueryClient();
-
   const { data: pinnedFindings = [] } = useQuery<PinnedFinding[]>({
     queryKey: ["/api/admin/pinned-findings"],
     enabled: open,
@@ -100,8 +101,8 @@ export function AdminDiagnosticAssistant() {
   const pinnedContentSet = buildContentSet(pinnedFindings);
 
   const pinMutation = useMutation({
-    mutationFn: async ({ content, note }: { content: string; note: string }) => {
-      const res = await apiRequest("POST", "/api/admin/pinned-findings", { content, note });
+    mutationFn: async ({ content, note, assignee }: { content: string; note: string; assignee: string }) => {
+      const res = await apiRequest("POST", "/api/admin/pinned-findings", { content, note, assignee });
       return res.json() as Promise<PinnedFinding>;
     },
     onSuccess: () => {
@@ -111,8 +112,8 @@ export function AdminDiagnosticAssistant() {
   });
 
   const updateNoteMutation = useMutation({
-    mutationFn: async ({ id, note }: { id: number; note: string }) => {
-      const res = await apiRequest("PATCH", `/api/admin/pinned-findings/${id}`, { note });
+    mutationFn: async ({ id, note, assignee }: { id: number; note: string; assignee: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/pinned-findings/${id}`, { note, assignee });
       return res.json() as Promise<PinnedFinding>;
     },
     onSuccess: () => {
@@ -149,12 +150,14 @@ export function AdminDiagnosticAssistant() {
   function startPinFlow(content: string) {
     setPendingPinContent(content);
     setPendingPinNote("");
+    setPendingPinAssignee("");
     setTimeout(() => pendingNoteRef.current?.focus(), 50);
   }
 
   function cancelPinFlow() {
     setPendingPinContent(null);
     setPendingPinNote("");
+    setPendingPinAssignee("");
   }
 
   function confirmPin(content: string) {
@@ -162,9 +165,10 @@ export function AdminDiagnosticAssistant() {
       cancelPinFlow();
       return;
     }
-    pinMutation.mutate({ content, note: pendingPinNote.trim() });
+    pinMutation.mutate({ content, note: pendingPinNote.trim(), assignee: pendingPinAssignee.trim() });
     setPendingPinContent(null);
     setPendingPinNote("");
+    setPendingPinAssignee("");
   }
 
   function handleUnpinByContent(content: string) {
@@ -182,8 +186,9 @@ export function AdminDiagnosticAssistant() {
     if (pinnedFindings.length === 0) return;
     const lines = pinnedFindings.map((f) => {
       const date = new Date(f.pinnedAt).toLocaleString();
+      const assigneeSection = f.assignee ? `Assigned to: ${f.assignee}\n` : "";
       const noteSection = f.note ? `Note: ${f.note}\n` : "";
-      return `[${date}]\n${noteSection}${f.content}\n${"─".repeat(60)}`;
+      return `[${date}]\n${assigneeSection}${noteSection}${f.content}\n${"─".repeat(60)}`;
     });
     const text = `Pinned Diagnostic Findings\nExported: ${new Date().toLocaleString()}\n${"═".repeat(60)}\n\n${lines.join("\n\n")}`;
     const blob = new Blob([text], { type: "text/plain" });
@@ -198,11 +203,12 @@ export function AdminDiagnosticAssistant() {
   function startEditNote(finding: PinnedFinding) {
     setEditingPinId(finding.id);
     setEditingPinNote(finding.note ?? "");
+    setEditingPinAssignee(finding.assignee ?? "");
     setTimeout(() => editingNoteRef.current?.focus(), 50);
   }
 
   function saveEditNote(id: number) {
-    updateNoteMutation.mutate({ id, note: editingPinNote.trim() });
+    updateNoteMutation.mutate({ id, note: editingPinNote.trim(), assignee: editingPinAssignee.trim() });
     setEditingPinId(null);
   }
 
@@ -570,6 +576,25 @@ export function AdminDiagnosticAssistant() {
                                 style={{ border: "1px solid hsl(263 70% 50% / 0.3)", background: "hsl(230 30% 11%)" }}
                                 data-testid={`pin-note-input-area-${i}`}
                               >
+                                <div
+                                  className="flex items-center gap-1.5 px-2.5 pt-2 pb-1"
+                                  style={{ borderBottom: "1px solid hsl(263 70% 50% / 0.15)" }}
+                                >
+                                  <UserRound className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(263 70% 60%)" }} />
+                                  <input
+                                    type="text"
+                                    value={pendingPinAssignee}
+                                    onChange={(e) => setPendingPinAssignee(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") { e.preventDefault(); confirmPin(msg.content); }
+                                      if (e.key === "Escape") cancelPinFlow();
+                                    }}
+                                    placeholder="Assign to… (optional)"
+                                    className="flex-1 text-xs bg-transparent focus:outline-none"
+                                    style={{ color: "hsl(0 0% 85%)" }}
+                                    data-testid={`input-pin-assignee-${i}`}
+                                  />
+                                </div>
                                 <textarea
                                   ref={pendingNoteRef}
                                   value={pendingPinNote}
@@ -820,61 +845,94 @@ export function AdminDiagnosticAssistant() {
                       </p>
 
                       {editingPinId === finding.id ? (
-                        <div className="mt-2 flex items-end gap-1.5">
-                          <textarea
-                            ref={editingNoteRef}
-                            value={editingPinNote}
-                            onChange={(e) => setEditingPinNote(e.target.value)}
-                            onKeyDown={(e) => handleEditNoteKeyDown(e, finding.id)}
-                            placeholder="Add a note…"
-                            rows={2}
-                            className="flex-1 text-xs rounded-lg px-2 py-1.5 resize-none focus:outline-none"
-                            style={{
-                              background: "hsl(230 30% 15%)",
-                              border: "1px solid hsl(263 70% 50% / 0.35)",
-                              color: "hsl(0 0% 85%)",
-                            }}
-                            data-testid={`input-edit-note-${finding.id}`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => saveEditNote(finding.id)}
-                            className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-all duration-150 mb-0.5"
-                            style={{ background: "hsl(263 70% 50% / 0.25)", color: "hsl(263 70% 70%)" }}
-                            aria-label="Save note"
-                            data-testid={`button-save-note-${finding.id}`}
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          <div
+                            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5"
+                            style={{ background: "hsl(230 30% 15%)", border: "1px solid hsl(263 70% 50% / 0.35)" }}
                           >
-                            <Check className="w-3 h-3" />
-                          </button>
+                            <UserRound className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(263 70% 60%)" }} />
+                            <input
+                              type="text"
+                              value={editingPinAssignee}
+                              onChange={(e) => setEditingPinAssignee(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") { e.preventDefault(); saveEditNote(finding.id); }
+                                if (e.key === "Escape") setEditingPinId(null);
+                              }}
+                              placeholder="Assign to…"
+                              className="flex-1 text-xs bg-transparent focus:outline-none"
+                              style={{ color: "hsl(0 0% 85%)" }}
+                              data-testid={`input-edit-assignee-${finding.id}`}
+                            />
+                          </div>
+                          <div className="flex items-end gap-1.5">
+                            <textarea
+                              ref={editingNoteRef}
+                              value={editingPinNote}
+                              onChange={(e) => setEditingPinNote(e.target.value)}
+                              onKeyDown={(e) => handleEditNoteKeyDown(e, finding.id)}
+                              placeholder="Add a note…"
+                              rows={2}
+                              className="flex-1 text-xs rounded-lg px-2 py-1.5 resize-none focus:outline-none"
+                              style={{
+                                background: "hsl(230 30% 15%)",
+                                border: "1px solid hsl(263 70% 50% / 0.35)",
+                                color: "hsl(0 0% 85%)",
+                              }}
+                              data-testid={`input-edit-note-${finding.id}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveEditNote(finding.id)}
+                              className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-all duration-150 mb-0.5"
+                              style={{ background: "hsl(263 70% 50% / 0.25)", color: "hsl(263 70% 70%)" }}
+                              aria-label="Save note"
+                              data-testid={`button-save-note-${finding.id}`}
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <button
                           type="button"
                           onClick={() => startEditNote(finding)}
-                          className="mt-1.5 flex items-center gap-1 group transition-opacity duration-150"
-                          aria-label={finding.note ? "Edit note" : "Add a note"}
+                          className="mt-1.5 flex flex-col gap-0.5 w-full text-left group transition-opacity duration-150"
+                          aria-label={finding.note || finding.assignee ? "Edit note and assignee" : "Add note or assignee"}
                           data-testid={`button-edit-note-${finding.id}`}
                         >
-                          {finding.note ? (
+                          {finding.assignee && (
                             <span
-                              className="text-[11px] leading-snug text-left"
+                              className="flex items-center gap-1 text-[11px] leading-snug"
                               style={{ color: "hsl(263 70% 68%)" }}
-                              data-testid={`text-pin-note-${finding.id}`}
+                              data-testid={`text-pin-assignee-${finding.id}`}
                             >
-                              {finding.note}
-                            </span>
-                          ) : (
-                            <span
-                              className="text-[11px] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                              style={{ color: "hsl(0 0% 40%)" }}
-                            >
-                              Add a note…
+                              <UserRound className="w-2.5 h-2.5 flex-shrink-0" />
+                              {finding.assignee}
                             </span>
                           )}
-                          <Pencil
-                            className="w-2.5 h-2.5 flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity duration-150"
-                            style={{ color: "hsl(263 70% 65%)" }}
-                          />
+                          <span className="flex items-center gap-1">
+                            {finding.note ? (
+                              <span
+                                className="text-[11px] leading-snug text-left"
+                                style={{ color: "hsl(263 70% 68%)" }}
+                                data-testid={`text-pin-note-${finding.id}`}
+                              >
+                                {finding.note}
+                              </span>
+                            ) : !finding.assignee ? (
+                              <span
+                                className="text-[11px] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                                style={{ color: "hsl(0 0% 40%)" }}
+                              >
+                                Add a note or assignee…
+                              </span>
+                            ) : null}
+                            <Pencil
+                              className="w-2.5 h-2.5 flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity duration-150"
+                              style={{ color: "hsl(263 70% 65%)" }}
+                            />
+                          </span>
                         </button>
                       )}
 
