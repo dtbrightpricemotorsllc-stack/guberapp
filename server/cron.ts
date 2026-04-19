@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes } from "@shared/schema";
+import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
 import { and, eq, lt, lte, isNull, isNotNull, inArray, desc, notInArray } from "drizzle-orm";
 import { storage } from "./storage";
 import { notifyNearbyAvailableWorkers } from "./notify-helpers";
@@ -468,7 +468,38 @@ async function enforceDisputeSLA(): Promise<number> {
   return resolved;
 }
 
+async function autoExpireCashDrops(): Promise<number> {
+  const now = new Date();
+  const toExpire = await db
+    .select({ id: cashDrops.id })
+    .from(cashDrops)
+    .where(
+      and(
+        eq(cashDrops.status, "active"),
+        isNotNull(cashDrops.endTime),
+        lt(cashDrops.endTime!, now)
+      )
+    );
+
+  for (const drop of toExpire) {
+    await db.update(cashDrops)
+      .set({ status: "expired", closedAt: now })
+      .where(eq(cashDrops.id, drop.id));
+  }
+
+  return toExpire.length;
+}
+
 export function startCron() {
+  cron.schedule("*/2 * * * *", async () => {
+    try {
+      const expired = await autoExpireCashDrops();
+      if (expired > 0) console.log(`[cron] auto-expired ${expired} cash drop(s) past endTime`);
+    } catch (err) {
+      console.error("[cron] error in cash drop auto-expire:", err);
+    }
+  });
+
   cron.schedule("*/5 * * * *", async () => {
     try {
       const expired = await expireUnacceptedJobs();

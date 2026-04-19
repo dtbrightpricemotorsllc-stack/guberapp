@@ -841,6 +841,7 @@ export const cashDrops = pgTable("cash_drops", {
   disclaimerText: text("disclaimer_text"),
   claimCode: text("claim_code"),
   fundingSource: text("funding_source").default("guber_cash_app"),
+  closedAt: timestamp("closed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

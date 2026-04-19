@@ -8756,6 +8756,13 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       if (patchData.gpsRadius !== undefined) patchData.gpsRadius = parseInt(patchData.gpsRadius) || 200;
       if (patchData.rewardQuantity !== undefined) patchData.rewardQuantity = patchData.rewardQuantity ? parseInt(patchData.rewardQuantity) : null;
       if (patchData.sponsorId !== undefined) patchData.sponsorId = patchData.sponsorId ? parseInt(patchData.sponsorId) : null;
+      if (
+        (patchData.status === "closed" || patchData.status === "expired") &&
+        previousDrop?.status !== patchData.status &&
+        !patchData.closedAt
+      ) {
+        patchData.closedAt = new Date();
+      }
       const drop = await storage.updateCashDrop(id, patchData);
       if (drop && req.body.status === "active" && previousDrop?.status !== "active") {
         notifyCashDropLive(drop).catch(() => {});
@@ -8905,7 +8912,9 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       const newConfirmedReward2 = confirmedRewardWinners + (isRewardWinner ? 1 : 0) + autoRewardWinners.length;
       const allSlotsFilled = newConfirmedCash2 >= cashCap && (rewardCap === 0 || newConfirmedReward2 >= rewardCap);
       const newStatus = (allSlotsFilled || totalWinnersFound >= effectiveLimit) ? "closed" : drop.status;
-      await storage.updateCashDrop(dropId, { winnersFound: totalWinnersFound, status: newStatus });
+      const closureUpdate: any = { winnersFound: totalWinnersFound, status: newStatus };
+      if (newStatus === "closed" && drop.status !== "closed") closureUpdate.closedAt = new Date();
+      await storage.updateCashDrop(dropId, closureUpdate);
 
       // Notify all non-winning participants when the drop is now fully claimed
       if (newStatus === "closed") {

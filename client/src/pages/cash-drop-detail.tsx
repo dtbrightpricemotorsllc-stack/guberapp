@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
@@ -238,6 +238,7 @@ export default function CashDropDetail() {
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [gpsPos, setGpsPos] = useState<{ lat: number; lng: number } | null>(null);
+  const previousStatusRef = useRef<string | null>(null);
 
   const { data: drop, isLoading } = useQuery<CashDrop & { userAttempt: CashDropAttempt | null }>({
     queryKey: ["/api/cash-drops", id],
@@ -298,6 +299,30 @@ export default function CashDropDetail() {
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  useEffect(() => {
+    if (!drop) return;
+    const prev = previousStatusRef.current;
+    const curr = drop.status;
+    if (prev && prev !== curr && (curr === "closed" || curr === "expired")) {
+      const wasEnRoute = drop.userAttempt?.status === "accepted";
+      if (wasEnRoute) {
+        toast({
+          title: "⚡ Drop Claimed Before You Arrived",
+          description: "Someone else got there first. Keep an eye out for new drops!",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: curr === "expired" ? "Drop Expired" : "Drop Claimed",
+          description: curr === "expired"
+            ? "This Cash Drop has expired."
+            : "This Cash Drop has been fully claimed.",
+        });
+      }
+    }
+    previousStatusRef.current = curr;
+  }, [drop?.status]);
 
   const handleCapture = async (index: number, file: File) => {
     setUploading(true);
@@ -369,7 +394,7 @@ export default function CashDropDetail() {
         </button>
 
         <div
-          className="rounded-2xl p-5 relative overflow-hidden"
+          className="rounded-2xl p-5 relative"
           style={{
             background: "linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0500 100%)",
             border: "1.5px solid rgba(245,158,11,0.35)",
@@ -486,9 +511,27 @@ export default function CashDropDetail() {
         )}
 
         {isClosed && (
-          <div className="rounded-xl border border-border/20 bg-muted/10 p-5 text-center">
-            <Trophy className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="font-display font-bold text-sm text-muted-foreground">This Cash Drop has ended</p>
+          <div
+            className="rounded-xl p-4 flex items-center gap-3"
+            data-testid="banner-drop-closed"
+            style={{
+              background: "rgba(107,114,128,0.08)",
+              border: "1px solid rgba(107,114,128,0.22)",
+            }}
+          >
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "rgba(107,114,128,0.15)" }}>
+              {drop.status === "expired" ? <Clock className="w-4 h-4 text-muted-foreground" /> : <Trophy className="w-4 h-4 text-muted-foreground" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-bold text-sm text-muted-foreground">
+                {drop.status === "expired" ? "Drop Expired" : "Drop Fully Claimed"}
+              </p>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                {drop.status === "expired"
+                  ? "This Cash Drop passed its end time without being claimed."
+                  : "All winner slots have been filled. Check the map for active drops near you."}
+              </p>
+            </div>
           </div>
         )}
 
@@ -521,7 +564,7 @@ export default function CashDropDetail() {
           </div>
         )}
 
-        {attempt?.status === "accepted" && (
+        {attempt?.status === "accepted" && isActive && (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
               <div className="flex items-center gap-2 mb-2">

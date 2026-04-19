@@ -43,6 +43,7 @@ export interface CashDropPin {
   gpsLng: number;
   title: string;
   rewardPerWinner: number;
+  status?: string;
 }
 
 interface GoogleMapProps {
@@ -361,6 +362,8 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       const lng = parseFloat(String(drop.gpsLng));
       if (isNaN(lat) || isNaN(lng)) return;
 
+      const isClosed = drop.status === "closed" || drop.status === "expired";
+
       class CashDropOverlay extends g.OverlayView {
         private div: HTMLDivElement | null = null;
         private pos: google.maps.LatLng;
@@ -379,26 +382,31 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           const wrapper = document.createElement("div");
           wrapper.style.cssText = "position:relative;width:56px;height:72px;display:flex;flex-direction:column;align-items:center;";
 
-          const rings: HTMLDivElement[] = [0,1,2].map(() => {
+          const initColor = isClosed ? "#6B7280" : "#22C55E";
+
+          const rings: HTMLDivElement[] = isClosed ? [] : [0,1,2].map(() => {
             const r = document.createElement("div");
-            r.style.cssText = "position:absolute;top:4px;left:50%;width:44px;height:44px;border-radius:50%;border:2px solid #22C55E;pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);";
+            r.style.cssText = `position:absolute;top:4px;left:50%;width:44px;height:44px;border-radius:50%;border:2px solid ${initColor};pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);`;
             wrapper.appendChild(r);
             return r;
           });
 
           const circle = document.createElement("div");
-          circle.style.cssText = "position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:#22C55E;border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px #22C55E,0 0 28px #22C55E66,0 3px 10px rgba(0,0,0,0.55);margin-top:6px;";
+          const circleBoxShadow = isClosed
+            ? "0 1px 6px rgba(0,0,0,0.4)"
+            : `0 0 14px ${initColor},0 0 28px ${initColor}66,0 3px 10px rgba(0,0,0,0.55)`;
+          circle.style.cssText = `position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:${initColor};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:${circleBoxShadow};margin-top:6px;opacity:${isClosed ? "0.55" : "1"};`;
 
           const dollar = document.createElement("span");
           dollar.textContent = "$";
-          dollar.style.cssText = "font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:#000000;letter-spacing:-1px;";
+          dollar.style.cssText = `font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:${isClosed ? "#d1d5db" : "#000000"};letter-spacing:-1px;`;
           circle.appendChild(dollar);
 
           const pill = document.createElement("div");
-          pill.style.cssText = "margin-top:3px;background:rgba(0,0,0,0.92);border-radius:6px;padding:1px 5px;white-space:nowrap;border:1.5px solid #22C55E;";
+          pill.style.cssText = `margin-top:3px;background:rgba(0,0,0,0.92);border-radius:6px;padding:1px 5px;white-space:nowrap;border:1.5px solid ${initColor};opacity:${isClosed ? "0.55" : "1"};`;
           const pillText = document.createElement("span");
-          pillText.textContent = "CASH DROP";
-          pillText.style.cssText = "font-size:6.5px;font-weight:900;letter-spacing:0.15em;font-family:system-ui,sans-serif;color:#22C55E;";
+          pillText.textContent = isClosed ? (drop.status === "expired" ? "EXPIRED" : "CLAIMED") : "CASH DROP";
+          pillText.style.cssText = `font-size:6.5px;font-weight:900;letter-spacing:0.15em;font-family:system-ui,sans-serif;color:${initColor};`;
           pill.appendChild(pillText);
 
           wrapper.appendChild(circle);
@@ -409,28 +417,30 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
             onCashDropClick?.(drop);
           });
 
-          let ci = 0;
-          this._colorInterval = setInterval(() => {
-            const c = GUBER_COLORS[ci % GUBER_COLORS.length];
-            circle.style.background = c;
-            circle.style.boxShadow = `0 0 14px ${c},0 0 28px ${c}66,0 3px 10px rgba(0,0,0,0.55)`;
-            pill.style.borderColor = c;
-            pillText.style.color = c;
-            rings.forEach(r => { r.style.borderColor = c; });
-            ci++;
-          }, 180);
+          if (!isClosed) {
+            let ci = 0;
+            this._colorInterval = setInterval(() => {
+              const c = GUBER_COLORS[ci % GUBER_COLORS.length];
+              circle.style.background = c;
+              circle.style.boxShadow = `0 0 14px ${c},0 0 28px ${c}66,0 3px 10px rgba(0,0,0,0.55)`;
+              pill.style.borderColor = c;
+              pillText.style.color = c;
+              rings.forEach(r => { r.style.borderColor = c; });
+              ci++;
+            }, 180);
 
-          rings.forEach((r, i) => {
-            const phase = i * 0.33;
-            const id = setInterval(() => {
-              const t = ((performance.now() / 1200 + phase) % 1);
-              const scale = 1 + t * 1.2;
-              const opacity = 1 - t;
-              r.style.transform = `translateX(-50%) scale(${scale})`;
-              r.style.opacity = String(Math.max(0, opacity * 0.6));
-            }, 30);
-            this._ringIntervals.push(id);
-          });
+            rings.forEach((r, i) => {
+              const phase = i * 0.33;
+              const id = setInterval(() => {
+                const t = ((performance.now() / 1200 + phase) % 1);
+                const scale = 1 + t * 1.2;
+                const opacity = 1 - t;
+                r.style.transform = `translateX(-50%) scale(${scale})`;
+                r.style.opacity = String(Math.max(0, opacity * 0.6));
+              }, 30);
+              this._ringIntervals.push(id);
+            });
+          }
 
           const panes = this.getPanes();
           panes?.overlayMouseTarget?.appendChild(this.div);

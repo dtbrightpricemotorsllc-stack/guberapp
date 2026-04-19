@@ -403,10 +403,11 @@ export default function Dashboard() {
     .filter((d: any) => d.gpsLat && d.gpsLng)
     .map((d: any) => ({
       id: d.id,
-      lat: parseFloat(d.gpsLat),
-      lng: parseFloat(d.gpsLng),
+      gpsLat: parseFloat(d.gpsLat),
+      gpsLng: parseFloat(d.gpsLng),
       title: d.title || "Cash Drop",
-      amount: d.rewardPerWinner,
+      rewardPerWinner: d.rewardPerWinner,
+      status: d.status,
     }));
 
   const isSharingRef = useRef(false);

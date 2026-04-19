@@ -828,7 +828,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveCashDrops(): Promise<CashDrop[]> {
-    return db.select().from(cashDrops).where(eq(cashDrops.status, "active")).orderBy(desc(cashDrops.createdAt));
+    const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    return db.select().from(cashDrops).where(
+      or(
+        eq(cashDrops.status, "active"),
+        and(
+          inArray(cashDrops.status, ["closed", "expired"]),
+          sql`${cashDrops.closedAt} IS NOT NULL AND ${cashDrops.closedAt} > ${fiveHoursAgo}`
+        )
+      )
+    ).orderBy(desc(cashDrops.createdAt));
   }
 
   async getCashDrop(id: number): Promise<CashDrop | undefined> {
