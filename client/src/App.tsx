@@ -275,7 +275,13 @@ function NativeDeepLinkHandler() {
 }
 
 function App() {
-  const [splashDone, setSplashDone] = useState(false);
+  const [splashDone, setSplashDone] = useState(() => {
+    if (import.meta.env.DEV && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("nosplash")) return true;
+    }
+    return false;
+  });
 
   return (
     <QueryClientProvider client={queryClient}>
