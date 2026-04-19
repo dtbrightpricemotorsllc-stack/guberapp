@@ -94,7 +94,12 @@ export default function Login() {
     if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
     if (Capacitor.isNativePlatform()) {
       googleUrl.searchParams.set("source", "native");
-      await Browser.open({ url: googleUrl.toString() });
+      try {
+        await Browser.open({ url: googleUrl.toString() });
+      } catch {
+        setGoogleLoading(false);
+        toast({ title: "Sign-In Failed", description: "Could not open browser. Please try again.", variant: "destructive" });
+      }
     } else {
       window.location.href = googleUrl.toString();
     }
