@@ -729,8 +729,8 @@ export default function Dashboard() {
                 const level = score >= 80 ? "trusted" : score >= 60 ? "verified" : "new";
                 const levelLabel = level === "trusted" ? "Trusted Worker" : level === "verified" ? "Verified Worker" : "New Worker";
                 const levelColor = level === "trusted" ? "#86efac" : level === "verified" ? "#93c5fd" : "#94a3b8";
-                const levelBg = level === "trusted" ? "rgba(34,197,94,0.08)" : level === "verified" ? "rgba(59,130,246,0.08)" : "rgba(100,116,139,0.08)";
-                const levelBorder = level === "trusted" ? "rgba(34,197,94,0.25)" : level === "verified" ? "rgba(59,130,246,0.25)" : "rgba(100,116,139,0.2)";
+                const levelBg = level === "trusted" ? "rgba(34,197,94,0.14)" : level === "verified" ? "rgba(59,130,246,0.14)" : "rgba(100,116,139,0.14)";
+                const levelBorder = level === "trusted" ? "rgba(34,197,94,0.40)" : level === "verified" ? "rgba(59,130,246,0.40)" : "rgba(100,116,139,0.35)";
                 const nextThreshold = level === "new" ? 60 : level === "verified" ? 80 : null;
                 const nextLabel = level === "new" ? "Verified (60)" : level === "verified" ? "Trusted (80)" : null;
                 const progressPct = nextThreshold ? Math.min(100, Math.round((score / nextThreshold) * 100)) : 100;

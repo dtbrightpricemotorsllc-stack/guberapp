@@ -16,13 +16,13 @@ import type { Job, BusinessProfile } from "@shared/schema";
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
 const PURPLE = "#7B3FE4";
-const SURFACE = "#0A0A0A";
-const BORDER = "rgba(255,255,255,0.06)";
+const SURFACE = "hsl(var(--card))";
+const BORDER = "hsl(var(--border) / 0.5)";
 const GOLD_BORDER = "rgba(198,168,92,0.22)";
 const GOLD_GLOW = "rgba(168,138,67,0.18)";
-const TEXT_PRIMARY = "#FFFFFF";
-const TEXT_SECONDARY = "#A1A1A1";
-const TEXT_MUTED = "#6B6B6B";
+const TEXT_PRIMARY = "hsl(var(--card-foreground))";
+const TEXT_SECONDARY = "hsl(var(--muted-foreground))";
+const TEXT_MUTED = "hsl(var(--muted-foreground) / 0.7)";
 const SUCCESS = "#22C55E";
 
 function StatCard({ label, value, sub, icon: Icon, iconColor }: { label: string; value: string | number; sub?: string; icon?: any; iconColor?: string }) {
@@ -222,14 +222,14 @@ export default function BizDashboard() {
             <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-4" style={{ color: TEXT_MUTED }}>Status</p>
 
             {isPending && (
-              <div className="rounded-2xl overflow-hidden" style={{ background: "#0A0A0A", border: "1px solid rgba(245,158,11,0.10)" }}>
+              <div className="rounded-2xl overflow-hidden" style={{ background: SURFACE, border: "1px solid rgba(245,158,11,0.10)" }}>
                 <div className="h-[1px]" style={{ background: "linear-gradient(90deg, transparent, rgba(245,158,11,0.30), transparent)" }} />
                 <div className="p-7 flex items-start gap-4">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.12)" }}>
                     <Clock className="w-4 h-4" style={{ color: "#F59E0B" }} />
                   </div>
                   <div>
-                    <p className="text-[13px] font-bold text-white mb-1.5">Access request under review</p>
+                    <p className="text-[13px] font-bold text-foreground mb-1.5">Access request under review</p>
                     <p className="text-xs leading-relaxed" style={{ color: TEXT_MUTED }}>
                       The GUBER team reviews every business application to maintain network quality. You'll be notified when approved — typically within 1–2 business days.
                     </p>
@@ -239,14 +239,14 @@ export default function BizDashboard() {
             )}
 
             {!isVerified && !isPending && (
-              <div className="rounded-2xl overflow-hidden" style={{ background: "#0A0A0A", border: `1px solid ${GOLD_BORDER}` }}>
+              <div className="rounded-2xl overflow-hidden" style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}` }}>
                 <div className="h-[1px]" style={{ background: `linear-gradient(90deg, transparent, ${GOLD_DK}, transparent)` }} />
                 <div className="p-7 flex items-start gap-5">
                   <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(198,168,92,0.06)", border: `1px solid rgba(198,168,92,0.14)` }}>
                     <ShieldCheck className="w-5 h-5" style={{ color: GOLD }} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-base font-black text-white mb-2">Complete Business Verification</p>
+                    <p className="text-base font-black text-foreground mb-2">Complete Business Verification</p>
                     <p className="text-xs leading-relaxed mb-5" style={{ color: TEXT_SECONDARY }}>
                       {isDemoUser ? "Verified companies unlock full scouting, candidate profiles, and direct outreach. Submit your EIN to gain full access." : "Verified companies unlock full scouting, candidate profiles, and direct outreach. Submit your EIN and a one-time $49 fee to gain full access."}
                     </p>
@@ -267,7 +267,7 @@ export default function BizDashboard() {
             )}
 
             {isNewAccount && (
-              <div className="rounded-2xl p-6 mt-3" style={{ background: "#0A0A0A", border: `1px solid rgba(255,255,255,0.05)` }}>
+              <div className="rounded-2xl p-6 mt-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                 <div className="flex items-center gap-2 mb-5">
                   <Target className="w-3.5 h-3.5" style={{ color: TEXT_MUTED }} />
                   <p className="text-[9px] font-bold tracking-[0.18em] uppercase" style={{ color: TEXT_MUTED }}>Access Status</p>
@@ -291,9 +291,9 @@ export default function BizDashboard() {
           <Link href="/biz/talent-explorer">
             <div
               className="rounded-2xl p-7 mb-3 cursor-pointer transition-all group"
-              style={{ background: "#0D0D0D", border: `1px solid rgba(255,255,255,0.06)` }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.10)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.06)"; }}
+              style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = GOLD_BORDER; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = BORDER; }}
               data-testid="card-talent-explorer-primary"
             >
               <div className="flex items-start justify-between gap-4">
@@ -303,7 +303,7 @@ export default function BizDashboard() {
                       <Search className="w-4.5 h-4.5" style={{ color: PURPLE }} />
                     </div>
                     <div>
-                      <p className="text-base font-black text-white">Talent Explorer</p>
+                      <p className="text-base font-black text-foreground">Talent Explorer</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: SUCCESS }} />
                         <span className="text-[10px]" style={{ color: TEXT_MUTED }}>Active in your region</span>
@@ -331,7 +331,7 @@ export default function BizDashboard() {
         <div style={{ marginBottom: "2.75rem" }}>
           <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-4" style={{ color: TEXT_MUTED }}>Campaigns</p>
 
-          <div className="rounded-2xl overflow-hidden" style={{ background: "#0A0A0A", border: `1px solid ${GOLD_BORDER}` }}>
+          <div className="rounded-2xl overflow-hidden" style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}` }}>
             <div className="h-[1px]" style={{ background: `linear-gradient(90deg, transparent, ${GOLD_DK}, transparent)` }} />
             <div className="p-7 flex items-start gap-5">
               <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(198,168,92,0.06)", border: `1px solid rgba(198,168,92,0.14)` }}>
@@ -339,7 +339,7 @@ export default function BizDashboard() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2.5 mb-2">
-                  <p className="text-base font-black text-white">Live GUBER Drops</p>
+                  <p className="text-base font-black text-foreground">Live GUBER Drops</p>
                   <span className="text-[8px] px-1.5 py-0.5 rounded font-bold tracking-[0.18em] uppercase" style={{ background: "rgba(198,168,92,0.07)", color: GOLD_DK, border: `1px solid rgba(198,168,92,0.16)` }}>
                     NEW
                   </span>
@@ -412,15 +412,15 @@ export default function BizDashboard() {
                   onChange={(e) => setSearchFilter(e.target.value)}
                   placeholder="Search by city, zip, or title..."
                   className="w-full h-9 pl-9 pr-3 rounded-xl text-xs outline-none transition-all focus:border-white/[0.10]"
-                  style={{ background: "#0A0A0A", border: `1px solid rgba(255,255,255,0.05)`, color: TEXT_PRIMARY }}
+                  style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: TEXT_PRIMARY }}
                   data-testid="input-job-search"
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-9 text-xs w-32 rounded-xl" style={{ background: "#0A0A0A", border: `1px solid rgba(255,255,255,0.05)`, color: TEXT_PRIMARY }} data-testid="select-status-filter">
+                <SelectTrigger className="h-9 text-xs w-32 rounded-xl" style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: TEXT_PRIMARY }} data-testid="select-status-filter">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
-                <SelectContent style={{ background: "#141417", border: `1px solid rgba(255,255,255,0.06)` }}>
+                <SelectContent>
                   {["all", "posted_public", "in_progress", "completion_submitted", "completed_paid", "proof_submitted", "cancelled"].map((s) => (
                     <SelectItem key={s} value={s} style={{ color: TEXT_PRIMARY }}>
                       {s === "all" ? "All Status" : s.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
@@ -434,7 +434,7 @@ export default function BizDashboard() {
           {jobsLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 rounded-xl" style={{ background: "#0A0A0A" }} />
+                <Skeleton key={i} className="h-14 rounded-xl" style={{ background: SURFACE }} />
               ))}
             </div>
           ) : filteredJobs.length > 0 ? (
@@ -485,7 +485,7 @@ export default function BizDashboard() {
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl" style={{ background: "#0A0A0A", border: `1px solid rgba(255,255,255,0.04)` }}>
+            <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.015)", border: `1px solid rgba(255,255,255,0.04)` }}>
                 <FileText className="w-5 h-5" style={{ color: "#3F3F46" }} />
               </div>

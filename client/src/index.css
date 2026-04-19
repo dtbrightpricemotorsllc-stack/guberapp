@@ -699,6 +699,24 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* ── Theme-aware gradient surfaces ─────────────────────────────── */
+
+.gradient-amber-glow {
+  background: linear-gradient(135deg, #1a0a00, #2d1200);
+}
+
+.gradient-emerald-glow {
+  background: linear-gradient(135deg, #001a0a, #002d12);
+}
+
+:root:not(.dark) .gradient-amber-glow {
+  background: linear-gradient(135deg, #fff8eb, #ffefcc);
+}
+
+:root:not(.dark) .gradient-emerald-glow {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+}
+
 /* Fix Safari not respecting min-height: 100svh on flex children */
 html, body, #root {
   height: 100%;

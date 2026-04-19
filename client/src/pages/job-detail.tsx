@@ -2089,7 +2089,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           )}
 
           {(job as any).payoutStatus === "paid_out" && isHelper && (
-            <div className="rounded-2xl border border-emerald-500/30 p-6 text-center space-y-3" style={{ background: "linear-gradient(135deg,#001a0a,#002d12)" }} data-testid="card-payout-complete">
+            <div className="rounded-2xl border border-emerald-500/30 p-6 text-center space-y-3 gradient-emerald-glow" data-testid="card-payout-complete">
               <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center mx-auto">
                 <CheckCircle className="w-6 h-6 text-emerald-400" />
               </div>
@@ -2189,7 +2189,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
       {showNavModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowNavModal(false)}>
-          <div className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl p-5"
+          <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
             style={{ border: "1px solid rgba(255,255,255,0.08)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-navigation">
@@ -2255,7 +2255,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
       {showCancelModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowCancelModal(false)}>
-          <div className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl p-5"
+          <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
             style={{ border: "1px solid rgba(255,255,255,0.08)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-cancel-job">
@@ -2321,7 +2321,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
       {showPosterCancelModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowPosterCancelModal(false)}>
-          <div className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl p-5"
+          <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
             style={{ border: "1px solid rgba(255,255,255,0.08)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-poster-cancel-job">
@@ -2394,7 +2394,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       {showSellModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center"
           onClick={() => setShowSellModal(false)}>
-          <div className="w-full max-w-lg bg-[#0d0d1a] rounded-t-3xl p-5"
+          <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
             style={{ border: "1px solid rgba(255,255,255,0.08)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-sell-vi-item">

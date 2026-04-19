@@ -57,7 +57,7 @@ function CashDropPayoutSelector({ dropId, attempt, rewardAmount, drop }: { dropI
     const noPurchaseText = drop?.noPurchaseRequiredText || "";
     const disclaimerText = drop?.disclaimerText || "";
     return (
-      <div className="rounded-2xl border border-amber-500/30 p-6 space-y-4" style={{ background: "linear-gradient(135deg, #1a0a00, #2d1200)" }}>
+      <div className="rounded-2xl border border-amber-500/30 p-6 space-y-4 gradient-amber-glow">
         <div className="text-center space-y-2">
           <Trophy className="w-10 h-10 text-amber-400 mx-auto" />
           <p className="font-display font-black text-xl text-amber-300">You Won a Sponsored Reward!</p>
@@ -104,7 +104,7 @@ function CashDropPayoutSelector({ dropId, attempt, rewardAmount, drop }: { dropI
 
   if (payoutStatus === "paid") {
     return (
-      <div className="rounded-2xl border border-emerald-500/30 p-6 text-center space-y-3" style={{ background: "linear-gradient(135deg, #001a0a, #002d12)" }}>
+      <div className="rounded-2xl border border-emerald-500/30 p-6 text-center space-y-3 gradient-emerald-glow">
         <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto" />
         <p className="font-display font-black text-xl text-emerald-300">Payout Complete!</p>
         <p className="text-[11px] text-emerald-400/60 leading-relaxed">
@@ -116,7 +116,7 @@ function CashDropPayoutSelector({ dropId, attempt, rewardAmount, drop }: { dropI
 
   if (chosenMethod && payoutStatus === "payout_method_selected") {
     return (
-      <div className="rounded-2xl border border-amber-500/30 p-6 text-center space-y-3" style={{ background: "linear-gradient(135deg, #1a0a00, #2d1200)" }}>
+      <div className="rounded-2xl border border-amber-500/30 p-6 text-center space-y-3 gradient-amber-glow">
         <Clock className="w-10 h-10 text-amber-400 mx-auto" />
         <p className="font-display font-black text-xl text-amber-300">Payout Pending</p>
         <p className="text-[11px] text-amber-400/60 leading-relaxed">
@@ -127,7 +127,7 @@ function CashDropPayoutSelector({ dropId, attempt, rewardAmount, drop }: { dropI
   }
 
   return (
-    <div className="rounded-2xl border border-amber-500/30 p-5 space-y-4" style={{ background: "linear-gradient(135deg, #1a0a00, #2d1200)" }}>
+    <div className="rounded-2xl border border-amber-500/30 p-5 space-y-4 gradient-amber-glow">
       <div className="text-center space-y-2">
         <Trophy className="w-8 h-8 text-amber-400 mx-auto" />
         <p className="font-display font-black text-xl text-amber-300">You Won!</p>

@@ -112,7 +112,7 @@ export default function BusinessSignup() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: "#000000" }} data-testid="page-business-signup">
+    <div className="min-h-screen relative overflow-hidden bg-background" data-testid="page-business-signup">
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[10%] right-[15%] w-[500px] h-[500px] rounded-full opacity-[0.06]"
           style={{ background: `radial-gradient(circle, ${PURPLE}, transparent 60%)` }} />
@@ -139,7 +139,7 @@ export default function BusinessSignup() {
           <p className="text-[10px] font-display font-bold tracking-[0.22em] uppercase mb-3" style={{ color: "#A88A43" }}>
             PRIVATE BUSINESS ACCESS
           </p>
-          <h1 className="text-2xl font-display font-black text-white tracking-tight mb-2">Enter GUBER Business</h1>
+          <h1 className="text-2xl font-display font-black text-foreground tracking-tight mb-2">Enter GUBER Business</h1>
           <p className="text-sm leading-relaxed max-w-xs mx-auto" style={{ color: "#A1A1A1" }}>
             Private access for companies seeking proven people, local coverage, and live promotional reach.
           </p>
@@ -148,11 +148,11 @@ export default function BusinessSignup() {
           </p>
         </div>
 
-        <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "#0A0A0A", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           <div className="h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${GOLD}, transparent)` }} />
           <div className="p-8">
           <div className="text-center mb-8">
-            <h2 className="text-base font-display font-bold text-white mb-1 tracking-tight">Request Access</h2>
+            <h2 className="text-base font-display font-bold text-foreground mb-1 tracking-tight">Request Access</h2>
             <p className="text-[11px]" style={{ color: "#3F3F46" }}>
               Fill in your company details below to begin.
             </p>
@@ -164,23 +164,23 @@ export default function BusinessSignup() {
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>LEGAL BUSINESS NAME *</Label>
-                <Input value={form.businessName} onChange={updateForm("businessName")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "#121212", color: "#FFFFFF" }} placeholder="e.g. Acme Corporation LLC" required data-testid="input-business-name" />
+                <Input value={form.businessName} onChange={updateForm("businessName")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="e.g. Acme Corporation LLC" required data-testid="input-business-name" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>WORK EMAIL *</Label>
-                <Input value={form.workEmail} onChange={updateForm("workEmail")} type="email" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "#121212", color: "#FFFFFF" }} placeholder="you@company.com" required data-testid="input-work-email" />
+                <Input value={form.workEmail} onChange={updateForm("workEmail")} type="email" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="you@company.com" required data-testid="input-work-email" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>PHONE</Label>
-                <Input value={form.phone} onChange={updateForm("phone")} type="tel" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "#121212", color: "#FFFFFF" }} placeholder="555-000-0000" data-testid="input-phone" />
+                <Input value={form.phone} onChange={updateForm("phone")} type="tel" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="555-000-0000" data-testid="input-phone" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>INDUSTRY *</Label>
                 <Select value={form.industry} onValueChange={(v) => setForm((f) => ({ ...f, industry: v }))}>
-                  <SelectTrigger className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "#121212", color: form.industry ? "#FFFFFF" : "#6B6B6B" }} data-testid="select-industry">
+                  <SelectTrigger className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} data-testid="select-industry">
                     <SelectValue placeholder="Select your industry" />
                   </SelectTrigger>
                   <SelectContent>
@@ -196,7 +196,7 @@ export default function BusinessSignup() {
                   onChange={updateForm("companyNeedsSummary")}
                   placeholder="Brief summary of your staffing or scouting needs..."
                   className="rounded-xl text-sm px-4 py-3 min-h-[70px] border-0"
-                  style={{ background: "#121212", color: "#FFFFFF" }}
+                  style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }}
                   maxLength={500}
                   data-testid="input-company-needs"
                 />
@@ -210,12 +210,12 @@ export default function BusinessSignup() {
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>FULL NAME *</Label>
-                <Input value={form.fullName} onChange={updateForm("fullName")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "#121212", color: "#FFFFFF" }} placeholder="Your full name" required data-testid="input-fullname" />
+                <Input value={form.fullName} onChange={updateForm("fullName")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="Your full name" required data-testid="input-fullname" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>USERNAME *</Label>
-                <Input value={form.username} onChange={updateForm("username")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "#121212", color: "#FFFFFF" }} placeholder="Choose a username" required data-testid="input-username" />
+                <Input value={form.username} onChange={updateForm("username")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="Choose a username" required data-testid="input-username" />
               </div>
 
               <div className="space-y-1.5">
@@ -226,7 +226,7 @@ export default function BusinessSignup() {
                     onChange={updateForm("password")}
                     type={showPassword ? "text" : "password"}
                     className="rounded-xl h-11 text-sm px-4 pr-12 border-0"
-                    style={{ background: "#121212", color: "#FFFFFF" }}
+                    style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }}
                     placeholder="Create a strong password"
                     required
                     data-testid="input-password"
@@ -245,7 +245,7 @@ export default function BusinessSignup() {
               </div>
             </div>
 
-            <div className="rounded-xl p-4" style={{ background: "#050505", border: "1px solid rgba(255,255,255,0.04)" }}>
+            <div className="rounded-xl p-4" style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border) / 0.4)" }}>
               <label className="flex items-start gap-3 cursor-pointer group" data-testid="label-terms-agree">
                 <div
                   onClick={() => setTermsAgreed(!termsAgreed)}
