@@ -487,7 +487,9 @@ export async function registerRoutes(
         pool,
         tableName: "user_sessions",
       }),
-      secret: process.env.SESSION_SECRET || "guber-fallback-secret-change-in-production",
+      secret: process.env.NODE_ENV === "production"
+        ? (process.env.SESSION_SECRET as string)
+        : (process.env.SESSION_SECRET || "dev-only-insecure-session-secret"),
       resave: false,
       saveUninitialized: false,
       cookie: {

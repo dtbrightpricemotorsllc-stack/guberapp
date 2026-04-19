@@ -132,6 +132,26 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const sessionSecret = process.env.SESSION_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (isProduction) {
+    if (!sessionSecret || sessionSecret.length < 32) {
+      console.error(
+        "[GUBER] FATAL: SESSION_SECRET is missing or too short (must be ≥ 32 characters). " +
+        "Refusing to start in production with an insecure session secret."
+      );
+      process.exit(1);
+    }
+    log(`[session] Real SESSION_SECRET loaded (${sessionSecret.length} chars).`);
+  } else {
+    if (!sessionSecret) {
+      console.warn("[session] SESSION_SECRET not set — using insecure dev-only default. Do NOT use in production.");
+    } else {
+      log(`[session] SESSION_SECRET loaded from environment (${sessionSecret.length} chars).`);
+    }
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "user_sessions" (
       "sid" varchar NOT NULL,
