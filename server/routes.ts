@@ -792,15 +792,22 @@ export async function registerRoutes(
     try {
       const apiKey = process.env.GOOGLE_MAPS_API_KEY;
       if (apiKey) {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-        const resp = await fetch(url);
-        const data = await resp.json() as any;
-        if (data.status === "OK" && data.results?.[0]) {
-          const result = data.results[0];
-          const address = result.formatted_address as string;
-          const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
-          const zip = zipComp?.short_name || null;
-          return res.json({ address, zip });
+        try {
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+          const resp = await fetch(url);
+          const contentType = resp.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const data = await resp.json() as any;
+            if (data.status === "OK" && data.results?.[0]) {
+              const result = data.results[0];
+              const address = result.formatted_address as string;
+              const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
+              const zip = zipComp?.short_name || null;
+              return res.json({ address, zip });
+            }
+          }
+        } catch {
+          // Google Maps unavailable — fall through to Nominatim
         }
       }
       // Nominatim fallback
