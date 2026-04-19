@@ -55,6 +55,20 @@ const HARD_ERROR_TYPES = new Set([
   BiometryErrorType.noDeviceCredential,
 ]);
 
+export async function performBiometricAuth(reason: string): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    await BiometricAuth.authenticate({
+      reason,
+      cancelTitle: "Cancel",
+      allowDeviceCredential: false,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureBiometricUnlocked(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return true;
 

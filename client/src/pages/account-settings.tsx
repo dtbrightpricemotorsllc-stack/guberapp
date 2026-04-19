@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Sun, Moon, Fingerprint } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/lib/theme-context";
-import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled } from "@/lib/biometric";
+import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled, performBiometricAuth } from "@/lib/biometric";
 
 async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<string> {
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -70,6 +70,17 @@ export default function AccountSettings() {
   }, []);
 
   const handleBiometricToggle = async (value: boolean) => {
+    if (value) {
+      const verified = await performBiometricAuth("Confirm your identity to enable biometric unlock");
+      if (!verified) {
+        toast({
+          title: "Biometric verification failed",
+          description: "Make sure Face ID or fingerprint is enrolled on this device, then try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     setBiometricEnabledState(value);
     try {
       await setBiometricEnabled(value);
