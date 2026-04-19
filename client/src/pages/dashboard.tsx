@@ -563,6 +563,7 @@ export default function Dashboard() {
                 cashDrops={activeCashDropPins}
                 onPinClick={setSelectedPin}
                 onWorkerPinClick={setSelectedWorker}
+                onCashDropClick={(drop) => navigate(`/cash-drop/${drop.id}`)}
                 className="w-full h-full"
               />
             ) : (
