@@ -7495,8 +7495,9 @@ BEHAVIOR RULES:
         pendingVerificationsRaw,
         activeDropsRaw,
         recentAuditRaw,
-        walletAnomaliesRaw,
+        walletTxAnomaliesRaw,
         disputedJobsRaw,
+        payoutStatusRaw,
       ] = await Promise.all([
         // User breakdown
         db.execute(sql.raw(`
@@ -7526,33 +7527,44 @@ BEHAVIOR RULES:
           SELECT id, title, reward_per_winner, created_at FROM cash_drops
           WHERE status = 'active' LIMIT 5
         `)),
-        // Last 15 audit log entries
+        // Last 15 audit log entries — action + timestamp only (no PII)
         db.execute(sql.raw(`
-          SELECT al.action, al.details, al.created_at, u.email
-          FROM audit_logs al
-          LEFT JOIN users u ON u.id = al.user_id
-          ORDER BY al.created_at DESC LIMIT 15
+          SELECT action, created_at FROM audit_logs
+          ORDER BY created_at DESC LIMIT 15
         `)),
-        // Wallet anomalies: users with balance mismatch indicators
+        // Wallet transaction anomalies: failed payouts and stuck pending transfers
         db.execute(sql.raw(`
-          SELECT COUNT(*) as users_with_balance FROM wallets WHERE balance > 0
+          SELECT status, COUNT(*) as count, SUM(amount) as total_amount
+          FROM wallet_transactions
+          WHERE status IN ('failed','pending')
+            AND created_at < '${oneDayAgo.toISOString()}'
+          GROUP BY status
         `)),
         // Disputed jobs detail
         db.execute(sql.raw(`
           SELECT id, title, budget, created_at FROM jobs WHERE status = 'disputed' ORDER BY created_at DESC LIMIT 5
         `)),
+        // Payout status breakdown from jobs
+        db.execute(sql.raw(`
+          SELECT payout_status, COUNT(*) as count FROM jobs
+          WHERE payout_status IS NOT NULL AND payout_status != 'none'
+          GROUP BY payout_status ORDER BY count DESC
+        `)),
       ]);
+
+      const pendingVerifCount = Number((pendingVerificationsRaw.rows[0] as Record<string, unknown>)?.count ?? 0);
 
       const snapshot = {
         timestamp: now.toISOString(),
         users: userCountsRaw.rows,
         jobStatuses: jobStatusesRaw.rows,
         stuckJobs: stuckJobsRaw.rows,
-        pendingVerifications: (pendingVerificationsRaw.rows[0] as any)?.count ?? 0,
+        pendingVerifications: pendingVerifCount,
         activeDrops: activeDropsRaw.rows,
-        recentAuditLogs: recentAuditRaw.rows,
-        walletStats: walletAnomaliesRaw.rows[0],
+        recentAuditActions: recentAuditRaw.rows,
+        walletTransactionAnomalies: walletTxAnomaliesRaw.rows,
         disputedJobs: disputedJobsRaw.rows,
+        payoutStatusBreakdown: payoutStatusRaw.rows,
       };
 
       const ALLOWED_ROLES = new Set(["user", "assistant"]);
@@ -7582,11 +7594,13 @@ ${JSON.stringify(snapshot, null, 2)}
 WHAT THE DATA MEANS:
 - users: breakdown by role (consumer, admin, business) and how many are Day-1 OG members
 - jobStatuses: jobs grouped by their current status. Key statuses: posted_public (open), funded (worker assigned, payment held), proof_submitted (worker submitted proof, awaiting approval), disputed (in dispute), completed
-- stuckJobs: jobs that have been in an actionable state (funded/proof_submitted/etc.) for over 24 hours without moving — these may indicate admin action needed or a software issue
+- stuckJobs: jobs that have been in an actionable state (funded/proof_submitted/etc.) for over 24 hours without moving — these may indicate admin action needed or a bug
 - pendingVerifications: credential/ID uploads waiting for admin review
 - activeDrops: currently live cash drop events
-- recentAuditLogs: the last 15 recorded admin/system actions with timestamps
+- recentAuditActions: the last 15 recorded system action types with timestamps (no user data)
+- walletTransactionAnomalies: wallet_transactions that are 'failed' or 'pending' for over 24h — indicates stuck payments or payout failures
 - disputedJobs: jobs currently in dispute that may need admin attention
+- payoutStatusBreakdown: breakdown of job payout_status values (e.g. 'pending','paid','failed') — key signal for payment health
 
 YOUR BEHAVIOR:
 - Proactively flag anything that looks wrong or needs attention — don't wait to be asked
