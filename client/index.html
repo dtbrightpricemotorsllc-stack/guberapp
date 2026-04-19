@@ -53,6 +53,8 @@
           var stored = localStorage.getItem('guber-theme');
           var useDark = stored ? stored === 'dark' : !window.matchMedia('(prefers-color-scheme: light)').matches;
           if (useDark) document.documentElement.classList.add('dark');
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', useDark ? '#000000' : '#ffffff');
         } catch(e) {}
       })();
     </script>

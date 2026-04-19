@@ -35,6 +35,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute("content", theme === "dark" ? "#000000" : "#ffffff");
+    }
     try {
       localStorage.setItem("guber-theme", theme);
     } catch {
