@@ -30,6 +30,18 @@ const PATTERNS = [
     name: "Inline hex color with low alpha (8-digit hex, alpha < 0xCC) used as text color",
     re: /color:\s*["']#[0-9a-fA-F]{6}(?:[0-9a-bA-B][0-9a-fA-F]|[cC][0-9a-bA-B])["']/,
   },
+  {
+    name: "Tailwind text-black with low opacity (invisible on dark backgrounds)",
+    re: /(?:placeholder:)?text-black\/(?:10|20|30|40|50|60|70)\b/,
+  },
+  {
+    name: "Tailwind gray-family text color with low opacity",
+    re: /(?:placeholder:)?text-(?:gray|slate|zinc|neutral|stone)-\d{2,3}\/(?:10|20|30|40|50|60|70)\b/,
+  },
+  {
+    name: "Inline named CSS color with known low contrast (gray, silver, darkgray, etc.)",
+    re: /\bcolor:\s*["']?(?:gray|silver|darkgray|lightgray|dimgray|slategray|lightslategray|darkslategray)["']?(?:[;\s,}"']|$)/i,
+  },
 ];
 
 async function* walk(dir) {
