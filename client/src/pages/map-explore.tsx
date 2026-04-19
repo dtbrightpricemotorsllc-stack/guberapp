@@ -1017,7 +1017,7 @@ export default function MapExplore() {
           className="absolute inset-x-0 bottom-0 z-50 rounded-t-3xl flex flex-col"
           style={{
             maxHeight: "50vh",
-            background: "linear-gradient(180deg, #1a0a00 0%, #0d0600 100%)",
+            background: "linear-gradient(180deg, #1a0a00 0%, #0d0600 100%)", // dark-gradient-allow: cash-drop panel tray chrome, amber brand dark theme
             boxShadow: "0 -4px 32px rgba(245,158,11,0.15)",
             borderTop: "1.5px solid rgba(245,158,11,0.3)",
           }}

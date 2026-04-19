@@ -439,7 +439,7 @@ export default function CashDropDetail() {
         <div
           className="rounded-2xl p-5 relative"
           style={{
-            background: "linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0500 100%)",
+            background: "linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0500 100%)", // dark-gradient-allow: amber cash-drop card surface, established brand dark theme
             border: "1.5px solid rgba(245,158,11,0.35)",
           }}
         >

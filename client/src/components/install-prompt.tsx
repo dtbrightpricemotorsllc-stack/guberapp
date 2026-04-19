@@ -156,7 +156,7 @@ export default function InstallPrompt() {
     <div
       style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
-        background: "linear-gradient(135deg, #0d0d0d 0%, #181818 100%)",
+        background: "linear-gradient(135deg, #0d0d0d 0%, #181818 100%)", // dark-gradient-allow: install-prompt tray chrome, dark theme surface
         borderTop: "1px solid rgba(34,197,94,0.35)",
         borderRadius: "20px 20px 0 0",
         padding: "18px 16px 40px",
@@ -210,7 +210,7 @@ export default function InstallPrompt() {
     <div
       style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
-        background: "linear-gradient(135deg, #0d0d0d 0%, #181818 100%)",
+        background: "linear-gradient(135deg, #0d0d0d 0%, #181818 100%)", // dark-gradient-allow: install-prompt tray chrome, dark theme surface
         borderTop: "1px solid rgba(34,197,94,0.35)",
         borderRadius: "20px 20px 0 0",
         padding: "18px 16px 40px",
@@ -268,7 +268,7 @@ export default function InstallPrompt() {
       <div
         style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
-          background: "linear-gradient(135deg, #0d0d0d 0%, #181818 100%)",
+          background: "linear-gradient(135deg, #0d0d0d 0%, #181818 100%)", // dark-gradient-allow: install-prompt tray chrome, dark theme surface
           borderTop: "1px solid rgba(34,197,94,0.35)",
           borderRadius: "20px 20px 0 0",
           padding: "18px 16px 40px",
@@ -355,7 +355,11 @@ export default function InstallPrompt() {
             <div style={{ position: "absolute", bottom: -8, left: 18, width: 0, height: 0, borderLeft: "8px solid transparent", borderRight: "8px solid transparent", borderTop: "9px solid #fff" }} />
           </div>
           <div
-            style={{ background: "linear-gradient(135deg, #111 0%, #1a1a1a 100%)", border: "1px solid rgba(34,197,94,0.3)", borderBottom: "none", borderRadius: "20px 20px 0 0", padding: "18px 16px 28px 148px", boxShadow: "0 -8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,197,94,0.08)", pointerEvents: "all", position: "relative", zIndex: 1 }}
+            style={{
+              // dark-gradient-allow: install-prompt tray chrome, dark theme surface
+              background: "linear-gradient(135deg, #111 0%, #1a1a1a 100%)",
+              border: "1px solid rgba(34,197,94,0.3)", borderBottom: "none", borderRadius: "20px 20px 0 0", padding: "18px 16px 28px 148px", boxShadow: "0 -8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,197,94,0.08)", pointerEvents: "all", position: "relative", zIndex: 1,
+            }}
           >
             <button
               onClick={() => handleDismiss()}

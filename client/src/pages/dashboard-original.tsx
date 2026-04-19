@@ -200,7 +200,7 @@ export default function Dashboard() {
               className="mb-5 rounded-2xl p-4 cursor-pointer relative overflow-hidden cash-drop-banner"
               data-testid="banner-cash-drop"
               style={{
-                background: "linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0500 100%)",
+                background: "linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0500 100%)", // dark-gradient-allow: amber cash-drop banner surface, established brand dark theme
                 border: "1.5px solid rgba(245,158,11,0.45)",
                 boxShadow: "0 0 24px rgba(245,158,11,0.15), 0 0 48px rgba(245,158,11,0.06)",
               }}

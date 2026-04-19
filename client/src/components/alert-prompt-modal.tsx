@@ -95,7 +95,7 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
       data-testid="modal-alert-prompt"
     >
       <div style={{
-        background: "linear-gradient(180deg,#0f0f0f 0%,#141414 100%)",
+        background: "linear-gradient(180deg,#0f0f0f 0%,#141414 100%)", // dark-gradient-allow: modal sheet surface — dark theme chrome, not a text card
         borderRadius: "24px 24px 0 0",
         borderTop: "1px solid rgba(201,168,76,0.25)",
         padding: "28px 24px 48px",
@@ -173,7 +173,7 @@ export function AlertActionPrompt({ onEnable, onDismiss, message }: AlertActionP
         position: "fixed", bottom: 76, left: "50%", transform: "translateX(-50%)",
         width: "calc(100% - 24px)", maxWidth: 448,
         zIndex: 9998,
-        background: "linear-gradient(135deg,#0f0f0f,#1c1c1c)",
+        background: "linear-gradient(135deg,#0f0f0f,#1c1c1c)", // dark-gradient-allow: floating banner chrome, dark theme
         border: "1px solid rgba(201,168,76,0.35)",
         borderRadius: 16, padding: "14px 16px",
         boxShadow: "0 8px 32px rgba(0,0,0,0.65), 0 0 0 1px rgba(201,168,76,0.08)",
@@ -238,7 +238,7 @@ export function MissedEventBanner({ type, onEnable, onDismiss }: MissedEventBann
         position: "fixed", top: 64, left: "50%", transform: "translateX(-50%)",
         width: "calc(100% - 24px)", maxWidth: 448,
         zIndex: 9997,
-        background: "linear-gradient(135deg,#1a0a00,#2a1000)",
+        background: "linear-gradient(135deg,#1a0a00,#2a1000)", // dark-gradient-allow: amber-tinted banner overlay, established dark theme
         border: "1px solid rgba(245,158,11,0.4)",
         borderRadius: 14, padding: "12px 14px",
         boxShadow: "0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(245,158,11,0.08)",

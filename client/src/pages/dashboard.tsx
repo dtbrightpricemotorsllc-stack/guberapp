@@ -822,7 +822,7 @@ export default function Dashboard() {
           <div
             className="mb-6 rounded-2xl px-4 py-3.5 cursor-pointer animate-fade-in stagger-3 relative overflow-hidden active:scale-[0.97] transition-all group"
             style={{
-              background: "linear-gradient(135deg,#0d0820 0%,#1a0d3e 55%,#0a0520 100%)",
+              background: "linear-gradient(135deg,#0d0820 0%,#1a0d3e 55%,#0a0520 100%)", // dark-gradient-allow: verify-inspect strip card, purple brand dark theme
               border: "1.5px solid rgba(139,92,246,0.5)",
               boxShadow: "0 0 36px rgba(139,92,246,0.18), inset 0 0 40px rgba(139,92,246,0.04)",
             }}

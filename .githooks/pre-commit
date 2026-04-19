@@ -1,4 +1,4 @@
 #!/bin/sh
-# Run the faint-text readability check before every commit.
+# Run readability checks before every commit.
 # Install once with: git config core.hooksPath .githooks
-node scripts/check-faint-text.mjs
+node scripts/check-faint-text.mjs && node scripts/check-dark-gradients.mjs

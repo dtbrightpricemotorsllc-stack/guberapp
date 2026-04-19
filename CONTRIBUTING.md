@@ -37,10 +37,10 @@ comment on the same or previous line:
 
 ### Automated enforcement
 
-The check runs automatically on every push and pull request via GitHub
+Both checks run automatically on every push and pull request via GitHub
 Actions (`.github/workflows/readability-check.yml`). A failing check
 blocks the PR until the issue is resolved or the usage is annotated with
-a `faint-text-allow` comment.
+an allow comment.
 
 To also catch violations before they leave your machine, install the
 provided pre-commit hook once per clone:
@@ -49,15 +49,56 @@ provided pre-commit hook once per clone:
 git config core.hooksPath .githooks
 ```
 
-After that, `git commit` will run the check and abort if any unannotated
-faint-text usage is found.
+After that, `git commit` will run both checks and abort if any
+unannotated violation is found.
 
 ### Checking manually
 
 ```
 node scripts/check-faint-text.mjs
+node scripts/check-dark-gradients.mjs
 ```
 
-The script scans `client/src` (excluding the generated shadcn primitives
+Each script scans `client/src` (excluding the generated shadcn primitives
 in `client/src/components/ui/`) and exits non-zero if any unannotated
-faint-text usage is found.
+violation is found.
+
+---
+
+## Readability rule: no near-black hex stops in inline style gradients
+
+Cards and panels written with JSX `style` props like
+
+```tsx
+style={{ background: "linear-gradient(135deg, #001a0a, #002d12)" }}
+```
+
+produce pitch-black surfaces that are unreadable outdoors. The Tailwind
+utility checker cannot see these because they bypass the class system.
+
+### What to avoid
+
+- `style={{ background: "linear-gradient(..., #000, ...)" }}` and any hex
+  stops where every RGB channel is ≤ 0x44 (≈ 27 % brightness).
+- This includes: `#000`, `#0a0a0a`, `#001a0a`, `#0d0d1a`, `#002d12`, etc.
+
+### What to use instead
+
+- Replace hard-coded dark hex stops with lighter values (each channel > 0x44).
+- Prefer CSS custom properties / theme tokens so colours adapt to the theme:
+  ```tsx
+  style={{ background: "linear-gradient(135deg, var(--color-surface-dark), var(--color-surface))" }}
+  ```
+
+### Decorative exceptions
+
+If a dark gradient is genuinely non-text (e.g. a full-bleed hero image
+overlay placed behind readable white text), add an allow comment:
+
+```tsx
+{/* dark-gradient-allow: hero overlay behind high-contrast text */}
+<div style={{ background: "linear-gradient(to bottom, #000, transparent)" }} />
+```
+
+The checker (`scripts/check-dark-gradients.mjs`) looks for the token
+`dark-gradient-allow` on the flagged line or the line immediately above it.

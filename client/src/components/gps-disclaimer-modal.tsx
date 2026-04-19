@@ -25,7 +25,11 @@ export function GpsDisclaimerModal() {
     >
       <div
         className="w-full max-w-sm rounded-3xl p-6 space-y-4"
-        style={{ background: "linear-gradient(135deg, #0d1117 0%, #161b22 100%)", border: "1.5px solid rgba(255,255,255,0.08)" }}
+        style={{
+          // dark-gradient-allow: modal card surface, dark theme chrome
+          background: "linear-gradient(135deg, #0d1117 0%, #161b22 100%)",
+          border: "1.5px solid rgba(255,255,255,0.08)",
+        }}
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.25)" }}>

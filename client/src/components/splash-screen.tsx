@@ -26,7 +26,7 @@ export default function SplashScreen({ onDone }: SplashScreenProps) {
         position: "fixed",
         inset: 0,
         zIndex: 99999,
-        background: "radial-gradient(ellipse 80% 60% at 50% 40%, #0a0a0a 0%, #000 100%)",
+        background: "radial-gradient(ellipse 80% 60% at 50% 40%, #0a0a0a 0%, #000 100%)", // dark-gradient-allow: full-screen splash backdrop, no text rendered on this surface
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
