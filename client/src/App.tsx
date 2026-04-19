@@ -126,9 +126,13 @@ function BizRoute({ component: Component }: { component: React.ComponentType }) 
 
 function ConsumerRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
+  const [currentPath] = useLocation();
 
   if (isLoading) return <PageLoader />;
-  if (!user) return <Redirect to="/login" />;
+  if (!user) {
+    const returnTo = encodeURIComponent(currentPath);
+    return <Redirect to={`/login?returnTo=${returnTo}`} />;
+  }
   if (user.accountType === "business") return <Redirect to="/biz/dashboard" />;
 
   return (

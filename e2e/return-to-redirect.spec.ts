@@ -98,7 +98,55 @@ test("handleExpiredSession: invalid token triggers session-expired redirect → 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scenario 3: External returnTo is rejected (open-redirect protection)
+// Scenario 3: ConsumerRoute — /wallet
+// Navigating to /wallet while unauthenticated produces a
+// /login?returnTo=%2Fwallet redirect; completing login returns to /wallet.
+// ─────────────────────────────────────────────────────────────────────────────
+test("ConsumerRoute: unauthenticated visit to /wallet → login with returnTo → back to /wallet", async ({
+  page,
+}) => {
+  // 1. Go directly to /wallet without being logged in.
+  await page.goto("/wallet");
+
+  // 2. ConsumerRoute guard redirects to /login?returnTo=%2Fwallet.
+  await expect(page).toHaveURL(/\/login/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("returnTo")).toBe("/wallet");
+
+  // 3. Complete login with the demo consumer account.
+  await loginAs(page, DEMO_EMAIL, DEMO_PASSWORD);
+
+  // 4. Should land back on /wallet, not the default /dashboard.
+  await expect(page).toHaveURL(/\/wallet/, { timeout: 8_000 });
+  await expect(page).not.toHaveURL(/\/login/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scenario 4: ConsumerRoute — /my-jobs
+// Navigating to /my-jobs while unauthenticated produces a
+// /login?returnTo=%2Fmy-jobs redirect; completing login returns to /my-jobs.
+// ─────────────────────────────────────────────────────────────────────────────
+test("ConsumerRoute: unauthenticated visit to /my-jobs → login with returnTo → back to /my-jobs", async ({
+  page,
+}) => {
+  // 1. Go directly to /my-jobs without being logged in.
+  await page.goto("/my-jobs");
+
+  // 2. ConsumerRoute guard redirects to /login?returnTo=%2Fmy-jobs.
+  await expect(page).toHaveURL(/\/login/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("returnTo")).toBe("/my-jobs");
+
+  // 3. Complete login with the demo consumer account.
+  await loginAs(page, DEMO_EMAIL, DEMO_PASSWORD);
+
+  // 4. Should land back on /my-jobs, not the default /dashboard.
+  await expect(page).toHaveURL(/\/my-jobs/, { timeout: 8_000 });
+  await expect(page).not.toHaveURL(/\/login/);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scenario 5: External returnTo is rejected (open-redirect protection)
 // A malicious link like /login?returnTo=https://evil.com must not redirect
 // the user outside the app after login.
 // ─────────────────────────────────────────────────────────────────────────────
