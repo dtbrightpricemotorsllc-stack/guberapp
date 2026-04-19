@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,10 @@ function buildContentSet(findings: PinnedFinding[]): Set<string> {
   return new Set(findings.map((f) => f.content));
 }
 
+function dbRowToPinnedFinding(row: { id: number; findingId: string; content: string; pinnedAt: string }): PinnedFinding {
+  return { id: row.findingId, content: row.content, pinnedAt: row.pinnedAt, note: "" };
+}
+
 type Tab = "chat" | "pinned";
 
 export function AdminDiagnosticAssistant() {
@@ -85,6 +89,51 @@ export function AdminDiagnosticAssistant() {
   const editingNoteRef = useRef<HTMLTextAreaElement>(null);
   const isAutoScanRef = useRef(false);
   const msgIdCounter = useRef(0);
+  const qc = useQueryClient();
+
+  const { data: dbFindings } = useQuery<any[]>({
+    queryKey: ["/api/admin/pinned-findings"],
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!dbFindings) return;
+    const converted = dbFindings.map(dbRowToPinnedFinding);
+    setPinnedFindings(converted);
+    setPinnedContentSet(buildContentSet(converted));
+    savePinnedFindings(converted);
+  }, [dbFindings]);
+
+  const pinApiMutation = useMutation({
+    mutationFn: async (finding: PinnedFinding) => {
+      await apiRequest("POST", "/api/admin/pinned-findings", {
+        findingId: finding.id,
+        content: finding.content,
+        pinnedAt: finding.pinnedAt,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+    },
+  });
+
+  const unpinByIdApiMutation = useMutation({
+    mutationFn: async (findingId: string) => {
+      await apiRequest("DELETE", `/api/admin/pinned-findings/${encodeURIComponent(findingId)}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+    },
+  });
+
+  const unpinByContentApiMutation = useMutation({
+    mutationFn: async (content: string) => {
+      await apiRequest("DELETE", "/api/admin/pinned-findings-by-content", { content });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+    },
+  });
 
   function nextMsgId() {
     msgIdCounter.current += 1;
@@ -125,6 +174,7 @@ export function AdminDiagnosticAssistant() {
     savePinnedFindings(updated);
     setPendingPinContent(null);
     setPendingPinNote("");
+    pinApiMutation.mutate(finding);
   }
 
   function handleUnpinByContent(content: string) {
@@ -133,6 +183,7 @@ export function AdminDiagnosticAssistant() {
     setPinnedContentSet(buildContentSet(updated));
     savePinnedFindings(updated);
     if (pendingPinContent === content) cancelPinFlow();
+    unpinByContentApiMutation.mutate(content);
   }
 
   function handleDismiss(id: string) {
@@ -141,6 +192,7 @@ export function AdminDiagnosticAssistant() {
     setPinnedContentSet(buildContentSet(updated));
     savePinnedFindings(updated);
     if (editingPinId === id) setEditingPinId(null);
+    unpinByIdApiMutation.mutate(id);
   }
 
   function handleExport() {

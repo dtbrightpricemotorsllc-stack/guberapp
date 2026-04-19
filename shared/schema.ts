@@ -1219,3 +1219,15 @@ export const insertFundClaimSchema = createInsertSchema(fundClaimsOrHolds).omit(
 });
 export type FundClaimOrHold = typeof fundClaimsOrHolds.$inferSelect;
 export type InsertFundClaimOrHold = z.infer<typeof insertFundClaimSchema>;
+
+export const adminPinnedFindings = pgTable("admin_pinned_findings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  findingId: text("finding_id").notNull(),
+  content: text("content").notNull(),
+  pinnedAt: timestamp("pinned_at").notNull(),
+});
+
+export const insertAdminPinnedFindingSchema = createInsertSchema(adminPinnedFindings).omit({ id: true });
+export type AdminPinnedFinding = typeof adminPinnedFindings.$inferSelect;
+export type InsertAdminPinnedFinding = z.infer<typeof insertAdminPinnedFindingSchema>;

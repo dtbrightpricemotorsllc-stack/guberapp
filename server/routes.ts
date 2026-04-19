@@ -7653,6 +7653,55 @@ YOUR BEHAVIOR:
     }
   });
 
+  // ── Admin Pinned Findings (cross-device sync) ────────────────────────────────
+
+  app.get("/api/admin/pinned-findings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const findings = await storage.getAdminPinnedFindings(userId);
+      res.json(findings);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to load pinned findings" });
+    }
+  });
+
+  app.post("/api/admin/pinned-findings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { findingId, content, pinnedAt } = req.body;
+      if (!findingId || typeof findingId !== "string") return res.status(400).json({ message: "findingId required" });
+      if (!content || typeof content !== "string") return res.status(400).json({ message: "content required" });
+      const pinnedAtDate = pinnedAt ? new Date(pinnedAt) : new Date();
+      const finding = await storage.createAdminPinnedFinding({ userId, findingId, content, pinnedAt: pinnedAtDate });
+      res.status(201).json(finding);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to save pinned finding" });
+    }
+  });
+
+  app.delete("/api/admin/pinned-findings/:findingId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { findingId } = req.params;
+      await storage.deleteAdminPinnedFinding(userId, findingId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to delete pinned finding" });
+    }
+  });
+
+  app.delete("/api/admin/pinned-findings-by-content", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { content } = req.body;
+      if (!content || typeof content !== "string") return res.status(400).json({ message: "content required" });
+      await storage.deleteAdminPinnedFindingByContent(userId, content);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to delete pinned finding" });
+    }
+  });
+
   // ── BOUNTY / PART AVAILABILITY VERIFICATION ────────────────────────────────
 
   app.post("/api/jobs/:id/bounty-submit", requireAuth, demoGuard, checkSuspended, async (req: Request, res: Response) => {
