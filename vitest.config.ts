@@ -1,7 +1,9 @@
 import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
+  plugins: [react()],
   resolve: {
     alias: {
       "@shared": path.resolve(__dirname, "shared"),
@@ -10,7 +12,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["server/tests/**/*.test.ts", "client/src/**/*.test.ts"],
+    include: ["server/tests/**/*.test.ts", "client/src/**/*.test.ts", "client/src/**/*.test.tsx"],
     globals: false,
     testTimeout: 10000,
   },
