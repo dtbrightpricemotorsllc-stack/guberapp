@@ -286,6 +286,26 @@ async function notifyCashDropLive(drop: { id: number; title: string; description
   }
 }
 
+async function notifyCashDropClaimed(dropId: number, dropTitle: string, winnerUserId: number) {
+  try {
+    const allAttempts = await storage.getCashDropAttempts(dropId);
+    const notifyUserIds = [...new Set(
+      allAttempts
+        .filter((a) => a.userId !== winnerUserId && a.status !== "won")
+        .map((a) => a.userId)
+    )];
+    const notifTitle = "Cash Drop Has Been Claimed";
+    const notifBody = `Someone snagged the "${dropTitle}" drop! Keep an eye out for the next one.`;
+    for (const uid of notifyUserIds) {
+      await storage.createNotification({ userId: uid, title: notifTitle, body: notifBody, type: "cash_drop", cashDropId: dropId, jobId: null });
+      sendPushToUser(uid, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-claimed-${dropId}` }).catch(() => {});
+    }
+    console.log(`[GUBER] Notified ${notifyUserIds.length} participants that Cash Drop #${dropId} was claimed`);
+  } catch (e: any) {
+    console.error("[GUBER] notifyCashDropClaimed error:", e.message);
+  }
+}
+
 async function checkStripeForOGStatus(email: string): Promise<{ isOG: boolean; hasTrustBox: boolean }> {
   try {
     const customers = await stripeMain.customers.list({ email: email.toLowerCase(), limit: 10 });
@@ -8843,6 +8863,11 @@ export async function registerRoutes(
       const allSlotsFilled = newConfirmedCash2 >= cashCap && (rewardCap === 0 || newConfirmedReward2 >= rewardCap);
       const newStatus = (allSlotsFilled || totalWinnersFound >= effectiveLimit) ? "closed" : drop.status;
       await storage.updateCashDrop(dropId, { winnersFound: totalWinnersFound, status: newStatus });
+
+      // Notify all non-winning participants when the drop is now fully claimed
+      if (newStatus === "closed") {
+        notifyCashDropClaimed(dropId, drop.title, winner.id).catch(() => {});
+      }
 
       await storage.createAuditLog({
         userId: req.session.userId,
