@@ -35,7 +35,24 @@ comment on the same or previous line:
 <span className="text-white/20">·</span>
 ```
 
-### Checking locally
+### Automated enforcement
+
+The check runs automatically on every push and pull request via GitHub
+Actions (`.github/workflows/readability-check.yml`). A failing check
+blocks the PR until the issue is resolved or the usage is annotated with
+a `faint-text-allow` comment.
+
+To also catch violations before they leave your machine, install the
+provided pre-commit hook once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+After that, `git commit` will run the check and abort if any unannotated
+faint-text usage is found.
+
+### Checking manually
 
 ```
 node scripts/check-faint-text.mjs
