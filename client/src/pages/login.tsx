@@ -43,7 +43,9 @@ export default function Login() {
   useEffect(() => {
     const params = new URLSearchParams(search);
     const error = params.get("error");
-    if (error === "banned") toast({ title: "Account Banned", description: "This account has been permanently banned.", variant: "destructive" });
+    const reason = params.get("reason");
+    if (reason === "session_expired") toast({ title: "Session Expired", description: "Your session expired — please sign in again." });
+    else if (error === "banned") toast({ title: "Account Banned", description: "This account has been permanently banned.", variant: "destructive" });
     else if (error === "suspended") toast({ title: "Account Suspended", description: "This account is currently suspended.", variant: "destructive" });
     else if (error === "google_failed") toast({ title: "Google Sign-In Failed", description: "Please try again.", variant: "destructive" });
     else if (error === "google_cancelled") toast({ title: "Sign-In Cancelled", description: "Google sign-in was cancelled." });

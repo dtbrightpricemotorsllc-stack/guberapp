@@ -5,8 +5,18 @@ function getBearerHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function handleExpiredSession() {
+  if (localStorage.getItem("guber_token")) {
+    localStorage.removeItem("guber_token");
+    window.location.href = "/login?reason=session_expired";
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      handleExpiredSession();
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -43,8 +53,9 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      handleExpiredSession();
+      if (unauthorizedBehavior === "returnNull") return null;
     }
 
     await throwIfResNotOk(res);
