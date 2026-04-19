@@ -9,7 +9,7 @@ import {
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
   workerBusinessProjections, backgroundCheckEligibility, billingEvents, legalAcceptances,
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
-  adminPinnedFindings,
+  pinnedFindings,
   type User, type InsertUser, type Job, type InsertJob,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
@@ -23,7 +23,7 @@ import {
   type BillingEvent, type LegalAcceptance,
   type DirectOffer, type GuberPayment, type MoneyLedgerEntry,
   type GuberDispute, type CancellationLogEntry, type FundClaimOrHold,
-  type AdminPinnedFinding,
+  type PinnedFinding,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, sql, isNotNull, count, inArray, lt, isNull } from "drizzle-orm";
@@ -251,10 +251,10 @@ export interface IStorage {
 
   getClockedInWorkers(): Promise<User[]>;
 
-  getAdminPinnedFindings(userId: number): Promise<AdminPinnedFinding[]>;
-  createAdminPinnedFinding(data: { userId: number; findingId: string; content: string; pinnedAt: Date }): Promise<AdminPinnedFinding>;
-  deleteAdminPinnedFinding(userId: number, findingId: string): Promise<void>;
-  deleteAdminPinnedFindingByContent(userId: number, content: string): Promise<void>;
+  getPinnedFindings(adminUserId: number): Promise<PinnedFinding[]>;
+  createPinnedFinding(adminUserId: number, content: string, note?: string): Promise<PinnedFinding>;
+  updatePinnedFindingNote(id: number, adminUserId: number, note: string): Promise<PinnedFinding | undefined>;
+  deletePinnedFinding(id: number, adminUserId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1340,25 +1340,30 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getAdminPinnedFindings(userId: number): Promise<AdminPinnedFinding[]> {
-    return db.select().from(adminPinnedFindings)
-      .where(eq(adminPinnedFindings.userId, userId))
-      .orderBy(desc(adminPinnedFindings.pinnedAt));
+  async getPinnedFindings(adminUserId: number): Promise<PinnedFinding[]> {
+    return db.select().from(pinnedFindings)
+      .where(eq(pinnedFindings.adminUserId, adminUserId))
+      .orderBy(desc(pinnedFindings.pinnedAt));
   }
 
-  async createAdminPinnedFinding(data: { userId: number; findingId: string; content: string; pinnedAt: Date }): Promise<AdminPinnedFinding> {
-    const [finding] = await db.insert(adminPinnedFindings).values(data).returning();
+  async createPinnedFinding(adminUserId: number, content: string, note?: string): Promise<PinnedFinding> {
+    const [finding] = await db.insert(pinnedFindings)
+      .values({ adminUserId, content, note: note ?? "", pinnedAt: new Date() })
+      .returning();
     return finding;
   }
 
-  async deleteAdminPinnedFinding(userId: number, findingId: string): Promise<void> {
-    await db.delete(adminPinnedFindings)
-      .where(and(eq(adminPinnedFindings.userId, userId), eq(adminPinnedFindings.findingId, findingId)));
+  async updatePinnedFindingNote(id: number, adminUserId: number, note: string): Promise<PinnedFinding | undefined> {
+    const [finding] = await db.update(pinnedFindings)
+      .set({ note })
+      .where(and(eq(pinnedFindings.id, id), eq(pinnedFindings.adminUserId, adminUserId)))
+      .returning();
+    return finding;
   }
 
-  async deleteAdminPinnedFindingByContent(userId: number, content: string): Promise<void> {
-    await db.delete(adminPinnedFindings)
-      .where(and(eq(adminPinnedFindings.userId, userId), eq(adminPinnedFindings.content, content)));
+  async deletePinnedFinding(id: number, adminUserId: number): Promise<void> {
+    await db.delete(pinnedFindings)
+      .where(and(eq(pinnedFindings.id, id), eq(pinnedFindings.adminUserId, adminUserId)));
   }
 }
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -14,51 +14,15 @@ interface Message {
 }
 
 interface PinnedFinding {
-  id: string;
+  id: number;
+  adminUserId: number;
   content: string;
-  pinnedAt: string;
   note: string;
+  pinnedAt: string;
+  createdAt: string;
 }
 
-const STORAGE_KEY = "admin_pinned_findings";
 const AUTO_SCAN_MESSAGE = "Give me a quick system health summary. Flag anything that needs my attention.";
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
-function loadPinnedFindings(): PinnedFinding[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item): item is Record<string, unknown> =>
-          item !== null &&
-          typeof item === "object" &&
-          typeof item.id === "string" &&
-          typeof item.content === "string" &&
-          typeof item.pinnedAt === "string"
-      )
-      .map((item) => ({
-        id: item.id as string,
-        content: item.content as string,
-        pinnedAt: item.pinnedAt as string,
-        note: typeof item.note === "string" ? item.note : "",
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function savePinnedFindings(findings: PinnedFinding[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(findings));
-  } catch {
-  }
-}
 
 function buildContentSet(findings: PinnedFinding[]): Set<string> {
   return new Set(findings.map((f) => f.content));
@@ -77,11 +41,9 @@ export function AdminDiagnosticAssistant() {
   const [input, setInput] = useState("");
   const [hasAutoScanned, setHasAutoScanned] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [pinnedFindings, setPinnedFindings] = useState<PinnedFinding[]>(loadPinnedFindings);
-  const [pinnedContentSet, setPinnedContentSet] = useState<Set<string>>(() => buildContentSet(loadPinnedFindings()));
   const [pendingPinContent, setPendingPinContent] = useState<string | null>(null);
   const [pendingPinNote, setPendingPinNote] = useState("");
-  const [editingPinId, setEditingPinId] = useState<string | null>(null);
+  const [editingPinId, setEditingPinId] = useState<number | null>(null);
   const [editingPinNote, setEditingPinNote] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -137,6 +99,44 @@ export function AdminDiagnosticAssistant() {
     },
   });
 
+  const queryClient = useQueryClient();
+
+  const { data: pinnedFindings = [] } = useQuery<PinnedFinding[]>({
+    queryKey: ["/api/admin/pinned-findings"],
+    enabled: open,
+  });
+
+  const pinnedContentSet = buildContentSet(pinnedFindings);
+
+  const pinMutation = useMutation({
+    mutationFn: async ({ content, note }: { content: string; note: string }) => {
+      const res = await apiRequest("POST", "/api/admin/pinned-findings", { content, note });
+      return res.json() as Promise<PinnedFinding>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+    },
+  });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: number; note: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/pinned-findings/${id}`, { note });
+      return res.json() as Promise<PinnedFinding>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+    },
+  });
+
+  const unpinMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/pinned-findings/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+    },
+  });
+
   function nextMsgId() {
     msgIdCounter.current += 1;
     return msgIdCounter.current;
@@ -164,35 +164,21 @@ export function AdminDiagnosticAssistant() {
   }
 
   function confirmPin(content: string) {
-    const finding: PinnedFinding = {
-      id: generateId(),
-      content,
-      pinnedAt: new Date().toISOString(),
-      note: pendingPinNote.trim(),
-    };
-    const updated = [finding, ...pinnedFindings];
-    setPinnedFindings(updated);
-    setPinnedContentSet(buildContentSet(updated));
-    savePinnedFindings(updated);
+    pinMutation.mutate({ content, note: pendingPinNote.trim() });
     setPendingPinContent(null);
     setPendingPinNote("");
     pinApiMutation.mutate(finding);
   }
 
   function handleUnpinByContent(content: string) {
-    const updated = pinnedFindings.filter((f) => f.content !== content);
-    setPinnedFindings(updated);
-    setPinnedContentSet(buildContentSet(updated));
-    savePinnedFindings(updated);
+    const finding = pinnedFindings.find((f) => f.content === content);
+    if (finding) unpinMutation.mutate(finding.id);
     if (pendingPinContent === content) cancelPinFlow();
     unpinByContentApiMutation.mutate(content);
   }
 
-  function handleDismiss(id: string) {
-    const updated = pinnedFindings.filter((f) => f.id !== id);
-    setPinnedFindings(updated);
-    setPinnedContentSet(buildContentSet(updated));
-    savePinnedFindings(updated);
+  function handleDismiss(id: number) {
+    unpinMutation.mutate(id);
     if (editingPinId === id) setEditingPinId(null);
     unpinByIdApiMutation.mutate(id);
   }
@@ -216,18 +202,16 @@ export function AdminDiagnosticAssistant() {
 
   function startEditNote(finding: PinnedFinding) {
     setEditingPinId(finding.id);
-    setEditingPinNote(finding.note);
+    setEditingPinNote(finding.note ?? "");
     setTimeout(() => editingNoteRef.current?.focus(), 50);
   }
 
-  function saveEditNote(id: string) {
-    const updated = pinnedFindings.map((f) => f.id === id ? { ...f, note: editingPinNote.trim() } : f);
-    setPinnedFindings(updated);
-    savePinnedFindings(updated);
+  function saveEditNote(id: number) {
+    updateNoteMutation.mutate({ id, note: editingPinNote.trim() });
     setEditingPinId(null);
   }
 
-  function handleEditNoteKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, id: string) {
+  function handleEditNoteKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, id: number) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       saveEditNote(id);
@@ -535,6 +519,7 @@ export function AdminDiagnosticAssistant() {
                                     startPinFlow(msg.content);
                                   }
                                 }}
+                                disabled={pinMutation.isPending || unpinMutation.isPending}
                                 className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
                                 style={{
                                   color: msgIsPinned || msgIsPending ? "hsl(263 70% 65%)" : "hsl(0 0% 45%)",
@@ -686,6 +671,7 @@ export function AdminDiagnosticAssistant() {
                       <button
                         type="button"
                         onClick={() => handleDismiss(finding.id)}
+                        disabled={unpinMutation.isPending}
                         className="absolute top-2.5 right-2.5 w-5 h-5 rounded-lg flex items-center justify-center transition-all duration-150 hover:opacity-100"
                         style={{ color: "hsl(0 0% 40%)", opacity: 0.7 }}
                         aria-label="Remove pinned finding"

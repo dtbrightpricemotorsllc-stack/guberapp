@@ -7653,50 +7653,53 @@ YOUR BEHAVIOR:
     }
   });
 
-  // ── Admin Pinned Findings (cross-device sync) ────────────────────────────────
-
+  // ── Admin Pinned Findings ────────────────────────────────────────────────────
   app.get("/api/admin/pinned-findings", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const userId = req.session.userId!;
-      const findings = await storage.getAdminPinnedFindings(userId);
+      const findings = await storage.getPinnedFindings(req.session.userId!);
       res.json(findings);
     } catch (err: any) {
-      res.status(500).json({ message: "Failed to load pinned findings" });
+      res.status(500).json({ message: "Failed to fetch pinned findings" });
     }
   });
 
   app.post("/api/admin/pinned-findings", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const userId = req.session.userId!;
-      const { findingId, content, pinnedAt } = req.body;
-      if (!findingId || typeof findingId !== "string") return res.status(400).json({ message: "findingId required" });
-      if (!content || typeof content !== "string") return res.status(400).json({ message: "content required" });
-      const pinnedAtDate = pinnedAt ? new Date(pinnedAt) : new Date();
-      const finding = await storage.createAdminPinnedFinding({ userId, findingId, content, pinnedAt: pinnedAtDate });
+      const { content, note } = req.body;
+      if (!content || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ message: "content is required" });
+      }
+      const finding = await storage.createPinnedFinding(
+        req.session.userId!,
+        content.trim(),
+        typeof note === "string" ? note.trim() : "",
+      );
       res.status(201).json(finding);
     } catch (err: any) {
       res.status(500).json({ message: "Failed to save pinned finding" });
     }
   });
 
-  app.delete("/api/admin/pinned-findings/:findingId", requireAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/admin/pinned-findings/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const userId = req.session.userId!;
-      const { findingId } = req.params;
-      await storage.deleteAdminPinnedFinding(userId, findingId);
-      res.json({ ok: true });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { note } = req.body;
+      if (typeof note !== "string") return res.status(400).json({ message: "note must be a string" });
+      const finding = await storage.updatePinnedFindingNote(id, req.session.userId!, note.trim());
+      if (!finding) return res.status(404).json({ message: "Finding not found" });
+      res.json(finding);
     } catch (err: any) {
-      res.status(500).json({ message: "Failed to delete pinned finding" });
+      res.status(500).json({ message: "Failed to update finding note" });
     }
   });
 
-  app.delete("/api/admin/pinned-findings-by-content", requireAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/admin/pinned-findings/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const userId = req.session.userId!;
-      const { content } = req.body;
-      if (!content || typeof content !== "string") return res.status(400).json({ message: "content required" });
-      await storage.deleteAdminPinnedFindingByContent(userId, content);
-      res.json({ ok: true });
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      await storage.deletePinnedFinding(id, req.session.userId!);
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: "Failed to delete pinned finding" });
     }
