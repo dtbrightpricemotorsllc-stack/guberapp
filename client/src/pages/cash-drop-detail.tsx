@@ -239,6 +239,7 @@ export default function CashDropDetail() {
   const [uploading, setUploading] = useState(false);
   const [gpsPos, setGpsPos] = useState<{ lat: number; lng: number } | null>(null);
   const previousStatusRef = useRef<string | null>(null);
+  const [dropEndedAlert, setDropEndedAlert] = useState<{ type: "expired" | "claimed"; wasEnRoute: boolean } | null>(null);
 
   const { data: drop, isLoading } = useQuery<CashDrop & { userAttempt: CashDropAttempt | null }>({
     queryKey: ["/api/cash-drops", id],
@@ -306,20 +307,7 @@ export default function CashDropDetail() {
     const curr = drop.status;
     if (prev && prev !== curr && (curr === "closed" || curr === "expired")) {
       const wasEnRoute = drop.userAttempt?.status === "accepted";
-      if (wasEnRoute) {
-        toast({
-          title: "⚡ Drop Claimed Before You Arrived",
-          description: "Someone else got there first. Keep an eye out for new drops!",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: curr === "expired" ? "Drop Expired" : "Drop Claimed",
-          description: curr === "expired"
-            ? "This Cash Drop has expired."
-            : "This Cash Drop has been fully claimed.",
-        });
-      }
+      setDropEndedAlert({ type: curr === "expired" ? "expired" : "claimed", wasEnRoute });
     }
     previousStatusRef.current = curr;
   }, [drop?.status]);
@@ -388,6 +376,61 @@ export default function CashDropDetail() {
 
   return (
     <GuberLayout>
+      {dropEndedAlert && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          data-testid="overlay-drop-ended"
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6 text-center"
+            style={{
+              background: dropEndedAlert.wasEnRoute
+                ? "linear-gradient(135deg,#1a0000 0%,#2d0a0a 100%)"
+                : "linear-gradient(135deg,#0d0d0d 0%,#1a1a1a 100%)",
+              border: dropEndedAlert.wasEnRoute
+                ? "1.5px solid rgba(239,68,68,0.4)"
+                : "1.5px solid rgba(107,114,128,0.3)",
+            }}
+          >
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+              style={{ background: dropEndedAlert.wasEnRoute ? "rgba(239,68,68,0.12)" : "rgba(107,114,128,0.12)" }}
+            >
+              {dropEndedAlert.type === "expired"
+                ? <Clock className="w-6 h-6 text-muted-foreground" />
+                : dropEndedAlert.wasEnRoute
+                  ? <AlertCircle className="w-6 h-6 text-red-400" />
+                  : <Trophy className="w-6 h-6 text-muted-foreground" />
+              }
+            </div>
+            <h2 className="font-display font-black text-lg mb-1" style={{ color: dropEndedAlert.wasEnRoute ? "#f87171" : "#9ca3af" }}>
+              {dropEndedAlert.wasEnRoute
+                ? "Drop Claimed Before You Arrived"
+                : dropEndedAlert.type === "expired" ? "Drop Expired" : "Drop Fully Claimed"}
+            </h2>
+            <p className="text-sm text-muted-foreground/70 leading-relaxed mb-5">
+              {dropEndedAlert.wasEnRoute
+                ? "Someone else got there first. Keep watching the map — new drops go live regularly."
+                : dropEndedAlert.type === "expired"
+                  ? "This Cash Drop passed its end time without being fully claimed."
+                  : "All winner slots have been filled. Check the map for drops near you."}
+            </p>
+            <button
+              onClick={() => setDropEndedAlert(null)}
+              className="w-full py-2.5 rounded-xl font-display font-bold text-sm transition-opacity hover:opacity-80"
+              style={{
+                background: dropEndedAlert.wasEnRoute ? "rgba(239,68,68,0.15)" : "rgba(107,114,128,0.15)",
+                color: dropEndedAlert.wasEnRoute ? "#f87171" : "#9ca3af",
+                border: dropEndedAlert.wasEnRoute ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(107,114,128,0.3)",
+              }}
+              data-testid="button-dismiss-drop-ended"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
         <button onClick={() => navigate("/dashboard")} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider transition-colors mb-2" data-testid="button-back">
           <ChevronLeft className="w-3.5 h-3.5" /> Back
@@ -443,6 +486,31 @@ export default function CashDropDetail() {
             </div>
           </div>
         </div>
+
+        {isActive && (
+          <div
+            className="rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+            data-testid="banner-drop-active"
+            style={{
+              background: "rgba(34,197,94,0.06)",
+              border: "1px solid rgba(34,197,94,0.2)",
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+              <span className="font-display font-bold text-sm text-green-400">Live Now</span>
+              <span className="text-muted-foreground/40 text-xs">·</span>
+              <span className="text-sm text-green-400/70 font-display">
+                {slotsLeft === 1 ? "1 slot left" : `${slotsLeft} slots remaining`}
+              </span>
+            </div>
+            {drop.endTime && (
+              <span className="text-[11px] text-green-400/50 font-display">
+                Ends {new Date(drop.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
+        )}
 
         {drop.isSponsored && drop.brandingEnabled && drop.sponsorName && (
           <div
