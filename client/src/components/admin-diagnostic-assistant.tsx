@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Send, Bot, Loader2, RefreshCw } from "lucide-react";
+import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -19,9 +19,20 @@ export function AdminDiagnosticAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [hasAutoScanned, setHasAutoScanned] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isAutoScanRef = useRef(false);
+
+  function handleCopy(content: string, index: number) {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    }).catch(() => {
+      setCopiedIndex(-1 - index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    });
+  }
 
   useEffect(() => {
     if (open) {
@@ -189,7 +200,7 @@ export function AdminDiagnosticAssistant() {
                     <Bot className="w-3.5 h-3.5" style={{ color: "hsl(263 70% 70%)" }} />
                   </div>
                 )}
-                <div className="flex flex-col gap-1 max-w-[82%]">
+                <div className={`max-w-[82%] flex flex-col gap-1 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                   <div
                     className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                       msg.role === "user"
@@ -212,6 +223,26 @@ export function AdminDiagnosticAssistant() {
                     >
                       Scanned at {msg.scanTimestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </p>
+                  )}
+                  {msg.role === "assistant" && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(msg.content, i)}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
+                      style={{
+                        color: copiedIndex === i ? "hsl(142 70% 55%)" : copiedIndex === -1 - i ? "hsl(0 70% 60%)" : "hsl(0 0% 45%)",
+                        opacity: (copiedIndex === i || copiedIndex === -1 - i) ? 1 : 0.7,
+                      }}
+                      aria-label={copiedIndex === i ? "Copied to clipboard" : copiedIndex === -1 - i ? "Copy failed" : "Copy finding to clipboard"}
+                      data-testid={`button-copy-diagnostic-${i}`}
+                    >
+                      {copiedIndex === i ? (
+                        <ClipboardCheck className="w-3 h-3" />
+                      ) : (
+                        <Clipboard className="w-3 h-3" />
+                      )}
+                      <span>{copiedIndex === i ? "Copied" : copiedIndex === -1 - i ? "Failed" : "Copy"}</span>
+                    </button>
                   )}
                 </div>
               </div>
