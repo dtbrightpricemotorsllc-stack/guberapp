@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
@@ -66,13 +67,9 @@ export default function SubmitObservation() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const handleGPS = () => {
-    if (!navigator.geolocation) {
-      toast({ title: "GPS not available", variant: "destructive" });
-      return;
-    }
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+    gpsGetCurrentPosition({ timeout: 10000 })
+      .then(async (pos) => {
         const { latitude, longitude } = pos.coords;
         setGpsLat(latitude);
         setGpsLng(longitude);
@@ -89,13 +86,11 @@ export default function SubmitObservation() {
           setAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
         }
         setGpsLoading(false);
-      },
-      () => {
+      })
+      .catch(() => {
         toast({ title: "Location denied", description: "Please allow location access.", variant: "destructive" });
         setGpsLoading(false);
-      },
-      { timeout: 10000 }
-    );
+      });
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {

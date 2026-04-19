@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -109,13 +110,9 @@ export default function PostJob() {
   });
 
   const handleGPS = () => {
-    if (!navigator.geolocation) {
-      toast({ title: "GPS not available", description: "Your browser doesn't support location access.", variant: "destructive" });
-      return;
-    }
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+    gpsGetCurrentPosition({ timeout: 10000, enableHighAccuracy: true })
+      .then(async (pos) => {
         const { latitude, longitude } = pos.coords;
         setExactLat(latitude);
         setExactLng(longitude);
@@ -133,13 +130,11 @@ export default function PostJob() {
           setJobLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         }
         setGpsLoading(false);
-      },
-      () => {
+      })
+      .catch(() => {
         toast({ title: "Location denied", description: "Please allow location access or enter your address manually.", variant: "destructive" });
         setGpsLoading(false);
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    );
+      });
   };
 
   useEffect(() => {

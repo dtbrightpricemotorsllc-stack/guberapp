@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
@@ -2952,19 +2953,16 @@ finally { setZipGeocoding(false); }
 };
 
 const handleUseLocation = () => {
-if (!navigator.geolocation) { toast({ title: "Geolocation not supported", variant: "destructive" }); return; }
 setUseLocating(true);
-navigator.geolocation.getCurrentPosition(
-(pos) => {
-const lat = pos.coords.latitude.toFixed(6);
-const lng = pos.coords.longitude.toFixed(6);
-setForm(f => ({ ...f, gpsLat: lat, gpsLng: lng }));
-toast({ title: "Location captured", description: `${lat}, ${lng}` });
-setUseLocating(false);
-},
-() => { toast({ title: "Could not get location", variant: "destructive" }); setUseLocating(false); },
-{ enableHighAccuracy: true, timeout: 10000 }
-);
+gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+  .then((pos) => {
+    const lat = pos.coords.latitude.toFixed(6);
+    const lng = pos.coords.longitude.toFixed(6);
+    setForm(f => ({ ...f, gpsLat: lat, gpsLng: lng }));
+    toast({ title: "Location captured", description: `${lat}, ${lng}` });
+    setUseLocating(false);
+  })
+  .catch(() => { toast({ title: "Could not get location", variant: "destructive" }); setUseLocating(false); });
 };
 
 const { data: drops, isLoading } = useQuery<any[]>({

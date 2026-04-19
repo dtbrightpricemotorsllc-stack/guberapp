@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { createPortal } from "react-dom";
 import { MapPin, Loader2, Building2 } from "lucide-react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
@@ -155,12 +156,9 @@ export function PlacesAutocomplete({
 
   useEffect(() => {
     if (userLat != null && userLng != null) return;
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setGeoLat(pos.coords.latitude); setGeoLng(pos.coords.longitude); },
-      () => {},
-      { timeout: 5000, maximumAge: 60000 }
-    );
+    gpsGetCurrentPosition({ timeout: 5000, maximumAge: 60000 })
+      .then((pos) => { setGeoLat(pos.coords.latitude); setGeoLng(pos.coords.longitude); })
+      .catch(() => {});
   }, [userLat, userLng]);
 
   const activeLat = userLat ?? geoLat;

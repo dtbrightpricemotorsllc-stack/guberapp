@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { useRoute } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
@@ -105,20 +106,14 @@ export default function JobDetail() {
   const openGoogleMapsForJob = (j: any) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
-    if (!navigator.geolocation) {
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
+      .then((pos) => {
         const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
         window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`, "_blank");
-      },
-      () => {
+      })
+      .catch(() => {
         window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank");
-      },
-      { enableHighAccuracy: true, timeout: 6000 }
-    );
+      });
   };
 
   const openWazeForJob = (j: any) => {
@@ -610,18 +605,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   function captureGps() {
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+      .then((pos) => {
         setBountyGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
         setGpsLoading(false);
         toast({ title: "Location Captured", description: `Accuracy: ±${Math.round(pos.coords.accuracy)}m` });
-      },
-      () => {
+      })
+      .catch(() => {
         setGpsLoading(false);
         toast({ title: "GPS Error", description: "Could not capture location. Please enable location access.", variant: "destructive" });
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+      });
   }
 
   async function handleBountyPhotoCapture(index: number, file: File) {
@@ -678,43 +671,31 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   });
 
   const handleOnMyWay = () => {
-    if (!navigator.geolocation) {
-      milestoneMutation.mutate({ statusType: "on_the_way" });
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+      .then((pos) => {
         milestoneMutation.mutate({
           statusType: "on_the_way",
           gpsLat: pos.coords.latitude,
           gpsLng: pos.coords.longitude,
         });
-      },
-      () => {
+      })
+      .catch(() => {
         milestoneMutation.mutate({ statusType: "on_the_way" });
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+      });
   };
 
   const handleArrived = () => {
-    if (!navigator.geolocation) {
-      milestoneMutation.mutate({ statusType: "arrived" });
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+      .then((pos) => {
         milestoneMutation.mutate({
           statusType: "arrived",
           gpsLat: pos.coords.latitude,
           gpsLng: pos.coords.longitude,
         });
-      },
-      () => {
+      })
+      .catch(() => {
         milestoneMutation.mutate({ statusType: "arrived" });
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+      });
   };
 
   const handleCancel = () => {

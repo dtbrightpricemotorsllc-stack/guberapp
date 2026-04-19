@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
@@ -95,15 +96,14 @@ export default function BizObservations() {
 
   const getGeoLocation = () => {
     setGettingGeo(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition()
+      .then((pos) => {
         setGeoLat(pos.coords.latitude);
         setGeoLng(pos.coords.longitude);
         setGettingGeo(false);
         queryClient.invalidateQueries({ queryKey: ["/api/observations"] });
-      },
-      () => { setGettingGeo(false); toast({ title: "GPS unavailable", variant: "destructive" }); }
-    );
+      })
+      .catch(() => { setGettingGeo(false); toast({ title: "GPS unavailable", variant: "destructive" }); });
   };
 
   const inputStyle: React.CSSProperties = {

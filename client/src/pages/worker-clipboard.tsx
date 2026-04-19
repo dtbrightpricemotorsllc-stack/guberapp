@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { useRoute } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
 import { useAuth } from "@/lib/auth-context";
@@ -209,12 +210,7 @@ export default function WorkerClipboard() {
     if (template?.geoRequired) {
       updateState(itemId, { gpsStatus: "loading" });
       try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 5000,
-          });
-        });
+        const pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 5000 });
         gpsData = {
           gpsLat: pos.coords.latitude,
           gpsLng: pos.coords.longitude,
@@ -274,26 +270,19 @@ export default function WorkerClipboard() {
 
   const captureGPS = useCallback((itemId: number) => {
     updateState(itemId, { gpsStatus: "loading" });
-    if (!navigator.geolocation) {
-      updateState(itemId, { gpsStatus: "error" });
-      toast({ title: "GPS Unavailable", description: "Geolocation not supported", variant: "destructive" });
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+      .then((pos) => {
         updateState(itemId, {
           gpsLat: pos.coords.latitude,
           gpsLng: pos.coords.longitude,
           gpsTimestamp: new Date().toISOString(),
           gpsStatus: "success",
         });
-      },
-      () => {
+      })
+      .catch(() => {
         updateState(itemId, { gpsStatus: "error" });
         toast({ title: "GPS Error", description: "Could not get location", variant: "destructive" });
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+      });
   }, [updateState, toast]);
 
   const submitMutation = useMutation({
@@ -691,11 +680,9 @@ function GeneralProofSubmit({ jobId, template }: { jobId: string; template: Temp
 
   const captureGPS = () => {
     setGpsStatus("loading");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setGpsLat(pos.coords.latitude); setGpsLng(pos.coords.longitude); setGpsTimestamp(new Date().toISOString()); setGpsStatus("success"); },
-      () => { setGpsStatus("error"); },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+      .then((pos) => { setGpsLat(pos.coords.latitude); setGpsLng(pos.coords.longitude); setGpsTimestamp(new Date().toISOString()); setGpsStatus("success"); })
+      .catch(() => { setGpsStatus("error"); });
   };
 
   return (

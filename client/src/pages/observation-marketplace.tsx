@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
 import { useAuth } from "@/lib/auth-context";
@@ -139,16 +140,13 @@ export default function ObservationMarketplace() {
   const [purchasePrice, setPurchasePrice] = useState<5 | 10 | 20>(10);
 
   function requestGps() {
-    if (!navigator.geolocation) return;
     setGpsLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+    gpsGetCurrentPosition({ timeout: 10000 })
+      .then((pos) => {
         setGpsLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGpsLoading(false);
-      },
-      () => setGpsLoading(false),
-      { timeout: 10000 }
-    );
+      })
+      .catch(() => setGpsLoading(false));
   }
 
   const params = new URLSearchParams();

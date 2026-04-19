@@ -186,7 +186,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   };
 
   const handleRetryLocation = () => {
-    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
     watchIdRef.current = null;
     hasCenteredRef.current = false;
     startWatchPosition();
@@ -216,7 +216,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   useEffect(() => {
     startWatchPosition();
     return () => {
-      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
     };
   }, []);
 

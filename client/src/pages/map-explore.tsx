@@ -265,7 +265,7 @@ export default function MapExplore() {
   };
 
   const handleRetryLocation = () => {
-    if (watchIdRef2.current !== null) navigator.geolocation.clearWatch(watchIdRef2.current);
+    if (watchIdRef2.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef2.current);
     watchIdRef2.current = null;
     hasCenteredRef.current = false;
     startWatchPosition();
@@ -274,7 +274,7 @@ export default function MapExplore() {
   useEffect(() => {
     startWatchPosition();
     return () => {
-      if (watchIdRef2.current !== null) navigator.geolocation.clearWatch(watchIdRef2.current);
+      if (watchIdRef2.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef2.current);
     };
   }, []);
 

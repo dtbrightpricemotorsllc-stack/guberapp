@@ -36,6 +36,9 @@ export async function gpsStartWatchPosition(
   opts?: PositionOptions
 ): Promise<number> {
   await ensureGpsDisclaimer();
-  if (!navigator.geolocation) { error({ code: 2, message: "Geolocation not available", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError); return -1; }
+  if (!navigator.geolocation) {
+    error({ code: 2, message: "Geolocation not available", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
+    throw new Error("Geolocation not available");
+  }
   return navigator.geolocation.watchPosition(success, error, opts);
 }
