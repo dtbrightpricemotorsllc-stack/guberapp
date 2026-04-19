@@ -66,8 +66,9 @@ export function GUBERAssistant() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-[96px] right-4 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
+        className="fixed right-4 z-[55] w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
         style={{
+          bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 16px)",
           background: "linear-gradient(135deg, hsl(45 100% 50%), hsl(152 100% 44%))",
           boxShadow: "0 4px 20px hsl(152 100% 44% / 0.35), 0 2px 8px rgba(0,0,0,0.4)",
         }}
