@@ -30,5 +30,8 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Test dark-gradient checker
+        run: node scripts/check-dark-gradients.test.mjs
+
       - name: Run dark-gradient inline-style check
         run: node scripts/check-dark-gradients.mjs

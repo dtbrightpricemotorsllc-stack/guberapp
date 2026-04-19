@@ -1,17 +1,26 @@
 #!/usr/bin/env node
 /**
- * Self-tests for the dark-gradient detection logic.
+ * check-dark-gradients.test.mjs
  *
- * Run with:  node scripts/check-dark-gradients.test.mjs
+ * Self-contained test suite for check-dark-gradients.mjs.
  *
- * Each test case feeds a synthetic snippet (possibly multi-line) through the
- * same detection path used by check-dark-gradients.mjs and asserts whether a
- * dark gradient is found or not.
+ * Part 1 — Unit tests: replicate the core detection helpers and test them
+ *   directly against synthetic snippets (no subprocess, no file I/O).
+ *
+ * Part 2 — Integration tests: run the checker as a subprocess against
+ *   temporary fixture files and assert exit codes and stderr output.
+ *
+ * Run:  node scripts/check-dark-gradients.test.mjs
  */
 
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
 // ---------------------------------------------------------------------------
-// Replicate the core detection helpers so the tests are self-contained and
-// don't depend on the file-walking side-effects of the main script.
+// Part 1 — Replicate core detection helpers for unit testing
 // ---------------------------------------------------------------------------
 
 const DARK_THRESHOLD = 0x44;
@@ -106,7 +115,7 @@ function scanSnippet(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Test harness
+// Test harness (shared)
 // ---------------------------------------------------------------------------
 
 let passed = 0;
@@ -130,7 +139,7 @@ function findings(snippet) {
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Part 1 — Unit tests
 // ---------------------------------------------------------------------------
 
 console.log("\n── Single-line cases ──────────────────────────────────────────");
@@ -316,14 +325,126 @@ expect(
 );
 
 // ---------------------------------------------------------------------------
+// Part 2 — Integration tests (subprocess, exit code + stderr)
+// ---------------------------------------------------------------------------
+
+const CHECKER = fileURLToPath(
+  new URL("./check-dark-gradients.mjs", import.meta.url),
+);
+
+/**
+ * Run the checker against a temp directory containing a single fixture file.
+ * Returns { code, stderr } so tests can assert both the exit code and output.
+ */
+async function runChecker(fixtureSource) {
+  const dir = await mkdtemp(join(tmpdir(), "dg-test-"));
+  try {
+    await writeFile(join(dir, "fixture.tsx"), fixtureSource, "utf8");
+    const stderrChunks = [];
+    const code = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [CHECKER], {
+        env: { ...process.env, DARK_GRADIENT_SCAN_DIR: dir },
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      child.stderr.on("data", (chunk) => stderrChunks.push(chunk));
+      child.on("error", reject);
+      child.on("close", resolve);
+    });
+    return { code, stderr: Buffer.concat(stderrChunks).toString("utf8") };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function integrationTest(description, fixtureSource, expectedExit, stderrContains) {
+  const { code, stderr } = await runChecker(fixtureSource);
+  let ok = code === expectedExit;
+  if (ok && stderrContains) {
+    for (const fragment of stderrContains) {
+      if (!stderr.includes(fragment)) {
+        ok = false;
+        console.error(
+          `  FAIL  ${description}\n         stderr did not contain: ${JSON.stringify(fragment)}\n         stderr: ${stderr.trim()}`,
+        );
+        failed++;
+        return;
+      }
+    }
+  }
+  if (ok) {
+    console.log(`  PASS  ${description}`);
+    passed++;
+  } else {
+    console.error(
+      `  FAIL  ${description}\n         expected exit ${expectedExit}, got ${code}`,
+    );
+    failed++;
+  }
+}
+
+console.log("\n── Integration tests (subprocess) ──────────────────────────────");
+
+// Dark gradient without allow comment → exits 1 and names the file/line
+await integrationTest(
+  "dark gradient without allow comment → exit 1, reports file:line",
+  `const Card = () => (
+  <div style={{ background: "linear-gradient(135deg, #001a0a, #002d12)" }} />
+);`,
+  1,
+  ["fixture.tsx:2"],
+);
+
+// Dark gradient with allow comment on the SAME line → exits 0
+await integrationTest(
+  "dark gradient with same-line allow comment → exit 0",
+  `const Hero = () => (
+  <div style={{ background: "linear-gradient(135deg, #001a0a, #002d12)" }} /> // dark-gradient-allow: hero overlay
+);`,
+  0,
+);
+
+// Dark gradient with allow comment on the PREVIOUS line → exits 0
+await integrationTest(
+  "dark gradient with allow comment on previous line → exit 0",
+  `const Hero = () => (
+  // dark-gradient-allow: intentional dark hero
+  <div style={{ background: "linear-gradient(135deg, #001a0a, #002d12)" }} />
+);`,
+  0,
+);
+
+// Bright gradient (all channels > 0x44) → exits 0
+await integrationTest(
+  "bright gradient (all channels > 0x44) → exit 0",
+  `const Banner = () => (
+  <div style={{ background: "linear-gradient(90deg, #5588ff, #aabbcc)" }} />
+);`,
+  0,
+);
+
+// Flat dark background — NOT a gradient → exits 0
+await integrationTest(
+  "flat dark background (no gradient function) → exit 0",
+  `const Overlay = () => (
+  <div style={{ background: "#000000" }} />
+);`,
+  0,
+);
+
+// 3-digit short-form dark hex (#000, #111) inside a gradient → exits 1
+await integrationTest(
+  "3-digit short-form dark hex (#111) in gradient → exit 1",
+  `const DarkCard = () => (
+  <div style={{ background: "linear-gradient(180deg, #111, #222)" }} />
+);`,
+  1,
+);
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
-console.log(`\n${"─".repeat(60)}`);
-console.log(`Results: ${passed} passed, ${failed} failed`);
+console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed.`);
 if (failed > 0) {
   process.exit(1);
-} else {
-  console.log("All tests passed.");
-  process.exit(0);
 }

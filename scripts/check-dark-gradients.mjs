@@ -29,7 +29,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const SCAN_DIR = join(ROOT, "client/src");
+const SCAN_DIR = process.env.DARK_GRADIENT_SCAN_DIR ?? join(ROOT, "client/src");
 const SKIP_DIRS = new Set([join(ROOT, "client/src/components/ui")]);
 const ALLOW_TOKEN = "dark-gradient-allow";
 
