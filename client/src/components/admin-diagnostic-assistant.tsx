@@ -57,11 +57,44 @@ export function AdminDiagnosticAssistant() {
   const msgIdCounter = useRef(0);
   const qc = useQueryClient();
 
+  const channelRef = useRef<BroadcastChannel | null>(null);
+  const STORAGE_PING_KEY = "admin_pinned_findings_ping";
+
+  useEffect(() => {
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("admin-pinned-findings");
+      channelRef.current = channel;
+      channel.onmessage = () => {
+        qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      };
+      return () => {
+        channel.close();
+        channelRef.current = null;
+      };
+    } else {
+      const handleStorage = (e: StorageEvent) => {
+        if (e.key === STORAGE_PING_KEY) {
+          qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+        }
+      };
+      window.addEventListener("storage", handleStorage);
+      return () => window.removeEventListener("storage", handleStorage);
+    }
+  }, [qc]);
+
+  function notifyOtherTabs() {
+    if (channelRef.current) {
+      channelRef.current.postMessage("changed");
+    } else {
+      try {
+        localStorage.setItem(STORAGE_PING_KEY, Date.now().toString());
+      } catch {
+      }
+    }
+  }
+
   const { data: dbFindings } = useQuery<any[]>({
     queryKey: ["/api/admin/pinned-findings"],
-    staleTime: 30_000,
-    refetchInterval: open ? 30_000 : false,
-    refetchIntervalInBackground: false,
   });
 
   useEffect(() => {
@@ -82,6 +115,7 @@ export function AdminDiagnosticAssistant() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      notifyOtherTabs();
     },
   });
 
@@ -91,6 +125,7 @@ export function AdminDiagnosticAssistant() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      notifyOtherTabs();
     },
   });
 
@@ -100,6 +135,7 @@ export function AdminDiagnosticAssistant() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      notifyOtherTabs();
     },
   });
 
