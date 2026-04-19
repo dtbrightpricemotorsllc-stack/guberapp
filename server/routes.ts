@@ -7163,6 +7163,49 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/ai-polish-broadcast", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, body } = req.body || {};
+      if (!title?.trim() && !body?.trim()) {
+        return res.status(400).json({ message: "Title or body required" });
+      }
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      const prompt = `You are a professional copywriter for GUBER, a local gig-work and cash-drop app. The admin wants to send a push notification announcement to all users. Fix any spelling, grammar, or punctuation errors. Make the tone friendly, energetic, and professional — like a short text from a trusted app. Keep the same meaning and approximate length. Do NOT change proper nouns like "GUBER", "Cash Drop", "Day-1 OG", "Verify & Inspect". Return ONLY a JSON object with exactly these two keys: "title" and "body". No markdown, no extra text.
+
+Input title: ${JSON.stringify((title || "").trim())}
+Input body: ${JSON.stringify((body || "").trim())}`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 300,
+        temperature: 0.3,
+      });
+
+      const raw = completion.choices[0]?.message?.content?.trim() || "";
+      let parsed: { title: string; body: string };
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        parsed = JSON.parse(jsonMatch?.[0] || raw);
+      } catch {
+        return res.status(500).json({ message: "AI returned unexpected format. Try again." });
+      }
+
+      if (typeof parsed.title !== "string" || typeof parsed.body !== "string") {
+        return res.status(500).json({ message: "AI response missing title or body." });
+      }
+
+      res.json({ title: parsed.title.trim(), body: parsed.body.trim() });
+    } catch (err: any) {
+      console.error("[ai-polish-broadcast] error:", err);
+      res.status(500).json({ message: "AI polish failed: " + err.message });
+    }
+  });
+
   // ── AI or Not entitlement sync (postMessage → backend) ─────────────────
   app.post("/api/guber-auth", requireAuth, async (req: Request, res: Response) => {
     try {

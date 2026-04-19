@@ -1923,6 +1923,7 @@ const [pushTitle, setPushTitle] = useState("");
 const [pushBody, setPushBody] = useState("");
 const [pushUrl, setPushUrl] = useState("/");
 const [pushAudience, setPushAudience] = useState("all");
+const [aiPolished, setAiPolished] = useState(false);
 
 const broadcastMutation = useMutation({
 mutationFn: () => apiRequest("POST", "/api/admin/broadcast-email", { subject, htmlBody, audience }),
@@ -1937,6 +1938,20 @@ toast({ title: "Failed to send", description: err.message, variant: "destructive
 },
 });
 
+const aiPolishMutation = useMutation({
+mutationFn: () => apiRequest("POST", "/api/admin/ai-polish-broadcast", { title: pushTitle, body: pushBody }),
+onSuccess: async (res) => {
+const data = await res.json();
+setPushTitle(data.title);
+setPushBody(data.body);
+setAiPolished(true);
+toast({ title: "✨ AI polished", description: "Spelling and grammar corrected. Review before sending." });
+},
+onError: async (err: any) => {
+toast({ title: "AI polish failed", description: err.message, variant: "destructive" });
+},
+});
+
 const pushBroadcastMutation = useMutation({
 mutationFn: () => apiRequest("POST", "/api/admin/broadcast-push", { title: pushTitle, body: pushBody, url: pushUrl, audience: pushAudience }),
 onSuccess: async (res) => {
@@ -1945,6 +1960,7 @@ toast({ title: "Push notification sent!", description: `Delivered: ${data.sent} 
 setPushTitle("");
 setPushBody("");
 setPushUrl("/");
+setAiPolished(false);
 },
 onError: async (err: any) => {
 toast({ title: "Push failed", description: err.message, variant: "destructive" });
@@ -1981,9 +1997,9 @@ Sends a push notification to all users who have enabled notifications. Reaches A
 <label className="text-xs text-muted-foreground mb-1 block">Title</label>
 <Input
 value={pushTitle}
-onChange={(e) => setPushTitle(e.target.value)}
+onChange={(e) => { setPushTitle(e.target.value); setAiPolished(false); }}
 placeholder="e.g. GUBER just got better 🚀"
-className="bg-background border-border/30"
+className={`bg-background border-border/30 ${aiPolished ? "border-emerald-500/40 ring-1 ring-emerald-500/20" : ""}`}
 data-testid="input-push-title"
 />
 </div>
@@ -1992,11 +2008,16 @@ data-testid="input-push-title"
 <label className="text-xs text-muted-foreground mb-1 block">Message</label>
 <Textarea
 value={pushBody}
-onChange={(e) => setPushBody(e.target.value)}
+onChange={(e) => { setPushBody(e.target.value); setAiPolished(false); }}
 placeholder="e.g. We fixed Cash Drops, improved notifications, and more. Tap to see what's new."
-className="bg-background border-border/30 min-h-[100px] text-sm"
+className={`bg-background border-border/30 min-h-[100px] text-sm ${aiPolished ? "border-emerald-500/40 ring-1 ring-emerald-500/20" : ""}`}
 data-testid="input-push-body"
 />
+{aiPolished && (
+<p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1" data-testid="text-ai-polished-badge">
+<span>✨</span> AI-polished — looks great. Review and send when ready.
+</p>
+)}
 </div>
 
 <div>
@@ -2011,8 +2032,23 @@ data-testid="input-push-url"
 </div>
 
 <Button
+onClick={() => aiPolishMutation.mutate()}
+disabled={aiPolishMutation.isPending || pushBroadcastMutation.isPending || (!pushTitle.trim() && !pushBody.trim())}
+variant="outline"
+className="w-full border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 font-display"
+data-testid="button-ai-polish-broadcast"
+>
+{aiPolishMutation.isPending ? (
+<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+) : (
+<span className="mr-2 text-base leading-none">✨</span>
+)}
+{aiPolishMutation.isPending ? "Polishing with AI..." : "AI Polish — Fix Spelling & Grammar"}
+</Button>
+
+<Button
 onClick={() => pushBroadcastMutation.mutate()}
-disabled={pushBroadcastMutation.isPending || !pushTitle.trim() || !pushBody.trim()}
+disabled={pushBroadcastMutation.isPending || aiPolishMutation.isPending || !pushTitle.trim() || !pushBody.trim()}
 className="bg-primary text-primary-foreground font-display w-full"
 data-testid="button-send-push-broadcast"
 >
@@ -2021,7 +2057,7 @@ data-testid="button-send-push-broadcast"
 ) : (
 <Bell className="w-4 h-4 mr-2" />
 )}
-{pushBroadcastMutation.isPending ? "Sending..." : "Send Push Notification"}
+{pushBroadcastMutation.isPending ? "Sending..." : "Send Push Notification to Everyone"}
 </Button>
 </div>
 </div>
