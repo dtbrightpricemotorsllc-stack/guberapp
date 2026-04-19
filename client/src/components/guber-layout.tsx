@@ -10,6 +10,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "./guber-logo";
 import { GUBERAssistant } from "./guber-assistant";
+import { AdminDiagnosticAssistant } from "./admin-diagnostic-assistant";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -268,6 +269,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
       </main>
 
       <GUBERAssistant />
+      {isAdmin && location === "/admin" && <AdminDiagnosticAssistant />}
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 glass-nav border-t border-white/[0.06]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="flex items-center justify-around h-[68px] max-w-lg mx-auto px-3">

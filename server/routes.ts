@@ -7476,6 +7476,145 @@ BEHAVIOR RULES:
     }
   });
 
+  // ── Admin AI Diagnostic Assistant ───────────────────────────────────────────
+  app.post("/api/admin/ai-diagnostic", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { messages } = req.body;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ message: "messages must be a non-empty array" });
+      }
+
+      // ── Live system snapshot ─────────────────────────────────────────────────
+      const now = new Date();
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      const [
+        userCountsRaw,
+        jobStatusesRaw,
+        stuckJobsRaw,
+        pendingVerificationsRaw,
+        activeDropsRaw,
+        recentAuditRaw,
+        walletAnomaliesRaw,
+        disputedJobsRaw,
+      ] = await Promise.all([
+        // User breakdown
+        db.execute(sql.raw(`
+          SELECT role, COUNT(*) as count,
+            SUM(CASE WHEN day1_og = true THEN 1 ELSE 0 END) as og_count
+          FROM users GROUP BY role
+        `)),
+        // Jobs grouped by status
+        db.execute(sql.raw(`
+          SELECT status, COUNT(*) as count FROM jobs GROUP BY status ORDER BY count DESC
+        `)),
+        // Jobs stuck >24h in actionable states
+        db.execute(sql.raw(`
+          SELECT id, title, status, created_at, updated_at FROM jobs
+          WHERE status IN ('funded','proof_submitted','accepted_pending_payment','proof_needed')
+            AND updated_at < '${oneDayAgo.toISOString()}'
+          ORDER BY updated_at ASC LIMIT 10
+        `)),
+        // Pending verifications
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count FROM audit_logs
+          WHERE action IN ('credential_upload','id_upload')
+            AND (review_status IS NULL OR review_status = 'pending')
+        `)),
+        // Active cash drops
+        db.execute(sql.raw(`
+          SELECT id, title, reward_per_winner, created_at FROM cash_drops
+          WHERE status = 'active' LIMIT 5
+        `)),
+        // Last 15 audit log entries
+        db.execute(sql.raw(`
+          SELECT al.action, al.details, al.created_at, u.email
+          FROM audit_logs al
+          LEFT JOIN users u ON u.id = al.user_id
+          ORDER BY al.created_at DESC LIMIT 15
+        `)),
+        // Wallet anomalies: users with balance mismatch indicators
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as users_with_balance FROM wallets WHERE balance > 0
+        `)),
+        // Disputed jobs detail
+        db.execute(sql.raw(`
+          SELECT id, title, budget, created_at FROM jobs WHERE status = 'disputed' ORDER BY created_at DESC LIMIT 5
+        `)),
+      ]);
+
+      const snapshot = {
+        timestamp: now.toISOString(),
+        users: userCountsRaw.rows,
+        jobStatuses: jobStatusesRaw.rows,
+        stuckJobs: stuckJobsRaw.rows,
+        pendingVerifications: (pendingVerificationsRaw.rows[0] as any)?.count ?? 0,
+        activeDrops: activeDropsRaw.rows,
+        recentAuditLogs: recentAuditRaw.rows,
+        walletStats: walletAnomaliesRaw.rows[0],
+        disputedJobs: disputedJobsRaw.rows,
+      };
+
+      const ALLOWED_ROLES = new Set(["user", "assistant"]);
+      const sanitized: Array<{ role: "user" | "assistant"; content: string }> = [];
+      for (const msg of messages.slice(-20)) {
+        if (!msg || typeof msg !== "object") continue;
+        if (!ALLOWED_ROLES.has(msg.role)) continue;
+        const content = typeof msg.content === "string" ? msg.content.slice(0, 2000).trim() : "";
+        if (!content) continue;
+        sanitized.push({ role: msg.role as "user" | "assistant", content });
+      }
+      if (sanitized.length === 0) {
+        return res.status(400).json({ message: "No valid messages provided" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const systemPrompt = `You are an AI system diagnostic assistant for GUBER — an on-demand labor platform. You are speaking directly to the platform admin (non-technical). Your job is to analyze live system data and surface problems, anomalies, or things that need attention in plain English.
+
+LIVE SYSTEM SNAPSHOT (as of ${now.toISOString()}):
+${JSON.stringify(snapshot, null, 2)}
+
+WHAT THE DATA MEANS:
+- users: breakdown by role (consumer, admin, business) and how many are Day-1 OG members
+- jobStatuses: jobs grouped by their current status. Key statuses: posted_public (open), funded (worker assigned, payment held), proof_submitted (worker submitted proof, awaiting approval), disputed (in dispute), completed
+- stuckJobs: jobs that have been in an actionable state (funded/proof_submitted/etc.) for over 24 hours without moving — these may indicate admin action needed or a software issue
+- pendingVerifications: credential/ID uploads waiting for admin review
+- activeDrops: currently live cash drop events
+- recentAuditLogs: the last 15 recorded admin/system actions with timestamps
+- disputedJobs: jobs currently in dispute that may need admin attention
+
+YOUR BEHAVIOR:
+- Proactively flag anything that looks wrong or needs attention — don't wait to be asked
+- Explain issues in plain English that a non-technical business owner can understand
+- For each problem you find, briefly suggest what action should be taken
+- Be concise but complete — use bullet points for clarity
+- If everything looks healthy, say so clearly
+- Do NOT reveal raw database IDs in bulk — only mention specific IDs if they're directly relevant to an issue
+- Never make up data — only reference what's in the snapshot above`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.3,
+        max_tokens: 600,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...sanitized,
+        ],
+      });
+
+      const reply = completion.choices[0]?.message?.content?.trim() || "Unable to generate diagnostic. Please try again.";
+      res.json({ reply });
+    } catch (err: any) {
+      console.error("[GUBER] admin diagnostic error:", err.message);
+      res.status(500).json({ message: "Diagnostic unavailable, please try again." });
+    }
+  });
+
   // ── BOUNTY / PART AVAILABILITY VERIFICATION ────────────────────────────────
 
   app.post("/api/jobs/:id/bounty-submit", requireAuth, demoGuard, checkSuspended, async (req: Request, res: Response) => {
