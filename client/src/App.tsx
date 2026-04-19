@@ -25,7 +25,6 @@ import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
-import OAuthComplete from "@/pages/oauth-complete";
 import AuthSuccess from "@/pages/auth-success";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
@@ -189,7 +188,6 @@ function Router() {
       <Route path="/business-signup" component={() => <PublicOnly component={BusinessSignup} />} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/oauth-complete" component={OAuthComplete} />
       <Route path="/oauth-landing" component={() => {
         const s = useSearch();
         const [, nav] = useLocation();
