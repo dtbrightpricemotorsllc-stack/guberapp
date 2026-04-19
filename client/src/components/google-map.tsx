@@ -95,6 +95,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   const initStartedRef = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
+  const watchCancelledRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -182,7 +183,13 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
-    ).then((id) => { watchIdRef.current = id; }).catch(() => { setLocating(false); setLocationDenied(true); });
+    ).then((id) => {
+      if (watchCancelledRef.current) {
+        if (navigator.geolocation) navigator.geolocation.clearWatch(id);
+        return;
+      }
+      watchIdRef.current = id;
+    }).catch(() => { setLocating(false); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {
@@ -214,8 +221,10 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   };
 
   useEffect(() => {
+    watchCancelledRef.current = false;
     startWatchPosition();
     return () => {
+      watchCancelledRef.current = true;
       if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
     };
   }, []);

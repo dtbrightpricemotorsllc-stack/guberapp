@@ -224,6 +224,7 @@ export default function MapExplore() {
   }, [apiKey, config, locating]);
 
   const watchIdRef2 = useRef<number | null>(null);
+  const watchCancelledRef = useRef(false);
 
   const reverseGeocodeZip = async (lat: number, lng: number) => {
     try {
@@ -261,7 +262,13 @@ export default function MapExplore() {
         setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
-    ).then((id) => { watchIdRef2.current = id; }).catch(() => { setLocating(false); setLocationDenied(true); });
+    ).then((id) => {
+      if (watchCancelledRef.current) {
+        if (navigator.geolocation) navigator.geolocation.clearWatch(id);
+        return;
+      }
+      watchIdRef2.current = id;
+    }).catch(() => { setLocating(false); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {
@@ -272,8 +279,10 @@ export default function MapExplore() {
   };
 
   useEffect(() => {
+    watchCancelledRef.current = false;
     startWatchPosition();
     return () => {
+      watchCancelledRef.current = true;
       if (watchIdRef2.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef2.current);
     };
   }, []);
