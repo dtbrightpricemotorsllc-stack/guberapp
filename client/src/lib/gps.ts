@@ -4,11 +4,11 @@ type Resolver = () => void;
 const pendingResolvers: Resolver[] = [];
 
 export function isGpsDisclaimerAccepted(): boolean {
-  try { return sessionStorage.getItem(SESSION_KEY) === "1"; } catch { return false; }
+  try { return localStorage.getItem(SESSION_KEY) === "1"; } catch { return false; }
 }
 
 export function acceptGpsDisclaimer(): void {
-  try { sessionStorage.setItem(SESSION_KEY, "1"); } catch {}
+  try { localStorage.setItem(SESSION_KEY, "1"); } catch {}
   while (pendingResolvers.length > 0) {
     pendingResolvers.shift()?.();
   }
