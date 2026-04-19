@@ -44,6 +44,7 @@ export interface IStorage {
   getUserJobs(userId: number): Promise<Job[]>;
   createJob(job: any): Promise<Job>;
   updateJob(id: number, data: Partial<Job>): Promise<Job | undefined>;
+  acknowledgeStuckJob(id: number, adminId: number): Promise<Job | undefined>;
   deleteJob(id: number): Promise<void>;
   adminRemoveJob(id: number, reason: string): Promise<void>;
 
@@ -349,6 +350,15 @@ export class DatabaseStorage implements IStorage {
 
   async updateJob(id: number, data: Partial<Job>): Promise<Job | undefined> {
     const [job] = await db.update(jobs).set(data).where(eq(jobs.id, id)).returning();
+    return job;
+  }
+
+  async acknowledgeStuckJob(id: number, adminId: number): Promise<Job | undefined> {
+    const [job] = await db
+      .update(jobs)
+      .set({ stuckAcknowledgedAt: new Date(), stuckAcknowledgedBy: adminId })
+      .where(eq(jobs.id, id))
+      .returning();
     return job;
   }
 

@@ -283,6 +283,8 @@ export const jobs = pgTable("jobs", {
   nextIncreaseAt: timestamp("next_increase_at"),
   taskTier: text("task_tier"),
   estimatedDurationHours: real("estimated_duration_hours"),
+  stuckAcknowledgedAt: timestamp("stuck_acknowledged_at"),
+  stuckAcknowledgedBy: integer("stuck_acknowledged_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -6482,6 +6482,22 @@ export async function registerRoutes(
     }
   });
 
+  // Mark a stuck job as acknowledged so it no longer appears in diagnostic scans
+  app.patch("/api/admin/jobs/:id/acknowledge-stuck", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      if (isNaN(jobId)) return res.status(400).json({ error: "Invalid job ID" });
+      const adminId = req.session.userId;
+      if (!adminId) return res.status(401).json({ error: "Unauthorized" });
+      const job = await storage.acknowledgeStuckJob(jobId, adminId);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      res.json({ success: true, job });
+    } catch (err) {
+      console.error("Acknowledge stuck job error:", err);
+      res.status(500).json({ error: "Failed to acknowledge job" });
+    }
+  });
+
   // Sync Stripe OG payments → activate any users who paid but weren't activated
   app.post("/api/admin/sync-stripe-og", requireAdmin, async (_req: Request, res: Response) => {
     try {
@@ -7516,11 +7532,12 @@ BEHAVIOR RULES:
         db.execute(sql.raw(`
           SELECT status, COUNT(*) as count FROM jobs GROUP BY status ORDER BY count DESC
         `)),
-        // Jobs stuck >24h in actionable states
+        // Jobs stuck >24h in actionable states (excluding admin-acknowledged ones)
         db.execute(sql.raw(`
           SELECT id, title, status, created_at, updated_at FROM jobs
           WHERE status IN ('funded','proof_submitted','accepted_pending_payment','proof_needed')
             AND updated_at < '${oneDayAgo.toISOString()}'
+            AND stuck_acknowledged_at IS NULL
           ORDER BY updated_at ASC LIMIT 10
         `)),
         // Pending verifications
