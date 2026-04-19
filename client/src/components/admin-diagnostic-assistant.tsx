@@ -23,13 +23,10 @@ interface PinnedFinding {
 }
 
 const AUTO_SCAN_MESSAGE = "Give me a quick system health summary. Flag anything that needs my attention.";
+const MAX_PINNED_FINDINGS = 50;
 
 function buildContentSet(findings: PinnedFinding[]): Set<string> {
   return new Set(findings.map((f) => f.content));
-}
-
-function dbRowToPinnedFinding(row: { id: number; findingId: string; content: string; pinnedAt: string }): PinnedFinding {
-  return { id: row.findingId, content: row.content, pinnedAt: row.pinnedAt, note: "" };
 }
 
 type Tab = "chat" | "pinned";
@@ -93,52 +90,6 @@ export function AdminDiagnosticAssistant() {
     }
   }
 
-  const { data: dbFindings } = useQuery<any[]>({
-    queryKey: ["/api/admin/pinned-findings"],
-  });
-
-  useEffect(() => {
-    if (!dbFindings) return;
-    const converted = dbFindings.map(dbRowToPinnedFinding);
-    setPinnedFindings(converted);
-    setPinnedContentSet(buildContentSet(converted));
-    savePinnedFindings(converted);
-  }, [dbFindings]);
-
-  const pinApiMutation = useMutation({
-    mutationFn: async (finding: PinnedFinding) => {
-      await apiRequest("POST", "/api/admin/pinned-findings", {
-        findingId: finding.id,
-        content: finding.content,
-        pinnedAt: finding.pinnedAt,
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
-      notifyOtherTabs();
-    },
-  });
-
-  const unpinByIdApiMutation = useMutation({
-    mutationFn: async (findingId: string) => {
-      await apiRequest("DELETE", `/api/admin/pinned-findings/${encodeURIComponent(findingId)}`);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
-      notifyOtherTabs();
-    },
-  });
-
-  const unpinByContentApiMutation = useMutation({
-    mutationFn: async (content: string) => {
-      await apiRequest("DELETE", "/api/admin/pinned-findings-by-content", { content });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
-      notifyOtherTabs();
-    },
-  });
-
   const queryClient = useQueryClient();
 
   const { data: pinnedFindings = [] } = useQuery<PinnedFinding[]>({
@@ -155,6 +106,7 @@ export function AdminDiagnosticAssistant() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      notifyOtherTabs();
     },
   });
 
@@ -165,6 +117,7 @@ export function AdminDiagnosticAssistant() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      notifyOtherTabs();
     },
   });
 
@@ -174,6 +127,7 @@ export function AdminDiagnosticAssistant() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/pinned-findings"] });
+      notifyOtherTabs();
     },
   });
 
@@ -204,23 +158,24 @@ export function AdminDiagnosticAssistant() {
   }
 
   function confirmPin(content: string) {
+    if (pinnedFindings.length >= MAX_PINNED_FINDINGS) {
+      cancelPinFlow();
+      return;
+    }
     pinMutation.mutate({ content, note: pendingPinNote.trim() });
     setPendingPinContent(null);
     setPendingPinNote("");
-    pinApiMutation.mutate(finding);
   }
 
   function handleUnpinByContent(content: string) {
     const finding = pinnedFindings.find((f) => f.content === content);
     if (finding) unpinMutation.mutate(finding.id);
     if (pendingPinContent === content) cancelPinFlow();
-    unpinByContentApiMutation.mutate(content);
   }
 
   function handleDismiss(id: number) {
     unpinMutation.mutate(id);
     if (editingPinId === id) setEditingPinId(null);
-    unpinByIdApiMutation.mutate(id);
   }
 
   function handleExport() {
@@ -571,33 +526,42 @@ export function AdminDiagnosticAssistant() {
                                 )}
                                 <span>{copiedIndex === i ? "Copied" : copiedIndex === -1 - i ? "Failed" : "Copy"}</span>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (msgIsPinned) {
-                                    handleUnpinByContent(msg.content);
-                                  } else if (msgIsPending) {
-                                    cancelPinFlow();
-                                  } else {
-                                    startPinFlow(msg.content);
-                                  }
-                                }}
-                                disabled={pinMutation.isPending || unpinMutation.isPending}
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
-                                style={{
-                                  color: msgIsPinned || msgIsPending ? "hsl(263 70% 65%)" : "hsl(0 0% 45%)",
-                                  opacity: msgIsPinned || msgIsPending ? 1 : 0.7,
-                                }}
-                                aria-label={msgIsPinned ? "Unpin finding" : "Pin finding"}
-                                data-testid={`button-pin-diagnostic-${i}`}
-                              >
-                                {msgIsPinned ? (
-                                  <PinOff className="w-3 h-3" />
-                                ) : (
-                                  <Pin className="w-3 h-3" />
-                                )}
-                                <span>{msgIsPinned ? "Unpin" : msgIsPending ? "Cancel" : "Pin"}</span>
-                              </button>
+                              {(() => {
+                                const atCap = !msgIsPinned && !msgIsPending && pinnedFindings.length >= MAX_PINNED_FINDINGS;
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={atCap || pinMutation.isPending || unpinMutation.isPending}
+                                    onClick={() => {
+                                      if (atCap) return;
+                                      if (msgIsPinned) {
+                                        handleUnpinByContent(msg.content);
+                                      } else if (msgIsPending) {
+                                        cancelPinFlow();
+                                      } else {
+                                        startPinFlow(msg.content);
+                                      }
+                                    }}
+                                    title={atCap ? `Pin limit reached (${MAX_PINNED_FINDINGS} max). Remove a pinned finding to add more.` : undefined}
+                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 hover:opacity-100"
+                                    style={{
+                                      color: atCap ? "hsl(0 0% 30%)" : msgIsPinned || msgIsPending ? "hsl(263 70% 65%)" : "hsl(0 0% 45%)",
+                                      opacity: atCap ? 0.5 : msgIsPinned || msgIsPending ? 1 : 0.7,
+                                      cursor: atCap ? "not-allowed" : "pointer",
+                                    }}
+                                    aria-label={atCap ? `Pin limit of ${MAX_PINNED_FINDINGS} reached` : msgIsPinned ? "Unpin finding" : "Pin finding"}
+                                    aria-disabled={atCap}
+                                    data-testid={`button-pin-diagnostic-${i}`}
+                                  >
+                                    {msgIsPinned ? (
+                                      <PinOff className="w-3 h-3" />
+                                    ) : (
+                                      <Pin className="w-3 h-3" />
+                                    )}
+                                    <span>{msgIsPinned ? "Unpin" : msgIsPending ? "Cancel" : "Pin"}</span>
+                                  </button>
+                                );
+                              })()}
                             </div>
 
                             {msgIsPending && (
@@ -796,6 +760,15 @@ export function AdminDiagnosticAssistant() {
               )}
 
               <div className="flex-1 overflow-y-auto px-4 py-2" data-testid="pinned-findings-list">
+                {pinnedFindings.length >= MAX_PINNED_FINDINGS && (
+                  <div
+                    className="mb-3 px-3 py-2 rounded-xl text-[11px] leading-snug"
+                    style={{ background: "hsl(30 80% 50% / 0.12)", border: "1px solid hsl(30 80% 50% / 0.3)", color: "hsl(30 80% 70%)" }}
+                    data-testid="banner-pin-cap-reached"
+                  >
+                    Pin limit reached ({MAX_PINNED_FINDINGS}/{MAX_PINNED_FINDINGS}). Remove a finding below to pin new ones.
+                  </div>
+                )}
               {pinnedFindings.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 pb-12">
                   <div
