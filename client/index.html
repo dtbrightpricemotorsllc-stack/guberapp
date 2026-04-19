@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
@@ -46,6 +46,16 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Apply saved theme immediately to avoid a flash of dark→light on load.
+      (function() {
+        try {
+          var stored = localStorage.getItem('guber-theme');
+          var useDark = stored ? stored === 'dark' : !window.matchMedia('(prefers-color-scheme: light)').matches;
+          if (useDark) document.documentElement.classList.add('dark');
+        } catch(e) {}
+      })();
+    </script>
     <script>
       // Capture beforeinstallprompt as early as possible — before React loads.
       // Chrome fires this event very early; if the React component hasn't mounted
