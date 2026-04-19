@@ -4,7 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Send, X, Bot, Loader2, Sparkles } from "lucide-react";
+import { MessageSquare, Send, Bot, Loader2, Sparkles } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -64,19 +64,21 @@ export function GUBERAssistant() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed right-4 z-[55] w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
-        style={{
-          bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 16px)",
-          background: "linear-gradient(135deg, hsl(45 100% 50%), hsl(152 100% 44%))",
-          boxShadow: "0 4px 20px hsl(152 100% 44% / 0.35), 0 2px 8px rgba(0,0,0,0.4)",
-        }}
-        data-testid="button-guber-assistant"
-        aria-label="Open GUBER Assistant"
-      >
-        <MessageSquare className="w-6 h-6 text-black" strokeWidth={2} />
-      </button>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed right-4 z-[55] w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
+          style={{
+            bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 16px)",
+            background: "linear-gradient(135deg, hsl(45 100% 50%), hsl(152 100% 44%))",
+            boxShadow: "0 4px 20px hsl(152 100% 44% / 0.35), 0 2px 8px rgba(0,0,0,0.4)",
+          }}
+          data-testid="button-guber-assistant"
+          aria-label="Open GUBER Assistant"
+        >
+          <MessageSquare className="w-6 h-6 text-black" strokeWidth={2} />
+        </button>
+      )}
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
@@ -98,15 +100,6 @@ export function GUBERAssistant() {
                   <p className="text-[11px] text-muted-foreground mt-0.5">AI-powered platform guide</p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setOpen(false)}
-                className="rounded-xl w-8 h-8 text-muted-foreground hover:text-white hover:bg-white/[0.06]"
-                data-testid="button-close-assistant"
-              >
-                <X className="w-4 h-4" />
-              </Button>
             </div>
           </SheetHeader>
 
