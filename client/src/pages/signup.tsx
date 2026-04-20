@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Check, X, ShieldCheck } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
+import { nativeGoogleSignIn } from "@/lib/native-google-sign-in";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [

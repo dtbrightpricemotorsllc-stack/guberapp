@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
-import { Browser } from "@capacitor/browser";
+import { nativeGoogleSignIn } from "@/lib/native-google-sign-in";
 
 export default function Login() {
   const { login } = useAuth();
@@ -41,15 +41,6 @@ export default function Login() {
       tapCountRef.current = 0;
     }, 1500);
   };
-
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    let handle: { remove: () => void } | null = null;
-    Browser.addListener("browserFinished", () => {
-      setGoogleLoading(false);
-    }).then((h) => { handle = h; });
-    return () => { handle?.remove(); };
-  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -89,18 +80,27 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     const params = new URLSearchParams(search);
-    const returnTo = params.get("returnTo");
-    const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
-    if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
+    const loginReturnTo = params.get("returnTo");
     if (Capacitor.isNativePlatform()) {
-      googleUrl.searchParams.set("source", "native");
       try {
-        await Browser.open({ url: googleUrl.toString() });
-      } catch {
+        const result = await nativeGoogleSignIn();
+        if (result.ok) {
+          if (loginReturnTo) {
+            setLocation(loginReturnTo);
+          } else {
+            setLocation("/dashboard");
+          }
+        } else if (result.reason === "timeout") {
+          toast({ title: "Sign-In Timed Out", description: "Please try again.", variant: "destructive" });
+        } else if (result.reason !== "cancelled") {
+          toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
+        }
+      } finally {
         setGoogleLoading(false);
-        toast({ title: "Sign-In Failed", description: "Could not open browser. Please try again.", variant: "destructive" });
       }
     } else {
+      const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
+      if (loginReturnTo) googleUrl.searchParams.set("returnTo", loginReturnTo);
       window.location.href = googleUrl.toString();
     }
   };

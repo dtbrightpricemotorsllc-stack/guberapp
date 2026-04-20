@@ -12,6 +12,10 @@ const config: CapacitorConfig = {
     Browser: {
       presentationStyle: 'popover',
     },
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      forceCodeForRefreshToken: true,
+    },
   },
   ios: {
     scheme: 'guber',

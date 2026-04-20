@@ -1843,6 +1843,171 @@ export async function registerRoutes(
     }
   });
 
+  // Native Google Sign-In — receives an ID token from the Android/iOS app
+  // (no browser, no redirect — direct token verification via Google's tokeninfo API)
+  app.post("/api/auth/google/native", async (req: Request, res: Response) => {
+    const { idToken } = req.body;
+    if (!idToken || typeof idToken !== "string") {
+      return res.status(400).json({ message: "idToken is required" });
+    }
+
+    const webClientId = process.env.GOOGLE_CLIENT_ID;
+    const androidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID;
+
+    if (!webClientId) {
+      console.error("[GUBER auth] /api/auth/google/native — GOOGLE_CLIENT_ID not configured");
+      return res.status(503).json({ message: "Google Sign-In not configured" });
+    }
+
+    try {
+      const tokenInfoRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      );
+      const tokenInfo = await tokenInfoRes.json() as any;
+
+      if (!tokenInfoRes.ok || !tokenInfo.sub || !tokenInfo.email) {
+        console.warn("[GUBER auth] native Google — tokeninfo rejected or missing sub/email:", JSON.stringify(tokenInfo).slice(0, 200));
+        return res.status(401).json({ message: "Invalid Google ID token" });
+      }
+
+      // Validate audience — must match web client ID or Android client ID
+      const validAuds = [webClientId, androidClientId].filter(Boolean);
+      if (!validAuds.includes(tokenInfo.aud)) {
+        console.warn(`[GUBER auth] native Google — unexpected aud: ${tokenInfo.aud}`);
+        return res.status(401).json({ message: "Invalid token audience" });
+      }
+
+      const googleUser = {
+        sub: tokenInfo.sub as string,
+        email: tokenInfo.email as string,
+        name: (tokenInfo.name || tokenInfo.email.split("@")[0]) as string,
+        picture: (tokenInfo.picture || null) as string | null,
+      };
+
+      console.log(`[GUBER auth] native Google — token verified for email=${googleUser.email}`);
+
+      // Find or create user (same logic as web callback)
+      let user = await storage.getUserByGoogleSub(googleUser.sub);
+      if (!user) {
+        user = await storage.getUserByEmail(googleUser.email);
+        if (user) {
+          console.log(`[GUBER auth] native Google — linking existing account (userId=${user.id})`);
+          await storage.updateUser(user.id, { googleSub: googleUser.sub, authProvider: "google" });
+          user = (await storage.getUser(user.id))!;
+        }
+      } else {
+        console.log(`[GUBER auth] native Google — returning user (userId=${user.id})`);
+      }
+
+      if (!user) {
+        console.log(`[GUBER auth] native Google — creating new account for email=${googleUser.email}`);
+        const baseUsername = (googleUser.email.split("@")[0] || "user").replace(/[^a-z0-9_]/gi, "").toLowerCase();
+        let username = baseUsername;
+        let suffix = 1;
+        while (await storage.getUserByUsername(username)) { username = `${baseUsername}${suffix++}`; }
+
+        let nativeGuberId = generateGuberId();
+        while (await storage.getUserByGuberId(nativeGuberId)) { nativeGuberId = generateGuberId(); }
+
+        let nativeRefCode = generateReferralCode();
+        while ((await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${nativeRefCode} LIMIT 1`)).rows.length) {
+          nativeRefCode = generateReferralCode();
+        }
+
+        const nativeIncomingRef = (req.session as any).pendingReferralCode || null;
+        let nativeReferrerId: number | null = null;
+        if (nativeIncomingRef) {
+          const ro = await db.execute(sql`SELECT id FROM users WHERE referral_code = ${nativeIncomingRef} LIMIT 1`);
+          if (ro.rows.length) nativeReferrerId = (ro.rows[0] as any).id;
+        }
+
+        user = await storage.createUser({
+          email: googleUser.email,
+          username,
+          fullName: googleUser.name,
+          password: await hashPassword(randomBytes(32).toString("hex")),
+          googleSub: googleUser.sub,
+          authProvider: "google",
+          emailVerified: true,
+          profilePhoto: googleUser.picture,
+          role: "buyer",
+          tier: "community",
+          day1OG: false,
+          guberId: nativeGuberId,
+          referralCode: nativeRefCode,
+          referredBy: nativeReferrerId,
+        } as any);
+
+        if (nativeReferrerId) {
+          await db.insert(referrals).values({ referrerId: nativeReferrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();
+        }
+
+        const ogCheckN = await db.execute(sql`SELECT 1 FROM og_preapproved_emails WHERE email = ${googleUser.email.toLowerCase()} LIMIT 1`);
+        const tbCheckN = await db.execute(sql`SELECT 1 FROM trust_box_preapproved_emails WHERE LOWER(email) = ${googleUser.email.toLowerCase()} LIMIT 1`);
+        const stripeN = await checkStripeForOGStatus(googleUser.email);
+        const nIsOG = ogCheckN.rows.length > 0 || stripeN.isOG;
+        const nHasTB = tbCheckN.rows.length > 0 || stripeN.hasTrustBox;
+        const nUpdates: Record<string, any> = {};
+        if (nIsOG) { nUpdates.day1OG = true; nUpdates.aiOrNotCredits = 5; }
+        if (nHasTB) { nUpdates.trustBoxPurchased = true; nUpdates.aiOrNotUnlimitedText = true; if ((user.aiOrNotCredits || 0) < 5) nUpdates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5; }
+        if (Object.keys(nUpdates).length > 0) await storage.updateUser(user.id, nUpdates);
+
+        if (nIsOG && nHasTB) {
+          await storage.createNotification({ userId: user.id, title: "Welcome, OG + Trust Box!", body: "Day-1 OG status and Trust Box are both active. Thanks for your early support!", type: "system" });
+        } else if (nIsOG) {
+          await storage.createNotification({ userId: user.id, title: "Welcome, Day-1 OG!", body: "You're a Day-1 OG member — your perks are already active. Thank you for your early support!", type: "system" });
+        } else if (nHasTB) {
+          await storage.createNotification({ userId: user.id, title: "Trust Box Activated!", body: "Your AI or Not premium access is ready. Thanks for subscribing!", type: "system" });
+        } else {
+          await storage.createNotification({ userId: user.id, title: "Welcome to GUBER!", body: "Your account has been created via Google. Complete your profile to get started.", type: "system" });
+        }
+      }
+
+      // Sync OG / TrustBox on every native Google login for existing users
+      if (!user.day1OG || !user.trustBoxPurchased) {
+        const nLoginOgCheck = await db.execute(sql`SELECT 1 FROM og_preapproved_emails WHERE email = ${googleUser.email.toLowerCase()} LIMIT 1`);
+        const nLoginTbCheck = await db.execute(sql`SELECT 1 FROM trust_box_preapproved_emails WHERE LOWER(email) = ${googleUser.email.toLowerCase()} LIMIT 1`);
+        const stripeNLogin = await checkStripeForOGStatus(googleUser.email);
+        const nLoginUpdates: Record<string, any> = {};
+        if (!user.day1OG && (nLoginOgCheck.rows.length > 0 || stripeNLogin.isOG)) {
+          nLoginUpdates.day1OG = true;
+          if (!user.aiOrNotCredits || user.aiOrNotCredits < 5) nLoginUpdates.aiOrNotCredits = 5;
+        }
+        if (!user.trustBoxPurchased && (nLoginTbCheck.rows.length > 0 || stripeNLogin.hasTrustBox)) {
+          nLoginUpdates.trustBoxPurchased = true;
+          nLoginUpdates.aiOrNotUnlimitedText = true;
+          if ((user.aiOrNotCredits || 0) < 5) nLoginUpdates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5;
+        }
+        if (Object.keys(nLoginUpdates).length > 0) {
+          await storage.updateUser(user.id, nLoginUpdates);
+          user = (await storage.getUser(user.id))!;
+          if (nLoginUpdates.day1OG) {
+            await storage.createNotification({ userId: user.id, title: "Day-1 OG Activated!", body: "You're a Day-1 OG member — your perks are now active.", type: "system" });
+          }
+          if (nLoginUpdates.trustBoxPurchased) {
+            await storage.createNotification({ userId: user.id, title: "Trust Box Activated!", body: "Your AI or Not premium access is now active.", type: "system" });
+          }
+        }
+      }
+
+      if (user.banned) {
+        console.warn(`[GUBER auth] native Google — user ${user.id} is banned`);
+        return res.status(403).json({ message: "Account permanently banned" });
+      }
+      if (user.suspended) {
+        console.warn(`[GUBER auth] native Google — user ${user.id} is suspended`);
+        return res.status(403).json({ message: "Account suspended" });
+      }
+
+      const jwtToken = generateJWT(user);
+      console.log(`[GUBER auth] native Google — auth complete (userId=${user.id})`);
+      return res.json({ token: jwtToken });
+    } catch (err: any) {
+      console.error("[GUBER auth] native Google error:", err?.message || err);
+      return res.status(500).json({ message: "Sign-in failed. Please try again." });
+    }
+  });
+
   // Deep link support for iOS Universal Links and Android App Links
   app.get("/.well-known/apple-app-site-association", (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "application/json");
