@@ -216,6 +216,11 @@ export default function BizDashboard() {
           </div>
         </div>
 
+        {/* Separation note */}
+        <p className="text-[10px] leading-relaxed mb-8 -mt-6" style={{ color: TEXT_MUTED }} data-testid="text-biz-separation-note">
+          Business accounts are separate from personal accounts and cannot access worker-side or cash drop participant features.
+        </p>
+
         {/* ── STATUS ─────────────────────────────────── */}
         {(isPending || (!isVerified && !isPending) || isNewAccount) && (
           <div style={{ marginBottom: "2.75rem" }}>
@@ -303,7 +308,7 @@ export default function BizDashboard() {
                       <Search className="w-4.5 h-4.5" style={{ color: PURPLE }} />
                     </div>
                     <div>
-                      <p className="text-base font-black text-foreground">Talent Explorer</p>
+                      <p className="text-base font-black text-foreground">Find Workers</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: SUCCESS }} />
                         <span className="text-[10px]" style={{ color: TEXT_MUTED }}>Active in your region</span>
@@ -323,7 +328,7 @@ export default function BizDashboard() {
           {/* Secondary row: Sent Offers + Verification */}
           <div className="grid grid-cols-2 gap-3">
             <QuickAction href="/biz/offers" icon={Send} label="Sent Offers" sub={total > 0 ? "Track your outreach" : "No outreach yet"} iconColor="#60A5FA" />
-            <QuickAction href="/biz/verification" icon={ShieldCheck} label="Verification" sub={isVerified ? "Verified" : "Required for full access"} iconColor={isVerified ? SUCCESS : "#A1A1A1"} />
+            <QuickAction href="/biz/verification" icon={ShieldCheck} label="Business Verification" sub={isVerified ? "Verified" : "Required for full access"} iconColor={isVerified ? SUCCESS : "#A1A1A1"} />
           </div>
         </div>
 
@@ -339,7 +344,7 @@ export default function BizDashboard() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2.5 mb-2">
-                  <p className="text-base font-black text-foreground">Live GUBER Drops</p>
+                  <p className="text-base font-black text-foreground">Sponsor Cash Drops</p>
                   <span className="text-[8px] px-1.5 py-0.5 rounded font-bold tracking-[0.18em] uppercase" style={{ background: "rgba(198,168,92,0.07)", color: GOLD_DK, border: `1px solid rgba(198,168,92,0.16)` }}>
                     NEW
                   </span>

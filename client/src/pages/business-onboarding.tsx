@@ -12,6 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Building2, ChevronLeft, Upload, Shield } from "lucide-react";
 import type { BusinessProfile } from "@shared/schema";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const INDUSTRIES = [
   "Insurance", "Property Management", "Survey & Inspection", "Automotive",
@@ -41,6 +45,7 @@ export default function BusinessOnboarding() {
   });
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   useEffect(() => {
     if (existing) {
@@ -208,13 +213,50 @@ export default function BusinessOnboarding() {
         </div>
 
         <Button
-          onClick={() => saveMutation.mutate()}
+          onClick={() => existing ? saveMutation.mutate() : setConfirmSubmitOpen(true)}
           disabled={saveMutation.isPending || !form.companyName}
           className="w-full h-11 font-display tracking-wider rounded-xl bg-primary text-primary-foreground"
           data-testid="button-save-business"
         >
           {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : existing ? "UPDATE BUSINESS PROFILE" : "CREATE BUSINESS ACCOUNT"}
         </Button>
+
+        <AlertDialog open={confirmSubmitOpen} onOpenChange={setConfirmSubmitOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Convert to Business Account?</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <p>This moves your account into the GUBER Business system.</p>
+                  <p>If approved, your account will lose access to the regular personal side, including:</p>
+                  <ul className="list-disc list-inside space-y-1 pl-1">
+                    <li>Cash Drops participation</li>
+                    <li>Work / earn features</li>
+                    <li>Personal user tools</li>
+                  </ul>
+                  <p>Business accounts are for:</p>
+                  <ul className="list-disc list-inside space-y-1 pl-1">
+                    <li>Hiring workers</li>
+                    <li>Sponsoring cash drops</li>
+                    <li>Managing campaigns</li>
+                    <li>Reviewing field work and business data</li>
+                  </ul>
+                  <p>To continue using personal features, create a separate personal account.</p>
+                  <p className="font-medium text-foreground">This should be treated as permanent once approved.</p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-stay-personal-onboarding">Stay Personal</AlertDialogCancel>
+              <AlertDialogAction
+                data-testid="button-confirm-biz-create"
+                onClick={() => saveMutation.mutate()}
+              >
+                Continue to Business Setup
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="rounded-xl border border-white/[0.06] bg-muted/10 p-4 space-y-2">
           <p className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-widest">What you get</p>

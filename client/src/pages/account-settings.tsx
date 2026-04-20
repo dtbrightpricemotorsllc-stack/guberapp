@@ -18,6 +18,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Sun, Moon, Fingerprint } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTheme } from "@/lib/theme-context";
 import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled, performBiometricAuth } from "@/lib/biometric";
 
@@ -44,6 +48,7 @@ export default function AccountSettings() {
   const { theme, setTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [bizConvertOpen, setBizConvertOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -371,12 +376,51 @@ export default function AccountSettings() {
               GUBER Business Mode
             </h3>
             <p className="text-[11px] text-muted-foreground leading-relaxed">Your business access has been approved. Complete setup to activate your Business Portal.</p>
-            <Link href="/business-onboarding">
-              <Button variant="outline" className="w-full border-border/30 font-display text-sm gap-2" data-testid="button-switch-to-business">
-                <Building2 className="w-4 h-4" />
-                Complete Business Setup
-              </Button>
-            </Link>
+            <Button
+              variant="outline"
+              className="w-full border-border/30 font-display text-sm gap-2"
+              data-testid="button-switch-to-business"
+              onClick={() => setBizConvertOpen(true)}
+            >
+              <Building2 className="w-4 h-4" />
+              Complete Business Setup
+            </Button>
+            <AlertDialog open={bizConvertOpen} onOpenChange={setBizConvertOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Convert to Business Account?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-3 text-sm text-muted-foreground">
+                      <p>This moves your account into the GUBER Business system.</p>
+                      <p>If approved, your account will lose access to the regular personal side, including:</p>
+                      <ul className="list-disc list-inside space-y-1 pl-1">
+                        <li>Cash Drops participation</li>
+                        <li>Work / earn features</li>
+                        <li>Personal user tools</li>
+                      </ul>
+                      <p>Business accounts are for:</p>
+                      <ul className="list-disc list-inside space-y-1 pl-1">
+                        <li>Hiring workers</li>
+                        <li>Sponsoring cash drops</li>
+                        <li>Managing campaigns</li>
+                        <li>Reviewing field work and business data</li>
+                      </ul>
+                      <p>To continue using personal features, create a separate personal account.</p>
+                      <p className="font-medium text-foreground">This should be treated as permanent once approved.</p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-stay-personal">Stay Personal</AlertDialogCancel>
+                  <AlertDialogAction
+                    data-testid="button-continue-biz-setup"
+                    onClick={() => setLocation("/business-onboarding")}
+                  >
+                    Continue to Business Setup
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         ) : (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
