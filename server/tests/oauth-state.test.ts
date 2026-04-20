@@ -478,6 +478,115 @@ describe("Google OAuth returnTo — end-to-end flow (start → callback)", () =>
     expect(callbackRes.body.returnTo).toBeNull();
   });
 
+  it("returns isNative=true when OAuth flow is started with ?source=native", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(true);
+  });
+
+  it("returns isNative=false when OAuth flow is started without ?source=native", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(false);
+  });
+
+  it("returns isNative=false when source param is something other than 'native'", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?source=web")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(false);
+  });
+
+  it("encodes native=true in the state payload when ?source=native is set", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
+    expect(decoded.native).toBe(true);
+    expect(typeof decoded.n).toBe("string");
+    expect(decoded.n.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("encodes native=false in the state payload when ?source=native is not set", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
+    expect(decoded.native).toBe(false);
+    expect(typeof decoded.n).toBe("string");
+    expect(decoded.n.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("encodes both native=true and returnTo together in the state payload", async () => {
+    const app = buildReturnToApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?source=native&returnTo=%2Fwallet")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
+    expect(decoded.native).toBe(true);
+    expect(decoded.returnTo).toBe("/wallet");
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(true);
+    expect(callbackRes.body.returnTo).toBe("/wallet");
+  });
+
   it("includes returnTo in the /auth-success redirect URL produced by the callback", async () => {
     const app = express();
     app.use(
