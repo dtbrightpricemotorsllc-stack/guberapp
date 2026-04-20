@@ -1749,14 +1749,30 @@ export async function registerRoutes(
       const jwtToken = generateJWT(user);
       const returnTo = stateResult.returnTo;
       if (stateResult.isNative) {
-        const nativeUrl = returnTo
+        // guber:// custom URI (secondary attempt, belt-and-suspenders for Chrome Custom Tabs)
+        const guberUrl = returnTo
           ? `guber://auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
           : `guber://auth-success?token=${encodeURIComponent(jwtToken)}`;
+
+        // intent:// URI — intercepted by the Android OS before the browser, so it works in
+        // Samsung Browser, Chrome, Firefox, and every other Android browser.  The embedded
+        // S.browser_fallback_url sends the user to the Play Store when the app is absent.
+        const authParams = returnTo
+          ? `auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
+          : `auth-success?token=${encodeURIComponent(jwtToken)}`;
+        const playStoreUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.guber.app");
+        const intentUrl = `intent://${authParams}#Intent;scheme=guber;package=com.guber.app;S.browser_fallback_url=${playStoreUrl};end`;
+
+        // intent:// without the Play Store fallback — used by the retry button so that if
+        // the retry also fails the HTML store state is shown instead of bouncing to the store.
+        const intentUrlNoFallback = `intent://${authParams}#Intent;scheme=guber;package=com.guber.app;end`;
+
         console.log(`[GUBER auth] Google auth complete (native) — userId=${user.id} returnTo=${returnTo || "none"}`);
         // Chrome Custom Tab blocks HTTP 302 redirects to custom URI schemes (guber://).
-        // Serving an HTML page that navigates via JS bypasses this restriction.
-        // A 2.5 s fallback detects when the app is not installed and shows a helpful
-        // message plus a Play Store link instead of leaving the user on a black screen.
+        // Serving an HTML bridge page that navigates via JS bypasses this restriction.
+        // intent:// is intercepted by Android OS before the browser, working across all
+        // Android browsers including Samsung Browser which does not fire pagehide/visibilitychange.
+        // A two-stage fallback (retry → store) is shown if the app cannot be opened.
         const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -1765,37 +1781,72 @@ export async function registerRoutes(
   <title>Opening Guber…</title>
   <style>
     html,body{margin:0;padding:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100%}
-    #fallback{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;box-sizing:border-box;text-align:center}
-    #fallback h1{font-size:22px;font-weight:700;margin:0 0 12px}
-    #fallback p{font-size:15px;color:#aaa;margin:0 0 28px;line-height:1.5}
-    #fallback a{display:inline-block;background:#fff;color:#000;font-weight:600;font-size:15px;text-decoration:none;padding:14px 28px;border-radius:999px}
-    #fallback a:active{opacity:.8}
+    .state{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;box-sizing:border-box;text-align:center}
+    .state h1{font-size:22px;font-weight:700;margin:0 0 12px}
+    .state p{font-size:15px;color:#aaa;margin:0 0 28px;line-height:1.5}
+    .state button,.state a{display:inline-block;background:#fff;color:#000;font-weight:600;font-size:15px;text-decoration:none;padding:14px 28px;border-radius:999px;border:none;cursor:pointer}
+    .state button:active,.state a:active{opacity:.8}
   </style>
 </head>
 <body>
-  <div id="fallback">
+  <div id="retry-state" class="state">
+    <h1>Having trouble opening Guber?</h1>
+    <p>Tap the button below to try opening the app again.</p>
+    <button id="retry-btn">Open Guber</button>
+  </div>
+  <div id="store-state" class="state">
     <h1>Guber isn't installed</h1>
     <p>It looks like the Guber app isn't on this device yet.<br>Download it from the Play Store to continue.</p>
     <a href="https://play.google.com/store/apps/details?id=com.guber.app" id="store-link">Get Guber on Google Play</a>
   </div>
   <script>
     (function () {
-      var deepLink = ${JSON.stringify(nativeUrl)};
-      var TIMEOUT_MS = 2500;
+      var intentUrl = ${JSON.stringify(intentUrl)};
+      var intentUrlNoFallback = ${JSON.stringify(intentUrlNoFallback)};
+      var guberUrl = ${JSON.stringify(guberUrl)};
+      var TIMEOUT_MS = 4000;
+      var RETRY_TIMEOUT_MS = 3000;
       var gone = false;
 
-      function onPageHide() { gone = true; }
-      window.addEventListener('pagehide', onPageHide);
+      function markGone() { gone = true; }
+      window.addEventListener('pagehide', markGone);
+      window.addEventListener('blur', markGone);
       document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'hidden') gone = true;
       });
 
-      window.location.replace(deepLink);
+      // Primary attempt: intent:// — handled by Android OS, works in all browsers.
+      window.location.replace(intentUrl);
 
+      // Belt-and-suspenders: also try guber:// after a short gap for Chrome Custom Tabs
+      // that handle the custom scheme directly before the intent can resolve.
       setTimeout(function () {
-        window.removeEventListener('pagehide', onPageHide);
+        if (!gone) { window.location.replace(guberUrl); }
+      }, 500);
+
+      // After TIMEOUT_MS, if we haven't detected the app opened, show the retry state.
+      setTimeout(function () {
+        window.removeEventListener('pagehide', markGone);
+        window.removeEventListener('blur', markGone);
         if (!gone) {
-          document.getElementById('fallback').style.display = 'flex';
+          document.getElementById('retry-state').style.display = 'flex';
+
+          document.getElementById('retry-btn').addEventListener('click', function () {
+            gone = false;
+            // Re-bind detection listeners so the retry attempt can also detect handoff.
+            window.addEventListener('pagehide', markGone);
+            window.addEventListener('blur', markGone);
+            window.location.replace(intentUrlNoFallback);
+            // After another wait, escalate to the store state.
+            setTimeout(function () {
+              window.removeEventListener('pagehide', markGone);
+              window.removeEventListener('blur', markGone);
+              if (!gone) {
+                document.getElementById('retry-state').style.display = 'none';
+                document.getElementById('store-state').style.display = 'flex';
+              }
+            }, RETRY_TIMEOUT_MS);
+          });
         }
       }, TIMEOUT_MS);
     })();
