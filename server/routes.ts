@@ -1606,35 +1606,53 @@ export async function registerRoutes(
   app.get("/api/auth/google", handleGoogleAuthStart);
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
-    const stateResult = validateOAuthState(req);
+    console.log(`[GUBER auth] Google callback received — query keys: ${Object.keys(req.query).join(", ")}`);
+    const stateResult = validateOAuthState(req, res); // pass res so cookie is cleared
     if (!stateResult.valid) {
+      console.warn(`[GUBER auth] Google callback rejected: ${stateResult.reason}`);
       return res.redirect(`/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`);
     }
     const code = stateResult.code;
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return res.redirect("/login?error=not_configured");
+    if (!clientId || !clientSecret) {
+      console.error("[GUBER auth] Google callback — GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured");
+      return res.redirect("/login?error=not_configured");
+    }
     try {
       const redirectUri = `${getBaseUrl(req)}/api/auth/google/callback`;
+      console.log(`[GUBER auth] Google token exchange — redirectUri=${redirectUri}`);
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
       });
       const tokens = await tokenRes.json() as any;
-      if (!tokens.access_token) return res.redirect("/login?error=token_failed");
+      if (!tokens.access_token) {
+        console.error("[GUBER auth] Google token exchange failed — no access_token in response:", JSON.stringify(tokens).slice(0, 200));
+        return res.redirect("/login?error=token_failed");
+      }
+      console.log("[GUBER auth] Google token exchange succeeded");
       const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
       const googleUser = await userInfoRes.json() as any;
-      if (!googleUser.sub || !googleUser.email) return res.redirect("/login?error=no_user_info");
+      if (!googleUser.sub || !googleUser.email) {
+        console.error("[GUBER auth] Google userinfo missing sub or email:", JSON.stringify(googleUser).slice(0, 200));
+        return res.redirect("/login?error=no_user_info");
+      }
+      console.log(`[GUBER auth] Google userinfo received — email=${googleUser.email}`);
       let user = await storage.getUserByGoogleSub(googleUser.sub);
       if (!user) {
         user = await storage.getUserByEmail(googleUser.email);
         if (user) {
+          console.log(`[GUBER auth] Google login — existing email account linked to Google (userId=${user.id})`);
           await storage.updateUser(user.id, { googleSub: googleUser.sub, authProvider: "google" });
           user = (await storage.getUser(user.id))!;
         }
+      } else {
+        console.log(`[GUBER auth] Google login — returning user found (userId=${user.id})`);
       }
       if (!user) {
+        console.log(`[GUBER auth] Google login — creating new account for email=${googleUser.email}`);
         const baseUsername = (googleUser.email.split("@")[0] || "user").replace(/[^a-z0-9_]/gi, "").toLowerCase();
         let username = baseUsername;
         let suffix = 1;
@@ -1720,22 +1738,30 @@ export async function registerRoutes(
         }
       }
 
-      if (user.banned) return res.redirect("/login?error=banned");
-      if (user.suspended) return res.redirect("/login?error=suspended");
+      if (user.banned) {
+        console.warn(`[GUBER auth] Google login blocked — user ${user.id} is banned`);
+        return res.redirect("/login?error=banned");
+      }
+      if (user.suspended) {
+        console.warn(`[GUBER auth] Google login blocked — user ${user.id} is suspended`);
+        return res.redirect("/login?error=suspended");
+      }
       const jwtToken = generateJWT(user);
       const returnTo = stateResult.returnTo;
       if (stateResult.isNative) {
         const nativeUrl = returnTo
           ? `guber://auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
           : `guber://auth-success?token=${encodeURIComponent(jwtToken)}`;
+        console.log(`[GUBER auth] Google auth complete (native) — userId=${user.id} returnTo=${returnTo || "none"}`);
         return res.redirect(nativeUrl);
       }
       const authSuccessUrl = returnTo
         ? `/auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
         : `/auth-success?token=${encodeURIComponent(jwtToken)}`;
+      console.log(`[GUBER auth] Google auth complete (web) — userId=${user.id} destination=${authSuccessUrl.split("?")[0]} returnTo=${returnTo || "none"}`);
       res.redirect(authSuccessUrl);
     } catch (err: any) {
-      console.error("Google OAuth error:", err);
+      console.error("[GUBER auth] Google OAuth error:", err?.message || err);
       res.redirect("/login?error=google_failed");
     }
   });
