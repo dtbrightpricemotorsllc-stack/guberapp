@@ -422,7 +422,7 @@ export default function AccountSettings() {
                 placeholder="Tell us what's on your mind..."
                 value={feedbackMessage}
                 onChange={(e) => setFeedbackMessage(e.target.value)}
-                className="min-h-[90px] text-sm border-border/20 resize-none"
+                className="min-h-[90px] max-h-[120px] text-sm border-border/20 resize-none"
                 data-testid="textarea-feedback-message"
               />
               <Button

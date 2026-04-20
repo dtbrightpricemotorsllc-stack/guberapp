@@ -4573,7 +4573,18 @@ data-testid={`button-grant-business-${u.id}`}
 </Button>
 )}
 {(u as any).accountType === "pending_business" && (
-<p className="text-[10px] text-blue-400/70 font-display text-center">🏢 Business access granted — awaiting setup</p>
+<div className="space-y-1">
+  <p className="text-[10px] text-blue-400/70 font-display text-center">🏢 Business access granted — awaiting setup</p>
+  <Button
+    size="sm"
+    className="h-7 text-[10px] font-display font-bold w-full rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20"
+    onClick={() => updateUserMutation.mutate({ id: u.id, data: { accountType: "business", role: "business" } })}
+    disabled={updateUserMutation.isPending}
+    data-testid={`button-force-activate-business-${u.id}`}
+  >
+    ✅ Force Activate Business
+  </Button>
+</div>
 )}
 
 <UserDocHistory userId={u.id} />

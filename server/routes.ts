@@ -6835,7 +6835,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
-    const adminAllowed = ["role", "tier", "trustScore", "day1OG", "aiOrNotCredits", "aiOrNotUnlimitedText",
+    const adminAllowed = ["role", "accountType", "tier", "trustScore", "day1OG", "aiOrNotCredits", "aiOrNotUnlimitedText",
                           "isAvailable", "fullName", "email", "username",
                           "suspended", "banned", "idVerified", "selfieVerified", "credentialVerified", "profileComplete",
                           "backgroundCheckStatus", "backgroundCheckRestrictions"];
