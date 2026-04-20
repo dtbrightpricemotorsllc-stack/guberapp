@@ -11,6 +11,7 @@ import InstallPrompt from "@/components/install-prompt";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
 import {
   lockBiometricSession,
   getBiometricEnabled,
@@ -269,6 +270,9 @@ function NativeDeepLinkHandler() {
         if (parsed.protocol === "guber:") {
           const path = "/" + parsed.host + (parsed.search || "");
           if (path.startsWith("/auth-success")) {
+            // Close the Chrome Custom Tab so it doesn't linger behind the app.
+            // Do this before setLocation so the WebView is foregrounded first.
+            Browser.close().catch(() => {});
             setLocation("/auth-success" + (parsed.search || ""));
           }
           return;

@@ -67,7 +67,9 @@ describe("Google OAuth state validation (production handlers)", () => {
       expect(res.headers.location).toContain("client_id=test-client-id");
 
       const state = extractStateFromRedirect(res.headers.location);
-      expect(state).toHaveLength(32);
+      // State is now a base64url-encoded JSON payload — length is >32.
+      expect(typeof state).toBe("string");
+      expect(state.length).toBeGreaterThan(32);
     });
 
     it("should return 503 when GOOGLE_CLIENT_ID is not set", async () => {
@@ -294,65 +296,48 @@ describe("isAllowedReturnTo — returnTo allowlist validation", () => {
     expect(callbackRes.body.success).toBe(true);
   });
 
-  it("does not store disallowed returnTo in session during OAuth flow", async () => {
+  it("disallowed returnTo is excluded from the OAuth state payload (callback receives null)", async () => {
     process.env.GOOGLE_CLIENT_ID = "test-client-id";
 
     const app2 = express();
-    app2.use(
-      session({
-        secret: "test-secret",
-        resave: false,
-        saveUninitialized: false,
-        cookie: { secure: false },
-      })
-    );
-
-    let capturedReturnTo: string | null = "NOT_SET";
-
+    app2.use(session({ secret: "test-secret", resave: false, saveUninitialized: false, cookie: { secure: false } }));
     app2.get("/api/auth/google", handleGoogleAuthStart);
-    app2.get("/api/auth/google/callback/check-return", (req, res) => {
-      capturedReturnTo = (req.session as any).oauthReturnTo ?? null;
-      res.json({ oauthReturnTo: capturedReturnTo });
+    app2.get("/api/auth/google/callback", (req, res) => {
+      const result = validateOAuthState(req, res);
+      if (!result.valid) return res.redirect("/login?error=invalid_state");
+      res.json({ returnTo: result.returnTo });
     });
 
     const agent = supertest.agent(app2);
-
-    await agent.get("/api/auth/google?returnTo=%2Fevil-redirect").expect(302);
-
-    const checkRes = await agent
-      .get("/api/auth/google/callback/check-return")
+    const initRes = await agent.get("/api/auth/google?returnTo=%2Fevil-redirect").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
       .expect(200);
 
-    expect(checkRes.body.oauthReturnTo).toBeNull();
+    expect(callbackRes.body.returnTo).toBeNull();
   });
 
-  it("stores allowed returnTo in session during OAuth flow", async () => {
+  it("allowed returnTo is embedded in the OAuth state payload (callback receives it)", async () => {
     process.env.GOOGLE_CLIENT_ID = "test-client-id";
 
     const app3 = express();
-    app3.use(
-      session({
-        secret: "test-secret",
-        resave: false,
-        saveUninitialized: false,
-        cookie: { secure: false },
-      })
-    );
-
+    app3.use(session({ secret: "test-secret", resave: false, saveUninitialized: false, cookie: { secure: false } }));
     app3.get("/api/auth/google", handleGoogleAuthStart);
-    app3.get("/api/auth/google/callback/check-return", (req, res) => {
-      res.json({ oauthReturnTo: (req.session as any).oauthReturnTo ?? null });
+    app3.get("/api/auth/google/callback", (req, res) => {
+      const result = validateOAuthState(req, res);
+      if (!result.valid) return res.redirect("/login?error=invalid_state");
+      res.json({ returnTo: result.returnTo });
     });
 
     const agent = supertest.agent(app3);
-
-    await agent.get("/api/auth/google?returnTo=%2Fdashboard").expect(302);
-
-    const checkRes = await agent
-      .get("/api/auth/google/callback/check-return")
+    const initRes = await agent.get("/api/auth/google?returnTo=%2Fdashboard").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
       .expect(200);
 
-    expect(checkRes.body.oauthReturnTo).toBe("/dashboard");
+    expect(callbackRes.body.returnTo).toBe("/dashboard");
   });
 });
 
