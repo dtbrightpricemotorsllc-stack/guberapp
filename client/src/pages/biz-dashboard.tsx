@@ -225,9 +225,12 @@ export default function BizDashboard() {
           </div>
         </div>
 
-        {/* Separation note */}
-        <p className="text-[10px] leading-relaxed mb-8 -mt-6" style={{ color: TEXT_MUTED }} data-testid="text-biz-separation-note">
+        {/* Separation notes */}
+        <p className="text-[10px] leading-relaxed -mt-6" style={{ color: TEXT_MUTED }} data-testid="text-biz-separation-note">
           Business accounts are separate from personal accounts and cannot access worker-side or cash drop participant features.
+        </p>
+        <p className="text-[10px] leading-relaxed mb-8 mt-1" style={{ color: TEXT_MUTED }} data-testid="text-biz-purpose-note">
+          This account is built for hiring and growth — not participation.
         </p>
 
         {/* ── STATUS ─────────────────────────────────── */}

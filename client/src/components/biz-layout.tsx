@@ -75,7 +75,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
               <p
                 key={`label-${idx}`}
                 className="px-3 pt-2 pb-1.5"
-                style={{ color: "#3F3F46", fontSize: "9px", fontWeight: 700, letterSpacing: "0.2em" }}
+                style={{ color: "#52525B", fontSize: "9px", fontWeight: 700, letterSpacing: "0.2em" }}
               >
                 {item.sectionLabel}
               </p>
@@ -89,7 +89,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left group relative"
                 style={{
                   background: active ? "rgba(168,138,67,0.10)" : "transparent",
-                  color: active ? GOLD : "#52525B",
+                  color: active ? GOLD : "#A1A1AA",
                 }}
                 data-testid={`biz-nav-${label.toLowerCase().replace(/\s/g, "-")}`}
               >
@@ -116,7 +116,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
         <Link href="/dashboard">
           <button
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left hover:bg-white/[0.02]"
-            style={{ color: "#3F3F46" }}
+            style={{ color: "#71717A" }}
             data-testid="biz-nav-consumer-app"
           >
             <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 rotate-180" />
@@ -126,7 +126,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
         <button
           onClick={() => logout()}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left hover:bg-red-500/[0.04]"
-          style={{ color: "#3F3F46" }}
+          style={{ color: "#71717A" }}
           data-testid="biz-nav-logout"
         >
           <LogOut className="w-3.5 h-3.5 flex-shrink-0" />

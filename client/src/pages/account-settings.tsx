@@ -362,6 +362,7 @@ export default function AccountSettings() {
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
             <h3 className="font-display font-semibold text-sm">Business Portal</h3>
             <p className="text-[11px] text-muted-foreground leading-relaxed">Manage your business profile, post jobs in bulk, and access business-only tools.</p>
+            <p className="text-[10px] text-muted-foreground" data-testid="text-biz-personal-reminder">Personal features require a separate personal account.</p>
             <Link href="/biz/dashboard">
               <Button variant="outline" className="w-full border-border/30 font-display text-sm gap-2" data-testid="button-go-biz-portal">
                 <Building2 className="w-4 h-4" />
@@ -376,6 +377,7 @@ export default function AccountSettings() {
               GUBER Business Mode
             </h3>
             <p className="text-[11px] text-muted-foreground leading-relaxed">Your business access has been approved. Complete setup to activate your Business Portal.</p>
+            <p className="text-[10px] text-muted-foreground" data-testid="text-pending-biz-personal-reminder">Personal features require a separate personal account.</p>
             <Button
               variant="outline"
               className="w-full border-border/30 font-display text-sm gap-2"
