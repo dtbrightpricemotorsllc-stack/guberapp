@@ -7669,6 +7669,10 @@ YOUR BEHAVIOR:
       if (!content || typeof content !== "string" || !content.trim()) {
         return res.status(400).json({ message: "content is required" });
       }
+      const existing = await storage.getPinnedFindings(req.session.userId!);
+      if (existing.length >= 50) {
+        return res.status(400).json({ message: "Maximum of 50 pinned findings reached. Remove one before adding another." });
+      }
       const finding = await storage.createPinnedFinding(
         req.session.userId!,
         content.trim(),
