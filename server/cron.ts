@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
 import { and, eq, lt, lte, isNull, isNotNull, inArray, desc, notInArray } from "drizzle-orm";
 import { storage } from "./storage";
@@ -492,6 +492,13 @@ async function autoExpireCashDrops(): Promise<number> {
   return toExpire.length;
 }
 
+async function pruneExpiredOAuthNonces(): Promise<number> {
+  const result = await pool.query(
+    `DELETE FROM oauth_used_nonces WHERE expires_at < NOW()`
+  );
+  return result.rowCount ?? 0;
+}
+
 export function startCron() {
   cron.schedule("*/2 * * * *", async () => {
     try {
@@ -528,6 +535,9 @@ export function startCron() {
         .where(and(eq(observations.status, "purchasing"), lt(observations.purchasedAt!, stuckCutoff)))
         .returning();
       if (recovered.length > 0) console.log(`[cron] recovered ${recovered.length} stuck purchasing observation(s)`);
+
+      const prunedNonces = await pruneExpiredOAuthNonces();
+      if (prunedNonces > 0) console.log(`[cron] pruned ${prunedNonces} expired OAuth nonce(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }

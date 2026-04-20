@@ -8,6 +8,7 @@ import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChec
 import { seedDemoAccounts } from "./seed-demo";
 import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
+import { setNonceStore, PgNonceStore } from "./oauth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -161,6 +162,27 @@ app.use((req, res, next) => {
     );
     CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire");
   `).catch(e => console.error("[sessions] table setup error:", e));
+
+  const nonceTableReady = await pool.query(`
+    CREATE TABLE IF NOT EXISTS oauth_used_nonces (
+      nonce TEXT PRIMARY KEY,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_used_nonces_expires_at ON oauth_used_nonces (expires_at);
+  `).then(() => true).catch(e => {
+    console.error("[oauth] nonce table setup error:", e);
+    return false;
+  });
+
+  if (nonceTableReady) {
+    setNonceStore(new PgNonceStore(pool));
+    console.log("[oauth] Nonce store switched to PostgreSQL backend.");
+  } else if (process.env.NODE_ENV === "production") {
+    console.error("[oauth] FATAL: Could not create oauth_used_nonces table. Refusing to start without durable replay protection.");
+    process.exit(1);
+  } else {
+    console.warn("[oauth] Falling back to in-memory nonce store (dev only — not suitable for production).");
+  }
 
   await pool.query(`
     ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS ein text;

@@ -19,7 +19,7 @@ function buildTestApp() {
   app.get("/api/auth/google", handleGoogleAuthStart);
 
   app.get("/api/auth/google/callback", async (req, res) => {
-    const stateResult = validateOAuthState(req, res);
+    const stateResult = await validateOAuthState(req, res);
     if (!stateResult.valid) {
       return res.redirect(
         `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`
@@ -302,8 +302,8 @@ describe("isAllowedReturnTo — returnTo allowlist validation", () => {
     const app2 = express();
     app2.use(session({ secret: "test-secret", resave: false, saveUninitialized: false, cookie: { secure: false } }));
     app2.get("/api/auth/google", handleGoogleAuthStart);
-    app2.get("/api/auth/google/callback", (req, res) => {
-      const result = validateOAuthState(req, res);
+    app2.get("/api/auth/google/callback", async (req, res) => {
+      const result = await validateOAuthState(req, res);
       if (!result.valid) return res.redirect("/login?error=invalid_state");
       res.json({ returnTo: result.returnTo });
     });
@@ -324,8 +324,8 @@ describe("isAllowedReturnTo — returnTo allowlist validation", () => {
     const app3 = express();
     app3.use(session({ secret: "test-secret", resave: false, saveUninitialized: false, cookie: { secure: false } }));
     app3.get("/api/auth/google", handleGoogleAuthStart);
-    app3.get("/api/auth/google/callback", (req, res) => {
-      const result = validateOAuthState(req, res);
+    app3.get("/api/auth/google/callback", async (req, res) => {
+      const result = await validateOAuthState(req, res);
       if (!result.valid) return res.redirect("/login?error=invalid_state");
       res.json({ returnTo: result.returnTo });
     });
@@ -355,8 +355,8 @@ describe("Google OAuth returnTo — end-to-end flow (start → callback)", () =>
 
     app.get("/api/auth/google", handleGoogleAuthStart);
 
-    app.get("/api/auth/google/callback", (req, res) => {
-      const stateResult = validateOAuthState(req, res);
+    app.get("/api/auth/google/callback", async (req, res) => {
+      const stateResult = await validateOAuthState(req, res);
       if (!stateResult.valid) {
         return res.redirect(
           `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`
@@ -600,8 +600,8 @@ describe("Google OAuth returnTo — end-to-end flow (start → callback)", () =>
 
     app.get("/api/auth/google", handleGoogleAuthStart);
 
-    app.get("/api/auth/google/callback", (req, res) => {
-      const stateResult = validateOAuthState(req, res);
+    app.get("/api/auth/google/callback", async (req, res) => {
+      const stateResult = await validateOAuthState(req, res);
       if (!stateResult.valid) {
         return res.redirect("/login?error=invalid_state");
       }
@@ -656,8 +656,8 @@ describe("Google OAuth cookie-fallback path (session-less native callback)", () 
       })
     );
     app.get("/api/auth/google", handleGoogleAuthStart);
-    app.get("/api/auth/google/callback", (req, res) => {
-      const stateResult = validateOAuthState(req, res);
+    app.get("/api/auth/google/callback", async (req, res) => {
+      const stateResult = await validateOAuthState(req, res);
       if (!stateResult.valid) {
         return res.redirect(
           `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`
@@ -967,8 +967,8 @@ describe("Google OAuth callback — native vs web redirect branching", () => {
 
     app.get("/api/auth/google", handleGoogleAuthStart);
 
-    app.get("/api/auth/google/callback", (req, res) => {
-      const stateResult = validateOAuthState(req, res);
+    app.get("/api/auth/google/callback", async (req, res) => {
+      const stateResult = await validateOAuthState(req, res);
       if (!stateResult.valid) {
         return res.redirect(
           `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`

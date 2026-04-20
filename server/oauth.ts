@@ -72,37 +72,110 @@ const OAUTH_STATE_COOKIE = "guber_oauth_state";
  */
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-/**
- * Server-side consumed-nonce registry for the cookie-fallback path.
- *
- * When a callback is validated via the `guber_oauth_state` cookie (i.e. the
- * session was lost — common in Android Chrome Custom Tab flows), we record the
- * nonce here so that a second request carrying the same cookie is rejected even
- * if the client ignored the `clearCookie` Set-Cookie directive.
- *
- * The session path does NOT need this: it deletes `req.session.oauthState`
- * immediately, so any replay has nothing to compare against.
- *
- * Entries expire after the same 10-minute window used for the cookie itself and
- * are pruned lazily on each `validateOAuthState` call to avoid unbounded growth.
- *
- * OPERATIONAL NOTE — this store is process-local (in-memory). It works correctly
- * for single-instance deployments. If the app is ever run behind a load balancer
- * with multiple server instances, a replay request that lands on a different
- * instance than the first callback will not be detected. In that scenario,
- * migrate this store to a shared TTL-key store (e.g. Redis SETNX) to make
- * replay protection durable across the fleet.
- */
-const usedCookieFallbackNonces = new Map<string, number>();
+// ---------------------------------------------------------------------------
+// Consumed-nonce store — pluggable for durability across restarts / instances
+// ---------------------------------------------------------------------------
 
-function pruneExpiredNonces(): void {
-  const now = Date.now();
-  for (const [nonce, expiry] of usedCookieFallbackNonces) {
-    if (now >= expiry) {
-      usedCookieFallbackNonces.delete(nonce);
+/**
+ * Interface for the server-side consumed-nonce registry.
+ *
+ * The default implementation (`InMemoryNonceStore`) is process-local and
+ * used in tests and development. For production, call `setNonceStore` with a
+ * `PgNonceStore` instance so that nonces survive server restarts and are
+ * visible across all instances in a load-balanced fleet.
+ */
+export interface NonceStore {
+  /**
+   * Atomically marks `nonce` as consumed for `ttlMs` milliseconds.
+   *
+   * Returns `true` when the nonce was fresh (first use) and has now been
+   * recorded; returns `false` when the nonce was already present (replay).
+   */
+  consumeIfFresh(nonce: string, ttlMs: number): Promise<boolean>;
+}
+
+/**
+ * In-memory nonce store — default, process-local.
+ *
+ * Works correctly in a single-process deployment and in automated tests.
+ * Consumed nonces are lost on restart and not shared across instances.
+ */
+class InMemoryNonceStore implements NonceStore {
+  private readonly map = new Map<string, number>(); // nonce → expiry timestamp
+
+  async consumeIfFresh(nonce: string, ttlMs: number): Promise<boolean> {
+    const now = Date.now();
+    // Lazy pruning of expired entries.
+    for (const [k, exp] of this.map) {
+      if (now >= exp) this.map.delete(k);
     }
+    if (this.map.has(nonce)) return false; // already consumed → replay
+    this.map.set(nonce, now + ttlMs);
+    return true; // fresh
   }
 }
+
+/**
+ * Minimal Pool-like interface so oauth.ts does not depend on the `pg` module
+ * directly. `pg.Pool` satisfies this interface.
+ */
+export interface DbPool {
+  query(sql: string, values?: unknown[]): Promise<{ rowCount: number | null }>;
+}
+
+/**
+ * PostgreSQL-backed nonce store.
+ *
+ * Uses an `oauth_used_nonces` table with an `INSERT … ON CONFLICT DO NOTHING`
+ * to atomically mark a nonce as consumed (equivalent to Redis SETNX). If two
+ * requests race with the same nonce, only one INSERT succeeds; the other gets
+ * `rowCount = 0` and is rejected as a replay.
+ *
+ * The table must be created before this store is used (see server/index.ts).
+ * An index on `expires_at` allows cheap periodic cleanup; `consumeIfFresh`
+ * itself does not prune expired rows — that is handled by a scheduled DELETE
+ * or Postgres TTL, keeping the hot path fast.
+ */
+export class PgNonceStore implements NonceStore {
+  constructor(private readonly pool: DbPool) {}
+
+  async consumeIfFresh(nonce: string, ttlMs: number): Promise<boolean> {
+    const expiresAt = new Date(Date.now() + ttlMs);
+    // Atomically claim the nonce:
+    //   - INSERT on a fresh nonce (never seen)     → rowCount = 1  (fresh)
+    //   - Conflict + existing row already EXPIRED  → UPDATE wins   → rowCount = 1  (fresh — expired entry recycled)
+    //   - Conflict + existing row still valid      → DO NOTHING    → rowCount = 0  (replay)
+    // The DO UPDATE … WHERE clause makes the conditional upsert entirely atomic
+    // in one round-trip, so two concurrent requests with the same nonce cannot
+    // both succeed.
+    const result = await this.pool.query(
+      `INSERT INTO oauth_used_nonces (nonce, expires_at)
+       VALUES ($1, $2)
+       ON CONFLICT (nonce) DO UPDATE
+         SET expires_at = EXCLUDED.expires_at
+         WHERE oauth_used_nonces.expires_at < NOW()`,
+      [nonce, expiresAt],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+}
+
+/** Active nonce store — defaults to in-memory; replaced with PgNonceStore at startup. */
+let activeNonceStore: NonceStore = new InMemoryNonceStore();
+
+/**
+ * Replace the active nonce store.
+ *
+ * Call this once at application startup (after the database table is ready)
+ * to switch from the default in-memory store to a durable, shared store.
+ */
+export function setNonceStore(store: NonceStore): void {
+  activeNonceStore = store;
+}
+
+// ---------------------------------------------------------------------------
+// OAuth state helpers
+// ---------------------------------------------------------------------------
 
 /**
  * OAuth state payload — encoded as base64url JSON and sent to Google as the
@@ -220,15 +293,17 @@ export type StateValidationResult =
  *   2. `guber_oauth_state` cookie — fallback for when the session is dropped
  *      (observed on Samsung Internet and Android Chrome Custom Tab contexts).
  *
- * By embedding `native` and `returnTo` in the state parameter, the server can
- * always emit the correct `guber://` deep link for native flows regardless of
- * whether the session survived.
+ * After a successful validation the nonce is atomically written to the active
+ * `NonceStore` (see `setNonceStore`). If the nonce is already present the
+ * request is rejected as a replay. Using an atomic INSERT ON CONFLICT in the
+ * PostgreSQL-backed store ensures replay protection is durable across server
+ * restarts and load-balanced instances.
  *
  * @param req - Express request from the Google callback route.
  * @param res - Optional Express response; pass to clear the nonce cookie after
  *              reading (recommended for production — makes nonce truly one-time).
  */
-export function validateOAuthState(req: Request, res?: Response): StateValidationResult {
+export async function validateOAuthState(req: Request, res?: Response): Promise<StateValidationResult> {
   const { code, state, error } = req.query as Record<string, string>;
 
   if (error || !code) {
@@ -272,18 +347,7 @@ export function validateOAuthState(req: Request, res?: Response): StateValidatio
   let stateSource: string;
   let stateValid = false;
 
-  // Always prune expired entries and check the consumed-nonce store before
-  // source branching.  This closes the session-first-then-cookie-replay gap:
-  // if a client that received a session-based callback keeps the
-  // guber_oauth_state cookie and re-sends it, the nonce will already be in the
-  // store (recorded when the session callback succeeded) and the replay is
-  // rejected before we even look at the cookie value.
-  pruneExpiredNonces();
-
-  if (usedCookieFallbackNonces.has(payload.n)) {
-    stateSource = "replay";
-    stateValid = false;
-  } else if (sessionNonce) {
+  if (sessionNonce) {
     // Primary: nonce from session vs nonce in decoded payload
     stateSource = "session";
     stateValid = !!(payload.n && payload.n === sessionNonce);
@@ -296,13 +360,21 @@ export function validateOAuthState(req: Request, res?: Response): StateValidatio
     stateValid = false;
   }
 
-  // On any successful validation, record the nonce as consumed so the
-  // guber_oauth_state cookie cannot be replayed — even if the client ignores
-  // the clearCookie directive and re-sends the cookie on a later request.
-  // The TTL mirrors OAUTH_STATE_TTL_MS (same as the cookie maxAge) so entries
-  // expire naturally at the same time the original cookie would have.
+  // On any successful state verification, atomically mark the nonce as
+  // consumed in the shared store.  consumeIfFresh returns false when the
+  // nonce is already present (replay), in which case we reject even though
+  // the state string itself matched.
+  //
+  // Using an atomic INSERT ON CONFLICT (PgNonceStore) ensures that two
+  // concurrent requests carrying the same nonce cannot both succeed, and
+  // that consumed nonces survive server restarts and are visible across all
+  // instances in a load-balanced fleet.
   if (stateValid) {
-    usedCookieFallbackNonces.set(payload.n, Date.now() + OAUTH_STATE_TTL_MS);
+    const fresh = await activeNonceStore.consumeIfFresh(payload.n, OAUTH_STATE_TTL_MS);
+    if (!fresh) {
+      stateSource = "replay";
+      stateValid = false;
+    }
   }
 
   if (!stateValid) {

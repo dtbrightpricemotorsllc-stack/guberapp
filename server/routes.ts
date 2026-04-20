@@ -1607,7 +1607,7 @@ export async function registerRoutes(
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
     console.log(`[GUBER auth] Google callback received — query keys: ${Object.keys(req.query).join(", ")}`);
-    const stateResult = validateOAuthState(req, res); // pass res so cookie is cleared
+    const stateResult = await validateOAuthState(req, res); // pass res so cookie is cleared
     if (!stateResult.valid) {
       console.warn(`[GUBER auth] Google callback rejected: ${stateResult.reason}`);
       return res.redirect(`/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`);
