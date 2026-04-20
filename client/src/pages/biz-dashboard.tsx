@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
@@ -124,6 +124,13 @@ export default function BizDashboard() {
   });
 
   const isLoading = accountLoading || profileLoading;
+
+  // Redirect to onboarding if the profile is a stub (no company name set yet)
+  useEffect(() => {
+    if (!isLoading && profile !== undefined && !profile.companyName) {
+      navigate("/business-onboarding");
+    }
+  }, [isLoading, profile, navigate]);
 
   const avgResponseHrs = useMemo(() => {
     const withLocked = (jobs || []).filter(j => j.lockedAt && j.createdAt);

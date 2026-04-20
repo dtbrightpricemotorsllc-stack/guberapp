@@ -6853,6 +6853,15 @@ export async function registerRoutes(
       finalUser = (await storage.updateUser(id, { aiOrNotCredits: 5 })) ?? user;
     }
 
+    // If admin is force-activating a business account, ensure a stub profile exists
+    // so the user lands on onboarding rather than a broken/empty dashboard
+    if (data.accountType === "business") {
+      const existingProfile = await storage.getBusinessProfile(id);
+      if (!existingProfile) {
+        await storage.createBusinessProfile({ userId: id, companyName: "" });
+      }
+    }
+
     await storage.createAuditLog({
       userId: req.session.userId,
       action: "admin_user_update",
@@ -7930,8 +7939,18 @@ YOUR BEHAVIOR:
 
   // ── BUSINESS PROFILE ──────────────────────────────────────────────────────
   app.get("/api/business/profile", requireAuth, async (req: Request, res: Response) => {
-    const profile = await storage.getBusinessProfile(req.session.userId!);
-    if (!profile) return res.status(404).json({ error: "No business profile" });
+    const userId = req.session.userId!;
+    let profile = await storage.getBusinessProfile(userId);
+    if (!profile) {
+      // For business accounts with no profile yet (e.g. admin force-activated),
+      // auto-create a stub so the frontend always gets valid data to redirect on
+      const requestingUser = await storage.getUser(userId);
+      if (requestingUser?.accountType === "business") {
+        profile = await storage.createBusinessProfile({ userId, companyName: "" });
+      } else {
+        return res.status(404).json({ error: "No business profile" });
+      }
+    }
     res.json(profile);
   });
 

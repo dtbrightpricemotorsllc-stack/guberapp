@@ -213,12 +213,12 @@ export default function BusinessOnboarding() {
         </div>
 
         <Button
-          onClick={() => existing ? saveMutation.mutate() : setConfirmSubmitOpen(true)}
+          onClick={() => existing?.companyName ? saveMutation.mutate() : setConfirmSubmitOpen(true)}
           disabled={saveMutation.isPending || !form.companyName}
           className="w-full h-11 font-display tracking-wider rounded-xl bg-primary text-primary-foreground"
           data-testid="button-save-business"
         >
-          {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : existing ? "UPDATE BUSINESS PROFILE" : "CREATE BUSINESS ACCOUNT"}
+          {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : existing?.companyName ? "UPDATE BUSINESS PROFILE" : "CREATE BUSINESS ACCOUNT"}
         </Button>
 
         <AlertDialog open={confirmSubmitOpen} onOpenChange={setConfirmSubmitOpen}>
