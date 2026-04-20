@@ -859,3 +859,234 @@ describe("Google OAuth cookie-fallback path (session-less native callback)", () 
     expect(callbackRes.body.returnTo).toBe("/dashboard");
   });
 });
+
+describe("Google OAuth callback — native vs web redirect branching", () => {
+  const MOCK_TOKEN = "mock-jwt-token";
+
+  function extractNativeUrl(html: string): URL {
+    const match = /window\.location\.replace\((".*?")\)/.exec(html);
+    if (!match) throw new Error("Could not find window.location.replace call in HTML");
+    const raw = JSON.parse(match[1]) as string;
+    return new URL(raw);
+  }
+
+  function buildBranchingTestApp() {
+    const app = express();
+    app.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+
+    app.get("/api/auth/google", handleGoogleAuthStart);
+
+    app.get("/api/auth/google/callback", (req, res) => {
+      const stateResult = validateOAuthState(req, res);
+      if (!stateResult.valid) {
+        return res.redirect(
+          `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`
+        );
+      }
+
+      const { returnTo, isNative } = stateResult;
+
+      if (isNative) {
+        const nativeUrl = returnTo
+          ? `guber://auth-success?token=${encodeURIComponent(MOCK_TOKEN)}&returnTo=${encodeURIComponent(returnTo)}`
+          : `guber://auth-success?token=${encodeURIComponent(MOCK_TOKEN)}`;
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#000}</style></head><body><script>window.location.replace(${JSON.stringify(nativeUrl)})</script></body></html>`;
+        return res.type("html").send(html);
+      }
+
+      const authSuccessUrl = returnTo
+        ? `/auth-success?token=${encodeURIComponent(MOCK_TOKEN)}&returnTo=${encodeURIComponent(returnTo)}`
+        : `/auth-success?token=${encodeURIComponent(MOCK_TOKEN)}`;
+      res.redirect(authSuccessUrl);
+    });
+
+    return app;
+  }
+
+  let savedClientId: string | undefined;
+
+  beforeAll(() => {
+    savedClientId = process.env.GOOGLE_CLIENT_ID;
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+  });
+
+  afterAll(() => {
+    if (savedClientId === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = savedClientId;
+    }
+  });
+
+  it("native flow → HTML response whose JS redirect starts with guber://", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google?source=native").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(callbackRes.headers["content-type"]).toMatch(/html/);
+    const nativeUrl = extractNativeUrl(callbackRes.text);
+    expect(nativeUrl.protocol).toBe("guber:");
+    expect(nativeUrl.host).toBe("auth-success");
+  });
+
+  it("native flow → guber:// URL contains the issued token", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google?source=native").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    const nativeUrl = extractNativeUrl(callbackRes.text);
+    expect(nativeUrl.searchParams.get("token")).toBe(MOCK_TOKEN);
+  });
+
+  it("native flow with returnTo → guber:// URL contains the returnTo path", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?source=native&returnTo=%2Fwallet")
+      .expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    const nativeUrl = extractNativeUrl(callbackRes.text);
+    expect(nativeUrl.protocol).toBe("guber:");
+    expect(nativeUrl.searchParams.get("returnTo")).toBe("/wallet");
+  });
+
+  it("native flow without returnTo → guber:// URL does not include a returnTo param", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google?source=native").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    const nativeUrl = extractNativeUrl(callbackRes.text);
+    expect(nativeUrl.protocol).toBe("guber:");
+    expect(nativeUrl.searchParams.has("returnTo")).toBe(false);
+  });
+
+  it("web flow → 302 redirect to /auth-success (not guber://)", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    expect(callbackRes.headers.location).toMatch(/^\/auth-success\?/);
+    expect(callbackRes.headers.location).not.toContain("guber://");
+  });
+
+  it("web flow → redirect location contains the issued token", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    const location = callbackRes.headers.location;
+    const url = new URL(location, "http://localhost");
+    expect(url.searchParams.get("token")).toBe(MOCK_TOKEN);
+  });
+
+  it("web flow with returnTo → redirect location includes the returnTo path", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?returnTo=%2Fwallet")
+      .expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    const url = new URL(callbackRes.headers.location, "http://localhost");
+    expect(url.pathname).toBe("/auth-success");
+    expect(url.searchParams.get("returnTo")).toBe("/wallet");
+  });
+
+  it("web flow without returnTo → /auth-success redirect has no returnTo param", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    const url = new URL(callbackRes.headers.location, "http://localhost");
+    expect(url.pathname).toBe("/auth-success");
+    expect(url.searchParams.has("returnTo")).toBe(false);
+  });
+
+  it("source=web (non-native) → 302 redirect to /auth-success (not guber://)", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent.get("/api/auth/google?source=web").expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    expect(callbackRes.headers.location).toMatch(/^\/auth-success\?/);
+    expect(callbackRes.headers.location).not.toContain("guber://");
+  });
+
+  it("native flow with returnTo=/biz/dashboard → guber:// URL encodes full returnTo path", async () => {
+    const app = buildBranchingTestApp();
+    const agent = supertest.agent(app);
+
+    const initRes = await agent
+      .get("/api/auth/google?source=native&returnTo=%2Fbiz%2Fdashboard")
+      .expect(302);
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    const callbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    const nativeUrl = extractNativeUrl(callbackRes.text);
+    expect(nativeUrl.protocol).toBe("guber:");
+    expect(nativeUrl.host).toBe("auth-success");
+    expect(nativeUrl.searchParams.get("returnTo")).toBe("/biz/dashboard");
+  });
+});
