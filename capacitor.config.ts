@@ -14,6 +14,10 @@ const config: CapacitorConfig = {
     },
     GoogleAuth: {
       scopes: ['profile', 'email'],
+      // serverClientId must match the Web Application OAuth Client ID in Google Cloud Console.
+      // This is used by the Android plugin to request an ID token compatible with the backend.
+      // Set GOOGLE_CLIENT_ID in Replit Secrets and run `npx cap sync` to apply.
+      serverClientId: process.env.GOOGLE_CLIENT_ID || '',
       forceCodeForRefreshToken: true,
     },
   },

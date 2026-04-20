@@ -443,6 +443,50 @@ export interface BusinessSignupDeps {
   runBackgroundCheck?: (userId: number, fullName: string) => void;
 }
 
+/**
+ * Verified payload returned by verifyGoogleIdToken on success.
+ */
+export interface GoogleTokenPayload {
+  sub: string;
+  email: string;
+  name: string;
+  picture: string | null;
+  aud: string;
+}
+
+/**
+ * Verify a Google ID token via the public tokeninfo endpoint.
+ *
+ * Returns the verified payload when the token is valid and its aud matches
+ * one of `validAuds`; returns null otherwise. Accepts a custom `fetchFn`
+ * parameter so the function can be tested without real network calls.
+ */
+export async function verifyGoogleIdToken(
+  idToken: string,
+  validAuds: string[],
+  fetchFn: typeof fetch = fetch,
+): Promise<GoogleTokenPayload | null> {
+  try {
+    const res = await fetchFn(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+    );
+    const info = await res.json() as Record<string, string | undefined>;
+
+    if (!res.ok || !info.sub || !info.email) return null;
+    if (!validAuds.includes(info.aud ?? "")) return null;
+
+    return {
+      sub: info.sub,
+      email: info.email,
+      name: info.name ?? info.email.split("@")[0],
+      picture: info.picture ?? null,
+      aud: info.aud!,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function handleBusinessSignup(storage: BusinessSignupStorage, deps: BusinessSignupDeps = {}) {
   return async (req: Request, res: Response) => {
     try {

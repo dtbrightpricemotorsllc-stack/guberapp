@@ -79,14 +79,12 @@ export default function Login() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const params = new URLSearchParams(search);
-    const loginReturnTo = params.get("returnTo");
     if (Capacitor.isNativePlatform()) {
       try {
         const result = await nativeGoogleSignIn();
         if (result.ok) {
-          if (loginReturnTo) {
-            setLocation(loginReturnTo);
+          if (returnTo) {
+            setLocation(returnTo);
           } else if (result.accountType === "business") {
             setLocation("/biz/dashboard");
           } else {
@@ -102,7 +100,7 @@ export default function Login() {
       }
     } else {
       const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
-      if (loginReturnTo) googleUrl.searchParams.set("returnTo", loginReturnTo);
+      if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
       window.location.href = googleUrl.toString();
     }
   };

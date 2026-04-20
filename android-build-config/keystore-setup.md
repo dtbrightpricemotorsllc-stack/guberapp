@@ -66,7 +66,33 @@ Unzip it — inside is `app-release-signed.aab`.
 
 ---
 
-## Step 5 — Upload to Google Play
+## Step 5 — Register SHA-1 in Google Cloud Console (required for native Google Sign-In)
+
+The release keystore SHA-1 fingerprint must be registered in Google Cloud Console so that
+Android's native Google Sign-In (via `@codetrix-studio/capacitor-google-auth`) can obtain
+ID tokens that your backend accepts.
+
+**Release keystore SHA-1:**
+```
+FB:66:D5:0B:B1:0F:F4:70:24:27:31:B4:E1:B3:C1:46:00:03:DB:73
+```
+*(Extracted from `android-build-config/guber-release.jks`, alias `guber`)*
+
+Steps:
+1. Go to [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Click **Create credentials → OAuth client ID**
+3. Application type: **Android**
+4. Package name: `com.guber.app`
+5. SHA-1: paste the fingerprint above
+6. Save — note the generated **Android client ID**
+7. Set `GOOGLE_ANDROID_CLIENT_ID` in Replit Secrets to the Android client ID
+8. Set `VITE_GOOGLE_WEB_CLIENT_ID` in Replit Secrets to your existing Web Application client ID
+   (same value as `GOOGLE_CLIENT_ID` unless you have a separate web client)
+9. Run `npx cap sync` locally to apply the updated `capacitor.config.ts` to the Android project
+
+---
+
+## Step 6 — Upload to Google Play
 
 1. Go to [Google Play Console](https://play.google.com/console)
 2. Create your app if you haven't already (app package: `com.guber.app`)
