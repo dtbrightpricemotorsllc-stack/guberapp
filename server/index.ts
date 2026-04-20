@@ -65,6 +65,7 @@ const passwordResetLimiter = rateLimit({
 app.use("/api", generalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/demo-login", loginLimiter);
+app.use("/api/auth/google/native", loginLimiter);
 app.use("/api/auth/signup", signupLimiter);
 app.use("/api/auth/business-signup", signupLimiter);
 app.use("/api/auth/business-access-request", signupLimiter);
