@@ -113,7 +113,7 @@ export default function BizDashboard() {
     retry: false,
   });
 
-  const { data: profile, isLoading: profileLoading } = useQuery<BusinessProfile>({
+  const { data: profile, isLoading: profileLoading, isFetching: profileFetching } = useQuery<BusinessProfile>({
     queryKey: ["/api/business/profile"],
     retry: false,
   });
@@ -125,12 +125,14 @@ export default function BizDashboard() {
 
   const isLoading = accountLoading || profileLoading;
 
-  // Redirect to onboarding if the profile is a stub (no company name set yet)
+  // Redirect to onboarding if the profile is a stub (no company name set yet).
+  // Guard on profileFetching too so we don't redirect during background refetch
+  // of stale cache immediately after onboarding save navigates here.
   useEffect(() => {
-    if (!isLoading && profile !== undefined && !profile.companyName) {
+    if (!isLoading && !profileFetching && profile !== undefined && !profile.companyName) {
       navigate("/business-onboarding");
     }
-  }, [isLoading, profile, navigate]);
+  }, [isLoading, profileFetching, profile, navigate]);
 
   const avgResponseHrs = useMemo(() => {
     const withLocked = (jobs || []).filter(j => j.lockedAt && j.createdAt);

@@ -64,7 +64,9 @@ export default function BusinessOnboarding() {
 
   const saveMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/business/profile", form),
-    onSuccess: () => {
+    onSuccess: (savedProfile) => {
+      // Update cache immediately so dashboard doesn't see stale stub on navigate
+      queryClient.setQueryData(["/api/business/profile"], savedProfile);
       queryClient.invalidateQueries({ queryKey: ["/api/business/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Business profile saved!" });
