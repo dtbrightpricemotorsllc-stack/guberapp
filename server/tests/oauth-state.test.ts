@@ -630,3 +630,232 @@ describe("Google OAuth returnTo — end-to-end flow (start → callback)", () =>
     expect(redirectUrl.searchParams.get("returnTo")).toBe("/wallet");
   });
 });
+
+describe("Google OAuth cookie-fallback path (session-less native callback)", () => {
+  /**
+   * Simulates the Android Chrome Custom Tab scenario: the OAuth flow is started
+   * in a Capacitor WebView which sets both a session cookie and the
+   * `guber_oauth_state` cookie. The Chrome Custom Tab that opens Google's
+   * consent page runs in a separate cookie jar, so the Express session is
+   * absent by the time Google redirects back. The `guber_oauth_state` cookie
+   * survives because it is a first-party same-site cookie that the WebView
+   * receives in the redirect response directly.
+   *
+   * Tests here use a fresh supertest agent for the callback (no session) but
+   * manually carry only the `guber_oauth_state` cookie.
+   */
+
+  function buildCookieFallbackApp() {
+    const app = express();
+    app.use(
+      session({
+        secret: "test-secret",
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      })
+    );
+    app.get("/api/auth/google", handleGoogleAuthStart);
+    app.get("/api/auth/google/callback", (req, res) => {
+      const stateResult = validateOAuthState(req, res);
+      if (!stateResult.valid) {
+        return res.redirect(
+          `/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`
+        );
+      }
+      req.session.save((err) => {
+        if (err) return res.redirect("/login?error=session_save_failed");
+        res.json({
+          success: true,
+          code: stateResult.code,
+          returnTo: stateResult.returnTo,
+          isNative: stateResult.isNative,
+        });
+      });
+    });
+    return app;
+  }
+
+  /**
+   * Extract a named cookie's value from the raw Set-Cookie response headers
+   * returned by supertest. Handles both array and single-string forms.
+   */
+  function extractSetCookieValue(
+    setCookieHeaders: string | string[] | undefined,
+    name: string
+  ): string | null {
+    if (!setCookieHeaders) return null;
+    const headers = Array.isArray(setCookieHeaders)
+      ? setCookieHeaders
+      : [setCookieHeaders];
+    for (const header of headers) {
+      const firstPart = header.split(";")[0].trim();
+      const eqIdx = firstPart.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = firstPart.slice(0, eqIdx).trim();
+      if (key === name) {
+        try {
+          return decodeURIComponent(firstPart.slice(eqIdx + 1));
+        } catch {
+          return firstPart.slice(eqIdx + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  let savedClientId: string | undefined;
+
+  beforeAll(() => {
+    savedClientId = process.env.GOOGLE_CLIENT_ID;
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+  });
+
+  afterAll(() => {
+    if (savedClientId === undefined) {
+      delete process.env.GOOGLE_CLIENT_ID;
+    } else {
+      process.env.GOOGLE_CLIENT_ID = savedClientId;
+    }
+  });
+
+  it("validates the callback via the cookie fallback and returns isNative=true when session is absent", async () => {
+    const app = buildCookieFallbackApp();
+
+    // Step 1: start the OAuth flow — captures the guber_oauth_state cookie
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const cookieState = extractSetCookieValue(
+      initRes.headers["set-cookie"],
+      "guber_oauth_state"
+    );
+
+    expect(cookieState).not.toBeNull();
+    // The cookie should store the full encoded state string
+    expect(cookieState).toBe(state);
+
+    // Step 2: callback with a fresh request — no session, but carries the cookie
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(true);
+    expect(callbackRes.body.returnTo).toBeNull();
+  });
+
+  it("preserves returnTo through the cookie-fallback path when session is absent", async () => {
+    const app = buildCookieFallbackApp();
+
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native&returnTo=%2Fwallet")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const cookieState = extractSetCookieValue(
+      initRes.headers["set-cookie"],
+      "guber_oauth_state"
+    );
+
+    expect(cookieState).not.toBeNull();
+
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(true);
+    expect(callbackRes.body.returnTo).toBe("/wallet");
+  });
+
+  it("preserves returnTo=/biz/dashboard through the cookie-fallback path", async () => {
+    const app = buildCookieFallbackApp();
+
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native&returnTo=%2Fbiz%2Fdashboard")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const cookieState = extractSetCookieValue(
+      initRes.headers["set-cookie"],
+      "guber_oauth_state"
+    );
+
+    expect(cookieState).not.toBeNull();
+
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(true);
+    expect(callbackRes.body.returnTo).toBe("/biz/dashboard");
+  });
+
+  it("rejects the callback when both session and guber_oauth_state cookie are absent", async () => {
+    const app = buildCookieFallbackApp();
+
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    // No session cookie, no guber_oauth_state cookie
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(302);
+
+    expect(callbackRes.headers.location).toBe("/login?error=invalid_state");
+  });
+
+  it("rejects the callback when the guber_oauth_state cookie is tampered with", async () => {
+    const app = buildCookieFallbackApp();
+
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    // Cookie present but value does not match the state parameter
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", "guber_oauth_state=tampered-state-value")
+      .expect(302);
+
+    expect(callbackRes.headers.location).toBe("/login?error=invalid_state");
+  });
+
+  it("returns isNative=false through the cookie-fallback path for a non-native flow", async () => {
+    const app = buildCookieFallbackApp();
+
+    // No ?source=native — web flow, but session dropped
+    const initRes = await supertest(app)
+      .get("/api/auth/google?returnTo=%2Fdashboard")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const cookieState = extractSetCookieValue(
+      initRes.headers["set-cookie"],
+      "guber_oauth_state"
+    );
+
+    expect(cookieState).not.toBeNull();
+
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(200);
+
+    expect(callbackRes.body.success).toBe(true);
+    expect(callbackRes.body.isNative).toBe(false);
+    expect(callbackRes.body.returnTo).toBe("/dashboard");
+  });
+});
