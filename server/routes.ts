@@ -1755,7 +1755,53 @@ export async function registerRoutes(
         console.log(`[GUBER auth] Google auth complete (native) — userId=${user.id} returnTo=${returnTo || "none"}`);
         // Chrome Custom Tab blocks HTTP 302 redirects to custom URI schemes (guber://).
         // Serving an HTML page that navigates via JS bypasses this restriction.
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#000}</style></head><body><script>window.location.replace(${JSON.stringify(nativeUrl)})</script></body></html>`;
+        // A 2.5 s fallback detects when the app is not installed and shows a helpful
+        // message plus a Play Store link instead of leaving the user on a black screen.
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Opening Guber…</title>
+  <style>
+    html,body{margin:0;padding:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100%}
+    #fallback{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;box-sizing:border-box;text-align:center}
+    #fallback h1{font-size:22px;font-weight:700;margin:0 0 12px}
+    #fallback p{font-size:15px;color:#aaa;margin:0 0 28px;line-height:1.5}
+    #fallback a{display:inline-block;background:#fff;color:#000;font-weight:600;font-size:15px;text-decoration:none;padding:14px 28px;border-radius:999px}
+    #fallback a:active{opacity:.8}
+  </style>
+</head>
+<body>
+  <div id="fallback">
+    <h1>Guber isn't installed</h1>
+    <p>It looks like the Guber app isn't on this device yet.<br>Download it from the Play Store to continue.</p>
+    <a href="https://play.google.com/store/apps/details?id=com.guber.app" id="store-link">Get Guber on Google Play</a>
+  </div>
+  <script>
+    (function () {
+      var deepLink = ${JSON.stringify(nativeUrl)};
+      var TIMEOUT_MS = 2500;
+      var gone = false;
+
+      function onPageHide() { gone = true; }
+      window.addEventListener('pagehide', onPageHide);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') gone = true;
+      });
+
+      window.location.replace(deepLink);
+
+      setTimeout(function () {
+        window.removeEventListener('pagehide', onPageHide);
+        if (!gone) {
+          document.getElementById('fallback').style.display = 'flex';
+        }
+      }, TIMEOUT_MS);
+    })();
+  </script>
+</body>
+</html>`;
         return res.type("html").send(html);
       }
       const authSuccessUrl = returnTo
