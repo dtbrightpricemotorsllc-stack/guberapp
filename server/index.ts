@@ -168,6 +168,11 @@ app.use((req, res, next) => {
   `).catch(e => console.error("[migration] business_profiles EIN columns error:", e));
 
   await pool.query(`
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stuck_acknowledged_at TIMESTAMP;
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stuck_acknowledged_by INTEGER;
+  `).catch(e => console.error("[migration] jobs stuck_acknowledged columns error:", e));
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS business_accounts (
       id SERIAL PRIMARY KEY,
       owner_user_id INTEGER NOT NULL UNIQUE,
