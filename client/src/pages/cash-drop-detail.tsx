@@ -611,13 +611,30 @@ export default function CashDropDetail() {
                 <p className="text-sm font-display font-bold text-amber-400">How It Works</p>
               </div>
               <ol className="space-y-1.5 ml-6">
-                {["Accept the Cash Drop", "Travel to the location area", "Confirm your arrival (GPS check)", ...(drop.clueRevealOnArrival ? ["Clue revealed after arrival"] : []), "Submit your proof photos", "Admin reviews and confirms winner", "Choose your payout method (Cash App, Venmo, PayPal, etc.)"].map((step, i) => (
+                {["Accept the Cash Drop", "Travel to the location area", "Confirm your arrival (GPS check)", ...(drop.clueRevealOnArrival ? ["Clue revealed after arrival"] : []), "Submit your proof photos", "Admin reviews and confirms winner", "Choose your payout: Cash App, Venmo, PayPal, Bank Transfer, or GUBER Credit (+20% bonus)"].map((step, i) => (
                   <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-2">
                     <span className="text-amber-400/50 font-bold flex-shrink-0">{i + 1}.</span>
                     {step}
                   </li>
                 ))}
               </ol>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.06] bg-muted/[0.06] px-4 py-3" data-testid="section-payout-options">
+              <p className="text-[10px] font-display font-black tracking-widest text-amber-400/50 uppercase mb-2.5">Payout Options</p>
+              <div className="flex flex-wrap gap-2">
+                {PAYOUT_METHODS.map((method) => (
+                  <div
+                    key={method.id}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-display font-semibold"
+                    style={{ background: `${method.color}18`, color: method.color, border: `1px solid ${method.color}30` }}
+                    data-testid={`pill-payout-${method.id}`}
+                  >
+                    <method.icon className="w-3 h-3 flex-shrink-0" />
+                    {method.id === "guber_credit" ? "GUBER Credit +20%" : method.id === "ach" ? "Bank Transfer" : method.label}
+                  </div>
+                ))}
+              </div>
             </div>
 
             <Button
