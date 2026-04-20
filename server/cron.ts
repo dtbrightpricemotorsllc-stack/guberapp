@@ -537,7 +537,7 @@ export function startCron() {
       if (recovered.length > 0) console.log(`[cron] recovered ${recovered.length} stuck purchasing observation(s)`);
 
       const prunedNonces = await pruneExpiredOAuthNonces();
-      if (prunedNonces > 0) console.log(`[cron] pruned ${prunedNonces} expired OAuth nonce(s)`);
+      console.log(`[cron] pruned ${prunedNonces} expired OAuth nonce(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }
