@@ -63,7 +63,10 @@ export default function BusinessOnboarding() {
   }, [existing]);
 
   const saveMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/business/profile", form),
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/business/profile", form);
+      return res.json() as Promise<BusinessProfile>;
+    },
     onSuccess: (savedProfile) => {
       // Update cache immediately so dashboard doesn't see stale stub on navigate
       queryClient.setQueryData(["/api/business/profile"], savedProfile);
