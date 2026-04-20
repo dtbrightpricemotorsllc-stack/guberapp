@@ -487,6 +487,66 @@ export async function verifyGoogleIdToken(
   }
 }
 
+export interface NativeGoogleAuthDeps {
+  webClientId: string;
+  androidClientId?: string;
+  upsertGoogleUser: (
+    googleUser: { sub: string; email: string; name: string; picture: string | null },
+    pendingReferralCode: string | null,
+  ) => Promise<any>;
+  generateToken: (user: any) => string;
+  fetchFn?: typeof fetch;
+}
+
+/**
+ * Factory that returns a POST /api/auth/google/native request handler.
+ * All side-effectful dependencies are injected so the handler can be unit-tested.
+ */
+export function handleNativeGoogleAuth(deps: NativeGoogleAuthDeps) {
+  return async (req: Request, res: Response) => {
+    if (!deps.webClientId) {
+      console.error("[GUBER auth] /api/auth/google/native — GOOGLE_CLIENT_ID not configured");
+      return res.status(503).json({ message: "Google Sign-In not configured" });
+    }
+
+    const { idToken } = req.body;
+    if (!idToken || typeof idToken !== "string") {
+      return res.status(400).json({ message: "idToken is required" });
+    }
+
+    const validAuds = [deps.webClientId, deps.androidClientId].filter(Boolean) as string[];
+    const googleUser = await verifyGoogleIdToken(idToken, validAuds, deps.fetchFn);
+
+    if (!googleUser) {
+      console.warn("[GUBER auth] native Google — tokeninfo rejected or aud mismatch");
+      return res.status(401).json({ message: "Invalid Google ID token" });
+    }
+
+    console.log(`[GUBER auth] native Google — token verified for email=${googleUser.email}`);
+
+    try {
+      const user = await deps.upsertGoogleUser(
+        googleUser,
+        (req.session as any)?.pendingReferralCode ?? null,
+      );
+
+      if (user.banned) {
+        return res.status(403).json({ message: "Account permanently banned" });
+      }
+      if (user.suspended) {
+        return res.status(403).json({ message: "Account suspended" });
+      }
+
+      const token = deps.generateToken(user);
+      console.log(`[GUBER auth] native Google — auth complete (userId=${user.id})`);
+      return res.json({ token, user: sanitizeUser(user) });
+    } catch (err: any) {
+      console.error("[GUBER auth] native Google error:", err?.message || err);
+      return res.status(500).json({ message: "Sign-in failed. Please try again." });
+    }
+  };
+}
+
 export function handleBusinessSignup(storage: BusinessSignupStorage, deps: BusinessSignupDeps = {}) {
   return async (req: Request, res: Response) => {
     try {

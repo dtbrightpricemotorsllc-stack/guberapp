@@ -13,7 +13,7 @@ import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
-import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, verifyGoogleIdToken } from "./auth";
+import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, verifyGoogleIdToken, handleNativeGoogleAuth } from "./auth";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
@@ -1878,53 +1878,15 @@ export async function registerRoutes(
 
   // Native Google Sign-In — receives an ID token from the Android/iOS app
   // (no browser, no redirect — direct token verification via Google's tokeninfo API)
-  app.post("/api/auth/google/native", async (req: Request, res: Response) => {
-    const { idToken } = req.body;
-    if (!idToken || typeof idToken !== "string") {
-      return res.status(400).json({ message: "idToken is required" });
-    }
-
-    const webClientId = process.env.GOOGLE_CLIENT_ID;
-    const androidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID;
-
-    if (!webClientId) {
-      console.error("[GUBER auth] /api/auth/google/native — GOOGLE_CLIENT_ID not configured");
-      return res.status(503).json({ message: "Google Sign-In not configured" });
-    }
-
-    try {
-      const validAuds = [webClientId, androidClientId].filter(Boolean) as string[];
-      const googleUser = await verifyGoogleIdToken(idToken, validAuds);
-
-      if (!googleUser) {
-        console.warn("[GUBER auth] native Google — tokeninfo rejected or aud mismatch");
-        return res.status(401).json({ message: "Invalid Google ID token" });
-      }
-
-      console.log(`[GUBER auth] native Google — token verified for email=${googleUser.email}`);
-
-      const user = await upsertGoogleUser(
-        googleUser,
-        (req.session as any).pendingReferralCode || null,
-      );
-
-      if (user.banned) {
-        console.warn(`[GUBER auth] native Google — user ${user.id} is banned`);
-        return res.status(403).json({ message: "Account permanently banned" });
-      }
-      if (user.suspended) {
-        console.warn(`[GUBER auth] native Google — user ${user.id} is suspended`);
-        return res.status(403).json({ message: "Account suspended" });
-      }
-
-      const jwtToken = generateJWT(user);
-      console.log(`[GUBER auth] native Google — auth complete (userId=${user.id})`);
-      return res.json({ token: jwtToken, user: sanitizeUser(user) });
-    } catch (err: any) {
-      console.error("[GUBER auth] native Google error:", err?.message || err);
-      return res.status(500).json({ message: "Sign-in failed. Please try again." });
-    }
-  });
+  app.post(
+    "/api/auth/google/native",
+    handleNativeGoogleAuth({
+      webClientId: process.env.GOOGLE_CLIENT_ID || "",
+      androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
+      upsertGoogleUser,
+      generateToken: generateJWT,
+    }),
+  );
 
   // Deep link support for iOS Universal Links and Android App Links
   app.get("/.well-known/apple-app-site-association", (_req: Request, res: Response) => {
