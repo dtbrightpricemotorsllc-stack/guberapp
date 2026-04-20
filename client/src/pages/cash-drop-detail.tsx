@@ -631,7 +631,7 @@ export default function CashDropDetail() {
                     data-testid={`pill-payout-${method.id}`}
                   >
                     <method.icon className="w-3 h-3 flex-shrink-0" />
-                    {method.id === "guber_credit" ? "GUBER Credit +20%" : method.id === "ach" ? "Bank Transfer" : method.label}
+                    {method.id === "guber_credit" ? "GUBER Credit +20% bonus" : method.id === "ach" ? "Bank Transfer" : method.label}
                   </div>
                 ))}
               </div>
