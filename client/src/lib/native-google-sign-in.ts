@@ -5,7 +5,7 @@ import { queryClient } from "@/lib/queryClient";
 export interface NativeGoogleSignInResult {
   ok: boolean;
   accountType?: string;
-  reason?: "cancelled" | "timeout" | "error";
+  reason?: "cancelled" | "error";
   message?: string;
 }
 
