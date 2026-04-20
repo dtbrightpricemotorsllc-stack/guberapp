@@ -476,18 +476,20 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 /**
  * Builds the HTML bridge page served to native Android clients after Google auth.
- * Chrome Custom Tab blocks HTTP 302 → custom-scheme redirects, so we serve an
- * HTML page that navigates via JS instead.
- *   - intent:// is intercepted by the Android OS and works in all browsers.
- *   - guber:// is tried 500 ms later as a belt-and-suspenders for Chrome Custom Tabs.
- * A two-stage fallback is shown if neither URL opens the app:
- *   1. After TIMEOUT_MS → retry state (lets the user try once more)
- *   2. After RETRY_TIMEOUT_MS on retry → store state (Play Store link)
+ * Chrome Custom Tab (Android 83+) blocks intent:// and custom-scheme navigation
+ * initiated by JavaScript without a user gesture. When intent:// with
+ * S.browser_fallback_url is blocked, Chrome immediately follows the fallback URL
+ * — which is why users were being sent to the Play Store even with the app installed.
+ *
+ * Solution: use guber:// only (no intent://), show the "Open GUBER" button
+ * immediately (not after a delay), and rely on the button click (user gesture)
+ * to guarantee the navigation works in all Chrome versions. An auto-attempt is
+ * also fired on load for Chrome versions that allow it without a gesture.
  *
  * Extracted into a standalone function so the e2e test suite can verify the
  * exact same template without duplicating it.
  */
-export function buildNativeBounceHtml(intentUrl: string, intentUrlNoFallback: string, guberUrl: string): string {
+export function buildNativeBounceHtml(guberUrl: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -495,75 +497,35 @@ export function buildNativeBounceHtml(intentUrl: string, intentUrlNoFallback: st
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Opening Guber\u2026</title>
   <style>
-    html,body{margin:0;padding:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100%}
-    .state{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;box-sizing:border-box;text-align:center}
-    .state h1{font-size:22px;font-weight:700;margin:0 0 12px}
-    .state p{font-size:15px;color:#aaa;margin:0 0 28px;line-height:1.5}
-    .state button,.state a{display:inline-block;background:#fff;color:#000;font-weight:600;font-size:15px;text-decoration:none;padding:14px 28px;border-radius:999px;border:none;cursor:pointer}
-    .state button:active,.state a:active{opacity:.8}
+    html,body{margin:0;padding:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100%;display:flex;align-items:center;justify-content:center}
+    .wrap{display:flex;flex-direction:column;align-items:center;padding:40px 24px;text-align:center;max-width:360px;width:100%;box-sizing:border-box}
+    h1{font-size:21px;font-weight:700;margin:0 0 10px;letter-spacing:-0.3px}
+    p{font-size:14px;color:#888;margin:0 0 28px;line-height:1.5}
+    #open-btn{display:block;width:100%;background:#fff;color:#000;font-weight:700;font-size:16px;padding:16px;border-radius:999px;border:none;cursor:pointer;letter-spacing:0.2px;box-sizing:border-box}
+    #open-btn:active{opacity:.8}
+    .store-link{margin-top:20px;font-size:13px;color:#555;text-decoration:none}
+    .store-link:hover{color:#888}
   </style>
 </head>
 <body>
-  <div id="retry-state" class="state">
-    <h1>Having trouble opening Guber?</h1>
-    <p>Tap the button below to try opening the app again.</p>
-    <button id="retry-btn">Open Guber</button>
-  </div>
-  <div id="store-state" class="state">
-    <h1>Guber isn't installed</h1>
-    <p>It looks like the Guber app isn't on this device yet.<br>Download it from the Play Store to continue.</p>
-    <a href="https://play.google.com/store/apps/details?id=com.guber.app" id="store-link">Get Guber on Google Play</a>
+  <div class="wrap">
+    <h1>You\u2019re signed in!</h1>
+    <p>Tap below to open the GUBER app.</p>
+    <button id="open-btn">Open GUBER</button>
+    <a href="https://play.google.com/store/apps/details?id=com.guber.app" class="store-link">Download GUBER on Google Play</a>
   </div>
   <script>
     (function () {
-      var intentUrl = ${JSON.stringify(intentUrl)};
-      var intentUrlNoFallback = ${JSON.stringify(intentUrlNoFallback)};
-      var guberUrl = ${JSON.stringify(guberUrl)};
-      var TIMEOUT_MS = 4000;
-      var RETRY_TIMEOUT_MS = 3000;
-      var gone = false;
+      var deepLink = ${JSON.stringify(guberUrl)};
 
-      function markGone() { gone = true; }
-      window.addEventListener('pagehide', markGone);
-      window.addEventListener('blur', markGone);
-      document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'hidden') gone = true;
+      // Auto-attempt: works on Chrome versions that allow custom-scheme
+      // navigation without a user gesture (older Chrome / some Custom Tab builds).
+      window.location.replace(deepLink);
+
+      // Button: user-gesture navigation — guaranteed to work on all Chrome versions.
+      document.getElementById('open-btn').addEventListener('click', function () {
+        window.location.href = deepLink;
       });
-
-      // Primary attempt: intent:// — handled by Android OS, works in all browsers.
-      window.location.replace(intentUrl);
-
-      // Belt-and-suspenders: also try guber:// after a short gap for Chrome Custom Tabs
-      // that handle the custom scheme directly before the intent can resolve.
-      setTimeout(function () {
-        if (!gone) { window.location.replace(guberUrl); }
-      }, 500);
-
-      // After TIMEOUT_MS, if we haven't detected the app opened, show the retry state.
-      setTimeout(function () {
-        window.removeEventListener('pagehide', markGone);
-        window.removeEventListener('blur', markGone);
-        if (!gone) {
-          document.getElementById('retry-state').style.display = 'flex';
-
-          document.getElementById('retry-btn').addEventListener('click', function () {
-            gone = false;
-            // Re-bind detection listeners so the retry attempt can also detect handoff.
-            window.addEventListener('pagehide', markGone);
-            window.addEventListener('blur', markGone);
-            window.location.replace(intentUrlNoFallback);
-            // After another wait, escalate to the store state.
-            setTimeout(function () {
-              window.removeEventListener('pagehide', markGone);
-              window.removeEventListener('blur', markGone);
-              if (!gone) {
-                document.getElementById('retry-state').style.display = 'none';
-                document.getElementById('store-state').style.display = 'flex';
-              }
-            }, RETRY_TIMEOUT_MS);
-          });
-        }
-      }, TIMEOUT_MS);
     })();
   </script>
 </body>
@@ -647,17 +609,11 @@ export async function registerRoutes(
   // triggering a full Google OAuth round-trip.  Not reachable in production.
   if (process.env.NODE_ENV !== "production") {
     app.get("/api/test/deep-link-bounce", (req: Request, res: Response) => {
-      // Synthetic test URLs — real intent:// / guber:// schemes are replaced
-      // by the Playwright test suite so no navigation actually occurs.
       const token = typeof req.query.token === "string" && req.query.token
         ? req.query.token
         : "e2e-test-token";
-      const authParams = `auth-success?token=${encodeURIComponent(token)}`;
-      const playStoreUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.guber.app");
-      const intentUrl = `intent://${authParams}#Intent;scheme=guber;package=com.guber.app;S.browser_fallback_url=${playStoreUrl};end`;
-      const intentUrlNoFallback = `intent://${authParams}#Intent;scheme=guber;package=com.guber.app;end`;
-      const guberUrl = `guber://${authParams}`;
-      res.type("html").send(buildNativeBounceHtml(intentUrl, intentUrlNoFallback, guberUrl));
+      const guberUrl = `guber://auth-success?token=${encodeURIComponent(token)}`;
+      res.type("html").send(buildNativeBounceHtml(guberUrl));
     });
   }
 
@@ -1864,26 +1820,17 @@ export async function registerRoutes(
       const jwtToken = generateJWT(user);
       const returnTo = stateResult.returnTo;
       if (stateResult.isNative) {
-        // guber:// custom URI (secondary attempt, belt-and-suspenders for Chrome Custom Tabs)
+        // guber:// custom URI — handled by the Android/iOS app's intent filter.
+        // Chrome Custom Tab (Android 83+) blocks intent:// JS navigation without a
+        // user gesture and immediately follows S.browser_fallback_url (→ Play Store).
+        // Using guber:// only avoids that redirect; the bounce page button (user gesture)
+        // guarantees navigation works on all Chrome versions.
         const guberUrl = returnTo
           ? `guber://auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
           : `guber://auth-success?token=${encodeURIComponent(jwtToken)}`;
 
-        // intent:// URI — intercepted by the Android OS before the browser, so it works in
-        // Samsung Browser, Chrome, Firefox, and every other Android browser.  The embedded
-        // S.browser_fallback_url sends the user to the Play Store when the app is absent.
-        const authParams = returnTo
-          ? `auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
-          : `auth-success?token=${encodeURIComponent(jwtToken)}`;
-        const playStoreUrl = encodeURIComponent("https://play.google.com/store/apps/details?id=com.guber.app");
-        const intentUrl = `intent://${authParams}#Intent;scheme=guber;package=com.guber.app;S.browser_fallback_url=${playStoreUrl};end`;
-
-        // intent:// without the Play Store fallback — used by the retry button so that if
-        // the retry also fails the HTML store state is shown instead of bouncing to the store.
-        const intentUrlNoFallback = `intent://${authParams}#Intent;scheme=guber;package=com.guber.app;end`;
-
         console.log(`[GUBER auth] Google auth complete (native) — userId=${user.id} returnTo=${returnTo || "none"}`);
-        return res.type("html").send(buildNativeBounceHtml(intentUrl, intentUrlNoFallback, guberUrl));
+        return res.type("html").send(buildNativeBounceHtml(guberUrl));
       }
       const authSuccessUrl = returnTo
         ? `/auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
