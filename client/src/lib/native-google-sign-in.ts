@@ -4,6 +4,7 @@ import { queryClient } from "@/lib/queryClient";
 
 export interface NativeGoogleSignInResult {
   ok: boolean;
+  accountType?: string;
   reason?: "cancelled" | "timeout" | "error";
   message?: string;
 }
@@ -39,15 +40,14 @@ export async function nativeGoogleSignIn(
 
     await setToken(data.token);
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    return { ok: true };
+    return { ok: true, accountType: data.user?.accountType };
   } catch (err: any) {
     const msg: string = err?.message || String(err);
     if (
       msg.includes("cancel") ||
       msg.includes("Cancel") ||
       msg.includes("12501") ||
-      msg.includes("dismissed") ||
-      msg.includes("sign_in_failed") && msg.includes("12501")
+      msg.includes("dismissed")
     ) {
       return { ok: false, reason: "cancelled" };
     }

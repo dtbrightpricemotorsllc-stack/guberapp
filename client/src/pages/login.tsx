@@ -87,6 +87,8 @@ export default function Login() {
         if (result.ok) {
           if (loginReturnTo) {
             setLocation(loginReturnTo);
+          } else if (result.accountType === "business") {
+            setLocation("/biz/dashboard");
           } else {
             setLocation("/dashboard");
           }

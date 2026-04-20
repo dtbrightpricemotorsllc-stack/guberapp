@@ -2,6 +2,8 @@ import { createContext, useContext, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "./queryClient";
 import { getToken, setToken, clearToken } from "./token-storage";
+import { signOutFromGoogle } from "./native-google-sign-in";
+import { Capacitor } from "@capacitor/core";
 import type { User } from "@shared/schema";
 
 type AuthContextType = {
@@ -61,6 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await clearToken();
+      if (Capacitor.isNativePlatform()) {
+        await signOutFromGoogle();
+      }
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {

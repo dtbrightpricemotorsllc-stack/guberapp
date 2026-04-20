@@ -1952,6 +1952,14 @@ export async function registerRoutes(
         if (nHasTB) { nUpdates.trustBoxPurchased = true; nUpdates.aiOrNotUnlimitedText = true; if ((user.aiOrNotCredits || 0) < 5) nUpdates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5; }
         if (Object.keys(nUpdates).length > 0) await storage.updateUser(user.id, nUpdates);
 
+        // Persist Stripe-derived OG/TrustBox into preapproved tables (parity with web callback)
+        if (stripeN.isOG && ogCheckN.rows.length === 0) {
+          await db.execute(sql`INSERT INTO og_preapproved_emails (email) VALUES (${googleUser.email.toLowerCase()}) ON CONFLICT DO NOTHING`);
+        }
+        if (stripeN.hasTrustBox && tbCheckN.rows.length === 0) {
+          await db.execute(sql`INSERT INTO trust_box_preapproved_emails (email) VALUES (${googleUser.email.toLowerCase()}) ON CONFLICT DO NOTHING`);
+        }
+
         if (nIsOG && nHasTB) {
           await storage.createNotification({ userId: user.id, title: "Welcome, OG + Trust Box!", body: "Day-1 OG status and Trust Box are both active. Thanks for your early support!", type: "system" });
         } else if (nIsOG) {
@@ -2001,7 +2009,7 @@ export async function registerRoutes(
 
       const jwtToken = generateJWT(user);
       console.log(`[GUBER auth] native Google — auth complete (userId=${user.id})`);
-      return res.json({ token: jwtToken });
+      return res.json({ token: jwtToken, user: sanitizeUser(user) });
     } catch (err: any) {
       console.error("[GUBER auth] native Google error:", err?.message || err);
       return res.status(500).json({ message: "Sign-in failed. Please try again." });
