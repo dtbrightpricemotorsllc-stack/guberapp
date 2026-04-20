@@ -858,6 +858,90 @@ describe("Google OAuth cookie-fallback path (session-less native callback)", () 
     expect(callbackRes.body.isNative).toBe(false);
     expect(callbackRes.body.returnTo).toBe("/dashboard");
   });
+
+  it("rejects a replayed cookie-fallback even when the client re-sends the same guber_oauth_state cookie", async () => {
+    /**
+     * Simulates a malicious or buggy client that ignores the clearCookie
+     * Set-Cookie directive and re-sends the same guber_oauth_state cookie on a
+     * second callback request. The first request should succeed; the second
+     * must be rejected because the server marks the nonce as consumed.
+     */
+    const app = buildCookieFallbackApp();
+
+    // Start the flow — captures cookie without creating a session for the callback
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const cookieState = extractSetCookieValue(
+      initRes.headers["set-cookie"],
+      "guber_oauth_state"
+    );
+
+    expect(cookieState).not.toBeNull();
+
+    // First callback — should succeed via cookie-fallback path
+    const firstCallbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(200);
+
+    expect(firstCallbackRes.body.success).toBe(true);
+
+    // Second callback — same cookie, same state, no session (client ignored clearCookie)
+    // Must be rejected as a replay by the server-side consumed-nonce store
+    const replayRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(302);
+
+    expect(replayRes.headers.location).toBe("/login?error=invalid_state");
+  });
+
+  it("rejects cookie-fallback replay after a successful session-based callback (session-first-then-cookie-replay)", async () => {
+    /**
+     * Closes the session-first-then-cookie-replay gap.
+     *
+     * Scenario: the first callback succeeds via the session path (normal browser
+     * flow). The client then keeps the guber_oauth_state cookie that the server
+     * tried to clear and makes a second request without a session (e.g. from a
+     * different context) using the same state + cookie. Because the nonce was
+     * recorded as consumed when the session callback succeeded, the server must
+     * reject the replay even though the cookie value still matches the state.
+     */
+    const app = buildCookieFallbackApp();
+
+    // Use a persistent agent so the first callback retains the session cookie
+    const agent = supertest.agent(app);
+
+    // Start the flow — agent accumulates both session cookie and guber_oauth_state
+    const initRes = await agent.get("/api/auth/google?source=native").expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+    const cookieState = extractSetCookieValue(
+      initRes.headers["set-cookie"],
+      "guber_oauth_state"
+    );
+
+    expect(cookieState).not.toBeNull();
+
+    // First callback via agent — uses session path; records nonce as consumed
+    const firstCallbackRes = await agent
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .expect(200);
+
+    expect(firstCallbackRes.body.success).toBe(true);
+
+    // Second callback — new request with no session but same guber_oauth_state cookie
+    // The nonce is already in the consumed store, so this must be rejected
+    const replayRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieState}`)
+      .expect(302);
+
+    expect(replayRes.headers.location).toBe("/login?error=invalid_state");
+  });
 });
 
 describe("Google OAuth callback — native vs web redirect branching", () => {

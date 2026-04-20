@@ -67,6 +67,44 @@ function parseCookieValue(cookieHeader: string | undefined, name: string): strin
 const OAUTH_STATE_COOKIE = "guber_oauth_state";
 
 /**
+ * Lifetime of the OAuth state cookie and the server-side consumed-nonce entries.
+ * Keeping both on a single constant prevents the two from drifting apart.
+ */
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Server-side consumed-nonce registry for the cookie-fallback path.
+ *
+ * When a callback is validated via the `guber_oauth_state` cookie (i.e. the
+ * session was lost — common in Android Chrome Custom Tab flows), we record the
+ * nonce here so that a second request carrying the same cookie is rejected even
+ * if the client ignored the `clearCookie` Set-Cookie directive.
+ *
+ * The session path does NOT need this: it deletes `req.session.oauthState`
+ * immediately, so any replay has nothing to compare against.
+ *
+ * Entries expire after the same 10-minute window used for the cookie itself and
+ * are pruned lazily on each `validateOAuthState` call to avoid unbounded growth.
+ *
+ * OPERATIONAL NOTE — this store is process-local (in-memory). It works correctly
+ * for single-instance deployments. If the app is ever run behind a load balancer
+ * with multiple server instances, a replay request that lands on a different
+ * instance than the first callback will not be detected. In that scenario,
+ * migrate this store to a shared TTL-key store (e.g. Redis SETNX) to make
+ * replay protection durable across the fleet.
+ */
+const usedCookieFallbackNonces = new Map<string, number>();
+
+function pruneExpiredNonces(): void {
+  const now = Date.now();
+  for (const [nonce, expiry] of usedCookieFallbackNonces) {
+    if (now >= expiry) {
+      usedCookieFallbackNonces.delete(nonce);
+    }
+  }
+}
+
+/**
  * OAuth state payload — encoded as base64url JSON and sent to Google as the
  * `state` parameter. This lets `native` and `returnTo` survive the round-trip
  * without depending on the session, which may be lost when Chrome Custom Tab
@@ -139,7 +177,7 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 10 * 60 * 1000, // 10 minutes
+    maxAge: OAUTH_STATE_TTL_MS,
     path: "/",
   });
 
@@ -234,7 +272,18 @@ export function validateOAuthState(req: Request, res?: Response): StateValidatio
   let stateSource: string;
   let stateValid = false;
 
-  if (sessionNonce) {
+  // Always prune expired entries and check the consumed-nonce store before
+  // source branching.  This closes the session-first-then-cookie-replay gap:
+  // if a client that received a session-based callback keeps the
+  // guber_oauth_state cookie and re-sends it, the nonce will already be in the
+  // store (recorded when the session callback succeeded) and the replay is
+  // rejected before we even look at the cookie value.
+  pruneExpiredNonces();
+
+  if (usedCookieFallbackNonces.has(payload.n)) {
+    stateSource = "replay";
+    stateValid = false;
+  } else if (sessionNonce) {
     // Primary: nonce from session vs nonce in decoded payload
     stateSource = "session";
     stateValid = !!(payload.n && payload.n === sessionNonce);
@@ -245,6 +294,15 @@ export function validateOAuthState(req: Request, res?: Response): StateValidatio
   } else {
     stateSource = "missing";
     stateValid = false;
+  }
+
+  // On any successful validation, record the nonce as consumed so the
+  // guber_oauth_state cookie cannot be replayed — even if the client ignores
+  // the clearCookie directive and re-sends the cookie on a later request.
+  // The TTL mirrors OAUTH_STATE_TTL_MS (same as the cookie maxAge) so entries
+  // expire naturally at the same time the original cookie would have.
+  if (stateValid) {
+    usedCookieFallbackNonces.set(payload.n, Date.now() + OAUTH_STATE_TTL_MS);
   }
 
   if (!stateValid) {
