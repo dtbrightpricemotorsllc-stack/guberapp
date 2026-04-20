@@ -1173,4 +1173,56 @@ describe("Google OAuth callback — native vs web redirect branching", () => {
     expect(nativeUrl.host).toBe("auth-success");
     expect(nativeUrl.searchParams.get("returnTo")).toBe("/biz/dashboard");
   });
+
+  it("native flow via cookie-fallback (session absent) → HTML response with guber://auth-success", async () => {
+    const app = buildBranchingTestApp();
+
+    // Step 1: initiate the OAuth flow — use a one-shot request (no agent) so
+    // there is no persistent session cookie carried into the callback.
+    const initRes = await supertest(app)
+      .get("/api/auth/google?source=native")
+      .expect(302);
+
+    const state = extractStateFromRedirect(initRes.headers.location);
+
+    // Extract the guber_oauth_state cookie value set by the start handler.
+    const setCookieHeaders = initRes.headers["set-cookie"] as string | string[] | undefined;
+    const cookieHeaderList = Array.isArray(setCookieHeaders)
+      ? setCookieHeaders
+      : setCookieHeaders
+      ? [setCookieHeaders]
+      : [];
+
+    let cookieStateValue: string | null = null;
+    for (const header of cookieHeaderList) {
+      const firstPart = header.split(";")[0].trim();
+      const eqIdx = firstPart.indexOf("=");
+      if (eqIdx !== -1 && firstPart.slice(0, eqIdx).trim() === "guber_oauth_state") {
+        try {
+          cookieStateValue = decodeURIComponent(firstPart.slice(eqIdx + 1));
+        } catch {
+          cookieStateValue = firstPart.slice(eqIdx + 1);
+        }
+        break;
+      }
+    }
+
+    expect(cookieStateValue).not.toBeNull();
+
+    // Step 2: callback with a fresh one-shot request — no session, only the
+    // guber_oauth_state cookie (simulates Android Chrome Custom Tab dropping the
+    // Express session while the WebView's first-party cookie survives).
+    const callbackRes = await supertest(app)
+      .get(`/api/auth/google/callback?code=test-code&state=${state}`)
+      .set("Cookie", `guber_oauth_state=${cookieStateValue}`)
+      .expect(200);
+
+    expect(callbackRes.headers["content-type"]).toMatch(/html/);
+    expect(callbackRes.text).toContain("guber://auth-success");
+
+    const nativeUrl = extractNativeUrl(callbackRes.text);
+    expect(nativeUrl.protocol).toBe("guber:");
+    expect(nativeUrl.host).toBe("auth-success");
+    expect(nativeUrl.searchParams.get("token")).toBe(MOCK_TOKEN);
+  });
 });
