@@ -131,10 +131,11 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
   // Session stores only the nonce — one-time-use CSRF verification.
   (req.session as any).oauthState = nonce;
 
-  // Cookie fallback: stores the nonce so it can be verified even if the session
-  // cookie is lost during Google's cross-site redirect (observed on Samsung
-  // Internet and Android Chrome Custom Tab contexts).
-  res.cookie(OAUTH_STATE_COOKIE, nonce, {
+  // Cookie fallback: stores the FULL encoded state so that if the session is
+  // lost, the fallback path can verify the entire payload (nonce + native +
+  // returnTo) via full-string equality, cryptographically binding all fields
+  // to the server-generated state rather than just the nonce.
+  res.cookie(OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -210,30 +211,51 @@ export function validateOAuthState(req: Request, res?: Response): StateValidatio
     return { valid: false, reason: "invalid_state" };
   }
 
-  // Verify the nonce — primary: session, fallback: cookie.
+  // Verify the state — primary: session nonce, fallback: full cookie state.
+  //
+  // Primary path (session nonce): the session stores only the 128-bit nonce
+  // from auth-start. Compare payload.n against it. If they match the nonce is
+  // valid; native/returnTo come from the decoded payload.
+  //
+  // Fallback path (cookie full state): the cookie stores the complete encoded
+  // state string. Compare the full received state string against it for
+  // full-integrity verification — this cryptographically binds native and
+  // returnTo to the server-generated value, not just the nonce.
   const sessionNonce = (req.session as any).oauthState as string | undefined;
   delete (req.session as any).oauthState; // always clear (one-time use)
 
-  const cookieNonce = parseCookieValue(req.headers.cookie, OAUTH_STATE_COOKIE);
+  const cookieState = parseCookieValue(req.headers.cookie, OAUTH_STATE_COOKIE);
 
-  const expectedNonce = sessionNonce || cookieNonce || null;
-  const nonceSource = sessionNonce ? "session" : cookieNonce ? "cookie-fallback" : "missing";
-
-  // Always clear the nonce cookie (one-time use).
+  // Always clear the state cookie (one-time use).
   if (res) {
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
   }
 
-  if (!payload.n || !expectedNonce || payload.n !== expectedNonce) {
+  let stateSource: string;
+  let stateValid = false;
+
+  if (sessionNonce) {
+    // Primary: nonce from session vs nonce in decoded payload
+    stateSource = "session";
+    stateValid = !!(payload.n && payload.n === sessionNonce);
+  } else if (cookieState) {
+    // Fallback: full encoded state in cookie vs full received state string
+    stateSource = "cookie-fallback";
+    stateValid = !!(state && state === cookieState);
+  } else {
+    stateSource = "missing";
+    stateValid = false;
+  }
+
+  if (!stateValid) {
     console.warn(
-      `[GUBER auth] Google callback — invalid_state: nonce mismatch (source=${nonceSource}, ` +
-      `received=${payload.n ? payload.n.slice(0, 8) + "..." : "none"}, ` +
-      `expected=${expectedNonce ? expectedNonce.slice(0, 8) + "..." : "none"})`
+      `[GUBER auth] Google callback — invalid_state (source=${stateSource}, ` +
+      `received=${state ? state.slice(0, 16) + "..." : "none"})`
     );
     return { valid: false, reason: "invalid_state" };
   }
 
-  console.log(`[GUBER auth] Google callback — state valid (nonce source=${nonceSource} native=${payload.native} returnTo=${payload.returnTo || "none"})`);
+  console.log(`[GUBER auth] Google callback — state valid (source=${stateSource} native=${payload.native} returnTo=${payload.returnTo || "none"})`);
 
   return {
     valid: true,
