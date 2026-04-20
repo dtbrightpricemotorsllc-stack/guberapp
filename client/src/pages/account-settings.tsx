@@ -16,13 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Sun, Moon, Fingerprint } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTheme } from "@/lib/theme-context";
 import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled, performBiometricAuth } from "@/lib/biometric";
 
 async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<string> {
@@ -45,7 +44,6 @@ export default function AccountSettings() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const { theme, setTheme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [bizConvertOpen, setBizConvertOpen] = useState(false);
@@ -482,40 +480,6 @@ export default function AccountSettings() {
               </Button>
             </div>
           )}
-        </div>
-
-        {/* Appearance */}
-        <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3" data-testid="card-appearance">
-          <h3 className="font-display font-semibold text-sm flex items-center gap-2">
-            {theme === "dark" ? <Moon className="w-4 h-4 text-muted-foreground" /> : <Sun className="w-4 h-4 text-muted-foreground" />}
-            Appearance
-          </h3>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setTheme("light")}
-              data-testid="button-theme-light"
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display transition-colors ${
-                theme === "light"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border/30 text-muted-foreground hover:border-border/60"
-              }`}
-            >
-              <Sun className="w-4 h-4" />
-              Light
-            </button>
-            <button
-              onClick={() => setTheme("dark")}
-              data-testid="button-theme-dark"
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-display transition-colors ${
-                theme === "dark"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border/30 text-muted-foreground hover:border-border/60"
-              }`}
-            >
-              <Moon className="w-4 h-4" />
-              Dark
-            </button>
-          </div>
         </div>
 
         <div className="bg-card rounded-2xl border border-destructive/20 p-5 space-y-3">

@@ -4,8 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { BizLayout } from "@/components/biz-layout";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, Shield, Sun, Moon } from "lucide-react";
-import { useTheme } from "@/lib/theme-context";
+import { Loader2, Upload, Shield } from "lucide-react";
 import type { BusinessProfile } from "@shared/schema";
 
 const GOLD = "#C9A84C";
@@ -50,8 +49,6 @@ export default function BizAccount() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { theme, setTheme } = useTheme();
-
   const { data: existing } = useQuery<BusinessProfile>({
     queryKey: ["/api/business/profile"],
     retry: false,
@@ -221,41 +218,6 @@ export default function BizAccount() {
           <Field label="Billing Email">
             <input {...inputProps("billingEmail")} type="email" placeholder="billing@yourcompany.com" data-testid="input-billing-email" />
           </Field>
-        </div>
-
-        <div className="rounded-xl p-6 space-y-4" style={{ background: SURFACE, border: `1px solid ${BORDER}` }} data-testid="card-appearance">
-          <p style={{ color: TEXT_SECONDARY, fontSize: "10px", letterSpacing: "0.14em", fontWeight: 700 }} className="uppercase flex items-center gap-2">
-            {theme === "dark" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            Appearance
-          </p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setTheme("light")}
-              data-testid="button-theme-light"
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all"
-              style={{
-                border: theme === "light" ? `1px solid rgba(201,168,76,0.5)` : `1px solid ${BORDER}`,
-                background: theme === "light" ? "rgba(201,168,76,0.08)" : "transparent",
-                color: theme === "light" ? GOLD : TEXT_SECONDARY,
-              }}
-            >
-              <Sun className="w-4 h-4" />
-              Light
-            </button>
-            <button
-              onClick={() => setTheme("dark")}
-              data-testid="button-theme-dark"
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all"
-              style={{
-                border: theme === "dark" ? `1px solid rgba(201,168,76,0.5)` : `1px solid ${BORDER}`,
-                background: theme === "dark" ? "rgba(201,168,76,0.08)" : "transparent",
-                color: theme === "dark" ? GOLD : TEXT_SECONDARY,
-              }}
-            >
-              <Moon className="w-4 h-4" />
-              Dark
-            </button>
-          </div>
         </div>
 
         <button

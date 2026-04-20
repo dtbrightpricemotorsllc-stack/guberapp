@@ -1753,7 +1753,10 @@ export async function registerRoutes(
           ? `guber://auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
           : `guber://auth-success?token=${encodeURIComponent(jwtToken)}`;
         console.log(`[GUBER auth] Google auth complete (native) — userId=${user.id} returnTo=${returnTo || "none"}`);
-        return res.redirect(nativeUrl);
+        // Chrome Custom Tab blocks HTTP 302 redirects to custom URI schemes (guber://).
+        // Serving an HTML page that navigates via JS bypasses this restriction.
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#000}</style></head><body><script>window.location.replace(${JSON.stringify(nativeUrl)})</script></body></html>`;
+        return res.type("html").send(html);
       }
       const authSuccessUrl = returnTo
         ? `/auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
