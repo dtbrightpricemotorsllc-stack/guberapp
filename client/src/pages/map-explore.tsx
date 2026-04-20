@@ -165,7 +165,7 @@ export default function MapExplore() {
 
   const { data: activeDrops = [] } = useQuery<any[]>({
     queryKey: ["/api/cash-drops/active"],
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
 
   const [selectedDrop, setSelectedDrop] = useState<any | null>(null);

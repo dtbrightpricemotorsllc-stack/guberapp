@@ -3001,6 +3001,7 @@ const patchMutation = useMutation({
 mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/admin/cash-drops/${id}`, data),
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: ["/api/admin/cash-drops"] });
+queryClient.invalidateQueries({ queryKey: ["/api/cash-drops/active"] });
 toast({ title: "Updated" });
 },
 onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
