@@ -9777,7 +9777,7 @@ YOUR BEHAVIOR:
           SELECT
             u.zipcode,
             COUNT(DISTINCT u.id)::int AS total,
-            COUNT(DISTINCT u.id) FILTER (WHERE u.created_at > NOW() - INTERVAL '30 days')::int AS recently_active,
+            COUNT(DISTINCT u.id) FILTER (WHERE GREATEST(u.created_at, COALESCE(u.clocked_in_at, u.created_at), COALESCE(u.clocked_out_at, u.created_at)) > NOW() - INTERVAL '30 days')::int AS recently_active,
             COUNT(DISTINCT u.id) FILTER (WHERE u.day1_og = true)::int AS day1_og_count,
             COUNT(DISTINCT u.id) FILTER (WHERE u.account_type = 'business')::int AS business_count,
             COUNT(DISTINCT u.id) FILTER (WHERE u.jobs_completed > 0 OR u.role = 'helper')::int AS helper_count
@@ -9791,7 +9791,7 @@ YOUR BEHAVIOR:
         rows = result.rows as any[];
       } else {
         const whereExtra =
-          filter === "recent" ? sql` AND created_at > NOW() - INTERVAL '30 days'` :
+          filter === "recent" ? sql` AND GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days'` :
           filter === "og"     ? sql` AND day1_og = true` :
           filter === "helper" ? sql` AND (jobs_completed > 0 OR role = 'helper')` :
           filter === "business" ? sql` AND account_type = 'business'` :
@@ -9801,7 +9801,7 @@ YOUR BEHAVIOR:
           SELECT
             zipcode,
             COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int AS recently_active,
+            COUNT(*) FILTER (WHERE GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days')::int AS recently_active,
             COUNT(*) FILTER (WHERE day1_og = true)::int AS day1_og_count,
             COUNT(*) FILTER (WHERE account_type = 'business')::int AS business_count,
             COUNT(*) FILTER (WHERE jobs_completed > 0 OR role = 'helper')::int AS helper_count
@@ -9816,7 +9816,7 @@ YOUR BEHAVIOR:
 
       const zips: any[] = [];
       for (const row of rows) {
-        const coords = await geocodeZip(row.zipcode);
+        const coords = geocodeZip(row.zipcode);
         if (!coords) continue;
         zips.push({
           zip: row.zipcode,
