@@ -7723,6 +7723,9 @@ Verify & Inspect is a specialized job category where workers physically inspect 
 - Salvage/auction lot inspections
 Workers travel to the item's location, inspect it thoroughly, take photos, and submit a detailed report through the app. This helps buyers make informed decisions without traveling themselves. It pays well and requires attention to detail.
 
+**Clocked In / Clocked Out**
+On the dashboard in WORK mode there is a "Clocked In / Clocked Out" toggle. When Clocked In, the worker shows as available on the map and local hirers can see them and send direct gig requests. When Clocked Out, the worker is invisible to hirers. This is separate from applying for jobs — you can still browse and apply for jobs while Clocked Out. Clocking In is just about passive visibility and inbound gig requests.
+
 **Worker Flow**
 1. Browse jobs on the dashboard or map
 2. Apply (some auto-assign, others need poster approval)

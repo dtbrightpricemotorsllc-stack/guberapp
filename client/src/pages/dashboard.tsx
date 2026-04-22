@@ -12,7 +12,7 @@ import type { Job } from "@shared/schema";
 import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat, ShoppingBag,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
-  TrendingUp, X, Loader2, Rocket, UserCircle, Users, Lock, Banknote, Clock, Bell, DollarSign,
+  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign,
 } from "lucide-react";
 import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
@@ -102,12 +102,29 @@ type DashboardMode = "hire" | "work";
 
 // ─── To-Do Reminder Box ───────────────────────────────────────────────────────
 
-interface TodoItem { id: string; icon: string; text: string; sub: string; href?: string }
+interface TodoItem { id: string; icon: string; text: string; sub: string; href?: string; sessionOnly?: boolean }
 
+// Permanent localStorage dismissals
 function getTodoDismissed(id: string) { return localStorage.getItem(`guber_todo_dismissed_${id}`) === "true"; }
 function setTodoDismissed(id: string) { localStorage.setItem(`guber_todo_dismissed_${id}`, "true"); }
+// Session-only dismissals (in-memory, reset on login/reload)
+const SESSION_DISMISSED = new Set<string>();
+
 function getDay1OgLastSuggested() { return Number(localStorage.getItem("guber_todo_day1og_last") || "0"); }
 function setDay1OgLastSuggested() { localStorage.setItem("guber_todo_day1og_last", Date.now().toString()); }
+
+// Clock-in first-use explanation
+function getClockInExplained() { return localStorage.getItem("guber_clockin_explained") === "true"; }
+function setClockInExplained() { localStorage.setItem("guber_clockin_explained", "true"); }
+
+// Opportunities card collapse (auto-expands after 3 days)
+function getOppsCollapsed() {
+  const stored = localStorage.getItem("guber_opps_collapsed_at");
+  if (!stored) return false;
+  return Date.now() - Number(stored) < 3 * 24 * 60 * 60 * 1000;
+}
+function setOppsCollapsed() { localStorage.setItem("guber_opps_collapsed_at", Date.now().toString()); }
+function clearOppsCollapsed() { localStorage.removeItem("guber_opps_collapsed_at"); }
 
 function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAvailable: boolean; referralCount: number }) {
   const [open, setOpen] = useState(false);
@@ -120,8 +137,8 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
     if (!user?.day1OG && Date.now() - getDay1OgLastSuggested() > 7 * 24 * 60 * 60 * 1000) {
       items.push({ id: "day1og", icon: "🥇", text: "Become a Day 1 OG", sub: "Lock in exclusive early-access perks before they're gone.", href: "/join" });
     }
-    if (isAvailable && user?.stripeAccountStatus !== "active") {
-      items.push({ id: "payout", icon: "💳", text: "Set up payouts", sub: "Complete Stripe verification to get paid for tasks." });
+    if (user?.stripeAccountStatus !== "active") {
+      items.push({ id: "payout", icon: "💳", text: "Set up payments", sub: "Connect your bank to receive payouts for completed tasks.", sessionOnly: true });
     }
     if (referralCount < 25) {
       items.push({ id: "city", icon: "🏙️", text: "Unlock your city", sub: `${referralCount}/25 invites — help activate local cash drops.` });
@@ -129,7 +146,11 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
     return items;
   }, [user, isAvailable, referralCount]);
 
-  const visibleItems = allItems.filter(item => !dismissed[item.id] && !getTodoDismissed(item.id));
+  const visibleItems = allItems.filter(item => {
+    if (dismissed[item.id]) return false;
+    if (item.sessionOnly) return !SESSION_DISMISSED.has(item.id);
+    return !getTodoDismissed(item.id);
+  });
 
   useEffect(() => {
     if (visibleItems.length === 0) return;
@@ -142,9 +163,13 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
     return () => { clearTimeout(t); clearInterval(interval); };
   }, [visibleItems.length]);
 
-  const dismiss = (id: string) => {
+  const dismiss = (id: string, sessionOnly?: boolean) => {
     if (id === "day1og") setDay1OgLastSuggested();
-    setTodoDismissed(id);
+    if (sessionOnly) {
+      SESSION_DISMISSED.add(id);
+    } else {
+      setTodoDismissed(id);
+    }
     setDismissed(p => ({ ...p, [id]: true }));
   };
 
@@ -190,7 +215,7 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
                 <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{item.sub}</p>
               </div>
               <button
-                onClick={() => dismiss(item.id)}
+                onClick={() => dismiss(item.id, item.sessionOnly)}
                 className="shrink-0 mt-0.5 p-1 rounded-full text-muted-foreground/25 hover:text-muted-foreground transition-colors"
                 aria-label="Dismiss"
                 data-testid={`button-todo-dismiss-${item.id}`}
@@ -231,6 +256,8 @@ export default function Dashboard() {
   const [actionPromptMsg, setActionPromptMsg] = useState<string | undefined>(undefined);
   const [showMissedBanner, setShowMissedBanner] = useState(false);
   const [missedEventType, setMissedEventType] = useState<"job" | "cash_drop" | "generic">("generic");
+  const [showClockInModal, setShowClockInModal] = useState(false);
+  const [oppsCollapsed, setOppsCollapsedState] = useState(() => getOppsCollapsed());
 
   useEffect(() => {
     localStorage.setItem("guber_mode", mode);
@@ -440,31 +467,8 @@ export default function Dashboard() {
     <GuberLayout>
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-dashboard">
 
-        {/* ── Hero Header ── */}
-        <div className="mb-6 animate-fade-in text-center">
-          {mode === "hire" ? (
-            <>
-              <h1 className="text-[1.35rem] font-display font-extrabold text-foreground tracking-tight leading-tight" data-testid="text-greeting">
-                Find help near you
-              </h1>
-              <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
-                Post a job, book help, or use verified local support.
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-[1.35rem] font-display font-extrabold text-foreground tracking-tight leading-tight" data-testid="text-greeting">
-                Complete tasks &amp; earn
-              </h1>
-              <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
-                Start local, build trust, and unlock more opportunities.
-              </p>
-            </>
-          )}
-        </div>
-
         {/* ── HIRE / WORK Toggle ── */}
-        <div className="grid grid-cols-2 gap-3 mb-5 animate-fade-in stagger-1" data-testid="toggle-mode">
+        <div className="grid grid-cols-2 gap-3 mb-4 animate-fade-in stagger-1" data-testid="toggle-mode">
           <button
             onClick={() => setMode("hire")}
             className="relative rounded-2xl p-4 flex items-center gap-3 text-left transition-all active:scale-95"
@@ -514,19 +518,102 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* ── To-Do Reminder Box ── */}
+        {/* ── Reminders (above hero) ── */}
         <TodoReminderBox
           user={user}
           isAvailable={!!(user as any)?.isAvailable}
           referralCount={referralData?.count ?? 0}
         />
 
+        {/* ── Hero Header ── */}
+        <div className="mb-4 animate-fade-in text-center">
+          {mode === "hire" ? (
+            <>
+              <h1 className="text-[1.35rem] font-display font-extrabold text-foreground tracking-tight leading-tight" data-testid="text-greeting">
+                Find help near you
+              </h1>
+              <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
+                Post a job, book help, or use verified local support.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-[1.35rem] font-display font-extrabold text-foreground tracking-tight leading-tight" data-testid="text-greeting">
+                Complete tasks &amp; earn
+              </h1>
+              <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
+                Start local, build trust, and unlock more opportunities.
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* ── Primary CTA (above map) ── */}
+        <div className="mb-4 animate-fade-in stagger-2 space-y-2">
+          {mode === "hire" ? (
+            <>
+              <Link href="/post-job">
+                <Button className="w-full h-14 gap-3 rounded-2xl premium-btn font-display tracking-[0.12em] text-sm font-bold shadow-lg" data-testid="button-post-job">
+                  <Plus className="w-5 h-5" />
+                  POST A JOB
+                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                </Button>
+              </Link>
+              {user?.cashDropHostEnabled && (
+                <Link href="/host-drop/new">
+                  <button
+                    className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
+                    style={{
+                      background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
+                      border: "1.5px solid rgba(201,168,76,0.4)",
+                      color: "#C9A84C",
+                    }}
+                    data-testid="button-start-host-drop"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    START A GUBER DROP
+                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                  </button>
+                </Link>
+              )}
+            </>
+          ) : (
+            (user as any)?.jobsCompleted === 0 ? (
+              <Link href="/browse-jobs">
+                <Button
+                  onClick={() => triggerActionPrompt("Enable alerts to get notified when a job matches you")}
+                  className="w-full h-14 gap-2 rounded-2xl font-display tracking-[0.10em] text-sm font-bold shadow-lg"
+                  style={{ background: "linear-gradient(135deg,#16a34a,#15803d)", color: "#fff" }}
+                  data-testid="button-start-first-task"
+                >
+                  <span>🔥</span>
+                  START YOUR FIRST TASK
+                  <ChevronRight className="w-4 h-4 ml-auto opacity-70" />
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/browse-jobs">
+                <Button
+                  onClick={() => triggerActionPrompt("Enable alerts so you never miss a new task")}
+                  className="w-full h-14 gap-2 rounded-2xl font-display tracking-[0.10em] text-sm font-bold shadow-lg"
+                  style={{ background: "linear-gradient(135deg,#C9A84C,#a8873c)", color: "#000" }}
+                  data-testid="button-find-live-tasks"
+                >
+                  <span>🔥</span>
+                  FIND LIVE TASKS
+                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                </Button>
+              </Link>
+            )
+          )}
+        </div>
+
         {/* ── Nearby Jobs / Map ── */}
-        <div className="mb-5 animate-fade-in stagger-2" data-testid="section-nearby-jobs">
+        <div className="mb-5 animate-fade-in stagger-3" data-testid="section-nearby-jobs">
           <div className="flex items-center justify-between mb-3">
             <div>
               <span className="text-xs font-display font-bold text-foreground/90 tracking-[0.15em] uppercase">
-                {mode === "hire" ? "Nearby Help" : "Nearby Jobs"}
+                {mode === "hire" ? "Nearby Workers" : "Nearby Jobs"}
               </span>
               {nearbyCount > 0 && (
                 <span className="ml-2 text-[10px] font-display text-primary/60">{nearbyCount} active</span>
@@ -535,12 +622,20 @@ export default function Dashboard() {
             <div className="flex items-center gap-2.5">
               {mode === "work" && (
                 <div className="flex items-center gap-1.5" data-testid="section-availability">
-                  <span className="text-[10px] font-display text-muted-foreground leading-none">Available</span>
+                  <span className="text-[10px] font-display font-semibold leading-none" style={{ color: (user as any)?.isAvailable ? "hsl(152 70% 60%)" : "hsl(var(--muted-foreground))" }}>
+                    {(user as any)?.isAvailable ? "Clocked In" : "Clocked Out"}
+                  </span>
                   <Switch
                     checked={!!(user as any)?.isAvailable}
                     onCheckedChange={(v) => {
                       availabilityMutation.mutate(v);
-                      if (v) triggerActionPrompt("Enable alerts to hear about new jobs");
+                      if (v) {
+                        triggerActionPrompt("Enable alerts to hear about new jobs");
+                        if (!getClockInExplained()) {
+                          setClockInExplained();
+                          setShowClockInModal(true);
+                        }
+                      }
                     }}
                     disabled={availabilityMutation.isPending}
                     data-testid="toggle-availability"
@@ -549,7 +644,7 @@ export default function Dashboard() {
               )}
               <Link href="/map">
                 <span className="text-[10px] font-display text-primary/70 tracking-wider hover:text-primary transition-colors cursor-pointer font-semibold uppercase">
-                  View All →
+                  View Map →
                 </span>
               </Link>
             </div>
@@ -560,7 +655,7 @@ export default function Dashboard() {
                 center={mapCenter}
                 pins={mode === "work" ? filteredPins : []}
                 workerPins={mode === "hire" ? (workerPins || []) : []}
-                cashDrops={activeCashDropPins}
+                cashDrops={mode === "work" ? activeCashDropPins : []}
                 onPinClick={setSelectedPin}
                 onWorkerPinClick={setSelectedWorker}
                 onCashDropClick={(drop) => navigate(`/cash-drop/${drop.id}`)}
@@ -632,176 +727,70 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Mode-Based CTAs ── */}
-        <div className="mb-6 animate-fade-in stagger-3 space-y-2">
-          {mode === "hire" ? (
-            <>
-              <Link href="/post-job">
-                <Button className="w-full h-14 gap-3 rounded-2xl premium-btn font-display tracking-[0.12em] text-sm font-bold shadow-lg" data-testid="button-post-job">
-                  <Plus className="w-5 h-5" />
-                  POST A JOB
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
-                </Button>
-              </Link>
-              {user?.cashDropHostEnabled && (
-                <Link href="/host-drop/new">
-                  <button
-                    className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
-                    style={{
-                      background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
-                      border: "1.5px solid rgba(201,168,76,0.4)",
-                      color: "#C9A84C",
-                    }}
-                    data-testid="button-start-host-drop"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    START A GUBER DROP
-                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
-                  </button>
-                </Link>
-              )}
-              <p className="text-[10px] text-muted-foreground font-display text-center pt-0.5">
-                Be the first to bring opportunities to your city
-              </p>
-            </>
-          ) : (
-            <>
-              {/* Primary CTA — conditional on task history */}
-              {(user as any)?.jobsCompleted === 0 ? (
-                <Link href="/browse-jobs">
-                  <Button
-                    onClick={() => triggerActionPrompt("Enable alerts to get notified when a job matches you")}
-                    className="w-full h-14 gap-2 rounded-2xl font-display tracking-[0.10em] text-sm font-bold shadow-lg"
-                    style={{ background: "linear-gradient(135deg,#16a34a,#15803d)", color: "#fff" }}
-                    data-testid="button-start-first-task"
-                  >
-                    <span>🔥</span>
-                    START YOUR FIRST TASK
-                    <ChevronRight className="w-4 h-4 ml-auto opacity-70" />
-                  </Button>
-                </Link>
-              ) : (
-                <Link href="/browse-jobs">
-                  <Button
-                    onClick={() => triggerActionPrompt("Enable alerts so you never miss a new task")}
-                    className="w-full h-14 gap-2 rounded-2xl font-display tracking-[0.10em] text-sm font-bold shadow-lg"
-                    style={{ background: "linear-gradient(135deg,#C9A84C,#a8873c)", color: "#000" }}
-                    data-testid="button-find-live-tasks"
-                  >
-                    <span>🔥</span>
-                    FIND LIVE TASKS
-                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
-                  </Button>
-                </Link>
-              )}
-
-              {/* Unified: Opportunities + Invite + City Activation */}
-              <div
-                className="rounded-2xl overflow-hidden"
-                style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.2)" }}
-                data-testid="card-city-activation-unified"
+        {/* ── Opportunities Near You (collapsible, work mode only) ── */}
+        {mode === "work" && (
+          <div className="mb-5 animate-fade-in stagger-4">
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.2)" }}
+              data-testid="card-city-activation-unified"
+            >
+              {/* Header row — tap to collapse */}
+              <button
+                className="w-full flex items-center justify-between px-4 pt-3.5 pb-2 text-left"
+                onClick={() => {
+                  if (oppsCollapsed) { clearOppsCollapsed(); setOppsCollapsedState(false); }
+                  else { setOppsCollapsed(); setOppsCollapsedState(true); }
+                }}
+                data-testid="button-toggle-opps"
               >
-                {/* Header row */}
-                <div className="px-4 pt-3.5 pb-2">
+                <div>
                   <p className="text-sm font-display font-black text-amber-400 tracking-wider leading-tight">
                     💰 Opportunities Near You
                   </p>
-                  <p className="text-[11px] text-amber-400/55 font-display mt-0.5 leading-snug">
-                    Your city is not active yet — help unlock it
-                  </p>
-                </div>
-
-                {/* Progress bar row */}
-                <div className="px-4 pb-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
-                    <p className="text-[9px] font-display text-muted-foreground/35">
-                      {referralData?.count ?? 0} / 25 to unlock cash drops
+                  {!oppsCollapsed && (
+                    <p className="text-[11px] text-amber-400/55 font-display mt-0.5 leading-snug">
+                      Your city is not active yet — help unlock it
                     </p>
-                  </div>
-                  <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, Math.round(((referralData?.count ?? 0) / 25) * 100 + 8))}%`, background: "linear-gradient(90deg,#C6A85C,#e8c97a)", transition: "width 1s ease" }}
-                      data-testid="bar-city-activation"
-                    />
-                  </div>
+                  )}
                 </div>
+                <span className="text-[10px] text-amber-400/40 font-display ml-3 shrink-0">{oppsCollapsed ? "▼" : "▲"}</span>
+              </button>
 
-                {/* Invite button — full-width, attached to bottom */}
-                <button
-                  className="w-full py-3 font-display text-sm font-black flex items-center justify-center gap-2 transition-all active:opacity-80 tracking-wider border-t disabled:opacity-50"
-                  style={{ background: "rgba(201,168,76,0.1)", borderColor: "rgba(201,168,76,0.18)", color: "#C9A84C" }}
-                  data-testid="button-invite-activate-city"
-                  disabled={isSharing}
-                  onClick={() => handleReferralShare()}
-                >
-                  🚀 Invite &amp; Activate Your City
-                </button>
-              </div>
-
-              {/* ── Trust Level Widget ── */}
-              {(() => {
-                const score: number = (user as any)?.trustScore ?? 50;
-                const level = score >= 80 ? "trusted" : score >= 60 ? "verified" : "new";
-                const levelLabel = level === "trusted" ? "Trusted Worker" : level === "verified" ? "Verified Worker" : "New Worker";
-                const levelColor = level === "trusted" ? "#86efac" : level === "verified" ? "#93c5fd" : "#94a3b8";
-                const levelBg = level === "trusted" ? "rgba(34,197,94,0.14)" : level === "verified" ? "rgba(59,130,246,0.14)" : "rgba(100,116,139,0.14)";
-                const levelBorder = level === "trusted" ? "rgba(34,197,94,0.40)" : level === "verified" ? "rgba(59,130,246,0.40)" : "rgba(100,116,139,0.35)";
-                const nextThreshold = level === "new" ? 60 : level === "verified" ? 80 : null;
-                const nextLabel = level === "new" ? "Verified (60)" : level === "verified" ? "Trusted (80)" : null;
-                const progressPct = nextThreshold ? Math.min(100, Math.round((score / nextThreshold) * 100)) : 100;
-                return (
-                  <div className="rounded-2xl border p-4 space-y-3" style={{ background: levelBg, borderColor: levelBorder }} data-testid="card-trust-level">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4" style={{ color: levelColor }} />
-                        <p className="text-xs font-display font-bold" style={{ color: levelColor }}>{levelLabel}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-[10px] text-muted-foreground font-display">Trust Score</p>
-                        <p className="text-sm font-display font-black tabular-nums" style={{ color: levelColor }} data-testid="text-trust-score">{score}</p>
-                      </div>
+              {!oppsCollapsed && (
+                <>
+                  {/* Progress bar row */}
+                  <div className="px-4 pb-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
+                      <p className="text-[9px] font-display text-muted-foreground/35">
+                        {referralData?.count ?? 0} / 25 to unlock cash drops
+                      </p>
                     </div>
-
-                    {nextThreshold && (
-                      <div className="space-y-1">
-                        <div className="h-1.5 w-full rounded-full bg-black/30 overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${progressPct}%`, background: levelColor }} data-testid="bar-trust-progress" />
-                        </div>
-                        <p className="text-[9px] text-muted-foreground font-display">
-                          {score} / {nextThreshold} — {nextThreshold - score} pts to {nextLabel}
-                        </p>
-                      </div>
-                    )}
-                    {!nextThreshold && (
-                      <p className="text-[9px] text-emerald-400/50 font-display">Max trust level reached — all payout modes unlocked</p>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-1.5" data-testid="grid-payout-unlocks">
-                      {[
-                        { icon: <Banknote className="w-3 h-3" />, label: "Standard", sub: "2–5 days · Free", unlocked: true },
-                        { icon: <Clock className="w-3 h-3" />, label: "Early", sub: "~1 day · 2% fee", unlocked: level !== "new" },
-                        { icon: <Zap className="w-3 h-3" />, label: "Instant", sub: "Immediate · 5%", unlocked: level === "trusted" },
-                      ].map(({ icon, label, sub, unlocked }) => (
-                        <div key={label} className="rounded-xl p-2 text-center space-y-1" style={{ background: unlocked ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.2)", border: `1px solid ${unlocked ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)"}` }} data-testid={`tile-payout-${label.toLowerCase()}`}>
-                          <div className="flex items-center justify-center" style={{ color: unlocked ? levelColor : "#475569" }}>
-                            {unlocked ? icon : <Lock className="w-3 h-3" />}
-                          </div>
-                          <p className="text-[9px] font-display font-bold" style={{ color: unlocked ? "#e2e8f0" : "#475569" }}>{label}</p>
-                          <p className="text-[8px]" style={{ color: unlocked ? "#64748b" : "#334155" }}>{sub}</p>
-                        </div>
-                      ))}
+                    <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${Math.min(100, Math.round(((referralData?.count ?? 0) / 25) * 100 + 8))}%`, background: "linear-gradient(90deg,#C6A85C,#e8c97a)", transition: "width 1s ease" }}
+                        data-testid="bar-city-activation"
+                      />
                     </div>
-                    <Link href="/profile">
-                      <p className="text-[9px] text-muted-foreground text-center font-display hover:text-muted-foreground transition-colors cursor-pointer">Complete jobs to raise your trust score →</p>
-                    </Link>
                   </div>
-                );
-              })()}
-            </>
-          )}
-        </div>
+
+                  {/* Invite button */}
+                  <button
+                    className="w-full py-3 font-display text-sm font-black flex items-center justify-center gap-2 transition-all active:opacity-80 tracking-wider border-t disabled:opacity-50"
+                    style={{ background: "rgba(201,168,76,0.1)", borderColor: "rgba(201,168,76,0.18)", color: "#C9A84C" }}
+                    data-testid="button-invite-activate-city"
+                    disabled={isSharing}
+                    onClick={() => handleReferralShare()}
+                  >
+                    🚀 Invite &amp; Activate Your City
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Boost Suggestions (contextual) ── */}
         {boostableJobs.length > 0 && (
@@ -1023,6 +1012,39 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* Clock-In first-use explanation modal */}
+      {showClockInModal && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 px-4 pb-8" data-testid="modal-clockin-explain">
+          <div className="w-full max-w-md rounded-3xl overflow-hidden" style={{ background: "hsl(222 47% 9%)", border: "1.5px solid hsl(152 70% 40% / 0.4)" }}>
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "hsl(152 70% 40% / 0.2)", border: "1px solid hsl(152 70% 40% / 0.3)" }}>
+                  <ShieldCheck className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-display font-black text-foreground tracking-tight">You're Clocked In! 🟢</p>
+                  <p className="text-[10px] text-muted-foreground font-display mt-0.5">Your availability is now visible</p>
+                </div>
+              </div>
+              <p className="text-[13px] text-foreground/80 leading-relaxed mb-4">
+                When you're <span className="text-primary font-semibold">Clocked In</span>, local hirers can see you're available and send you gig requests directly. Clock Out any time to go invisible.
+              </p>
+              <p className="text-[11px] text-muted-foreground mb-5">
+                You can also ask the <span className="text-primary/80">AI Help</span> button anytime to explain how this works.
+              </p>
+              <button
+                onClick={() => setShowClockInModal(false)}
+                className="w-full py-3 rounded-2xl font-display font-black text-sm tracking-wide transition-all active:scale-[0.98]"
+                style={{ background: "linear-gradient(135deg,hsl(152 70% 40%),hsl(152 70% 30%))", color: "#000" }}
+                data-testid="button-clockin-modal-close"
+              >
+                Got it — I'm ready to work
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Alert permission modals */}
       {showAlertModal && (
