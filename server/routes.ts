@@ -7824,10 +7824,17 @@ BEHAVIOR RULES:
         return res.status(400).json({ message: "No valid messages provided" });
       }
 
+      const aiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const aiBaseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      if (!aiApiKey) {
+        console.error("[GUBER] admin diagnostic error: AI_INTEGRATIONS_OPENAI_API_KEY not set in this environment");
+        return res.status(503).json({ message: "AI service not configured in this environment", detail: "Missing API key" });
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: aiApiKey,
+        baseURL: aiBaseURL,
       });
 
       const systemPrompt = `You are an AI system diagnostic assistant for GUBER — an on-demand labor platform. You are speaking directly to the platform admin (non-technical). Your job is to analyze live system data and surface problems, anomalies, or things that need attention in plain English.
@@ -7868,8 +7875,8 @@ YOUR BEHAVIOR:
       const reply = completion.choices[0]?.message?.content?.trim() || "Unable to generate diagnostic. Please try again.";
       res.json({ reply });
     } catch (err: any) {
-      console.error("[GUBER] admin diagnostic error:", err.message);
-      res.status(500).json({ message: "Diagnostic unavailable, please try again." });
+      console.error("[GUBER] admin diagnostic error:", err?.status, err?.code, err?.message, err?.stack?.split("\n")[1]);
+      res.status(500).json({ message: "Diagnostic unavailable, please try again.", detail: err?.message });
     }
   });
 

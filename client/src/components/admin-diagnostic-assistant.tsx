@@ -269,11 +269,21 @@ export function AdminDiagnosticAssistant() {
         },
       ]);
     },
-    onError: () => {
+    onError: (err: any) => {
       isAutoScanRef.current = false;
+      let detail = "";
+      try {
+        const raw = err?.message ?? "";
+        const jsonStr = raw.indexOf("{") !== -1 ? raw.slice(raw.indexOf("{")) : null;
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr);
+          detail = parsed.detail || parsed.message || "";
+        }
+      } catch { /* ignore */ }
+      const msg = `Unable to run diagnostic right now. Please try again in a moment.${detail ? `\n\nReason: ${detail}` : ""}`;
       setMessages((prev) => [
         ...prev,
-        { id: nextMsgId(), role: "assistant", content: "Unable to run diagnostic right now. Please try again in a moment." },
+        { id: nextMsgId(), role: "assistant", content: msg },
       ]);
     },
   });
