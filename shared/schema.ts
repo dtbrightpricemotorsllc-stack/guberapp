@@ -1229,6 +1229,15 @@ export const insertFundClaimSchema = createInsertSchema(fundClaimsOrHolds).omit(
 export type FundClaimOrHold = typeof fundClaimsOrHolds.$inferSelect;
 export type InsertFundClaimOrHold = z.infer<typeof insertFundClaimSchema>;
 
+export const zipGeocodeCache = pgTable("zip_geocode_cache", {
+  zip: text("zip").primaryKey(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  cachedAt: timestamp("cached_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+export type ZipGeocodeCache = typeof zipGeocodeCache.$inferSelect;
+
 export const pinnedFindings = pgTable("pinned_findings", {
   id: serial("id").primaryKey(),
   adminUserId: integer("admin_user_id").notNull(),

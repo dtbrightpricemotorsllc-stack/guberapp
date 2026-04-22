@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { lookupZip } from "./zip-geocode";
+import { lookupZip, geocodeZip, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -9771,75 +9771,12 @@ YOUR BEHAVIOR:
     }
   });
 
-  app.get("/api/admin/user-density", requireAdmin, async (req: Request, res: Response) => {
+
+  app.post("/api/admin/zip-geocode-cache/flush", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const filter = ((req.query.filter as string) || "all").trim();
-
-      type DensityRow = { zipcode: string; total: number; recently_active: number; day1_og_count: number; business_count: number; helper_count: number };
-
-      let rows: DensityRow[];
-
-      if (filter === "cash_drop") {
-        const result = await db.execute(sql`
-          SELECT
-            u.zipcode,
-            COUNT(DISTINCT u.id)::int AS total,
-            COUNT(DISTINCT u.id) FILTER (WHERE GREATEST(u.created_at, COALESCE(u.clocked_in_at, u.created_at), COALESCE(u.clocked_out_at, u.created_at)) > NOW() - INTERVAL '30 days')::int AS recently_active,
-            COUNT(DISTINCT u.id) FILTER (WHERE u.day1_og = true)::int AS day1_og_count,
-            COUNT(DISTINCT u.id) FILTER (WHERE u.account_type = 'business')::int AS business_count,
-            COUNT(DISTINCT u.id) FILTER (WHERE u.jobs_completed > 0 OR u.role = 'helper')::int AS helper_count
-          FROM users u
-          INNER JOIN cash_drop_attempts cda ON cda.user_id = u.id
-          WHERE u.zipcode IS NOT NULL AND trim(u.zipcode) != ''
-          GROUP BY u.zipcode
-          ORDER BY total DESC
-        `);
-        rows = result.rows as DensityRow[];
-      } else {
-        const whereExtra =
-          filter === "recent" ? sql` AND GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days'` :
-          filter === "og"     ? sql` AND day1_og = true` :
-          filter === "helper" ? sql` AND (jobs_completed > 0 OR role = 'helper')` :
-          filter === "business" ? sql` AND account_type = 'business'` :
-          sql``;
-
-        const result = await db.execute(sql`
-          SELECT
-            zipcode,
-            COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days')::int AS recently_active,
-            COUNT(*) FILTER (WHERE day1_og = true)::int AS day1_og_count,
-            COUNT(*) FILTER (WHERE account_type = 'business')::int AS business_count,
-            COUNT(*) FILTER (WHERE jobs_completed > 0 OR role = 'helper')::int AS helper_count
-          FROM users
-          WHERE zipcode IS NOT NULL AND trim(zipcode) != '' ${whereExtra}
-          GROUP BY zipcode
-          ORDER BY total DESC
-        `);
-        rows = result.rows as DensityRow[];
-      }
-
-      type ZipResult = { zip: string; lat: number; lng: number; total: number; recentlyActive: number; day1OgCount: number; businessCount: number; helperCount: number };
-      const zips: ZipResult[] = [];
-      for (const row of rows) {
-        const coords = geocodeZip(row.zipcode);
-        if (!coords) continue;
-        zips.push({
-          zip: row.zipcode,
-          lat: coords.lat,
-          lng: coords.lng,
-          total: Number(row.total),
-          recentlyActive: Number(row.recently_active),
-          day1OgCount: Number(row.day1_og_count),
-          businessCount: Number(row.business_count),
-          helperCount: Number(row.helper_count),
-        });
-      }
-
-      const userTotal = zips.reduce((s, z) => s + z.total, 0);
-      res.json({ zips, zipCount: zips.length, userTotal });
+      const deleted = await flushZipGeocodeCache();
+      res.json({ ok: true, deleted });
     } catch (err: any) {
-      console.error("[GUBER] /api/admin/user-density error:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
@@ -10878,25 +10815,27 @@ YOUR BEHAVIOR:
 
       const result = await pool.query(queryText);
 
-      const rows: Array<{
+      type DensityRow2 = {
         zip: string; total: number; centerLat: number; centerLng: number;
         recentlyActive: number; day1Og: number; business: number; helpers: number;
-      }> = [];
+      };
 
-      for (const r of result.rows) {
-        const geo = lookupZip(r.zipcode);
-        if (!geo) continue; // silently skip zips not in the static dataset
-        rows.push({
-          zip: r.zipcode,
-          total: parseInt(r.total, 10),
-          centerLat: geo.latitude,
-          centerLng: geo.longitude,
-          recentlyActive: parseInt(r.recently_active, 10),
-          day1Og: parseInt(r.day1_og, 10),
-          business: parseInt(r.business, 10),
-          helpers: parseInt(r.helpers, 10),
-        });
-      }
+      const rows: DensityRow2[] = (
+        await Promise.all(result.rows.map(async (r: any) => {
+          const geo = await geocodeZip(r.zipcode);
+          if (!geo) return null;
+          return {
+            zip: r.zipcode,
+            total: parseInt(r.total, 10),
+            centerLat: geo.lat,
+            centerLng: geo.lng,
+            recentlyActive: parseInt(r.recently_active, 10),
+            day1Og: parseInt(r.day1_og, 10),
+            business: parseInt(r.business, 10),
+            helpers: parseInt(r.helpers, 10),
+          } satisfies DensityRow2;
+        }))
+      ).filter((r): r is DensityRow2 => r !== null);
 
       res.json(rows);
     } catch (err: any) {
