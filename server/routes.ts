@@ -10816,8 +10816,8 @@ YOUR BEHAVIOR:
       const result = await pool.query(queryText);
 
       type DensityRow2 = {
-        zip: string; total: number; centerLat: number; centerLng: number;
-        recentlyActive: number; day1Og: number; business: number; helpers: number;
+        zip: string; lat: number; lng: number; total: number;
+        recentlyActive: number; day1OgCount: number; businessCount: number; helperCount: number;
       };
 
       const rows: DensityRow2[] = (
@@ -10826,18 +10826,19 @@ YOUR BEHAVIOR:
           if (!geo) return null;
           return {
             zip: r.zipcode,
+            lat: geo.lat,
+            lng: geo.lng,
             total: parseInt(r.total, 10),
-            centerLat: geo.lat,
-            centerLng: geo.lng,
             recentlyActive: parseInt(r.recently_active, 10),
-            day1Og: parseInt(r.day1_og, 10),
-            business: parseInt(r.business, 10),
-            helpers: parseInt(r.helpers, 10),
+            day1OgCount: parseInt(r.day1_og, 10),
+            businessCount: parseInt(r.business, 10),
+            helperCount: parseInt(r.helpers, 10),
           } satisfies DensityRow2;
         }))
       ).filter((r): r is DensityRow2 => r !== null);
 
-      res.json(rows);
+      const userTotal = rows.reduce((s, r) => s + r.total, 0);
+      res.json({ zips: rows, zipCount: rows.length, userTotal });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
