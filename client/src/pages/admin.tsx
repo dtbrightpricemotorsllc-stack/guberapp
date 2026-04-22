@@ -4247,6 +4247,7 @@ const [editForm, setEditForm] = useState<{ brandName: string; brandLogo: string;
 const [grantSearch, setGrantSearch] = useState("");
 const [logoUploading, setLogoUploading] = useState(false);
 const [approvingDropId, setApprovingDropId] = useState<number | null>(null);
+const [rejectReason, setRejectReason] = useState("");
 
 const { data: hostUsers, isLoading: hostLoading } = useQuery<HostDropUser[]>({
 queryKey: ["/api/admin/host-drop-users"],
@@ -4352,13 +4353,23 @@ data-testid={`button-reject-drop-${drop.id}`}>
 </Button>
 </div>
 ) : (
-<div className="flex gap-2 items-center pt-1">
-<Input placeholder="Rejection reason (optional)..." className="bg-background border-border/20 text-xs flex-1 h-7"
+<div className="space-y-2 pt-1">
+<Input
+placeholder="Rejection reason (optional)..."
+className="bg-background border-border/20 text-xs w-full h-7"
+value={rejectReason}
+onChange={e => setRejectReason(e.target.value)}
 data-testid={`input-reject-reason-${drop.id}`}
-onKeyDown={(e) => {
-if (e.key === "Enter") approveMutation.mutate({ id: drop.id, action: "reject", reason: (e.target as HTMLInputElement).value });
-}} />
-<Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setApprovingDropId(null)}>Cancel</Button>
+/>
+<div className="flex gap-2">
+<Button size="sm" className="h-7 text-xs gap-1 bg-destructive hover:bg-destructive/90"
+onClick={() => { approveMutation.mutate({ id: drop.id, action: "reject", reason: rejectReason || undefined }); setRejectReason(""); }}
+disabled={approveMutation.isPending}
+data-testid={`button-confirm-reject-${drop.id}`}>
+Confirm Reject
+</Button>
+<Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setApprovingDropId(null); setRejectReason(""); }}>Cancel</Button>
+</div>
 </div>
 )}
 </div>
