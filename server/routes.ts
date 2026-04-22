@@ -7690,6 +7690,8 @@ ABOUT THIS USER:
 - Role: ${sessionUser.role || "buyer"}
 - Day-1 OG member: ${sessionUser.day1OG ? "YES — they already have OG perks" : "NO — not yet an OG member"}
 - Jobs completed: ${(sessionUser as any).jobsCompleted || 0}
+- AI or Not credits: ${(sessionUser as any).aiOrNotCredits || 0}
+- Trust Box (unlimited AI or Not): ${(sessionUser as any).aiOrNotUnlimitedText ? "YES — active" : "NO"}
 
 KEY PLATFORM KNOWLEDGE:
 
@@ -7707,8 +7709,19 @@ Day-1 OG is GUBER's founding membership — locked in early before the platform 
 - Early access to new features
 If someone asks about fees, saving money, payouts, or how to earn more — proactively mention that Day-1 OG membership cuts their worker fee in half (5% vs 10%). Example: "By the way, if you're not already a Day-1 OG member, it's worth checking out — OG members only pay a 5% fee instead of 10% on every payout, which adds up fast."
 
+**AI or Not — The Game**
+AI or Not is a fun mini-game inside GUBER where users look at images and guess whether they were made by a human or AI. It's accessible from the main menu or dashboard. Users get credits to play — Day-1 OG members receive 5 free credits. The Trust Box subscription gives unlimited plays. If this user asks about AI or Not, tell them they currently have ${(sessionUser as any).aiOrNotCredits || 0} credit(s) remaining${(sessionUser as any).aiOrNotUnlimitedText ? " and unlimited Trust Box access" : ""}. To play more, they can earn credits through OG membership or subscribe to Trust Box.
+
+**Trust Box**
+Trust Box is a premium subscription that unlocks unlimited AI or Not gameplay and text features. It pairs with Day-1 OG membership for the full founding-member experience. Users can subscribe from the AI or Not screen inside the app.
+
 **Verify & Inspect Jobs**
-Workers physically inspect items for buyers/sellers — vehicles, properties, marketplace items, salvage/auction goods. Travel to location, inspect, submit a detailed report with photos.
+Verify & Inspect is a specialized job category where workers physically inspect items on behalf of buyers or sellers. Sub-categories include:
+- Vehicle inspections (cars, trucks, motorcycles before purchase)
+- Property walk-throughs (homes, rentals, commercial spaces)
+- Marketplace item verification (Facebook Marketplace, eBay, auction goods)
+- Salvage/auction lot inspections
+Workers travel to the item's location, inspect it thoroughly, take photos, and submit a detailed report through the app. This helps buyers make informed decisions without traveling themselves. It pays well and requires attention to detail.
 
 **Worker Flow**
 1. Browse jobs on the dashboard or map
