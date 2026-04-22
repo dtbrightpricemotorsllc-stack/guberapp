@@ -9641,8 +9641,8 @@ YOUR BEHAVIOR:
       const [u] = await db
         .select({
           cashDropHostEnabled: usersTable.cashDropHostEnabled,
-          cashDropHostStatus: (usersTable as any).cashDropHostStatus,
-          cashDropApprovalRequired: (usersTable as any).cashDropApprovalRequired,
+          cashDropHostStatus: usersTable.cashDropHostStatus,
+          cashDropApprovalRequired: usersTable.cashDropApprovalRequired,
           cashDropBrandName: usersTable.cashDropBrandName,
           cashDropBrandLogo: usersTable.cashDropBrandLogo,
         })
@@ -9809,7 +9809,7 @@ YOUR BEHAVIOR:
         hostUserId: currentUser.id,
         hostLogo: resolvedLogo,
         approvalStatus: needsApproval ? "pending" : "approved",
-      } as any);
+      });
 
       await storage.createAuditLog({
         action: "host_drop_created",
