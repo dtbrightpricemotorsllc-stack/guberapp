@@ -6,7 +6,9 @@ const ZIP_LOOKUP: Record<string, [number, number]> = JSON.parse(
 );
 
 export function geocodeZip(zip: string): { lat: number; lng: number } | null {
-  const z = (zip || "").trim().padStart(5, "0");
+  const raw = (zip || "").trim();
+  const z = raw.replace(/-\d{4}$/, "").padStart(5, "0");
+  if (!/^\d{5}$/.test(z)) return null;
   const entry = ZIP_LOOKUP[z];
   if (!entry) return null;
   return { lat: entry[0], lng: entry[1] };
