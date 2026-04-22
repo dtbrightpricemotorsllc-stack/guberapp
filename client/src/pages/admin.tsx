@@ -4217,6 +4217,29 @@ async function uploadLogoToCloudinary(file: File): Promise<string> {
   return data.secure_url as string;
 }
 
+interface HostDropUser {
+  id: number;
+  username: string;
+  fullName: string | null;
+  email: string;
+  profilePhoto: string | null;
+  cashDropHostEnabled: boolean;
+  cashDropBrandName: string | null;
+  cashDropBrandLogo: string | null;
+  cashDropApprovalRequired: boolean;
+}
+
+interface PendingHostDrop {
+  id: number;
+  title: string;
+  reward_per_winner: number;
+  winner_limit: number;
+  host_logo: string | null;
+  host_full_name: string | null;
+  host_username: string | null;
+  approval_status: string;
+}
+
 function HostDropsTab() {
 const { toast } = useToast();
 const [editingId, setEditingId] = useState<number | null>(null);
@@ -4225,17 +4248,17 @@ const [grantSearch, setGrantSearch] = useState("");
 const [logoUploading, setLogoUploading] = useState(false);
 const [approvingDropId, setApprovingDropId] = useState<number | null>(null);
 
-const { data: hostUsers, isLoading: hostLoading } = useQuery<any[]>({
+const { data: hostUsers, isLoading: hostLoading } = useQuery<HostDropUser[]>({
 queryKey: ["/api/admin/host-drop-users"],
 staleTime: 30_000,
 });
 
-const { data: pendingDrops, isLoading: pendingLoading } = useQuery<any[]>({
+const { data: pendingDrops, isLoading: pendingLoading } = useQuery<PendingHostDrop[]>({
 queryKey: ["/api/admin/host-drops/pending"],
 staleTime: 15_000,
 });
 
-const { data: allUsersData } = useQuery<any[]>({
+const { data: allUsersData } = useQuery<User[]>({
 queryKey: ["/api/admin/users"],
 staleTime: 60_000,
 });

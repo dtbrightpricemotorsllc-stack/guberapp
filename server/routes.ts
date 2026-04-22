@@ -9656,12 +9656,13 @@ YOUR BEHAVIOR:
 
   app.get("/api/host/drops", requireAuth, async (req: Request, res: Response) => {
     try {
-      const currentUser = req.user as any;
+      const userId = req.session.userId!;
+      const currentUser = await storage.getUser(userId);
       if (!currentUser?.cashDropHostEnabled) {
         return res.status(403).json({ error: "Host drop access required" });
       }
       const result = await db.execute(sql`
-        SELECT * FROM cash_drops WHERE host_user_id = ${currentUser.id} ORDER BY created_at DESC
+        SELECT * FROM cash_drops WHERE host_user_id = ${userId} ORDER BY created_at DESC
       `);
       res.json(result.rows);
     } catch (err: any) {
@@ -9679,6 +9680,7 @@ YOUR BEHAVIOR:
           email: usersTable.email,
           profilePhoto: usersTable.profilePhoto,
           cashDropHostEnabled: usersTable.cashDropHostEnabled,
+          cashDropApprovalRequired: usersTable.cashDropApprovalRequired,
           cashDropBrandName: usersTable.cashDropBrandName,
           cashDropBrandLogo: usersTable.cashDropBrandLogo,
         })
@@ -9765,7 +9767,8 @@ YOUR BEHAVIOR:
 
   app.post(["/api/cash-drops/host/create", "/api/host/drops"], requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
-      const currentUser = req.user as any;
+      const userId = req.session.userId!;
+      const currentUser = await storage.getUser(userId);
       if (!currentUser?.cashDropHostEnabled) {
         return res.status(403).json({ error: "You do not have host drop permission" });
       }

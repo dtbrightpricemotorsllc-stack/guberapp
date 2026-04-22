@@ -643,7 +643,7 @@ export default function Dashboard() {
                   <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
                 </Button>
               </Link>
-              {(user as any)?.cashDropHostEnabled && (
+              {user?.cashDropHostEnabled && (
                 <Link href="/host-drop/new">
                   <button
                     className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"

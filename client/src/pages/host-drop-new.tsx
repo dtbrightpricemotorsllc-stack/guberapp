@@ -93,7 +93,7 @@ export default function HostDropNew() {
     }
   };
 
-  if (!(user as any)?.cashDropHostEnabled) {
+  if (!user?.cashDropHostEnabled) {
     return (
       <GuberLayout>
         <div className="max-w-lg mx-auto px-4 py-12 text-center">
@@ -105,8 +105,8 @@ export default function HostDropNew() {
     );
   }
 
-  const brandName = (user as any)?.cashDropBrandName;
-  const brandLogo = (user as any)?.cashDropBrandLogo;
+  const brandName = user?.cashDropBrandName;
+  const brandLogo = user?.cashDropBrandLogo;
   const resolvedLogo = hostLogo || brandLogo || "";
 
   return (
