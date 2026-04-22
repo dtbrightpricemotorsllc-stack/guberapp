@@ -4630,11 +4630,11 @@ const maxTotal = Math.max(...density.zips.map(z => z.total), 1);
 
 class ZipOverlay extends mapsLib.OverlayView {
 private div: HTMLDivElement | null = null;
-private pos: google.maps.LatLng;
+private pos: google.maps.LatLngLiteral;
 private zipData: ZipDensity;
 private onClickCb: () => void;
 
-constructor(position: google.maps.LatLng, data: ZipDensity, onClick: () => void) {
+constructor(position: google.maps.LatLngLiteral, data: ZipDensity, onClick: () => void) {
 super();
 this.pos = position;
 this.zipData = data;
@@ -4688,7 +4688,7 @@ this.div = null;
 
 density.zips.forEach(zipData => {
 const overlay = new ZipOverlay(
-new mapsLib.LatLng(zipData.lat, zipData.lng),
+{ lat: zipData.lat, lng: zipData.lng },
 zipData,
 () => setSelectedZip(zipData),
 );
