@@ -840,34 +840,36 @@ export default function Dashboard() {
             className="mb-6 rounded-2xl px-4 py-3.5 cursor-pointer animate-fade-in stagger-3 relative overflow-hidden active:scale-[0.97] transition-all group"
             style={{
               background: "linear-gradient(135deg,#0d0820 0%,#1a0d3e 55%,#0a0520 100%)", // dark-gradient-allow: verify-inspect strip card, purple brand dark theme
-              border: "1.5px solid rgba(139,92,246,0.5)",
-              boxShadow: "0 0 36px rgba(139,92,246,0.18), inset 0 0 40px rgba(139,92,246,0.04)",
+              border: "1.5px solid rgba(139,92,246,0.6)",
+              boxShadow: "0 0 40px rgba(139,92,246,0.25), inset 0 0 40px rgba(139,92,246,0.06)",
             }}
             data-testid="card-verify-inspect-strip"
           >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 90% 30%,rgba(167,139,250,0.2) 0%,transparent 55%)" }} />
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 10% 80%,rgba(91,33,182,0.1) 0%,transparent 50%)" }} />
-            <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-30" style={{ background: "linear-gradient(90deg,transparent 0%,rgba(139,92,246,0.12) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 90% 30%,rgba(167,139,250,0.28) 0%,transparent 55%)" }} />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 10% 80%,rgba(91,33,182,0.15) 0%,transparent 50%)" }} />
+            <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-40" style={{ background: "linear-gradient(90deg,transparent 0%,rgba(139,92,246,0.18) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
             <div className="relative flex items-start gap-3.5">
-              <div className="shrink-0 mt-0.5 w-12 h-12 animate-pulse-glow" style={{ filter: "drop-shadow(0 0 12px rgba(139,92,246,0.6))" }}>
+              <div className="shrink-0 mt-0.5 w-12 h-12 animate-pulse-glow" style={{ filter: "drop-shadow(0 0 16px rgba(167,139,250,0.9))" }}>
                 <img src={viLogoImg} alt="Verify & Inspect" className="w-full h-full object-contain" style={{ mixBlendMode: "screen" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-display font-black tracking-[0.2em] text-violet-400/70 uppercase mb-0.5">Verify &amp; Inspect</p>
-                <p className="text-[13px] font-display font-black text-white leading-tight mb-1.5">See It Before You Buy It.</p>
+                <p className="text-[9px] font-display font-black tracking-[0.25em] uppercase mb-0.5" style={{ color: "#a78bfa" }}>— Book a Job —</p>
+                <p className="font-display font-black text-white leading-tight mb-1.5" style={{ fontSize: 15, letterSpacing: "-0.02em", textShadow: "0 0 20px rgba(167,139,250,0.5)" }}>
+                  Verify &amp; Inspect
+                </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {["📸 Photo proof", "📍 GPS verified", "⚡ On-site in hours"].map((tag) => (
-                    <span key={tag} className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full"
-                      style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", color: "#c4b5fd" }}>
+                  {["📸 Photos", "📍 On-site", "⚡ Same day"].map((tag) => (
+                    <span key={tag} className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: "rgba(139,92,246,0.22)", border: "1px solid rgba(167,139,250,0.45)", color: "#ddd6fe" }}>
                       {tag}
                     </span>
                   ))}
                 </div>
               </div>
               <div className="shrink-0 flex items-center gap-2 self-center">
-                <span className="text-[10px] font-display font-black tracking-widest text-black uppercase px-3 py-1.5 rounded-full group-active:scale-95 transition-transform"
-                  style={{ background: "linear-gradient(135deg,#a78bfa,#7c3aed)", boxShadow: "0 0 12px rgba(139,92,246,0.4)" }}>
-                  Book Now
+                <span className="font-display font-black tracking-wider text-white uppercase px-3.5 py-2 rounded-full group-active:scale-95 transition-transform flex items-center gap-1"
+                  style={{ background: "linear-gradient(135deg,#9333ea,#6d28d9)", boxShadow: "0 0 18px rgba(139,92,246,0.55)", fontSize: 11 }}>
+                  Book Now →
                 </span>
               </div>
             </div>
@@ -934,32 +936,41 @@ export default function Dashboard() {
           onClick={() => navigate("/ai-or-not")}
           className="mb-6 rounded-2xl p-4 cursor-pointer animate-fade-in stagger-5 overflow-hidden relative active:scale-[0.97] transition-all group"
           style={{
-            background: "linear-gradient(135deg,hsl(190 85% 12%),hsl(175 85% 8%))",
-            border: "1.5px solid hsl(190 85% 50% / 0.3)",
-            boxShadow: "0 0 30px hsl(190 85% 50% / 0.1), inset 0 0 40px hsl(190 85% 50% / 0.03)",
+            background: "linear-gradient(135deg,hsl(190 90% 9%),hsl(220 80% 8%) 50%,hsl(175 90% 7%))",
+            border: "1.5px solid hsl(190 85% 55% / 0.45)",
+            boxShadow: "0 0 40px hsl(190 85% 50% / 0.2), inset 0 0 40px hsl(190 85% 50% / 0.04)",
           }}
           data-testid="card-category-ai-or-not"
         >
+          {/* Background orbs */}
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-20"
-              style={{ background: "radial-gradient(circle,hsl(190 85% 55%),transparent 70%)" }} />
-            <div className="absolute -left-4 -bottom-4 w-16 h-16 rounded-full opacity-10"
-              style={{ background: "radial-gradient(circle,hsl(175 85% 55%),transparent 70%)" }} />
+            <div className="absolute -right-2 -top-3 w-28 h-28 rounded-full opacity-25"
+              style={{ background: "radial-gradient(circle,hsl(190 85% 55%),transparent 65%)" }} />
+            <div className="absolute left-12 -bottom-5 w-20 h-20 rounded-full opacity-15"
+              style={{ background: "radial-gradient(circle,hsl(175 85% 55%),transparent 65%)" }} />
           </div>
-          <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-20" style={{ background: "linear-gradient(90deg,transparent 0%,hsl(190 85% 50% / 0.1) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
-          <div className="relative flex items-center gap-4">
-            <div className="p-3 rounded-xl shrink-0 relative animate-pulse-glow"
-              style={{ background: "linear-gradient(135deg,hsl(190 85% 40%),hsl(175 85% 30%))", boxShadow: "0 0 20px hsl(190 85% 50% / 0.35)" }}>
-              <Bot className="w-6 h-6 text-white" strokeWidth={1.8} />
+          <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-30" style={{ background: "linear-gradient(90deg,transparent 0%,hsl(190 85% 55% / 0.15) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
+
+          <div className="relative flex items-center gap-3.5">
+            {/* Icon block with split human/AI visual */}
+            <div className="shrink-0 w-12 h-12 rounded-xl relative overflow-hidden animate-pulse-glow flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,hsl(190 85% 35%),hsl(210 85% 25%))", boxShadow: "0 0 24px hsl(190 85% 55% / 0.5)" }}>
+              <Bot className="w-6 h-6 text-white" strokeWidth={1.5} />
+              {/* scan line */}
+              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,transparent 40%,hsl(190 85% 55% / 0.35) 50%,transparent 60%)", animation: "shimmer 2s linear infinite" }} />
             </div>
-            <div className="flex-1 relative">
-              <p className="font-display font-bold text-white text-sm leading-tight mb-0.5">AI or Not</p>
-              <p className="text-[10px] font-display tracking-wider mb-1.5" style={{ color: "hsl(190 85% 60%)" }}>DETECT AI-GENERATED MEDIA</p>
-              <p className="text-[10px] text-white/85 leading-relaxed">Upload any image or video to check if it's real or AI-made</p>
+
+            <div className="flex-1 relative min-w-0">
+              <p className="text-[9px] font-display font-black tracking-[0.25em] uppercase mb-0.5" style={{ color: "hsl(190 85% 65%)" }}>— The Game —</p>
+              <p className="font-display font-black text-white leading-none mb-1" style={{ fontSize: 17, letterSpacing: "-0.03em", textShadow: "0 0 24px hsl(190 85% 55% / 0.6)" }}>
+                AI <span style={{ color: "hsl(190 85% 60%)" }}>or</span> Not?
+              </p>
+              <p className="text-[10px] text-white/60 leading-snug">Can you tell real from fake? 🤖</p>
             </div>
-            <span className="text-[10px] font-display font-black tracking-widest text-black uppercase px-3 py-1.5 rounded-full shrink-0 group-active:scale-95 transition-transform"
-              style={{ background: "linear-gradient(135deg,hsl(190 85% 55%),hsl(175 85% 45%))", boxShadow: "0 0 12px hsl(190 85% 50% / 0.35)" }}>
-              Try It
+
+            <span className="font-display font-black tracking-wide text-black uppercase shrink-0 px-3.5 py-2 rounded-full group-active:scale-95 transition-transform flex items-center gap-1"
+              style={{ background: "linear-gradient(135deg,hsl(190 85% 60%),hsl(175 85% 50%))", boxShadow: "0 0 18px hsl(190 85% 55% / 0.5)", fontSize: 11 }}>
+              Play →
             </span>
           </div>
         </div>
