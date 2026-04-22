@@ -11,6 +11,7 @@ import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-rea
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
+import { getToken } from "@/lib/token-storage";
 
 type GooglePhase = null | "connecting" | "completing";
 
@@ -94,7 +95,15 @@ export default function Login() {
     else if (error === "suspended") toast({ title: "Account Suspended", description: "This account is currently suspended.", variant: "destructive" });
     else if (error === "google_failed") toast({ title: "Google Sign-In Failed", description: "Please try again.", variant: "destructive" });
     else if (error === "google_cancelled") toast({ title: "Sign-In Cancelled", description: "Google sign-in was cancelled." });
-    else if (error === "invalid_state") toast({ title: "Sign-In Failed", description: "Security validation failed. Please try again.", variant: "destructive" });
+    else if (error === "invalid_state") {
+      getToken().then((token) => {
+        if (token) {
+          setLocation(returnTo || "/dashboard");
+        } else {
+          toast({ title: "Sign-In Link Expired", description: "That sign-in link already expired. Please tap 'Continue with Google' again.", variant: "destructive" });
+        }
+      });
+    }
     else if (error === "not_configured") toast({ title: "Not Available", description: "Google Sign-In is not configured yet.", variant: "destructive" });
   }, [search]);
 

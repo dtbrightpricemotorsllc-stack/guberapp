@@ -1911,7 +1911,12 @@ export async function registerRoutes(
     <h1>Signed in!</h1>
     <p>Returning to GUBER…</p>
   </div>
-  <script>window.close();</script>
+  <script>
+    try { window.close(); } catch(e) {}
+    setTimeout(function() {
+      if (!window.closed) { window.location.replace('/'); }
+    }, 2000);
+  </script>
 </body>
 </html>`);
         }
