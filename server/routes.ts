@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import * as zipcodesLib from "zipcodes";
+import { lookupZip } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -10726,7 +10726,6 @@ YOUR BEHAVIOR:
           FROM base b
           GROUP BY b.zipcode
           ORDER BY total DESC
-          LIMIT 500
         `;
       } else {
         let whereExtra = "";
@@ -10749,7 +10748,6 @@ YOUR BEHAVIOR:
             ${whereExtra}
           GROUP BY u.zipcode
           ORDER BY total DESC
-          LIMIT 500
         `;
       }
 
@@ -10761,8 +10759,8 @@ YOUR BEHAVIOR:
       }> = [];
 
       for (const r of result.rows) {
-        const geo = zipcodesLib.lookup(r.zipcode);
-        if (!geo) continue; // silently skip zips not in the dataset
+        const geo = lookupZip(r.zipcode);
+        if (!geo) continue; // silently skip zips not in the static dataset
         rows.push({
           zip: r.zipcode,
           total: parseInt(r.total, 10),
