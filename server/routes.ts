@@ -9635,7 +9635,7 @@ YOUR BEHAVIOR:
 
   // ==================== HOST DROP PERMISSION ====================
 
-  app.get("/api/users/me/host-drop-status", requireAuth, async (req: Request, res: Response) => {
+  app.get(["/api/users/me/host-drop-status", "/api/user/host-drop-status"], requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const [u] = await db
@@ -9763,7 +9763,7 @@ YOUR BEHAVIOR:
     }
   });
 
-  app.post("/api/cash-drops/host/create", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  app.post(["/api/cash-drops/host/create", "/api/host/drops"], requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const currentUser = req.user as any;
       if (!currentUser?.cashDropHostEnabled) {
@@ -9778,6 +9778,7 @@ YOUR BEHAVIOR:
 
       const needsApproval = !!currentUser.cashDropApprovalRequired;
       const resolvedLogo = hostLogo || currentUser.cashDropBrandLogo || null;
+      if (!resolvedLogo) return res.status(400).json({ error: "A brand logo is required for host drops. Please upload a logo image." });
 
       const drop = await storage.createCashDrop({
         title,
@@ -9821,6 +9822,7 @@ YOUR BEHAVIOR:
       res.status(500).json({ error: err.message });
     }
   });
+
 
   // ==================== SPONSORED CASH DROPS ====================
 

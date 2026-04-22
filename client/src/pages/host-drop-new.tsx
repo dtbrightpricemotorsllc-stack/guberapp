@@ -193,8 +193,8 @@ export default function HostDropNew() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">DROP PIN LOGO (optional)</Label>
-            <p className="text-[10px] text-muted-foreground -mt-1">This logo will appear on the map as your drop pin.</p>
+            <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">DROP PIN LOGO <span className="text-destructive">*</span></Label>
+            <p className="text-[10px] text-muted-foreground -mt-1">This logo will appear on the map as your drop pin. Required.</p>
             {resolvedLogo && (
               <div className="flex items-center gap-3">
                 <img src={resolvedLogo} alt="Drop pin logo" className="w-10 h-10 rounded-full object-cover border-2 border-amber-500/40" />
@@ -307,10 +307,14 @@ export default function HostDropNew() {
             </div>
           </div>
 
+          {!resolvedLogo && (
+            <p className="text-[11px] text-destructive text-center">A brand logo is required before submitting your drop.</p>
+          )}
+
           <Button
             className="w-full h-14 font-display tracking-[0.15em] text-sm font-bold rounded-2xl"
             style={{ background: "linear-gradient(135deg,#C9A84C,#a8873c)", color: "#000" }}
-            disabled={!title || !rewardPerWinner || createMutation.isPending || logoUploading}
+            disabled={!title || !rewardPerWinner || !resolvedLogo || createMutation.isPending || logoUploading}
             onClick={() => createMutation.mutate({
               title,
               description: description || undefined,
