@@ -105,6 +105,9 @@ export const users = pgTable("users", {
   clockedInAt: timestamp("clocked_in_at"),
   clockedOutAt: timestamp("clocked_out_at"),
   reputationFlags: integer("reputation_flags").default(0),
+  cashDropHostEnabled: boolean("cash_drop_host_enabled").default(false),
+  cashDropBrandName: text("cash_drop_brand_name"),
+  cashDropBrandLogo: text("cash_drop_brand_logo"),
 });
 
 export const categories = pgTable("categories", {
@@ -844,6 +847,9 @@ export const cashDrops = pgTable("cash_drops", {
   claimCode: text("claim_code"),
   fundingSource: text("funding_source").default("guber_cash_app"),
   closedAt: timestamp("closed_at"),
+  isHostDrop: boolean("is_host_drop").default(false),
+  hostUserId: integer("host_user_id"),
+  hostLogo: text("host_logo"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

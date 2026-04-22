@@ -4201,6 +4201,166 @@ function SafetyQueueTab({ allUsers, usersLoading, bgCheckMutation }: {
   );
 }
 
+function HostDropsTab() {
+const { toast } = useToast();
+const [editingId, setEditingId] = useState<number | null>(null);
+const [editForm, setEditForm] = useState<{ brandName: string; brandLogo: string }>({ brandName: "", brandLogo: "" });
+const [grantSearch, setGrantSearch] = useState("");
+
+const { data: hostUsers, isLoading: hostLoading } = useQuery<any[]>({
+queryKey: ["/api/admin/host-drop-users"],
+staleTime: 30_000,
+});
+
+const { data: allUsersData } = useQuery<any[]>({
+queryKey: ["/api/admin/users"],
+staleTime: 60_000,
+});
+
+const grantMutation = useMutation({
+mutationFn: ({ id, enabled, brandName, brandLogo }: { id: number; enabled: boolean; brandName?: string; brandLogo?: string }) =>
+apiRequest("PATCH", `/api/admin/users/${id}/host-drop`, { enabled, brandName, brandLogo }),
+onSuccess: () => {
+queryClient.invalidateQueries({ queryKey: ["/api/admin/host-drop-users"] });
+queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+toast({ title: "Host drop permission updated" });
+setEditingId(null);
+},
+onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+});
+
+const filtered = (allUsersData || []).filter((u: any) =>
+grantSearch.trim() === "" ? false :
+(u.username?.toLowerCase().includes(grantSearch.toLowerCase()) ||
+u.email?.toLowerCase().includes(grantSearch.toLowerCase()) ||
+u.fullName?.toLowerCase().includes(grantSearch.toLowerCase()))
+).slice(0, 5);
+
+const hosts = hostUsers || [];
+
+return (
+<div className="space-y-5" data-testid="admin-host-drops">
+<div className="flex items-center gap-2">
+<DollarSign className="w-4 h-4 guber-text-green" />
+<h3 className="font-display font-semibold text-sm">Host Drop Permissions</h3>
+</div>
+
+<div className="bg-card rounded-xl border border-border/20 p-4 space-y-3">
+<p className="text-xs font-display font-semibold text-muted-foreground">Grant Permission to a User</p>
+<div className="relative">
+<Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+<Input
+value={grantSearch}
+onChange={e => setGrantSearch(e.target.value)}
+placeholder="Search by username, email, or name..."
+className="bg-background border-border/20 text-xs pl-9"
+data-testid="input-host-user-search"
+/>
+</div>
+{filtered.length > 0 && (
+<div className="space-y-1.5">
+{filtered.map((u: any) => (
+<div key={u.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/10 border border-border/10">
+<Avatar className="w-7 h-7 shrink-0">
+<AvatarImage src={u.profilePhoto} />
+<AvatarFallback className="text-[10px]">{u.fullName?.[0]}</AvatarFallback>
+</Avatar>
+<div className="flex-1 min-w-0">
+<p className="text-xs font-semibold truncate">{u.fullName}</p>
+<p className="text-[10px] text-muted-foreground truncate">@{u.username}</p>
+</div>
+{u.cashDropHostEnabled ? (
+<Badge className="text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Host</Badge>
+) : (
+<Button size="sm" className="h-7 text-xs px-3" onClick={() => {
+grantMutation.mutate({ id: u.id, enabled: true, brandName: "", brandLogo: "" });
+setGrantSearch("");
+}} disabled={grantMutation.isPending} data-testid={`button-grant-host-${u.id}`}>
+Grant
+</Button>
+)}
+</div>
+))}
+</div>
+)}
+</div>
+
+<div className="space-y-2">
+<p className="text-xs font-display font-semibold text-muted-foreground">Active Host Drop Hosts ({hosts.length})</p>
+{hostLoading ? (
+Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)
+) : hosts.length === 0 ? (
+<p className="text-xs text-muted-foreground text-center py-8 border border-dashed border-border/20 rounded-xl">No host drop hosts yet</p>
+) : hosts.map((u: any) => {
+const isEditing = editingId === u.id;
+return (
+<div key={u.id} className="bg-card rounded-xl border border-border/20 p-3 space-y-2" data-testid={`host-user-${u.id}`}>
+<div className="flex items-center gap-3">
+<Avatar className="w-8 h-8 shrink-0">
+{u.cashDropBrandLogo ? (
+<AvatarImage src={u.cashDropBrandLogo} />
+) : (
+<AvatarImage src={u.profilePhoto} />
+)}
+<AvatarFallback className="text-[10px]">{u.fullName?.[0]}</AvatarFallback>
+</Avatar>
+<div className="flex-1 min-w-0">
+<p className="text-xs font-semibold truncate">{u.fullName}</p>
+<p className="text-[10px] text-muted-foreground truncate">
+@{u.username}
+{u.cashDropBrandName && <span className="text-primary/70"> · {u.cashDropBrandName}</span>}
+</p>
+</div>
+<div className="flex items-center gap-1.5">
+<Button size="icon" variant="ghost" onClick={() => {
+if (isEditing) setEditingId(null);
+else { setEditingId(u.id); setEditForm({ brandName: u.cashDropBrandName || "", brandLogo: u.cashDropBrandLogo || "" }); }
+}} data-testid={`button-edit-host-${u.id}`}>
+<Edit className="w-3.5 h-3.5" />
+</Button>
+<Button size="icon" variant="ghost" onClick={() => {
+if (confirm(`Revoke host drop permission for ${u.fullName}?`)) {
+grantMutation.mutate({ id: u.id, enabled: false, brandName: "", brandLogo: "" });
+}
+}} data-testid={`button-revoke-host-${u.id}`}>
+<X className="w-3.5 h-3.5 text-destructive" />
+</Button>
+</div>
+</div>
+{isEditing && (
+<div className="space-y-2 pt-2 border-t border-border/10">
+<Input
+value={editForm.brandName}
+onChange={e => setEditForm(f => ({ ...f, brandName: e.target.value }))}
+placeholder="Brand name (e.g. Find Cash PCOLA)"
+className="bg-background border-border/20 text-xs"
+data-testid={`input-brand-name-${u.id}`}
+/>
+<Input
+value={editForm.brandLogo}
+onChange={e => setEditForm(f => ({ ...f, brandLogo: e.target.value }))}
+placeholder="Brand logo URL (Cloudinary URL)"
+className="bg-background border-border/20 text-xs"
+data-testid={`input-brand-logo-${u.id}`}
+/>
+<div className="flex gap-2">
+<Button size="sm" disabled={grantMutation.isPending}
+onClick={() => grantMutation.mutate({ id: u.id, enabled: true, ...editForm })}
+data-testid={`button-save-host-${u.id}`}>
+<Save className="w-3 h-3 mr-1" /> Save
+</Button>
+<Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+</div>
+</div>
+)}
+</div>
+);
+})}
+</div>
+</div>
+);
+}
+
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
@@ -4353,6 +4513,7 @@ return (
 <TabsTrigger value="trustbox" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-trustbox">Trust Box</TabsTrigger>
 <TabsTrigger value="broadcast" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-broadcast">Broadcast</TabsTrigger>
 <TabsTrigger value="cashdrop" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-cashdrop">⚡ Cash Drop</TabsTrigger>
+<TabsTrigger value="hostdrops" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-hostdrops">💰 Host Drops</TabsTrigger>
 <TabsTrigger value="sponsors" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-sponsors">🔥 Sponsors</TabsTrigger>
 <TabsTrigger value="qualifications" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-qualifications">Qualifications</TabsTrigger>
 <TabsTrigger value="wallet" className="font-display shrink-0 whitespace-nowrap" data-testid="tab-wallet">Wallet</TabsTrigger>
@@ -4804,6 +4965,9 @@ data-testid={`button-resolve-dispute-${j.id}`}
 </TabsContent>
 <TabsContent value="cashdrop">
 <CashDropTab sponsorPrefill={sponsorPrefill} onSponsorPrefillUsed={() => setSponsorPrefill(null)} />
+</TabsContent>
+<TabsContent value="hostdrops">
+<HostDropsTab />
 </TabsContent>
 <TabsContent value="sponsors">
 <SponsorsTab onCreateDrop={createDropFromSponsor} />

@@ -12,7 +12,7 @@ import type { Job } from "@shared/schema";
 import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat, ShoppingBag,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
-  TrendingUp, X, Loader2, Rocket, UserCircle, Users, Lock, Banknote, Clock, Bell,
+  TrendingUp, X, Loader2, Rocket, UserCircle, Users, Lock, Banknote, Clock, Bell, DollarSign,
 } from "lucide-react";
 import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
@@ -643,6 +643,23 @@ export default function Dashboard() {
                   <ChevronRight className="w-4 h-4 ml-auto opacity-60" /> {/* faint-text-allow: decorative chevron icon */}
                 </Button>
               </Link>
+              {(user as any)?.cashDropHostEnabled && (
+                <Link href="/host-drop/new">
+                  <button
+                    className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
+                    style={{
+                      background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
+                      border: "1.5px solid rgba(201,168,76,0.4)",
+                      color: "#C9A84C",
+                    }}
+                    data-testid="button-start-host-drop"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    START A GUBER DROP
+                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+                  </button>
+                </Link>
+              )}
               <p className="text-[10px] text-muted-foreground font-display text-center pt-0.5">
                 Be the first to bring opportunities to your city
               </p>

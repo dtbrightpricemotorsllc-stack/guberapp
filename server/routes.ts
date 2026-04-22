@@ -9633,6 +9633,104 @@ YOUR BEHAVIOR:
     }
   });
 
+  // ==================== HOST DROP PERMISSION ====================
+
+  app.get("/api/admin/host-drop-users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const rows = await db
+        .select({
+          id: usersTable.id,
+          username: usersTable.username,
+          fullName: usersTable.fullName,
+          email: usersTable.email,
+          profilePhoto: usersTable.profilePhoto,
+          cashDropHostEnabled: usersTable.cashDropHostEnabled,
+          cashDropBrandName: usersTable.cashDropBrandName,
+          cashDropBrandLogo: usersTable.cashDropBrandLogo,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.cashDropHostEnabled, true))
+        .orderBy(usersTable.fullName);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/host-drop", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const { enabled, brandName, brandLogo } = req.body;
+      await db
+        .update(usersTable)
+        .set({
+          cashDropHostEnabled: !!enabled,
+          cashDropBrandName: brandName || null,
+          cashDropBrandLogo: brandLogo || null,
+        })
+        .where(eq(usersTable.id, userId));
+      const [updated] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/cash-drops/host/create", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const currentUser = req.user as any;
+      if (!currentUser?.cashDropHostEnabled) {
+        return res.status(403).json({ error: "You do not have host drop permission" });
+      }
+      const {
+        title, description, rewardPerWinner, winnerLimit, startTime, endTime,
+        gpsLat, gpsLng, gpsRadius, clueText,
+      } = req.body;
+      if (!title) return res.status(400).json({ error: "Title is required" });
+      if (!rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
+
+      const drop = await storage.createCashDrop({
+        title,
+        description: description || null,
+        rewardPerWinner: parseFloat(rewardPerWinner),
+        winnerLimit: parseInt(winnerLimit) || 1,
+        cashWinnerCount: parseInt(winnerLimit) || 1,
+        rewardWinnerCount: 0,
+        startTime: startTime ? new Date(startTime) : null,
+        endTime: endTime ? new Date(endTime) : null,
+        gpsLat: gpsLat ? parseFloat(gpsLat) : null,
+        gpsLng: gpsLng ? parseFloat(gpsLng) : null,
+        gpsRadius: gpsRadius ? parseInt(gpsRadius) : 200,
+        clueText: clueText || null,
+        clueRevealOnArrival: false,
+        requireInAppCamera: true,
+        proofItems: [],
+        sponsorName: currentUser.cashDropBrandName || currentUser.fullName,
+        sponsorId: null,
+        isSponsored: false,
+        brandingEnabled: !!(currentUser.cashDropBrandName || currentUser.cashDropBrandLogo),
+        finalLocationMode: "name_only",
+        rewardType: "cash",
+        fundingSource: "host_user",
+        status: "draft",
+        isHostDrop: true,
+        hostUserId: currentUser.id,
+        hostLogo: currentUser.cashDropBrandLogo || null,
+        sponsorLogo: currentUser.cashDropBrandLogo || null,
+      } as any);
+
+      await storage.createAuditLog({
+        action: "host_drop_created",
+        userId: currentUser.id,
+        details: `Host drop "${title}" created by user ${currentUser.id}`,
+      });
+
+      res.json(drop);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ==================== SPONSORED CASH DROPS ====================
 
   // ==================== SPONSOR DROP STRIPE CHECKOUT ====================

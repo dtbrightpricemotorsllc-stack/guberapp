@@ -341,12 +341,18 @@ export default function Login() {
             )}
           </div>
 
-          <p className="text-center text-sm text-muted-foreground mt-8 animate-fade-in stagger-3">
-            New to GUBER?{" "}
-            <Link href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"} className="guber-text-purple font-display font-semibold hover:underline tracking-wider" data-testid="link-signup">
-              SIGN UP
+          <div className="mt-6 text-center animate-fade-in stagger-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              New to GUBER?{" "}
+              <Link href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"} className="guber-text-purple font-display font-semibold hover:underline tracking-wider" data-testid="link-signup">
+                SIGN UP
+              </Link>
+            </p>
+            <Link href="/biz/login" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors font-display tracking-wide" data-testid="link-business-signin">
+              <Building2 className="w-3.5 h-3.5" />
+              Sign in as a Business →
             </Link>
-          </p>
+          </div>
         </div>
       </div>
     </InAppBrowserGate>
