@@ -10686,6 +10686,66 @@ YOUR BEHAVIOR:
     }
   });
 
+  // ── ACTIVE AREAS — Admin User Density Map ─────────────────────────────────
+
+  app.get("/api/admin/user-density", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const validFilters = ["all", "recent", "og", "helper", "business", "cash_drop"];
+      const filter = validFilters.includes(req.query.filter as string) ? (req.query.filter as string) : "all";
+
+      let joinExtra = "";
+      let whereExtra = "";
+
+      if (filter === "recent") {
+        whereExtra = `AND (u.clocked_in_at > NOW() - INTERVAL '30 days' OR u.clocked_out_at > NOW() - INTERVAL '30 days')`;
+      } else if (filter === "og") {
+        whereExtra = `AND u.day1_og = true`;
+      } else if (filter === "helper") {
+        whereExtra = `AND u.role IN ('helper', 'both')`;
+      } else if (filter === "business") {
+        whereExtra = `AND u.account_type IS NOT NULL AND u.account_type != 'personal'`;
+      } else if (filter === "cash_drop") {
+        joinExtra = `INNER JOIN cash_drop_attempts cda ON cda.user_id = u.id`;
+      }
+
+      const queryText = `
+        SELECT
+          u.zipcode,
+          COUNT(DISTINCT u.id) AS total,
+          AVG(CASE WHEN u.lat IS NOT NULL AND u.lng IS NOT NULL THEN u.lat END) AS center_lat,
+          AVG(CASE WHEN u.lat IS NOT NULL AND u.lng IS NOT NULL THEN u.lng END) AS center_lng,
+          SUM(CASE WHEN u.clocked_in_at > NOW() - INTERVAL '30 days' OR u.clocked_out_at > NOW() - INTERVAL '30 days' THEN 1 ELSE 0 END) AS recently_active,
+          SUM(CASE WHEN u.day1_og = true THEN 1 ELSE 0 END) AS day1_og,
+          SUM(CASE WHEN u.account_type IS NOT NULL AND u.account_type != 'personal' THEN 1 ELSE 0 END) AS business,
+          SUM(CASE WHEN u.role IN ('helper', 'both') THEN 1 ELSE 0 END) AS helpers
+        FROM users u
+        ${joinExtra}
+        WHERE u.zipcode IS NOT NULL AND u.zipcode != ''
+          AND (u.banned IS NULL OR u.banned = false)
+          ${whereExtra}
+        GROUP BY u.zipcode
+        HAVING AVG(CASE WHEN u.lat IS NOT NULL AND u.lng IS NOT NULL THEN u.lat END) IS NOT NULL
+        ORDER BY total DESC
+        LIMIT 500
+      `;
+
+      const result = await pool.query(queryText);
+      const rows = result.rows.map((r: any) => ({
+        zip: r.zipcode,
+        total: parseInt(r.total, 10),
+        centerLat: parseFloat(r.center_lat),
+        centerLng: parseFloat(r.center_lng),
+        recentlyActive: parseInt(r.recently_active, 10),
+        day1Og: parseInt(r.day1_og, 10),
+        business: parseInt(r.business, 10),
+        helpers: parseInt(r.helpers, 10),
+      }));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── OBSERVATION MARKETPLACE ───────────────────────────────────────────────
 
   app.post("/api/observations", requireAuth, demoGuard, async (req: Request, res: Response) => {
