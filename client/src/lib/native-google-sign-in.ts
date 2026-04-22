@@ -5,7 +5,7 @@ import { queryClient } from "@/lib/queryClient";
 export interface NativeGoogleSignInResult {
   ok: boolean;
   accountType?: string;
-  reason?: "cancelled" | "error";
+  reason?: "cancelled" | "error" | "plugin_not_available";
   message?: string;
 }
 
@@ -43,6 +43,13 @@ export async function nativeGoogleSignIn(
     return { ok: true, accountType: data.user?.accountType };
   } catch (err: any) {
     const msg: string = err?.message || String(err);
+    if (
+      msg.includes("not implemented") ||
+      msg.includes("not available") ||
+      msg.includes("No implementation found")
+    ) {
+      return { ok: false, reason: "plugin_not_available" };
+    }
     if (
       msg.includes("cancel") ||
       msg.includes("Cancel") ||

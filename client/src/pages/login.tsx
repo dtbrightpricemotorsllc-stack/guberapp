@@ -90,8 +90,12 @@ export default function Login() {
           } else {
             setLocation("/dashboard");
           }
-        } else if (result.reason === "timeout") {
-          toast({ title: "Sign-In Timed Out", description: "Please try again.", variant: "destructive" });
+        } else if (result.reason === "plugin_not_available") {
+          // Native plugin not in this build — fall back to browser OAuth
+          const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
+          if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
+          window.location.href = googleUrl.toString();
+          return;
         } else if (result.reason !== "cancelled") {
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
         }

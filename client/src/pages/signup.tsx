@@ -95,8 +95,11 @@ export default function Signup() {
         if (result.ok) {
           localStorage.removeItem("guber_ref");
           setLocation(returnTo || "/dashboard");
-        } else if (result.reason === "timeout") {
-          toast({ title: "Sign-In Timed Out", description: "Please try again.", variant: "destructive" });
+        } else if (result.reason === "plugin_not_available") {
+          // Native plugin not in this build — fall back to browser OAuth
+          const authUrl = `${window.location.origin}/api/auth/google`;
+          window.location.href = authUrl;
+          return;
         } else if (result.reason !== "cancelled") {
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
         }
