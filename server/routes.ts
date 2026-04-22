@@ -7055,7 +7055,7 @@ export async function registerRoutes(
     const adminAllowed = ["role", "accountType", "tier", "trustScore", "day1OG", "aiOrNotCredits", "aiOrNotUnlimitedText",
                           "isAvailable", "fullName", "email", "username",
                           "suspended", "banned", "idVerified", "selfieVerified", "credentialVerified", "profileComplete",
-                          "backgroundCheckStatus", "backgroundCheckRestrictions"];
+                          "backgroundCheckStatus", "backgroundCheckRestrictions", "cashDropHostEnabled"];
     const data: Record<string, any> = {};
     for (const key of adminAllowed) {
       if (req.body[key] !== undefined) data[key] = req.body[key];

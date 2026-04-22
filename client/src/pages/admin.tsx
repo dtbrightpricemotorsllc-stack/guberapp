@@ -5186,6 +5186,14 @@ data-testid={`check-banned-${u.id}`}
 />
 Banned
 </label>
+<label className="flex items-center gap-1.5 text-xs text-yellow-400">
+<Checkbox
+checked={!!u.cashDropHostEnabled}
+onCheckedChange={(v) => updateUserMutation.mutate({ id: u.id, data: { cashDropHostEnabled: !!v } })}
+data-testid={`check-host-drop-${u.id}`}
+/>
+💰 Host Drops
+</label>
 </div>
 {!u.day1OG && (
 <Button
