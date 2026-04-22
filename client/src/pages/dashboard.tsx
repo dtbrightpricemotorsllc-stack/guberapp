@@ -107,8 +107,13 @@ interface TodoItem { id: string; icon: string; text: string; sub: string; href?:
 // Permanent localStorage dismissals
 function getTodoDismissed(id: string) { return localStorage.getItem(`guber_todo_dismissed_${id}`) === "true"; }
 function setTodoDismissed(id: string) { localStorage.setItem(`guber_todo_dismissed_${id}`, "true"); }
-// Session-only dismissals (in-memory, reset on login/reload)
-const SESSION_DISMISSED = new Set<string>();
+// Session-only dismissals (sessionStorage — cleared when browser tab closes / user logs out)
+function isSessionDismissed(id: string, userId?: number) {
+  return sessionStorage.getItem(`guber_sess_dismissed_${userId ?? "anon"}_${id}`) === "true";
+}
+function addSessionDismissed(id: string, userId?: number) {
+  sessionStorage.setItem(`guber_sess_dismissed_${userId ?? "anon"}_${id}`, "true");
+}
 
 function getDay1OgLastSuggested() { return Number(localStorage.getItem("guber_todo_day1og_last") || "0"); }
 function setDay1OgLastSuggested() { localStorage.setItem("guber_todo_day1og_last", Date.now().toString()); }
@@ -148,7 +153,7 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
 
   const visibleItems = allItems.filter(item => {
     if (dismissed[item.id]) return false;
-    if (item.sessionOnly) return !SESSION_DISMISSED.has(item.id);
+    if (item.sessionOnly) return !isSessionDismissed(item.id, user?.id);
     return !getTodoDismissed(item.id);
   });
 
@@ -166,7 +171,7 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
   const dismiss = (id: string, sessionOnly?: boolean) => {
     if (id === "day1og") setDay1OgLastSuggested();
     if (sessionOnly) {
-      SESSION_DISMISSED.add(id);
+      addSessionDismissed(id, user?.id);
     } else {
       setTodoDismissed(id);
     }
