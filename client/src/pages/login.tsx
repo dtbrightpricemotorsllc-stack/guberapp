@@ -243,13 +243,11 @@ export default function Login() {
               Continue with Google
             </Button>
 
-            {isNative && (
-              <p className="text-center text-[11px] text-muted-foreground/70 mt-2 mb-5 leading-relaxed" data-testid="text-google-helper">
-                Secure Google sign-in will open briefly and return you automatically.
-              </p>
-            )}
-
-            {!isNative && <div className="mb-5" />}
+            <p className="text-center text-[11px] text-muted-foreground/70 mt-2 mb-5 leading-relaxed" data-testid="text-google-helper">
+              {isNative
+                ? "Secure Google sign-in will open briefly and return you automatically."
+                : "A Google sign-in window will open — allow popups if prompted."}
+            </p>
 
             <div className="flex items-center gap-3 mb-5">
               <div className="flex-1 h-px bg-white/[0.06]" />
