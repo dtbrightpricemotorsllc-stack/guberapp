@@ -60,6 +60,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/supertest": "^7.2.0",
     "@types/web-push": "^3.6.4",
+    "@types/zipcodes": "^8.0.5",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
@@ -104,6 +105,7 @@
     "web-push": "^3.6.7",
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
+    "zipcodes": "^8.0.0",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.4"
   },
