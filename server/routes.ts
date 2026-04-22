@@ -9635,6 +9635,40 @@ YOUR BEHAVIOR:
 
   // ==================== HOST DROP PERMISSION ====================
 
+  app.get("/api/users/me/host-drop-status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [u] = await db
+        .select({
+          cashDropHostEnabled: usersTable.cashDropHostEnabled,
+          cashDropHostStatus: (usersTable as any).cashDropHostStatus,
+          cashDropApprovalRequired: (usersTable as any).cashDropApprovalRequired,
+          cashDropBrandName: usersTable.cashDropBrandName,
+          cashDropBrandLogo: usersTable.cashDropBrandLogo,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId));
+      res.json(u || {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/host/drops", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const currentUser = req.user as any;
+      if (!currentUser?.cashDropHostEnabled) {
+        return res.status(403).json({ error: "Host drop access required" });
+      }
+      const result = await db.execute(sql`
+        SELECT * FROM cash_drops WHERE host_user_id = ${currentUser.id} ORDER BY created_at DESC
+      `);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/host-drop-users", requireAdmin, async (req: Request, res: Response) => {
     try {
       const rows = await db
@@ -9657,18 +9691,71 @@ YOUR BEHAVIOR:
     }
   });
 
+  app.get("/api/admin/host-drops/pending", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const drops = await db.execute(sql`
+        SELECT cd.*, u.full_name as host_full_name, u.username as host_username, u.profile_photo as host_profile_photo
+        FROM cash_drops cd
+        LEFT JOIN users u ON u.id = cd.host_user_id
+        WHERE cd.is_host_drop = true AND cd.approval_status = 'pending'
+        ORDER BY cd.created_at DESC
+      `);
+      res.json(drops.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/host-drops/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const dropId = parseInt(req.params.id);
+      const { action, reason } = req.body; // action: "approve" | "reject"
+      if (!["approve", "reject"].includes(action)) {
+        return res.status(400).json({ error: "action must be 'approve' or 'reject'" });
+      }
+      const newApprovalStatus = action === "approve" ? "approved" : "rejected";
+      const newStatus = action === "approve" ? "active" : "draft";
+      await db.execute(sql`
+        UPDATE cash_drops
+        SET approval_status = ${newApprovalStatus}, status = ${newStatus}
+        WHERE id = ${dropId} AND is_host_drop = true
+      `);
+      // Notify host
+      const [drop] = await db.execute(sql`SELECT host_user_id, title FROM cash_drops WHERE id = ${dropId}`).then(r => r.rows);
+      if (drop?.host_user_id) {
+        await storage.createNotification({
+          userId: drop.host_user_id as number,
+          title: action === "approve" ? "GUBER Drop Approved!" : "GUBER Drop Not Approved",
+          body: action === "approve"
+            ? `Your drop "${drop.title}" has been approved and is now live.`
+            : `Your drop "${drop.title}" was not approved. ${reason || "Please contact admin for details."}`,
+          type: "cash_drop",
+        });
+      }
+      await storage.createAuditLog({
+        action: `host_drop_${action}d`,
+        userId: req.session.userId,
+        details: `Drop ${dropId} ${action}d by admin`,
+      });
+      res.json({ success: true, approvalStatus: newApprovalStatus });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.patch("/api/admin/users/:id/host-drop", requireAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      const { enabled, brandName, brandLogo } = req.body;
-      await db
-        .update(usersTable)
-        .set({
-          cashDropHostEnabled: !!enabled,
-          cashDropBrandName: brandName || null,
-          cashDropBrandLogo: brandLogo || null,
-        })
-        .where(eq(usersTable.id, userId));
+      const { enabled, brandName, brandLogo, approvalRequired } = req.body;
+      await db.execute(sql`
+        UPDATE users SET
+          cash_drop_host_enabled = ${!!enabled},
+          cash_drop_host_status = ${enabled ? 'active' : 'inactive'},
+          cash_drop_approval_required = ${!!approvalRequired},
+          cash_drop_brand_name = ${brandName || null},
+          cash_drop_brand_logo = ${brandLogo || null}
+        WHERE id = ${userId}
+      `);
       const [updated] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
       res.json(updated);
     } catch (err: any) {
@@ -9684,10 +9771,13 @@ YOUR BEHAVIOR:
       }
       const {
         title, description, rewardPerWinner, winnerLimit, startTime, endTime,
-        gpsLat, gpsLng, gpsRadius, clueText,
+        gpsLat, gpsLng, gpsRadius, clueText, hostLogo,
       } = req.body;
       if (!title) return res.status(400).json({ error: "Title is required" });
       if (!rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
+
+      const needsApproval = !!currentUser.cashDropApprovalRequired;
+      const resolvedLogo = hostLogo || currentUser.cashDropBrandLogo || null;
 
       const drop = await storage.createCashDrop({
         title,
@@ -9706,26 +9796,27 @@ YOUR BEHAVIOR:
         requireInAppCamera: true,
         proofItems: [],
         sponsorName: currentUser.cashDropBrandName || currentUser.fullName,
+        sponsorLogo: resolvedLogo,
         sponsorId: null,
         isSponsored: false,
-        brandingEnabled: !!(currentUser.cashDropBrandName || currentUser.cashDropBrandLogo),
+        brandingEnabled: !!(currentUser.cashDropBrandName || resolvedLogo),
         finalLocationMode: "name_only",
         rewardType: "cash",
         fundingSource: "host_user",
-        status: "draft",
+        status: needsApproval ? "draft" : "active",
         isHostDrop: true,
         hostUserId: currentUser.id,
-        hostLogo: currentUser.cashDropBrandLogo || null,
-        sponsorLogo: currentUser.cashDropBrandLogo || null,
+        hostLogo: resolvedLogo,
+        approvalStatus: needsApproval ? "pending" : "approved",
       } as any);
 
       await storage.createAuditLog({
         action: "host_drop_created",
         userId: currentUser.id,
-        details: `Host drop "${title}" created by user ${currentUser.id}`,
+        details: `Host drop "${title}" created by user ${currentUser.id}, approvalRequired=${needsApproval}`,
       });
 
-      res.json(drop);
+      res.json({ ...drop, needsApproval });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

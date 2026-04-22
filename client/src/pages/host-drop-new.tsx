@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
@@ -10,7 +10,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { gpsGetCurrentPosition } from "@/lib/gps";
-import { DollarSign, MapPin, Loader2, ChevronLeft, Info } from "lucide-react";
+import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, X } from "lucide-react";
+
+async function uploadLogoToCloudinary(file: File): Promise<string> {
+  const signRes = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
+  if (!signRes.ok) throw new Error("Could not get upload token");
+  const { signature, timestamp, cloud_name, api_key, folder } = await signRes.json();
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("api_key", api_key);
+  formData.append("timestamp", String(timestamp));
+  formData.append("signature", signature);
+  formData.append("folder", folder);
+  const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`, { method: "POST", body: formData });
+  if (!uploadRes.ok) throw new Error("Upload failed");
+  const data = await uploadRes.json();
+  return data.secure_url as string;
+}
 
 export default function HostDropNew() {
   const { user } = useAuth();
@@ -28,6 +44,9 @@ export default function HostDropNew() {
   const [locating, setLocating] = useState(false);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [hostLogo, setHostLogo] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const createMutation = useMutation({
     mutationFn: async (body: any) => {
@@ -35,7 +54,11 @@ export default function HostDropNew() {
       return resp.json();
     },
     onSuccess: (data: any) => {
-      toast({ title: "Drop Created", description: "Your GUBER Drop has been created as a draft. Contact admin to activate it." });
+      if (data.needsApproval) {
+        toast({ title: "Drop Submitted", description: "Your GUBER Drop has been submitted for admin approval." });
+      } else {
+        toast({ title: "Drop Created!", description: "Your GUBER Drop is now live on the map." });
+      }
       navigate("/dashboard");
     },
     onError: (err: any) => {
@@ -57,6 +80,19 @@ export default function HostDropNew() {
     }
   };
 
+  const handleLogoUpload = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const url = await uploadLogoToCloudinary(file);
+      setHostLogo(url);
+      toast({ title: "Logo uploaded" });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   if (!(user as any)?.cashDropHostEnabled) {
     return (
       <GuberLayout>
@@ -71,6 +107,7 @@ export default function HostDropNew() {
 
   const brandName = (user as any)?.cashDropBrandName;
   const brandLogo = (user as any)?.cashDropBrandLogo;
+  const resolvedLogo = hostLogo || brandLogo || "";
 
   return (
     <GuberLayout>
@@ -88,7 +125,7 @@ export default function HostDropNew() {
           <h1 className="text-xl font-display font-bold tracking-tight mb-1">Start a GUBER Drop</h1>
           {brandName && (
             <div className="flex items-center gap-2 mt-2">
-              {brandLogo && <img src={brandLogo} alt={brandName} className="w-6 h-6 rounded-full object-cover" />}
+              {resolvedLogo && <img src={resolvedLogo} alt={brandName} className="w-6 h-6 rounded-full object-cover" />}
               <span className="text-xs text-muted-foreground font-display">Hosting as <span className="text-foreground font-semibold">{brandName}</span></span>
             </div>
           )}
@@ -100,7 +137,7 @@ export default function HostDropNew() {
         >
           <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-amber-400/80 leading-relaxed">
-            Your drop will be created as a draft. An admin will review and activate it before it goes live.
+            Your drop will be reviewed by admin before going live. You'll get a notification once it's approved.
           </p>
         </div>
 
@@ -153,6 +190,42 @@ export default function HostDropNew() {
                 data-testid="input-winner-limit"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">DROP PIN LOGO (optional)</Label>
+            <p className="text-[10px] text-muted-foreground -mt-1">This logo will appear on the map as your drop pin.</p>
+            {resolvedLogo && (
+              <div className="flex items-center gap-3">
+                <img src={resolvedLogo} alt="Drop pin logo" className="w-10 h-10 rounded-full object-cover border-2 border-amber-500/40" />
+                {hostLogo && (
+                  <button
+                    onClick={() => setHostLogo("")}
+                    className="text-[10px] text-destructive flex items-center gap-1"
+                    data-testid="button-remove-logo"
+                  >
+                    <X className="w-3 h-3" /> Remove
+                  </button>
+                )}
+              </div>
+            )}
+            <label className="cursor-pointer">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) await handleLogoUpload(file);
+                }}
+                data-testid="input-logo-upload"
+              />
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/20 bg-muted/5 text-xs text-muted-foreground hover:text-foreground hover:border-border/40 transition-colors cursor-pointer w-fit">
+                {logoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                {logoUploading ? "Uploading..." : hostLogo ? "Replace logo" : "Upload logo"}
+              </div>
+            </label>
           </div>
 
           <div className="space-y-2">
@@ -237,7 +310,7 @@ export default function HostDropNew() {
           <Button
             className="w-full h-14 font-display tracking-[0.15em] text-sm font-bold rounded-2xl"
             style={{ background: "linear-gradient(135deg,#C9A84C,#a8873c)", color: "#000" }}
-            disabled={!title || !rewardPerWinner || createMutation.isPending}
+            disabled={!title || !rewardPerWinner || createMutation.isPending || logoUploading}
             onClick={() => createMutation.mutate({
               title,
               description: description || undefined,
@@ -249,6 +322,7 @@ export default function HostDropNew() {
               gpsRadius,
               startTime: startTime || undefined,
               endTime: endTime || undefined,
+              hostLogo: hostLogo || undefined,
             })}
             data-testid="button-submit-host-drop"
           >

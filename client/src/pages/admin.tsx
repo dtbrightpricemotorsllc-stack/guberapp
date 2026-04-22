@@ -4201,15 +4201,38 @@ function SafetyQueueTab({ allUsers, usersLoading, bgCheckMutation }: {
   );
 }
 
+async function uploadLogoToCloudinary(file: File): Promise<string> {
+  const signRes = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
+  if (!signRes.ok) throw new Error("Could not get upload token");
+  const { signature, timestamp, cloud_name, api_key, folder } = await signRes.json();
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("api_key", api_key);
+  formData.append("timestamp", String(timestamp));
+  formData.append("signature", signature);
+  formData.append("folder", folder);
+  const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`, { method: "POST", body: formData });
+  if (!uploadRes.ok) throw new Error("Upload failed");
+  const data = await uploadRes.json();
+  return data.secure_url as string;
+}
+
 function HostDropsTab() {
 const { toast } = useToast();
 const [editingId, setEditingId] = useState<number | null>(null);
-const [editForm, setEditForm] = useState<{ brandName: string; brandLogo: string }>({ brandName: "", brandLogo: "" });
+const [editForm, setEditForm] = useState<{ brandName: string; brandLogo: string; approvalRequired: boolean }>({ brandName: "", brandLogo: "", approvalRequired: false });
 const [grantSearch, setGrantSearch] = useState("");
+const [logoUploading, setLogoUploading] = useState(false);
+const [approvingDropId, setApprovingDropId] = useState<number | null>(null);
 
 const { data: hostUsers, isLoading: hostLoading } = useQuery<any[]>({
 queryKey: ["/api/admin/host-drop-users"],
 staleTime: 30_000,
+});
+
+const { data: pendingDrops, isLoading: pendingLoading } = useQuery<any[]>({
+queryKey: ["/api/admin/host-drops/pending"],
+staleTime: 15_000,
 });
 
 const { data: allUsersData } = useQuery<any[]>({
@@ -4218,8 +4241,8 @@ staleTime: 60_000,
 });
 
 const grantMutation = useMutation({
-mutationFn: ({ id, enabled, brandName, brandLogo }: { id: number; enabled: boolean; brandName?: string; brandLogo?: string }) =>
-apiRequest("PATCH", `/api/admin/users/${id}/host-drop`, { enabled, brandName, brandLogo }),
+mutationFn: ({ id, enabled, brandName, brandLogo, approvalRequired }: { id: number; enabled: boolean; brandName?: string; brandLogo?: string; approvalRequired?: boolean }) =>
+apiRequest("PATCH", `/api/admin/users/${id}/host-drop`, { enabled, brandName, brandLogo, approvalRequired }),
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: ["/api/admin/host-drop-users"] });
 queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -4229,6 +4252,30 @@ setEditingId(null);
 onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
 });
 
+const approveMutation = useMutation({
+mutationFn: ({ id, action, reason }: { id: number; action: "approve" | "reject"; reason?: string }) =>
+apiRequest("PATCH", `/api/admin/host-drops/${id}/approve`, { action, reason }),
+onSuccess: () => {
+queryClient.invalidateQueries({ queryKey: ["/api/admin/host-drops/pending"] });
+toast({ title: "Host drop decision saved" });
+setApprovingDropId(null);
+},
+onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+});
+
+const handleLogoUpload = async (file: File) => {
+setLogoUploading(true);
+try {
+const url = await uploadLogoToCloudinary(file);
+setEditForm(f => ({ ...f, brandLogo: url }));
+toast({ title: "Logo uploaded" });
+} catch (e: any) {
+toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+} finally {
+setLogoUploading(false);
+}
+};
+
 const filtered = (allUsersData || []).filter((u: any) =>
 grantSearch.trim() === "" ? false :
 (u.username?.toLowerCase().includes(grantSearch.toLowerCase()) ||
@@ -4237,6 +4284,7 @@ u.fullName?.toLowerCase().includes(grantSearch.toLowerCase()))
 ).slice(0, 5);
 
 const hosts = hostUsers || [];
+const pending = pendingDrops || [];
 
 return (
 <div className="space-y-5" data-testid="admin-host-drops">
@@ -4245,6 +4293,57 @@ return (
 <h3 className="font-display font-semibold text-sm">Host Drop Permissions</h3>
 </div>
 
+{/* Pending Approval Queue */}
+{(pendingLoading || pending.length > 0) && (
+<div className="bg-card rounded-xl border border-amber-500/20 p-4 space-y-3">
+<div className="flex items-center gap-2">
+<Clock className="w-3.5 h-3.5 text-amber-400" />
+<p className="text-xs font-display font-semibold text-amber-400">Pending Approval ({pending.length})</p>
+</div>
+{pendingLoading ? (
+<Skeleton className="h-14 w-full rounded-xl" />
+) : pending.map((drop: any) => (
+<div key={drop.id} className="rounded-xl border border-border/20 bg-muted/5 p-3 space-y-2" data-testid={`pending-drop-${drop.id}`}>
+<div className="flex items-center gap-2.5">
+{drop.host_logo && <img src={drop.host_logo} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />}
+<div className="flex-1 min-w-0">
+<p className="text-xs font-semibold truncate">{drop.title}</p>
+<p className="text-[10px] text-muted-foreground truncate">
+By {drop.host_full_name} · ${drop.reward_per_winner} · {drop.winner_limit} slot(s)
+</p>
+</div>
+<Badge className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/20 shrink-0">Pending</Badge>
+</div>
+{approvingDropId !== drop.id ? (
+<div className="flex gap-2 pt-1">
+<Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+onClick={() => approveMutation.mutate({ id: drop.id, action: "approve" })}
+disabled={approveMutation.isPending}
+data-testid={`button-approve-drop-${drop.id}`}>
+<ThumbsUp className="w-3 h-3" /> Approve
+</Button>
+<Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+onClick={() => setApprovingDropId(drop.id)}
+data-testid={`button-reject-drop-${drop.id}`}>
+<ThumbsDown className="w-3 h-3" /> Reject
+</Button>
+</div>
+) : (
+<div className="flex gap-2 items-center pt-1">
+<Input placeholder="Rejection reason (optional)..." className="bg-background border-border/20 text-xs flex-1 h-7"
+data-testid={`input-reject-reason-${drop.id}`}
+onKeyDown={(e) => {
+if (e.key === "Enter") approveMutation.mutate({ id: drop.id, action: "reject", reason: (e.target as HTMLInputElement).value });
+}} />
+<Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setApprovingDropId(null)}>Cancel</Button>
+</div>
+)}
+</div>
+))}
+</div>
+)}
+
+{/* Grant Permission */}
 <div className="bg-card rounded-xl border border-border/20 p-4 space-y-3">
 <p className="text-xs font-display font-semibold text-muted-foreground">Grant Permission to a User</p>
 <div className="relative">
@@ -4273,7 +4372,7 @@ data-testid="input-host-user-search"
 <Badge className="text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Host</Badge>
 ) : (
 <Button size="sm" className="h-7 text-xs px-3" onClick={() => {
-grantMutation.mutate({ id: u.id, enabled: true, brandName: "", brandLogo: "" });
+grantMutation.mutate({ id: u.id, enabled: true, brandName: "", brandLogo: "", approvalRequired: false });
 setGrantSearch("");
 }} disabled={grantMutation.isPending} data-testid={`button-grant-host-${u.id}`}>
 Grant
@@ -4285,6 +4384,7 @@ Grant
 )}
 </div>
 
+{/* Active Hosts */}
 <div className="space-y-2">
 <p className="text-xs font-display font-semibold text-muted-foreground">Active Host Drop Hosts ({hosts.length})</p>
 {hostLoading ? (
@@ -4297,11 +4397,7 @@ return (
 <div key={u.id} className="bg-card rounded-xl border border-border/20 p-3 space-y-2" data-testid={`host-user-${u.id}`}>
 <div className="flex items-center gap-3">
 <Avatar className="w-8 h-8 shrink-0">
-{u.cashDropBrandLogo ? (
-<AvatarImage src={u.cashDropBrandLogo} />
-) : (
-<AvatarImage src={u.profilePhoto} />
-)}
+<AvatarImage src={u.cashDropBrandLogo || u.profilePhoto} />
 <AvatarFallback className="text-[10px]">{u.fullName?.[0]}</AvatarFallback>
 </Avatar>
 <div className="flex-1 min-w-0">
@@ -4314,13 +4410,13 @@ return (
 <div className="flex items-center gap-1.5">
 <Button size="icon" variant="ghost" onClick={() => {
 if (isEditing) setEditingId(null);
-else { setEditingId(u.id); setEditForm({ brandName: u.cashDropBrandName || "", brandLogo: u.cashDropBrandLogo || "" }); }
+else { setEditingId(u.id); setEditForm({ brandName: u.cashDropBrandName || "", brandLogo: u.cashDropBrandLogo || "", approvalRequired: !!u.cashDropApprovalRequired }); }
 }} data-testid={`button-edit-host-${u.id}`}>
 <Edit className="w-3.5 h-3.5" />
 </Button>
 <Button size="icon" variant="ghost" onClick={() => {
 if (confirm(`Revoke host drop permission for ${u.fullName}?`)) {
-grantMutation.mutate({ id: u.id, enabled: false, brandName: "", brandLogo: "" });
+grantMutation.mutate({ id: u.id, enabled: false, brandName: "", brandLogo: "", approvalRequired: false });
 }
 }} data-testid={`button-revoke-host-${u.id}`}>
 <X className="w-3.5 h-3.5 text-destructive" />
@@ -4328,7 +4424,7 @@ grantMutation.mutate({ id: u.id, enabled: false, brandName: "", brandLogo: "" })
 </div>
 </div>
 {isEditing && (
-<div className="space-y-2 pt-2 border-t border-border/10">
+<div className="space-y-2.5 pt-2.5 border-t border-border/10">
 <Input
 value={editForm.brandName}
 onChange={e => setEditForm(f => ({ ...f, brandName: e.target.value }))}
@@ -4336,15 +4432,47 @@ placeholder="Brand name (e.g. Find Cash PCOLA)"
 className="bg-background border-border/20 text-xs"
 data-testid={`input-brand-name-${u.id}`}
 />
-<Input
-value={editForm.brandLogo}
-onChange={e => setEditForm(f => ({ ...f, brandLogo: e.target.value }))}
-placeholder="Brand logo URL (Cloudinary URL)"
-className="bg-background border-border/20 text-xs"
-data-testid={`input-brand-logo-${u.id}`}
+<div className="space-y-1">
+<p className="text-[10px] text-muted-foreground">Brand Logo</p>
+{editForm.brandLogo && (
+<img src={editForm.brandLogo} alt="Brand logo" className="w-10 h-10 rounded-full object-cover border border-border/20" />
+)}
+<div className="flex gap-2 items-center">
+<label className="flex-1 cursor-pointer">
+<input
+ref={logoInputRef as any}
+type="file"
+accept="image/*"
+className="hidden"
+onChange={async (e) => {
+const file = e.target.files?.[0];
+if (file) await handleLogoUpload(file);
+}}
+data-testid={`input-logo-upload-${u.id}`}
 />
+<div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/20 bg-background text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+{logoUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+{logoUploading ? "Uploading..." : "Upload logo"}
+</div>
+</label>
+{editForm.brandLogo && (
+<Button size="sm" variant="ghost" onClick={() => setEditForm(f => ({ ...f, brandLogo: "" }))} className="h-8 px-2 text-xs text-destructive">
+Remove
+</Button>
+)}
+</div>
+<p className="text-[9px] text-muted-foreground/60">This logo appears on the map as the drop pin.</p>
+</div>
+<div className="flex items-center gap-2">
+<Switch
+checked={editForm.approvalRequired}
+onCheckedChange={v => setEditForm(f => ({ ...f, approvalRequired: v }))}
+data-testid={`toggle-approval-required-${u.id}`}
+/>
+<label className="text-xs text-muted-foreground">Require admin approval for each drop</label>
+</div>
 <div className="flex gap-2">
-<Button size="sm" disabled={grantMutation.isPending}
+<Button size="sm" disabled={grantMutation.isPending || logoUploading}
 onClick={() => grantMutation.mutate({ id: u.id, enabled: true, ...editForm })}
 data-testid={`button-save-host-${u.id}`}>
 <Save className="w-3 h-3 mr-1" /> Save

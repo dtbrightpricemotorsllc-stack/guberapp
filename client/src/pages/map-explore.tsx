@@ -423,58 +423,87 @@ export default function MapExplore() {
           this.div = document.createElement("div");
           this.div.style.cssText = "position:absolute;cursor:pointer;transform:translate(-50%,-50%);z-index:9999;";
 
+          const isHost = !!(this.dropData?.isHostDrop || this.dropData?.is_host_drop);
+          const hostLogoUrl = this.dropData?.hostLogo || this.dropData?.host_logo || null;
+
           const wrapper = document.createElement("div");
           wrapper.style.cssText = "position:relative;width:56px;height:72px;display:flex;flex-direction:column;align-items:center;";
 
+          const ringColor = isHost && hostLogoUrl ? "#C9A84C" : "#22C55E";
+
           const rings: HTMLDivElement[] = [0,1,2].map(() => {
             const r = document.createElement("div");
-            r.style.cssText = "position:absolute;top:4px;left:50%;width:44px;height:44px;border-radius:50%;border:2px solid #22C55E;pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);";
+            r.style.cssText = `position:absolute;top:4px;left:50%;width:44px;height:44px;border-radius:50%;border:2px solid ${ringColor};pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);`;
             wrapper.appendChild(r);
             return r;
           });
 
           const circle = document.createElement("div");
-          circle.style.cssText = "position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:#22C55E;border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px #22C55E,0 0 28px #22C55E66,0 3px 10px rgba(0,0,0,0.55);margin-top:6px;";
+          circle.style.cssText = `position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:${isHost && hostLogoUrl ? "#000" : "#22C55E"};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px ${ringColor},0 0 28px ${ringColor}66,0 3px 10px rgba(0,0,0,0.55);margin-top:6px;overflow:hidden;`;
 
-          const dollar = document.createElement("span");
-          dollar.textContent = "$";
-          dollar.style.cssText = "font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:#000000;letter-spacing:-1px;";
-          circle.appendChild(dollar);
+          if (isHost && hostLogoUrl) {
+            const img = document.createElement("img");
+            img.src = hostLogoUrl;
+            img.alt = "";
+            img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;";
+            circle.appendChild(img);
+          } else {
+            const dollar = document.createElement("span");
+            dollar.textContent = "$";
+            dollar.style.cssText = "font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:#000000;letter-spacing:-1px;";
+            circle.appendChild(dollar);
+          }
 
           const pill = document.createElement("div");
-          pill.style.cssText = "margin-top:3px;background:rgba(0,0,0,0.92);border-radius:6px;padding:1px 5px;white-space:nowrap;border:1.5px solid #22C55E;";
+          pill.style.cssText = `margin-top:3px;background:rgba(0,0,0,0.92);border-radius:6px;padding:1px 5px;white-space:nowrap;border:1.5px solid ${ringColor};`;
           const pillText = document.createElement("span");
-          pillText.textContent = "CASH DROP";
-          pillText.style.cssText = "font-size:6.5px;font-weight:900;letter-spacing:0.15em;font-family:system-ui,sans-serif;color:#22C55E;";
+          pillText.textContent = isHost && hostLogoUrl ? "HOST DROP" : "CASH DROP";
+          pillText.style.cssText = `font-size:6.5px;font-weight:900;letter-spacing:0.15em;font-family:system-ui,sans-serif;color:${ringColor};`;
           pill.appendChild(pillText);
 
           wrapper.appendChild(circle);
           wrapper.appendChild(pill);
           this.div.appendChild(wrapper);
 
-          let colorIdx = 0;
-          this._colorInterval = setInterval(() => {
-            colorIdx = (colorIdx + 1) % GUBER_COLORS.length;
-            const c = GUBER_COLORS[colorIdx];
-            circle.style.background = c;
-            circle.style.boxShadow = `0 0 22px ${c},0 0 44px ${c}66,0 4px 14px rgba(0,0,0,0.55)`;
-            pill.style.borderColor = c;
-            pillText.style.color = c;
-            rings.forEach(r => { r.style.borderColor = c; });
-          }, 180);
+          if (isHost && hostLogoUrl) {
+            // Gold pulsing rings for host drops — no color cycling
+            const ringPhases = [0, 0.33, 0.66];
+            ringPhases.forEach((phase, i) => {
+              let t = phase;
+              this._ringIntervals.push(setInterval(() => {
+                t += 0.025;
+                if (t >= 1) t = 0;
+                const scale = 1 + t * 2.8;
+                const opacity = Math.max(0, 1 - t);
+                rings[i].style.transform = `translateX(-50%) scale(${scale})`;
+                rings[i].style.opacity = String(opacity.toFixed(3));
+              }, 30));
+            });
+          } else {
+            let colorIdx = 0;
+            this._colorInterval = setInterval(() => {
+              colorIdx = (colorIdx + 1) % GUBER_COLORS.length;
+              const c = GUBER_COLORS[colorIdx];
+              circle.style.background = c;
+              circle.style.boxShadow = `0 0 22px ${c},0 0 44px ${c}66,0 4px 14px rgba(0,0,0,0.55)`;
+              pill.style.borderColor = c;
+              pillText.style.color = c;
+              rings.forEach(r => { r.style.borderColor = c; });
+            }, 180);
 
-          const ringPhases = [0, 0.33, 0.66];
-          ringPhases.forEach((phase, i) => {
-            let t = phase;
-            this._ringIntervals.push(setInterval(() => {
-              t += 0.025;
-              if (t >= 1) t = 0;
-              const scale = 1 + t * 2.8;
-              const opacity = Math.max(0, 1 - t);
-              rings[i].style.transform = `translateX(-50%) scale(${scale})`;
-              rings[i].style.opacity = String(opacity.toFixed(3));
-            }, 30));
-          });
+            const ringPhases = [0, 0.33, 0.66];
+            ringPhases.forEach((phase, i) => {
+              let t = phase;
+              this._ringIntervals.push(setInterval(() => {
+                t += 0.025;
+                if (t >= 1) t = 0;
+                const scale = 1 + t * 2.8;
+                const opacity = Math.max(0, 1 - t);
+                rings[i].style.transform = `translateX(-50%) scale(${scale})`;
+                rings[i].style.opacity = String(opacity.toFixed(3));
+              }, 30));
+            });
+          }
 
           this.div.addEventListener("click", this.onClick);
           const panes = this.getPanes();
