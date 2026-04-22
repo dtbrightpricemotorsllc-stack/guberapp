@@ -67,7 +67,7 @@ export function GUBERAssistant() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed right-4 z-[55] w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
+          className="fixed right-4 z-[55] h-11 px-4 rounded-full flex items-center gap-2 shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
           style={{
             bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 16px)",
             background: "linear-gradient(135deg, hsl(45 100% 50%), hsl(152 100% 44%))",
@@ -76,7 +76,8 @@ export function GUBERAssistant() {
           data-testid="button-guber-assistant"
           aria-label="Open GUBER Assistant"
         >
-          <MessageSquare className="w-6 h-6 text-black" strokeWidth={2} />
+          <MessageSquare className="w-4 h-4 text-black" strokeWidth={2.5} />
+          <span className="text-black font-display font-bold text-xs tracking-wide">AI Help</span>
         </button>
       )}
 
