@@ -1795,7 +1795,34 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ---------------------------------------------------------------------------
+  // Poll-token store for Chrome Custom Tab OAuth flow (no deep link required)
+  // The app supplies a random pollKey before opening the browser. After OAuth
+  // completes, the server stores the JWT here. The app retrieves it by polling
+  // /api/auth/google/poll — one-time use, 5-minute TTL.
+  // ---------------------------------------------------------------------------
+  const pollTokenStore = new Map<string, { jwt: string; accountType: string; expiresAt: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of pollTokenStore) {
+      if (now >= v.expiresAt) pollTokenStore.delete(k);
+    }
+  }, 60_000);
+
   app.get("/api/auth/google", handleGoogleAuthStart);
+
+  app.get("/api/auth/google/poll", (req: Request, res: Response) => {
+    const key = req.query.key as string | undefined;
+    if (!key || !/^[a-f0-9]{8,64}$/.test(key)) {
+      return res.status(400).json({ message: "invalid key" });
+    }
+    const entry = pollTokenStore.get(key);
+    if (!entry || Date.now() >= entry.expiresAt) {
+      return res.status(202).json({ pending: true });
+    }
+    pollTokenStore.delete(key); // one-time use
+    return res.json({ token: entry.jwt, user: { accountType: entry.accountType } });
+  });
 
   app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
     console.log(`[GUBER auth] Google callback received — query keys: ${Object.keys(req.query).join(", ")}`);
@@ -1853,6 +1880,42 @@ export async function registerRoutes(
       const jwtToken = generateJWT(user);
       const returnTo = stateResult.returnTo;
       if (stateResult.isNative) {
+        const pollKey = stateResult.pollKey;
+        if (pollKey) {
+          // Polling flow: store JWT for the app to retrieve; return a self-contained
+          // success page that closes the Chrome Custom Tab automatically.
+          pollTokenStore.set(pollKey, {
+            jwt: jwtToken,
+            accountType: user.accountType || "worker",
+            expiresAt: Date.now() + 5 * 60 * 1000,
+          });
+          console.log(`[GUBER auth] Google auth complete (native/poll) — userId=${user.id} pollKey=${pollKey.slice(0, 8)}…`);
+          return res.type("html").send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Signed in</title>
+  <style>
+    html,body{margin:0;padding:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box}
+    .card{max-width:320px}
+    h1{font-size:22px;font-weight:700;margin:0 0 8px}
+    p{font-size:15px;color:#aaa;margin:0 0 24px;line-height:1.5}
+    .check{font-size:56px;margin-bottom:16px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="check">✓</div>
+    <h1>Signed in!</h1>
+    <p>Returning to GUBER…</p>
+  </div>
+  <script>window.close();</script>
+</body>
+</html>`);
+        }
+
+        // Deep-link flow (requires registered guber:// scheme in the APK).
         // guber:// custom URI — handled by the Android/iOS app's intent filter.
         // Chrome Custom Tab (Android 83+) blocks intent:// JS navigation without a
         // user gesture and immediately follows S.browser_fallback_url (→ Play Store).
@@ -1862,7 +1925,7 @@ export async function registerRoutes(
           ? `guber://auth-success?token=${encodeURIComponent(jwtToken)}&returnTo=${encodeURIComponent(returnTo)}`
           : `guber://auth-success?token=${encodeURIComponent(jwtToken)}`;
 
-        console.log(`[GUBER auth] Google auth complete (native) — userId=${user.id} returnTo=${returnTo || "none"}`);
+        console.log(`[GUBER auth] Google auth complete (native/deeplink) — userId=${user.id} returnTo=${returnTo || "none"}`);
         return res.type("html").send(buildNativeBounceHtml(guberUrl));
       }
       const authSuccessUrl = returnTo

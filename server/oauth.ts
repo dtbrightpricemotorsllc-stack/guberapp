@@ -191,6 +191,7 @@ interface OAuthStatePayload {
   n: string;             // CSRF nonce — 128-bit hex
   native: boolean;       // true when triggered from the native mobile app
   returnTo: string | null; // validated return path, or null
+  pollKey?: string;      // correlation key for polling-based token retrieval (no deep link required)
 }
 
 function encodeOAuthState(payload: OAuthStatePayload): string {
@@ -210,6 +211,7 @@ function decodeOAuthState(state: string): OAuthStatePayload | null {
         n: parsed.n,
         native: parsed.native,
         returnTo: typeof parsed.returnTo === "string" ? parsed.returnTo : null,
+        pollKey: typeof parsed.pollKey === "string" && parsed.pollKey.length > 0 ? parsed.pollKey : undefined,
       };
     }
     return null;
@@ -233,10 +235,16 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
 
   const isNative = req.query.source === "native";
 
+  // pollKey: opaque correlation ID supplied by the native app; lets the app
+  // retrieve the JWT via polling (/api/auth/google/poll) without needing a
+  // registered custom URI scheme or deep link. Max 64 hex chars to prevent abuse.
+  const rawPollKey = req.query.pollKey as string | undefined;
+  const pollKey = rawPollKey && /^[a-f0-9]{8,64}$/.test(rawPollKey) ? rawPollKey : undefined;
+
   // Encode the full OAuth context in the state parameter so native/returnTo
   // survive the round-trip even when the session is lost (Chrome Custom Tab
   // on Android has an isolated cookie jar from the Capacitor WebView).
-  const statePayload: OAuthStatePayload = { n: nonce, native: isNative, returnTo };
+  const statePayload: OAuthStatePayload = { n: nonce, native: isNative, returnTo, pollKey };
   const state = encodeOAuthState(statePayload);
 
   // Session stores only the nonce — one-time-use CSRF verification.
@@ -276,7 +284,7 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
 }
 
 export type StateValidationResult =
-  | { valid: true; code: string; returnTo: string | null; isNative: boolean }
+  | { valid: true; code: string; returnTo: string | null; isNative: boolean; pollKey?: string }
   | { valid: false; reason: "cancelled" | "invalid_state" };
 
 /**
@@ -385,12 +393,13 @@ export async function validateOAuthState(req: Request, res?: Response): Promise<
     return { valid: false, reason: "invalid_state" };
   }
 
-  console.log(`[GUBER auth] Google callback — state valid (source=${stateSource} native=${payload.native} returnTo=${payload.returnTo || "none"})`);
+  console.log(`[GUBER auth] Google callback — state valid (source=${stateSource} native=${payload.native} returnTo=${payload.returnTo || "none"} pollKey=${payload.pollKey ? "present" : "none"})`);
 
   return {
     valid: true,
     code,
     returnTo: payload.returnTo,
     isNative: payload.native,
+    pollKey: payload.pollKey,
   };
 }

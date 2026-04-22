@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Check, X, ShieldCheck } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
-import { nativeGoogleSignIn } from "@/lib/native-google-sign-in";
+import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -96,10 +96,14 @@ export default function Signup() {
           localStorage.removeItem("guber_ref");
           setLocation(returnTo || "/dashboard");
         } else if (result.reason === "plugin_not_available") {
-          // Native plugin not in this build — fall back to browser OAuth
-          const authUrl = `${window.location.origin}/api/auth/google`;
-          window.location.href = authUrl;
-          return;
+          // Native plugin not in this build — use Chrome Custom Tab + polling flow
+          const browserResult = await browserGoogleSignIn({ returnTo: returnTo || undefined });
+          if (browserResult.ok) {
+            localStorage.removeItem("guber_ref");
+            setLocation(returnTo || "/dashboard");
+          } else if (browserResult.reason !== "cancelled") {
+            toast({ title: "Sign-In Failed", description: browserResult.message || "Please try again.", variant: "destructive" });
+          }
         } else if (result.reason !== "cancelled") {
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
         }
