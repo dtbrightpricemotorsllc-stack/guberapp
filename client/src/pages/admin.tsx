@@ -4220,7 +4220,7 @@ async function uploadLogoToCloudinary(file: File): Promise<string> {
 function HostDropsTab() {
 const { toast } = useToast();
 const [editingId, setEditingId] = useState<number | null>(null);
-const [editForm, setEditForm] = useState<{ brandName: string; brandLogo: string; approvalRequired: boolean }>({ brandName: "", brandLogo: "", approvalRequired: false });
+const [editForm, setEditForm] = useState<{ brandName: string; brandLogo: string; approvalRequired: boolean }>({ brandName: "", brandLogo: "", approvalRequired: true });
 const [grantSearch, setGrantSearch] = useState("");
 const [logoUploading, setLogoUploading] = useState(false);
 const [approvingDropId, setApprovingDropId] = useState<number | null>(null);
@@ -4372,7 +4372,7 @@ data-testid="input-host-user-search"
 <Badge className="text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Host</Badge>
 ) : (
 <Button size="sm" className="h-7 text-xs px-3" onClick={() => {
-grantMutation.mutate({ id: u.id, enabled: true, brandName: "", brandLogo: "", approvalRequired: false });
+grantMutation.mutate({ id: u.id, enabled: true, brandName: "", brandLogo: "", approvalRequired: true });
 setGrantSearch("");
 }} disabled={grantMutation.isPending} data-testid={`button-grant-host-${u.id}`}>
 Grant
@@ -4440,7 +4440,6 @@ data-testid={`input-brand-name-${u.id}`}
 <div className="flex gap-2 items-center">
 <label className="flex-1 cursor-pointer">
 <input
-ref={logoInputRef as any}
 type="file"
 accept="image/*"
 className="hidden"
