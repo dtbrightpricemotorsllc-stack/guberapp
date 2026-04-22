@@ -9771,6 +9771,126 @@ YOUR BEHAVIOR:
     }
   });
 
+  app.get("/api/admin/user-density", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const filter = ((req.query.filter as string) || "all").trim();
+
+      type DensityRow = { zipcode: string; total: number; recently_active: number; day1_og_count: number; business_count: number; helper_count: number };
+
+      let rows: DensityRow[];
+
+      if (filter === "cash_drop") {
+        const result = await db.execute(sql`
+          SELECT
+            u.zipcode,
+            COUNT(DISTINCT u.id)::int AS total,
+            COUNT(DISTINCT u.id) FILTER (WHERE GREATEST(u.created_at, COALESCE(u.clocked_in_at, u.created_at), COALESCE(u.clocked_out_at, u.created_at)) > NOW() - INTERVAL '30 days')::int AS recently_active,
+            COUNT(DISTINCT u.id) FILTER (WHERE u.day1_og = true)::int AS day1_og_count,
+            COUNT(DISTINCT u.id) FILTER (WHERE u.account_type = 'business')::int AS business_count,
+            COUNT(DISTINCT u.id) FILTER (WHERE u.jobs_completed > 0 OR u.role = 'helper')::int AS helper_count
+          FROM users u
+          INNER JOIN cash_drop_attempts cda ON cda.user_id = u.id
+          WHERE u.zipcode IS NOT NULL AND trim(u.zipcode) != ''
+          GROUP BY u.zipcode
+          ORDER BY total DESC
+        `);
+        rows = result.rows as DensityRow[];
+      } else {
+        const whereExtra =
+          filter === "recent" ? sql` AND GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days'` :
+          filter === "og"     ? sql` AND day1_og = true` :
+          filter === "helper" ? sql` AND (jobs_completed > 0 OR role = 'helper')` :
+          filter === "business" ? sql` AND account_type = 'business'` :
+          sql``;
+
+        const result = await db.execute(sql`
+          SELECT
+            zipcode,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days')::int AS recently_active,
+            COUNT(*) FILTER (WHERE day1_og = true)::int AS day1_og_count,
+            COUNT(*) FILTER (WHERE account_type = 'business')::int AS business_count,
+            COUNT(*) FILTER (WHERE jobs_completed > 0 OR role = 'helper')::int AS helper_count
+          FROM users
+          WHERE zipcode IS NOT NULL AND trim(zipcode) != '' ${whereExtra}
+          GROUP BY zipcode
+          ORDER BY total DESC
+        `);
+        rows = result.rows as DensityRow[];
+      }
+
+      type ZipResult = { zip: string; lat: number; lng: number; total: number; recentlyActive: number; day1OgCount: number; businessCount: number; helperCount: number };
+      const zips: ZipResult[] = [];
+      for (const row of rows) {
+        const coords = geocodeZip(row.zipcode);
+        if (!coords) continue;
+        zips.push({
+          zip: row.zipcode,
+          lat: coords.lat,
+          lng: coords.lng,
+          total: Number(row.total),
+          recentlyActive: Number(row.recently_active),
+          day1OgCount: Number(row.day1_og_count),
+          businessCount: Number(row.business_count),
+          helperCount: Number(row.helper_count),
+        });
+      }
+
+      const userTotal = zips.reduce((s, z) => s + z.total, 0);
+      res.json({ zips, zipCount: zips.length, userTotal });
+    } catch (err: any) {
+      console.error("[GUBER] /api/admin/user-density error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/user-density/zip/:zipcode", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const zipcode = (req.params.zipcode || "").trim();
+      const filter = ((req.query.filter as string) || "all").trim();
+
+      if (!zipcode) return res.status(400).json({ error: "zipcode required" });
+
+      const whereFilter =
+        filter === "recent"   ? sql` AND GREATEST(u.created_at, COALESCE(u.clocked_in_at, u.created_at), COALESCE(u.clocked_out_at, u.created_at)) > NOW() - INTERVAL '30 days'` :
+        filter === "og"       ? sql` AND u.day1_og = true` :
+        filter === "helper"   ? sql` AND (u.jobs_completed > 0 OR u.role = 'helper')` :
+        filter === "business" ? sql` AND u.account_type = 'business'` :
+        filter === "cash_drop" ? sql` AND EXISTS (SELECT 1 FROM cash_drop_attempts cda WHERE cda.user_id = u.id)` :
+        sql``;
+
+      const result = await db.execute(sql`
+        SELECT
+          u.id,
+          u.full_name,
+          u.username,
+          u.account_type,
+          u.day1_og,
+          u.jobs_completed,
+          u.role
+        FROM users u
+        WHERE u.zipcode = ${zipcode} ${whereFilter}
+        ORDER BY u.full_name ASC
+      `);
+
+      type UserRow = { id: number; full_name: string; username: string; account_type: string; day1_og: boolean; jobs_completed: number; role: string };
+      const users = (result.rows as UserRow[]).map(r => ({
+        id: Number(r.id),
+        fullName: r.full_name || r.username || "Unknown",
+        username: r.username,
+        accountType: r.account_type,
+        isOg: Boolean(r.day1_og),
+        jobsCompleted: Number(r.jobs_completed) || 0,
+        role: r.role,
+      }));
+
+      res.json({ users, total: users.length });
+    } catch (err: any) {
+      console.error("[GUBER] /api/admin/user-density/zip error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post(["/api/cash-drops/host/create", "/api/host/drops"], requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;

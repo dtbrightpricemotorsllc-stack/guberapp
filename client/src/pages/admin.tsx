@@ -4761,6 +4761,324 @@ data-testid={`button-save-host-${u.id}`}>
 );
 }
 
+interface ZipDensity {
+zip: string;
+lat: number;
+lng: number;
+total: number;
+recentlyActive: number;
+day1OgCount: number;
+businessCount: number;
+helperCount: number;
+}
+
+interface ZipUser {
+id: number;
+fullName: string;
+username: string;
+accountType: string;
+isOg: boolean;
+jobsCompleted: number;
+role: string;
+}
+
+interface DensityResponse {
+zips: ZipDensity[];
+zipCount: number;
+userTotal: number;
+}
+
+function ActiveAreasTab({ onNavigateToUser }: { onNavigateToUser: (userId: number) => void }) {
+const { toast } = useToast();
+const mapDivRef = useRef<HTMLDivElement>(null);
+const mapRef = useRef<google.maps.Map | null>(null);
+const mapsLibRef = useRef<typeof google.maps | null>(null);
+const overlaysRef = useRef<google.maps.OverlayView[]>([]);
+const initStartedRef = useRef(false);
+const [mapReady, setMapReady] = useState(false);
+const [activeFilter, setActiveFilter] = useState("all");
+const [selectedZip, setSelectedZip] = useState<ZipDensity | null>(null);
+const [zipUsers, setZipUsers] = useState<ZipUser[]>([]);
+const [zipUsersLoading, setZipUsersLoading] = useState(false);
+const [zipUsersError, setZipUsersError] = useState(false);
+
+const { data: config } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
+const apiKey = config?.googleMapsApiKey ?? "";
+
+const { data: density, isFetching: densityLoading, refetch } = useQuery<DensityResponse>({
+queryKey: ["/api/admin/user-density", activeFilter],
+queryFn: async () => {
+const res = await fetch(`/api/admin/user-density?filter=${activeFilter}`);
+if (!res.ok) throw new Error(await res.text());
+return res.json();
+},
+enabled: mapReady,
+staleTime: 120_000,
+});
+
+useEffect(() => {
+if (!selectedZip) { setZipUsers([]); setZipUsersError(false); return; }
+let cancelled = false;
+setZipUsersLoading(true);
+setZipUsersError(false);
+fetch(`/api/admin/user-density/zip/${encodeURIComponent(selectedZip.zip)}?filter=${activeFilter}`)
+  .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
+  .then(data => { if (!cancelled) { setZipUsers(data.users || []); setZipUsersError(false); } })
+  .catch(() => { if (!cancelled) { setZipUsers([]); setZipUsersError(true); } })
+  .finally(() => { if (!cancelled) setZipUsersLoading(false); });
+return () => { cancelled = true; };
+}, [selectedZip, activeFilter]);
+
+useEffect(() => {
+if (!apiKey || !mapDivRef.current || initStartedRef.current) return;
+initStartedRef.current = true;
+(async () => {
+try {
+const { setOptions: sOpts, importLibrary: iLib } = await import("@googlemaps/js-api-loader");
+sOpts({ key: apiKey, version: "weekly" } as Parameters<typeof sOpts>[0]);
+const mapsLib = await iLib("maps") as typeof google.maps;
+mapsLibRef.current = mapsLib;
+const map = new mapsLib.Map(mapDivRef.current!, {
+center: { lat: 39.5, lng: -98.35 },
+zoom: 4,
+mapTypeControl: false,
+streetViewControl: false,
+fullscreenControl: false,
+zoomControl: true,
+gestureHandling: "greedy",
+});
+mapRef.current = map;
+setMapReady(true);
+} catch (e: unknown) {
+const msg = e instanceof Error ? e.message : String(e);
+toast({ title: "Map failed to load", description: msg, variant: "destructive" });
+initStartedRef.current = false;
+}
+})();
+}, [apiKey]);
+
+useEffect(() => {
+if (!mapReady || !density?.zips || !mapRef.current || !mapsLibRef.current) return;
+const mapsLib = mapsLibRef.current;
+
+overlaysRef.current.forEach(o => o.setMap(null));
+overlaysRef.current = [];
+
+const maxTotal = Math.max(...density.zips.map(z => z.total), 1);
+
+class ZipOverlay extends mapsLib.OverlayView {
+private div: HTMLDivElement | null = null;
+private pos: google.maps.LatLng;
+private zipData: ZipDensity;
+private onClickCb: () => void;
+
+constructor(position: google.maps.LatLng, data: ZipDensity, onClick: () => void) {
+super();
+this.pos = position;
+this.zipData = data;
+this.onClickCb = onClick;
+}
+
+onAdd() {
+this.div = document.createElement("div");
+this.div.style.cssText = "position:absolute;cursor:pointer;transform:translate(-50%,-50%);z-index:100;";
+
+const count = this.zipData.total;
+const intensity = count / maxTotal;
+const size = Math.round(24 + intensity * 26);
+const opacity = 0.65 + intensity * 0.35;
+const color = count >= 21 ? "#EF4444" : count >= 6 ? "#F97316" : "#22C55E";
+
+const circle = document.createElement("div");
+circle.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:${opacity};border:2px solid rgba(255,255,255,0.9);box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;transition:transform 0.1s;`;
+
+const label = document.createElement("span");
+label.textContent = count >= 1000 ? `${Math.round(count / 1000)}k` : String(count);
+label.style.cssText = `font-size:${size < 32 ? 9 : 11}px;font-weight:900;color:#fff;font-family:system-ui,sans-serif;text-shadow:0 1px 2px rgba(0,0,0,0.5);`;
+circle.appendChild(label);
+
+circle.addEventListener("mouseenter", () => { circle.style.transform = "scale(1.15)"; });
+circle.addEventListener("mouseleave", () => { circle.style.transform = "scale(1)"; });
+
+this.div.appendChild(circle);
+this.div.addEventListener("click", () => this.onClickCb());
+
+const panes = this.getPanes();
+if (panes) panes.overlayMouseTarget.appendChild(this.div);
+}
+
+draw() {
+if (!this.div) return;
+const projection = this.getProjection();
+if (!projection) return;
+const point = projection.fromLatLngToDivPixel(this.pos);
+if (point) {
+this.div.style.left = point.x + "px";
+this.div.style.top = point.y + "px";
+}
+}
+
+onRemove() {
+if (this.div?.parentNode) this.div.parentNode.removeChild(this.div);
+this.div = null;
+}
+}
+
+density.zips.forEach(zipData => {
+const overlay = new ZipOverlay(
+new mapsLib.LatLng(zipData.lat, zipData.lng),
+zipData,
+() => setSelectedZip(zipData),
+);
+overlay.setMap(mapRef.current);
+overlaysRef.current.push(overlay);
+});
+}, [density, mapReady]);
+
+const FILTERS = [
+{ key: "all", label: "All Users" },
+{ key: "recent", label: "Recently Active" },
+{ key: "og", label: "Day-1 OG" },
+{ key: "helper", label: "Helpers" },
+{ key: "business", label: "Businesses" },
+{ key: "cash_drop", label: "Drop Participants" },
+];
+
+return (
+<div className="space-y-4" data-testid="admin-active-areas">
+<div className="flex items-center justify-between gap-2 flex-wrap">
+<div className="flex items-center gap-2 flex-wrap">
+<MapPin className="w-4 h-4 guber-text-green shrink-0" />
+<h3 className="font-display font-semibold text-sm">Active Areas</h3>
+{density && (
+<Badge variant="outline" className="text-[10px]">
+{density.zipCount} zip{density.zipCount !== 1 ? "s" : ""} · {density.userTotal} user{density.userTotal !== 1 ? "s" : ""}
+</Badge>
+)}
+</div>
+<Button size="sm" variant="outline" onClick={() => refetch()} disabled={densityLoading} className="h-7 text-xs gap-1" data-testid="button-refresh-density">
+<RefreshCw className={`w-3 h-3 ${densityLoading ? "animate-spin" : ""}`} /> Refresh
+</Button>
+</div>
+
+<div className="flex gap-1.5 flex-wrap">
+{FILTERS.map(f => (
+<button
+key={f.key}
+onClick={() => { setActiveFilter(f.key); setSelectedZip(null); }}
+className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${activeFilter === f.key ? "bg-primary text-primary-foreground border-primary" : "bg-muted/20 border-border/30 text-muted-foreground hover:text-foreground hover:border-border/60"}`}
+data-testid={`filter-density-${f.key}`}>
+{f.label}
+</button>
+))}
+</div>
+
+<div className="relative rounded-xl overflow-hidden border border-border/20" style={{ height: 480 }}>
+{!apiKey && (
+<div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm bg-muted/20">
+Map unavailable — API key not configured
+</div>
+)}
+<div ref={mapDivRef} className="w-full h-full" />
+
+{densityLoading && (
+<div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur rounded-full px-3 py-1.5 text-xs flex items-center gap-1.5 border border-border/20 shadow-sm">
+<Loader2 className="w-3 h-3 animate-spin" /> Loading density data…
+</div>
+)}
+
+{density && !densityLoading && density.zips.length === 0 && (
+<div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
+<MapPin className="w-8 h-8 text-muted-foreground/40" />
+<p className="text-sm text-muted-foreground">No users with zip codes found for this filter</p>
+</div>
+)}
+
+{selectedZip && (
+<div className="absolute top-0 right-0 bottom-0 w-72 bg-background/97 backdrop-blur-sm border-l border-border/20 shadow-xl flex flex-col" data-testid="density-zip-panel">
+<div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-border/10 shrink-0">
+<div className="flex items-center gap-2">
+<div className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedZip.total >= 21 ? "bg-red-500" : selectedZip.total >= 6 ? "bg-orange-500" : "bg-green-500"}`} />
+<span className="font-display font-bold text-sm">ZIP {selectedZip.zip}</span>
+</div>
+<button onClick={() => setSelectedZip(null)} className="text-muted-foreground hover:text-foreground transition-colors p-0.5" data-testid="button-close-zip-panel">
+<X className="w-3.5 h-3.5" />
+</button>
+</div>
+<div className="grid grid-cols-3 gap-px bg-border/10 shrink-0 text-center text-[10px]">
+<div className="bg-background/80 py-1.5 px-1">
+<div className="font-bold text-sm leading-none mb-0.5">{selectedZip.total}</div>
+<div className="text-muted-foreground">Total</div>
+</div>
+<div className="bg-background/80 py-1.5 px-1">
+<div className="font-bold text-sm leading-none mb-0.5 text-yellow-500">{selectedZip.day1OgCount}</div>
+<div className="text-muted-foreground">OG</div>
+</div>
+<div className="bg-background/80 py-1.5 px-1">
+<div className="font-bold text-sm leading-none mb-0.5">{selectedZip.businessCount}</div>
+<div className="text-muted-foreground">Biz</div>
+</div>
+</div>
+<div className="px-3 py-2 border-b border-border/10 shrink-0">
+<p className="text-[10px] text-muted-foreground">{selectedZip.total >= 21 ? "High density zone" : selectedZip.total >= 6 ? "Medium density zone" : "Low density zone"} · {selectedZip.recentlyActive} active last 30d · {selectedZip.helperCount} helper{selectedZip.helperCount !== 1 ? "s" : ""}</p>
+</div>
+<div className="flex-1 overflow-y-auto">
+{zipUsersLoading && (
+<div className="flex items-center justify-center gap-1.5 py-6 text-xs text-muted-foreground" data-testid="zip-users-loading">
+<Loader2 className="w-3 h-3 animate-spin" /> Loading users…
+</div>
+)}
+{!zipUsersLoading && zipUsersError && (
+<div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-destructive/70" data-testid="zip-users-error">
+<AlertCircle className="w-5 h-5 opacity-60" />
+Failed to load users — try again
+</div>
+)}
+{!zipUsersLoading && !zipUsersError && zipUsers.length === 0 && (
+<div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-muted-foreground" data-testid="zip-users-empty">
+<Users className="w-5 h-5 opacity-40" />
+No users found for this filter
+</div>
+)}
+{!zipUsersLoading && !zipUsersError && zipUsers.map(u => (
+<button
+key={u.id}
+onClick={() => onNavigateToUser(u.id)}
+className="w-full text-left px-3 py-2 border-b border-border/5 hover:bg-muted/30 transition-colors flex items-start gap-2 group"
+data-testid={`zip-user-row-${u.id}`}
+>
+<div className="w-6 h-6 rounded-full bg-muted/40 flex items-center justify-center shrink-0 text-[9px] font-bold text-muted-foreground mt-0.5">
+{(u.fullName || u.username || "?")[0].toUpperCase()}
+</div>
+<div className="flex-1 min-w-0">
+<div className="flex items-center gap-1 flex-wrap">
+<span className="text-xs font-medium truncate">{u.fullName || u.username}</span>
+{u.isOg && <span className="text-[9px] font-bold text-yellow-500 shrink-0">OG</span>}
+</div>
+<div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+<span className="text-[10px] text-muted-foreground capitalize">{u.accountType === "business" ? "Business" : u.role === "helper" ? "Helper" : "Member"}</span>
+{u.jobsCompleted > 0 && (
+<span className="text-[10px] text-muted-foreground">{u.jobsCompleted} job{u.jobsCompleted !== 1 ? "s" : ""}</span>
+)}
+</div>
+</div>
+<ChevronRight className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 mt-1 transition-colors" />
+</button>
+))}
+</div>
+</div>
+)}
+
+<div className="absolute top-3 left-3 bg-background/90 backdrop-blur-sm rounded-lg px-2.5 py-2 border border-border/20 shadow-sm text-[10px] space-y-1 pointer-events-none">
+<div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-green-500" />1–5 users</div>
+<div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-orange-500" />6–20 users</div>
+<div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500" />21+ users</div>
+</div>
+</div>
+</div>
+);
+}
+
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
@@ -5390,6 +5708,9 @@ data-testid={`button-resolve-dispute-${j.id}`}
 </TabsContent>
 <TabsContent value="feedback">
 <FeedbackTab />
+</TabsContent>
+<TabsContent value="areas">
+<ActiveAreasTab onNavigateToUser={(userId) => { setActiveTab("users"); setExpandedUser(userId); }} />
 </TabsContent>
 <TabsContent value="safetyqueue">
 <SafetyQueueTab allUsers={allUsers} usersLoading={usersLoading} bgCheckMutation={bgCheckMutation} />
