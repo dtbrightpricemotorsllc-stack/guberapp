@@ -5,13 +5,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, Check, Briefcase, AlertTriangle, Star, Info, ChevronRight, Zap, Trophy } from "lucide-react";
+import { Bell, Check, Briefcase, AlertTriangle, Star, Info, ChevronRight, Zap, Trophy, X, Trash2 } from "lucide-react";
 import type { Notification } from "@shared/schema";
 import { useLocation } from "wouter";
 
 const typeIcons: Record<string, any> = { job: Briefcase, alert: AlertTriangle, review: Star, system: Info, cash_drop: Zap, cash_drop_win: Trophy };
 
-/** Resolve the navigation URL for a notification. Returns null if non-navigable. */
 function getNotifUrl(n: Notification): string | null {
   if (n.cashDropId && (n.type === "cash_drop" || n.type === "cash_drop_win")) return `/cash-drop/${n.cashDropId}`;
   if (n.jobId) return `/jobs/${n.jobId}`;
@@ -19,8 +18,6 @@ function getNotifUrl(n: Notification): string | null {
   if (n.type === "alert") return "/wallet";
   return null;
 }
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NotificationsPage() {
   const [, navigate] = useLocation();
@@ -45,18 +42,27 @@ export default function NotificationsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/notifications/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/notifications"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
+  });
+
   const handleNotificationTap = (n: Notification) => {
-    // Mark as read — but only fire the mutation once (ref-based, won't block navigation)
     if (!n.read && !mutatingIds.current.has(n.id)) {
       mutatingIds.current.add(n.id);
       markReadMutation.mutate(n.id);
     }
-    // Always navigate — even while the mark-read call is still in-flight
     const url = getNotifUrl(n);
     if (url) navigate(url);
   };
 
   const unreadCount = notifications?.filter((n) => !n.read).length || 0;
+  const total = notifications?.length || 0;
 
   return (
     <GuberLayout>
@@ -70,16 +76,29 @@ export default function NotificationsPage() {
               </Badge>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost" size="sm"
-              onClick={() => markAllMutation.mutate()}
-              className="text-xs guber-text-green font-display"
-              data-testid="button-mark-all-read"
-            >
-              <Check className="w-3 h-3 mr-1" /> Mark all read
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost" size="sm"
+                onClick={() => markAllMutation.mutate()}
+                className="text-xs guber-text-green font-display"
+                data-testid="button-mark-all-read"
+              >
+                <Check className="w-3 h-3 mr-1" /> Mark all read
+              </Button>
+            )}
+            {total > 0 && (
+              <Button
+                variant="ghost" size="sm"
+                onClick={() => clearAllMutation.mutate()}
+                disabled={clearAllMutation.isPending}
+                className="text-xs text-destructive/70 hover:text-destructive font-display"
+                data-testid="button-clear-all-notifications"
+              >
+                <Trash2 className="w-3 h-3 mr-1" /> Clear all
+              </Button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -97,32 +116,45 @@ export default function NotificationsPage() {
               const Icon = typeIcons[n.type || "system"] || Info;
               const navUrl = getNotifUrl(n);
               return (
-                <button
+                <div
                   key={n.id}
-                  type="button"
                   className={[
                     "w-full text-left bg-card rounded-xl border p-4 flex items-start gap-3 transition-colors",
                     !n.read ? "border-primary/20" : "border-border/10",
-                    navUrl ? "cursor-pointer hover:border-primary/40 active:opacity-80" : "cursor-default",
                   ].join(" ")}
-                  onClick={() => handleNotificationTap(n)}
                   data-testid={`notification-${n.id}`}
                 >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${!n.read ? "bg-primary/10" : "bg-muted"}`}>
-                    <Icon className={`w-4 h-4 ${!n.read ? "text-primary" : "text-muted-foreground"}`} />
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-semibold text-sm">{n.title}</p>
-                    {n.body && <p className="text-sm text-muted-foreground mt-0.5">{n.body}</p>}
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 shrink-0">
-                    {!n.read && <div className="w-2 h-2 rounded-full bg-primary" />}
-                    {navUrl && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    className="flex items-start gap-3 flex-1 min-w-0 text-left"
+                    onClick={() => handleNotificationTap(n)}
+                    style={{ cursor: navUrl ? "pointer" : "default" }}
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${!n.read ? "bg-primary/10" : "bg-muted"}`}>
+                      <Icon className={`w-4 h-4 ${!n.read ? "text-primary" : "text-muted-foreground"}`} />
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="font-semibold text-sm">{n.title}</p>
+                      {n.body && <p className="text-sm text-muted-foreground mt-0.5">{n.body}</p>}
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      {!n.read && <div className="w-2 h-2 rounded-full bg-primary" />}
+                      {navUrl && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMutation.mutate(n.id)}
+                    className="shrink-0 p-1 rounded-full text-muted-foreground/30 hover:text-destructive transition-colors"
+                    aria-label="Delete notification"
+                    data-testid={`button-delete-notification-${n.id}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               );
             })}
           </div>

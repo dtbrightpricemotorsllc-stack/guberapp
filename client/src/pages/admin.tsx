@@ -4872,9 +4872,18 @@ queryKey: ["/api/admin/feedback/unread-count"], enabled: user?.role === "admin",
 });
 const feedbackUnread = feedbackUnreadData?.count ?? 0;
 
+const [userSearch, setUserSearch] = useState("");
+const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+
 const updateUserMutation = useMutation({
 mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
 onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] }); toast({ title: "Updated" }); },
+onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+});
+
+const deleteUserMutation = useMutation({
+mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/users/${id}`),
+onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] }); setDeleteConfirmId(null); toast({ title: "User deleted" }); },
 onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
 });
 
@@ -5024,6 +5033,17 @@ return (
 <TabsContent value="users">
 {usersLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div> : (
 <div className="space-y-2">
+<div className="relative mb-3">
+<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+<input
+  type="text"
+  value={userSearch}
+  onChange={(e) => setUserSearch(e.target.value)}
+  placeholder="Search by name, email or username…"
+  className="w-full bg-muted/20 border border-border/20 rounded-xl pl-8 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/30"
+  data-testid="input-user-search"
+/>
+</div>
 <div className="bg-muted/20 rounded-lg p-3 mb-3">
 <div className="flex items-center gap-2 mb-1">
 <ShieldCheck className="w-4 h-4 guber-text-green" />
@@ -5036,7 +5056,11 @@ fair access while maintaining safety standards.
 </p>
 </div>
 
-{allUsers?.map((u) => {
+{(allUsers ?? []).filter(u => {
+  if (!userSearch.trim()) return true;
+  const q = userSearch.toLowerCase();
+  return (u.fullName || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q) || (u.username || "").toLowerCase().includes(q);
+}).map((u) => {
 const isExpanded = expandedUser === u.id;
 
 return (
@@ -5238,6 +5262,30 @@ data-testid={`button-grant-business-${u.id}`}
 )}
 
 <UserDocHistory userId={u.id} />
+
+{deleteConfirmId === u.id ? (
+<div className="flex gap-2 pt-1">
+<Button size="sm" variant="destructive" className="flex-1 h-7 text-[10px]"
+  onClick={() => deleteUserMutation.mutate(u.id)}
+  disabled={deleteUserMutation.isPending}
+  data-testid={`button-confirm-delete-user-${u.id}`}
+>
+  {deleteUserMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "⚠️ Confirm Delete"}
+</Button>
+<Button size="sm" variant="outline" className="h-7 text-[10px]"
+  onClick={() => setDeleteConfirmId(null)}
+  data-testid={`button-cancel-delete-user-${u.id}`}
+>Cancel</Button>
+</div>
+) : (
+<Button size="sm" variant="outline"
+  className="h-7 text-[10px] w-full border-destructive/30 text-destructive hover:bg-destructive/10 font-display"
+  onClick={() => setDeleteConfirmId(u.id)}
+  data-testid={`button-delete-user-${u.id}`}
+>
+<Trash2 className="w-3 h-3 mr-1" /> Delete User
+</Button>
+)}
 </div>
 )}
 </div>

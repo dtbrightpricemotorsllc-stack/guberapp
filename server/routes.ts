@@ -6596,6 +6596,16 @@ export async function registerRoutes(
     res.json({ message: "All marked as read" });
   });
 
+  app.delete("/api/notifications/:id", requireAuth, async (req: Request, res: Response) => {
+    await storage.deleteNotification(parseInt(req.params.id), req.session.userId!);
+    res.json({ message: "Deleted" });
+  });
+
+  app.delete("/api/notifications", requireAuth, async (req: Request, res: Response) => {
+    await storage.deleteAllNotifications(req.session.userId!);
+    res.json({ message: "All deleted" });
+  });
+
   // REVIEWS
   app.post("/api/reviews", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
@@ -7086,6 +7096,16 @@ export async function registerRoutes(
     });
 
     res.json(sanitizeUser(finalUser));
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const target = await storage.getUser(id);
+    if (!target) return res.status(404).json({ message: "User not found" });
+    if (target.role === "admin") return res.status(403).json({ message: "Cannot delete admin accounts" });
+    await storage.deleteUser(id);
+    await storage.createAuditLog({ userId: req.session.userId, action: "admin_delete_user", details: `Admin deleted user ${id} (${target.email})` });
+    res.json({ ok: true });
   });
 
   app.post("/api/admin/users/:id/grant-business-access", requireAdmin, async (req: Request, res: Response) => {
