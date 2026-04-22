@@ -73,9 +73,14 @@ export async function nativeGoogleSignIn(
  *      "Signed in!" page that tries window.close().
  *   3. App polls /api/auth/google/poll every 1.5 s; on success, closes the
  *      browser and navigates to the dashboard.
+ *
+ * onPhaseChange callbacks let the caller show intentional loading UI:
+ *   "browser_open"  — browser is about to appear (keep "Connecting…" screen)
+ *   "completing"    — token received, browser closing (show "Signing you in…")
  */
 export async function browserGoogleSignIn(opts?: {
   returnTo?: string;
+  onPhaseChange?: (phase: "browser_open" | "completing") => void;
 }): Promise<NativeGoogleSignInResult> {
   const pollKey = Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -105,13 +110,14 @@ export async function browserGoogleSignIn(opts?: {
           finish({ ok: false, reason: "cancelled" });
         });
 
+        opts?.onPhaseChange?.("browser_open");
         await Browser.open({ url: authUrl.toString(), presentationStyle: "popover" });
 
         // Poll every 1.5 s for up to 5 minutes
         let attempts = 0;
         pollInterval = setInterval(async () => {
           attempts++;
-          if (attempts > 200) { // 5 min max
+          if (attempts > 200) {
             await Browser.close().catch(() => {});
             finish({ ok: false, reason: "cancelled" });
             return;
@@ -121,8 +127,14 @@ export async function browserGoogleSignIn(opts?: {
             if (res.ok) {
               const data = await res.json();
               if (data.token) {
+                // Signal "completing" before resolving so the caller can show the
+                // "Signing you in…" screen while the browser is still closing.
+                opts?.onPhaseChange?.("completing");
                 await setToken(data.token);
                 queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                // Remove the browserFinished listener before closing so it doesn't
+                // fire "cancelled" after a successful sign-in.
+                if (browserListener) { browserListener.remove(); browserListener = null; }
                 await Browser.close().catch(() => {});
                 finish({ ok: true, accountType: data.user?.accountType });
               }

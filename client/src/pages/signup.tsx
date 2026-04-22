@@ -11,6 +11,47 @@ import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
 
+type GooglePhase = null | "connecting" | "completing";
+
+function GoogleAuthOverlay({ phase }: { phase: GooglePhase }) {
+  if (!phase) return null;
+  return (
+    <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center" data-testid="overlay-google-auth">
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full"
+          style={{ background: "radial-gradient(circle, hsl(152 100% 44% / 0.08), transparent 65%)" }}
+        />
+        <div
+          className="absolute bottom-[20%] right-[10%] w-[300px] h-[300px] rounded-full"
+          style={{ background: "radial-gradient(circle, hsl(275 85% 62% / 0.05), transparent 65%)" }}
+        />
+      </div>
+      <div className="relative z-10 flex flex-col items-center gap-8 text-center px-8">
+        <GuberLogo size="xl" />
+        {phase === "connecting" ? (
+          <div className="flex flex-col items-center gap-3">
+            <h2 className="text-xl font-display font-semibold tracking-wide text-foreground">
+              Connecting to Google…
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-[260px]">
+              You'll return to GUBER automatically
+            </p>
+            <Loader2 className="w-5 h-5 animate-spin text-primary/50 mt-2" />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <h2 className="text-xl font-display font-semibold tracking-wide text-foreground">
+              Signing you in…
+            </h2>
+            <Loader2 className="w-5 h-5 animate-spin text-primary/50 mt-2" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
     { label: "At least 8 characters", ok: password.length >= 8 },
@@ -41,8 +82,10 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googlePhase, setGooglePhase] = useState<GooglePhase>(null);
   const [refCode, setRefCode] = useState<string | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -84,28 +127,42 @@ export default function Signup() {
   };
 
   const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    const isNative = Capacitor.isNativePlatform();
     if (refCode) {
       await fetch("/api/auth/store-ref", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ref: refCode }) }).catch(() => {});
     }
     if (isNative) {
+      setGooglePhase("connecting");
+      setGoogleLoading(true);
       try {
         const result = await nativeGoogleSignIn({ authPathBase: "/api/auth/google" });
         if (result.ok) {
+          setGooglePhase("completing");
+          await new Promise((r) => setTimeout(r, 650));
           localStorage.removeItem("guber_ref");
           setLocation(returnTo || "/dashboard");
         } else if (result.reason === "plugin_not_available") {
-          // Native plugin not in this build — use Chrome Custom Tab + polling flow
-          const browserResult = await browserGoogleSignIn({ returnTo: returnTo || undefined });
+          const browserResult = await browserGoogleSignIn({
+            returnTo: returnTo || undefined,
+            onPhaseChange: (phase) => {
+              if (phase === "completing") setGooglePhase("completing");
+            },
+          });
           if (browserResult.ok) {
+            setGooglePhase("completing");
+            await new Promise((r) => setTimeout(r, 650));
             localStorage.removeItem("guber_ref");
             setLocation(returnTo || "/dashboard");
           } else if (browserResult.reason !== "cancelled") {
+            setGooglePhase(null);
             toast({ title: "Sign-In Failed", description: browserResult.message || "Please try again.", variant: "destructive" });
+          } else {
+            setGooglePhase(null);
           }
         } else if (result.reason !== "cancelled") {
+          setGooglePhase(null);
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
+        } else {
+          setGooglePhase(null);
         }
       } finally {
         setGoogleLoading(false);
@@ -118,6 +175,7 @@ export default function Signup() {
 
   return (
     <InAppBrowserGate>
+      <GoogleAuthOverlay phase={googlePhase} />
     <div className="min-h-screen bg-background flex items-center justify-center px-6 py-8 relative overflow-hidden" data-testid="page-signup">
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[20%] right-[25%] w-[400px] h-[400px] rounded-full opacity-[0.05]"
@@ -144,7 +202,7 @@ export default function Signup() {
           <Button
             type="button"
             variant="outline"
-            className="w-full h-12 mb-5 rounded-xl border-white/[0.15] font-display text-sm tracking-wider flex items-center gap-3 hover:bg-white/[0.04] transition-all"
+            className="w-full h-12 rounded-xl border-white/[0.15] font-display text-sm tracking-wider flex items-center gap-3 hover:bg-white/[0.04] transition-all"
             onClick={handleGoogleSignIn}
             disabled={googleLoading}
             data-testid="button-google-signup"
@@ -161,6 +219,14 @@ export default function Signup() {
             )}
             Sign up with Google
           </Button>
+
+          {isNative && (
+            <p className="text-center text-[11px] text-muted-foreground/70 mt-2 mb-5 leading-relaxed" data-testid="text-google-helper">
+              Secure Google sign-in will open briefly and return you automatically.
+            </p>
+          )}
+
+          {!isNative && <div className="mb-5" />}
 
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-white/[0.06]" />
