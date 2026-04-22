@@ -4543,7 +4543,8 @@ function ActiveAreasTab() {
 const { toast } = useToast();
 const mapDivRef = useRef<HTMLDivElement>(null);
 const mapRef = useRef<google.maps.Map | null>(null);
-const overlaysRef = useRef<any[]>([]);
+const mapsLibRef = useRef<typeof google.maps | null>(null);
+const overlaysRef = useRef<google.maps.OverlayView[]>([]);
 const initStartedRef = useRef(false);
 const [mapReady, setMapReady] = useState(false);
 const [activeFilter, setActiveFilter] = useState("all");
@@ -4569,8 +4570,9 @@ initStartedRef.current = true;
 (async () => {
 try {
 const { setOptions: sOpts, importLibrary: iLib } = await import("@googlemaps/js-api-loader");
-sOpts({ key: apiKey, version: "weekly" } as any);
+sOpts({ key: apiKey, version: "weekly" } as Parameters<typeof sOpts>[0]);
 const mapsLib = await iLib("maps") as typeof google.maps;
+mapsLibRef.current = mapsLib;
 const map = new mapsLib.Map(mapDivRef.current!, {
 center: { lat: 39.5, lng: -98.35 },
 zoom: 4,
@@ -4582,24 +4584,24 @@ gestureHandling: "greedy",
 });
 mapRef.current = map;
 setMapReady(true);
-} catch (e: any) {
-toast({ title: "Map failed to load", description: e.message, variant: "destructive" });
+} catch (e: unknown) {
+const msg = e instanceof Error ? e.message : String(e);
+toast({ title: "Map failed to load", description: msg, variant: "destructive" });
 initStartedRef.current = false;
 }
 })();
 }, [apiKey]);
 
 useEffect(() => {
-if (!mapReady || !density?.zips || !mapRef.current) return;
-const g = (window as any).google;
-if (!g) return;
+if (!mapReady || !density?.zips || !mapRef.current || !mapsLibRef.current) return;
+const mapsLib = mapsLibRef.current;
 
 overlaysRef.current.forEach(o => o.setMap(null));
 overlaysRef.current = [];
 
 const maxTotal = Math.max(...density.zips.map(z => z.total), 1);
 
-class ZipOverlay extends g.maps.OverlayView {
+class ZipOverlay extends mapsLib.OverlayView {
 private div: HTMLDivElement | null = null;
 private pos: google.maps.LatLng;
 private zipData: ZipDensity;
@@ -4659,7 +4661,7 @@ this.div = null;
 
 density.zips.forEach(zipData => {
 const overlay = new ZipOverlay(
-new g.maps.LatLng(zipData.lat, zipData.lng),
+new mapsLib.LatLng(zipData.lat, zipData.lng),
 zipData,
 () => setSelectedZip(zipData),
 );

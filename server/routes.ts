@@ -9770,7 +9770,9 @@ YOUR BEHAVIOR:
     try {
       const filter = ((req.query.filter as string) || "all").trim();
 
-      let rows: { zipcode: string; total: number; recently_active: number; day1_og_count: number; business_count: number; helper_count: number }[];
+      type DensityRow = { zipcode: string; total: number; recently_active: number; day1_og_count: number; business_count: number; helper_count: number };
+
+      let rows: DensityRow[];
 
       if (filter === "cash_drop") {
         const result = await db.execute(sql`
@@ -9786,9 +9788,8 @@ YOUR BEHAVIOR:
           WHERE u.zipcode IS NOT NULL AND trim(u.zipcode) != ''
           GROUP BY u.zipcode
           ORDER BY total DESC
-          LIMIT 500
         `);
-        rows = result.rows as any[];
+        rows = result.rows as DensityRow[];
       } else {
         const whereExtra =
           filter === "recent" ? sql` AND GREATEST(created_at, COALESCE(clocked_in_at, created_at), COALESCE(clocked_out_at, created_at)) > NOW() - INTERVAL '30 days'` :
@@ -9809,12 +9810,12 @@ YOUR BEHAVIOR:
           WHERE zipcode IS NOT NULL AND trim(zipcode) != '' ${whereExtra}
           GROUP BY zipcode
           ORDER BY total DESC
-          LIMIT 500
         `);
-        rows = result.rows as any[];
+        rows = result.rows as DensityRow[];
       }
 
-      const zips: any[] = [];
+      type ZipResult = { zip: string; lat: number; lng: number; total: number; recentlyActive: number; day1OgCount: number; businessCount: number; helperCount: number };
+      const zips: ZipResult[] = [];
       for (const row of rows) {
         const coords = geocodeZip(row.zipcode);
         if (!coords) continue;
