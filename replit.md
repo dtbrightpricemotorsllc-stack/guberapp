@@ -6,6 +6,8 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 ## User Preferences
 I prefer a concise and direct communication style. I value iterative development and clear explanations of the changes made. Please ask for confirmation before implementing major architectural changes or introducing new external dependencies. For code, I appreciate well-structured and readable solutions.
 
+**IMPORTANT: Do NOT use task agents / project task queue.** All work must be done directly by the main agent in this environment. Parallel/isolated task agents have caused duplicate code and merge conflicts (e.g. duplicate ActiveAreasTab). Handle every request directly here.
+
 ## System Architecture
 GUBER employs a modern full-stack architecture with a focus on security, user experience, and scalability.
 
