@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { gpsGetCurrentPosition } from "@/lib/gps";
-import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2 } from "lucide-react";
+import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2, X } from "lucide-react";
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -183,12 +185,15 @@ export default function HostDropNew() {
   const [rewardPerWinner, setRewardPerWinner] = useState("");
   const [winnerLimit, setWinnerLimit] = useState("1");
   const [clueText, setClueText] = useState("");
+  const [addressInput, setAddressInput] = useState("");
   const [gpsLat, setGpsLat] = useState("");
   const [gpsLng, setGpsLng] = useState("");
   const [gpsRadius, setGpsRadius] = useState("200");
   const [locating, setLocating] = useState(false);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [physicalDrop, setPhysicalDrop] = useState(false);
+  const [finalLocationMode, setFinalLocationMode] = useState<"none" | "name_only" | "destination">("name_only");
   const [resolvedLogoUrl, setResolvedLogoUrl] = useState(
     (user as any)?.cashDropActiveLogo === 2
       ? ((user as any)?.cashDropLogo2 || user?.cashDropBrandLogo || "")
@@ -297,20 +302,43 @@ export default function HostDropNew() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">REWARD PER WINNER ($)</Label>
-              <Input
-                type="number"
-                min="1"
-                step="0.01"
-                value={rewardPerWinner}
-                onChange={e => setRewardPerWinner(e.target.value)}
-                placeholder="10.00"
-                className="rounded-xl"
-                data-testid="input-reward-amount"
-              />
+          {/* Physical drop toggle (matches admin option) */}
+          <div className="flex items-center justify-between p-3 rounded-xl border border-border/20 bg-muted/5">
+            <div className="pr-3">
+              <p className="text-sm font-display flex items-center gap-1.5">
+                <span>📍</span> Physical Cash Drop
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                GUBER acts as GPS only — you hand the money in person. No digital reward needed.
+              </p>
             </div>
+            <Switch
+              checked={physicalDrop}
+              onCheckedChange={(v) => {
+                setPhysicalDrop(v);
+                if (v) setRewardPerWinner("0");
+                else if (rewardPerWinner === "0") setRewardPerWinner("");
+              }}
+              data-testid="switch-physical-drop"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {!physicalDrop && (
+              <div className="space-y-2">
+                <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">REWARD PER WINNER ($)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={rewardPerWinner}
+                  onChange={e => setRewardPerWinner(e.target.value)}
+                  placeholder="10.00"
+                  className="rounded-xl"
+                  data-testid="input-reward-amount"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">WINNER SLOTS</Label>
               <Input
@@ -338,48 +366,81 @@ export default function HostDropNew() {
             />
           </div>
 
+          {/* Address search — drives gpsLat/gpsLng via geocoding */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">GPS LOCATION</Label>
+              <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">
+                DROP ADDRESS <span className="text-destructive">*</span>
+              </Label>
               <button
                 onClick={handleLocate}
                 disabled={locating}
-                className="flex items-center gap-1 text-[10px] font-display text-primary/70 hover:text-primary transition-colors"
+                className="flex items-center gap-1 text-[10px] font-display text-primary/70 hover:text-primary transition-colors disabled:opacity-50"
                 data-testid="button-use-location"
+                type="button"
               >
                 {locating ? <Loader2 className="w-3 h-3 animate-spin" /> : <MapPin className="w-3 h-3" />}
                 Use my location
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Input
-                value={gpsLat}
-                onChange={e => setGpsLat(e.target.value)}
-                placeholder="Latitude"
-                className="rounded-xl text-xs"
-                data-testid="input-gps-lat"
-              />
-              <Input
-                value={gpsLng}
-                onChange={e => setGpsLng(e.target.value)}
-                placeholder="Longitude"
-                className="rounded-xl text-xs"
-                data-testid="input-gps-lng"
-              />
+            <PlacesAutocomplete
+              value={addressInput}
+              onChange={setAddressInput}
+              onPlaceSelect={(place) => {
+                setAddressInput(place.name ? `${place.name}, ${place.address}` : place.address);
+                setGpsLat(String(place.lat.toFixed(6)));
+                setGpsLng(String(place.lng.toFixed(6)));
+                toast({ title: "Location pinpointed", description: place.address });
+              }}
+              placeholder="Search address or place name..."
+              data-testid="input-drop-address"
+            />
+            {gpsLat && gpsLng && (
+              <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+                <p className="text-[11px] text-primary font-mono font-semibold" data-testid="text-drop-coordinates">
+                  {parseFloat(gpsLat).toFixed(4)}, {parseFloat(gpsLng).toFixed(4)} · {gpsRadius}m
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setGpsLat(""); setGpsLng(""); setAddressInput(""); }}
+                  className="text-muted-foreground hover:text-destructive"
+                  data-testid="button-clear-coordinates"
+                  aria-label="Clear location"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">ARRIVAL RADIUS (m)</Label>
+            <div className="flex items-center gap-3">
               <Input
                 type="number"
                 value={gpsRadius}
                 onChange={e => setGpsRadius(e.target.value)}
-                placeholder="Radius (m)"
-                className="rounded-xl text-xs"
+                className="rounded-xl w-28"
                 data-testid="input-gps-radius"
               />
+              <span className="text-[10px] text-muted-foreground font-display">
+                {parseInt(gpsRadius) <= 100 ? "Very close — same building" : parseInt(gpsRadius) <= 250 ? "~1 city block" : parseInt(gpsRadius) <= 500 ? "~2-3 blocks" : "Wide area"}
+              </span>
             </div>
-            {gpsLat && gpsLng && (
-              <p className="text-[10px] text-muted-foreground">
-                Location set: {parseFloat(gpsLat).toFixed(4)}, {parseFloat(gpsLng).toFixed(4)} · {gpsRadius}m radius
-              </p>
-            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">FINAL LOCATION MODE</Label>
+            <select
+              value={finalLocationMode}
+              onChange={e => setFinalLocationMode(e.target.value as any)}
+              className="w-full rounded-xl border border-border/30 bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+              data-testid="select-final-location-mode"
+            >
+              <option value="none">None (no location info shared)</option>
+              <option value="name_only">Name Only (business name shared, no address)</option>
+              <option value="destination">Destination (full route-to-location)</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -405,18 +466,43 @@ export default function HostDropNew() {
             </div>
           </div>
 
-          {!resolvedLogoUrl && (
-            <p className="text-[11px] text-destructive text-center">A brand logo is required before submitting your drop.</p>
-          )}
+          {/* Missing-requirements hints so the user knows what's blocking submit */}
+          {(() => {
+            const missing: string[] = [];
+            if (!title) missing.push("drop title");
+            if (!physicalDrop && !rewardPerWinner) missing.push("reward amount");
+            if (!gpsLat || !gpsLng) missing.push("drop address");
+            if (!resolvedLogoUrl) missing.push("brand logo");
+            if (missing.length === 0) return null;
+            return (
+              <div className="rounded-xl px-3 py-2.5 text-[11px] text-amber-400/90 leading-relaxed"
+                style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}
+                data-testid="text-missing-fields"
+              >
+                To activate the button, add: <span className="font-semibold text-amber-300">{missing.join(", ")}</span>
+              </div>
+            );
+          })()}
 
           <Button
-            className="w-full h-14 font-display tracking-[0.15em] text-sm font-bold rounded-2xl"
-            style={{ background: "linear-gradient(135deg,#C9A84C,#a8873c)", color: "#000" }}
-            disabled={!title || !rewardPerWinner || !resolvedLogoUrl || createMutation.isPending}
+            className="w-full h-14 font-display tracking-[0.15em] text-sm font-bold rounded-2xl shadow-lg transition-opacity"
+            style={{
+              background: "linear-gradient(135deg,#F5C542,#D4A017)",
+              color: "#000",
+              boxShadow: "0 0 24px rgba(245,197,66,0.35)",
+            }}
+            disabled={
+              !title ||
+              (!physicalDrop && !rewardPerWinner) ||
+              !resolvedLogoUrl ||
+              !gpsLat ||
+              !gpsLng ||
+              createMutation.isPending
+            }
             onClick={() => createMutation.mutate({
               title,
               description: description || undefined,
-              rewardPerWinner,
+              rewardPerWinner: physicalDrop ? "0" : rewardPerWinner,
               winnerLimit,
               clueText: clueText || undefined,
               gpsLat: gpsLat || undefined,
@@ -424,6 +510,9 @@ export default function HostDropNew() {
               gpsRadius,
               startTime: startTime || undefined,
               endTime: endTime || undefined,
+              physicalCashDrop: physicalDrop,
+              finalLocationMode,
+              address: addressInput || undefined,
             })}
             data-testid="button-submit-host-drop"
           >

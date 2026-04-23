@@ -10204,19 +10204,25 @@ YOUR BEHAVIOR:
       const {
         title, description, rewardPerWinner, winnerLimit, startTime, endTime,
         gpsLat, gpsLng, gpsRadius, clueText, hostLogo,
+        physicalCashDrop, finalLocationMode, address,
       } = req.body;
       if (!title) return res.status(400).json({ error: "Title is required" });
-      if (!rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
+      if (!physicalCashDrop && !rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
+      if (!gpsLat || !gpsLng) return res.status(400).json({ error: "A drop address is required" });
 
       const needsApproval = !!currentUser.cashDropApprovalRequired;
       const activeLogo = (currentUser as any).cashDropActiveLogo === 2 ? (currentUser as any).cashDropLogo2 : currentUser.cashDropBrandLogo;
       const resolvedLogo = hostLogo || activeLogo || currentUser.cashDropBrandLogo || null;
       if (!resolvedLogo) return res.status(400).json({ error: "A brand logo is required for host drops. Please upload a logo image." });
 
+      const validLocationModes = ["none", "name_only", "destination"];
+      const locMode = validLocationModes.includes(finalLocationMode) ? finalLocationMode : "name_only";
+      const isPhysical = !!physicalCashDrop;
+
       const drop = await storage.createCashDrop({
         title,
         description: description || null,
-        rewardPerWinner: parseFloat(rewardPerWinner),
+        rewardPerWinner: isPhysical ? 0 : parseFloat(rewardPerWinner),
         winnerLimit: parseInt(winnerLimit) || 1,
         cashWinnerCount: parseInt(winnerLimit) || 1,
         rewardWinnerCount: 0,
@@ -10234,8 +10240,8 @@ YOUR BEHAVIOR:
         sponsorId: null,
         isSponsored: false,
         brandingEnabled: !!(currentUser.cashDropBrandName || resolvedLogo),
-        finalLocationMode: "name_only",
-        rewardType: "cash",
+        finalLocationMode: locMode,
+        rewardType: isPhysical ? "physical" : "cash",
         fundingSource: "host_user",
         status: needsApproval ? "draft" : "active",
         isHostDrop: true,
