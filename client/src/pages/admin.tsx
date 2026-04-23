@@ -1926,6 +1926,47 @@ const [pushUrl, setPushUrl] = useState("/");
 const [pushAudience, setPushAudience] = useState("all");
 const [aiPolished, setAiPolished] = useState(false);
 
+// In-app popup broadcast state
+const [popupTitle, setPopupTitle] = useState("");
+const [popupBody, setPopupBody] = useState("");
+const [popupCtaUrl, setPopupCtaUrl] = useState("");
+const [popupCtaLabel, setPopupCtaLabel] = useState("");
+const [popupAudience, setPopupAudience] = useState("non_og");
+
+const popupBroadcastMutation = useMutation({
+  mutationFn: () => apiRequest("POST", "/api/admin/broadcast-popup", {
+    title: popupTitle,
+    body: popupBody,
+    ctaUrl: popupCtaUrl || null,
+    ctaLabel: popupCtaLabel || null,
+    audience: popupAudience,
+  }),
+  onSuccess: async (res) => {
+    const data = await res.json();
+    toast({ title: "In-app popup queued!", description: `Created: ${data.created} | Audience: ${data.audience}` });
+    setPopupTitle(""); setPopupBody(""); setPopupCtaUrl(""); setPopupCtaLabel("");
+  },
+  onError: async (err: any) => {
+    toast({ title: "Popup failed", description: err.message, variant: "destructive" });
+  },
+});
+
+const usePresetDay1OG = () => {
+  setPopupTitle("👑 Become a Day-1 OG");
+  setPopupBody("You're early — claim Day-1 OG status, lock in lower fees forever, and get your name in the founders wall. Only available while we unlock your city.");
+  setPopupCtaUrl("https://guberapp.com/day1og");
+  setPopupCtaLabel("Tell me more");
+  setPopupAudience("non_og");
+};
+
+const usePresetFreeToPost = () => {
+  setPopupTitle("📝 Reminder — it's always free to post");
+  setPopupBody("No matter the task, big or small, posting on GUBER is always free. Got something on your to-do list? Post it now and let a Guber handle it.");
+  setPopupCtaUrl("/post-job");
+  setPopupCtaLabel("Post a job");
+  setPopupAudience("all");
+};
+
 const broadcastMutation = useMutation({
 mutationFn: () => apiRequest("POST", "/api/admin/broadcast-email", { subject, htmlBody, audience }),
 onSuccess: async (res) => {
@@ -2060,6 +2101,119 @@ data-testid="button-send-push-broadcast"
 <Bell className="w-4 h-4 mr-2" />
 )}
 {pushBroadcastMutation.isPending ? "Sending..." : "Send Push Notification to Everyone"}
+</Button>
+</div>
+</div>
+
+<div className="bg-card rounded-2xl border border-amber-500/30 p-5 space-y-4" style={{ background: "linear-gradient(160deg,rgba(245,197,66,0.04),rgba(0,0,0,0))" }}>
+<h3 className="font-display font-semibold text-sm flex items-center gap-2" style={{ color: "#F5C542" }}>
+<span className="text-base">💬</span> In-App Popup Broadcast
+</h3>
+<p className="text-xs text-muted-foreground">
+Shows a dismissable modal to users the next time they open the app. They can tap "Not interested" to close, or tap the CTA to follow a link (external URL or in-app path).
+</p>
+
+<div className="flex flex-wrap gap-2">
+<Button
+  type="button"
+  size="sm"
+  variant="outline"
+  onClick={usePresetDay1OG}
+  className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 font-display text-xs"
+  data-testid="button-preset-day1og"
+>
+  👑 Day-1 OG invite
+</Button>
+<Button
+  type="button"
+  size="sm"
+  variant="outline"
+  onClick={usePresetFreeToPost}
+  className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 font-display text-xs"
+  data-testid="button-preset-free-to-post"
+>
+  📝 Free-to-post reminder
+</Button>
+</div>
+
+<div className="space-y-3">
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">Audience</label>
+<Select value={popupAudience} onValueChange={setPopupAudience}>
+<SelectTrigger className="bg-background border-border/30" data-testid="select-popup-audience">
+<SelectValue />
+</SelectTrigger>
+<SelectContent>
+<SelectItem value="all">All users</SelectItem>
+<SelectItem value="og">Day-1 OG only</SelectItem>
+<SelectItem value="non_og">Non-Day-1 OG only</SelectItem>
+<SelectItem value="trustbox">Trust Box subscribers only</SelectItem>
+</SelectContent>
+</Select>
+</div>
+
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">Title</label>
+<Input
+value={popupTitle}
+onChange={(e) => setPopupTitle(e.target.value)}
+placeholder="e.g. Become a Day-1 OG"
+className="bg-background border-border/30"
+data-testid="input-popup-title"
+/>
+</div>
+
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">Message</label>
+<Textarea
+value={popupBody}
+onChange={(e) => setPopupBody(e.target.value)}
+placeholder="Short, friendly message — what's in it for them?"
+className="bg-background border-border/30 min-h-[80px] text-sm"
+data-testid="input-popup-body"
+/>
+</div>
+
+<div className="grid grid-cols-2 gap-2">
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">CTA Label (optional)</label>
+<Input
+value={popupCtaLabel}
+onChange={(e) => setPopupCtaLabel(e.target.value)}
+placeholder="Tell me more"
+className="bg-background border-border/30"
+data-testid="input-popup-cta-label"
+/>
+</div>
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">CTA URL (optional)</label>
+<Input
+value={popupCtaUrl}
+onChange={(e) => setPopupCtaUrl(e.target.value)}
+placeholder="/post-job or https://..."
+className="bg-background border-border/30"
+data-testid="input-popup-cta-url"
+/>
+</div>
+</div>
+
+<Button
+onClick={() => popupBroadcastMutation.mutate()}
+disabled={popupBroadcastMutation.isPending || !popupTitle.trim() || !popupBody.trim()}
+className="w-full font-display font-bold"
+style={{
+  background: "linear-gradient(135deg,#F5C542,#D4A017)",
+  color: "#0c0a08",
+  boxShadow: "0 0 18px rgba(245,197,66,0.35)",
+}}
+data-testid="button-send-popup-broadcast"
+>
+{popupBroadcastMutation.isPending ? (
+<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+) : (
+<span className="mr-2">💬</span>
+)}
+{popupBroadcastMutation.isPending ? "Queueing..." : "Send In-App Popup"}
 </Button>
 </div>
 </div>

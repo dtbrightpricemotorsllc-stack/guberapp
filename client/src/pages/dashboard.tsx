@@ -570,7 +570,7 @@ export default function Dashboard() {
         </div>
 
         {/* ── Primary CTA (above map) ── */}
-        <div className="mb-4 animate-fade-in stagger-2 space-y-4">
+        <div className="mb-4 animate-fade-in stagger-2 space-y-5">
           {mode === "hire" ? (
             <>
               <Link href="/post-job">
@@ -583,7 +583,7 @@ export default function Dashboard() {
               {user?.cashDropHostEnabled && (
                 <Link href="/host-drop/new">
                   <button
-                    className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99] mt-1"
+                    className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
                     style={{
                       background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
                       border: "1.5px solid rgba(201,168,76,0.4)",
@@ -630,7 +630,7 @@ export default function Dashboard() {
           {mode === "work" && user?.cashDropHostEnabled && (
             <Link href="/host-drop/new">
               <button
-                className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99] mt-1"
+                className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
                 style={{
                   background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
                   border: "1.5px solid rgba(201,168,76,0.4)",

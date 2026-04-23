@@ -7546,6 +7546,75 @@ export async function registerRoutes(
     }
   });
 
+  // ── Admin In-App Popup Broadcast ────────────────────────────────────────
+  app.post("/api/admin/broadcast-popup", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, body, ctaUrl, ctaLabel, audience } = req.body || {};
+      if (!title?.trim() || !body?.trim()) {
+        return res.status(400).json({ message: "Title and body are required" });
+      }
+
+      let users = await storage.getAllUsers();
+      if (audience === "og") {
+        users = users.filter((u: any) => u.day1OG);
+      } else if (audience === "non_og") {
+        users = users.filter((u: any) => !u.day1OG);
+      } else if (audience === "trustbox") {
+        users = users.filter((u: any) => u.trustBoxPurchased);
+      }
+
+      users = users.filter((u: any) => u.role !== "admin");
+
+      let created = 0;
+      for (const u of users) {
+        try {
+          await storage.createNotification({
+            userId: u.id,
+            title: title.trim(),
+            body: body.trim(),
+            type: "announcement",
+            displayMode: "modal",
+            ctaUrl: ctaUrl?.trim() || null,
+            ctaLabel: ctaLabel?.trim() || null,
+            read: false,
+          });
+          created++;
+        } catch {}
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "admin_broadcast_popup",
+        details: `Title: "${title}" | Audience: ${audience || "all"} | Created: ${created}`,
+      });
+
+      res.json({ created, total: users.length, audience: audience || "all" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Current user's pending in-app popup ─────────────────────────────────
+  app.get("/api/me/popup", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const all = await storage.getNotificationsByUser(userId);
+      const popup = all
+        .filter((n: any) => !n.read && n.displayMode === "modal" && n.type === "announcement")
+        .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
+      if (!popup) return res.json(null);
+      res.json({
+        id: popup.id,
+        title: popup.title,
+        body: popup.body,
+        ctaUrl: (popup as any).ctaUrl || null,
+        ctaLabel: (popup as any).ctaLabel || null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/admin/ai-polish-broadcast", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { title, body } = req.body || {};

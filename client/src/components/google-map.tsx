@@ -387,18 +387,36 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
 
       class CashDropOverlay extends g.OverlayView {
         private div: HTMLDivElement | null = null;
+        private inner: HTMLDivElement | null = null;
         private pos: google.maps.LatLng;
         private _colorInterval: ReturnType<typeof setInterval> | null = null;
         private _ringIntervals: ReturnType<typeof setInterval>[] = [];
+        private _zoomListener: google.maps.MapsEventListener | null = null;
 
         constructor(position: google.maps.LatLng) {
           super();
           this.pos = position;
         }
 
+        private applyZoomScale() {
+          if (!this.inner) return;
+          const map = this.getMap() as google.maps.Map | undefined;
+          const z = map?.getZoom?.() ?? 12;
+          // Base zoom 12 = 1.0x, scales up to ~2.4x at zoom 18, down to ~0.7x at zoom 8
+          const scale = Math.max(0.7, Math.min(2.4, 1 + (z - 12) * 0.22));
+          this.inner.style.transform = `translate(-50%,-50%) scale(${scale})`;
+          this.inner.style.transformOrigin = "center center";
+        }
+
         onAdd() {
           this.div = document.createElement("div");
-          this.div.style.cssText = "position:absolute;cursor:pointer;transform:translate(-50%,-50%);z-index:9999;";
+          this.div.style.cssText = "position:absolute;cursor:pointer;z-index:9999;";
+
+          // Inner element holds the scaled content so zoom transform doesn't fight positioning
+          const inner = document.createElement("div");
+          inner.style.cssText = "position:absolute;left:0;top:0;transform:translate(-50%,-50%);transform-origin:center center;will-change:transform;transition:transform 180ms cubic-bezier(.2,.8,.2,1);";
+          this.inner = inner;
+          this.div.appendChild(inner);
 
           const wrapper = document.createElement("div");
           wrapper.style.cssText = "position:relative;width:56px;height:72px;display:flex;flex-direction:column;align-items:center;";
@@ -449,11 +467,17 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
 
           wrapper.appendChild(circle);
           wrapper.appendChild(pill);
-          this.div.appendChild(wrapper);
+          inner.appendChild(wrapper);
 
           this.div.addEventListener("click", () => {
             onCashDropClick?.(drop);
           });
+
+          const map = this.getMap() as google.maps.Map | undefined;
+          if (map) {
+            this._zoomListener = map.addListener("zoom_changed", () => this.applyZoomScale());
+          }
+          this.applyZoomScale();
 
           if (!isClosed) {
             let ci = 0;
@@ -498,8 +522,10 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         onRemove() {
           if (this._colorInterval) clearInterval(this._colorInterval);
           this._ringIntervals.forEach(id => clearInterval(id));
+          if (this._zoomListener) { try { this._zoomListener.remove(); } catch {} this._zoomListener = null; }
           this.div?.remove();
           this.div = null;
+          this.inner = null;
         }
       }
 

@@ -338,6 +338,9 @@ export const notifications = pgTable("notifications", {
   read: boolean("read").default(false),
   jobId: integer("job_id"),
   cashDropId: integer("cash_drop_id"),
+  ctaUrl: text("cta_url"),
+  ctaLabel: text("cta_label"),
+  displayMode: text("display_mode").default("toast"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import SplashScreen from "@/components/splash-screen";
 import InstallPrompt from "@/components/install-prompt";
+import AnnouncementPopup from "@/components/announcement-popup";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -370,6 +371,7 @@ function App() {
             <Toaster />
             {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
             <InstallPrompt />
+            <AnnouncementPopup />
             <NativeDeepLinkHandler />
             <Router />
           </AuthProvider>
