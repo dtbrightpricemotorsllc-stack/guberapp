@@ -570,7 +570,7 @@ export default function Dashboard() {
         </div>
 
         {/* ── Primary CTA (above map) ── */}
-        <div className="mb-4 animate-fade-in stagger-2 space-y-5">
+        <div className="mb-4 animate-fade-in stagger-2 space-y-8">
           {mode === "hire" ? (
             <>
               <Link href="/post-job">
