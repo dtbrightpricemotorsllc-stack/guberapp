@@ -5378,6 +5378,7 @@ const feedbackUnread = feedbackUnreadData?.count ?? 0;
 
 const [userSearch, setUserSearch] = useState("");
 const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+const [jobFilter, setJobFilter] = useState<"all" | "stuck" | "active" | "done">("all");
 
 const updateUserMutation = useMutation({
 mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
@@ -5808,14 +5809,106 @@ data-testid={`button-grant-business-${u.id}`}
 </TabsContent>
 
 <TabsContent value="jobs">
-{jobsLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div> : (
-<div className="space-y-2">
-{allJobs?.map((j) => (
-<div key={j.id} className={`bg-card rounded-xl border p-3 ${(j as any).removedByAdmin ? "border-destructive/30 opacity-60" : "border-border/20"}`} data-testid={`admin-job-${j.id}`}> {/* faint-text-allow: removed jobs intentionally dimmed */}
+{(() => {
+  const STUCK_STATUSES = ["accepted_pending_payment","confirmed","funded","awaiting_payment"];
+  const ACTIVE_STATUSES = ["active","in_progress","proof_submitted","completion_submitted","posted_public"];
+  const DONE_STATUSES = ["completed_paid","completed","cancelled","disputed"];
+  const counts = {
+    all: allJobs?.length ?? 0,
+    stuck: allJobs?.filter(j => STUCK_STATUSES.includes(j.status)).length ?? 0,
+    active: allJobs?.filter(j => ACTIVE_STATUSES.includes(j.status)).length ?? 0,
+    done: allJobs?.filter(j => DONE_STATUSES.includes(j.status)).length ?? 0,
+  };
+  const filtered = (allJobs ?? []).filter(j => {
+    if (jobFilter === "all") return true;
+    if (jobFilter === "stuck") return STUCK_STATUSES.includes(j.status);
+    if (jobFilter === "active") return ACTIVE_STATUSES.includes(j.status);
+    if (jobFilter === "done") return DONE_STATUSES.includes(j.status);
+    return true;
+  }).sort((a,b) => {
+    const aStuck = STUCK_STATUSES.includes(a.status) ? 0 : 1;
+    const bStuck = STUCK_STATUSES.includes(b.status) ? 0 : 1;
+    if (aStuck !== bStuck) return aStuck - bStuck;
+    return new Date((b as any).createdAt).getTime() - new Date((a as any).createdAt).getTime();
+  });
+
+  const FilterChip = ({ value, label, count, tone }: { value: string; label: string; count: number; tone: string }) => (
+    <button
+      type="button"
+      onClick={() => setJobFilter(value)}
+      className={`px-3 h-8 rounded-full text-[11px] font-display font-bold tracking-wide transition flex items-center gap-1.5 ${jobFilter === value ? "ring-2 ring-offset-1 ring-offset-background" : "opacity-70 hover:opacity-100"}`}
+      style={{ background: tone, color: "#0c0a08" }}
+      data-testid={`filter-jobs-${value}`}
+    >
+      {label}
+      <span className="bg-black/25 rounded-full px-1.5 text-[10px]">{count}</span>
+    </button>
+  );
+
+  return jobsLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div> : (
+<div className="space-y-3">
+
+<div className="flex flex-wrap gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-1 px-1">
+  <FilterChip value="all" label="All" count={counts.all} tone="#e5e7eb" />
+  <FilterChip value="stuck" label="🚨 Stuck" count={counts.stuck} tone="#fbbf24" />
+  <FilterChip value="active" label="Active" count={counts.active} tone="#86efac" />
+  <FilterChip value="done" label="Done" count={counts.done} tone="#cbd5e1" />
+</div>
+
+{counts.stuck > 0 && jobFilter !== "stuck" && (
+  <button
+    type="button"
+    onClick={() => setJobFilter("stuck")}
+    className="w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-200 hover:bg-amber-500/20 transition flex items-center gap-2"
+    data-testid="banner-stuck-jobs"
+  >
+    <span className="text-base">🚨</span>
+    <span><strong>{counts.stuck}</strong> job{counts.stuck === 1 ? "" : "s"} stuck in transitional status (accepted but not paid, or awaiting confirmation). Tap to view.</span>
+  </button>
+)}
+
+{filtered.length === 0 ? (
+  <p className="text-center py-8 text-muted-foreground font-display text-sm">No jobs match this filter.</p>
+) : filtered.map((j) => {
+  const poster = allUsers?.find(u => u.id === (j as any).postedById);
+  const helper = (j as any).assignedHelperId ? allUsers?.find(u => u.id === (j as any).assignedHelperId) : null;
+  const acceptedAt = (j as any).lockedAt || (j as any).confirmedAt || null;
+  const isStuck = STUCK_STATUSES.includes(j.status);
+  const fmtAgo = (d: any) => {
+    if (!d) return "";
+    const ms = Date.now() - new Date(d).getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+  return (
+<div key={j.id} className={`bg-card rounded-xl border p-3 ${(j as any).removedByAdmin ? "border-destructive/30 opacity-60" : isStuck ? "border-amber-500/50 ring-1 ring-amber-500/20" : "border-border/20"}`} data-testid={`admin-job-${j.id}`}> {/* faint-text-allow: removed jobs intentionally dimmed */}
 <div className="flex items-start justify-between gap-3">
 <div className="min-w-0 flex-1">
-<p className="text-sm font-semibold truncate">{j.title}</p>
+<p className="text-sm font-semibold truncate" data-testid={`text-job-title-${j.id}`}>{j.title}</p>
 <p className="text-[11px] text-muted-foreground">{j.category} — ${j.budget || 0} — ID:{j.id}</p>
+
+<div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px]">
+  <span className="text-muted-foreground">
+    Posted by <span className="text-zinc-200 font-medium" data-testid={`text-job-poster-${j.id}`}>{poster?.fullName || poster?.email || `User #${(j as any).postedById}`}</span>
+    {(j as any).createdAt && <span className="text-muted-foreground/70"> · {fmtAgo((j as any).createdAt)}</span>}
+  </span>
+  {helper ? (
+    <span className="text-emerald-300/90">
+      ✓ Accepted by <span className="font-semibold" data-testid={`text-job-helper-${j.id}`}>{helper.fullName || helper.email}</span>
+      {acceptedAt && <span className="text-emerald-300/60"> · {fmtAgo(acceptedAt)}</span>}
+    </span>
+  ) : (j as any).assignedHelperId ? (
+    <span className="text-amber-300/90">⏳ Helper #{(j as any).assignedHelperId} (not loaded)</span>
+  ) : (
+    <span className="text-muted-foreground/60">Not yet accepted</span>
+  )}
+</div>
+
 {(j as any).removedByAdmin && (
 <p className="text-[10px] text-destructive/70 mt-0.5 font-display">Removed: {(j as any).removedByAdminReason || "Admin action"}</p>
 )}
@@ -5864,16 +5957,18 @@ data-testid={`button-remove-job-${j.id}`}
 {(j as any).removedByAdmin ? (
 <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/30">Removed</Badge>
 ) : (
-<Badge variant="outline" className="text-[10px] capitalize bg-primary/10 text-primary border-primary/30">
+<Badge variant="outline" className={`text-[10px] capitalize ${isStuck ? "bg-amber-500/15 text-amber-300 border-amber-500/40" : "bg-primary/10 text-primary border-primary/30"}`} data-testid={`badge-job-status-${j.id}`}>
 {j.status.replace(/_/g, " ")}
 </Badge>
 )}
 </div>
 </div>
 </div>
-))}
+);
+})}
 </div>
-)}
+);
+})()}
 </TabsContent>
 
 <TabsContent value="catalog">
