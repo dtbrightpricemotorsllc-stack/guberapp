@@ -670,7 +670,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           style={{ background: "rgba(255,255,255,0.92)", border: "1px solid rgba(0,0,0,0.08)", color: "#9ca3af", backdropFilter: "blur(8px)", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
           data-testid="text-no-jobs"
         >
-          NO JOBS NEARBY YET
+          ⚡ LIVE MAP
         </div>
       )}
     </div>
