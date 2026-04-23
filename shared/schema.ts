@@ -110,6 +110,7 @@ export const users = pgTable("users", {
   cashDropApprovalRequired: boolean("cash_drop_approval_required").default(true),
   cashDropBrandName: text("cash_drop_brand_name"),
   cashDropBrandLogo: text("cash_drop_brand_logo"),
+  milestoneBadges: text("milestone_badges").array(),
 });
 
 export const categories = pgTable("categories", {

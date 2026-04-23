@@ -457,9 +457,19 @@ export default function Profile() {
               <p className="text-xs text-muted-foreground mb-0.5">{displayUser.fullName} <span className="text-[10px]">(private)</span></p>
             )}
             <p className="text-[11px] font-mono text-primary/70 mb-2.5 tracking-wider" data-testid="text-guber-id">{(displayUser as any).guberId || ""}</p>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap justify-center">
               <TrustBadge tier={displayUser.tier} />
               {displayUser.day1OG && <Day1OGBadge />}
+              {((displayUser as any).milestoneBadges || []).includes("trusted_worker") && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-bold" style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#86efac" }} data-testid="badge-trusted-worker">
+                  <Award className="w-2.5 h-2.5" /> Trusted Worker
+                </span>
+              )}
+              {((displayUser as any).milestoneBadges || []).includes("verified_worker") && !((displayUser as any).milestoneBadges || []).includes("trusted_worker") && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-bold" style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.3)", color: "#93c5fd" }} data-testid="badge-verified-worker">
+                  <CheckCircle className="w-2.5 h-2.5" /> Verified Worker
+                </span>
+              )}
             </div>
             {displayUser.userBio && (
               <p className="text-sm text-muted-foreground mb-3 leading-relaxed max-w-sm">{displayUser.userBio}</p>
@@ -738,6 +748,21 @@ export default function Profile() {
                 )}
                 {!nextThreshold && (
                   <p className="text-[9px] text-emerald-400/50 font-display">Max trust level — all payout modes unlocked</p>
+                )}
+
+                {((displayUser as any).milestoneBadges || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5" data-testid="container-milestone-badges">
+                    {((displayUser as any).milestoneBadges || []).includes("verified_worker") && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-display font-bold" style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.35)", color: "#93c5fd" }} data-testid="trust-badge-verified-worker">
+                        <CheckCircle className="w-2.5 h-2.5" /> Verified Worker
+                      </span>
+                    )}
+                    {((displayUser as any).milestoneBadges || []).includes("trusted_worker") && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-display font-bold" style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.35)", color: "#86efac" }} data-testid="trust-badge-trusted-worker">
+                        <Award className="w-2.5 h-2.5" /> Trusted Worker
+                      </span>
+                    )}
+                  </div>
                 )}
 
                 <div className="grid grid-cols-3 gap-1.5" data-testid="grid-payout-unlocks-profile">

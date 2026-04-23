@@ -465,6 +465,18 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             : "Confirmed! Waiting for the poster to confirm — your payout releases once both sides agree.",
         });
       }
+      if (!isOwner && updatedJob?.newBadge) {
+        const badgeLabel = updatedJob.newBadge === "trusted_worker" ? "Trusted Worker" : "Verified Worker";
+        const badgeEmoji = updatedJob.newBadge === "trusted_worker" ? "🏆" : "✅";
+        setTimeout(() => {
+          toast({
+            title: `${badgeEmoji} You leveled up to ${badgeLabel}!`,
+            description: updatedJob.newBadge === "trusted_worker"
+              ? "You've reached the highest trust tier. Instant payouts are now unlocked."
+              : "Your trust has grown. Early payouts are now available to you.",
+          });
+        }, 1200);
+      }
     },
     onError: (err: any) => toast({ title: "Confirm Failed", description: err.message, variant: "destructive" }),
   });

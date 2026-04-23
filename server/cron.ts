@@ -291,11 +291,43 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
     if (job.assignedHelperId) {
       const helper = await db.select().from(users).where(eq(users.id, job.assignedHelperId)).then(r => r[0]);
       if (helper) {
-        await db.update(users).set({
+        const oldTrust = helper.trustScore || 50;
+        const newTrust = Math.min(100, oldTrust + TRUST_ADJUSTMENTS.JOB_COMPLETED_WITH_PROOF + TRUST_ADJUSTMENTS.POSTER_CONFIRMED);
+        const existingBadges: string[] = (helper as any).milestoneBadges || [];
+        const cronBadgeUpdates: Record<string, any> = {
           jobsCompleted: (helper.jobsCompleted || 0) + 1,
-          trustScore: Math.min(100, (helper.trustScore || 50) + TRUST_ADJUSTMENTS.JOB_COMPLETED_WITH_PROOF + TRUST_ADJUSTMENTS.POSTER_CONFIRMED),
+          trustScore: newTrust,
           jobsConfirmed: ((helper as any).jobsConfirmed || 0) + 1,
-        }).where(eq(users.id, helper.id));
+        };
+        const cronNewBadges: string[] = [];
+        if (newTrust >= 60 && oldTrust < 60 && !existingBadges.includes("verified_worker")) {
+          cronNewBadges.push("verified_worker");
+        }
+        if (newTrust >= 80 && oldTrust < 80 && !existingBadges.includes("trusted_worker")) {
+          cronNewBadges.push("trusted_worker");
+        }
+        if (cronNewBadges.length > 0) {
+          cronBadgeUpdates.milestoneBadges = [...existingBadges, ...cronNewBadges];
+        }
+        await db.update(users).set(cronBadgeUpdates).where(eq(users.id, helper.id));
+
+        // Notify worker of milestone badge(s) earned via auto-completion
+        const cronNewBadge = cronNewBadges.includes("trusted_worker")
+          ? "trusted_worker"
+          : cronNewBadges.includes("verified_worker") ? "verified_worker" : null;
+        if (cronNewBadge) {
+          const badgeLabel = cronNewBadge === "trusted_worker" ? "Trusted Worker" : "Verified Worker";
+          const badgeBody = cronNewBadge === "trusted_worker"
+            ? "You've reached the highest trust tier. Instant payouts are now unlocked!"
+            : "Your trust has grown. Early payouts are now available to you.";
+          await storage.createNotification({
+            userId: helper.id,
+            title: `🏆 You leveled up to ${badgeLabel}!`,
+            body: badgeBody,
+            type: "job",
+            jobId: job.id,
+          });
+        }
       }
 
       // Send capture-state-specific notification — never say "on its way" if capture expired

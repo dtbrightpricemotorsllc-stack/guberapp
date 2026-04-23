@@ -5601,6 +5601,7 @@ export async function registerRoutes(
         return res.json(updatedEarly);
       }
 
+      let confirmNewBadge: string | null = null;
       if (newBuyerConfirmed && newHelperConfirmed) {
         update.status = "completed_paid";
         update.confirmedAt = new Date();
@@ -5621,12 +5622,14 @@ export async function registerRoutes(
         if (job.assignedHelperId) {
           const helper = await storage.getUser(job.assignedHelperId);
           if (helper) {
+            const oldTrust = helper.trustScore || 50;
+            const newTrust = adjustTrustScore(
+              oldTrust,
+              TRUST_ADJUSTMENTS.JOB_COMPLETED_WITH_PROOF + TRUST_ADJUSTMENTS.POSTER_CONFIRMED
+            );
             const resumeFields: any = {
               jobsCompleted: (helper.jobsCompleted || 0) + 1,
-              trustScore: adjustTrustScore(
-                helper.trustScore || 50,
-                TRUST_ADJUSTMENTS.JOB_COMPLETED_WITH_PROOF + TRUST_ADJUSTMENTS.POSTER_CONFIRMED
-              ),
+              trustScore: newTrust,
               jobsConfirmed: ((helper as any).jobsConfirmed || 0) + 1,
             };
             const catField = categorizeCategoryExperience(job);
@@ -5638,7 +5641,38 @@ export async function registerRoutes(
             const pc = computeProofConfidence(updatedForCalc);
             resumeFields.proofConfidenceScore = pc.score;
             resumeFields.proofConfidenceLevel = pc.level;
+
+            // Grant milestone badges if trust score crossed thresholds for the first time.
+            // Both badges can be awarded in one update if trust jumps past 60 and 80 together.
+            const existingBadges: string[] = (helper as any).milestoneBadges || [];
+            const newBadges: string[] = [];
+            if (newTrust >= 60 && oldTrust < 60 && !existingBadges.includes("verified_worker")) {
+              newBadges.push("verified_worker");
+            }
+            if (newTrust >= 80 && oldTrust < 80 && !existingBadges.includes("trusted_worker")) {
+              newBadges.push("trusted_worker");
+            }
+            if (newBadges.length > 0) {
+              // Surface the highest-tier badge for the toast
+              confirmNewBadge = newBadges.includes("trusted_worker") ? "trusted_worker" : "verified_worker";
+              resumeFields.milestoneBadges = [...existingBadges, ...newBadges];
+            }
+
             await storage.updateUser(helper.id, resumeFields);
+
+            // Notify the worker of their badge regardless of who triggered final confirm
+            if (confirmNewBadge) {
+              const badgeLabel = confirmNewBadge === "trusted_worker" ? "Trusted Worker" : "Verified Worker";
+              const badgeBody = confirmNewBadge === "trusted_worker"
+                ? "You've reached the highest trust tier. Instant payouts are now unlocked!"
+                : "Your trust has grown. Early payouts are now available to you.";
+              await notify(helper.id, {
+                title: `🏆 You leveled up to ${badgeLabel}!`,
+                body: badgeBody,
+                jobId,
+                priority: "high",
+              }, "/profile");
+            }
           }
 
           const workerShare = (job as any).workerGrossShare || job.helperPayout || 0;
@@ -5825,7 +5859,7 @@ export async function registerRoutes(
         });
       }
 
-      res.json(updated);
+      res.json(confirmNewBadge ? { ...updated, newBadge: confirmNewBadge } : updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -7690,6 +7724,8 @@ ABOUT THIS USER:
 - Role: ${sessionUser.role || "buyer"}
 - Day-1 OG member: ${sessionUser.day1OG ? "YES — they already have OG perks" : "NO — not yet an OG member"}
 - Jobs completed: ${(sessionUser as any).jobsCompleted || 0}
+- Trust score: ${(sessionUser as any).trustScore || 50}
+- Trust milestone badges: ${((sessionUser as any).milestoneBadges || []).length > 0 ? ((sessionUser as any).milestoneBadges || []).join(", ") : "none yet"}
 - AI or Not credits: ${(sessionUser as any).aiOrNotCredits || 0}
 - Trust Box (unlimited AI or Not): ${(sessionUser as any).aiOrNotUnlimitedText ? "YES — active" : "NO"}
 
@@ -7738,6 +7774,16 @@ Earnings accumulate after jobs are approved. Connect your bank in Settings → W
 
 **Profile & Trust**
 Your profile shows work history, trust score, and credentials. Upload certifications and IDs to boost your trust level and attract better jobs. More completed jobs = stronger profile.
+
+**Trust Milestone Badges**
+Workers earn milestone badges when their trust score crosses key thresholds:
+- "Verified Worker" badge: awarded when trust score reaches 60 for the first time
+- "Trusted Worker" badge: awarded when trust score reaches 80 for the first time
+Badges are permanently stored and shown on your profile. They unlock payout benefits: Verified Workers get Early payouts; Trusted Workers get Instant payouts.
+${((sessionUser as any).milestoneBadges || []).length > 0
+  ? `This user has earned: ${((sessionUser as any).milestoneBadges || []).map((b: string) => b === "trusted_worker" ? "Trusted Worker 🏆" : "Verified Worker ✅").join(", ")}. Acknowledge these achievements warmly if relevant.`
+  : `This user has not yet earned a milestone badge. If they ask about trust or badges, encourage them to complete more jobs to reach 60 points (Verified Worker).`
+}
 
 BEHAVIOR RULES:
 - The user is ALREADY in the app. Never suggest they open, download, or sign into the app.
