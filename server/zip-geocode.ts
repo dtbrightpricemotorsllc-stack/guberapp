@@ -33,6 +33,14 @@ async function fetchCountyFromGoogle(zip: string, lat: number, lng: number): Pro
   }
 }
 
+export function lookupZipsByCity(city: string, state: string): string[] {
+  const results = zipcodesLib.lookupByName(city, state);
+  if (!Array.isArray(results)) return [];
+  return (results as Array<{ zip: string }>)
+    .filter(r => r?.zip)
+    .map(r => r.zip);
+}
+
 export async function geocodeZipFull(zip: string): Promise<ZipFullInfo | null> {
   const z = (zip || "").trim().replace(/-\d{4}$/, "").padStart(5, "0");
   if (!/^\d{5}$/.test(z)) return null;

@@ -4836,10 +4836,9 @@ data-testid={`area-row-${idx}`}
 <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
 <div className="flex-1 min-w-0">
 <div className="flex items-center gap-1.5">
-<span className="text-xs font-semibold text-foreground truncate">{area.city}</span>
-<span className="text-[10px] text-foreground/40 shrink-0">{area.state}</span>
-{area.county && <span className="text-[9px] text-foreground/30 shrink-0 hidden sm:inline">{area.county} Co.</span>}
+<span className="text-xs font-semibold text-foreground truncate">{area.city}, {area.state}</span>
 </div>
+<p className="text-[10px] text-foreground/40 leading-snug">{area.county ? `${area.county} County` : area.state}</p>
 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
 <span className="text-[10px] text-foreground/50">{area.recentlyActive} active</span>
 {area.day1OgCount > 0 && <span className="text-[9px] font-bold text-yellow-500/80">{area.day1OgCount} OG</span>}

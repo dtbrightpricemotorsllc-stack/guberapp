@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { lookupZip, geocodeZip, geocodeZipFull, flushZipGeocodeCache } from "./zip-geocode";
+import { lookupZip, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -10145,15 +10145,7 @@ YOUR BEHAVIOR:
         filter === "cash_drop" ? `AND EXISTS (SELECT 1 FROM cash_drop_attempts cda WHERE cda.user_id = u.id)` :
         "";
 
-      const zipcodesModule = await import("zipcodes");
-      const zipsLib = (zipcodesModule as any).default ?? zipcodesModule;
-      const zipsByCity = zipsLib.lookupByName?.(city, state) ?? [];
-      const allZips: string[] = [];
-      if (Array.isArray(zipsByCity)) {
-        for (const z of zipsByCity as Array<{ zip: string }>) {
-          if (z?.zip) allZips.push(z.zip);
-        }
-      }
+      const allZips = lookupZipsByCity(city, state);
 
       if (allZips.length === 0) {
         return res.json({ users: [], total: 0 });
@@ -10163,7 +10155,9 @@ YOUR BEHAVIOR:
       const queryText = `
         SELECT u.id, u.full_name, u.username, u.account_type, u.day1_og, u.jobs_completed, u.role
         FROM users u
-        WHERE u.zipcode IN (${placeholders}) ${filterClause}
+        WHERE u.zipcode IN (${placeholders})
+          AND (u.banned IS NULL OR u.banned = false)
+          ${filterClause}
         ORDER BY u.full_name ASC
       `;
       const result = await pool.query(queryText, allZips);
