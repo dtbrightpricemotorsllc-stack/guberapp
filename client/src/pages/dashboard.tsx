@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
+import { InstallBanner } from "@/components/install-prompt";
 import { GoogleMap, type JobPin, type WorkerPin, type MapBounds } from "@/components/google-map";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -534,6 +535,9 @@ export default function Dashboard() {
             </div>
           </button>
         </div>
+
+        {/* ── Inline install banner (slim, dismissible, never blocks UI) ── */}
+        <InstallBanner />
 
         {/* ── Reminders (above hero) ── */}
         <TodoReminderBox
