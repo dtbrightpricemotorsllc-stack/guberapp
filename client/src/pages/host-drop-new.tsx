@@ -12,20 +12,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2 } from "lucide-react";
 
-async function uploadLogoToCloudinary(file: File): Promise<string> {
-  const signRes = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
-  if (!signRes.ok) throw new Error("Could not get upload token");
-  const { signature, timestamp, cloud_name, api_key, folder } = await signRes.json();
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("api_key", api_key);
-  formData.append("timestamp", String(timestamp));
-  formData.append("signature", signature);
-  formData.append("folder", folder);
-  const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`, { method: "POST", body: formData });
-  if (!uploadRes.ok) throw new Error("Upload failed");
-  const data = await uploadRes.json();
-  return data.secure_url as string;
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (logoUrl: string) => void }) {
@@ -35,6 +28,8 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
   const [localLogo1, setLocalLogo1] = useState<string | null>(user?.cashDropBrandLogo ?? null);
   const [localLogo2, setLocalLogo2] = useState<string | null>(user?.cashDropLogo2 ?? null);
   const [activeLogo, setActiveLogo] = useState<1 | 2>((user?.cashDropActiveLogo ?? 1) as 1 | 2);
+  const [logo1AdminUploaded] = useState<boolean>(!!user?.cashDropLogo1AdminUploaded);
+  const [logo2AdminUploaded] = useState<boolean>(!!user?.cashDropLogo2AdminUploaded);
   const logoRef1 = useRef<HTMLInputElement>(null);
   const logoRef2 = useRef<HTMLInputElement>(null);
 
@@ -46,9 +41,11 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
   const uploadLogo = async (slot: 1 | 2, file: File) => {
     setLogoUploading(slot);
     try {
-      const url = await uploadLogoToCloudinary(file);
-      const res = await apiRequest("PATCH", `/api/users/me/cash-drop-logo/${slot}`, { url });
+      const imageBase64 = await fileToBase64(file);
+      const res = await apiRequest("POST", `/api/users/me/cash-drop-logo`, { slot, imageBase64 });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const url = data.url as string;
       if (slot === 1) setLocalLogo1(url);
       else setLocalLogo2(url);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -62,7 +59,9 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
 
   const deleteLogo = async (slot: 1 | 2) => {
     try {
-      await apiRequest("DELETE", `/api/users/me/cash-drop-logo/${slot}`);
+      const res = await apiRequest("DELETE", `/api/users/me/cash-drop-logo/${slot}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
       if (slot === 1) setLocalLogo1(null);
       else setLocalLogo2(null);
       setDeleteConfirm(null);
@@ -92,11 +91,15 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
           const logoUrl = slot === 1 ? localLogo1 : localLogo2;
           const isActive = activeLogo === slot;
           const isUploading = logoUploading === slot;
+          const isAdminLogo = slot === 1 ? logo1AdminUploaded : logo2AdminUploaded;
           const fileRef = slot === 1 ? logoRef1 : logoRef2;
           return (
             <div key={slot} className={`rounded-xl border p-2.5 space-y-2 transition-colors ${isActive ? "border-amber-500/50 bg-amber-500/5" : "border-border/20"}`}>
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-display font-semibold text-foreground">Logo {slot}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-display font-semibold text-foreground">Logo {slot}</span>
+                  {isAdminLogo && <span className="text-[7px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 font-display font-bold">Admin</span>}
+                </div>
                 <button
                   type="button"
                   onClick={() => setActive(slot)}
@@ -110,20 +113,22 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
               {logoUrl ? (
                 <div className="relative group">
                   <img src={logoUrl} alt={`Logo ${slot}`} className="w-full aspect-square object-cover rounded-lg border border-border/20" />
-                  {deleteConfirm === slot ? (
-                    <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-background/90 rounded-lg">
-                      <button type="button" onClick={() => deleteLogo(slot)} className="text-[9px] px-2 py-1 bg-destructive text-white rounded-md font-display font-bold" data-testid={`button-confirm-delete-logo-${slot}`}>Delete</button>
-                      <button type="button" onClick={() => setDeleteConfirm(null)} className="text-[9px] px-2 py-1 bg-muted text-foreground rounded-md">Cancel</button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirm(slot)}
-                      className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      data-testid={`button-delete-logo-${slot}`}
-                    >
-                      <Trash2 className="w-2.5 h-2.5 text-white" />
-                    </button>
+                  {!isAdminLogo && (
+                    deleteConfirm === slot ? (
+                      <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-background/90 rounded-lg">
+                        <button type="button" onClick={() => deleteLogo(slot)} className="text-[9px] px-2 py-1 bg-destructive text-white rounded-md font-display font-bold" data-testid={`button-confirm-delete-logo-${slot}`}>Delete</button>
+                        <button type="button" onClick={() => setDeleteConfirm(null)} className="text-[9px] px-2 py-1 bg-muted text-foreground rounded-md">Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(slot)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        data-testid={`button-delete-logo-${slot}`}
+                      >
+                        <Trash2 className="w-2.5 h-2.5 text-white" />
+                      </button>
+                    )
                   )}
                 </div>
               ) : (

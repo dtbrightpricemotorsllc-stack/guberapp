@@ -29,6 +29,8 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stuck_acknowledged_by INTEGER;
 -- users: cash drop host logo slots (task-290)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_logo_2 TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_active_logo INTEGER DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_logo1_admin_uploaded BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_logo2_admin_uploaded BOOLEAN DEFAULT false;
 
 -- Unique constraints: drizzle generates _unique names; DB had _key names.
 -- These DO-blocks are idempotent and safe to re-run on any environment.

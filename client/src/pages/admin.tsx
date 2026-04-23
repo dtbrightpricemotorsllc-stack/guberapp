@@ -4856,13 +4856,21 @@ if (!localUser) return null;
 const logo1: string | null = (localUser as any).cashDropBrandLogo ?? null;
 const logo2: string | null = (localUser as any).cashDropLogo2 ?? null;
 const activeLogo: number = (localUser as any).cashDropActiveLogo ?? 1;
+const logo1AdminUploaded: boolean = !!(localUser as any).cashDropLogo1AdminUploaded;
+const logo2AdminUploaded: boolean = !!(localUser as any).cashDropLogo2AdminUploaded;
 
 const uploadLogo = async (slot: 1 | 2, file: File) => {
   setLogoUploading(slot);
   try {
-    const url = await uploadLogoToCloudinary(file);
-    const res = await apiRequest("PATCH", `/api/admin/users/${localUser.id}/cash-drop-logo/${slot}`, { url });
+    const imageBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const res = await apiRequest("POST", `/api/admin/users/${localUser.id}/cash-drop-logo`, { slot, imageBase64 });
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
     setLocalUser(data.user);
     queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     toast({ title: "Logo uploaded" });
@@ -5006,11 +5014,15 @@ return (
         const logoUrl = slot === 1 ? logo1 : logo2;
         const isActive = activeLogo === slot;
         const isUploading = logoUploading === slot;
+        const isAdminUploaded = slot === 1 ? logo1AdminUploaded : logo2AdminUploaded;
         const fileRef = slot === 1 ? logoRef1 : logoRef2;
         return (
           <div key={slot} className={`rounded-xl border p-3 space-y-2 transition-colors ${isActive ? "border-primary/50 bg-primary/5" : "border-border/20"}`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-display font-semibold text-foreground">Logo {slot}</span>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-display font-semibold text-foreground">Logo {slot}</span>
+                {isAdminUploaded && <span className="text-[8px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 font-display font-bold">Admin</span>}
+              </div>
               <button
                 onClick={() => setActiveLogoSlot(slot)}
                 className={`text-[9px] px-1.5 py-0.5 rounded-full font-display font-bold transition-colors ${isActive ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-primary/20 hover:text-primary"}`}

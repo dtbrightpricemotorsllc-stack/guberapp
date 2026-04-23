@@ -112,6 +112,8 @@ export const users = pgTable("users", {
   cashDropBrandLogo: text("cash_drop_brand_logo"),
   cashDropLogo2: text("cash_drop_logo_2"),
   cashDropActiveLogo: integer("cash_drop_active_logo").default(1),
+  cashDropLogo1AdminUploaded: boolean("cash_drop_logo1_admin_uploaded").default(false),
+  cashDropLogo2AdminUploaded: boolean("cash_drop_logo2_admin_uploaded").default(false),
   milestoneBadges: text("milestone_badges").array(),
 });
 

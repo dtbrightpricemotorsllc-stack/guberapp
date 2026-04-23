@@ -7160,6 +7160,7 @@ export async function registerRoutes(
 
   // ── CASH DROP HOST LOGO — Admin routes ──────────────────────────────────
   // NOTE: /active must be registered before /:slot to avoid Express matching "active" as a slot number
+  // ── CASH DROP HOST LOGO — Admin routes ──────────────────────────────────
   app.patch("/api/admin/users/:id/cash-drop-logo/active", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -7174,18 +7175,27 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/admin/users/:id/cash-drop-logo/:slot", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/users/:id/cash-drop-logo", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const slot = parseInt(req.params.slot);
+      const { slot, imageBase64 } = req.body;
       if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
-      const { url } = req.body;
-      if (!url) return res.status(400).json({ error: "url required" });
+      if (!imageBase64 || typeof imageBase64 !== "string") return res.status(400).json({ error: "imageBase64 required" });
       const target = await storage.getUser(id);
       if (!target) return res.status(404).json({ error: "User not found" });
-      const field = slot === 1 ? { cashDropBrandLogo: url } : { cashDropLogo2: url };
+      if (!process.env.CLOUDINARY_CLOUD_NAME) return res.status(503).json({ error: "Media storage not configured" });
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const result = await cloudinary.uploader.upload(imageBase64, {
+        resource_type: "image",
+        folder: "guber-host-logos",
+        allowed_formats: ["jpg", "jpeg", "png", "webp"],
+      });
+      const url = result.secure_url;
+      const field = slot === 1
+        ? { cashDropBrandLogo: url, cashDropLogo1AdminUploaded: true }
+        : { cashDropLogo2: url, cashDropLogo2AdminUploaded: true };
       const updated = await storage.updateUser(id, field as any);
-      res.json({ ok: true, user: sanitizeUser(updated!) });
+      res.json({ ok: true, url, user: sanitizeUser(updated!) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -7198,7 +7208,9 @@ export async function registerRoutes(
       if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
       const target = await storage.getUser(id);
       if (!target) return res.status(404).json({ error: "User not found" });
-      const field = slot === 1 ? { cashDropBrandLogo: null } : { cashDropLogo2: null };
+      const field = slot === 1
+        ? { cashDropBrandLogo: null, cashDropLogo1AdminUploaded: false }
+        : { cashDropLogo2: null, cashDropLogo2AdminUploaded: false };
       const updated = await storage.updateUser(id, field as any);
       res.json({ ok: true, user: sanitizeUser(updated!) });
     } catch (err: any) {
@@ -7221,18 +7233,27 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/users/me/cash-drop-logo/:slot", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/users/me/cash-drop-logo", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const slot = parseInt(req.params.slot);
+      const { slot, imageBase64 } = req.body;
       if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
-      const { url } = req.body;
-      if (!url) return res.status(400).json({ error: "url required" });
+      if (!imageBase64 || typeof imageBase64 !== "string") return res.status(400).json({ error: "imageBase64 required" });
       const user = await storage.getUser(userId);
       if (!user?.cashDropHostEnabled) return res.status(403).json({ error: "Host drops not enabled" });
-      const field = slot === 1 ? { cashDropBrandLogo: url } : { cashDropLogo2: url };
+      if (!process.env.CLOUDINARY_CLOUD_NAME) return res.status(503).json({ error: "Media storage not configured" });
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const result = await cloudinary.uploader.upload(imageBase64, {
+        resource_type: "image",
+        folder: "guber-host-logos",
+        allowed_formats: ["jpg", "jpeg", "png", "webp"],
+      });
+      const url = result.secure_url;
+      const field = slot === 1
+        ? { cashDropBrandLogo: url, cashDropLogo1AdminUploaded: false }
+        : { cashDropLogo2: url, cashDropLogo2AdminUploaded: false };
       const updated = await storage.updateUser(userId, field as any);
-      res.json({ ok: true, user: sanitizeUser(updated!) });
+      res.json({ ok: true, url, user: sanitizeUser(updated!) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -7245,7 +7266,11 @@ export async function registerRoutes(
       if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
       const user = await storage.getUser(userId);
       if (!user?.cashDropHostEnabled) return res.status(403).json({ error: "Host drops not enabled" });
-      const field = slot === 1 ? { cashDropBrandLogo: null } : { cashDropLogo2: null };
+      const isAdminUploaded = slot === 1 ? (user as any).cashDropLogo1AdminUploaded : (user as any).cashDropLogo2AdminUploaded;
+      if (isAdminUploaded) return res.status(403).json({ error: "Cannot delete a logo uploaded by an admin" });
+      const field = slot === 1
+        ? { cashDropBrandLogo: null, cashDropLogo1AdminUploaded: false }
+        : { cashDropLogo2: null, cashDropLogo2AdminUploaded: false };
       const updated = await storage.updateUser(userId, field as any);
       res.json({ ok: true, user: sanitizeUser(updated!) });
     } catch (err: any) {
