@@ -205,10 +205,16 @@ export default function Login() {
         </div>
 
         <div className="w-full max-w-sm relative z-10">
-          <Link href="/" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider mb-8 transition-colors" data-testid="link-back">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            BACK
-          </Link>
+          <div className="flex items-center justify-between mb-8">
+            <Link href="/" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider transition-colors" data-testid="link-back">
+              <ArrowLeft className="w-3.5 h-3.5" />
+              BACK
+            </Link>
+            <Link href="/biz/login" className="inline-flex items-center gap-1.5 text-[11px] text-yellow-500/80 hover:text-yellow-400 font-display tracking-wider transition-colors" data-testid="link-business-signin-top">
+              <Building2 className="w-3.5 h-3.5" />
+              BUSINESS SIGN IN →
+            </Link>
+          </div>
 
           <div className="text-center space-y-3 mb-10 animate-fade-in">
             <div
@@ -348,17 +354,13 @@ export default function Login() {
             )}
           </div>
 
-          <div className="mt-6 text-center animate-fade-in stagger-3 space-y-3">
+          <div className="mt-6 text-center animate-fade-in stagger-3">
             <p className="text-sm text-muted-foreground">
               New to GUBER?{" "}
               <Link href={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"} className="guber-text-purple font-display font-semibold hover:underline tracking-wider" data-testid="link-signup">
                 SIGN UP
               </Link>
             </p>
-            <Link href="/biz/login" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors font-display tracking-wide" data-testid="link-business-signin">
-              <Building2 className="w-3.5 h-3.5" />
-              Sign in as a Business →
-            </Link>
           </div>
         </div>
       </div>
