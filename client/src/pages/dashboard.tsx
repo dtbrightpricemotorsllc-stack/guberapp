@@ -357,7 +357,7 @@ export default function Dashboard() {
 
   const availabilityMutation = useMutation({
     mutationFn: async (v: boolean) => {
-      await apiRequest("PATCH", `/api/users/${user!.id}`, { isAvailable: v });
+      await apiRequest("PATCH", "/api/workers/clock-in", { isAvailable: v });
       if (v) {
         gpsGetCurrentPosition().then(async (pos) => {
           await apiRequest("POST", "/api/users/location", { lat: pos.coords.latitude, lng: pos.coords.longitude });

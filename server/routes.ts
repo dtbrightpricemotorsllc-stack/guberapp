@@ -11134,6 +11134,28 @@ YOUR BEHAVIOR:
     }
   });
 
+  app.patch("/api/workers/clock-in", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const { isAvailable } = req.body;
+      if (typeof isAvailable !== "boolean") {
+        return res.status(400).json({ message: "isAvailable (boolean) is required" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const now = new Date();
+      if (isAvailable) {
+        await storage.updateUser(userId, { isAvailable: true, clockedInAt: now, clockedOutAt: null });
+        res.json({ success: true, isAvailable: true, clockedInAt: now });
+      } else {
+        await storage.updateUser(userId, { isAvailable: false, clockedInAt: null, clockedOutAt: now });
+        res.json({ success: true, isAvailable: false, clockedOutAt: now });
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/direct-offers", requireAuth, async (req: Request, res: Response) => {
     try {
       const hirerUserId = req.session!.userId!;
