@@ -10155,7 +10155,12 @@ YOUR BEHAVIOR:
         filter === "cash_drop" ? `AND EXISTS (SELECT 1 FROM cash_drop_attempts cda WHERE cda.user_id = u.id)` :
         "";
 
-      const allZips = lookupZipsByCity(city, state);
+      // Prefer the exact zip set from the /by-area aggregation if provided by the client.
+      // This ensures drill-down totals are consistent with the selected area row.
+      const zipsParam = ((req.query.zips as string) || "").trim();
+      const allZips: string[] = zipsParam
+        ? zipsParam.split(",").map(s => s.trim()).filter(Boolean)
+        : lookupZipsByCity(city, state);
 
       if (allZips.length === 0) {
         return res.json({ users: [], total: 0 });

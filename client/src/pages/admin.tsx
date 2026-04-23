@@ -4613,7 +4613,7 @@ if (!selectedArea) { setAreaUsers([]); setAreaUsersError(false); return; }
 let cancelled = false;
 setAreaUsersLoading(true);
 setAreaUsersError(false);
-fetch(`/api/admin/user-density/area?city=${encodeURIComponent(selectedArea.city)}&state=${encodeURIComponent(selectedArea.state)}&filter=${activeFilter}`)
+fetch(`/api/admin/user-density/area?city=${encodeURIComponent(selectedArea.city)}&state=${encodeURIComponent(selectedArea.state)}&zips=${encodeURIComponent(selectedArea.zips.join(","))}&filter=${activeFilter}`)
   .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
   .then(data => { if (!cancelled) { setAreaUsers(data.users || []); setAreaUsersError(false); } })
   .catch(() => { if (!cancelled) { setAreaUsers([]); setAreaUsersError(true); } })
