@@ -7158,6 +7158,101 @@ export async function registerRoutes(
     res.json({ ok: true, user: sanitizeUser(updated!) });
   });
 
+  // ── CASH DROP HOST LOGO — Admin routes ──────────────────────────────────
+  // NOTE: /active must be registered before /:slot to avoid Express matching "active" as a slot number
+  app.patch("/api/admin/users/:id/cash-drop-logo/active", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { slot } = req.body;
+      if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
+      const target = await storage.getUser(id);
+      if (!target) return res.status(404).json({ error: "User not found" });
+      const updated = await storage.updateUser(id, { cashDropActiveLogo: slot } as any);
+      res.json({ ok: true, user: sanitizeUser(updated!) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/cash-drop-logo/:slot", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const slot = parseInt(req.params.slot);
+      if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: "url required" });
+      const target = await storage.getUser(id);
+      if (!target) return res.status(404).json({ error: "User not found" });
+      const field = slot === 1 ? { cashDropBrandLogo: url } : { cashDropLogo2: url };
+      const updated = await storage.updateUser(id, field as any);
+      res.json({ ok: true, user: sanitizeUser(updated!) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/users/:id/cash-drop-logo/:slot", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const slot = parseInt(req.params.slot);
+      if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
+      const target = await storage.getUser(id);
+      if (!target) return res.status(404).json({ error: "User not found" });
+      const field = slot === 1 ? { cashDropBrandLogo: null } : { cashDropLogo2: null };
+      const updated = await storage.updateUser(id, field as any);
+      res.json({ ok: true, user: sanitizeUser(updated!) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── CASH DROP HOST LOGO — User self-service routes ───────────────────────
+  app.patch("/api/users/me/cash-drop-logo/active", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { slot } = req.body;
+      if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
+      const user = await storage.getUser(userId);
+      if (!user?.cashDropHostEnabled) return res.status(403).json({ error: "Host drops not enabled" });
+      const updated = await storage.updateUser(userId, { cashDropActiveLogo: slot } as any);
+      res.json({ ok: true, user: sanitizeUser(updated!) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/users/me/cash-drop-logo/:slot", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const slot = parseInt(req.params.slot);
+      if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: "url required" });
+      const user = await storage.getUser(userId);
+      if (!user?.cashDropHostEnabled) return res.status(403).json({ error: "Host drops not enabled" });
+      const field = slot === 1 ? { cashDropBrandLogo: url } : { cashDropLogo2: url };
+      const updated = await storage.updateUser(userId, field as any);
+      res.json({ ok: true, user: sanitizeUser(updated!) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/users/me/cash-drop-logo/:slot", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const slot = parseInt(req.params.slot);
+      if (slot !== 1 && slot !== 2) return res.status(400).json({ error: "slot must be 1 or 2" });
+      const user = await storage.getUser(userId);
+      if (!user?.cashDropHostEnabled) return res.status(403).json({ error: "Host drops not enabled" });
+      const field = slot === 1 ? { cashDropBrandLogo: null } : { cashDropLogo2: null };
+      const updated = await storage.updateUser(userId, field as any);
+      res.json({ ok: true, user: sanitizeUser(updated!) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/admin/strike", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { userId, reason, severity, jobId } = req.body;
@@ -9931,7 +10026,8 @@ YOUR BEHAVIOR:
       if (!rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
 
       const needsApproval = !!currentUser.cashDropApprovalRequired;
-      const resolvedLogo = hostLogo || currentUser.cashDropBrandLogo || null;
+      const activeLogo = (currentUser as any).cashDropActiveLogo === 2 ? (currentUser as any).cashDropLogo2 : currentUser.cashDropBrandLogo;
+      const resolvedLogo = hostLogo || activeLogo || currentUser.cashDropBrandLogo || null;
       if (!resolvedLogo) return res.status(400).json({ error: "A brand logo is required for host drops. Please upload a logo image." });
 
       const drop = await storage.createCashDrop({

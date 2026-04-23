@@ -440,6 +440,7 @@ export default function Dashboard() {
       title: d.title || "Cash Drop",
       rewardPerWinner: d.rewardPerWinner,
       status: d.status,
+      hostLogoUrl: d.hostLogo || undefined,
     }));
 
   const inViewport = (lat: number, lng: number) => {

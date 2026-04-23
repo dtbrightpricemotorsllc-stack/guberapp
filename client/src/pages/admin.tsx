@@ -4841,6 +4841,247 @@ data-testid={`zip-user-row-${u.id}`}
 );
 }
 
+function AdminUserProfileModal({ user, open, onClose }: { user: User | null; open: boolean; onClose: () => void }) {
+const { toast } = useToast();
+const [logoUploading, setLogoUploading] = useState<1 | 2 | null>(null);
+const [logoDeleteConfirm, setLogoDeleteConfirm] = useState<1 | 2 | null>(null);
+const [localUser, setLocalUser] = useState<User | null>(user);
+const logoRef1 = useRef<HTMLInputElement>(null);
+const logoRef2 = useRef<HTMLInputElement>(null);
+
+useEffect(() => { setLocalUser(user); }, [user]);
+
+if (!localUser) return null;
+
+const logo1: string | null = (localUser as any).cashDropBrandLogo ?? null;
+const logo2: string | null = (localUser as any).cashDropLogo2 ?? null;
+const activeLogo: number = (localUser as any).cashDropActiveLogo ?? 1;
+
+const uploadLogo = async (slot: 1 | 2, file: File) => {
+  setLogoUploading(slot);
+  try {
+    const url = await uploadLogoToCloudinary(file);
+    const res = await apiRequest("PATCH", `/api/admin/users/${localUser.id}/cash-drop-logo/${slot}`, { url });
+    const data = await res.json();
+    setLocalUser(data.user);
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    toast({ title: "Logo uploaded" });
+  } catch (e: any) {
+    toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+  } finally {
+    setLogoUploading(null);
+  }
+};
+
+const deleteLogo = async (slot: 1 | 2) => {
+  try {
+    const res = await apiRequest("DELETE", `/api/admin/users/${localUser.id}/cash-drop-logo/${slot}`);
+    const data = await res.json();
+    setLocalUser(data.user);
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    setLogoDeleteConfirm(null);
+    toast({ title: "Logo removed" });
+  } catch (e: any) {
+    toast({ title: "Error", description: e.message, variant: "destructive" });
+  }
+};
+
+const setActiveLogoSlot = async (slot: 1 | 2) => {
+  try {
+    const res = await apiRequest("PATCH", `/api/admin/users/${localUser.id}/cash-drop-logo/active`, { slot });
+    const data = await res.json();
+    setLocalUser(data.user);
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+  } catch (e: any) {
+    toast({ title: "Error", description: e.message, variant: "destructive" });
+  }
+};
+
+const initials = (localUser.fullName || "?").split(" ").map((n: string) => n[0]).join("").toUpperCase();
+const formatDate = (d: any) => d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+return (
+<Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+<DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="modal-user-profile">
+<DialogHeader>
+<DialogTitle className="sr-only">User Profile — {localUser.fullName}</DialogTitle>
+</DialogHeader>
+
+{/* Header */}
+<div className="flex items-start gap-4 pb-4 border-b border-border/20">
+  <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+    {localUser.profilePhoto
+      ? <img src={localUser.profilePhoto} alt="" className="w-14 h-14 object-cover" />
+      : <span className="text-xl font-display font-bold text-muted-foreground">{initials}</span>}
+  </div>
+  <div className="flex-1 min-w-0">
+    <div className="flex items-center gap-2 flex-wrap">
+      <h2 className="text-base font-display font-bold">{localUser.fullName}</h2>
+      <Badge variant="outline" className="text-[9px] font-mono bg-muted/20">#{localUser.id}</Badge>
+      {localUser.day1OG && <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30">👑 OG</Badge>}
+      {localUser.suspended && <Badge variant="outline" className="text-[9px] bg-destructive/10 text-destructive border-destructive/30">Suspended</Badge>}
+      {localUser.banned && <Badge variant="outline" className="text-[9px] bg-destructive/10 text-destructive border-destructive/30">Banned</Badge>}
+    </div>
+    <p className="text-xs text-muted-foreground mt-0.5">@{localUser.username}</p>
+    <p className="text-[11px] text-muted-foreground truncate">{localUser.email}</p>
+  </div>
+</div>
+
+{/* Stats */}
+<div className="grid grid-cols-4 gap-2 py-3 border-b border-border/20">
+  {[
+    { label: "Trust", value: localUser.trustScore ?? 50 },
+    { label: "Jobs Done", value: localUser.jobsCompleted ?? 0 },
+    { label: "Strikes", value: localUser.strikes ?? 0 },
+    { label: "Rating", value: Number(localUser.rating ?? 0).toFixed(1) },
+  ].map(s => (
+    <div key={s.label} className="text-center bg-muted/20 rounded-lg p-2">
+      <p className="text-sm font-display font-bold guber-text-green">{s.value}</p>
+      <p className="text-[9px] text-muted-foreground">{s.label}</p>
+    </div>
+  ))}
+</div>
+
+{/* Account info */}
+<div className="py-3 border-b border-border/20">
+  <p className="text-[10px] text-muted-foreground font-semibold tracking-wider uppercase mb-2">Account Details</p>
+  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+    {[
+      { label: "Tier", value: localUser.tier },
+      { label: "Role", value: localUser.role },
+      { label: "Account Type", value: (localUser as any).accountType || "personal" },
+      { label: "Auth Provider", value: (localUser as any).authProvider || "email" },
+      { label: "Stripe Status", value: localUser.stripeAccountStatus || "none" },
+      { label: "BG Check", value: localUser.backgroundCheckStatus || "none" },
+      { label: "Zipcode", value: localUser.zipcode || "—" },
+      { label: "Referral Code", value: (localUser as any).referralCode || "—" },
+      { label: "Member Since", value: formatDate((localUser as any).createdAt) },
+      { label: "GUBER ID", value: (localUser as any).guberId || `USR-${localUser.id}` },
+    ].map(({ label, value }) => (
+      <div key={label}>
+        <p className="text-[9px] text-muted-foreground">{label}</p>
+        <p className="text-xs text-foreground font-medium">{value}</p>
+      </div>
+    ))}
+  </div>
+</div>
+
+{/* Verification flags */}
+<div className="py-3 border-b border-border/20">
+  <p className="text-[10px] text-muted-foreground font-semibold tracking-wider uppercase mb-2">Verification Status</p>
+  <div className="flex flex-wrap gap-1.5">
+    {[
+      { label: "ID Verified", ok: !!(localUser as any).idVerified },
+      { label: "Credential", ok: !!(localUser as any).credentialVerified },
+      { label: "Email", ok: !!localUser.emailVerified },
+      { label: "Drop Host", ok: !!localUser.cashDropHostEnabled },
+      { label: "Profile Complete", ok: !!(localUser as any).profileComplete },
+    ].map(({ label, ok }) => (
+      <span key={label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${ok ? "bg-emerald-500/10 text-emerald-400" : "bg-muted/30 text-muted-foreground"}`}>
+        {ok ? "✓" : "✗"} {label}
+      </span>
+    ))}
+  </div>
+</div>
+
+{/* Milestone Badges */}
+{localUser.milestoneBadges && (localUser.milestoneBadges as string[]).length > 0 && (
+  <div className="py-3 border-b border-border/20">
+    <p className="text-[10px] text-muted-foreground font-semibold tracking-wider uppercase mb-2">Milestone Badges</p>
+    <div className="flex flex-wrap gap-1.5">
+      {(localUser.milestoneBadges as string[]).map(badge => (
+        <Badge key={badge} variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">{badge}</Badge>
+      ))}
+    </div>
+  </div>
+)}
+
+{/* Drop Logos */}
+{localUser.cashDropHostEnabled && (
+  <div className="py-3">
+    <p className="text-[10px] text-muted-foreground font-semibold tracking-wider uppercase mb-1">Drop Pin Logos</p>
+    <p className="text-[9px] text-muted-foreground mb-3">The active logo appears as the map pin on this user's Cash Drops.</p>
+    <div className="grid grid-cols-2 gap-3">
+      {([1, 2] as const).map(slot => {
+        const logoUrl = slot === 1 ? logo1 : logo2;
+        const isActive = activeLogo === slot;
+        const isUploading = logoUploading === slot;
+        const fileRef = slot === 1 ? logoRef1 : logoRef2;
+        return (
+          <div key={slot} className={`rounded-xl border p-3 space-y-2 transition-colors ${isActive ? "border-primary/50 bg-primary/5" : "border-border/20"}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-display font-semibold text-foreground">Logo {slot}</span>
+              <button
+                onClick={() => setActiveLogoSlot(slot)}
+                className={`text-[9px] px-1.5 py-0.5 rounded-full font-display font-bold transition-colors ${isActive ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-primary/20 hover:text-primary"}`}
+                data-testid={`button-set-active-logo-${slot}`}
+              >
+                {isActive ? "ACTIVE" : "SET ACTIVE"}
+              </button>
+            </div>
+
+            {logoUrl ? (
+              <div className="relative group">
+                <img src={logoUrl} alt={`Logo ${slot}`} className="w-full aspect-square object-cover rounded-lg border border-border/20" />
+                {logoDeleteConfirm === slot ? (
+                  <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-background/90 rounded-lg">
+                    <button onClick={() => deleteLogo(slot)} className="text-[9px] px-2 py-1 bg-destructive text-white rounded-md font-display font-bold" data-testid={`button-confirm-delete-logo-${slot}`}>Delete</button>
+                    <button onClick={() => setLogoDeleteConfirm(null)} className="text-[9px] px-2 py-1 bg-muted text-foreground rounded-md">Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setLogoDeleteConfirm(slot)}
+                    className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    data-testid={`button-delete-logo-${slot}`}
+                  >
+                    <Trash2 className="w-3 h-3 text-white" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className="aspect-square rounded-lg border-2 border-dashed border-border/30 flex flex-col items-center justify-center gap-1.5 hover:border-primary/40 transition-colors bg-muted/10 cursor-pointer"
+                onClick={() => fileRef.current?.click()}
+                data-testid={`placeholder-logo-slot-${slot}`}
+              >
+                {isUploading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : <Camera className="w-5 h-5 text-muted-foreground" />}
+                <span className="text-[9px] text-muted-foreground">{isUploading ? "Uploading…" : "Upload logo"}</span>
+              </div>
+            )}
+
+            {logoUrl && (
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="w-full flex items-center justify-center gap-1 py-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                data-testid={`button-replace-logo-${slot}`}
+              >
+                {isUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+                {isUploading ? "Uploading…" : "Replace"}
+              </button>
+            )}
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) { await uploadLogo(slot, file); e.target.value = ""; }
+              }}
+              data-testid={`input-logo-file-${slot}`}
+            />
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
+</DialogContent>
+</Dialog>
+);
+}
+
 export default function Admin() {
 const { user } = useAuth();
 const { toast } = useToast();
@@ -4850,6 +5091,7 @@ const [strikeUserId, setStrikeUserId] = useState("");
 const [strikeReason, setStrikeReason] = useState("");
 const [strikeSeverity, setStrikeSeverity] = useState("standard");
 const [expandedUser, setExpandedUser] = useState<number | null>(null);
+const [profileUser, setProfileUser] = useState<User | null>(null);
 const [bgRestrictions, setBgRestrictions] = useState<string[]>([]);
 const [disputeNotes, setDisputeNotes] = useState<Record<number, string>>({});
 const [disputeResolution, setDisputeResolution] = useState<Record<number, string>>({});
@@ -5067,12 +5309,20 @@ return (
 <div key={u.id} className="bg-card rounded-xl border border-border/20 overflow-hidden" data-testid={`admin-user-${u.id}`}>
 <div className="p-3 flex items-center justify-between gap-3">
 <div className="flex items-center gap-2 min-w-0">
-<div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-<span className="text-xs font-display text-muted-foreground">{u.fullName?.split(" ").map((n) => n[0]).join("") || "?"}</span>
-</div>
+<button
+  onClick={() => setProfileUser(u)}
+  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 hover:ring-2 hover:ring-primary/40 transition-all"
+  data-testid={`button-view-profile-${u.id}`}
+>
+  <span className="text-xs font-display text-muted-foreground">{u.fullName?.split(" ").map((n) => n[0]).join("") || "?"}</span>
+</button>
 <div className="min-w-0">
 <div className="flex items-center gap-1.5 flex-wrap">
-<p className="text-sm font-semibold truncate">{u.fullName}</p>
+<button
+  onClick={() => setProfileUser(u)}
+  className="text-sm font-semibold truncate hover:text-primary transition-colors text-left"
+  data-testid={`button-open-profile-${u.id}`}
+>{u.fullName}</button>
 {u.suspended && <Badge variant="outline" className="text-[9px] bg-destructive/10 text-destructive border-destructive/30">Suspended</Badge>}
 {u.banned && <Badge variant="outline" className="text-[9px] bg-destructive/10 text-destructive border-destructive/30">Banned</Badge>}
 {u.day1OG && <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-400 border-amber-500/30 gap-0.5 pl-0"><Day1OGLogo size="sm" />OG</Badge>}
@@ -5541,6 +5791,11 @@ jobTitle={proofModalJob.title}
 onClose={() => setProofModalJob(null)}
 />
 )}
+<AdminUserProfileModal
+user={profileUser}
+open={!!profileUser}
+onClose={() => setProfileUser(null)}
+/>
 </>
 );
 }

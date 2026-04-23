@@ -44,6 +44,7 @@ export interface CashDropPin {
   title: string;
   rewardPerWinner: number;
   status?: string;
+  hostLogoUrl?: string;
 }
 
 export interface MapBounds {
@@ -417,10 +418,27 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
             : `0 0 14px ${initColor},0 0 28px ${initColor}66,0 3px 10px rgba(0,0,0,0.55)`;
           circle.style.cssText = `position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:${initColor};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:${circleBoxShadow};margin-top:6px;opacity:${isClosed ? "0.55" : "1"};`;
 
-          const dollar = document.createElement("span");
-          dollar.textContent = "$";
-          dollar.style.cssText = `font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:${isClosed ? "#d1d5db" : "#000000"};letter-spacing:-1px;`;
-          circle.appendChild(dollar);
+          if (drop.hostLogoUrl && !isClosed) {
+            const logoImg = document.createElement("img");
+            logoImg.src = drop.hostLogoUrl;
+            logoImg.alt = "";
+            logoImg.style.cssText = "width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;";
+            logoImg.onerror = () => {
+              logoImg.remove();
+              const fallback = document.createElement("span");
+              fallback.textContent = "$";
+              fallback.style.cssText = `font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:#000000;letter-spacing:-1px;`;
+              circle.appendChild(fallback);
+            };
+            circle.style.padding = "0";
+            circle.style.overflow = "hidden";
+            circle.appendChild(logoImg);
+          } else {
+            const dollar = document.createElement("span");
+            dollar.textContent = "$";
+            dollar.style.cssText = `font-size:20px;font-weight:900;line-height:1;font-family:system-ui,sans-serif;color:${isClosed ? "#d1d5db" : "#000000"};letter-spacing:-1px;`;
+            circle.appendChild(dollar);
+          }
 
           const pill = document.createElement("div");
           pill.style.cssText = `margin-top:3px;background:rgba(0,0,0,0.92);border-radius:6px;padding:1px 5px;white-space:nowrap;border:1.5px solid ${initColor};opacity:${isClosed ? "0.55" : "1"};`;
