@@ -46,6 +46,13 @@ export interface CashDropPin {
   status?: string;
 }
 
+export interface MapBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
 interface GoogleMapProps {
   pins: JobPin[];
   workerPins?: WorkerPin[];
@@ -57,6 +64,7 @@ interface GoogleMapProps {
   center?: { lat: number; lng: number };
   cluster?: boolean;
   onUserPos?: (pos: { lat: number; lng: number }) => void;
+  onBoundsChanged?: (bounds: MapBounds) => void;
 }
 
 const DAYLIGHT_STYLES: object[] = [
@@ -86,7 +94,7 @@ const DAYLIGHT_STYLES: object[] = [
 const US_CENTER = { lat: 39.8283, lng: -98.5795 };
 const US_DENIED_ZOOM = 4;
 
-export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPinClick, onCashDropClick, className, center, cluster, onUserPos }: GoogleMapProps) {
+export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPinClick, onCashDropClick, className, center, cluster, onUserPos, onBoundsChanged }: GoogleMapProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
@@ -136,6 +144,18 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
 
       map.addListener("click", () => {
         onPinClick?.(null as any);
+      });
+
+      map.addListener("idle", () => {
+        const b = map.getBounds();
+        if (b && onBoundsChanged) {
+          onBoundsChanged({
+            north: b.getNorthEast().lat(),
+            south: b.getSouthWest().lat(),
+            east: b.getNorthEast().lng(),
+            west: b.getSouthWest().lng(),
+          });
+        }
       });
 
       mapRef.current = map;

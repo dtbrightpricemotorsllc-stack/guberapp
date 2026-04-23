@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
-import { GoogleMap, type JobPin, type WorkerPin } from "@/components/google-map";
+import { GoogleMap, type JobPin, type WorkerPin, type MapBounds } from "@/components/google-map";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -253,6 +253,7 @@ export default function Dashboard() {
   const [activePromo, setActivePromo] = useState<PromoCard | null>(null);
   const [zipOverride, setZipOverride] = useState("");
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [selectedPin, setSelectedPin] = useState<JobPin | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<WorkerPin | null>(null);
   const [mapCatFilter] = useState("");
@@ -429,7 +430,6 @@ export default function Dashboard() {
   });
 
   const filteredPins = (mapPins || []).filter(p => !mapCatFilter || p.category === mapCatFilter);
-  const nearbyCount = filteredPins.length;
 
   const activeCashDropPins: CashDropPin[] = (activeCashDrops || [])
     .filter((d: any) => d.gpsLat && d.gpsLng)
@@ -441,6 +441,17 @@ export default function Dashboard() {
       rewardPerWinner: d.rewardPerWinner,
       status: d.status,
     }));
+
+  const inViewport = (lat: number, lng: number) => {
+    if (!mapBounds) return true;
+    return lat >= mapBounds.south && lat <= mapBounds.north && lng >= mapBounds.west && lng <= mapBounds.east;
+  };
+
+  const visibleJobPins = filteredPins.filter(p => inViewport(p.lat, p.lng));
+  const visibleCashDropPins = activeCashDropPins.filter(d => inViewport(d.gpsLat, d.gpsLng));
+  const visibleWorkerPins = (workerPins || []).filter(w => inViewport(w.lat, w.lng));
+  const nearbyCount = visibleJobPins.length + visibleCashDropPins.length;
+  const workerCount = visibleWorkerPins.length;
 
   const isSharingRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -620,8 +631,14 @@ export default function Dashboard() {
               <span className="text-xs font-display font-bold text-foreground/90 tracking-[0.15em] uppercase">
                 {mode === "hire" ? "Nearby Workers" : "Nearby Jobs"}
               </span>
-              {nearbyCount > 0 && (
-                <span className="ml-2 text-[10px] font-display text-primary/60">{nearbyCount} active</span>
+              {mode === "hire" ? (
+                workerCount > 0 && (
+                  <span className="ml-2 text-[10px] font-display text-primary/60" data-testid="text-nearby-count-inline">{workerCount} active</span>
+                )
+              ) : (
+                nearbyCount > 0 && (
+                  <span className="ml-2 text-[10px] font-display text-primary/60" data-testid="text-nearby-count-inline">{nearbyCount} active</span>
+                )
               )}
             </div>
             <div className="flex items-center gap-2.5">
@@ -647,11 +664,26 @@ export default function Dashboard() {
                   />
                 </div>
               )}
-              <Link href="/map">
-                <span className="text-[10px] font-display text-primary/70 tracking-wider hover:text-primary transition-colors cursor-pointer font-semibold uppercase">
-                  View Map →
-                </span>
-              </Link>
+              <div className="flex flex-col items-end gap-0.5">
+                <Link href="/map">
+                  <span className="text-[10px] font-display text-primary/70 tracking-wider hover:text-primary transition-colors cursor-pointer font-semibold uppercase">
+                    View Map →
+                  </span>
+                </Link>
+                {mode === "hire" ? (
+                  workerCount > 0 && (
+                    <span className="text-[9px] font-display text-primary/50 leading-none" data-testid="text-map-live-count">
+                      {workerCount} worker{workerCount !== 1 ? "s" : ""} nearby
+                    </span>
+                  )
+                ) : (
+                  nearbyCount > 0 && (
+                    <span className="text-[9px] font-display text-primary/50 leading-none" data-testid="text-map-live-count">
+                      {nearbyCount} near you
+                    </span>
+                  )
+                )}
+              </div>
             </div>
           </div>
           <div className="glass-card-strong rounded-2xl overflow-hidden relative" style={{ height: 200 }}>
@@ -664,6 +696,7 @@ export default function Dashboard() {
                 onPinClick={setSelectedPin}
                 onWorkerPinClick={setSelectedWorker}
                 onCashDropClick={(drop) => navigate(`/cash-drop/${drop.id}`)}
+                onBoundsChanged={setMapBounds}
                 className="w-full h-full"
               />
             ) : (
