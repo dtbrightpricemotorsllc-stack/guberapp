@@ -4725,7 +4725,8 @@ if (areaData?.areas) {
 const match = areaData.areas.find(a => a.zips.includes(zipData.zip));
 if (match) {
 setSelectedArea(match);
-const el = document.getElementById(`area-row-${match.city}-${match.state}`);
+const elId = `area-row-${match.city.replace(/[^a-z0-9]/gi, "-")}-${match.state}`;
+const el = document.getElementById(elId);
 el?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 }
@@ -4827,23 +4828,23 @@ const dotColor = density === "high" ? "bg-red-500" : density === "medium" ? "bg-
 return (
 <button
 key={`${area.city}-${area.state}`}
-id={`area-row-${area.city}-${area.state}`}
+id={`area-row-${area.city.replace(/[^a-z0-9]/gi, "-")}-${area.state}`}
 onClick={() => setSelectedArea(isSelected ? null : area)}
 className={`w-full text-left px-3 py-2.5 border-b border-border/5 transition-colors flex items-center gap-3 group ${isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"}`}
 data-testid={`area-row-${idx}`}
 >
-<span className="text-[10px] font-bold text-foreground/30 w-5 shrink-0 text-right">#{idx + 1}</span>
+<span className="text-[10px] font-bold text-foreground/50 w-5 shrink-0 text-right">#{idx + 1}</span>
 <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
 <div className="flex-1 min-w-0">
 <div className="flex items-center gap-1.5">
 <span className="text-xs font-semibold text-foreground truncate">{area.city}, {area.state}</span>
 </div>
-<p className="text-[10px] text-foreground/40 leading-snug">{area.county ? `${area.county} County` : area.state}</p>
+<p className="text-[10px] text-foreground/55 leading-snug">{area.county ? `${area.county} County` : area.state}</p>
 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
 <span className="text-[10px] text-foreground/50">{area.recentlyActive} active</span>
 {area.day1OgCount > 0 && <span className="text-[9px] font-bold text-yellow-500/80">{area.day1OgCount} OG</span>}
-{area.helperCount > 0 && <span className="text-[9px] text-foreground/40">{area.helperCount} helper{area.helperCount !== 1 ? "s" : ""}</span>}
-{area.zips.length > 0 && <span className="text-[9px] text-foreground/30">{area.zips.length} zip{area.zips.length !== 1 ? "s" : ""}</span>}
+{area.helperCount > 0 && <span className="text-[9px] text-foreground/50">{area.helperCount} helper{area.helperCount !== 1 ? "s" : ""}</span>}
+{area.zips.length > 0 && <span className="text-[9px] text-foreground/50">{area.zips.length} zip{area.zips.length !== 1 ? "s" : ""}</span>}
 </div>
 </div>
 <span className="text-sm font-display font-black text-foreground/70 shrink-0">{area.total}</span>
