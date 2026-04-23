@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, X, Share, Plus } from "lucide-react";
+import mascotImg from "@assets/Picsart_26-02-04_14-41-36-216_1772938444282.png";
 
 // iOS 13+ iPads report as Macintosh — check for touch support too
 function isIOSDevice() {
@@ -78,12 +79,9 @@ function isInstallEligible(): boolean {
   return detectMode() !== null;
 }
 
-// ── Inline slim banner for the dashboard ──────────────────────────────────────
-export function InstallBanner() {
+// ── Tiny right-aligned text-button hint (replaces full banner) ────────────────
+export function InstallHint() {
   const [eligible, setEligible] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => sessionStorage.getItem(BANNER_DISMISS_KEY) === "1"
-  );
 
   useEffect(() => {
     const recheck = () => setEligible(isInstallEligible());
@@ -94,44 +92,134 @@ export function InstallBanner() {
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
-  if (!eligible || bannerDismissed) return null;
+  if (!eligible) return null;
 
-  const open = () => window.dispatchEvent(new CustomEvent(OPEN_EVENT));
-  const dismiss = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    sessionStorage.setItem(BANNER_DISMISS_KEY, "1");
-    setBannerDismissed(true);
-  };
+  return (
+    <div className="flex justify-end -mt-1 mb-1.5">
+      <button
+        onClick={() => window.dispatchEvent(new CustomEvent(OPEN_EVENT))}
+        className="text-[10px] font-display tracking-[0.12em] text-emerald-400/70 hover:text-emerald-400 transition-colors px-1 py-0.5"
+        data-testid="link-install-hint"
+      >
+        Install ⚡
+      </button>
+    </div>
+  );
+}
+
+// ── Floating mascot helper (subtle, anchored bottom-right) ────────────────────
+export function InstallMascot() {
+  const [eligible, setEligible] = useState(false);
+  const [showBubble, setShowBubble] = useState(false);
+  const bubbleShownRef = useRef(
+    typeof window !== "undefined" && sessionStorage.getItem("guber-mascot-bubble-shown") === "1"
+  );
+  const triggerArmedRef = useRef(false);
+
+  useEffect(() => {
+    const recheck = () => setEligible(isInstallEligible());
+    recheck();
+    const handler = () => recheck();
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", () => setEligible(false));
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  // Arm the speech-bubble trigger once eligible — first scroll OR ~6s timer
+  useEffect(() => {
+    if (!eligible || bubbleShownRef.current || triggerArmedRef.current) return;
+    triggerArmedRef.current = true;
+
+    const trigger = () => {
+      if (bubbleShownRef.current) return;
+      bubbleShownRef.current = true;
+      sessionStorage.setItem("guber-mascot-bubble-shown", "1");
+      setShowBubble(true);
+      setTimeout(() => setShowBubble(false), 3000);
+      window.removeEventListener("scroll", trigger);
+      clearTimeout(timer);
+    };
+
+    const timer = setTimeout(trigger, 6000);
+    window.addEventListener("scroll", trigger, { passive: true, once: true });
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("scroll", trigger);
+    };
+  }, [eligible]);
+
+  if (!eligible) return null;
 
   return (
     <div
-      className="mb-3 flex items-center gap-3 rounded-xl px-3 py-2 animate-fade-in"
       style={{
-        background: "linear-gradient(135deg,rgba(34,197,94,0.06),rgba(34,197,94,0.02))",
-        border: "1px solid rgba(34,197,94,0.18)",
-        boxShadow: "0 0 0 1px rgba(34,197,94,0.04)",
+        position: "fixed",
+        right: 10,
+        bottom: 84, // safe margin above bottom nav (~64px)
+        zIndex: 40, // below modal (9999) and toasts but above content
+        pointerEvents: "none",
       }}
-      data-testid="banner-install-inline"
+      data-testid="install-mascot-anchor"
     >
-      <p className="flex-1 text-[11px] font-display text-foreground/85 tracking-wide leading-tight m-0">
-        Install GUBER for faster access ⚡
-      </p>
+      {showBubble && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 70,
+            right: 0,
+            background: "#fff",
+            borderRadius: 12,
+            padding: "6px 10px",
+            fontSize: 11,
+            fontWeight: 800,
+            color: "#111",
+            fontFamily: "Oxanium, sans-serif",
+            whiteSpace: "nowrap",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            animation: "mascot-bubble-in 0.28s cubic-bezier(0.34,1.4,0.64,1)",
+            pointerEvents: "none",
+          }}
+        >
+          Install GUBER ⚡
+          <div
+            style={{
+              position: "absolute",
+              bottom: -7,
+              right: 18,
+              width: 0,
+              height: 0,
+              borderLeft: "7px solid transparent",
+              borderRight: "7px solid transparent",
+              borderTop: "8px solid #fff",
+            }}
+          />
+        </div>
+      )}
       <button
-        onClick={open}
-        className="px-3 py-1 rounded-lg text-[10px] font-display font-black tracking-[0.1em]"
-        style={{ background: "#22C55E", color: "#000" }}
-        data-testid="button-install-banner"
+        onClick={() => window.dispatchEvent(new CustomEvent(OPEN_EVENT))}
+        aria-label="Install GUBER"
+        data-testid="button-install-mascot"
+        style={{
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          pointerEvents: "auto",
+          filter: "drop-shadow(0 0 10px rgba(34,197,94,0.35))",
+          transition: "transform 0.18s ease",
+        }}
+        onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.94)")}
+        onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
       >
-        INSTALL
+        <img
+          src={mascotImg}
+          alt="GUBER mascot"
+          style={{ width: 64, height: "auto", display: "block", objectFit: "contain" }}
+        />
       </button>
-      <button
-        onClick={dismiss}
-        className="text-muted-foreground/60 hover:text-muted-foreground p-1"
-        aria-label="Dismiss install banner"
-        data-testid="button-dismiss-install-banner"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
+      <style>{`@keyframes mascot-bubble-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }

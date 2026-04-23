@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
-import { InstallBanner } from "@/components/install-prompt";
+import { InstallHint, InstallMascot } from "@/components/install-prompt";
 import { GoogleMap, type JobPin, type WorkerPin, type MapBounds } from "@/components/google-map";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -485,6 +485,9 @@ export default function Dashboard() {
     <GuberLayout>
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-dashboard">
 
+        {/* ── Subtle install hint (right-aligned, secondary) ── */}
+        <InstallHint />
+
         {/* ── HIRE / WORK Toggle ── */}
         <div className="grid grid-cols-2 gap-3 mb-4 animate-fade-in stagger-1" data-testid="toggle-mode">
           <button
@@ -535,9 +538,6 @@ export default function Dashboard() {
             </div>
           </button>
         </div>
-
-        {/* ── Inline install banner (slim, dismissible, never blocks UI) ── */}
-        <InstallBanner />
 
         {/* ── Reminders (above hero) ── */}
         <TodoReminderBox
@@ -806,11 +806,11 @@ export default function Dashboard() {
               >
                 <div>
                   <p className="text-sm font-display font-black text-amber-400 tracking-wider leading-tight">
-                    💰 Opportunities Near You
+                    🚀 You're early — help unlock your city
                   </p>
                   {!oppsCollapsed && (
                     <p className="text-[11px] text-amber-400/55 font-display mt-0.5 leading-snug">
-                      🚀 You're early — help unlock your city
+                      More activity unlocks more drops, more jobs, and more momentum.
                     </p>
                   )}
                 </div>
@@ -1136,6 +1136,9 @@ export default function Dashboard() {
         onClose={handlePromoClose}
         onAction={handlePromoAction}
       />
+
+      {/* ── Floating mascot helper (subtle, anchored bottom-right) ── */}
+      <InstallMascot />
 
     </GuberLayout>
   );
