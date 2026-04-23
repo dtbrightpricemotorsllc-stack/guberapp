@@ -16,20 +16,38 @@ export interface ZipFullInfo {
 
 const fullInfoCache = new Map<string, ZipFullInfo>();
 
-async function fetchCountyFromGoogle(zip: string, lat: number, lng: number): Promise<string> {
+interface GoogleGeocodeResult {
+  results?: Array<{
+    address_components: Array<{ types: string[]; long_name: string; short_name: string }>;
+  }>;
+  status: string;
+}
+
+async function fetchLocationFromGoogle(lat: number, lng: number): Promise<{ city: string; state: string; county: string }> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) return "";
+  if (!apiKey) return { city: "", state: "", county: "" };
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=administrative_area_level_2&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
     const res = await fetch(url);
-    if (!res.ok) return "";
-    const data = await res.json() as { results?: Array<{ address_components: Array<{ types: string[]; long_name: string }> }> };
+    if (!res.ok) return { city: "", state: "", county: "" };
+    const data = await res.json() as GoogleGeocodeResult;
     const result = data.results?.[0];
-    if (!result) return "";
-    const countyComp = result.address_components.find(c => c.types.includes("administrative_area_level_2"));
-    return countyComp?.long_name?.replace(/ County$/i, "") ?? "";
+    if (!result) return { city: "", state: "", county: "" };
+
+    const comps = result.address_components;
+    const find = (type: string) => comps.find(c => c.types.includes(type));
+
+    const cityComp = find("locality") ?? find("sublocality_level_1") ?? find("postal_town");
+    const stateComp = find("administrative_area_level_1");
+    const countyComp = find("administrative_area_level_2");
+
+    return {
+      city: cityComp?.long_name ?? "",
+      state: stateComp?.short_name ?? "",
+      county: countyComp?.long_name?.replace(/ County$/i, "") ?? "",
+    };
   } catch {
-    return "";
+    return { city: "", state: "", county: "" };
   }
 }
 
@@ -47,13 +65,22 @@ export async function geocodeZipFull(zip: string): Promise<ZipFullInfo | null> {
 
   if (fullInfoCache.has(z)) return fullInfoCache.get(z)!;
 
+  // Use zipcodes lib for lat/lng and as static fallback for city/state
   const staticResult = zipcodesLib.lookup(z);
   if (!staticResult) return null;
 
-  const { latitude: lat, longitude: lng, city, state } = staticResult;
-  const county = await fetchCountyFromGoogle(z, lat, lng);
+  const { latitude: lat, longitude: lng } = staticResult;
 
-  const info: ZipFullInfo = { lat, lng, city: city || "", state: state || "", county };
+  // Authoritative city/state/county from Google Geocoding address_components
+  const google = await fetchLocationFromGoogle(lat, lng);
+
+  const info: ZipFullInfo = {
+    lat,
+    lng,
+    city: google.city || staticResult.city || "",
+    state: google.state || staticResult.state || "",
+    county: google.county,
+  };
   fullInfoCache.set(z, info);
   return info;
 }

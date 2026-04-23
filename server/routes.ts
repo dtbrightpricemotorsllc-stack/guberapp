@@ -10037,10 +10037,18 @@ YOUR BEHAVIOR:
   });
 
   // ── AREA DENSITY — city/county/state breakdown ──────────────────────────
+  // Per-filter server-side cache: keyed by filter, TTL 5 minutes
+  const areaByFilterCache = new Map<string, { data: object; expiresAt: number }>();
+
   app.get("/api/admin/user-density/by-area", requireAdmin, async (req: Request, res: Response) => {
     try {
       const validFilters = ["all", "recent", "og", "helper", "business", "cash_drop"];
       const filter = validFilters.includes(req.query.filter as string) ? (req.query.filter as string) : "all";
+
+      const cached = areaByFilterCache.get(filter);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.data);
+      }
 
       const recentExpr = `(
         u.clocked_in_at > NOW() - INTERVAL '30 days'
@@ -10123,7 +10131,9 @@ YOUR BEHAVIOR:
         .sort((a, b) => b.total - a.total);
 
       const userTotal = areas.reduce((s, a) => s + a.total, 0);
-      res.json({ areas, areaCount: areas.length, userTotal });
+      const responseData = { areas, areaCount: areas.length, userTotal };
+      areaByFilterCache.set(filter, { data: responseData, expiresAt: Date.now() + 5 * 60 * 1000 });
+      res.json(responseData);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
