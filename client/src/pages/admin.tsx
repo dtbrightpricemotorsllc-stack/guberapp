@@ -4550,6 +4550,24 @@ zipCount: number;
 userTotal: number;
 }
 
+interface AreaDensity {
+city: string;
+state: string;
+county: string;
+total: number;
+recentlyActive: number;
+day1OgCount: number;
+businessCount: number;
+helperCount: number;
+zips: string[];
+}
+
+interface AreaDensityResponse {
+areas: AreaDensity[];
+areaCount: number;
+userTotal: number;
+}
+
 function ActiveAreasTab({ onNavigateToUser }: { onNavigateToUser: (userId: number) => void }) {
 const { toast } = useToast();
 const mapDivRef = useRef<HTMLDivElement>(null);
@@ -4557,12 +4575,13 @@ const mapRef = useRef<google.maps.Map | null>(null);
 const mapsLibRef = useRef<typeof google.maps | null>(null);
 const overlaysRef = useRef<google.maps.OverlayView[]>([]);
 const initStartedRef = useRef(false);
+const areaListRef = useRef<HTMLDivElement>(null);
 const [mapReady, setMapReady] = useState(false);
 const [activeFilter, setActiveFilter] = useState("all");
-const [selectedZip, setSelectedZip] = useState<ZipDensity | null>(null);
-const [zipUsers, setZipUsers] = useState<ZipUser[]>([]);
-const [zipUsersLoading, setZipUsersLoading] = useState(false);
-const [zipUsersError, setZipUsersError] = useState(false);
+const [selectedArea, setSelectedArea] = useState<AreaDensity | null>(null);
+const [areaUsers, setAreaUsers] = useState<ZipUser[]>([]);
+const [areaUsersLoading, setAreaUsersLoading] = useState(false);
+const [areaUsersError, setAreaUsersError] = useState(false);
 
 const { data: config } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
 const apiKey = config?.googleMapsApiKey ?? "";
@@ -4578,18 +4597,29 @@ enabled: mapReady,
 staleTime: 120_000,
 });
 
+const { data: areaData, isFetching: areaLoading, refetch: refetchAreas } = useQuery<AreaDensityResponse>({
+queryKey: ["/api/admin/user-density/by-area", activeFilter],
+queryFn: async () => {
+const res = await fetch(`/api/admin/user-density/by-area?filter=${activeFilter}`);
+if (!res.ok) throw new Error(await res.text());
+return res.json();
+},
+enabled: mapReady,
+staleTime: 120_000,
+});
+
 useEffect(() => {
-if (!selectedZip) { setZipUsers([]); setZipUsersError(false); return; }
+if (!selectedArea) { setAreaUsers([]); setAreaUsersError(false); return; }
 let cancelled = false;
-setZipUsersLoading(true);
-setZipUsersError(false);
-fetch(`/api/admin/user-density/zip/${encodeURIComponent(selectedZip.zip)}?filter=${activeFilter}`)
+setAreaUsersLoading(true);
+setAreaUsersError(false);
+fetch(`/api/admin/user-density/area?city=${encodeURIComponent(selectedArea.city)}&state=${encodeURIComponent(selectedArea.state)}&filter=${activeFilter}`)
   .then(r => r.ok ? r.json() : Promise.reject(r.statusText))
-  .then(data => { if (!cancelled) { setZipUsers(data.users || []); setZipUsersError(false); } })
-  .catch(() => { if (!cancelled) { setZipUsers([]); setZipUsersError(true); } })
-  .finally(() => { if (!cancelled) setZipUsersLoading(false); });
+  .then(data => { if (!cancelled) { setAreaUsers(data.users || []); setAreaUsersError(false); } })
+  .catch(() => { if (!cancelled) { setAreaUsers([]); setAreaUsersError(true); } })
+  .finally(() => { if (!cancelled) setAreaUsersLoading(false); });
 return () => { cancelled = true; };
-}, [selectedZip, activeFilter]);
+}, [selectedArea, activeFilter]);
 
 useEffect(() => {
 if (!apiKey || !mapDivRef.current || initStartedRef.current) return;
@@ -4690,12 +4720,21 @@ density.zips.forEach(zipData => {
 const overlay = new ZipOverlay(
 { lat: zipData.lat, lng: zipData.lng },
 zipData,
-() => setSelectedZip(zipData),
+() => {
+if (areaData?.areas) {
+const match = areaData.areas.find(a => a.zips.includes(zipData.zip));
+if (match) {
+setSelectedArea(match);
+const el = document.getElementById(`area-row-${match.city}-${match.state}`);
+el?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+}
+},
 );
 overlay.setMap(mapRef.current);
 overlaysRef.current.push(overlay);
 });
-}, [density, mapReady]);
+}, [density, mapReady, areaData]);
 
 const FILTERS = [
 { key: "all", label: "All Users" },
@@ -4706,20 +4745,25 @@ const FILTERS = [
 { key: "cash_drop", label: "Drop Participants" },
 ];
 
+const handleFilterChange = (key: string) => {
+setActiveFilter(key);
+setSelectedArea(null);
+};
+
 return (
 <div className="space-y-4" data-testid="admin-active-areas">
 <div className="flex items-center justify-between gap-2 flex-wrap">
 <div className="flex items-center gap-2 flex-wrap">
 <MapPin className="w-4 h-4 guber-text-green shrink-0" />
-<h3 className="font-display font-semibold text-sm">Active Areas</h3>
-{density && (
+<h3 className="font-display font-semibold text-sm text-foreground">Active Areas</h3>
+{areaData && (
 <Badge variant="outline" className="text-[10px]">
-{density.zipCount} zip{density.zipCount !== 1 ? "s" : ""} · {density.userTotal} user{density.userTotal !== 1 ? "s" : ""}
+{areaData.areaCount} cit{areaData.areaCount !== 1 ? "ies" : "y"} · {areaData.userTotal} user{areaData.userTotal !== 1 ? "s" : ""}
 </Badge>
 )}
 </div>
-<Button size="sm" variant="outline" onClick={() => refetch()} disabled={densityLoading} className="h-7 text-xs gap-1" data-testid="button-refresh-density">
-<RefreshCw className={`w-3 h-3 ${densityLoading ? "animate-spin" : ""}`} /> Refresh
+<Button size="sm" variant="outline" onClick={() => { refetch(); refetchAreas(); }} disabled={densityLoading || areaLoading} className="h-7 text-xs gap-1" data-testid="button-refresh-density">
+<RefreshCw className={`w-3 h-3 ${(densityLoading || areaLoading) ? "animate-spin" : ""}`} /> Refresh
 </Button>
 </div>
 
@@ -4727,115 +4771,165 @@ return (
 {FILTERS.map(f => (
 <button
 key={f.key}
-onClick={() => { setActiveFilter(f.key); setSelectedZip(null); }}
-className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${activeFilter === f.key ? "bg-primary text-primary-foreground border-primary" : "bg-muted/20 border-border/30 text-muted-foreground hover:text-foreground hover:border-border/60"}`}
+onClick={() => handleFilterChange(f.key)}
+className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${activeFilter === f.key ? "bg-primary text-primary-foreground border-primary" : "bg-muted/20 border-border/30 text-foreground/60 hover:text-foreground hover:border-border/60"}`}
 data-testid={`filter-density-${f.key}`}>
 {f.label}
 </button>
 ))}
 </div>
 
-<div className="relative rounded-xl overflow-hidden border border-border/20" style={{ height: 480 }}>
+<div className="relative rounded-xl overflow-hidden border border-border/20" style={{ height: 420 }}>
 {!apiKey && (
-<div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm bg-muted/20">
+<div className="absolute inset-0 flex items-center justify-center text-foreground/60 text-sm bg-muted/20">
 Map unavailable — API key not configured
 </div>
 )}
 <div ref={mapDivRef} className="w-full h-full" />
 
-{densityLoading && (
-<div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur rounded-full px-3 py-1.5 text-xs flex items-center gap-1.5 border border-border/20 shadow-sm">
+{(densityLoading || areaLoading) && (
+<div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur rounded-full px-3 py-1.5 text-xs flex items-center gap-1.5 border border-border/20 shadow-sm text-foreground/80">
 <Loader2 className="w-3 h-3 animate-spin" /> Loading density data…
 </div>
 )}
 
 {density && !densityLoading && density.zips.length === 0 && (
 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
-<MapPin className="w-8 h-8 text-muted-foreground/40" />
-<p className="text-sm text-muted-foreground">No users with zip codes found for this filter</p>
+<MapPin className="w-8 h-8 text-foreground/30" />
+<p className="text-sm text-foreground/50">No users with zip codes found for this filter</p>
 </div>
 )}
 
-{selectedZip && (
-<div className="absolute top-0 right-0 bottom-0 w-72 bg-background/97 backdrop-blur-sm border-l border-border/20 shadow-xl flex flex-col" data-testid="density-zip-panel">
-<div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-border/10 shrink-0">
-<div className="flex items-center gap-2">
-<div className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedZip.total >= 21 ? "bg-red-500" : selectedZip.total >= 6 ? "bg-orange-500" : "bg-green-500"}`} />
-<span className="font-display font-bold text-sm">ZIP {selectedZip.zip}</span>
+<div className="absolute top-3 left-3 bg-background/90 backdrop-blur-sm rounded-lg px-2.5 py-2 border border-border/20 shadow-sm text-[10px] space-y-1 pointer-events-none">
+<div className="flex items-center gap-1.5 text-foreground/70"><div className="w-2.5 h-2.5 rounded-full bg-green-500" />1–5 users</div>
+<div className="flex items-center gap-1.5 text-foreground/70"><div className="w-2.5 h-2.5 rounded-full bg-orange-500" />6–20 users</div>
+<div className="flex items-center gap-1.5 text-foreground/70"><div className="w-2.5 h-2.5 rounded-full bg-red-500" />21+ users</div>
 </div>
-<button onClick={() => setSelectedZip(null)} className="text-muted-foreground hover:text-foreground transition-colors p-0.5" data-testid="button-close-zip-panel">
+</div>
+
+{/* Ranked city list + user side panel */}
+<div className="flex gap-3 mt-4" style={{ minHeight: 320 }}>
+{/* City ranked list */}
+<div ref={areaListRef} className="flex-1 rounded-xl border border-border/20 overflow-y-auto" style={{ maxHeight: 420 }} data-testid="area-ranked-list">
+<div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-border/10 px-3 py-2 flex items-center justify-between">
+<span className="text-[11px] font-display font-bold text-foreground/80 uppercase tracking-widest">City Breakdown</span>
+<span className="text-[10px] text-foreground/40">{areaData?.areaCount ?? 0} cities</span>
+</div>
+{(areaLoading && !areaData) && (
+<div className="flex items-center justify-center gap-1.5 py-10 text-xs text-foreground/50">
+<Loader2 className="w-3 h-3 animate-spin" /> Building city list…
+</div>
+)}
+{areaData?.areas.map((area, idx) => {
+const isSelected = selectedArea?.city === area.city && selectedArea?.state === area.state;
+const density = area.total >= 21 ? "high" : area.total >= 6 ? "medium" : "low";
+const dotColor = density === "high" ? "bg-red-500" : density === "medium" ? "bg-orange-500" : "bg-green-500";
+return (
+<button
+key={`${area.city}-${area.state}`}
+id={`area-row-${area.city}-${area.state}`}
+onClick={() => setSelectedArea(isSelected ? null : area)}
+className={`w-full text-left px-3 py-2.5 border-b border-border/5 transition-colors flex items-center gap-3 group ${isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/20"}`}
+data-testid={`area-row-${idx}`}
+>
+<span className="text-[10px] font-bold text-foreground/30 w-5 shrink-0 text-right">#{idx + 1}</span>
+<div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+<div className="flex-1 min-w-0">
+<div className="flex items-center gap-1.5">
+<span className="text-xs font-semibold text-foreground truncate">{area.city}</span>
+<span className="text-[10px] text-foreground/40 shrink-0">{area.state}</span>
+{area.county && <span className="text-[9px] text-foreground/30 shrink-0 hidden sm:inline">{area.county} Co.</span>}
+</div>
+<div className="flex items-center gap-2 mt-0.5 flex-wrap">
+<span className="text-[10px] text-foreground/50">{area.recentlyActive} active</span>
+{area.day1OgCount > 0 && <span className="text-[9px] font-bold text-yellow-500/80">{area.day1OgCount} OG</span>}
+{area.helperCount > 0 && <span className="text-[9px] text-foreground/40">{area.helperCount} helper{area.helperCount !== 1 ? "s" : ""}</span>}
+{area.zips.length > 0 && <span className="text-[9px] text-foreground/30">{area.zips.length} zip{area.zips.length !== 1 ? "s" : ""}</span>}
+</div>
+</div>
+<span className="text-sm font-display font-black text-foreground/70 shrink-0">{area.total}</span>
+<ChevronRight className={`w-3 h-3 shrink-0 transition-colors ${isSelected ? "text-primary" : "text-foreground/20 group-hover:text-foreground/50"}`} />
+</button>
+);
+})}
+{areaData?.areas.length === 0 && !areaLoading && (
+<div className="flex flex-col items-center justify-center gap-2 py-10 text-foreground/40 text-xs">
+<Users className="w-5 h-5 opacity-40" />
+No city data for this filter
+</div>
+)}
+</div>
+
+{/* User side panel */}
+{selectedArea && (
+<div className="w-64 rounded-xl border border-border/20 flex flex-col overflow-hidden" style={{ maxHeight: 420 }} data-testid="density-area-panel">
+<div className="flex items-center justify-between px-3 pt-3 pb-2 border-b border-border/10 shrink-0">
+<div>
+<p className="font-display font-bold text-sm text-foreground">{selectedArea.city}</p>
+<p className="text-[10px] text-foreground/50">{selectedArea.county ? `${selectedArea.county} Co., ` : ""}{selectedArea.state}</p>
+</div>
+<button onClick={() => setSelectedArea(null)} className="text-foreground/40 hover:text-foreground transition-colors p-0.5" data-testid="button-close-area-panel">
 <X className="w-3.5 h-3.5" />
 </button>
 </div>
 <div className="grid grid-cols-3 gap-px bg-border/10 shrink-0 text-center text-[10px]">
 <div className="bg-background/80 py-1.5 px-1">
-<div className="font-bold text-sm leading-none mb-0.5">{selectedZip.total}</div>
-<div className="text-muted-foreground">Total</div>
+<div className="font-bold text-sm leading-none mb-0.5 text-foreground">{selectedArea.total}</div>
+<div className="text-foreground/50">Total</div>
 </div>
 <div className="bg-background/80 py-1.5 px-1">
-<div className="font-bold text-sm leading-none mb-0.5 text-yellow-500">{selectedZip.day1OgCount}</div>
-<div className="text-muted-foreground">OG</div>
+<div className="font-bold text-sm leading-none mb-0.5 text-yellow-500">{selectedArea.day1OgCount}</div>
+<div className="text-foreground/50">OG</div>
 </div>
 <div className="bg-background/80 py-1.5 px-1">
-<div className="font-bold text-sm leading-none mb-0.5">{selectedZip.businessCount}</div>
-<div className="text-muted-foreground">Biz</div>
+<div className="font-bold text-sm leading-none mb-0.5 text-foreground">{selectedArea.businessCount}</div>
+<div className="text-foreground/50">Biz</div>
 </div>
-</div>
-<div className="px-3 py-2 border-b border-border/10 shrink-0">
-<p className="text-[10px] text-muted-foreground">{selectedZip.total >= 21 ? "High density zone" : selectedZip.total >= 6 ? "Medium density zone" : "Low density zone"} · {selectedZip.recentlyActive} active last 30d · {selectedZip.helperCount} helper{selectedZip.helperCount !== 1 ? "s" : ""}</p>
 </div>
 <div className="flex-1 overflow-y-auto">
-{zipUsersLoading && (
-<div className="flex items-center justify-center gap-1.5 py-6 text-xs text-muted-foreground" data-testid="zip-users-loading">
+{areaUsersLoading && (
+<div className="flex items-center justify-center gap-1.5 py-6 text-xs text-foreground/50" data-testid="area-users-loading">
 <Loader2 className="w-3 h-3 animate-spin" /> Loading users…
 </div>
 )}
-{!zipUsersLoading && zipUsersError && (
-<div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-destructive/70" data-testid="zip-users-error">
+{!areaUsersLoading && areaUsersError && (
+<div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-destructive/70" data-testid="area-users-error">
 <AlertCircle className="w-5 h-5 opacity-60" />
-Failed to load users — try again
+<span className="text-foreground/60">Failed to load users</span>
 </div>
 )}
-{!zipUsersLoading && !zipUsersError && zipUsers.length === 0 && (
-<div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-muted-foreground" data-testid="zip-users-empty">
+{!areaUsersLoading && !areaUsersError && areaUsers.length === 0 && (
+<div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-foreground/40" data-testid="area-users-empty">
 <Users className="w-5 h-5 opacity-40" />
-No users found for this filter
+No users found
 </div>
 )}
-{!zipUsersLoading && !zipUsersError && zipUsers.map(u => (
+{!areaUsersLoading && !areaUsersError && areaUsers.map(u => (
 <button
 key={u.id}
 onClick={() => onNavigateToUser(u.id)}
 className="w-full text-left px-3 py-2 border-b border-border/5 hover:bg-muted/30 transition-colors flex items-start gap-2 group"
-data-testid={`zip-user-row-${u.id}`}
+data-testid={`area-user-row-${u.id}`}
 >
-<div className="w-6 h-6 rounded-full bg-muted/40 flex items-center justify-center shrink-0 text-[9px] font-bold text-muted-foreground mt-0.5">
+<div className="w-6 h-6 rounded-full bg-muted/40 flex items-center justify-center shrink-0 text-[9px] font-bold text-foreground/60 mt-0.5">
 {(u.fullName || u.username || "?")[0].toUpperCase()}
 </div>
 <div className="flex-1 min-w-0">
 <div className="flex items-center gap-1 flex-wrap">
-<span className="text-xs font-medium truncate">{u.fullName || u.username}</span>
+<span className="text-xs font-medium truncate text-foreground">{u.fullName || u.username}</span>
 {u.isOg && <span className="text-[9px] font-bold text-yellow-500 shrink-0">OG</span>}
 </div>
 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-<span className="text-[10px] text-muted-foreground capitalize">{u.accountType === "business" ? "Business" : u.role === "helper" ? "Helper" : "Member"}</span>
-{u.jobsCompleted > 0 && (
-<span className="text-[10px] text-muted-foreground">{u.jobsCompleted} job{u.jobsCompleted !== 1 ? "s" : ""}</span>
-)}
+<span className="text-[10px] text-foreground/50 capitalize">{u.accountType === "business" ? "Business" : u.role === "helper" ? "Helper" : "Member"}</span>
+{u.jobsCompleted > 0 && <span className="text-[10px] text-foreground/40">{u.jobsCompleted} job{u.jobsCompleted !== 1 ? "s" : ""}</span>}
 </div>
 </div>
-<ChevronRight className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 mt-1 transition-colors" />
+<ChevronRight className="w-3 h-3 text-foreground/20 group-hover:text-foreground/50 shrink-0 mt-1 transition-colors" />
 </button>
 ))}
 </div>
 </div>
 )}
-
-<div className="absolute top-3 left-3 bg-background/90 backdrop-blur-sm rounded-lg px-2.5 py-2 border border-border/20 shadow-sm text-[10px] space-y-1 pointer-events-none">
-<div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-green-500" />1–5 users</div>
-<div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-orange-500" />6–20 users</div>
-<div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500" />21+ users</div>
-</div>
 </div>
 </div>
 );

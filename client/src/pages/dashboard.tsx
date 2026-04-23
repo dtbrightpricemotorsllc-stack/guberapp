@@ -559,7 +559,7 @@ export default function Dashboard() {
                 Complete tasks &amp; earn
               </h1>
               <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
-                Start local, build trust, and unlock more opportunities.
+                Stay ready, build trust, and unlock more opportunities.
               </p>
             </>
           )}
@@ -633,13 +633,13 @@ export default function Dashboard() {
                 {mode === "hire" ? "Nearby Workers" : "Nearby Jobs"}
               </span>
               {mode === "hire" ? (
-                workerCount > 0 && (
-                  <span className="ml-2 text-[10px] font-display text-primary/60" data-testid="text-nearby-count-inline">{workerCount} active</span>
-                )
+                workerCount > 0
+                  ? <span className="ml-2 text-[10px] font-display text-primary/60" data-testid="text-nearby-count-inline">{workerCount} active</span>
+                  : <span className="ml-2 text-[10px] font-display text-primary/40" data-testid="text-nearby-count-inline">👀 Local help appears here in real time</span>
               ) : (
-                nearbyCount > 0 && (
-                  <span className="ml-2 text-[10px] font-display text-primary/60" data-testid="text-nearby-count-inline">{nearbyCount} active</span>
-                )
+                nearbyCount > 0
+                  ? <span className="ml-2 text-[10px] font-display text-primary/60" data-testid="text-nearby-count-inline">{nearbyCount} active</span>
+                  : <span className="ml-2 text-[10px] font-display text-primary/40" data-testid="text-nearby-count-inline">⚡ Activity grows as more workers join</span>
               )}
             </div>
             <div className="flex items-center gap-2.5">
@@ -754,8 +754,8 @@ export default function Dashboard() {
               <div className="flex gap-3">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-[11px] font-display font-bold text-foreground leading-tight mb-1 uppercase tracking-wider">Payout Setup Required</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed mb-2">Complete your Stripe verification to receive payments.</p>
+                  <p className="text-[11px] font-display font-bold text-foreground leading-tight mb-1">💸 Unlock your payouts</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed mb-2">Complete Stripe setup so you can receive payments when you finish jobs.</p>
                   <Button size="sm" variant="ghost" className="h-7 px-0 text-[10px] font-display font-bold text-emerald-400 hover:text-emerald-300 hover:bg-transparent flex items-center gap-1 group"
                     onClick={() => onboardMutation.mutate()} disabled={onboardMutation.isPending} data-testid="link-setup-payouts-dashboard">
                     {onboardMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <><span>SET UP NOW</span><ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" /></>}
@@ -789,7 +789,7 @@ export default function Dashboard() {
                   </p>
                   {!oppsCollapsed && (
                     <p className="text-[11px] text-amber-400/55 font-display mt-0.5 leading-snug">
-                      Your city is not active yet — help unlock it
+                      🚀 You're early — help unlock your city
                     </p>
                   )}
                 </div>
@@ -798,6 +798,11 @@ export default function Dashboard() {
 
               {!oppsCollapsed && (
                 <>
+                  {/* Context line */}
+                  <p className="text-[10px] text-amber-400/45 font-display px-4 pb-2 leading-snug">
+                    More activity unlocks more drops, more jobs, and more momentum.
+                  </p>
+
                   {/* Progress bar row */}
                   <div className="px-4 pb-3">
                     <div className="flex items-center justify-between mb-1.5">

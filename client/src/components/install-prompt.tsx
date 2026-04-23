@@ -75,26 +75,26 @@ export default function InstallPrompt() {
     if (sessionStorage.getItem("pwa-install-dismissed")) { setDismissed(true); return; }
 
     if (isIOSSafari()) {
-      setTimeout(() => setIosMode("safari"), 2500);
+      setTimeout(() => setIosMode("safari"), 4000);
       return;
     }
 
     if (isIOSChrome() || isIOSOtherBrowser()) {
-      setTimeout(() => setIosMode("not-safari"), 2500);
+      setTimeout(() => setIosMode("not-safari"), 4000);
       return;
     }
 
     if (isAndroidNonChrome()) {
-      setTimeout(() => setIosMode("android-chrome"), 2500);
+      setTimeout(() => setIosMode("android-chrome"), 4000);
       return;
     }
 
     const alreadyCaptured = (window as any).__installPromptEvent;
     if (alreadyCaptured) {
-      setPrompt(alreadyCaptured);
+      setTimeout(() => setPrompt(alreadyCaptured), 4000);
     }
 
-    const handler = (e: any) => { e.preventDefault(); setPrompt(e); };
+    const handler = (e: any) => { e.preventDefault(); setTimeout(() => setPrompt(e), 4000); };
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", () => {
       setInstalled(true);
@@ -348,17 +348,17 @@ export default function InstallPrompt() {
           <img
             src={mascotImg}
             alt="GUBER mascot"
-            style={{ position: "absolute", bottom: 100, left: -8, width: 160, height: "auto", objectFit: "contain", zIndex: 2, filter: "drop-shadow(0 0 16px rgba(34,197,94,0.35))", pointerEvents: "none" }}
+            style={{ position: "absolute", bottom: 100, left: -8, width: 112, height: "auto", objectFit: "contain", zIndex: 2, filter: "drop-shadow(0 0 16px rgba(34,197,94,0.35))", pointerEvents: "none" }}
           />
-          <div style={{ position: "absolute", bottom: 232, left: 108, background: "#fff", borderRadius: 14, padding: "8px 12px", fontSize: 13, fontWeight: 800, color: "#111", fontFamily: "Oxanium, sans-serif", whiteSpace: "nowrap", zIndex: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.4)", pointerEvents: "none" }}>
-            Download GUBER! 📲
+          <div style={{ position: "absolute", bottom: 210, left: 80, background: "#fff", borderRadius: 14, padding: "8px 12px", fontSize: 13, fontWeight: 800, color: "#111", fontFamily: "Oxanium, sans-serif", whiteSpace: "nowrap", zIndex: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.4)", pointerEvents: "none" }}>
+            Install GUBER
             <div style={{ position: "absolute", bottom: -8, left: 18, width: 0, height: 0, borderLeft: "8px solid transparent", borderRight: "8px solid transparent", borderTop: "9px solid #fff" }} />
           </div>
           <div
             style={{
               // dark-gradient-allow: install-prompt tray chrome, dark theme surface
               background: "linear-gradient(135deg, #111 0%, #1a1a1a 100%)",
-              border: "1px solid rgba(34,197,94,0.3)", borderBottom: "none", borderRadius: "20px 20px 0 0", padding: "18px 16px 28px 148px", boxShadow: "0 -8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,197,94,0.08)", pointerEvents: "all", position: "relative", zIndex: 1,
+              border: "1px solid rgba(34,197,94,0.3)", borderBottom: "none", borderRadius: "20px 20px 0 0", padding: "18px 16px 28px 120px", boxShadow: "0 -8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,197,94,0.08)", pointerEvents: "all", position: "relative", zIndex: 1,
             }}
           >
             <button
@@ -370,7 +370,7 @@ export default function InstallPrompt() {
               <X style={{ width: 17, height: 17 }} />
             </button>
             <p style={{ color: "#fff", fontWeight: 900, fontSize: 17, margin: "0 0 3px", fontFamily: "Oxanium, sans-serif", letterSpacing: "0.04em", textTransform: "uppercase" }}>INSTALL GUBER</p>
-            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: "0 0 14px", lineHeight: 1.4 }}>Install GUBER — takes 2 seconds</p>
+            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: "0 0 14px", lineHeight: 1.4 }}>Add GUBER to your device for faster access and a smoother experience.</p>
             <button
               onClick={handleInstall}
               style={{ background: "#22C55E", color: "#000", border: "none", borderRadius: 12, padding: "11px 22px", fontWeight: 900, fontSize: 14, fontFamily: "Oxanium, sans-serif", letterSpacing: "0.06em", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, boxShadow: "0 0 20px rgba(34,197,94,0.4)" }}

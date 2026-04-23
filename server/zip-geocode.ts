@@ -5,6 +5,51 @@ import { eq } from "drizzle-orm";
 
 const TTL_DAYS = 90;
 
+// ── Module-level cache for full geocode results (city/state/county) ──────────
+export interface ZipFullInfo {
+  lat: number;
+  lng: number;
+  city: string;
+  state: string;
+  county: string;
+}
+
+const fullInfoCache = new Map<string, ZipFullInfo>();
+
+async function fetchCountyFromGoogle(zip: string, lat: number, lng: number): Promise<string> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return "";
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=administrative_area_level_2&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return "";
+    const data = await res.json() as { results?: Array<{ address_components: Array<{ types: string[]; long_name: string }> }> };
+    const result = data.results?.[0];
+    if (!result) return "";
+    const countyComp = result.address_components.find(c => c.types.includes("administrative_area_level_2"));
+    return countyComp?.long_name?.replace(/ County$/i, "") ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function geocodeZipFull(zip: string): Promise<ZipFullInfo | null> {
+  const z = (zip || "").trim().replace(/-\d{4}$/, "").padStart(5, "0");
+  if (!/^\d{5}$/.test(z)) return null;
+
+  if (fullInfoCache.has(z)) return fullInfoCache.get(z)!;
+
+  const staticResult = zipcodesLib.lookup(z);
+  if (!staticResult) return null;
+
+  const { latitude: lat, longitude: lng, city, state } = staticResult;
+  const county = await fetchCountyFromGoogle(z, lat, lng);
+
+  const info: ZipFullInfo = { lat, lng, city: city || "", state: state || "", county };
+  fullInfoCache.set(z, info);
+  return info;
+}
+
 export interface ZipCoords {
   latitude: number;
   longitude: number;

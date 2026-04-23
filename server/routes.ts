@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { lookupZip, geocodeZip, flushZipGeocodeCache } from "./zip-geocode";
+import { lookupZip, geocodeZip, geocodeZipFull, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -10032,6 +10032,155 @@ YOUR BEHAVIOR:
       res.json({ users, total: users.length });
     } catch (err: any) {
       console.error("[GUBER] /api/admin/user-density/zip error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── AREA DENSITY — city/county/state breakdown ──────────────────────────
+  app.get("/api/admin/user-density/by-area", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const validFilters = ["all", "recent", "og", "helper", "business", "cash_drop"];
+      const filter = validFilters.includes(req.query.filter as string) ? (req.query.filter as string) : "all";
+
+      const recentExpr = `(
+        u.clocked_in_at > NOW() - INTERVAL '30 days'
+        OR u.clocked_out_at > NOW() - INTERVAL '30 days'
+        OR (u.clocked_in_at IS NULL AND u.clocked_out_at IS NULL AND u.created_at > NOW() - INTERVAL '30 days')
+      )`;
+
+      let queryText: string;
+      if (filter === "cash_drop") {
+        queryText = `
+          WITH participants AS (SELECT DISTINCT user_id FROM cash_drop_attempts),
+          base AS (
+            SELECT u.* FROM users u
+            INNER JOIN participants p ON p.user_id = u.id
+            WHERE u.zipcode IS NOT NULL AND u.zipcode != ''
+              AND (u.banned IS NULL OR u.banned = false)
+          )
+          SELECT b.zipcode, COUNT(*) AS total,
+            SUM(CASE WHEN ${recentExpr.replace(/u\./g, "b.")} THEN 1 ELSE 0 END) AS recently_active,
+            SUM(CASE WHEN b.day1_og = true THEN 1 ELSE 0 END) AS day1_og,
+            SUM(CASE WHEN b.account_type IS NOT NULL AND b.account_type != 'personal' THEN 1 ELSE 0 END) AS business,
+            SUM(CASE WHEN b.role IN ('helper', 'both') THEN 1 ELSE 0 END) AS helpers
+          FROM base b GROUP BY b.zipcode ORDER BY total DESC`;
+      } else {
+        let whereExtra = "";
+        if (filter === "recent") whereExtra = `AND ${recentExpr}`;
+        else if (filter === "og") whereExtra = `AND u.day1_og = true`;
+        else if (filter === "helper") whereExtra = `AND u.role IN ('helper', 'both')`;
+        else if (filter === "business") whereExtra = `AND u.account_type IS NOT NULL AND u.account_type != 'personal'`;
+        queryText = `
+          SELECT u.zipcode, COUNT(*) AS total,
+            SUM(CASE WHEN ${recentExpr} THEN 1 ELSE 0 END) AS recently_active,
+            SUM(CASE WHEN u.day1_og = true THEN 1 ELSE 0 END) AS day1_og,
+            SUM(CASE WHEN u.account_type IS NOT NULL AND u.account_type != 'personal' THEN 1 ELSE 0 END) AS business,
+            SUM(CASE WHEN u.role IN ('helper', 'both') THEN 1 ELSE 0 END) AS helpers
+          FROM users u
+          WHERE u.zipcode IS NOT NULL AND u.zipcode != ''
+            AND (u.banned IS NULL OR u.banned = false) ${whereExtra}
+          GROUP BY u.zipcode ORDER BY total DESC`;
+      }
+
+      const result = await pool.query(queryText);
+
+      // Geocode each zip and aggregate by city+state
+      const areaMap = new Map<string, {
+        city: string; state: string; county: string;
+        total: number; recentlyActive: number; day1OgCount: number; businessCount: number; helperCount: number;
+        zips: string[];
+      }>();
+
+      await Promise.all(result.rows.map(async (r: any) => {
+        const info = await geocodeZipFull(r.zipcode);
+        if (!info) return;
+        const key = `${info.city}|${info.state}`;
+        const existing = areaMap.get(key);
+        if (existing) {
+          existing.total += parseInt(r.total, 10);
+          existing.recentlyActive += parseInt(r.recently_active, 10);
+          existing.day1OgCount += parseInt(r.day1_og, 10);
+          existing.businessCount += parseInt(r.business, 10);
+          existing.helperCount += parseInt(r.helpers, 10);
+          existing.zips.push(r.zipcode);
+        } else {
+          areaMap.set(key, {
+            city: info.city,
+            state: info.state,
+            county: info.county,
+            total: parseInt(r.total, 10),
+            recentlyActive: parseInt(r.recently_active, 10),
+            day1OgCount: parseInt(r.day1_og, 10),
+            businessCount: parseInt(r.business, 10),
+            helperCount: parseInt(r.helpers, 10),
+            zips: [r.zipcode],
+          });
+        }
+      }));
+
+      const areas = Array.from(areaMap.values())
+        .filter(a => a.total > 0)
+        .sort((a, b) => b.total - a.total);
+
+      const userTotal = areas.reduce((s, a) => s + a.total, 0);
+      res.json({ areas, areaCount: areas.length, userTotal });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/user-density/area", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const city = ((req.query.city as string) || "").trim();
+      const state = ((req.query.state as string) || "").trim();
+      const filter = ((req.query.filter as string) || "all").trim();
+
+      if (!city || !state) return res.status(400).json({ error: "city and state required" });
+
+      const filterClause =
+        filter === "recent"    ? `AND (u.clocked_in_at > NOW() - INTERVAL '30 days' OR u.clocked_out_at > NOW() - INTERVAL '30 days' OR (u.clocked_in_at IS NULL AND u.clocked_out_at IS NULL AND u.created_at > NOW() - INTERVAL '30 days'))` :
+        filter === "og"        ? `AND u.day1_og = true` :
+        filter === "helper"    ? `AND u.role IN ('helper', 'both')` :
+        filter === "business"  ? `AND u.account_type IS NOT NULL AND u.account_type != 'personal'` :
+        filter === "cash_drop" ? `AND EXISTS (SELECT 1 FROM cash_drop_attempts cda WHERE cda.user_id = u.id)` :
+        "";
+
+      const zipcodesModule = await import("zipcodes");
+      const zipsLib = (zipcodesModule as any).default ?? zipcodesModule;
+      const zipsByCity = zipsLib.lookupByName?.(city, state) ?? [];
+      const allZips: string[] = [];
+      if (Array.isArray(zipsByCity)) {
+        for (const z of zipsByCity as Array<{ zip: string }>) {
+          if (z?.zip) allZips.push(z.zip);
+        }
+      }
+
+      if (allZips.length === 0) {
+        return res.json({ users: [], total: 0 });
+      }
+
+      const placeholders = allZips.map((_, i) => `$${i + 1}`).join(",");
+      const queryText = `
+        SELECT u.id, u.full_name, u.username, u.account_type, u.day1_og, u.jobs_completed, u.role
+        FROM users u
+        WHERE u.zipcode IN (${placeholders}) ${filterClause}
+        ORDER BY u.full_name ASC
+      `;
+      const result = await pool.query(queryText, allZips);
+
+      type UserRow = { id: string | number; full_name: string; username: string; account_type: string; day1_og: boolean; jobs_completed: string | number; role: string };
+      const users = (result.rows as UserRow[]).map(r => ({
+        id: Number(r.id),
+        fullName: r.full_name || r.username || "Unknown",
+        username: r.username,
+        accountType: r.account_type,
+        isOg: Boolean(r.day1_og),
+        jobsCompleted: Number(r.jobs_completed) || 0,
+        role: r.role,
+      }));
+
+      res.json({ users, total: users.length });
+    } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
