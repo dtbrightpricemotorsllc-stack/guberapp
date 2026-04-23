@@ -28,8 +28,8 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
   const [localLogo1, setLocalLogo1] = useState<string | null>(user?.cashDropBrandLogo ?? null);
   const [localLogo2, setLocalLogo2] = useState<string | null>(user?.cashDropLogo2 ?? null);
   const [activeLogo, setActiveLogo] = useState<1 | 2>((user?.cashDropActiveLogo ?? 1) as 1 | 2);
-  const [logo1AdminUploaded] = useState<boolean>(!!user?.cashDropLogo1AdminUploaded);
-  const [logo2AdminUploaded] = useState<boolean>(!!user?.cashDropLogo2AdminUploaded);
+  const [logo1AdminUploaded, setLogo1AdminUploaded] = useState<boolean>(!!user?.cashDropLogo1AdminUploaded);
+  const [logo2AdminUploaded, setLogo2AdminUploaded] = useState<boolean>(!!user?.cashDropLogo2AdminUploaded);
   const logoRef1 = useRef<HTMLInputElement>(null);
   const logoRef2 = useRef<HTMLInputElement>(null);
 
@@ -46,8 +46,8 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
       const url = data.url as string;
-      if (slot === 1) setLocalLogo1(url);
-      else setLocalLogo2(url);
+      if (slot === 1) { setLocalLogo1(url); setLogo1AdminUploaded(false); }
+      else { setLocalLogo2(url); setLogo2AdminUploaded(false); }
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Logo saved" });
     } catch (e: any) {
@@ -62,8 +62,8 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
       const res = await apiRequest("DELETE", `/api/users/me/cash-drop-logo/${slot}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Delete failed");
-      if (slot === 1) setLocalLogo1(null);
-      else setLocalLogo2(null);
+      if (slot === 1) { setLocalLogo1(null); setLogo1AdminUploaded(false); }
+      else { setLocalLogo2(null); setLogo2AdminUploaded(false); }
       setDeleteConfirm(null);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Logo removed" });

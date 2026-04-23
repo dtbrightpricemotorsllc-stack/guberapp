@@ -4885,6 +4885,7 @@ const deleteLogo = async (slot: 1 | 2) => {
   try {
     const res = await apiRequest("DELETE", `/api/admin/users/${localUser.id}/cash-drop-logo/${slot}`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Delete failed");
     setLocalUser(data.user);
     queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     setLogoDeleteConfirm(null);
@@ -4898,6 +4899,7 @@ const setActiveLogoSlot = async (slot: 1 | 2) => {
   try {
     const res = await apiRequest("PATCH", `/api/admin/users/${localUser.id}/cash-drop-logo/active`, { slot });
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to update active slot");
     setLocalUser(data.user);
     queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
   } catch (e: any) {
