@@ -415,45 +415,44 @@ export default function Dashboard() {
 
   const postedJobs = myJobs?.filter((j) => j.postedById === user?.id) || [];
   const acceptedJobs = myJobs?.filter((j) => j.assignedHelperId === user?.id) || [];
-  // Mirrors filterJobsForHireTab(pending_confirm) ∪ (proof_submitted) in my-jobs.tsx.
+  // Poster action items: fund the worker or review submitted proof.
   const awaitingHireAction = postedJobs.filter((j) =>
     ["accepted_pending_payment", "proof_submitted"].includes(j.status),
   );
-  // Mirrors filterJobsForWorkTab(proof_needed) in my-jobs.tsx, plus funded → locked_in_progress.
+  // Worker action items: start the funded job or submit required proof.
+  // proof_submitted is excluded — that is "waiting on poster", not a worker action.
   const awaitingWorkAction = acceptedJobs.filter(
     (j) =>
       j.status === "funded" ||
-      j.status === "proof_submitted" ||
       (j.status === "in_progress" && j.proofRequired),
   );
-
-  const hireDeepLink = (job: Job) =>
-    `/my-jobs?mode=hire&tab=${job.status === "accepted_pending_payment" ? "pending_confirm" : "proof_submitted"}`;
-  const workDeepLink = (job: Job) =>
-    `/my-jobs?mode=work&tab=${job.status === "funded" ? "locked_in_progress" : "proof_needed"}`;
 
   const mostUrgentHireJob =
     awaitingHireAction.find((j) => j.status === "accepted_pending_payment") ||
     awaitingHireAction[0];
   const mostUrgentWorkJob =
     awaitingWorkAction.find((j) => j.status === "funded") || awaitingWorkAction[0];
-  const hireUrgentDeepLink = mostUrgentHireJob
-    ? hireDeepLink(mostUrgentHireJob)
-    : "/my-jobs?mode=hire";
-  const workUrgentDeepLink = mostUrgentWorkJob
-    ? workDeepLink(mostUrgentWorkJob)
-    : "/my-jobs?mode=work";
+  const hireUrgentDeepLink = `/my-jobs?mode=hire&tab=${
+    mostUrgentHireJob?.status === "proof_submitted" ? "proof_submitted" : "pending_confirm"
+  }`;
+  const workUrgentDeepLink = `/my-jobs?mode=work&tab=${
+    mostUrgentWorkJob?.status === "funded" ? "locked_in_progress" : "proof_needed"
+  }`;
 
-  // First-touch toast per session per new urgent job ID.
-  const urgentSignature = [
-    ...awaitingHireAction.map((j) => `h:${j.id}:${j.status}`),
-    ...awaitingWorkAction.map((j) => `w:${j.id}:${j.status}`),
-  ]
-    .sort()
-    .join("|");
+  // First-touch toast: one per session naming the single most urgent job
+  // (HIRE funding > HIRE proof review > WORK start > WORK submit-proof).
+  // sessionStorage records every urgent ID we've alerted on so the toast
+  // doesn't re-fire for the same job, but a brand-new urgent job appearing
+  // mid-session still gets its own first-touch toast.
+  const topPriorityJob =
+    awaitingHireAction.find((j) => j.status === "accepted_pending_payment") ||
+    awaitingHireAction.find((j) => j.status === "proof_submitted") ||
+    awaitingWorkAction.find((j) => j.status === "funded") ||
+    awaitingWorkAction[0];
+  const topPriorityId = topPriorityJob?.id;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !topPriorityJob) return;
     const sessionKey = `guber_urgent_alerted_${user.id}`;
     let alreadyAlerted = new Set<number>();
     try {
@@ -464,58 +463,46 @@ export default function Dashboard() {
     } catch {
       alreadyAlerted = new Set();
     }
+    if (alreadyAlerted.has(topPriorityJob.id)) return;
 
-    const candidates: Array<{ job: Job; href: string; copy: string }> = [];
-    for (const job of awaitingHireAction) {
-      const isPay = job.status === "accepted_pending_payment";
-      candidates.push({
-        job,
-        href: hireDeepLink(job),
-        copy: isPay
-          ? `A worker accepted "${job.title}" — fund it now to lock them in.`
-          : `Proof submitted on "${job.title}" — review it now to release payment.`,
-      });
-    }
-    for (const job of awaitingWorkAction) {
-      let copy: string;
-      if (job.status === "funded") {
-        copy = `"${job.title}" is funded — start the work to lock in your payout.`;
-      } else if (job.status === "proof_submitted") {
-        copy = `Proof submitted for "${job.title}" — waiting on the poster to release payment.`;
-      } else {
-        copy = `Submit proof for "${job.title}" so the poster can release your payout.`;
-      }
-      candidates.push({ job, href: workDeepLink(job), copy });
+    const isHire = topPriorityJob.postedById === user.id;
+    let copy: string;
+    let href: string;
+    if (isHire) {
+      href = hireUrgentDeepLink;
+      copy =
+        topPriorityJob.status === "accepted_pending_payment"
+          ? `A worker accepted "${topPriorityJob.title}" — fund it now to lock them in.`
+          : `Proof submitted on "${topPriorityJob.title}" — review it now to release payment.`;
+    } else {
+      href = workUrgentDeepLink;
+      copy =
+        topPriorityJob.status === "funded"
+          ? `"${topPriorityJob.title}" is funded — start the work to lock in your payout.`
+          : `Submit proof for "${topPriorityJob.title}" so the poster can release your payout.`;
     }
 
-    const newOnes = candidates.filter((c) => !alreadyAlerted.has(c.job.id));
-    if (newOnes.length === 0) return;
+    toast({
+      title: "⚠️ Action needed",
+      description: copy,
+      duration: 12000,
+      action: (
+        <ToastAction
+          altText="Take me there"
+          onClick={() => navigate(href)}
+          className="border-destructive/50 bg-destructive/15 text-destructive hover:bg-destructive/25"
+          data-testid="button-urgent-take-me-there"
+        >
+          Take me there
+        </ToastAction>
+      ),
+    });
 
-    // Cap per pass to TOAST_LIMIT (3) so excess jobs aren't silently dropped + marked.
-    const toEmit = newOnes.slice(0, 3);
-    const updated = new Set(alreadyAlerted);
-    for (const c of toEmit) {
-      toast({
-        title: "⚠️ Action needed",
-        description: c.copy,
-        duration: 12000,
-        action: (
-          <ToastAction
-            altText="Take me there"
-            onClick={() => navigate(c.href)}
-            className="border-destructive/50 bg-destructive/15 text-destructive hover:bg-destructive/25"
-            data-testid={`button-urgent-take-me-there-${c.job.id}`}
-          >
-            Take me there
-          </ToastAction>
-        ),
-      });
-      updated.add(c.job.id);
-    }
+    alreadyAlerted.add(topPriorityJob.id);
     try {
-      sessionStorage.setItem(sessionKey, JSON.stringify(Array.from(updated)));
+      sessionStorage.setItem(sessionKey, JSON.stringify(Array.from(alreadyAlerted)));
     } catch {}
-  }, [user, urgentSignature, awaitingHireAction, awaitingWorkAction, navigate, toast]);
+  }, [user, topPriorityId, topPriorityJob, hireUrgentDeepLink, workUrgentDeepLink, navigate, toast]);
   const boostableJobs = postedJobs.filter((j) => j.boostSuggested && j.suggestedBudget && ["posted_public", "accepted_pending_payment"].includes(j.status));
 
   const boostMutation = useMutation({
