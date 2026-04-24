@@ -27,6 +27,7 @@ import {
   Circle,
 } from "lucide-react";
 import type { Job } from "@shared/schema";
+import { formatJobTime } from "@/lib/job-time";
 
 type Mode = "hire" | "work";
 
@@ -273,12 +274,15 @@ function MyJobCard({ job, mode }: { job: Job; mode: Mode }) {
               <MapPin className="w-3 h-3" />{job.locationApprox || `${job.zip} area`}
             </span>
           )}
-          {job.createdAt && (
-            <span className="flex items-center gap-0.5">
-              <Clock className="w-3 h-3" />
-              {new Date(job.createdAt).toLocaleDateString()}
-            </span>
-          )}
+          {job.createdAt && (() => {
+            const t = formatJobTime(job.createdAt, job.zip, { month: "short", day: "numeric" });
+            return (
+              <span className="flex items-center gap-0.5" title={t?.viewerLocal ? `(${t.viewerLocal})` : undefined} data-testid={`text-myjob-created-${job.id}`}>
+                <Clock className="w-3 h-3" />
+                {t?.primary}
+              </span>
+            );
+          })()}
         </div>
 
         <div className="flex items-center gap-1.5">

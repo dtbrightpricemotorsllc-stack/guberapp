@@ -3,6 +3,8 @@ import { Card } from "@/components/ui/card";
 import { MapPin, AlertTriangle, Clock, Lock, ShieldCheck, Award, TrendingUp, Handshake } from "lucide-react";
 import { Link } from "wouter";
 import type { Job } from "@shared/schema";
+import { useAuth } from "@/lib/auth-context";
+import { formatJobTime } from "@/lib/job-time";
 
 const statusColors: Record<string, string> = {
   posted_public: "bg-primary/15 text-primary border-primary/30",
@@ -45,6 +47,8 @@ const tierBadgeInfo: Record<string, { label: string; color: string; icon: React.
 };
 
 export function JobCard({ job }: { job: Job }) {
+  const { user } = useAuth();
+  const viewerIsOwner = !!user && user.id === job.postedById;
   const showApproxLocation = !["funded", "active", "in_progress", "completion_submitted", "completed_paid"].includes(job.status);
 
   const tierRequired = job.category === "Skilled Labor"
@@ -73,7 +77,10 @@ export function JobCard({ job }: { job: Job }) {
                 </div>
               )}
               <div className="flex items-center gap-1 flex-wrap justify-end">
-                {(job as any).autoIncreaseEnabled && (
+                {/* Auto-increase badge is poster-only intel — server strips
+                    these fields for non-posters, but we also gate explicitly
+                    so a stale cache or API regression can't leak it. */}
+                {viewerIsOwner && (job as any).autoIncreaseEnabled && (
                   <Badge variant="outline" className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]" data-testid={`badge-auto-increase-${job.id}`}>
                     <TrendingUp className="w-2.5 h-2.5 mr-0.5" />
                     {(() => {
@@ -189,12 +196,15 @@ export function JobCard({ job }: { job: Job }) {
                     : `${(job as any).estimatedDurationHours}h`}
                 </span>
               )}
-              {job.createdAt && !(job as any).estimatedMinutes && !(job as any).estimatedDurationHours && (
-                <span className="flex items-center gap-0.5">
-                  <Clock className="w-3 h-3" />
-                  {new Date(job.createdAt).toLocaleDateString()}
-                </span>
-              )}
+              {job.createdAt && !(job as any).estimatedMinutes && !(job as any).estimatedDurationHours && (() => {
+                const t = formatJobTime(job.createdAt, job.zip, { month: "short", day: "numeric" });
+                return (
+                  <span className="flex items-center gap-0.5" title={t?.viewerLocal ? `(${t.viewerLocal})` : undefined} data-testid={`text-created-${job.id}`}>
+                    <Clock className="w-3 h-3" />
+                    {t?.primary}
+                  </span>
+                );
+              })()}
             </div>
             <Badge variant="outline" className={`text-[10px] ${statusColors[job.status] || ""}`}>
               {job.status.replace("_", " ")}

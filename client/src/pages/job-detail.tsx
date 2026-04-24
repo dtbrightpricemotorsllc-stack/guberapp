@@ -955,7 +955,10 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <p className="text-lg font-display font-bold guber-text-green flex items-center gap-0.5">
                   <DollarSign className="w-4 h-4" />{job.budget}
                 </p>
-                {(job as any).autoIncreaseEnabled && (
+                {/* Auto-increase ceiling is poster-only — gate explicitly so
+                    a stale cache or future API regression can never leak the
+                    ladder to a worker who's deciding whether to wait. */}
+                {isOwner && (job as any).autoIncreaseEnabled && (
                   <div className="mt-1.5 space-y-0.5" data-testid="auto-increase-detail-badge">
                     <div className="flex items-center gap-1">
                       <TrendingUp className="w-3 h-3 text-emerald-400" />
