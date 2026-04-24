@@ -199,9 +199,12 @@ export function JobCard({ job }: { job: Job }) {
               {job.createdAt && !(job as any).estimatedMinutes && !(job as any).estimatedDurationHours && (() => {
                 const t = formatJobTime(job.createdAt, job.zip, { month: "short", day: "numeric" });
                 return (
-                  <span className="flex items-center gap-0.5" title={t?.viewerLocal ? `(${t.viewerLocal})` : undefined} data-testid={`text-created-${job.id}`}>
+                  <span className="flex items-center gap-0.5" data-testid={`text-created-${job.id}`}>
                     <Clock className="w-3 h-3" />
                     {t?.primary}
+                    {t?.viewerLocal && (
+                      <span className="text-[10px] text-muted-foreground/80 ml-0.5">({t.viewerLocal})</span>
+                    )}
                   </span>
                 );
               })()}

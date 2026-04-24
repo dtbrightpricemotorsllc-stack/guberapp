@@ -474,20 +474,37 @@ function stripPosterOnlyFields(job: any) {
 
 // Wrap a job-returning response so mutation endpoints don't accidentally
 // leak poster-only fields (auto-increase config, suggested boost, internal
-// admin notes) to assigned helpers or other viewers.
-function respondJob(req: Request, res: Response, job: any, extra?: Record<string, any>) {
+// admin notes) to assigned helpers or other viewers. Admins always receive
+// the full unsanitized object so admin tools can show the real state.
+async function respondJob(req: Request, res: Response, job: any, extra?: Record<string, any>) {
   if (!job) return res.json(job);
-  const sanitized = sanitizeJobForPublic(job, req.session.userId);
+  const isAdmin = await viewerIsAdmin(req);
+  const sanitized = sanitizeJobForPublic(job, req.session.userId, isAdmin);
   if (extra) return res.json({ ...sanitized, ...extra });
   return res.json(sanitized);
 }
 
-function sanitizeJobForPublic(job: any, viewerId: number | undefined) {
+async function viewerIsAdmin(req: Request): Promise<boolean> {
+  const viewerId = req.session?.userId;
+  if (!viewerId) return false;
+  try {
+    const u = await storage.getUser(viewerId);
+    return u?.role === "admin";
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeJobForPublic(job: any, viewerId: number | undefined, isAdmin: boolean = false) {
   const isOwner = viewerId === job.postedById;
   const isHelper = viewerId === job.assignedHelperId;
   const isLocked = ["funded", "active", "in_progress", "completion_submitted", "proof_submitted"].includes(job.status);
 
   const { platformFee, ...publicJob } = job;
+
+  // Admins always see the full job (including pricing/internal fields) so
+  // admin dashboards and dispute tools work correctly.
+  if (isAdmin) return publicJob;
 
   // Owner sees everything (including auto-increase config and admin internals).
   if (isOwner) {
@@ -4921,7 +4938,7 @@ export async function registerRoutes(
 
       // If webhook already processed this, just return the job
       if (job.isPaid && job.status !== "draft") {
-        return respondJob(req, res, job);
+        return await respondJob(req, res, job);
       }
 
       const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
@@ -4956,7 +4973,7 @@ export async function registerRoutes(
         });
 
         notifyNearbyAvailableWorkers(updated || job).catch(() => {});
-        respondJob(req, res, updated);
+        await respondJob(req, res, updated);
       } else {
         res.status(400).json({ message: "Payment not completed" });
       }
@@ -5083,7 +5100,7 @@ export async function registerRoutes(
         priority: "high",
       });
 
-      respondJob(req, res, updated);
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5300,7 +5317,7 @@ export async function registerRoutes(
       if (job.postedById !== req.session.userId) {
         return res.status(403).json({ message: "Not your job" });
       }
-      if (job.status === "funded") return respondJob(req, res, job);
+      if (job.status === "funded") return await respondJob(req, res, job);
 
       let chargeId: string | null = null;
       const paymentIntentId = stripeSession.payment_intent as string;
@@ -5343,7 +5360,7 @@ export async function registerRoutes(
         });
       }
 
-      respondJob(req, res, updated);
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5584,8 +5601,8 @@ export async function registerRoutes(
       if (!isBuyer && !isHelper) return res.status(403).json({ message: "Not authorized" });
 
       // Idempotency — if already confirmed, return current state immediately
-      if (isBuyer && job.buyerConfirmed) return respondJob(req, res, job);
-      if (isHelper && job.helperConfirmed) return respondJob(req, res, job);
+      if (isBuyer && job.buyerConfirmed) return await respondJob(req, res, job);
+      if (isHelper && job.helperConfirmed) return await respondJob(req, res, job);
 
       // GPS gate: helper must have physically checked in ("I've Arrived") before confirming
       if (isHelper && !(job as any).arrivedAt) {
@@ -5905,7 +5922,7 @@ export async function registerRoutes(
         });
       }
 
-      respondJob(req, res, updated, confirmNewBadge ? { newBadge: confirmNewBadge } : undefined);
+      await respondJob(req, res, updated, confirmNewBadge ? { newBadge: confirmNewBadge } : undefined);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5970,7 +5987,7 @@ export async function registerRoutes(
         details: `Dispute opened on job ${jobId}: ${reason || "No reason provided"}`,
       });
 
-      respondJob(req, res, updated);
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
