@@ -384,8 +384,20 @@ function JobList({ jobs, mode, isLoading }: { jobs: Job[]; mode: Mode; isLoading
 
 export default function MyJobs() {
   const { user } = useAuth();
-  const [mode, setMode] = useState<Mode>("hire");
   const { toast } = useToast();
+
+  // Initialize mode + active tab from URL params so dashboard's urgent-action
+  // deep links (?mode=hire&tab=pending_confirm) land on the right place.
+  const initialParams = (() => {
+    if (typeof window === "undefined") return { mode: "hire" as Mode, tab: undefined as string | undefined };
+    const sp = new URLSearchParams(window.location.search);
+    const m = sp.get("mode");
+    const t = sp.get("tab") || undefined;
+    return { mode: (m === "work" ? "work" : "hire") as Mode, tab: t };
+  })();
+
+  const [mode, setMode] = useState<Mode>(initialParams.mode);
+  const [activeTab, setActiveTab] = useState<string | undefined>(initialParams.tab);
 
   const confirmBarterMutation = useMutation({
     mutationFn: async ({ sessionId, jobId }: { sessionId: string; jobId: string }) => {
@@ -418,6 +430,12 @@ export default function MyJobs() {
   const allJobs = jobs || [];
   const tabs = mode === "hire" ? HIRE_TABS : WORK_TABS;
   const defaultTab = mode === "hire" ? "posted" : "accepted_pending";
+  // The Tabs component is now controlled so deep links can pre-select an
+  // urgent tab. Fall back to the per-mode default when no URL hint is given
+  // or when the hint doesn't match the current mode's tab list.
+  const validTabValues = tabs.map((t) => t.value as string);
+  const currentTab =
+    activeTab && validTabValues.includes(activeTab) ? activeTab : defaultTab;
 
   return (
     <GuberLayout>
@@ -444,21 +462,27 @@ export default function MyJobs() {
         <div className="premium-toggle mb-5 flex animate-fade-in" data-testid="mode-toggle">
           <button
             className={`premium-toggle-btn flex-1 py-2 text-sm font-display text-center ${mode === "hire" ? "active" : "text-muted-foreground"}`}
-            onClick={() => setMode("hire")}
+            onClick={() => {
+              setMode("hire");
+              setActiveTab(undefined);
+            }}
             data-testid="button-hire-mode"
           >
             Hire Mode
           </button>
           <button
             className={`premium-toggle-btn flex-1 py-2 text-sm font-display text-center ${mode === "work" ? "active" : "text-muted-foreground"}`}
-            onClick={() => setMode("work")}
+            onClick={() => {
+              setMode("work");
+              setActiveTab(undefined);
+            }}
             data-testid="button-work-mode"
           >
             Work Mode
           </button>
         </div>
 
-        <Tabs defaultValue={defaultTab} key={mode} className="w-full">
+        <Tabs value={currentTab} onValueChange={setActiveTab} key={mode} className="w-full">
           <div className="overflow-x-auto -mx-4 px-4 mb-4">
             <TabsList className="glass-card premium-border w-max min-w-full">
               {tabs.map((tab) => {
