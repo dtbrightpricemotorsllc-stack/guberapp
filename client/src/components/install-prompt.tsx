@@ -149,7 +149,15 @@ function useInstallEligible(check: () => boolean = isInstallEligible) {
     };
 
     const handler = () => recheck();
-    const onInstalled = () => setEligible(false);
+    const onInstalled = () => {
+      // Persist the flag now even if standalone hasn't been observed yet —
+      // covers cases where the OS installs the PWA without an immediate
+      // standalone launch.
+      try {
+        localStorage.setItem(INSTALLED_KEY, "1");
+      } catch {}
+      setEligible(false);
+    };
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", onInstalled);
     document.addEventListener("visibilitychange", onVisibility);
