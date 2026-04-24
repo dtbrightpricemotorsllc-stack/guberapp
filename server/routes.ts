@@ -4116,7 +4116,7 @@ export async function registerRoutes(
       }
 
       const updated = await storage.updateJob(id, allowedUpdate);
-      res.json(updated);
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -4207,7 +4207,9 @@ export async function registerRoutes(
         details: `${escalatedBy} escalated job ${jobId} to admin review.${reason ? ` Reason: ${reason}` : ""}`,
       });
 
-      res.json(updated);
+      // Helpers can hit this endpoint, so funnel the response through
+      // respondJob to strip poster-only price-intent + internal fields.
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5971,7 +5973,7 @@ export async function registerRoutes(
         }
       }
 
-      res.json(updated);
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -6152,7 +6154,7 @@ export async function registerRoutes(
         note: `Reward boosted from $${job.budget} to $${newBudget}`,
       });
 
-      res.json(updated);
+      await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
