@@ -41,20 +41,41 @@ function isAndroidNonChrome() {
   return !supportsNative;
 }
 
-function isAlreadyInstalled() {
+const SNOOZE_KEY = "guber-install-snoozed-until";
+const SESSION_DISMISS_KEY = "pwa-install-dismissed";
+const BANNER_DISMISS_KEY = "guber-install-banner-dismissed";
+const INSTALLED_KEY = "guber-pwa-installed";
+const POSTAUTH_KEY = "guber-install-postauth-until";
+const OPEN_EVENT = "guber:open-install";
+
+function isStandaloneNow() {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
     (window.navigator as any).standalone === true
   );
 }
 
-const SNOOZE_KEY = "guber-install-snoozed-until";
-const SESSION_DISMISS_KEY = "pwa-install-dismissed";
-const BANNER_DISMISS_KEY = "guber-install-banner-dismissed";
-const OPEN_EVENT = "guber:open-install";
+// Once we've ever seen standalone mode, remember it. Google OAuth bounces the
+// user out to the system browser tab, which momentarily breaks the standalone
+// check on return — so the persisted flag is what we trust after install.
+function isAlreadyInstalled() {
+  if (isStandaloneNow()) {
+    if (localStorage.getItem(INSTALLED_KEY) !== "1") {
+      localStorage.setItem(INSTALLED_KEY, "1");
+    }
+    return true;
+  }
+  return localStorage.getItem(INSTALLED_KEY) === "1";
+}
 
 function isSnoozed() {
   const until = localStorage.getItem(SNOOZE_KEY);
+  if (!until) return false;
+  return Date.now() < Number(until);
+}
+
+function isPostAuthCooldown() {
+  const until = sessionStorage.getItem(POSTAUTH_KEY);
   if (!until) return false;
   return Date.now() < Number(until);
 }
@@ -75,22 +96,66 @@ function detectMode(): "safari" | "not-safari" | "android-chrome" | "native" | n
 function isInstallEligible(): boolean {
   if (isAlreadyInstalled()) return false;
   if (isSnoozed()) return false;
+  if (isPostAuthCooldown()) return false;
   if (sessionStorage.getItem(SESSION_DISMISS_KEY)) return false;
   return detectMode() !== null;
 }
 
-// ── Tiny right-aligned text-button hint (replaces full banner) ────────────────
-export function InstallHint() {
+// Shared eligibility hook — also schedules a recheck when the post-OAuth
+// cooldown is set to expire so the prompt becomes available again without a
+// page reload, and re-evaluates whenever the tab returns to foreground.
+function useInstallEligible() {
   const [eligible, setEligible] = useState(false);
 
   useEffect(() => {
-    const recheck = () => setEligible(isInstallEligible());
+    let cooldownTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleCooldownRecheck = () => {
+      if (cooldownTimer) {
+        clearTimeout(cooldownTimer);
+        cooldownTimer = null;
+      }
+      const until = Number(sessionStorage.getItem(POSTAUTH_KEY) || "0");
+      const remaining = until - Date.now();
+      if (remaining > 0) {
+        // small buffer so the recheck happens just after expiry
+        cooldownTimer = setTimeout(() => {
+          cooldownTimer = null;
+          recheck();
+        }, remaining + 50);
+      }
+    };
+
+    const recheck = () => {
+      setEligible(isInstallEligible());
+      scheduleCooldownRecheck();
+    };
+
     recheck();
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") recheck();
+    };
+
     const handler = () => recheck();
+    const onInstalled = () => setEligible(false);
     window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => setEligible(false));
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", onInstalled);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (cooldownTimer) clearTimeout(cooldownTimer);
+    };
   }, []);
+
+  return eligible;
+}
+
+// ── Tiny right-aligned text-button hint (replaces full banner) ────────────────
+export function InstallHint() {
+  const eligible = useInstallEligible();
 
   if (!eligible) return null;
 
@@ -109,43 +174,67 @@ export function InstallHint() {
 
 // ── Floating mascot helper (subtle, anchored bottom-right) ────────────────────
 export function InstallMascot() {
-  const [eligible, setEligible] = useState(false);
+  const eligible = useInstallEligible();
   const [showBubble, setShowBubble] = useState(false);
   const bubbleShownRef = useRef(
     typeof window !== "undefined" && sessionStorage.getItem("guber-mascot-bubble-shown") === "1"
   );
   const triggerArmedRef = useRef(false);
 
-  useEffect(() => {
-    const recheck = () => setEligible(isInstallEligible());
-    recheck();
-    const handler = () => recheck();
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => setEligible(false));
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  // Arm the speech-bubble trigger once eligible — first scroll OR ~6s timer
+  // Arm the speech-bubble trigger once eligible — first scroll OR ~6s timer.
+  // The 6s timer requires the page to actually be visible for the full delay,
+  // so it doesn't fire while the tab is backgrounded during a Google OAuth
+  // round trip and pop up the moment the user lands back on the dashboard.
   useEffect(() => {
     if (!eligible || bubbleShownRef.current || triggerArmedRef.current) return;
     triggerArmedRef.current = true;
 
-    const trigger = () => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const VISIBLE_DELAY_MS = 6000;
+
+    const fire = () => {
       if (bubbleShownRef.current) return;
       bubbleShownRef.current = true;
       sessionStorage.setItem("guber-mascot-bubble-shown", "1");
       setShowBubble(true);
       setTimeout(() => setShowBubble(false), 3000);
-      window.removeEventListener("scroll", trigger);
-      clearTimeout(timer);
+      window.removeEventListener("scroll", scrollTrigger);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (timer) clearTimeout(timer);
     };
 
-    const timer = setTimeout(trigger, 6000);
-    window.addEventListener("scroll", trigger, { passive: true, once: true });
+    const scrollTrigger = () => {
+      if (document.visibilityState === "visible") fire();
+    };
+
+    const startTimer = () => {
+      if (timer || bubbleShownRef.current) return;
+      timer = setTimeout(() => {
+        timer = null;
+        if (document.visibilityState === "visible") fire();
+      }, VISIBLE_DELAY_MS);
+    };
+
+    const cancelTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") startTimer();
+      else cancelTimer();
+    };
+
+    if (document.visibilityState === "visible") startTimer();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("scroll", scrollTrigger, { passive: true });
 
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener("scroll", trigger);
+      cancelTimer();
+      window.removeEventListener("scroll", scrollTrigger);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [eligible]);
 
@@ -245,12 +334,13 @@ export default function InstallPrompt() {
       setPrompt(e);
     };
     window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => {
+    const onInstalled = () => {
       setInstalled(true);
       setOpen(false);
       setShowInstalledConfirm(true);
       setTimeout(() => setShowInstalledConfirm(false), 3000);
-    });
+    };
+    window.addEventListener("appinstalled", onInstalled);
 
     // listen for explicit open requests from InstallBanner / mascot
     const openHandler = () => {
@@ -265,6 +355,7 @@ export default function InstallPrompt() {
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener(OPEN_EVENT, openHandler);
     };
   }, []);

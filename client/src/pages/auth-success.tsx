@@ -60,6 +60,16 @@ export default function AuthSuccess() {
         // Clear the token from the URL so it isn't bookmarked or leaked in history
         window.history.replaceState({}, "", "/auth-success");
 
+        // Suppress the install prompt for ~2 minutes after a Google OAuth round
+        // trip — the redirect briefly bumps the user out of standalone, and we
+        // don't want the mascot popping up the moment they land back.
+        try {
+          sessionStorage.setItem(
+            "guber-install-postauth-until",
+            String(Date.now() + 2 * 60 * 1000),
+          );
+        } catch {}
+
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
         console.log("[GUBER auth-success] token saved, fetching /api/auth/me");
         return queryClient.fetchQuery({ queryKey: ["/api/auth/me"] });
