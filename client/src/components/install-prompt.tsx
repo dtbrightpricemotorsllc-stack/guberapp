@@ -93,18 +93,29 @@ function detectMode(): "safari" | "not-safari" | "android-chrome" | "native" | n
   return null;
 }
 
+// Base eligibility used by the InstallHint button — the user-initiated entry
+// point. The hint is never suppressed by the post-OAuth cooldown so a
+// determined user can still self-trigger the install flow right away.
 function isInstallEligible(): boolean {
   if (isAlreadyInstalled()) return false;
   if (isSnoozed()) return false;
-  if (isPostAuthCooldown()) return false;
   if (sessionStorage.getItem(SESSION_DISMISS_KEY)) return false;
   return detectMode() !== null;
+}
+
+// Eligibility for the unsolicited mascot auto-fire — adds the post-OAuth
+// cooldown so the bubble doesn't pop up the moment the user lands back from
+// Google sign-in.
+function isMascotEligible(): boolean {
+  if (!isInstallEligible()) return false;
+  if (isPostAuthCooldown()) return false;
+  return true;
 }
 
 // Shared eligibility hook — also schedules a recheck when the post-OAuth
 // cooldown is set to expire so the prompt becomes available again without a
 // page reload, and re-evaluates whenever the tab returns to foreground.
-function useInstallEligible() {
+function useInstallEligible(check: () => boolean = isInstallEligible) {
   const [eligible, setEligible] = useState(false);
 
   useEffect(() => {
@@ -127,7 +138,7 @@ function useInstallEligible() {
     };
 
     const recheck = () => {
-      setEligible(isInstallEligible());
+      setEligible(check());
       scheduleCooldownRecheck();
     };
 
@@ -148,14 +159,16 @@ function useInstallEligible() {
       document.removeEventListener("visibilitychange", onVisibility);
       if (cooldownTimer) clearTimeout(cooldownTimer);
     };
-  }, []);
+  }, [check]);
 
   return eligible;
 }
 
 // ── Tiny right-aligned text-button hint (replaces full banner) ────────────────
 export function InstallHint() {
-  const eligible = useInstallEligible();
+  // Hint stays available even during the post-OAuth cooldown so a determined
+  // user can self-trigger the install flow immediately.
+  const eligible = useInstallEligible(isInstallEligible);
 
   if (!eligible) return null;
 
@@ -174,7 +187,9 @@ export function InstallHint() {
 
 // ── Floating mascot helper (subtle, anchored bottom-right) ────────────────────
 export function InstallMascot() {
-  const eligible = useInstallEligible();
+  // Mascot honors the post-OAuth cooldown so the unsolicited bubble doesn't
+  // pop up right after a Google sign-in round trip.
+  const eligible = useInstallEligible(isMascotEligible);
   const [showBubble, setShowBubble] = useState(false);
   const bubbleShownRef = useRef(
     typeof window !== "undefined" && sessionStorage.getItem("guber-mascot-bubble-shown") === "1"
