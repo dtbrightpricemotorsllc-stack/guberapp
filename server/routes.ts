@@ -2353,6 +2353,9 @@ export async function registerRoutes(
           locationApprox: j.locationApprox || (j.zip ? `${j.zip} area` : null),
           color: CATEGORY_COLORS[j.category] || "#6B7280",
           createdAt: j.createdAt,
+          // Include zip so the client can render the job's local timezone
+          // on map-pin "Posted" timestamps (per task #296 timezone tags).
+          zip: j.zip ?? null,
         }));
       res.json(pins);
     } catch (err: any) {

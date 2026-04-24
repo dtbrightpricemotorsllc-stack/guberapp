@@ -20,6 +20,9 @@ export interface JobPin {
   locationApprox: string | null;
   color: string;
   createdAt: string | null;
+  // zip is included so client-side timezone derivation (formatJobTime) can
+  // render the job's local time, not just the viewer's local time.
+  zip: string | null;
 }
 
 export interface WorkerPin {

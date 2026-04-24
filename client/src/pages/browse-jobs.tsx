@@ -302,7 +302,7 @@ export default function BrowseJobs() {
                         <Clock className="w-3.5 h-3.5" />
                         {(() => {
                           if (!selectedPin.createdAt) return "Recently";
-                          const t = formatJobTime(selectedPin.createdAt, (selectedPin as any).zip, { month: "short", day: "numeric" });
+                          const t = formatJobTime(selectedPin.createdAt, selectedPin.zip, { month: "short", day: "numeric" });
                           return (
                             <>
                               {t?.primary}
