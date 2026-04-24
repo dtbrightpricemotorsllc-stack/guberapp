@@ -5379,6 +5379,7 @@ const feedbackUnread = feedbackUnreadData?.count ?? 0;
 const [userSearch, setUserSearch] = useState("");
 const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 const [jobFilter, setJobFilter] = useState<"all" | "stuck" | "active" | "done">("all");
+const [includeDemoJobs, setIncludeDemoJobs] = useState(false);
 
 const updateUserMutation = useMutation({
 mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
@@ -5813,13 +5814,20 @@ data-testid={`button-grant-business-${u.id}`}
   const STUCK_STATUSES = ["accepted_pending_payment","confirmed","funded","awaiting_payment"];
   const ACTIVE_STATUSES = ["active","in_progress","proof_submitted","completion_submitted","posted_public"];
   const DONE_STATUSES = ["completed_paid","completed","cancelled","disputed"];
-  const counts = {
-    all: allJobs?.length ?? 0,
-    stuck: allJobs?.filter(j => STUCK_STATUSES.includes(j.status)).length ?? 0,
-    active: allJobs?.filter(j => ACTIVE_STATUSES.includes(j.status)).length ?? 0,
-    done: allJobs?.filter(j => DONE_STATUSES.includes(j.status)).length ?? 0,
+  const isDemoEmail = (e?: string | null) => !!e && e.toLowerCase().endsWith("@guberapp.internal");
+  const isDemoJob = (j: any) => {
+    const u = allUsers?.find(u => u.id === j.postedById);
+    return isDemoEmail(u?.email);
   };
-  const filtered = (allJobs ?? []).filter(j => {
+  const visibleJobs = (allJobs ?? []).filter(j => includeDemoJobs || !isDemoJob(j));
+  const demoCount = (allJobs ?? []).filter(j => isDemoJob(j)).length;
+  const counts = {
+    all: visibleJobs.length,
+    stuck: visibleJobs.filter(j => STUCK_STATUSES.includes(j.status)).length,
+    active: visibleJobs.filter(j => ACTIVE_STATUSES.includes(j.status)).length,
+    done: visibleJobs.filter(j => DONE_STATUSES.includes(j.status)).length,
+  };
+  const filtered = visibleJobs.filter(j => {
     if (jobFilter === "all") return true;
     if (jobFilter === "stuck") return STUCK_STATUSES.includes(j.status);
     if (jobFilter === "active") return ACTIVE_STATUSES.includes(j.status);
@@ -5848,11 +5856,23 @@ data-testid={`button-grant-business-${u.id}`}
   return jobsLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div> : (
 <div className="space-y-3">
 
-<div className="flex flex-wrap gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-1 px-1">
+<div className="flex flex-wrap items-center gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 -mx-1 px-1">
   <FilterChip value="all" label="All" count={counts.all} tone="#e5e7eb" />
   <FilterChip value="stuck" label="🚨 Stuck" count={counts.stuck} tone="#fbbf24" />
   <FilterChip value="active" label="Active" count={counts.active} tone="#86efac" />
   <FilterChip value="done" label="Done" count={counts.done} tone="#cbd5e1" />
+  {demoCount > 0 && (
+    <button
+      type="button"
+      onClick={() => setIncludeDemoJobs(v => !v)}
+      className={`ml-auto px-3 h-8 rounded-full text-[10.5px] font-display font-bold tracking-wide transition flex items-center gap-1.5 border ${includeDemoJobs ? "bg-fuchsia-500/20 border-fuchsia-400/50 text-fuchsia-200" : "bg-transparent border-border/40 text-muted-foreground hover:text-foreground"}`}
+      data-testid="toggle-include-demo-jobs"
+      title="Demo jobs are jobs posted by the reviewer demo accounts (@guberapp.internal). Hidden by default."
+    >
+      {includeDemoJobs ? "👁 Hiding nothing" : "🙈 Hiding demo"}
+      <span className="bg-black/25 rounded-full px-1.5 text-[10px]">{demoCount}</span>
+    </button>
+  )}
 </div>
 
 {counts.stuck > 0 && jobFilter !== "stuck" && (
