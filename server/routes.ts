@@ -31,6 +31,7 @@ import {
   type PlatformFeeConfig,
   type TrustLevel,
 } from "./pricing";
+import { sanitizeJobForPublic } from "./sanitize-job";
 
 /** Create an in-app notification AND fire a background push alert to the user's device(s). */
 async function notify(
@@ -439,39 +440,6 @@ function fuzzCoordinate(coord: number | null, seed: number = 0): number | null {
   return coord + (lcg - 0.5) * 0.003; // ±0.0015° ≈ ±0.1 mi — protects home address, avoids water displacement
 }
 
-// Fields that reveal the poster's pricing intent (auto-increase ceiling,
-// boost suggestions). Showing these to workers incentivizes stalling, so we
-// strip them for everyone except the poster (and admins).
-const POSTER_ONLY_PRICE_FIELDS = [
-  "autoIncreaseEnabled",
-  "autoIncreaseAmount",
-  "autoIncreaseMax",
-  "autoIncreaseIntervalMins",
-  "nextIncreaseAt",
-  "boostSuggested",
-  "suggestedBudget",
-] as const;
-
-// Internal/admin-only fields that should never leak to non-poster viewers.
-const POSTER_ONLY_INTERNAL_FIELDS = [
-  "removedByAdminReason",
-  "stuckAcknowledgedAt",
-  "stuckAcknowledgedBy",
-  "stripePaymentIntentId",
-  "stripeSessionId",
-  "stripeChargeId",
-  "stripeTransferId",
-  "disputeNotes",
-  "cancelNotes",
-] as const;
-
-function stripPosterOnlyFields(job: any) {
-  const out: any = { ...job };
-  for (const f of POSTER_ONLY_PRICE_FIELDS) delete out[f];
-  for (const f of POSTER_ONLY_INTERNAL_FIELDS) delete out[f];
-  return out;
-}
-
 // Wrap a job-returning response so mutation endpoints don't accidentally
 // leak poster-only fields (auto-increase config, suggested boost, internal
 // admin notes) to assigned helpers or other viewers. Admins always receive
@@ -493,41 +461,6 @@ async function viewerIsAdmin(req: Request): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function sanitizeJobForPublic(job: any, viewerId: number | undefined, isAdmin: boolean = false) {
-  const isOwner = viewerId === job.postedById;
-  const isHelper = viewerId === job.assignedHelperId;
-  const isLocked = ["funded", "active", "in_progress", "completion_submitted", "proof_submitted"].includes(job.status);
-
-  const { platformFee, ...publicJob } = job;
-
-  // Admins always see the full job (including pricing/internal fields) so
-  // admin dashboards and dispute tools work correctly.
-  if (isAdmin) return publicJob;
-
-  // Owner sees everything (including auto-increase config and admin internals).
-  if (isOwner) {
-    if (isLocked) return publicJob;
-    return { ...publicJob, lat: fuzzCoordinate(job.lat), lng: fuzzCoordinate(job.lng) };
-  }
-
-  // Assigned helper sees real coords + payout, but NOT poster's price-intent fields.
-  if (isHelper) {
-    const stripped = stripPosterOnlyFields(publicJob);
-    if (isLocked) return stripped;
-    return { ...stripped, lat: fuzzCoordinate(job.lat), lng: fuzzCoordinate(job.lng) };
-  }
-
-  // Strangers / browsing workers — strip pricing-intent + internal + payout + exact location.
-  const stripped = stripPosterOnlyFields(publicJob);
-  return {
-    ...stripped,
-    helperPayout: undefined,
-    location: job.locationApprox || "Approximate location",
-    lat: fuzzCoordinate(job.lat),
-    lng: fuzzCoordinate(job.lng),
-  };
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -4052,8 +3985,10 @@ export async function registerRoutes(
     try {
       const jobs = await storage.getUserJobs(req.session.userId!);
       // Sanitize each job from the viewer's perspective so workers don't see
-      // the poster's auto-increase ceiling on jobs they accepted.
-      const sanitized = jobs.map(j => sanitizeJobForPublic(j, req.session.userId));
+      // the poster's auto-increase ceiling on jobs they accepted. Admins
+      // bypass sanitization so support tooling sees the real state.
+      const isAdmin = await viewerIsAdmin(req);
+      const sanitized = jobs.map(j => sanitizeJobForPublic(j, req.session.userId, isAdmin));
       res.json(sanitized);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -4067,8 +4002,10 @@ export async function registerRoutes(
 
       const isOwner = req.session.userId === job.postedById;
       const isHelper = req.session.userId === job.assignedHelperId;
+      const isAdmin = await viewerIsAdmin(req);
       // Strangers can't peek at unpublished/draft jobs by guessing IDs.
-      if (!isOwner && !isHelper && (job.status === "draft" || !job.isPaid)) {
+      // Admins are exempt so support can audit drafts/unpaid posts.
+      if (!isOwner && !isHelper && !isAdmin && (job.status === "draft" || !job.isPaid)) {
         return res.status(403).json({ message: "Job not available" });
       }
 
@@ -4088,7 +4025,7 @@ export async function registerRoutes(
         }).catch(() => {});
       }
 
-      const sanitized = sanitizeJobForPublic(job, req.session.userId);
+      const sanitized = sanitizeJobForPublic(job, req.session.userId, isAdmin);
 
       if (sanitized.description) sanitized.description = filterContactInfo(sanitized.description).clean;
       if (sanitized.jobDetails) {
@@ -4471,10 +4408,11 @@ export async function registerRoutes(
     const jobsList = await storage.getJobs();
     const demoIds = await getDemoUserIds();
     const callerIsDemoUser = req.session.userId ? demoIds.has(req.session.userId) : false;
+    const isAdmin = await viewerIsAdmin(req);
     const sanitized = jobsList
       .filter(j => j.status !== "draft" && j.isPaid)
       .filter(j => callerIsDemoUser || !demoIds.has(j.postedById))
-      .map(j => sanitizeJobForPublic(j, req.session.userId));
+      .map(j => sanitizeJobForPublic(j, req.session.userId, isAdmin));
     res.json(sanitized);
   });
 

@@ -13,6 +13,7 @@ import { useSearch, useLocation } from "wouter";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatJobTime } from "@/lib/job-time";
 import { shouldShowAlertPrompt } from "@/components/alert-prompt-modal";
 import { subscribeToPush, getPushStatus } from "@/lib/push";
 import { gpsGetCurrentPosition } from "@/lib/gps";
@@ -297,9 +298,20 @@ export default function BrowseJobs() {
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="text-[10px] font-display text-muted-foreground tracking-widest uppercase mb-0.5">Posted</span>
-                      <div className="flex items-center gap-1.5 text-xs font-display text-muted-foreground/80">
+                      <div className="flex items-center gap-1.5 text-xs font-display text-muted-foreground/80" data-testid="text-pin-posted">
                         <Clock className="w-3.5 h-3.5" />
-                        {selectedPin.createdAt ? new Date(selectedPin.createdAt).toLocaleDateString() : "Recently"}
+                        {(() => {
+                          if (!selectedPin.createdAt) return "Recently";
+                          const t = formatJobTime(selectedPin.createdAt, (selectedPin as any).zip, { month: "short", day: "numeric" });
+                          return (
+                            <>
+                              {t?.primary}
+                              {t?.viewerLocal && (
+                                <span className="text-[10px] text-muted-foreground/80 ml-0.5">({t.viewerLocal})</span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

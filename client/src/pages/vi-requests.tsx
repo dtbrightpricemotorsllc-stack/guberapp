@@ -8,6 +8,7 @@ import { ArrowLeft, Shield, Clock, MapPin, Zap, ChevronRight, Search, Loader2 } 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatJobTime } from "@/lib/job-time";
 import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
 import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
 import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
@@ -245,12 +246,18 @@ export default function VIRequests() {
                             <MapPin className="w-2.5 h-2.5" /> {job.locationApprox}
                           </span>
                         )}
-                        {job.createdAt && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-2.5 h-2.5" />
-                            {new Date(job.createdAt).toLocaleDateString()}
-                          </span>
-                        )}
+                        {job.createdAt && (() => {
+                          const t = formatJobTime(job.createdAt, job.zip, { month: "short", day: "numeric" });
+                          return (
+                            <span className="flex items-center gap-1" data-testid={`text-vi-created-${job.id}`}>
+                              <Clock className="w-2.5 h-2.5" />
+                              {t?.primary}
+                              {t?.viewerLocal && (
+                                <span className="text-[10px] text-muted-foreground/80 ml-0.5">({t.viewerLocal})</span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex gap-2">
