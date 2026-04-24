@@ -117,6 +117,27 @@ describe("sanitizeJobForPublic", () => {
     expect(out.lng).toBe(-89.6501);
   });
 
+  it("masked coordinates are deterministic across repeated calls (no averaging attack)", () => {
+    // Repeated sanitization of the same job for the same viewer must return
+    // the IDENTICAL masked point, otherwise an attacker can poll and average
+    // results to recover the true location.
+    const job = makeJob();
+    const a = sanitizeJobForPublic(job, STRANGER_ID, false);
+    const b = sanitizeJobForPublic(job, STRANGER_ID, false);
+    const c = sanitizeJobForPublic(job, STRANGER_ID, false);
+    expect(b.lat).toBe(a.lat);
+    expect(b.lng).toBe(a.lng);
+    expect(c.lat).toBe(a.lat);
+    expect(c.lng).toBe(a.lng);
+    // And the mask actually moves the point off the true coords.
+    expect(a.lat).not.toBe(job.lat);
+    expect(a.lng).not.toBe(job.lng);
+    // Different jobs produce different offsets (so the mask isn't a constant).
+    const otherJob = makeJob({ id: 7777, lat: 39.7817, lng: -89.6501 });
+    const d = sanitizeJobForPublic(otherJob, STRANGER_ID, false);
+    expect(d.lat === a.lat && d.lng === a.lng).toBe(false);
+  });
+
   it("a third-party stranger CANNOT obtain the poster's auto-increase config via the API shape", () => {
     // Simulates the My Jobs / job detail surface returning the same job to
     // someone who is neither owner nor assigned helper. This is the
