@@ -18,7 +18,7 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
-import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, type User, type CashDrop } from "@shared/schema";
+import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop } from "@shared/schema";
 import {
   calculateJobPricing,
   getTrustInfo,
@@ -10332,6 +10332,246 @@ YOUR BEHAVIOR:
       });
 
       res.json({ ...drop, needsApproval });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ──────────────────────────── HOST DROP MANAGEMENT ────────────────────────
+  // Returns the user's manageable drops (anything not yet expired/cleaned up so
+  // the host can still cancel a freshly-closed one). Most-recent first; the
+  // dashboard uses the first entry to swap the CTA into "Manage" mode.
+  app.get("/api/cash-drops/host/mine", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const rows = await db.select().from(cashDrops).where(
+        and(
+          eq(cashDrops.isHostDrop, true),
+          eq(cashDrops.hostUserId, userId),
+          inArray(cashDrops.status, ["draft", "active"]),
+        )
+      ).orderBy(desc(cashDrops.createdAt));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Helper used by the host edit/cancel/delete handlers to load the drop and
+  // confirm the caller actually owns it. Returns the drop or sends the error
+  // response and returns null.
+  async function loadOwnedHostDrop(req: Request, res: Response) {
+    const userId = req.session.userId!;
+    const id = parseInt(req.params.id);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: "Invalid drop id" });
+      return null;
+    }
+    const drop = await storage.getCashDrop(id);
+    if (!drop) {
+      res.status(404).json({ error: "Cash Drop not found" });
+      return null;
+    }
+    if (!drop.isHostDrop || drop.hostUserId !== userId) {
+      res.status(403).json({ error: "You do not own this drop" });
+      return null;
+    }
+    return drop;
+  }
+
+  // Single-drop fetch so the edit page can prefill its form.
+  app.get("/api/cash-drops/host/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const drop = await loadOwnedHostDrop(req, res);
+      if (!drop) return;
+      res.json(drop);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Edit own drop. Mirrors the admin patch's sanitization but is restricted to
+  // a whitelist of fields so users can't promote a draft past approval, change
+  // ownership, or otherwise escalate. Inputs are strictly validated — a
+  // malformed number/date returns 400 instead of being silently coerced to 0.
+  app.patch("/api/cash-drops/host/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const drop = await loadOwnedHostDrop(req, res);
+      if (!drop) return;
+
+      const {
+        title, description, rewardPerWinner, winnerLimit,
+        startTime, endTime, gpsLat, gpsLng, gpsRadius,
+        clueText, physicalCashDrop, finalLocationMode,
+      } = req.body;
+
+      // ── Strict parsers — reject garbage instead of coercing to 0/NaN. ──
+      const parseFiniteFloat = (raw: any, field: string): number | null | undefined => {
+        if (raw === undefined) return undefined;
+        if (raw === null || raw === "") return null;
+        const n = typeof raw === "number" ? raw : parseFloat(String(raw));
+        if (!Number.isFinite(n)) {
+          res.status(400).json({ error: `Invalid value for ${field}` });
+          return undefined;
+        }
+        return n;
+      };
+      const parseFinitePositiveInt = (raw: any, field: string, fallback?: number): number | undefined => {
+        if (raw === undefined) return undefined;
+        if (raw === null || raw === "") return fallback;
+        const n = typeof raw === "number" ? Math.floor(raw) : parseInt(String(raw), 10);
+        if (!Number.isFinite(n) || n < 1) {
+          res.status(400).json({ error: `Invalid value for ${field}` });
+          return undefined;
+        }
+        return n;
+      };
+      const parseDateOrNull = (raw: any, field: string): Date | null | undefined => {
+        if (raw === undefined) return undefined;
+        if (raw === null || raw === "") return null;
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) {
+          res.status(400).json({ error: `Invalid value for ${field}` });
+          return undefined;
+        }
+        return d;
+      };
+
+      const patchData: Record<string, any> = {};
+      if (title !== undefined) {
+        if (typeof title !== "string" || !title.trim()) {
+          return res.status(400).json({ error: "Title cannot be empty" });
+        }
+        patchData.title = title.trim();
+      }
+      if (description !== undefined) patchData.description = description || null;
+      if (clueText !== undefined) patchData.clueText = clueText || null;
+
+      if (winnerLimit !== undefined) {
+        const n = parseFinitePositiveInt(winnerLimit, "winnerLimit");
+        if (res.headersSent) return;
+        if (n !== undefined) {
+          patchData.winnerLimit = n;
+          patchData.cashWinnerCount = n;
+        }
+      }
+
+      if (startTime !== undefined) {
+        const v = parseDateOrNull(startTime, "startTime");
+        if (res.headersSent) return;
+        patchData.startTime = v;
+      }
+      if (endTime !== undefined) {
+        const v = parseDateOrNull(endTime, "endTime");
+        if (res.headersSent) return;
+        patchData.endTime = v;
+      }
+
+      if (gpsLat !== undefined) {
+        const v = parseFiniteFloat(gpsLat, "gpsLat");
+        if (res.headersSent) return;
+        if (v !== null && v !== undefined && (v < -90 || v > 90)) {
+          return res.status(400).json({ error: "gpsLat out of range" });
+        }
+        patchData.gpsLat = v;
+      }
+      if (gpsLng !== undefined) {
+        const v = parseFiniteFloat(gpsLng, "gpsLng");
+        if (res.headersSent) return;
+        if (v !== null && v !== undefined && (v < -180 || v > 180)) {
+          return res.status(400).json({ error: "gpsLng out of range" });
+        }
+        patchData.gpsLng = v;
+      }
+      if (gpsRadius !== undefined) {
+        const v = parseFinitePositiveInt(gpsRadius, "gpsRadius", 200);
+        if (res.headersSent) return;
+        if (v !== undefined) patchData.gpsRadius = v;
+      }
+
+      if (finalLocationMode !== undefined) {
+        const validLocationModes = ["none", "name_only", "destination"];
+        if (!validLocationModes.includes(finalLocationMode)) {
+          return res.status(400).json({ error: "Invalid finalLocationMode" });
+        }
+        patchData.finalLocationMode = finalLocationMode;
+      }
+
+      if (physicalCashDrop !== undefined) {
+        const isPhysical = !!physicalCashDrop;
+        patchData.rewardType = isPhysical ? "physical" : "cash";
+        if (isPhysical) {
+          patchData.rewardPerWinner = 0;
+        } else if (rewardPerWinner !== undefined) {
+          const v = parseFiniteFloat(rewardPerWinner, "rewardPerWinner");
+          if (res.headersSent) return;
+          if (v === null || v === undefined || v < 0) {
+            return res.status(400).json({ error: "rewardPerWinner must be a non-negative number" });
+          }
+          patchData.rewardPerWinner = v;
+        }
+      } else if (rewardPerWinner !== undefined) {
+        const v = parseFiniteFloat(rewardPerWinner, "rewardPerWinner");
+        if (res.headersSent) return;
+        if (v === null || v === undefined || v < 0) {
+          return res.status(400).json({ error: "rewardPerWinner must be a non-negative number" });
+        }
+        patchData.rewardPerWinner = v;
+      }
+
+      const updated = await storage.updateCashDrop(drop.id, patchData);
+      await storage.createAuditLog({
+        action: "host_drop_edited",
+        userId: req.session.userId!,
+        details: `Host drop ${drop.id} edited by owner`,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Cancel = soft-stop (status:closed, closedAt:now) so the drop disappears
+  // from active listings but stays around for audit/history.
+  app.post("/api/cash-drops/host/:id/cancel", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const drop = await loadOwnedHostDrop(req, res);
+      if (!drop) return;
+      if (drop.status === "closed" || drop.status === "expired") {
+        return res.status(400).json({ error: "Drop is already closed" });
+      }
+      const updated = await storage.updateCashDrop(drop.id, {
+        status: "closed",
+        closedAt: new Date(),
+      });
+      await storage.createAuditLog({
+        action: "host_drop_cancelled",
+        userId: req.session.userId!,
+        details: `Host drop ${drop.id} cancelled by owner`,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Hard delete. Only allowed once the drop is no longer active so a host
+  // can't yank a drop out from under participants who might already be on
+  // their way. To remove an active drop, the host cancels first.
+  app.delete("/api/cash-drops/host/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const drop = await loadOwnedHostDrop(req, res);
+      if (!drop) return;
+      if (drop.status === "active") {
+        return res.status(400).json({ error: "Cancel the drop before deleting it." });
+      }
+      await storage.deleteCashDrop(drop.id);
+      await storage.createAuditLog({
+        action: "host_drop_deleted",
+        userId: req.session.userId!,
+        details: `Host drop ${drop.id} deleted by owner`,
+      });
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

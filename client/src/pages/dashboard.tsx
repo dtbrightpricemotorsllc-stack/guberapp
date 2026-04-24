@@ -239,6 +239,41 @@ function TodoReminderBox({ user, isAvailable, referralCount }: { user: any; isAv
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// CTA that flips between "Start a GUBER Drop" and "Manage GUBER Drop" based on
+// whether the host has an active/draft drop. We render it inside the dashboard
+// so it shares the auth/layout context, but isolate the query so the lookup
+// doesn't run for users without host permission.
+function HostDropCta({ testIdSuffix }: { testIdSuffix: string }) {
+  const { data: myDrops } = useQuery<Array<{ id: number; title: string; status: string }>>({
+    queryKey: ["/api/cash-drops/host/mine"],
+  });
+  const activeDrop = myDrops?.[0];
+  const href = activeDrop ? `/host-drop/edit/${activeDrop.id}` : "/host-drop/new";
+  const label = activeDrop ? "MANAGE GUBER DROP" : "START A GUBER DROP";
+  const testId = activeDrop
+    ? `button-manage-host-drop-${testIdSuffix}`
+    : `button-start-host-drop${testIdSuffix === "hire" ? "" : `-${testIdSuffix}`}`;
+  return (
+    <Link href={href}>
+      <button
+        className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
+        style={{
+          background: activeDrop
+            ? "linear-gradient(135deg,rgba(34,197,94,0.14),rgba(34,197,94,0.06))"
+            : "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
+          border: `1.5px solid ${activeDrop ? "rgba(34,197,94,0.45)" : "rgba(201,168,76,0.4)"}`,
+          color: activeDrop ? "#22c55e" : "#C9A84C",
+        }}
+        data-testid={testId}
+      >
+        <DollarSign className="w-4 h-4" />
+        {label}
+        <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
+      </button>
+    </Link>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -702,21 +737,7 @@ export default function Dashboard() {
                 </Button>
               </Link>
               {user?.cashDropHostEnabled && (
-                <Link href="/host-drop/new">
-                  <button
-                    className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
-                    style={{
-                      background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
-                      border: "1.5px solid rgba(201,168,76,0.4)",
-                      color: "#C9A84C",
-                    }}
-                    data-testid="button-start-host-drop"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    START A GUBER DROP
-                    <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
-                  </button>
-                </Link>
+                <HostDropCta testIdSuffix="hire" />
               )}
             </>
           ) : (
@@ -749,21 +770,7 @@ export default function Dashboard() {
             )
           )}
           {mode === "work" && user?.cashDropHostEnabled && (
-            <Link href="/host-drop/new">
-              <button
-                className="w-full h-12 gap-3 rounded-2xl font-display tracking-[0.12em] text-sm font-bold flex items-center justify-center transition-all active:scale-[0.99]"
-                style={{
-                  background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06))",
-                  border: "1.5px solid rgba(201,168,76,0.4)",
-                  color: "#C9A84C",
-                }}
-                data-testid="button-start-host-drop-work"
-              >
-                <DollarSign className="w-4 h-4" />
-                START A GUBER DROP
-                <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
-              </button>
-            </Link>
+            <HostDropCta testIdSuffix="work" />
           )}
         </div>
 

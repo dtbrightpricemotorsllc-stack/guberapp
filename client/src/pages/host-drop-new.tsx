@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { gpsGetCurrentPosition } from "@/lib/gps";
-import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2, X } from "lucide-react";
+import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2, X, Ban } from "lucide-react";
+import type { CashDrop } from "@shared/schema";
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -175,10 +176,25 @@ function LogoSlotManager({ user, onLogoChange }: { user: any; onLogoChange: (log
   );
 }
 
+// Format a Date (or date-string) for the <input type="datetime-local"> control,
+// which expects "YYYY-MM-DDTHH:MM" in local time.
+function toLocalInput(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function HostDropNew() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+
+  // Detect edit mode from the URL: /host-drop/edit/:id
+  const [editMatch, editParams] = useRoute<{ id: string }>("/host-drop/edit/:id");
+  const editId = editMatch && editParams?.id ? parseInt(editParams.id) : null;
+  const isEdit = editId !== null && Number.isFinite(editId);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -199,6 +215,61 @@ export default function HostDropNew() {
       ? ((user as any)?.cashDropLogo2 || user?.cashDropBrandLogo || "")
       : (user?.cashDropBrandLogo || (user as any)?.cashDropLogo2 || "")
   );
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // When editing, fetch the existing drop and prefill the form once it loads.
+  // Errors here mean the user doesn't own the drop — bounce them home.
+  // refetchOnWindowFocus is disabled because a refetch would otherwise wipe
+  // out unsaved edits when the user tabs back in.
+  const dropQuery = useQuery<CashDrop>({
+    queryKey: ["/api/cash-drops/host", editId],
+    enabled: isEdit,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  // Only prefill once per editId. We track which id we've already populated
+  // from so subsequent refetches (e.g. from invalidations after a save) don't
+  // clobber whatever the user has typed since.
+  const prefilledForId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isEdit || !dropQuery.data) return;
+    if (prefilledForId.current === editId) return;
+    prefilledForId.current = editId;
+    const d = dropQuery.data as any;
+    setTitle(d.title ?? "");
+    setDescription(d.description ?? "");
+    setRewardPerWinner(d.rewardPerWinner != null ? String(d.rewardPerWinner) : "");
+    setWinnerLimit(String(d.winnerLimit ?? 1));
+    setClueText(d.clueText ?? "");
+    setGpsLat(d.gpsLat != null ? String(d.gpsLat) : "");
+    setGpsLng(d.gpsLng != null ? String(d.gpsLng) : "");
+    setGpsRadius(String(d.gpsRadius ?? 200));
+    setStartTime(toLocalInput(d.startTime));
+    setEndTime(toLocalInput(d.endTime));
+    setPhysicalDrop(d.rewardType === "physical");
+    setFinalLocationMode((d.finalLocationMode ?? "name_only") as any);
+    if (d.hostLogo || d.sponsorLogo) setResolvedLogoUrl(d.hostLogo || d.sponsorLogo);
+    // Show whatever address text is available so the host can re-search if
+    // they want to change it.
+    setAddressInput("");
+  }, [isEdit, editId, dropQuery.data]);
+
+  useEffect(() => {
+    if (isEdit && dropQuery.error) {
+      toast({ title: "Couldn't load drop", description: (dropQuery.error as any)?.message || "Drop unavailable", variant: "destructive" });
+      navigate("/dashboard");
+    }
+  }, [isEdit, dropQuery.error]);
+
+  // After any successful mutation, refresh the dashboard's "do I have an
+  // active drop?" query so the CTA flips back to the right state.
+  const invalidateAfter = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/cash-drops/host/mine"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/cash-drops/active"] });
+    if (isEdit) queryClient.invalidateQueries({ queryKey: ["/api/cash-drops/host", editId] });
+  };
 
   const createMutation = useMutation({
     mutationFn: async (body: any) => {
@@ -211,6 +282,51 @@ export default function HostDropNew() {
       } else {
         toast({ title: "Drop Created!", description: "Your GUBER Drop is now live on the map." });
       }
+      invalidateAfter();
+      navigate("/dashboard");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: async (body: any) => {
+      const resp = await apiRequest("PATCH", `/api/cash-drops/host/${editId}`, body);
+      return resp.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Drop Updated", description: "Your changes are saved." });
+      invalidateAfter();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await apiRequest("POST", `/api/cash-drops/host/${editId}/cancel`);
+      return resp.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Drop Cancelled", description: "Your drop is no longer live." });
+      invalidateAfter();
+      navigate("/dashboard");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await apiRequest("DELETE", `/api/cash-drops/host/${editId}`);
+      return resp.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Drop Deleted" });
+      invalidateAfter();
       navigate("/dashboard");
     },
     onError: (err: any) => {
@@ -246,9 +362,24 @@ export default function HostDropNew() {
 
   const brandName = user?.cashDropBrandName;
 
+  // Show a small loading state while we fetch the drop being edited so the
+  // form doesn't briefly render in "create mode" with empty fields.
+  if (isEdit && dropQuery.isLoading) {
+    return (
+      <GuberLayout>
+        <div className="max-w-lg mx-auto px-4 py-12 text-center" data-testid="loading-host-drop-edit">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto" />
+        </div>
+      </GuberLayout>
+    );
+  }
+
+  const dropStatus = (dropQuery.data as any)?.status as string | undefined;
+  const isClosed = dropStatus === "closed" || dropStatus === "expired";
+
   return (
     <GuberLayout>
-      <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-host-drop-new">
+      <div className="max-w-lg mx-auto px-4 py-6" data-testid={isEdit ? "page-host-drop-edit" : "page-host-drop-new"}>
         <button
           onClick={() => navigate("/dashboard")}
           className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider mb-6 transition-colors"
@@ -259,7 +390,14 @@ export default function HostDropNew() {
         </button>
 
         <div className="mb-6">
-          <h1 className="text-xl font-display font-bold tracking-tight mb-1">Start a GUBER Drop</h1>
+          <h1 className="text-xl font-display font-bold tracking-tight mb-1" data-testid="text-page-title">
+            {isEdit ? `Manage GUBER Drop` : "Start a GUBER Drop"}
+          </h1>
+          {isEdit && title && (
+            <p className="text-xs text-muted-foreground/80 font-display tracking-wide" data-testid="text-editing-title">
+              EDITING: <span className="text-foreground font-semibold">{title}</span>
+            </p>
+          )}
           {brandName && (
             <div className="flex items-center gap-2 mt-2">
               {resolvedLogoUrl && <img src={resolvedLogoUrl} alt={brandName} className="w-6 h-6 rounded-full object-cover" />}
@@ -268,15 +406,36 @@ export default function HostDropNew() {
           )}
         </div>
 
-        <div
-          className="mb-5 p-3 rounded-xl flex items-start gap-2.5"
-          style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)" }}
-        >
-          <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-amber-400/80 leading-relaxed">
-            Your drop will be reviewed by admin before going live. You'll get a notification once it's approved.
-          </p>
-        </div>
+        {!isEdit && (
+          <div
+            className="mb-5 p-3 rounded-xl flex items-start gap-2.5"
+            style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)" }}
+          >
+            <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-400/80 leading-relaxed">
+              Your drop will be reviewed by admin before going live. You'll get a notification once it's approved.
+            </p>
+          </div>
+        )}
+
+        {isEdit && dropStatus && (
+          <div
+            className="mb-5 p-3 rounded-xl flex items-center justify-between gap-2"
+            style={{
+              background: isClosed ? "rgba(148,163,184,0.08)" : "rgba(34,197,94,0.08)",
+              border: `1px solid ${isClosed ? "rgba(148,163,184,0.25)" : "rgba(34,197,94,0.25)"}`,
+            }}
+          >
+            <span className="text-[11px] font-display tracking-[0.12em] text-muted-foreground">STATUS</span>
+            <span
+              className="text-[11px] font-display font-bold uppercase tracking-wider"
+              style={{ color: isClosed ? "#94a3b8" : "#22c55e" }}
+              data-testid="text-drop-status"
+            >
+              {dropStatus}
+            </span>
+          </div>
+        )}
 
         <div className="space-y-5">
           <div className="space-y-2">
@@ -497,34 +656,129 @@ export default function HostDropNew() {
               !resolvedLogoUrl ||
               !gpsLat ||
               !gpsLng ||
-              createMutation.isPending
+              createMutation.isPending ||
+              patchMutation.isPending ||
+              (isEdit && isClosed)
             }
-            onClick={() => createMutation.mutate({
-              title,
-              description: description || undefined,
-              rewardPerWinner: physicalDrop ? "0" : rewardPerWinner,
-              winnerLimit,
-              clueText: clueText || undefined,
-              gpsLat: gpsLat || undefined,
-              gpsLng: gpsLng || undefined,
-              gpsRadius,
-              startTime: startTime || undefined,
-              endTime: endTime || undefined,
-              physicalCashDrop: physicalDrop,
-              finalLocationMode,
-              address: addressInput || undefined,
-            })}
+            onClick={() => {
+              const payload = {
+                title,
+                description: description || undefined,
+                rewardPerWinner: physicalDrop ? "0" : rewardPerWinner,
+                winnerLimit,
+                clueText: clueText || undefined,
+                gpsLat: gpsLat || undefined,
+                gpsLng: gpsLng || undefined,
+                gpsRadius,
+                startTime: startTime || undefined,
+                endTime: endTime || undefined,
+                physicalCashDrop: physicalDrop,
+                finalLocationMode,
+                address: addressInput || undefined,
+              };
+              if (isEdit) patchMutation.mutate(payload);
+              else createMutation.mutate(payload);
+            }}
             data-testid="button-submit-host-drop"
           >
-            {createMutation.isPending ? (
+            {createMutation.isPending || patchMutation.isPending ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
                 <DollarSign className="w-5 h-5 mr-2" />
-                CREATE GUBER DROP
+                {isEdit ? "SAVE CHANGES" : "CREATE GUBER DROP"}
               </>
             )}
           </Button>
+
+          {/* ── Edit-mode danger zone: cancel (soft) and delete (hard) ──
+              Both use a two-step inline confirm so a stray tap can't take
+              the drop down. The platform also enforces "cancel before
+              delete" for active drops on the server. */}
+          {isEdit && (
+            <div className="space-y-2 pt-2">
+              {!isClosed && (
+                confirmCancel ? (
+                  <div className="rounded-xl p-3 border border-amber-500/40 bg-amber-500/5 space-y-2" data-testid="confirm-cancel-drop">
+                    <p className="text-[11px] text-amber-300 font-display leading-relaxed">
+                      Cancel this drop? It will be removed from the live map immediately. Participants on their way will be notified.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-10 text-[11px] font-display tracking-wider border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                        onClick={() => cancelMutation.mutate()}
+                        disabled={cancelMutation.isPending}
+                        data-testid="button-confirm-cancel-drop"
+                      >
+                        {cancelMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "YES, CANCEL DROP"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="h-10 text-[11px] font-display tracking-wider"
+                        onClick={() => setConfirmCancel(false)}
+                        disabled={cancelMutation.isPending}
+                        data-testid="button-cancel-cancel"
+                      >
+                        Keep Drop
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full h-11 font-display tracking-[0.12em] text-xs font-bold rounded-2xl border-amber-500/40 text-amber-300 hover:bg-amber-500/5"
+                    onClick={() => setConfirmCancel(true)}
+                    disabled={cancelMutation.isPending}
+                    data-testid="button-cancel-drop"
+                  >
+                    <Ban className="w-4 h-4 mr-2" />
+                    CANCEL DROP
+                  </Button>
+                )
+              )}
+
+              {confirmDelete ? (
+                <div className="rounded-xl p-3 border border-destructive/40 bg-destructive/5 space-y-2" data-testid="confirm-delete-drop">
+                  <p className="text-[11px] text-destructive font-display leading-relaxed">
+                    Permanently delete this drop and its history? This can't be undone.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="destructive"
+                      className="flex-1 h-10 text-[11px] font-display tracking-wider"
+                      onClick={() => deleteMutation.mutate()}
+                      disabled={deleteMutation.isPending}
+                      data-testid="button-confirm-delete-drop"
+                    >
+                      {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "YES, DELETE FOREVER"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-10 text-[11px] font-display tracking-wider"
+                      onClick={() => setConfirmDelete(false)}
+                      disabled={deleteMutation.isPending}
+                      data-testid="button-cancel-delete"
+                    >
+                      Keep Drop
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="w-full h-11 font-display tracking-[0.12em] text-xs rounded-2xl text-muted-foreground hover:text-destructive hover:bg-destructive/5"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={deleteMutation.isPending}
+                  data-testid="button-delete-drop"
+                  title={!isClosed ? "Cancel the drop first to delete it" : undefined}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  DELETE DROP
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </GuberLayout>

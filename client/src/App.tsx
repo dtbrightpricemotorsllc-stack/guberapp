@@ -227,6 +227,7 @@ function Router() {
       <Route path="/submit-observation" component={() => <ProtectedRoute component={SubmitObservation} />} />
       <Route path="/observations" component={() => <ProtectedRoute component={ObservationMarketplace} />} />
       <Route path="/host-drop/new" component={() => <ProtectedRoute component={HostDropNew} />} />
+      <Route path="/host-drop/edit/:id" component={() => <ProtectedRoute component={HostDropNew} />} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />
