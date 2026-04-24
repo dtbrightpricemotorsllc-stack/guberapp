@@ -423,7 +423,7 @@ export default function Dashboard() {
   const awaitingWorkAction = acceptedJobs.filter(
     (j) =>
       j.status === "funded" ||
-      (j.status === "in_progress" && (j as any).proofRequired),
+      (j.status === "in_progress" && j.proofRequired),
   );
 
   // Pick the most-urgent job per side and the my-jobs tab to land on.
@@ -624,8 +624,10 @@ export default function Dashboard() {
           <button
             onClick={() => {
               // If poster has unhandled action items, jump straight to the
-              // urgent My Jobs tab so they immediately see what needs them.
-              if (awaitingHireAction.length > 0 && mode === "hire") {
+              // urgent My Jobs tab on a single tap regardless of which
+              // mode is currently active — the pulsing red badge promises
+              // immediate action, not a two-step toggle.
+              if (awaitingHireAction.length > 0) {
                 navigate(hireUrgentDeepLink);
                 return;
               }
@@ -664,7 +666,7 @@ export default function Dashboard() {
 
           <button
             onClick={() => {
-              if (awaitingWorkAction.length > 0 && mode === "work") {
+              if (awaitingWorkAction.length > 0) {
                 navigate(workUrgentDeepLink);
                 return;
               }
