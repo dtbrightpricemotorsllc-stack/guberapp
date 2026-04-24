@@ -439,6 +439,49 @@ function fuzzCoordinate(coord: number | null, seed: number = 0): number | null {
   return coord + (lcg - 0.5) * 0.003; // ±0.0015° ≈ ±0.1 mi — protects home address, avoids water displacement
 }
 
+// Fields that reveal the poster's pricing intent (auto-increase ceiling,
+// boost suggestions). Showing these to workers incentivizes stalling, so we
+// strip them for everyone except the poster (and admins).
+const POSTER_ONLY_PRICE_FIELDS = [
+  "autoIncreaseEnabled",
+  "autoIncreaseAmount",
+  "autoIncreaseMax",
+  "autoIncreaseIntervalMins",
+  "nextIncreaseAt",
+  "boostSuggested",
+  "suggestedBudget",
+] as const;
+
+// Internal/admin-only fields that should never leak to non-poster viewers.
+const POSTER_ONLY_INTERNAL_FIELDS = [
+  "removedByAdminReason",
+  "stuckAcknowledgedAt",
+  "stuckAcknowledgedBy",
+  "stripePaymentIntentId",
+  "stripeSessionId",
+  "stripeChargeId",
+  "stripeTransferId",
+  "disputeNotes",
+  "cancelNotes",
+] as const;
+
+function stripPosterOnlyFields(job: any) {
+  const out: any = { ...job };
+  for (const f of POSTER_ONLY_PRICE_FIELDS) delete out[f];
+  for (const f of POSTER_ONLY_INTERNAL_FIELDS) delete out[f];
+  return out;
+}
+
+// Wrap a job-returning response so mutation endpoints don't accidentally
+// leak poster-only fields (auto-increase config, suggested boost, internal
+// admin notes) to assigned helpers or other viewers.
+function respondJob(req: Request, res: Response, job: any, extra?: Record<string, any>) {
+  if (!job) return res.json(job);
+  const sanitized = sanitizeJobForPublic(job, req.session.userId);
+  if (extra) return res.json({ ...sanitized, ...extra });
+  return res.json(sanitized);
+}
+
 function sanitizeJobForPublic(job: any, viewerId: number | undefined) {
   const isOwner = viewerId === job.postedById;
   const isHelper = viewerId === job.assignedHelperId;
@@ -446,22 +489,27 @@ function sanitizeJobForPublic(job: any, viewerId: number | undefined) {
 
   const { platformFee, ...publicJob } = job;
 
-  // Expose helperPayout to owner and assigned helper so UI can show accurate breakdown
-  if (isOwner || isHelper) {
-    if (isLocked && (isOwner || isHelper)) return publicJob;
-    const fuzzedLat = fuzzCoordinate(job.lat);
-    const fuzzedLng = fuzzCoordinate(job.lng);
-    return { ...publicJob, lat: fuzzedLat, lng: fuzzedLng };
+  // Owner sees everything (including auto-increase config and admin internals).
+  if (isOwner) {
+    if (isLocked) return publicJob;
+    return { ...publicJob, lat: fuzzCoordinate(job.lat), lng: fuzzCoordinate(job.lng) };
   }
-  
-  const fuzzedLat = fuzzCoordinate(job.lat);
-  const fuzzedLng = fuzzCoordinate(job.lng);
+
+  // Assigned helper sees real coords + payout, but NOT poster's price-intent fields.
+  if (isHelper) {
+    const stripped = stripPosterOnlyFields(publicJob);
+    if (isLocked) return stripped;
+    return { ...stripped, lat: fuzzCoordinate(job.lat), lng: fuzzCoordinate(job.lng) };
+  }
+
+  // Strangers / browsing workers — strip pricing-intent + internal + payout + exact location.
+  const stripped = stripPosterOnlyFields(publicJob);
   return {
-    ...publicJob,
+    ...stripped,
     helperPayout: undefined,
     location: job.locationApprox || "Approximate location",
-    lat: fuzzedLat,
-    lng: fuzzedLng,
+    lat: fuzzCoordinate(job.lat),
+    lng: fuzzCoordinate(job.lng),
   };
 }
 
@@ -3986,7 +4034,10 @@ export async function registerRoutes(
   app.get("/api/my-jobs", requireAuth, async (req: Request, res: Response) => {
     try {
       const jobs = await storage.getUserJobs(req.session.userId!);
-      res.json(jobs);
+      // Sanitize each job from the viewer's perspective so workers don't see
+      // the poster's auto-increase ceiling on jobs they accepted.
+      const sanitized = jobs.map(j => sanitizeJobForPublic(j, req.session.userId));
+      res.json(sanitized);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -3996,7 +4047,55 @@ export async function registerRoutes(
     try {
       const job = await storage.getJob(parseInt(req.params.id));
       if (!job) return res.status(404).json({ message: "Job not found" });
-      res.json(sanitizeJobForPublic(job, req.session.userId));
+
+      const isOwner = req.session.userId === job.postedById;
+      const isHelper = req.session.userId === job.assignedHelperId;
+      // Strangers can't peek at unpublished/draft jobs by guessing IDs.
+      if (!isOwner && !isHelper && (job.status === "draft" || !job.isPaid)) {
+        return res.status(403).json({ message: "Job not available" });
+      }
+
+      // Retroactive geocode if lat/lng still missing (fire-and-forget).
+      if ((!job.lat || !job.lng) && (job.location || job.zip)) {
+        const addr = job.location && job.zip
+          ? `${job.location.trim()}, ${job.zip}, USA`
+          : job.location ? job.location.trim()
+          : `${job.zip}, USA`;
+        geocodeAddress(addr).then(async coords => {
+          if (coords) {
+            await storage.updateJob(job.id, { lat: coords.lat, lng: coords.lng });
+          } else if (job.zip) {
+            const zc = await geocodeAddress(`${job.zip}, USA`);
+            if (zc) await storage.updateJob(job.id, { lat: zc.lat, lng: zc.lng });
+          }
+        }).catch(() => {});
+      }
+
+      const sanitized = sanitizeJobForPublic(job, req.session.userId);
+
+      if (sanitized.description) sanitized.description = filterContactInfo(sanitized.description).clean;
+      if (sanitized.jobDetails) {
+        const cleanDetails: Record<string, string> = {};
+        for (const [key, val] of Object.entries(sanitized.jobDetails)) {
+          cleanDetails[key] = filterContactInfo(val as string).clean;
+        }
+        sanitized.jobDetails = cleanDetails;
+      }
+
+      if (isOwner || isHelper) {
+        const jobAssignments = await storage.getAssignmentsByJob(job.id);
+        const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
+        if (activeAssignment) {
+          (sanitized as any).assignment = {
+            workerAvailableFrom: activeAssignment.workerAvailableFrom,
+            workerAvailableTo: activeAssignment.workerAvailableTo,
+            confirmedStartTime: activeAssignment.confirmedStartTime,
+            needMoreTimeSentAt: activeAssignment.needMoreTimeSentAt,
+          };
+        }
+      }
+
+      res.json(sanitized);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -4362,67 +4461,10 @@ export async function registerRoutes(
     res.json(sanitized);
   });
 
-  app.get("/api/my-jobs", requireAuth, async (req: Request, res: Response) => {
-    const jobsList = await storage.getUserJobs(req.session.userId!);
-    const sanitized = jobsList.map(j => {
-      const { platformFee, helperPayout, ...pub } = j as any;
-      return pub;
-    });
-    res.json(sanitized);
-  });
-
-  app.get("/api/jobs/:id", requireAuth, async (req: Request, res: Response) => {
-    const job = await storage.getJob(parseInt(req.params.id as string));
-    if (!job) return res.status(404).json({ message: "Job not found" });
-    
-    const isOwner = req.session.userId === job.postedById;
-    const isHelper = req.session.userId === job.assignedHelperId;
-    if (!isOwner && !isHelper && (job.status === "draft" || !job.isPaid)) {
-      return res.status(403).json({ message: "Job not available" });
-    }
-    
-    // Retroactive geocode if lat/lng still missing
-    if ((!job.lat || !job.lng) && (job.location || job.zip)) {
-      const addr = job.location && job.zip
-        ? `${job.location.trim()}, ${job.zip}, USA`
-        : job.location ? job.location.trim()
-        : `${job.zip}, USA`;
-      geocodeAddress(addr).then(async coords => {
-        if (coords) {
-          await storage.updateJob(job.id, { lat: coords.lat, lng: coords.lng });
-        } else if (job.zip) {
-          const zc = await geocodeAddress(`${job.zip}, USA`);
-          if (zc) await storage.updateJob(job.id, { lat: zc.lat, lng: zc.lng });
-        }
-      }).catch(() => {});
-    }
-
-    const sanitized = sanitizeJobForPublic(job, req.session.userId);
-    
-    if (sanitized.description) sanitized.description = filterContactInfo(sanitized.description).clean;
-    if (sanitized.jobDetails) {
-      const cleanDetails: Record<string, string> = {};
-      for (const [key, val] of Object.entries(sanitized.jobDetails)) {
-        cleanDetails[key] = filterContactInfo(val as string).clean;
-      }
-      sanitized.jobDetails = cleanDetails;
-    }
-
-    if (isOwner || isHelper) {
-      const jobAssignments = await storage.getAssignmentsByJob(job.id);
-      const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
-      if (activeAssignment) {
-        (sanitized as any).assignment = {
-          workerAvailableFrom: activeAssignment.workerAvailableFrom,
-          workerAvailableTo: activeAssignment.workerAvailableTo,
-          confirmedStartTime: activeAssignment.confirmedStartTime,
-          needMoreTimeSentAt: activeAssignment.needMoreTimeSentAt,
-        };
-      }
-    }
-
-    res.json(sanitized);
-  });
+  // /api/my-jobs and /api/jobs/:id are registered earlier — see the
+  // sanitized handlers near the top of the jobs routes block. The duplicate
+  // copies that lived here previously were shadowed by Express and acted as
+  // dead code; removing them prevents drift between the two implementations.
 
   // PRICING SUGGESTION
   app.get("/api/pricing-suggestion", async (req: Request, res: Response) => {
@@ -4879,7 +4921,7 @@ export async function registerRoutes(
 
       // If webhook already processed this, just return the job
       if (job.isPaid && job.status !== "draft") {
-        return res.json(job);
+        return respondJob(req, res, job);
       }
 
       const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
@@ -4914,7 +4956,7 @@ export async function registerRoutes(
         });
 
         notifyNearbyAvailableWorkers(updated || job).catch(() => {});
-        res.json(updated);
+        respondJob(req, res, updated);
       } else {
         res.status(400).json({ message: "Payment not completed" });
       }
@@ -5041,7 +5083,7 @@ export async function registerRoutes(
         priority: "high",
       });
 
-      res.json(updated);
+      respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5254,7 +5296,11 @@ export async function registerRoutes(
 
       const job = await storage.getJob(jobId);
       if (!job) return res.status(404).json({ message: "Job not found" });
-      if (job.status === "funded") return res.json(job);
+      // Only the poster can confirm their own job's lock payment.
+      if (job.postedById !== req.session.userId) {
+        return res.status(403).json({ message: "Not your job" });
+      }
+      if (job.status === "funded") return respondJob(req, res, job);
 
       let chargeId: string | null = null;
       const paymentIntentId = stripeSession.payment_intent as string;
@@ -5297,7 +5343,7 @@ export async function registerRoutes(
         });
       }
 
-      res.json(updated);
+      respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5538,8 +5584,8 @@ export async function registerRoutes(
       if (!isBuyer && !isHelper) return res.status(403).json({ message: "Not authorized" });
 
       // Idempotency — if already confirmed, return current state immediately
-      if (isBuyer && job.buyerConfirmed) return res.json(job);
-      if (isHelper && job.helperConfirmed) return res.json(job);
+      if (isBuyer && job.buyerConfirmed) return respondJob(req, res, job);
+      if (isHelper && job.helperConfirmed) return respondJob(req, res, job);
 
       // GPS gate: helper must have physically checked in ("I've Arrived") before confirming
       if (isHelper && !(job as any).arrivedAt) {
@@ -5859,7 +5905,7 @@ export async function registerRoutes(
         });
       }
 
-      res.json(confirmNewBadge ? { ...updated, newBadge: confirmNewBadge } : updated);
+      respondJob(req, res, updated, confirmNewBadge ? { newBadge: confirmNewBadge } : undefined);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5924,7 +5970,7 @@ export async function registerRoutes(
         details: `Dispute opened on job ${jobId}: ${reason || "No reason provided"}`,
       });
 
-      res.json(updated);
+      respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

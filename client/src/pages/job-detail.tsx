@@ -32,6 +32,7 @@ function toLocalDatetimeString(date: Date): string {
   return `${y}-${m}-${d}T${h}:${min}`;
 }
 import { TrustBadge } from "@/components/trust-badge";
+import { formatJobTime } from "@/lib/job-time";
 import { Link, useLocation } from "wouter";
 import {
   Select,
@@ -1754,17 +1755,25 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   Payments processed by Stripe. Funds are held until job completion and confirmation by both parties. Refunds are case-by-case. GUBER may assist in disputes but does not guarantee any outcome.
                 </p>
               </div>
-              {(job as any).assignment?.workerAvailableFrom && (
+              {(job as any).assignment?.workerAvailableFrom && (() => {
+                const fromT = formatJobTime((job as any).assignment.workerAvailableFrom, job.zip);
+                const toT = formatJobTime((job as any).assignment.workerAvailableTo, job.zip);
+                return (
                 <div className="bg-card rounded-xl border border-emerald-500/20 p-4 space-y-2" data-testid="card-worker-availability">
                   <p className="text-[10px] font-display font-semibold text-muted-foreground uppercase tracking-wider">Worker Availability</p>
                   <div className="flex items-center gap-2 text-xs text-emerald-400">
                     <Clock className="w-4 h-4" />
-                    <span>
-                      {new Date((job as any).assignment.workerAvailableFrom).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                    <span data-testid="text-worker-availability-window">
+                      {fromT?.primary}
                       {" – "}
-                      {new Date((job as any).assignment.workerAvailableTo).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      {toT?.primary}
                     </span>
                   </div>
+                  {fromT?.viewerLocal && (
+                    <p className="text-[10px] text-muted-foreground/70 pl-6" data-testid="text-worker-availability-viewer-local">
+                      ({fromT.viewerLocal})
+                    </p>
+                  )}
                   <div className="space-y-1 pt-1">
                     <label className="text-[10px] text-[#00E5E5] uppercase tracking-wider font-bold">Pick a start time</label>
                     <input
@@ -1778,16 +1787,27 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     />
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
-              {(job as any).assignment?.confirmedStartTime && (
-                <div className="bg-card rounded-xl border border-primary/20 p-3 flex items-center gap-2" data-testid="card-confirmed-time">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <span className="text-xs text-muted-foreground">
-                    Confirmed start: <span className="text-foreground font-semibold">{new Date((job as any).assignment.confirmedStartTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-                  </span>
+              {(job as any).assignment?.confirmedStartTime && (() => {
+                const t = formatJobTime((job as any).assignment.confirmedStartTime, job.zip);
+                return (
+                <div className="bg-card rounded-xl border border-primary/20 p-3 space-y-1" data-testid="card-confirmed-time">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-primary" />
+                    <span className="text-xs text-muted-foreground">
+                      Confirmed start: <span className="text-foreground font-semibold" data-testid="text-confirmed-start-primary">{t?.primary}</span>
+                    </span>
+                  </div>
+                  {t?.viewerLocal && (
+                    <p className="text-[10px] text-muted-foreground/70 pl-6" data-testid="text-confirmed-start-viewer-local">
+                      ({t.viewerLocal})
+                    </p>
+                  )}
                 </div>
-              )}
+                );
+              })()}
 
               <div className="flex gap-2">
                 <Button onClick={() => lockMutation.mutate(confirmedStartTime || undefined)} disabled={lockMutation.isPending}
@@ -1816,14 +1836,24 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </div>
           )}
 
-          {(isHelper || isOwner) && (job as any).assignment?.confirmedStartTime && ["funded", "active", "in_progress"].includes(job.status) && (
-            <div className="bg-card rounded-xl border border-primary/20 p-3 flex items-center gap-2" data-testid="card-scheduled-time">
-              <Clock className="w-4 h-4 text-primary" />
-              <span className="text-xs text-muted-foreground">
-                Scheduled start: <span className="text-foreground font-semibold">{new Date((job as any).assignment.confirmedStartTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-              </span>
+          {(isHelper || isOwner) && (job as any).assignment?.confirmedStartTime && ["funded", "active", "in_progress"].includes(job.status) && (() => {
+            const t = formatJobTime((job as any).assignment.confirmedStartTime, job.zip, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+            return (
+            <div className="bg-card rounded-xl border border-primary/20 p-3 space-y-1" data-testid="card-scheduled-time">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                <span className="text-xs text-muted-foreground">
+                  Scheduled start: <span className="text-foreground font-semibold" data-testid="text-scheduled-start-primary">{t?.primary}</span>
+                </span>
+              </div>
+              {t?.viewerLocal && (
+                <p className="text-[10px] text-muted-foreground/70 pl-6" data-testid="text-scheduled-start-viewer-local">
+                  ({t.viewerLocal})
+                </p>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {["in_progress", "active", "funded"].includes(job.status) && isHelper && !job.proofRequired && job.proofStatus !== "rejected" && (
             (job as any).helperConfirmed ? (
