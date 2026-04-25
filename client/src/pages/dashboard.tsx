@@ -726,7 +726,10 @@ export default function Dashboard() {
         </div>
 
         {/* ── Primary CTA (above map) ── */}
-        <div className="mb-4 animate-fade-in stagger-2 space-y-8">
+        {/* Use flex+gap (not space-y-*) because wouter's <Link> renders an
+            inline <a>; vertical margins don't take effect on inline elements,
+            so space-y-* leaves the buttons stacked flush together. */}
+        <div className="mb-4 animate-fade-in stagger-2 flex flex-col gap-4">
           {mode === "hire" ? (
             <>
               <Link href="/post-job">
