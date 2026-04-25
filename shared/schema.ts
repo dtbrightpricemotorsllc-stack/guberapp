@@ -115,6 +115,10 @@ export const users = pgTable("users", {
   cashDropLogo1AdminUploaded: boolean("cash_drop_logo1_admin_uploaded").default(false),
   cashDropLogo2AdminUploaded: boolean("cash_drop_logo2_admin_uploaded").default(false),
   milestoneBadges: text("milestone_badges").array(),
+  // ── Coordination preferences ──────────────────────────────────────────
+  // Worker's chosen navigation provider for the new GUBER Route screen.
+  // null = ask each time (Phase 1 of the coordination overhaul).
+  preferredMapApp: text("preferred_map_app"),
 });
 
 export const categories = pgTable("categories", {
@@ -295,6 +299,50 @@ export const jobs = pgTable("jobs", {
   estimatedDurationHours: real("estimated_duration_hours"),
   stuckAcknowledgedAt: timestamp("stuck_acknowledged_at"),
   stuckAcknowledgedBy: integer("stuck_acknowledged_by"),
+  // ── Structured scheduling (no chat) ─────────────────────────────────
+  // Poster supplies one or more {date, startTime, endTime} windows when posting.
+  // Worker picks a slot inside one of these; poster confirms/rejects/suggests new.
+  // See server/coordination.ts for the full flow.
+  availabilityWindows: json("availability_windows").$type<Array<{ date: string; startTime: string; endTime: string }>>(),
+  selectedWorkerTime: timestamp("selected_worker_time"),
+  selectedArrivalWindowStart: timestamp("selected_arrival_window_start"),
+  selectedArrivalWindowEnd: timestamp("selected_arrival_window_end"),
+  // pending_worker_time | pending_poster_confirmation | scheduled |
+  // poster_suggested_window | reschedule_requested | null (legacy/unused)
+  scheduleStatus: text("schedule_status"),
+  posterConfirmedTime: timestamp("poster_confirmed_time"),
+  // When the worker last submitted a time selection (drives 30-min poster timeout).
+  lastTimeSelectionAt: timestamp("last_time_selection_at"),
+  // When the worker accepted but hasn't picked a slot yet (drives 15-min worker timeout).
+  workerAcceptedAt: timestamp("worker_accepted_at"),
+  // Poster's structured counter-suggestion when they reject the worker's pick.
+  rescheduleSuggestedWindow: json("reschedule_suggested_window").$type<{ date: string; startTime: string; endTime: string } | null>(),
+  // Tracks who initiated the most recent reschedule (poster | worker | null).
+  rescheduleRequestedBy: text("reschedule_requested_by"),
+  rescheduleCountPoster: integer("reschedule_count_poster").default(0),
+  rescheduleCountWorker: integer("reschedule_count_worker").default(0),
+  // ── Arrival GPS proof ──
+  workerOnMyWayAt: timestamp("worker_on_my_way_at"),
+  workerArrivedAt: timestamp("worker_arrived_at"),
+  arrivalGpsLat: real("arrival_gps_lat"),
+  arrivalGpsLng: real("arrival_gps_lng"),
+  arrivalVerified: boolean("arrival_verified").default(false),
+  // ── Address / navigation gating ──
+  // Computed/cached: only true when payment authorized + worker accepted + time confirmed.
+  paymentAuthorized: boolean("payment_authorized").default(false),
+  addressUnlocked: boolean("address_unlocked").default(false),
+  navigationUnlocked: boolean("navigation_unlocked").default(false),
+  // ── Proof Engine timing ──
+  // Computed at confirm time: scheduled - 15 min ... scheduled + 30 min.
+  proofWindowStart: timestamp("proof_window_start"),
+  proofWindowEnd: timestamp("proof_window_end"),
+  // ── Urgent jobs ──
+  // urgentSwitch already exists. Add the explicit deadline (now + 30/60/90 min).
+  urgentArrivalDeadline: timestamp("urgent_arrival_deadline"),
+  // ── Risk / dispute ──
+  jobAtRisk: boolean("job_at_risk").default(false),
+  // open | dispute_locked | resolved | null
+  disputeStatus: text("dispute_status"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -545,6 +593,33 @@ export const insertJobSchema = createInsertSchema(jobs).omit({
   suggestedBudget: true,
   isBoosted: true,
   boostedAt: true,
+  // ── Coordination fields are all server-controlled (set by the structured
+  //    scheduling endpoints, not by the poster directly). availabilityWindows
+  //    is the one exception and stays in the insert payload.
+  selectedWorkerTime: true,
+  selectedArrivalWindowStart: true,
+  selectedArrivalWindowEnd: true,
+  scheduleStatus: true,
+  posterConfirmedTime: true,
+  lastTimeSelectionAt: true,
+  workerAcceptedAt: true,
+  rescheduleSuggestedWindow: true,
+  rescheduleRequestedBy: true,
+  rescheduleCountPoster: true,
+  rescheduleCountWorker: true,
+  workerOnMyWayAt: true,
+  workerArrivedAt: true,
+  arrivalGpsLat: true,
+  arrivalGpsLng: true,
+  arrivalVerified: true,
+  paymentAuthorized: true,
+  addressUnlocked: true,
+  navigationUnlocked: true,
+  proofWindowStart: true,
+  proofWindowEnd: true,
+  urgentArrivalDeadline: true,
+  jobAtRisk: true,
+  disputeStatus: true,
 });
 
 export const insertReviewSchema = createInsertSchema(reviews).omit({
