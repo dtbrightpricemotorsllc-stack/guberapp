@@ -32,6 +32,15 @@ import {
   type TrustLevel,
 } from "./pricing";
 import { sanitizeJobForPublic } from "./sanitize-job";
+import {
+  validateAvailabilityWindows,
+  isInsideAnyWindow,
+  windowToDateRange,
+  computeProofWindow,
+  parseTimeSelection,
+  TIMING as COORDINATION_TIMING,
+  SCHEDULE_STATUS,
+} from "./coordination";
 
 /** Create an in-app notification AND fire a background push alert to the user's device(s). */
 async function notify(
@@ -2106,6 +2115,24 @@ export async function registerRoutes(
     }
   });
 
+  // Stores the user's preferred external map app (Apple Maps, Google Maps,
+  // Waze, …) so the future GUBER navigation wrapper can hand off to the
+  // right destination without asking every time. Sending null clears it.
+  app.post("/api/users/me/preferred-map-app", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const ALLOWED = new Set(["apple_maps", "google_maps", "waze", null]);
+      const raw = req.body?.app;
+      const value = raw === undefined ? null : raw;
+      if (!ALLOWED.has(value)) {
+        return res.status(400).json({ message: "app must be one of: apple_maps, google_maps, waze, null" });
+      }
+      await storage.updateUser(req.session.userId!, { preferredMapApp: value } as any);
+      res.json({ success: true, preferredMapApp: value });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/users/me/validate-username", requireAuth, async (req: Request, res: Response) => {
     const value = (req.query.value as string) || "";
     const validationError = validatePublicUsername(value.trim());
@@ -4062,7 +4089,20 @@ export async function registerRoutes(
     try {
       const parsed = insertJobSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
-      
+
+      // Structured-coordination soft check: non-urgent jobs SHOULD post one or
+      // more availability windows so the no-chat scheduling flow can engage.
+      // We only warn (not reject) during the transition so the legacy post
+      // flow keeps working until the Phase-2 UI lands.
+      const isUrgent = parsed.data.urgentSwitch === true || parsed.data.category === "On-Demand Help";
+      const windows = (parsed.data as any).availabilityWindows;
+      if (!isUrgent && windows != null && !validateAvailabilityWindows(windows)) {
+        return res.status(400).json({ message: "availabilityWindows must be an array of {date, startTime, endTime} objects" });
+      }
+      if (!isUrgent && (windows == null || (Array.isArray(windows) && windows.length === 0))) {
+        console.warn(`[coordination] Non-urgent job posted by user ${req.session.userId} with no availabilityWindows — legacy fallback path.`);
+      }
+
       const jobData = {
         ...parsed.data,
         postedById: req.session.userId!,
@@ -5010,12 +5050,24 @@ export async function registerRoutes(
         }
       }
 
+      // Structured-coordination flow: if the poster supplied availability windows
+      // when posting the job, the worker's accept does NOT yet pick a time —
+      // instead we move into pending_worker_time so the worker calls
+      // /api/jobs/:id/select-time next. Legacy posts (no windows) keep the old
+      // single-window accept behavior.
+      const hasStructuredWindows = validateAvailabilityWindows((job as any).availabilityWindows);
       const updated = await storage.updateJob(jobId, {
         status: "accepted_pending_payment",
         assignedHelperId: req.session.userId!,
         autoIncreaseEnabled: false,
         nextIncreaseAt: null,
-      });
+        ...(hasStructuredWindows
+          ? {
+              scheduleStatus: SCHEDULE_STATUS.PENDING_WORKER_TIME,
+              workerAcceptedAt: new Date(),
+            }
+          : {}),
+      } as any);
 
       await storage.updateUser(helper.id, {
         jobsAccepted: ((helper as any).jobsAccepted || 0) + 1,
@@ -5043,6 +5095,336 @@ export async function registerRoutes(
         priority: "high",
       });
 
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Structured "no-chat" scheduling endpoints ────────────────────────────
+  // These run in parallel with the legacy accept/lock flow. The poster's
+  // availabilityWindows on the job drive a state machine in `schedule_status`:
+  //   pending_worker_time → pending_poster_confirmation → scheduled
+  //                       ↘ poster_suggested_window ↗
+  // Each endpoint is ownership-checked, demoGuard'd, and validates inputs
+  // strictly so a malformed payload never corrupts state.
+
+  // POST /api/jobs/:id/select-time  (worker)
+  app.post("/api/jobs/:id/select-time", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job: any = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Only the assigned worker can select a time" });
+      }
+      const allowed = new Set([SCHEDULE_STATUS.PENDING_WORKER_TIME, SCHEDULE_STATUS.POSTER_SUGGESTED_WINDOW]);
+      if (!allowed.has(job.scheduleStatus)) {
+        return res.status(400).json({ message: "Job is not awaiting a worker time selection" });
+      }
+      if (!validateAvailabilityWindows(job.availabilityWindows)) {
+        return res.status(400).json({ message: "Job has no valid availability windows" });
+      }
+      const parsed = parseTimeSelection(req.body);
+      if (!parsed.ok) return res.status(400).json({ message: parsed.error });
+
+      const arrival = new Date(parsed.selection.arrivalTime);
+      if (!isInsideAnyWindow(arrival, job.availabilityWindows)) {
+        return res.status(400).json({ message: "Selected time must fall inside one of the poster's availability windows" });
+      }
+      const arrivalEnd = parsed.selection.mode === "window" && parsed.selection.arrivalWindowEnd
+        ? new Date(parsed.selection.arrivalWindowEnd)
+        : null;
+
+      const updated = await storage.updateJob(jobId, {
+        selectedWorkerTime: arrival,
+        selectedArrivalWindowStart: arrival,
+        selectedArrivalWindowEnd: arrivalEnd ?? arrival,
+        scheduleStatus: SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION,
+        lastTimeSelectionAt: new Date(),
+      } as any);
+
+      await notify(job.postedById, {
+        title: "Worker picked a time",
+        body: `Your worker proposed ${arrival.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}${arrivalEnd ? ` – ${arrivalEnd.toLocaleString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""} for "${job.title}". Confirm to lock it in.`,
+        jobId,
+        priority: "high",
+      });
+
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/jobs/:id/confirm-time  (poster)
+  app.post("/api/jobs/:id/confirm-time", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job: any = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.postedById !== req.session.userId) {
+        return res.status(403).json({ message: "Only the poster can confirm the time" });
+      }
+      if (job.scheduleStatus !== SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION) {
+        return res.status(400).json({ message: "No worker time selection awaiting confirmation" });
+      }
+      if (!job.selectedWorkerTime) {
+        return res.status(400).json({ message: "Job has no selected worker time to confirm" });
+      }
+
+      const scheduledAt = new Date(job.selectedWorkerTime);
+      const proofWindow = computeProofWindow(scheduledAt);
+
+      // Address & navigation only unlock once payment is also authorized.
+      // Confirming the time before payment is allowed (poster may pay after);
+      // the unlock just waits until both gates pass.
+      const willUnlock = !!job.paymentAuthorized;
+
+      const updated = await storage.updateJob(jobId, {
+        scheduleStatus: SCHEDULE_STATUS.SCHEDULED,
+        posterConfirmedTime: new Date(),
+        proofWindowStart: proofWindow.start,
+        proofWindowEnd: proofWindow.end,
+        ...(willUnlock ? { addressUnlocked: true, navigationUnlocked: true } : {}),
+      } as any);
+
+      if (job.assignedHelperId) {
+        await notify(job.assignedHelperId, {
+          title: "Time Confirmed!",
+          body: `${scheduledAt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} is locked in for "${job.title}".${willUnlock ? " Address and navigation are unlocked." : " Address unlocks once payment is authorized."}`,
+          jobId,
+          priority: "high",
+        });
+      }
+
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/jobs/:id/reject-time  (poster)
+  app.post("/api/jobs/:id/reject-time", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job: any = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.postedById !== req.session.userId) {
+        return res.status(403).json({ message: "Only the poster can reject a time selection" });
+      }
+      if (job.scheduleStatus !== SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION) {
+        return res.status(400).json({ message: "No worker time selection to reject" });
+      }
+
+      const updated = await storage.updateJob(jobId, {
+        selectedWorkerTime: null,
+        selectedArrivalWindowStart: null,
+        selectedArrivalWindowEnd: null,
+        scheduleStatus: SCHEDULE_STATUS.PENDING_WORKER_TIME,
+        lastTimeSelectionAt: new Date(),
+      } as any);
+
+      if (job.assignedHelperId) {
+        await notify(job.assignedHelperId, {
+          title: "Time rejected — pick another slot",
+          body: `The poster needs a different time for "${job.title}". Pick another slot from their availability.`,
+          jobId,
+          priority: "high",
+        });
+      }
+
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/jobs/:id/suggest-window  (poster)
+  // Body: { date: 'YYYY-MM-DD', startTime: 'HH:MM', endTime: 'HH:MM' }
+  app.post("/api/jobs/:id/suggest-window", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job: any = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.postedById !== req.session.userId) {
+        return res.status(403).json({ message: "Only the poster can suggest a window" });
+      }
+      const allowed = new Set([SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION, SCHEDULE_STATUS.PENDING_WORKER_TIME]);
+      if (!allowed.has(job.scheduleStatus)) {
+        return res.status(400).json({ message: "Cannot suggest a window in the current schedule state" });
+      }
+      const { date, startTime, endTime } = req.body || {};
+      const window = { date, startTime, endTime };
+      if (!validateAvailabilityWindows([window])) {
+        return res.status(400).json({ message: "Invalid window. Provide {date:YYYY-MM-DD, startTime:HH:MM, endTime:HH:MM}." });
+      }
+      const { start } = windowToDateRange(window);
+      if (start <= new Date()) {
+        return res.status(400).json({ message: "Suggested window must start in the future" });
+      }
+
+      const updated = await storage.updateJob(jobId, {
+        rescheduleSuggestedWindow: window,
+        rescheduleRequestedBy: "poster",
+        scheduleStatus: SCHEDULE_STATUS.POSTER_SUGGESTED_WINDOW,
+        // Clear any pending worker selection so the worker has to act on the suggestion.
+        selectedWorkerTime: null,
+        selectedArrivalWindowStart: null,
+        selectedArrivalWindowEnd: null,
+      } as any);
+
+      if (job.assignedHelperId) {
+        await notify(job.assignedHelperId, {
+          title: "Poster suggested a new window",
+          body: `Poster suggests ${window.date} ${window.startTime}–${window.endTime} for "${job.title}". Accept it or pick a different slot.`,
+          jobId,
+          priority: "high",
+        });
+      }
+
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/jobs/:id/respond-suggested-window  (worker)
+  // Body: { accept: boolean, arrivalTime?: ISO } — when accepting, the worker
+  //   must still pick a specific arrival inside the suggested window.
+  app.post("/api/jobs/:id/respond-suggested-window", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job: any = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Only the assigned worker can respond to the suggestion" });
+      }
+      if (job.scheduleStatus !== SCHEDULE_STATUS.POSTER_SUGGESTED_WINDOW) {
+        return res.status(400).json({ message: "No suggested window to respond to" });
+      }
+      const accept = req.body?.accept === true;
+
+      if (!accept) {
+        // Worker rejects → fall back to picking a time inside the original windows.
+        const updated = await storage.updateJob(jobId, {
+          rescheduleSuggestedWindow: null,
+          rescheduleRequestedBy: null,
+          scheduleStatus: SCHEDULE_STATUS.PENDING_WORKER_TIME,
+        } as any);
+        await notify(job.postedById, {
+          title: "Worker declined the suggestion",
+          body: `Worker passed on your suggested window for "${job.title}". They'll pick a different time.`,
+          jobId,
+          priority: "high",
+        });
+        return await respondJob(req, res, updated);
+      }
+
+      const window = job.rescheduleSuggestedWindow;
+      if (!validateAvailabilityWindows([window])) {
+        return res.status(400).json({ message: "Suggested window is no longer valid" });
+      }
+      const arrival = req.body?.arrivalTime ? new Date(req.body.arrivalTime) : null;
+      if (!arrival || isNaN(arrival.getTime()) || !isInsideAnyWindow(arrival, [window])) {
+        return res.status(400).json({ message: "arrivalTime must lie inside the suggested window" });
+      }
+
+      const updated = await storage.updateJob(jobId, {
+        selectedWorkerTime: arrival,
+        selectedArrivalWindowStart: arrival,
+        selectedArrivalWindowEnd: arrival,
+        scheduleStatus: SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION,
+        lastTimeSelectionAt: new Date(),
+      } as any);
+
+      await notify(job.postedById, {
+        title: "Worker accepted your suggestion",
+        body: `Worker picked ${arrival.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} for "${job.title}". Confirm to lock it in.`,
+        jobId,
+        priority: "high",
+      });
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/jobs/:id/reschedule-request  (either side)
+  // Body: { date, startTime, endTime } — the requester proposes a new window.
+  // Each side gets a single free reschedule (TIMING.MAX_RESCHEDULES_PER_SIDE).
+  app.post("/api/jobs/:id/reschedule-request", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job: any = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      const isPoster = job.postedById === req.session.userId;
+      const isWorker = job.assignedHelperId === req.session.userId;
+      if (!isPoster && !isWorker) return res.status(403).json({ message: "Not a participant in this job" });
+      if (job.scheduleStatus !== SCHEDULE_STATUS.SCHEDULED) {
+        return res.status(400).json({ message: "Reschedule only allowed once a time is scheduled" });
+      }
+
+      const counterField = isPoster ? "rescheduleCountPoster" : "rescheduleCountWorker";
+      const used = (job[counterField] ?? 0) as number;
+      if (used >= COORDINATION_TIMING.MAX_RESCHEDULES_PER_SIDE) {
+        return res.status(400).json({ message: "You've already used your reschedule for this job" });
+      }
+
+      const { date, startTime, endTime } = req.body || {};
+      const window = { date, startTime, endTime };
+      if (!validateAvailabilityWindows([window])) {
+        return res.status(400).json({ message: "Invalid reschedule window" });
+      }
+      const { start, end } = windowToDateRange(window);
+      if (start <= new Date()) {
+        return res.status(400).json({ message: "Reschedule window must start in the future" });
+      }
+
+      // For worker-initiated reschedules we require a specific arrivalTime
+      // inside the proposed window so the poster's existing /confirm-time
+      // endpoint (which needs selectedWorkerTime to be set) can act on it
+      // without a separate dead-end state.
+      let workerArrivalForReschedule: Date | null = null;
+      if (!isPoster) {
+        const arrivalRaw = req.body?.arrivalTime;
+        const arrival = arrivalRaw ? new Date(arrivalRaw) : null;
+        if (!arrival || isNaN(arrival.getTime()) || arrival < start || arrival > end) {
+          return res.status(400).json({ message: "arrivalTime is required and must lie inside the proposed window" });
+        }
+        workerArrivalForReschedule = arrival;
+      }
+
+      const updated = await storage.updateJob(jobId, {
+        rescheduleSuggestedWindow: window,
+        rescheduleRequestedBy: isPoster ? "poster" : "worker",
+        [counterField]: used + 1,
+        scheduleStatus: isPoster
+          ? SCHEDULE_STATUS.POSTER_SUGGESTED_WINDOW
+          : SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION,
+        // Worker-initiated: keep a concrete selectedWorkerTime so /confirm-time
+        // can act on it. Poster-initiated: clear so worker re-picks via
+        // /respond-suggested-window.
+        selectedWorkerTime: workerArrivalForReschedule,
+        selectedArrivalWindowStart: workerArrivalForReschedule,
+        selectedArrivalWindowEnd: workerArrivalForReschedule,
+        posterConfirmedTime: null,
+        proofWindowStart: null,
+        proofWindowEnd: null,
+        // Re-lock the address until the reschedule is reconfirmed.
+        addressUnlocked: false,
+        navigationUnlocked: false,
+      } as any);
+
+      const recipientId = isPoster ? job.assignedHelperId : job.postedById;
+      if (recipientId) {
+        await notify(recipientId, {
+          title: "Reschedule requested",
+          body: `${isPoster ? "Poster" : "Worker"} wants to reschedule "${job.title}" to ${window.date} ${window.startTime}–${window.endTime}.`,
+          jobId,
+          priority: "high",
+        });
+      }
       await respondJob(req, res, updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -5087,7 +5469,25 @@ export async function registerRoutes(
 
       const isAdmin = poster.role === "admin";
       if (job.category === "Barter Labor" || budget <= 0 || isAdmin) {
-        const updated = await storage.updateJob(jobId, { status: "funded", lockedAt: new Date() });
+        // Compute the structured proof window if a confirmed start time exists.
+        const proofWindow = confirmedStartTime
+          ? computeProofWindow(new Date(confirmedStartTime))
+          : null;
+        // Address & nav only unlock when ALL three gates pass: payment authorized
+        // + worker accepted + scheduleStatus='scheduled'. The legacy lock path
+        // either pre-existed (scheduleStatus=null) — in which case the legacy
+        // funded-status fallback in isAddressUnlocked() carries the load —
+        // or it ran AFTER the new confirm-time set scheduleStatus='scheduled'.
+        const scheduleReady = (job as any).scheduleStatus === SCHEDULE_STATUS.SCHEDULED;
+        const allGatesPass = scheduleReady && !!job.assignedHelperId;
+        const updated = await storage.updateJob(jobId, {
+          status: "funded",
+          lockedAt: new Date(),
+          paymentAuthorized: true,
+          ...(allGatesPass ? { addressUnlocked: true, navigationUnlocked: true } : {}),
+          ...(confirmedStartTime ? { posterConfirmedTime: new Date() } : {}),
+          ...(proofWindow ? { proofWindowStart: proofWindow.start, proofWindowEnd: proofWindow.end } : {}),
+        } as any);
         const timeMsg = confirmedStartTime ? ` Start time: ${new Date(confirmedStartTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.` : "";
         await notify(job.assignedHelperId!, {
           title: "Job Funded!",
@@ -5273,6 +5673,22 @@ export async function registerRoutes(
         }
       }
 
+      // Compute structured proof window from the worker's confirmed start time.
+      const lockJobAssignments = await storage.getAssignmentsByJob(jobId);
+      const lockActiveAssignment = lockJobAssignments.find(a => a.helperId === job.assignedHelperId);
+      const confirmedStart = lockActiveAssignment?.confirmedStartTime
+        ? new Date(lockActiveAssignment.confirmedStartTime)
+        : (job as any).selectedWorkerTime
+          ? new Date((job as any).selectedWorkerTime)
+          : null;
+      const lockProofWindow = confirmedStart ? computeProofWindow(confirmedStart) : null;
+
+      // Address & nav only unlock when ALL three gates pass: payment authorized
+      // + worker accepted + scheduleStatus='scheduled'. Legacy callers that
+      // skipped the new flow keep working via the funded-status fallback in
+      // isAddressUnlocked().
+      const lockScheduleReady = (job as any).scheduleStatus === SCHEDULE_STATUS.SCHEDULED;
+      const lockAllGatesPass = lockScheduleReady && !!job.assignedHelperId;
       // isPaid = true signals authorized/funded (for job visibility); chargedAt set only at capture
       const updated = await storage.updateJob(jobId, {
         status: "funded",
@@ -5280,6 +5696,10 @@ export async function registerRoutes(
         isPaid: true,
         stripePaymentIntentId: paymentIntentId,
         stripeChargeId: chargeId,
+        paymentAuthorized: true,
+        ...(lockAllGatesPass ? { addressUnlocked: true, navigationUnlocked: true } : {}),
+        ...(confirmedStart ? { posterConfirmedTime: new Date() } : {}),
+        ...(lockProofWindow ? { proofWindowStart: lockProofWindow.start, proofWindowEnd: lockProofWindow.end } : {}),
       } as any);
 
       if (job.assignedHelperId) {
@@ -5367,8 +5787,11 @@ export async function registerRoutes(
         await storage.updateJob(jobId, {
           helperStage: "on_the_way",
           onTheWayAt: now,
+          // Mirror to the structured-coordination field so the at-risk cron
+          // and future Phase 2 UI both see a consistent timestamp.
+          workerOnMyWayAt: now,
           status: job.status === "funded" ? "active" : job.status,
-        });
+        } as any);
 
         await notify(job.postedById, {
           title: "Helper On The Way 🚗",
@@ -13014,6 +13437,122 @@ YOUR BEHAVIOR:
       console.error("[cron] offer expiration error:", err);
     }
   }, 60 * 1000);
+
+  // ── Coordination timeouts cron ───────────────────────────────────────────
+  // Runs every 2 minutes. Three sweeps:
+  //   1. pending_poster_confirmation older than 30 min → revert to
+  //      pending_worker_time so the worker can re-pick (prevents zombie
+  //      pending selections holding the job hostage).
+  //   2. pending_worker_time older than 15 min after worker accept → revert
+  //      assignment so the job re-opens to other workers.
+  //   3. scheduled but past arrival time and worker has not pinged
+  //      worker_on_my_way_at → set job_at_risk=true and notify the poster.
+  // All sweeps are no-ops on empty result sets and never throw past the
+  // catch boundary.
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const posterDeadline = new Date(now.getTime() - COORDINATION_TIMING.POSTER_CONFIRM_TIMEOUT_MIN * 60_000);
+      const workerDeadline = new Date(now.getTime() - COORDINATION_TIMING.WORKER_PICK_TIMEOUT_MIN * 60_000);
+
+      // Sweep 1: poster sat on a worker time pick > 30 min.
+      const stalePosterConfirms = await db
+        .select()
+        .from(jobsTable)
+        .where(and(
+          eq(jobsTable.scheduleStatus, SCHEDULE_STATUS.PENDING_POSTER_CONFIRMATION),
+          sql`${jobsTable.lastTimeSelectionAt} IS NOT NULL`,
+          sql`${jobsTable.lastTimeSelectionAt} < ${posterDeadline}`,
+        ));
+      for (const j of stalePosterConfirms) {
+        await storage.updateJob(j.id, {
+          scheduleStatus: SCHEDULE_STATUS.PENDING_WORKER_TIME,
+          selectedWorkerTime: null,
+          selectedArrivalWindowStart: null,
+          selectedArrivalWindowEnd: null,
+        } as any);
+        if (j.assignedHelperId) {
+          await notify(j.assignedHelperId, {
+            title: "Poster didn't confirm — pick again",
+            body: `The poster didn't confirm your time for "${j.title}" within 30 minutes. Choose another slot or cancel without penalty.`,
+            jobId: j.id,
+            priority: "high",
+          });
+        }
+      }
+
+      // Sweep 2: worker accepted but never picked a time within 15 min.
+      // Note: we intentionally do NOT filter on isPaid — the post-publish
+      // flow flips isPaid=true the moment the job hits posted_public (the
+      // poster paid the posting fee), so requiring isPaid=false would skip
+      // every accepted job. The status='accepted_pending_payment' check is
+      // the actual gate (job hasn't been locked/funded yet).
+      const staleWorkerPicks = await db
+        .select()
+        .from(jobsTable)
+        .where(and(
+          eq(jobsTable.scheduleStatus, SCHEDULE_STATUS.PENDING_WORKER_TIME),
+          sql`${jobsTable.workerAcceptedAt} IS NOT NULL`,
+          sql`${jobsTable.workerAcceptedAt} < ${workerDeadline}`,
+          sql`${jobsTable.assignedHelperId} IS NOT NULL`,
+          eq(jobsTable.status, "accepted_pending_payment"),
+        ));
+      for (const j of staleWorkerPicks) {
+        const formerHelperId = j.assignedHelperId;
+        await storage.updateJob(j.id, {
+          status: "posted_public",
+          assignedHelperId: null,
+          scheduleStatus: null,
+          workerAcceptedAt: null,
+          selectedWorkerTime: null,
+          selectedArrivalWindowStart: null,
+          selectedArrivalWindowEnd: null,
+        } as any);
+        if (formerHelperId) {
+          await notify(formerHelperId, {
+            title: "Job re-opened",
+            body: `You didn't pick a time for "${j.title}" within 15 minutes, so it's back in the open queue.`,
+            jobId: j.id,
+            priority: "normal",
+          });
+        }
+        await notify(j.postedById, {
+          title: "Worker timed out",
+          body: `Worker didn't pick a time for "${j.title}" — it's back in the open queue.`,
+          jobId: j.id,
+          priority: "normal",
+        });
+      }
+
+      // Sweep 3: scheduled jobs past their arrival window with no on-my-way ping.
+      // We accept either the new structured `worker_on_my_way_at` field or the
+      // legacy `on_the_way_at` field (set by the existing milestone endpoint)
+      // so a worker who used the legacy "On the way" button isn't falsely
+      // flagged at-risk.
+      const atRiskJobs = await db
+        .select()
+        .from(jobsTable)
+        .where(and(
+          eq(jobsTable.scheduleStatus, SCHEDULE_STATUS.SCHEDULED),
+          sql`${jobsTable.selectedWorkerTime} IS NOT NULL`,
+          sql`${jobsTable.selectedWorkerTime} < ${now}`,
+          sql`${jobsTable.workerOnMyWayAt} IS NULL`,
+          sql`${jobsTable.onTheWayAt} IS NULL`,
+          sql`(${jobsTable.jobAtRisk} IS NULL OR ${jobsTable.jobAtRisk} = false)`,
+        ));
+      for (const j of atRiskJobs) {
+        await storage.updateJob(j.id, { jobAtRisk: true } as any);
+        await notify(j.postedById, {
+          title: "Worker hasn't started yet",
+          body: `Your worker for "${j.title}" hasn't tapped "On my way" past their scheduled time. We're flagging this job at-risk.`,
+          jobId: j.id,
+          priority: "high",
+        });
+      }
+    } catch (err) {
+      console.error("[cron] coordination timeouts error:", err);
+    }
+  }, 2 * 60 * 1000);
 
   return httpServer;
 }

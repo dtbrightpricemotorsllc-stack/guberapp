@@ -28,6 +28,38 @@ export const POSTER_ONLY_INTERNAL_FIELDS = [
   "cancelNotes",
 ] as const;
 
+// Coordination metadata that participants (poster + assigned worker) need to
+// drive the structured no-chat scheduling flow but that strangers / browsing
+// workers should never see — it leaks the participants' availability,
+// scheduling intent, and reschedule history.
+export const PARTICIPANT_ONLY_COORDINATION_FIELDS = [
+  "availabilityWindows",
+  "selectedWorkerTime",
+  "selectedArrivalWindowStart",
+  "selectedArrivalWindowEnd",
+  "scheduleStatus",
+  "posterConfirmedTime",
+  "lastTimeSelectionAt",
+  "workerAcceptedAt",
+  "rescheduleSuggestedWindow",
+  "rescheduleRequestedBy",
+  "rescheduleCountPoster",
+  "rescheduleCountWorker",
+  "workerOnMyWayAt",
+  "workerArrivedAt",
+  "arrivalGpsLat",
+  "arrivalGpsLng",
+  "arrivalVerified",
+  "paymentAuthorized",
+  "addressUnlocked",
+  "navigationUnlocked",
+  "proofWindowStart",
+  "proofWindowEnd",
+  "urgentArrivalDeadline",
+  "jobAtRisk",
+  "disputeStatus",
+] as const;
+
 const LOCKED_STATUSES = new Set([
   "funded",
   "active",
@@ -75,6 +107,13 @@ export function stripPosterOnlyFields(job: any) {
   return out;
 }
 
+/** Strip the structured-coordination metadata that only participants need. */
+export function stripParticipantOnlyCoordinationFields(job: any) {
+  const out: any = { ...job };
+  for (const f of PARTICIPANT_ONLY_COORDINATION_FIELDS) delete out[f];
+  return out;
+}
+
 export function sanitizeJobForPublic(
   job: any,
   viewerId: number | undefined,
@@ -113,8 +152,10 @@ export function sanitizeJobForPublic(
   }
 
   // Strangers / browsing workers — strip pricing-intent + internal + payout
-  // + exact location.
-  const stripped = stripPosterOnlyFields(publicJob);
+  // + exact location + structured-coordination metadata (availability windows,
+  // selected times, reschedule history, GPS arrival, gating flags). They can
+  // see the job exists but never see how the participants are coordinating.
+  const stripped = stripParticipantOnlyCoordinationFields(stripPosterOnlyFields(publicJob));
   return {
     ...stripped,
     helperPayout: undefined,
