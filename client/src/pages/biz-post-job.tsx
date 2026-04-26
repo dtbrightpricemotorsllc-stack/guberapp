@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Briefcase, MapPin, DollarSign, FileText, Tag, ChevronLeft, CheckCircle } from "lucide-react";
+import { AvailabilityWindowsPicker, type AvailabilityWindow, hasAtLeastOneFutureWindow } from "@/components/availability-windows-picker";
 
 const GOLD = "#C9A84C";
 const TEXT_PRIMARY = "#F4F4F5";
@@ -47,9 +48,13 @@ export default function BizPostJob() {
     zip: "",
     urgentSwitch: false,
   });
+  const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const cleanWindows = !form.urgentSwitch
+        ? availabilityWindows.filter(w => w.date && w.startTime && w.endTime && w.startTime < w.endTime)
+        : [];
       const resp = await apiRequest("POST", "/api/jobs", {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -58,6 +63,7 @@ export default function BizPostJob() {
         location: form.location.trim(),
         zip: form.zip.trim(),
         urgentSwitch: form.urgentSwitch,
+        ...(cleanWindows.length > 0 ? { availabilityWindows: cleanWindows } : {}),
       });
       return resp.json();
     },
@@ -71,7 +77,11 @@ export default function BizPostJob() {
     },
   });
 
-  const canSubmit = form.title.trim().length >= 3 && form.budget !== "" && !isNaN(parseFloat(form.budget));
+  const canSubmit =
+    form.title.trim().length >= 3 &&
+    form.budget !== "" &&
+    !isNaN(parseFloat(form.budget)) &&
+    (form.urgentSwitch || hasAtLeastOneFutureWindow(availabilityWindows));
 
   if (submitted) {
     return (
@@ -249,6 +259,20 @@ export default function BizPostJob() {
               </div>
             </div>
           </div>
+
+          {!form.urgentSwitch && (
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}` }}
+            >
+              <AvailabilityWindowsPicker
+                value={availabilityWindows}
+                onChange={setAvailabilityWindows}
+                variant="biz"
+                helperText="Tell workers when you're available. They'll pick a start time inside one of these windows for you to confirm."
+              />
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <Button

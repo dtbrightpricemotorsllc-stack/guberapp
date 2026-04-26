@@ -34,6 +34,7 @@ function toLocalDatetimeString(date: Date): string {
 import { TrustBadge } from "@/components/trust-badge";
 import { formatJobTime } from "@/lib/job-time";
 import { Link, useLocation } from "wouter";
+import { SchedulingPanel, isJobAddressUnlocked } from "@/components/scheduling-panel";
 import {
   Select,
   SelectContent,
@@ -126,6 +127,12 @@ export default function JobDetail() {
       : `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
     window.open(wazeUrl, "_blank");
     setTimeout(() => openGoogleMapsForJob(j), 2000);
+  };
+
+  const openAppleMapsForJob = (j: any) => {
+    const dest = buildNavDestination(j);
+    if (!dest) return;
+    window.open(`https://maps.apple.com/?daddr=${dest}`, "_blank");
   };
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -530,8 +537,20 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       if (vars.statusType === "on_the_way") {
         setNavUrls(data.navigationUrls || { google: null, waze: null });
-        setShowNavModal(true);
-        toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
+        const pref = (user as any)?.preferredMapApp;
+        if (pref === "google_maps") {
+          openGoogleMapsForJob(job);
+          toast({ title: "On The Way!", description: "GPS logged. Opening Google Maps." });
+        } else if (pref === "waze") {
+          openWazeForJob(job);
+          toast({ title: "On The Way!", description: "GPS logged. Opening Waze." });
+        } else if (pref === "apple_maps") {
+          openAppleMapsForJob(job);
+          toast({ title: "On The Way!", description: "GPS logged. Opening Apple Maps." });
+        } else {
+          setShowNavModal(true);
+          toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
+        }
       } else if (vars.statusType === "arrived") {
         toast({ title: "Arrival Logged", description: "The poster has been notified you arrived." });
       } else if (vars.statusType === "cancelled") {
@@ -1001,11 +1020,18 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             )}
             <div className="bg-background rounded-xl p-3">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Location</p>
-              {isLockedOrBeyond && (isOwner || isHelper) ? (
-                <p className="text-sm flex items-center gap-1"><MapPin className="w-3 h-3" />{job.location || "N/A"}</p>
+              {(isOwner || isHelper) && isJobAddressUnlocked(job as any) ? (
+                <p className="text-sm flex items-center gap-1" data-testid="text-job-address-unlocked">
+                  <MapPin className="w-3 h-3" />{job.location || "N/A"}
+                </p>
               ) : (
-                <p className="text-sm flex items-center gap-1 text-muted-foreground">
+                <p className="text-sm flex items-center gap-1 text-muted-foreground" data-testid="text-job-address-locked">
                   <Lock className="w-3 h-3" />{(job as any).locationApprox || job.zip || "Locked"}
+                </p>
+              )}
+              {(isOwner || isHelper) && !isJobAddressUnlocked(job as any) && (
+                <p className="text-[10px] text-muted-foreground/80 mt-1.5 leading-tight" data-testid="text-address-unlock-hint">
+                  Address unlocks once the time is confirmed and payment is held.
                 </p>
               )}
             </div>
@@ -1081,6 +1107,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           )}
         </div>
 
+        {/* Phase-2 structured no-chat scheduling panel. Only renders for the
+            poster + assigned worker once the worker has accepted (i.e. the
+            backend has set scheduleStatus). Branches by status + viewer role. */}
+        {(isOwner || isHelper) && (
+          <SchedulingPanel job={job as any} viewerId={user?.id} />
+        )}
+
         {showClipboard && (
           <Link href={`/worker-clipboard/${jobId}`}>
             <Button
@@ -1128,7 +1161,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </Button>
             )}
 
-            {isActiveJob && ((job as any).lat || job.location) && (
+            {isActiveJob && isJobAddressUnlocked(job as any) && ((job as any).lat || job.location) && (
               <div className="space-y-2 pt-1" data-testid="section-navigation">
                 <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Get Directions</p>
                 {job.location && (
@@ -2263,6 +2296,23 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     <p className="text-xs text-muted-foreground">Turn-by-turn navigation</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-blue-400/50 ml-auto" />
+                </button>
+              )}
+
+              {job && (
+                <button
+                  onClick={() => { setShowNavModal(false); openAppleMapsForJob(job); }}
+                  className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  style={{ background: "rgba(180,180,180,0.10)", border: "1px solid rgba(180,180,180,0.22)" }}
+                  data-testid="link-apple-maps">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(180,180,180,0.18)" }}>
+                    <MapPin className="w-5 h-5 text-zinc-200" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-display font-bold text-zinc-200">Open in Apple Maps</p>
+                    <p className="text-xs text-muted-foreground">iOS native turn-by-turn</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-zinc-200/50 ml-auto" />
                 </button>
               )}
 

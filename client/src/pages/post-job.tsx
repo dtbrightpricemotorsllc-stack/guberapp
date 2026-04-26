@@ -19,6 +19,7 @@ import { Loader2, AlertTriangle, Lock, FileText, Zap, DollarSign, MapPin, Naviga
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { type DetailOptionSet } from "@shared/schema";
 import { TASK_TIERS, PRICING_MODES, type TaskTierId, type PricingModeId } from "@shared/task-tiers";
+import { AvailabilityWindowsPicker, type AvailabilityWindow, hasAtLeastOneFutureWindow } from "@/components/availability-windows-picker";
 
 const mainCategories = [
   "On-Demand Help", "General Labor", "Skilled Labor",
@@ -89,6 +90,7 @@ export default function PostJob() {
   const [autoIncreaseIntervalMins, setAutoIncreaseIntervalMins] = useState("60");
   const [taskTier, setTaskTier] = useState<TaskTierId | "">("");
   const [pricingModeSelection, setPricingModeSelection] = useState<PricingModeId>("fixed");
+  const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([]);
 
   const { data: businessProfile } = useQuery<any>({
     queryKey: ["/api/business/profile"],
@@ -255,6 +257,15 @@ export default function PostJob() {
         payload.pricingMode = pricingModeSelection;
       }
 
+      // Phase-2 structured coordination: include availability windows for any
+      // non-urgent job. Urgent jobs skip the no-chat scheduling flow entirely
+      // (worker shows up ASAP), so we deliberately omit windows in that case.
+      if (!urgentSwitch && availabilityWindows.length > 0) {
+        payload.availabilityWindows = availabilityWindows.filter(
+          w => w.date && w.startTime && w.endTime && w.startTime < w.endTime,
+        );
+      }
+
       const resp = await apiRequest("POST", "/api/jobs/create-checkout", payload);
       return resp.json();
     },
@@ -314,8 +325,14 @@ export default function PostJob() {
       if (!amt || amt <= 0) return "Enter a valid auto-increase amount";
       if (!max || max <= budgetNum) return "Auto-increase max must be higher than budget";
     }
+    // Phase-2 structured coordination: every non-urgent in-person job needs at
+    // least one valid future availability window so the worker has a slot to
+    // pick. Urgent and online-only jobs skip the no-chat scheduling flow.
+    if (!urgentSwitch && !isOnlineCategory && !hasAtLeastOneFutureWindow(availabilityWindows)) {
+      return "Add at least one availability window";
+    }
     return "";
-  }, [category, isVIJob, serviceType, isBarter, budgetNum, minPayoutError, locationRequired, zip, checklists, jobDetails, barterNeed, barterOffering, autoIncreaseEnabled, autoIncreaseAmount, autoIncreaseMax]);
+  }, [category, isVIJob, serviceType, isBarter, budgetNum, minPayoutError, locationRequired, zip, checklists, jobDetails, barterNeed, barterOffering, autoIncreaseEnabled, autoIncreaseAmount, autoIncreaseMax, urgentSwitch, isOnlineCategory, availabilityWindows]);
 
   const canSubmit = !missingReason;
 
@@ -950,6 +967,14 @@ export default function PostJob() {
               </div>
               <Switch checked={urgentSwitch} onCheckedChange={setUrgentSwitch} data-testid="switch-urgent" />
             </div>
+          )}
+
+          {!urgentSwitch && !isOnlineCategory && (
+            <AvailabilityWindowsPicker
+              value={availabilityWindows}
+              onChange={setAvailabilityWindows}
+              helperText="When are you available for the worker to come? Add one or more windows. The worker will pick a start time inside one of them."
+            />
           )}
 
           {!isBarter && budgetNum > 0 && (

@@ -4626,11 +4626,27 @@ export async function registerRoutes(
               verifyInspectCategory, useCaseName, catalogServiceTypeName, jobDetails, scheduledAt, isBounty,
               estimatedMinutes: rawEstimatedMinutes, barterNeed, barterOffering, barterEstimatedValue,
               autoIncreaseEnabled, autoIncreaseAmount, autoIncreaseMax, autoIncreaseIntervalMins,
-              lat: rawLat, lng: rawLng } = req.body;
+              lat: rawLat, lng: rawLng, availabilityWindows: rawAvailabilityWindows } = req.body;
       const exactLat = rawLat != null && !isNaN(parseFloat(rawLat)) ? parseFloat(rawLat) : null;
       const exactLng = rawLng != null && !isNaN(parseFloat(rawLng)) ? parseFloat(rawLng) : null;
 
       if (!category) return res.status(400).json({ message: "Category is required" });
+
+      // Phase-2 structured coordination: posters of non-urgent jobs supply
+      // one or more availability windows so the no-chat scheduling flow can
+      // engage. We keep a soft fallback for legacy callers that haven't been
+      // updated yet (mirrors the warning in /api/jobs).
+      const isUrgentJob = urgentSwitch === true || category === "On-Demand Help";
+      let cleanAvailabilityWindows: Array<{ date: string; startTime: string; endTime: string }> | null = null;
+      if (rawAvailabilityWindows != null) {
+        if (!validateAvailabilityWindows(rawAvailabilityWindows)) {
+          return res.status(400).json({ message: "availabilityWindows must be an array of {date, startTime, endTime} objects" });
+        }
+        cleanAvailabilityWindows = rawAvailabilityWindows;
+      }
+      if (!isUrgentJob && !cleanAvailabilityWindows) {
+        console.warn(`[coordination] Non-urgent job posted by user ${req.session.userId} via create-checkout with no availabilityWindows — legacy fallback path.`);
+      }
 
       let title = "";
       let description = "";
@@ -4836,6 +4852,7 @@ export async function registerRoutes(
             nextIncreaseAt: new Date(Date.now() + parsedInterval * 60 * 1000),
           };
         })(),
+        ...(cleanAvailabilityWindows ? { availabilityWindows: cleanAvailabilityWindows } : {}),
       });
 
       // Geocode address/zip in background (non-blocking)

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -60,6 +60,27 @@ export default function AccountSettings() {
 
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnabled, setBiometricEnabledState] = useState(false);
+
+  const [preferredMapApp, setPreferredMapApp] = useState<string>("ask");
+
+  useEffect(() => {
+    if (user) {
+      setPreferredMapApp(((user as any).preferredMapApp as string) || "ask");
+    }
+  }, [user]);
+
+  const preferredMapMutation = useMutation({
+    mutationFn: async (value: string) => {
+      const apiValue = value === "ask" ? null : value;
+      const r = await apiRequest("POST", "/api/users/me/preferred-map-app", { app: apiValue });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Map preference saved" });
+    },
+    onError: (err: any) => toast({ title: "Could not save preference", description: err?.message, variant: "destructive" }),
+  });
 
   useEffect(() => {
     (async () => {
@@ -296,6 +317,28 @@ export default function AccountSettings() {
             </Button>
           </div>
         )}
+
+        <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3 mb-4" data-testid="card-preferred-map">
+          <div className="flex items-center gap-2 mb-1">
+            <Map className="w-4 h-4 text-primary" />
+            <h3 className="font-display font-semibold text-sm">Preferred Map App</h3>
+          </div>
+          <p className="text-[11px] text-muted-foreground">When you tap Open in Maps, we'll use this app instead of asking each time.</p>
+          <Select
+            value={preferredMapApp}
+            onValueChange={(v) => { setPreferredMapApp(v); preferredMapMutation.mutate(v); }}
+          >
+            <SelectTrigger className="bg-background border-border/30" data-testid="select-preferred-map-app">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ask">Always ask</SelectItem>
+              <SelectItem value="google_maps">Google Maps</SelectItem>
+              <SelectItem value="apple_maps">Apple Maps</SelectItem>
+              <SelectItem value="waze">Waze</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {biometricSupported && (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3" data-testid="card-biometric">
