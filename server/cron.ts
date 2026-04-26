@@ -704,6 +704,9 @@ async function cashDropExpiringSweep(): Promise<number> {
     for (const uid of userIds) {
       const user = await storage.getUser(uid);
       if (!user) continue;
+      // Both gates: the broad cash-drops category AND the dedicated
+      // expiring-reminder pref. Either one being off mutes this push.
+      if (user.notifCashDrops === false) continue;
       if (user.notifReminderDropExpiring === false) continue;
       if (isUserInQuietHours(user)) continue;
       if (!(await claimReminder({ cashDropId: d.id, userId: uid, type: "drop_expiring" }))) continue;

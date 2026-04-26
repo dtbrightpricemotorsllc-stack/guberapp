@@ -775,7 +775,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
     const isOwnerLocal = user.id === job.postedById;
     const isHelperLocal = user.id === job.assignedHelperId;
-    const helperStageLocal = (job as any).helperStage as string | null;
+    const helperStageLocal = job.helperStage;
 
     if (action === "on_the_way") {
       const canFire = isHelperLocal
@@ -791,7 +791,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
     } else if (action === "release") {
       const canFire = isOwnerLocal
         && (job.status === "completion_submitted" || job.status === "in_progress" || job.status === "active" || job.status === "funded")
-        && !(job as any).buyerConfirmed;
+        && !job.buyerConfirmed;
       if (!canFire) return;
       const ok = window.confirm(
         `Release payment for "${job.title}"? This confirms the work is complete and pays your worker.`
