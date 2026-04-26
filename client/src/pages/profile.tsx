@@ -95,7 +95,15 @@ function UploadButton({ type, label, verified, pending, onUpload, documentType }
 
   return (
     <div>
-      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} data-testid={`input-upload-${type}`} />
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture={type === "id" ? "environment" : undefined}
+        className="hidden"
+        onChange={handleFile}
+        data-testid={`input-upload-${type}`}
+      />
       <Button
         variant="outline"
         size="sm"

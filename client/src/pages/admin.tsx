@@ -1364,6 +1364,14 @@ const [rejectReason, setRejectReason] = useState("");
 const [flagsExpanded, setFlagsExpanded] = useState(false);
 const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
 const nonUsFlagged = (aiResult?.vision?.nonUsIdDetected === true) || (cachedVision?.nonUsIdDetected === true);
+// AI flagged the image as NOT being a government photo ID at all
+// (e.g., random photo, screenshot, selfie uploaded as ID). Surface this
+// as a top-of-card banner so admins cannot accidentally approve junk.
+const visionForBanner = aiResult?.vision || cachedVision;
+const notAnIdFlagged = !!visionForBanner
+  && !visionForBanner.error
+  && visionForBanner.isIdentityDocument === false
+  && (visionForBanner.confidence ?? 0) >= 0.6;
 
 const docType = v.action === "id_upload" || v.action === "verification_submitted_id"
 ? "ID Document" : v.action === "verification_submitted_selfie"
@@ -1519,6 +1527,36 @@ win?.document.write(`<iframe src="${docImageSrc}" frameborder="0" style="border:
 <FileText className="w-8 h-8 text-muted-foreground" />
 <p className="text-xs text-muted-foreground">No document image</p>
 </div>
+)}
+
+{/* Top-of-card AI warning banner — shown BEFORE the admin runs Pre-Check
+    if cached vision already flagged the image as not-an-ID. Impossible
+    to scroll past. */}
+{notAnIdFlagged && (
+  <div
+    className="rounded-lg border-2 border-red-500/60 bg-red-500/15 px-3 py-2.5 flex items-start gap-2 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]"
+    data-testid={`banner-not-an-id-${v.id}`}
+  >
+    <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+    <div className="flex-1 space-y-1">
+      <p className="text-[12px] font-display font-black uppercase tracking-wider text-red-300">
+        AI: This is NOT a government photo ID
+      </p>
+      <p className="text-[11px] text-red-200/90 leading-snug">
+        Looks like:{" "}
+        <span className="font-bold">
+          {visionForBanner?.documentKind || "non-ID image"}
+        </span>{" "}
+        ({Math.round((visionForBanner?.confidence || 0) * 100)}% confidence).
+        Reject unless you have a strong reason to override.
+      </p>
+      {visionForBanner?.reasoning && (
+        <p className="text-[10px] text-red-200/70 italic">
+          "{visionForBanner.reasoning}"
+        </p>
+      )}
+    </div>
+  </div>
 )}
 
 {/* AI Pre-Check */}

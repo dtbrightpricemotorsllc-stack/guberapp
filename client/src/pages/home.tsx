@@ -365,7 +365,7 @@ export default function Home() {
                 <p className="text-[11px] font-display font-black tracking-widest text-white mb-0.5">{label}</p>
                 <p className="text-[10px] text-white/85 leading-tight">{desc}</p>
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       </section>
