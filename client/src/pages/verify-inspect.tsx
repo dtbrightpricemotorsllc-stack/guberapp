@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -173,115 +174,119 @@ type SituationField = {
   required?: boolean;
 };
 
+// All "observation" fields are now framed as "What should the helper check / document?"
+// toggles. The requester is never asked for answers they cannot know — they only scope
+// the proof checklist. Requester-known facts (Property Type, Bedrooms, Damage Type,
+// Terrain Type) stay as dropdowns. Default ON toggles are wired up in defaultDetailValues.
 const PROPERTY_SITUATION_FIELDS: Record<string, SituationField[]> = {
   "Move-In Condition Baseline": [
     { name: "propertyType", label: "Property Type", type: "dropdown", options: ["House", "Apartment", "Condo", "Townhome", "Room", "Studio"], required: true },
     { name: "bedrooms", label: "Bedrooms", type: "dropdown", options: ["Studio", "1", "2", "3", "4", "5+"], required: true },
     { name: "bathrooms", label: "Bathrooms", type: "dropdown", options: ["1", "1.5", "2", "2.5", "3", "4+"], required: true },
-    { name: "interiorPhotos", label: "Interior Photos Required", type: "yesno", required: true },
-    { name: "appliancePhotos", label: "Appliance Photos", type: "yesno" },
-    { name: "damageDocumentation", label: "Document Any Pre-Existing Damage", type: "yesno" },
+    { name: "interiorPhotos", label: "Take interior photos", type: "yesno", required: true },
+    { name: "appliancePhotos", label: "Photograph appliances", type: "yesno" },
+    { name: "damageDocumentation", label: "Document any pre-existing damage", type: "yesno" },
   ],
   "Move-Out / Deposit Protection Check": [
     { name: "propertyType", label: "Property Type", type: "dropdown", options: ["House", "Apartment", "Condo", "Townhome", "Room", "Studio"], required: true },
-    { name: "interiorCondition", label: "Overall Interior Condition", type: "dropdown", options: ["Good", "Fair", "Poor", "Significant Damage"], required: true },
-    { name: "damageDocumentation", label: "Document Any Damage", type: "yesno", required: true },
-    { name: "applianceCheck", label: "Appliance Condition Check", type: "yesno" },
-    { name: "trashOrItems", label: "Trash or Personal Items Left Behind", type: "yesno" },
+    { name: "interiorPhotos", label: "Photograph overall interior condition", type: "yesno", required: true },
+    { name: "damageDocumentation", label: "Document any damage", type: "yesno", required: true },
+    { name: "applianceCheck", label: "Photograph appliance condition", type: "yesno" },
+    { name: "trashOrItems", label: "Note any trash or items left behind", type: "yesno" },
   ],
   "Airbnb Turnover / Host Check": [
-    { name: "bedsPresent", label: "Beds Properly Set", type: "yesno", required: true },
-    { name: "cleanlinessCheck", label: "Cleanliness Level", type: "dropdown", options: ["Clean & Guest Ready", "Needs Light Cleaning", "Needs Deep Cleaning", "Not Acceptable"], required: true },
-    { name: "linensTowels", label: "Linens & Towels", type: "dropdown", options: ["Present & Fresh", "Present but Need Washing", "Missing"] },
-    { name: "bathroomCondition", label: "Bathroom Condition", type: "dropdown", options: ["Good", "Fair", "Poor"] },
-    { name: "kitchenCondition", label: "Kitchen Condition", type: "dropdown", options: ["Good", "Fair", "Poor"] },
-    { name: "suppliesStocked", label: "Supplies Stocked for Next Guest", type: "yesno" },
+    { name: "bedsPresent", label: "Confirm beds are properly set", type: "yesno", required: true },
+    { name: "cleanlinessCheck", label: "Photograph overall cleanliness", type: "yesno", required: true },
+    { name: "linensTowels", label: "Photograph linens & towels", type: "yesno" },
+    { name: "bathroomCondition", label: "Photograph bathroom condition", type: "yesno" },
+    { name: "kitchenCondition", label: "Photograph kitchen condition", type: "yesno" },
+    { name: "suppliesStocked", label: "Confirm supplies stocked for next guest", type: "yesno" },
   ],
   "Remote Landlord Routine Check": [
-    { name: "exteriorCondition", label: "Exterior Condition", type: "dropdown", options: ["Good", "Fair", "Poor", "Damaged"], required: true },
-    { name: "generalCondition", label: "General Property Condition", type: "dropdown", options: ["Good", "Fair", "Concerns Noted", "Immediate Attention Needed"], required: true },
-    { name: "yardCondition", label: "Yard / Grounds", type: "dropdown", options: ["Maintained", "Overgrown", "Neglected"] },
-    { name: "safetyItemsVisible", label: "Safety Items Visible (smoke detectors, etc.)", type: "yesno" },
+    { name: "exteriorPhotos", label: "Photograph exterior condition", type: "yesno", required: true },
+    { name: "generalConditionPhotos", label: "Photograph overall property condition", type: "yesno", required: true },
+    { name: "yardPhoto", label: "Photograph yard / grounds", type: "yesno" },
+    { name: "safetyItemsCheck", label: "Note visible safety items (smoke detectors, etc.)", type: "yesno" },
   ],
   "Vacancy / Occupancy Confirmation": [
-    { name: "vehiclesPresent", label: "Vehicles Present", type: "yesno", required: true },
-    { name: "lightsActivity", label: "Lights or Activity Visible", type: "yesno", required: true },
-    { name: "mailboxStatus", label: "Mailbox Status", type: "dropdown", options: ["Empty", "Full / Overflowing", "Unknown / Inaccessible"] },
-    { name: "exteriorPhotos", label: "Exterior Photos Required", type: "yesno", required: true },
+    { name: "vehiclesCheck", label: "Note any vehicles present", type: "yesno", required: true },
+    { name: "lightsActivityCheck", label: "Note any lights or activity visible", type: "yesno", required: true },
+    { name: "mailboxCheck", label: "Photograph mailbox status", type: "yesno" },
+    { name: "exteriorPhotos", label: "Take exterior photos", type: "yesno", required: true },
   ],
   "Exterior Only Check": [
-    { name: "exteriorPhotos", label: "Full Exterior Photo Set", type: "yesno", required: true },
-    { name: "yardCondition", label: "Yard Condition", type: "dropdown", options: ["Maintained", "Overgrown", "Neglected", "N/A"] },
-    { name: "structureCondition", label: "Structure Condition", type: "dropdown", options: ["Good", "Fair", "Poor", "Damaged"], required: true },
+    { name: "exteriorPhotos", label: "Take full exterior photo set", type: "yesno", required: true },
+    { name: "yardPhoto", label: "Photograph yard condition", type: "yesno" },
+    { name: "structurePhotos", label: "Photograph structure condition", type: "yesno", required: true },
   ],
   "HOA/Neighborhood Drive-By": [
-    { name: "propertyExterior", label: "Property Exterior Status", type: "dropdown", options: ["Compliant", "Violations Visible", "Unable to Assess"], required: true },
-    { name: "neighborhoodCondition", label: "Neighborhood Condition", type: "dropdown", options: ["Good", "Fair", "Poor"] },
-    { name: "visibleViolations", label: "Visible Violations (trash, junk, etc.)", type: "yesno" },
+    { name: "exteriorPhotos", label: "Photograph property exterior", type: "yesno", required: true },
+    { name: "neighborhoodPhotos", label: "Photograph neighborhood context", type: "yesno" },
+    { name: "violationsCheck", label: "Note any visible violations (trash, junk, etc.)", type: "yesno" },
   ],
   "Utilities/Fixtures Visual Check": [
-    { name: "waterMeterVisible", label: "Water Meter Visible", type: "yesno", required: true },
-    { name: "powerMeterVisible", label: "Power / Electric Meter Visible", type: "yesno", required: true },
-    { name: "exteriorFixtures", label: "Exterior Fixtures Condition", type: "dropdown", options: ["Present & Intact", "Damaged", "Missing", "N/A"] },
+    { name: "waterMeterPhoto", label: "Photograph water meter (if visible)", type: "yesno", required: true },
+    { name: "powerMeterPhoto", label: "Photograph power / electric meter (if visible)", type: "yesno", required: true },
+    { name: "exteriorFixturesPhotos", label: "Photograph exterior fixtures", type: "yesno" },
   ],
   "Mail / Package Accumulation Check": [
-    { name: "mailboxPhoto", label: "Mailbox Photo", type: "yesno", required: true },
-    { name: "packagesPresent", label: "Packages Present", type: "yesno" },
-    { name: "frontDoorArea", label: "Front Door Area", type: "dropdown", options: ["Clear", "Packages Piled Up", "Cluttered / Debris"] },
+    { name: "mailboxPhoto", label: "Photograph mailbox", type: "yesno", required: true },
+    { name: "packagesCheck", label: "Note any packages present", type: "yesno" },
+    { name: "frontDoorPhoto", label: "Photograph front door area", type: "yesno" },
   ],
   "Door / Lock Security Check": [
-    { name: "doorCondition", label: "Door Condition", type: "dropdown", options: ["Good", "Fair", "Damaged", "Broken"], required: true },
-    { name: "locksVisible", label: "Locks Appear Functional", type: "yesno", required: true },
-    { name: "brokenWindows", label: "Broken Windows or Entry Points", type: "yesno" },
+    { name: "doorPhotos", label: "Photograph door condition", type: "yesno", required: true },
+    { name: "locksCheck", label: "Check whether locks appear functional", type: "yesno", required: true },
+    { name: "windowsCheck", label: "Note any broken windows or entry points", type: "yesno" },
   ],
   "Damage Documentation Check": [
-    { name: "damageType", label: "Type of Damage", type: "dropdown", options: ["Water / Flood", "Fire / Smoke", "Vandalism", "Structural", "Pest / Mold", "Other"], required: true },
-    { name: "damagePhotos", label: "Close-Up Damage Photos", type: "yesno", required: true },
-    { name: "wideAreaPhotos", label: "Wide Area / Context Photos", type: "yesno", required: true },
+    { name: "damageType", label: "Type of Damage (you reported)", type: "dropdown", options: ["Water / Flood", "Fire / Smoke", "Vandalism", "Structural", "Pest / Mold", "Other"], required: true },
+    { name: "damagePhotos", label: "Take close-up damage photos", type: "yesno", required: true },
+    { name: "wideAreaPhotos", label: "Take wide area / context photos", type: "yesno", required: true },
   ],
   "Renovation / Work Progress Check": [
-    { name: "workProgressPhotos", label: "Work Progress Photos", type: "yesno", required: true },
-    { name: "materialsPresent", label: "Materials / Supplies On-Site", type: "yesno" },
-    { name: "contractorActivity", label: "Contractor Activity Visible", type: "yesno" },
-    { name: "workStage", label: "Work Stage", type: "dropdown", options: ["Just Started", "In Progress", "Nearly Complete", "Complete / Walkthrough Needed"] },
+    { name: "workProgressPhotos", label: "Take work progress photos", type: "yesno", required: true },
+    { name: "materialsCheck", label: "Note materials / supplies on-site", type: "yesno" },
+    { name: "contractorActivityCheck", label: "Note any contractor activity visible", type: "yesno" },
+    { name: "workStagePhotos", label: "Photograph current work stage", type: "yesno" },
   ],
   "Vehicle / Activity Presence Check": [
-    { name: "vehiclesPresent", label: "Vehicles Present", type: "yesno", required: true },
-    { name: "drivewayPhoto", label: "Driveway / Parking Area Photo", type: "yesno", required: true },
-    { name: "activityLevel", label: "General Activity Level", type: "dropdown", options: ["None", "Low", "Normal", "High"] },
+    { name: "vehiclesCheck", label: "Note any vehicles present", type: "yesno", required: true },
+    { name: "drivewayPhoto", label: "Photograph driveway / parking area", type: "yesno", required: true },
+    { name: "activityCheck", label: "Note general activity level", type: "yesno" },
   ],
   "Guest Activity / Party Check": [
-    { name: "vehiclesPresent", label: "Vehicles Present (count if possible)", type: "yesno", required: true },
-    { name: "noiseActivity", label: "Noise / Activity Level", type: "dropdown", options: ["None", "Moderate", "Loud", "Party / Gathering"], required: true },
-    { name: "exteriorPhotos", label: "Exterior Photos", type: "yesno", required: true },
-    { name: "shortVideo", label: "Short Video Clip (optional)", type: "yesno" },
+    { name: "vehiclesCheck", label: "Note any vehicles present (count if possible)", type: "yesno", required: true },
+    { name: "noiseCheck", label: "Note noise / activity level", type: "yesno", required: true },
+    { name: "exteriorPhotos", label: "Take exterior photos", type: "yesno", required: true },
+    { name: "shortVideo", label: "Capture short video clip", type: "yesno" },
   ],
   "Land Condition Check": [
-    { name: "terrainDescription", label: "Terrain Type", type: "dropdown", options: ["Flat", "Rolling / Sloped", "Rocky", "Wooded", "Mixed"], required: true },
-    { name: "vegetation", label: "Vegetation / Growth", type: "dropdown", options: ["Clear", "Light", "Dense", "Overgrown"], required: true },
-    { name: "debrisDumping", label: "Debris or Dumping Present", type: "yesno" },
-    { name: "wideLandPhotos", label: "Wide Landscape Photos Required", type: "yesno", required: true },
+    { name: "terrainDescription", label: "Terrain Type (you know this)", type: "dropdown", options: ["Flat", "Rolling / Sloped", "Rocky", "Wooded", "Mixed"], required: true },
+    { name: "vegetationPhotos", label: "Photograph vegetation / growth", type: "yesno", required: true },
+    { name: "debrisCheck", label: "Note any debris or dumping present", type: "yesno" },
+    { name: "wideLandPhotos", label: "Take wide landscape photos", type: "yesno", required: true },
   ],
   "Land Access Verification": [
-    { name: "roadAccessPhoto", label: "Road Access Photo", type: "yesno", required: true },
-    { name: "gatePresence", label: "Gate Present", type: "yesno" },
-    { name: "roadCondition", label: "Road / Access Condition", type: "dropdown", options: ["Paved", "Gravel", "Dirt / Passable", "Impassable"], required: true },
+    { name: "roadAccessPhoto", label: "Photograph road access", type: "yesno", required: true },
+    { name: "gateCheck", label: "Note whether a gate is present", type: "yesno" },
+    { name: "roadConditionPhotos", label: "Photograph road / access condition", type: "yesno", required: true },
   ],
   "Boundary Marker / Fence Check": [
-    { name: "fencePresence", label: "Fence Present", type: "yesno", required: true },
-    { name: "cornerMarkers", label: "Corner Markers Visible", type: "yesno" },
-    { name: "boundaryIndicators", label: "Boundary Indicators", type: "dropdown", options: ["Clearly Marked", "Partially Visible", "None Visible"] },
+    { name: "fenceCheck", label: "Note whether a fence is present", type: "yesno", required: true },
+    { name: "cornerMarkersCheck", label: "Look for corner markers", type: "yesno" },
+    { name: "boundaryPhotos", label: "Photograph boundary indicators", type: "yesno" },
   ],
   "Illegal Dumping / Encroachment Check": [
-    { name: "trashPresent", label: "Trash / Dumping Present", type: "yesno", required: true },
-    { name: "abandonedVehicles", label: "Abandoned Vehicles", type: "yesno" },
-    { name: "neighborEncroachment", label: "Neighbor / Structure Encroachment", type: "yesno" },
+    { name: "trashCheck", label: "Note any trash / dumping present", type: "yesno", required: true },
+    { name: "abandonedVehiclesCheck", label: "Note any abandoned vehicles", type: "yesno" },
+    { name: "encroachmentCheck", label: "Note any neighbor / structure encroachment", type: "yesno" },
   ],
   "Utility Proximity Check": [
-    { name: "powerPolesVisible", label: "Power Poles Visible", type: "yesno" },
-    { name: "transformersVisible", label: "Transformers / Junction Boxes", type: "yesno" },
-    { name: "waterMetersVisible", label: "Water Meters Visible", type: "yesno" },
-    { name: "nearbyStructures", label: "Nearby Structures / Buildings", type: "yesno" },
+    { name: "powerPolesCheck", label: "Photograph any visible power poles", type: "yesno" },
+    { name: "transformersCheck", label: "Photograph any transformers / junction boxes", type: "yesno" },
+    { name: "waterMetersCheck", label: "Photograph any visible water meters", type: "yesno" },
+    { name: "nearbyStructuresCheck", label: "Photograph nearby structures / buildings", type: "yesno" },
   ],
 };
 
@@ -419,6 +424,7 @@ export default function VerifyInspect() {
   const [detailValues, setDetailValues] = useState<Record<string, string>>({});
   const [timingWindow, setTimingWindow] = useState<string>("");
   const [accessInstruction, setAccessInstruction] = useState<string>("");
+  const [focusNote, setFocusNote] = useState<string>("");
   const [smartFormValues, setSmartFormValues] = useState<Record<string, string>>({});
   const [vibudget, setViBudget] = useState<string>("");
   const [vizip, setViZip] = useState<string>("");
@@ -531,6 +537,25 @@ export default function VerifyInspect() {
     return PROPERTY_SITUATION_FIELDS[selectedUseCase?.name || ""] ?? null;
   }, [selectedCategory?.name, selectedUseCase?.name]);
 
+  // Default every "What should we check / document?" toggle to "Yes" so the
+  // requester opts OUT rather than opting IN to each piece of proof. Only seed
+  // the yesno toggles — leave dropdowns (Property Type, Bedrooms, etc.) blank
+  // so the requester still actively picks them.
+  useEffect(() => {
+    if (!situationFields || situationFields.length === 0) return;
+    setDetailValues((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      situationFields.forEach((f) => {
+        if (f.type === "yesno" && next[f.name] === undefined) {
+          next[f.name] = "Yes";
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [situationFields]);
+
   const allDetailsFilled = useMemo(() => {
     if (isOnlineItems) return true;
     if (situationFields) {
@@ -608,6 +633,7 @@ export default function VerifyInspect() {
       const allJobDetails = { ...detailValues, ...smartFormValues };
       if (accessInstruction) allJobDetails["Access"] = accessInstruction;
       if (timingWindow) allJobDetails["Timing"] = timingWindow;
+      if (focusNote.trim()) allJobDetails["Focus Note"] = focusNote.trim();
       const payload = {
         category: "Verify & Inspect",
         verifyInspectCategory: selectedCategory?.name || "",
@@ -1133,6 +1159,9 @@ export default function VerifyInspect() {
                 <Skeleton className="h-10 w-full rounded-md" data-testid="skeleton-details" />
               ) : situationFields && situationFields.length > 0 ? (
                 <div className="space-y-3">
+                  <div className="text-[11px] text-muted-foreground italic font-display leading-snug -mt-1 mb-1">
+                    Pick what you want the helper to check or document. Toggles default to Yes — turn off anything you don't need.
+                  </div>
                   {situationFields.map((field) => (
                     <div key={field.name}>
                       <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
@@ -1170,6 +1199,20 @@ export default function VerifyInspect() {
                       ) : null}
                     </div>
                   ))}
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                      Anything specific to focus on? (optional)
+                    </label>
+                    <Textarea
+                      value={focusNote}
+                      onChange={(e) => setFocusNote(e.target.value)}
+                      placeholder="e.g. Check the back gate latch, look for water stains under the kitchen sink"
+                      rows={2}
+                      maxLength={500}
+                      className="premium-input rounded-md text-sm"
+                      data-testid="textarea-focus-note"
+                    />
+                  </div>
                 </div>
               ) : visibleDetailOptions && visibleDetailOptions.length > 0 ? (
                 <div className="space-y-3">
