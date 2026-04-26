@@ -87,6 +87,8 @@ export const users = pgTable("users", {
   notifReminderPreArrival: boolean("notif_reminder_pre_arrival").default(true),
   notifReminderOnTheWay: boolean("notif_reminder_on_the_way").default(true),
   notifReminderPayoutRelease: boolean("notif_reminder_payout_release").default(true),
+  notifReminderAtRisk: boolean("notif_reminder_at_risk").default(true),
+  notifReminderDropExpiring: boolean("notif_reminder_drop_expiring").default(true),
   capabilitiesDescription: text("capabilities_description"),
   jobsAccepted: integer("jobs_accepted").default(0),
   jobsConfirmed: integer("jobs_confirmed").default(0),

@@ -752,15 +752,21 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   };
 
   // Phase 5 — handle ?action=on_the_way / ?action=release deep links from
-  // notification action buttons. Fires the right mutation exactly once,
-  // strips the param, and only acts when the user's role + job state
-  // actually allow it (so a stale/shared link can't trigger anything).
+  // notification action buttons. We strip the param IMMEDIATELY (so a
+  // refresh/back can't re-prompt), then prompt the user with an explicit
+  // confirm before firing any state-changing mutation. This prevents a
+  // crafted/shared link from silently moving the job forward.
   const actionFiredRef = useRef(false);
   useEffect(() => {
     if (actionFiredRef.current || !job || !user) return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get("action");
     if (action !== "on_the_way" && action !== "release") return;
+
+    actionFiredRef.current = true;
+    params.delete("action");
+    const qs = params.toString();
+    window.history.replaceState({}, "", `/jobs/${jobId}${qs ? `?${qs}` : ""}`);
 
     const isOwnerLocal = user.id === job.postedById;
     const isHelperLocal = user.id === job.assignedHelperId;
@@ -770,28 +776,24 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       const canFire = isHelperLocal
         && ["funded", "active", "in_progress"].includes(job.status)
         && !helperStageLocal;
-      if (canFire) {
-        actionFiredRef.current = true;
-        handleOnMyWay();
-        toast({ title: "On the way", description: "Thanks — we let the poster know." });
-      } else {
-        actionFiredRef.current = true;
-      }
+      if (!canFire) return;
+      const ok = window.confirm(
+        `Let the poster know you're on the way to "${job.title}"?`
+      );
+      if (!ok) return;
+      handleOnMyWay();
+      toast({ title: "On the way", description: "Thanks — we let the poster know." });
     } else if (action === "release") {
       const canFire = isOwnerLocal
         && (job.status === "completion_submitted" || job.status === "in_progress" || job.status === "active" || job.status === "funded")
         && !(job as any).buyerConfirmed;
-      if (canFire) {
-        actionFiredRef.current = true;
-        confirmMutation.mutate();
-      } else {
-        actionFiredRef.current = true;
-      }
+      if (!canFire) return;
+      const ok = window.confirm(
+        `Release payment for "${job.title}"? This confirms the work is complete and pays your worker.`
+      );
+      if (!ok) return;
+      confirmMutation.mutate();
     }
-
-    params.delete("action");
-    const qs = params.toString();
-    window.history.replaceState({}, "", `/jobs/${jobId}${qs ? `?${qs}` : ""}`);
   }, [job, user, jobId]);
 
   if (isLoading) {

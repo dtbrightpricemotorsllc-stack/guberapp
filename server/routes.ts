@@ -2095,9 +2095,11 @@ export async function registerRoutes(
         notifMessages: user.notifMessages ?? true,
         notifJobUpdates: user.notifJobUpdates ?? true,
         notifCashDrops: user.notifCashDrops ?? true,
-        notifReminderPreArrival: (user as any).notifReminderPreArrival ?? true,
-        notifReminderOnTheWay: (user as any).notifReminderOnTheWay ?? true,
-        notifReminderPayoutRelease: (user as any).notifReminderPayoutRelease ?? true,
+        notifReminderPreArrival: user.notifReminderPreArrival ?? true,
+        notifReminderOnTheWay: user.notifReminderOnTheWay ?? true,
+        notifReminderPayoutRelease: user.notifReminderPayoutRelease ?? true,
+        notifReminderAtRisk: user.notifReminderAtRisk ?? true,
+        notifReminderDropExpiring: user.notifReminderDropExpiring ?? true,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -2109,8 +2111,13 @@ export async function registerRoutes(
       const {
         notifNearbyJobs, notifMessages, notifJobUpdates, notifCashDrops,
         notifReminderPreArrival, notifReminderOnTheWay, notifReminderPayoutRelease,
+        notifReminderAtRisk, notifReminderDropExpiring,
       } = req.body;
-      const updates: Record<string, boolean> = {};
+      const updates: Partial<{
+        notifNearbyJobs: boolean; notifMessages: boolean; notifJobUpdates: boolean; notifCashDrops: boolean;
+        notifReminderPreArrival: boolean; notifReminderOnTheWay: boolean; notifReminderPayoutRelease: boolean;
+        notifReminderAtRisk: boolean; notifReminderDropExpiring: boolean;
+      }> = {};
       if (typeof notifNearbyJobs === "boolean") updates.notifNearbyJobs = notifNearbyJobs;
       if (typeof notifMessages === "boolean") updates.notifMessages = notifMessages;
       if (typeof notifJobUpdates === "boolean") updates.notifJobUpdates = notifJobUpdates;
@@ -2118,7 +2125,9 @@ export async function registerRoutes(
       if (typeof notifReminderPreArrival === "boolean") updates.notifReminderPreArrival = notifReminderPreArrival;
       if (typeof notifReminderOnTheWay === "boolean") updates.notifReminderOnTheWay = notifReminderOnTheWay;
       if (typeof notifReminderPayoutRelease === "boolean") updates.notifReminderPayoutRelease = notifReminderPayoutRelease;
-      await storage.updateUser(req.session.userId!, updates as any);
+      if (typeof notifReminderAtRisk === "boolean") updates.notifReminderAtRisk = notifReminderAtRisk;
+      if (typeof notifReminderDropExpiring === "boolean") updates.notifReminderDropExpiring = notifReminderDropExpiring;
+      await storage.updateUser(req.session.userId!, updates);
       // Return the full canonical preference object so the client always
       // sees authoritative server state regardless of what was patched.
       const fresh = await storage.getUser(req.session.userId!);
@@ -2128,9 +2137,11 @@ export async function registerRoutes(
         notifMessages: fresh?.notifMessages ?? true,
         notifJobUpdates: fresh?.notifJobUpdates ?? true,
         notifCashDrops: fresh?.notifCashDrops ?? true,
-        notifReminderPreArrival: (fresh as any)?.notifReminderPreArrival ?? true,
-        notifReminderOnTheWay: (fresh as any)?.notifReminderOnTheWay ?? true,
-        notifReminderPayoutRelease: (fresh as any)?.notifReminderPayoutRelease ?? true,
+        notifReminderPreArrival: fresh?.notifReminderPreArrival ?? true,
+        notifReminderOnTheWay: fresh?.notifReminderOnTheWay ?? true,
+        notifReminderPayoutRelease: fresh?.notifReminderPayoutRelease ?? true,
+        notifReminderAtRisk: fresh?.notifReminderAtRisk ?? true,
+        notifReminderDropExpiring: fresh?.notifReminderDropExpiring ?? true,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -13584,11 +13595,11 @@ YOUR BEHAVIOR:
 
         // Phase 5 — push to BOTH parties (poster + worker) when at-risk
         // flips. At-risk pushes intentionally bypass quiet hours (it's
-        // urgent) but are gated by the existing notifJobUpdates pref
-        // (at-risk is a critical job-status update). Atomically deduped
-        // via reminders_sent so we never re-fire if the cron loops.
+        // urgent) but are gated by the dedicated notifReminderAtRisk
+        // pref so users can still mute them if they want. Atomically
+        // deduped via reminders_sent so we never re-fire on cron loops.
         const poster = await storage.getUser(j.postedById);
-        if (poster && (poster as any).notifJobUpdates !== false) {
+        if (poster && poster.notifReminderAtRisk !== false) {
           if (await claimReminder({ jobId: j.id, type: "at_risk_poster" })) {
             await notify(j.postedById, {
               title: "Worker hasn't started yet",
@@ -13601,7 +13612,7 @@ YOUR BEHAVIOR:
 
         if (j.assignedHelperId) {
           const worker = await storage.getUser(j.assignedHelperId);
-          if (worker && (worker as any).notifJobUpdates !== false) {
+          if (worker && worker.notifReminderAtRisk !== false) {
             if (await claimReminder({ jobId: j.id, type: "at_risk_worker" })) {
               await notify(j.assignedHelperId, {
                 title: "Job is at risk — head out now",

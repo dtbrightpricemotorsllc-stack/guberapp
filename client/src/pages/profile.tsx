@@ -177,6 +177,8 @@ export default function Profile() {
     notifReminderPreArrival: boolean;
     notifReminderOnTheWay: boolean;
     notifReminderPayoutRelease: boolean;
+    notifReminderAtRisk: boolean;
+    notifReminderDropExpiring: boolean;
   };
   type NotifPrefKey = keyof NotifPrefs;
 
@@ -1262,6 +1264,8 @@ export default function Profile() {
                 { key: "notifReminderPreArrival" as const, label: "30-Minute Heads Up", desc: "Reminder 30 minutes before your scheduled job" },
                 { key: "notifReminderOnTheWay" as const, label: "On-the-Way Nudge", desc: "Friendly nudge if you haven't tapped \"On the way\" near start time" },
                 { key: "notifReminderPayoutRelease" as const, label: "Payout Release Reminder", desc: "Heads up if you haven't released payment 2 hours after submission" },
+                { key: "notifReminderAtRisk" as const, label: "At-Risk Job Alerts", desc: "Urgent alert if a job is at risk of falling through (sent past quiet hours)" },
+                { key: "notifReminderDropExpiring" as const, label: "Cash Drop Expiring", desc: "Heads up 5 minutes before an active Cash Drop closes" },
               ].map(({ key, label, desc }) => (
                 <div
                   key={key}

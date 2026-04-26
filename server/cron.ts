@@ -561,8 +561,8 @@ async function preArrivalReminderSweep(): Promise<number> {
     if (!j.assignedHelperId) continue;
     const helper = await storage.getUser(j.assignedHelperId);
     if (!helper) continue;
-    if ((helper as any).notifReminderPreArrival === false) continue;
-    if (isUserInQuietHours(helper as any)) continue;
+    if (helper.notifReminderPreArrival === false) continue;
+    if (isUserInQuietHours(helper)) continue;
     // Atomic claim — DB partial unique index guarantees single send.
     if (!(await claimReminder({ jobId: j.id, type: "pre_arrival" }))) continue;
 
@@ -605,17 +605,17 @@ async function missingOnTheWaySweep(): Promise<number> {
     if (!j.assignedHelperId) continue;
     const helper = await storage.getUser(j.assignedHelperId);
     if (!helper) continue;
-    if ((helper as any).notifReminderOnTheWay === false) continue;
-    if (isUserInQuietHours(helper as any)) continue;
+    if (helper.notifReminderOnTheWay === false) continue;
+    if (isUserInQuietHours(helper)) continue;
     if (!(await claimReminder({ jobId: j.id, type: "missing_otw" }))) continue;
 
     const title = "Are you still on the way?";
-    const body = `"${j.title}" was scheduled to start. Tap "On the way" to confirm or snooze 5 minutes.`;
+    const body = `"${j.title}" was scheduled to start. Tap "On the way" to let your poster know you're heading out.`;
     await storage.createNotification({
       userId: helper.id, title, body, type: "job", jobId: j.id,
     });
     // url stays clean (no ?action=…) — only the explicit action button
-    // should POST on-the-way. The SW handler routes per-button.
+    // should trigger on-the-way. The SW handler routes per-button.
     sendPushToUser(helper.id, {
       title, body,
       url: `/jobs/${j.id}`,
@@ -623,7 +623,6 @@ async function missingOnTheWaySweep(): Promise<number> {
       priority: "high",
       actions: [
         { action: "on_the_way", title: "On the way" },
-        { action: "snooze", title: "Snooze 5m" },
       ],
     }).catch(() => {});
     sent++;
@@ -649,8 +648,8 @@ async function payoutReleaseReminderSweep(): Promise<number> {
   for (const j of candidates) {
     const poster = await storage.getUser(j.postedById);
     if (!poster) continue;
-    if ((poster as any).notifReminderPayoutRelease === false) continue;
-    if (isUserInQuietHours(poster as any)) continue;
+    if (poster.notifReminderPayoutRelease === false) continue;
+    if (isUserInQuietHours(poster)) continue;
     if (!(await claimReminder({ jobId: j.id, type: "payout_release" }))) continue;
 
     const title = "Don't forget to release payment";
@@ -698,8 +697,8 @@ async function cashDropExpiringSweep(): Promise<number> {
     for (const uid of userIds) {
       const user = await storage.getUser(uid);
       if (!user) continue;
-      if ((user as any).notifCashDrops === false) continue;
-      if (isUserInQuietHours(user as any)) continue;
+      if (user.notifReminderDropExpiring === false) continue;
+      if (isUserInQuietHours(user)) continue;
       if (!(await claimReminder({ cashDropId: d.id, userId: uid, type: "drop_expiring" }))) continue;
 
       const title = "Cash Drop expiring in 5 min";
