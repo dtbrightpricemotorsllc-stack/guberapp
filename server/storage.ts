@@ -638,11 +638,15 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getJobCountsByZip(): Promise<{ zip: string; count: number }[]> {
+  async getJobCountsByZip(excludePosterIds?: number[]): Promise<{ zip: string; count: number }[]> {
+    const conditions = [isNotNull(jobs.zip), eq(jobs.isPublished, true)];
+    if (excludePosterIds && excludePosterIds.length > 0) {
+      conditions.push(sql`${jobs.postedById} NOT IN (${sql.join(excludePosterIds.map(id => sql`${id}`), sql`, `)})`);
+    }
     const results = await db
       .select({ zip: jobs.zip, count: count() })
       .from(jobs)
-      .where(and(isNotNull(jobs.zip), eq(jobs.isPublished, true)))
+      .where(and(...conditions))
       .groupBy(jobs.zip);
     return results
       .filter((r): r is { zip: string; count: number } => r.zip !== null)

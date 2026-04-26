@@ -40,7 +40,9 @@ async function seedDemoConsumer() {
       fullName: "Alex Rivera",
       password: pw,
       role: "buyer",
-      tier: "community",
+      // Elite so the demo helper can accept ANY demo job (incl. Skilled Labor
+      // and credentialed Verify & Inspect categories) without tier rejection.
+      tier: "elite",
       accountType: "personal",
       guberId: "GUB-DEMO001",
       publicUsername: "alexrivera_guber",
@@ -66,6 +68,9 @@ async function seedDemoConsumer() {
   const userId = existing.id;
 
   await storage.updateUser(userId, {
+    // Re-seed must also force tier=elite so existing demo accounts that were
+    // seeded before the tier bump get healed too. (See create block above.)
+    tier: "elite",
     day1OG: true,
     trustBoxPurchased: true,
     aiOrNotUnlimitedText: true,
@@ -128,7 +133,7 @@ async function seedDemoConsumer() {
       title: "Yard Cleanup — Leaf Blowing & Bagging",
       description: "Front and backyard cleanup. Leaf blowing, bagging, and hauling to curb. About 2 hours.",
       category: "General Labor", budget: 55, location: "Beverly Hills, CA", locationApprox: "Beverly Hills, CA", zip: "90210", lat: 34.0736, lng: -118.4004,
-      status: "posted_public", postedById: userId, isPublished: true, isPaid: false, payType: "fixed",
+      status: "posted_public", postedById: userId, isPublished: true, isPaid: true, payType: "fixed",
     });
 
     await db.insert(jobs).values({
@@ -136,7 +141,7 @@ async function seedDemoConsumer() {
       description: "I'll mow and edge your lawn (up to 1/4 acre) in exchange for 2 beginner guitar lessons.",
       category: "Barter Labor", budget: 0, barterOffering: "2 beginner guitar lessons (45 min each)", barterNeed: "Lawn mowing and edging — up to 1/4 acre", barterEstimatedValue: "$40–$60",
       location: "Los Angeles, CA", locationApprox: "Los Angeles, CA", zip: "90210", lat: 34.0522, lng: -118.2437,
-      status: "posted_public", postedById: userId, isPublished: true, isPaid: false, payType: "barter",
+      status: "posted_public", postedById: userId, isPublished: true, isPaid: true, payType: "barter",
     });
 
     await db.insert(jobs).values({
@@ -236,19 +241,19 @@ async function seedDemoBusinessUser() {
     await db.insert(jobs).values({
       title: "Property Walkthrough & Photo Report — Studio City", description: "Walk through a rental unit and submit a detailed photo report. Checklist provided.",
       category: "Verify & Inspect", budget: 85, location: "Studio City, CA", locationApprox: "Studio City, CA", zip: "91604", lat: 34.1395, lng: -118.3870,
-      status: "posted_public", postedById: userId, isPublished: true, isPaid: false, payType: "fixed",
+      status: "posted_public", postedById: userId, isPublished: true, isPaid: true, payType: "fixed",
     });
 
     await db.insert(jobs).values({
       title: "General Cleaning — 3-Bedroom Turnover", description: "Full turnover cleaning for a 3-bedroom apartment. Tenant just moved out.",
       category: "General Labor", budget: 120, location: "Koreatown, LA", locationApprox: "Koreatown, LA", zip: "90006", lat: 34.0604, lng: -118.3016,
-      status: "posted_public", postedById: userId, isPublished: true, isPaid: false, payType: "fixed",
+      status: "posted_public", postedById: userId, isPublished: true, isPaid: true, payType: "fixed",
     });
 
     await db.insert(jobs).values({
       title: "Skilled Electrician — Outlet Replacement (4 units)", description: "Need an experienced electrician to replace outlets in 4 units.",
       category: "Skilled Labor", budget: 200, location: "Burbank, CA", locationApprox: "Burbank, CA", zip: "91502", lat: 34.1808, lng: -118.3089,
-      status: "posted_public", postedById: userId, isPublished: true, isPaid: false, payType: "fixed",
+      status: "posted_public", postedById: userId, isPublished: true, isPaid: true, payType: "fixed",
     });
 
     const completedBizJobs = [
@@ -699,7 +704,7 @@ async function seedNationwideJobs() {
       status: "posted_public" as const,
       postedById: j.poster,
       isPublished: true,
-      isPaid: false,
+      isPaid: true,
       payType: j.payType,
       ...(j.barterOff ? { barterOffering: j.barterOff, barterNeed: j.barterNeed } : {}),
     }));

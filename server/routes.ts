@@ -13,7 +13,7 @@ import express from "express";
 import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
-import { demoGuard, getDemoUserIds, isDemoUser } from "./demo-guard";
+import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth } from "./auth";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
@@ -713,9 +713,15 @@ export async function registerRoutes(
       const { zip, search, category, limit: limitParam } = req.query as Record<string, string | undefined>;
       const limitVal = Math.min(50, Math.max(1, parseInt(limitParam || '50', 10) || 50));
 
+      // Public/anonymous endpoint — exclude demo posters so seeded fake jobs
+      // never leak to embed widgets / external scrapers.
+      const demoIdsSet = await getDemoUserIds();
+      const demoIdArr = Array.from(demoIdsSet);
+
       const conditions = [
         eq(jobsTable.status, "posted_public"),
         or(sql`${jobsTable.expiresAt} IS NULL`, sql`${jobsTable.expiresAt} > NOW()`),
+        ...(demoIdArr.length > 0 ? [sql`${jobsTable.postedById} NOT IN (${sql.join(demoIdArr.map(id => sql`${id}`), sql`, `)})`] : []),
         ...(zip ? [eq(jobsTable.zip, zip)] : []),
         ...(search ? [sql`lower(${jobsTable.title}) LIKE ${"%" + search.toLowerCase() + "%"}`] : []),
         ...(category ? [eq(jobsTable.category, category)] : []),
@@ -798,6 +804,7 @@ export async function registerRoutes(
           expiresAt: jobsTable.expiresAt,
           status: jobsTable.status,
           createdAt: jobsTable.createdAt,
+          postedById: jobsTable.postedById,
         })
         .from(jobsTable)
         .where(eq(jobsTable.id, jobId))
@@ -807,6 +814,9 @@ export async function registerRoutes(
       const job = rows[0];
       if (job.status !== "posted_public") return res.status(404).json({ error: "Job not found" });
       if (job.expiresAt && new Date(job.expiresAt) < new Date()) return res.status(404).json({ error: "Job expired" });
+      // Public anonymous endpoint — never reveal demo-seeded jobs to outside scrapers/embeds.
+      const demoIdsPub = await getDemoUserIds();
+      if (demoIdsPub.has(job.postedById)) return res.status(404).json({ error: "Job not found" });
 
       const desc = job.description ? filterContactInfo(job.description).clean.substring(0, 1000) : null;
       res.json({
@@ -2364,7 +2374,10 @@ export async function registerRoutes(
 
   app.get("/api/heat-map", async (_req: Request, res: Response) => {
     try {
-      const data = await storage.getJobCountsByZip();
+      // Heat-map is a public/aggregated view — exclude demo posters so the
+      // seeded demo footprint doesn't pollute real-user zip counts.
+      const demoIds = await getDemoUserIds();
+      const data = await storage.getJobCountsByZip(Array.from(demoIds));
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -2376,10 +2389,8 @@ export async function registerRoutes(
       let mapJobs = await storage.getOpenJobsForMap();
 
       const demoIds = await getDemoUserIds();
-      const callerIsDemoUser = req.session?.userId ? demoIds.has(req.session.userId) : false;
-      if (!callerIsDemoUser && demoIds.size > 0) {
-        mapJobs = mapJobs.filter(j => !demoIds.has(j.postedById));
-      }
+      const isAdmin = await viewerIsAdmin(req);
+      mapJobs = mapJobs.filter(j => viewerCanSeeJobSync(j, req.session?.userId, isAdmin, demoIds));
 
       // Geocode any jobs missing lat/lng — prefer zip over vague location strings.
       // A real address contains digits (e.g. "123 Main St"). Descriptions like
@@ -2428,10 +2439,8 @@ export async function registerRoutes(
       let mapJobs = await storage.getOpenJobsForMap();
 
       const demoIds = await getDemoUserIds();
-      const callerIsDemoUser = req.session?.userId ? demoIds.has(req.session.userId) : false;
-      if (!callerIsDemoUser && demoIds.size > 0) {
-        mapJobs = mapJobs.filter(j => !demoIds.has(j.postedById));
-      }
+      const isAdmin = await viewerIsAdmin(req);
+      mapJobs = mapJobs.filter(j => viewerCanSeeJobSync(j, req.session?.userId, isAdmin, demoIds));
 
       // Geocode missing lat/lng — prefer zip over vague location strings
       const geocodePromises = mapJobs
@@ -4071,6 +4080,13 @@ export async function registerRoutes(
       if (!isOwner && !isHelper && !isAdmin && (job.status === "draft" || !job.isPaid)) {
         return res.status(403).json({ message: "Job not available" });
       }
+      // Demo isolation: real users can't fetch demo job details by ID and
+      // demo users can't fetch real job details. Owner/helper/admin paths
+      // above already short-circuited so this only affects strangers.
+      const demoIds = await getDemoUserIds();
+      if (!viewerCanSeeJobSync(job, req.session.userId, isAdmin, demoIds)) {
+        return res.status(404).json({ message: "Job not found" });
+      }
 
       // Retroactive geocode if lat/lng still missing (fire-and-forget).
       if ((!job.lat || !job.lng) && (job.location || job.zip)) {
@@ -4599,7 +4615,7 @@ export async function registerRoutes(
     const isAdmin = await viewerIsAdmin(req);
     const sanitized = jobsList
       .filter(j => j.status !== "draft" && j.isPaid)
-      .filter(j => callerIsDemoUser || !demoIds.has(j.postedById))
+      .filter(j => viewerCanSeeJobSync(j, req.session.userId, isAdmin, demoIds))
       .map(j => sanitizeJobForPublic(j, req.session.userId, isAdmin));
     res.json(sanitized);
   });

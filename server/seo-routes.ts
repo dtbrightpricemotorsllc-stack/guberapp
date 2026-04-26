@@ -1,9 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { jobs as jobsTable } from "@shared/schema";
-import { eq, and, or, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql, notInArray } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
+import { getDemoUserIds } from "./demo-guard";
 
 interface PublicJobData {
   id: number;
@@ -233,14 +234,17 @@ export function setupPublicSeoRoutes(app: Express) {
 
       const jobId = parseInt(idMatch[1], 10);
       const rows = await db
-        .select(JOB_SELECT_FIELDS)
+        .select({ ...JOB_SELECT_FIELDS, postedById: jobsTable.postedById })
         .from(jobsTable)
         .where(eq(jobsTable.id, jobId))
         .limit(1);
 
       if (!rows.length) return next();
-      const job = rows[0] as PublicJobData;
+      const job = rows[0] as PublicJobData & { postedById: number };
       if (!isJobPublicAndActive(job)) return next();
+      // Never serve demo-seeded jobs to anonymous SEO/OG crawlers.
+      const demoIds = await getDemoUserIds();
+      if (demoIds.has(job.postedById)) return next();
 
       let template: string;
       if (process.env.NODE_ENV === "production") {
@@ -261,6 +265,9 @@ export function setupPublicSeoRoutes(app: Express) {
 
   app.get("/sitemap.xml", async (_req: Request, res: Response) => {
     try {
+      // Sitemap is consumed by search engines — must never index demo-seeded jobs.
+      const demoIds = await getDemoUserIds();
+      const demoIdArr = Array.from(demoIds);
       const rows = await db
         .select({
           id: jobsTable.id,
@@ -273,7 +280,8 @@ export function setupPublicSeoRoutes(app: Express) {
         .where(
           and(
             eq(jobsTable.status, "posted_public"),
-            or(sql`${jobsTable.expiresAt} IS NULL`, sql`${jobsTable.expiresAt} > NOW()`)
+            or(sql`${jobsTable.expiresAt} IS NULL`, sql`${jobsTable.expiresAt} > NOW()`),
+            ...(demoIdArr.length > 0 ? [notInArray(jobsTable.postedById, demoIdArr)] : []),
           )
         )
         .orderBy(desc(jobsTable.createdAt))
