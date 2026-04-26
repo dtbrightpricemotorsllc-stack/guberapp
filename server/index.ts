@@ -13,6 +13,13 @@ import { setNonceStore, PgNonceStore } from "./oauth";
 const app = express();
 const httpServer = createServer(app);
 
+// Trust the first proxy hop (Replit edge / hosting proxy) so that
+// req.ip resolves to the real client IP. This MUST be set before any
+// rate-limit middleware mounts — otherwise every request looks like it
+// came from the same proxy IP and all users share a single bucket,
+// causing false 429s on /api/auth/login under normal traffic.
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
