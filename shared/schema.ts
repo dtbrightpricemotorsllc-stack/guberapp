@@ -1110,10 +1110,12 @@ export const remindersSent = pgTable("reminders_sent", {
     .on(t.jobId, t.reminderType)
     .where(sql`job_id IS NOT NULL`),
   // Per-cash-drop-per-user reminders (drop_expiring) are keyed by
-  // (cash_drop_id, user_id, reminder_type).
+  // (cash_drop_id, user_id, reminder_type). Predicate matches the
+  // runtime ON CONFLICT target in claimReminder so the index can
+  // actually be used to enforce the conflict (both columns NOT NULL).
   dropUserTypeUniq: uniqueIndex("reminders_sent_drop_user_type_uniq")
     .on(t.cashDropId, t.userId, t.reminderType)
-    .where(sql`cash_drop_id IS NOT NULL`),
+    .where(sql`cash_drop_id IS NOT NULL AND user_id IS NOT NULL`),
 }));
 export type ReminderSent = typeof remindersSent.$inferSelect;
 

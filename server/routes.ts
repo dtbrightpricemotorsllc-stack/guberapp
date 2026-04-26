@@ -41,7 +41,7 @@ import {
   TIMING as COORDINATION_TIMING,
   SCHEDULE_STATUS,
 } from "./coordination";
-import { claimReminder, clearReminder, scheduleSnooze } from "./reminders";
+import { claimReminder, clearReminder, scheduleSnooze, isUserInQuietHours } from "./reminders";
 
 /** Create an in-app notification AND fire a background push alert to the user's device(s). */
 async function notify(
@@ -4359,6 +4359,15 @@ export async function registerRoutes(
           const helper = await storage.getUser(userId);
           if (!helper) return;
           if (helper.notifReminderOnTheWay === false) return;
+          // Snooze can drift across the 10pm quiet-hours boundary
+          // (snooze tapped at 9:58pm -> fire at 10:03pm). Non-at-risk
+          // reminders MUST respect quiet hours per Phase 5 spec, so we
+          // skip the push here. The finally block still drops the
+          // dedupe row, letting the cron sweep re-pick this up at 7am.
+          if (isUserInQuietHours(helper)) {
+            console.log(`[reminders/snooze] suppressed for user ${helper.id} — quiet hours`);
+            return;
+          }
 
           const title = "Are you still on the way?";
           const body = `"${fresh.title}" was scheduled to start. Tap "On the way" to confirm or Dismiss to silence this reminder.`;
