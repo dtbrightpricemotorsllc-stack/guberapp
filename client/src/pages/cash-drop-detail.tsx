@@ -10,10 +10,20 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, MapPin, Clock, Trophy, Camera, AlertCircle, CheckCircle, Navigation, ChevronLeft, Car, ChevronRight, DollarSign, CreditCard, Wallet, Banknote } from "lucide-react";
+import { Loader2, MapPin, Clock, Trophy, Camera, AlertCircle, CheckCircle, Navigation, ChevronLeft, Car, ChevronRight, DollarSign, CreditCard, Wallet, Banknote, ShieldAlert } from "lucide-react";
 import type { CashDrop, CashDropAttempt } from "@shared/schema";
 import { Link } from "wouter";
 import { gpsGetCurrentPosition } from "@/lib/gps";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
@@ -240,6 +250,7 @@ export default function CashDropDetail() {
   const [gpsPos, setGpsPos] = useState<{ lat: number; lng: number } | null>(null);
   const previousStatusRef = useRef<string | null>(null);
   const [dropEndedAlert, setDropEndedAlert] = useState<{ type: "expired" | "claimed"; wasEnRoute: boolean } | null>(null);
+  const [safetyModalOpen, setSafetyModalOpen] = useState(false);
 
   const { data: drop, isLoading } = useQuery<CashDrop & { userAttempt: CashDropAttempt | null }>({
     queryKey: ["/api/cash-drops", id],
@@ -411,13 +422,16 @@ export default function CashDropDetail() {
             </h2>
             <p className="text-sm text-muted-foreground/70 leading-relaxed mb-5">
               {dropEndedAlert.wasEnRoute
-                ? "Someone else got there first. Keep watching the map — new drops go live regularly."
+                ? "Someone else got there first. Heading back to active drops — new ones go live regularly."
                 : dropEndedAlert.type === "expired"
                   ? "This Cash Drop passed its end time without being fully claimed."
-                  : "All winner slots have been filled. Check the map for drops near you."}
+                  : "All winner slots have been filled. Check the active drops list for ones near you."}
             </p>
             <button
-              onClick={() => setDropEndedAlert(null)}
+              onClick={() => {
+                setDropEndedAlert(null);
+                navigate("/cash-drops");
+              }}
               className="w-full py-2.5 rounded-xl font-display font-bold text-sm transition-opacity hover:opacity-80"
               style={{
                 background: dropEndedAlert.wasEnRoute ? "rgba(239,68,68,0.15)" : "rgba(107,114,128,0.15)",
@@ -426,7 +440,7 @@ export default function CashDropDetail() {
               }}
               data-testid="button-dismiss-drop-ended"
             >
-              Dismiss
+              See active drops
             </button>
           </div>
         </div>
@@ -638,7 +652,7 @@ export default function CashDropDetail() {
             </div>
 
             <Button
-              onClick={() => acceptMutation.mutate()}
+              onClick={() => setSafetyModalOpen(true)}
               disabled={acceptMutation.isPending}
               className="w-full h-12 font-display tracking-wider rounded-xl text-background"
               style={{ background: "linear-gradient(135deg, #d97706, #f59e0b, #d97706)" }}
@@ -646,6 +660,52 @@ export default function CashDropDetail() {
             >
               {acceptMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "⚡ ACCEPT CASH DROP"}
             </Button>
+
+            <AlertDialog open={safetyModalOpen} onOpenChange={setSafetyModalOpen}>
+              <AlertDialogContent
+                className="max-w-sm rounded-2xl"
+                style={{
+                  background: "linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0500 100%)", // dark-gradient-allow: amber cash-drop card surface, established brand dark theme
+                  border: "1.5px solid rgba(245,158,11,0.35)",
+                }}
+                data-testid="dialog-cash-drop-safety"
+              >
+                <AlertDialogHeader>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)" }}
+                    >
+                      <ShieldAlert className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <AlertDialogTitle className="font-display font-black text-amber-300 text-lg leading-tight">
+                      Stay safe out there
+                    </AlertDialogTitle>
+                  </div>
+                  <AlertDialogDescription className="text-sm text-amber-200/70 leading-relaxed pt-2">
+                    Drive safely. Stay aware of your surroundings. Do not enter private property.
+                    GUBER Cash Drops are public-area challenges — never put yourself, others, or your
+                    vehicle at risk to claim one.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="gap-2 sm:gap-2">
+                  <AlertDialogCancel
+                    className="rounded-xl bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground"
+                    data-testid="button-cancel-safety"
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => acceptMutation.mutate()}
+                    className="rounded-xl text-background font-display font-bold tracking-wider"
+                    style={{ background: "linear-gradient(135deg, #d97706, #f59e0b, #d97706)" }}
+                    data-testid="button-confirm-safety"
+                  >
+                    I understand
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
 

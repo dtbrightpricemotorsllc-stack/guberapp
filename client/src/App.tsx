@@ -52,6 +52,7 @@ const VIRequests = lazy(() => import("@/pages/vi-requests"));
 const Marketplace = lazy(() => import("@/pages/marketplace"));
 const MarketplacePreview = lazy(() => import("@/pages/marketplace-preview"));
 const MapExplore = lazy(() => import("@/pages/map-explore"));
+const CashDropsList = lazy(() => import("@/pages/cash-drops-list"));
 const CashDropDetail = lazy(() => import("@/pages/cash-drop-detail"));
 const ResumePage = lazy(() => import("@/pages/resume"));
 const SubmitObservation = lazy(() => import("@/pages/submit-observation"));
@@ -219,6 +220,7 @@ function Router() {
       <Route path="/marketplace" component={() => <ProtectedRoute component={Marketplace} />} />
       <Route path="/marketplace-preview" component={() => <ProtectedRoute component={MarketplacePreview} />} />
       <Route path="/map" component={() => <ProtectedRoute component={MapExplore} />} />
+      <Route path="/cash-drops" component={() => <ConsumerRoute component={CashDropsList} />} />
       <Route path="/cash-drop/:id" component={() => <ProtectedRoute component={CashDropDetail} />} />
       <Route path="/business-onboarding" component={() => <ProtectedRoute component={BusinessOnboarding} />} />
       <Route path="/business-templates" component={() => <Redirect to="/biz/templates" />} />

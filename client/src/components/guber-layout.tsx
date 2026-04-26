@@ -33,6 +33,7 @@ import {
   Lock,
   Shield,
   Map,
+  Zap,
   Download,
 } from "lucide-react";
 
@@ -71,8 +72,8 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
   const bottomTabs = [
     { href: "/dashboard", label: "Home", icon: Home },
     { href: "/map", label: "Map", icon: Map },
+    { href: "/cash-drops", label: "Drops", icon: Zap },
     { href: "/my-jobs", label: "Jobs", icon: Briefcase },
-    { href: "/profile", label: "Profile", icon: User },
     ...(isAdmin
       ? [{ href: "/admin", label: "Admin", icon: Shield }]
       : [{ href: "/wallet", label: "Wallet", icon: Wallet }]
