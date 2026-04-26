@@ -32,6 +32,31 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_active_logo INTEGER DEFAULT
 ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_logo1_admin_uploaded BOOLEAN DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS cash_drop_logo2_admin_uploaded BOOLEAN DEFAULT false;
 
+-- users: smart-reminder notification preferences (task-308 / Phase 5)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_reminder_pre_arrival BOOLEAN DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_reminder_on_the_way BOOLEAN DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_reminder_payout_release BOOLEAN DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_reminder_at_risk BOOLEAN DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_reminder_drop_expiring BOOLEAN DEFAULT true;
+
+-- reminders_sent: atomic dedupe table for smart reminders (task-308 / Phase 5)
+-- Partial unique indexes guarantee single-fire per (job, type) and per
+-- (cash_drop, user, type) even if cron sweeps overlap or race.
+CREATE TABLE IF NOT EXISTS reminders_sent (
+  id SERIAL PRIMARY KEY,
+  job_id INTEGER,
+  cash_drop_id INTEGER,
+  user_id INTEGER,
+  reminder_type TEXT NOT NULL,
+  sent_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS reminders_sent_job_type_uniq
+  ON reminders_sent (job_id, reminder_type)
+  WHERE job_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS reminders_sent_drop_user_type_uniq
+  ON reminders_sent (cash_drop_id, user_id, reminder_type)
+  WHERE cash_drop_id IS NOT NULL AND user_id IS NOT NULL;
+
 -- Unique constraints: drizzle generates _unique names; DB had _key names.
 -- These DO-blocks are idempotent and safe to re-run on any environment.
 DO $$ BEGIN
