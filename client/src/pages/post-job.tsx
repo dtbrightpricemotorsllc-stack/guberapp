@@ -206,6 +206,108 @@ export default function PostJob() {
   const isGeneralLabor = category === "General Labor";
   const locationRequired = !isOnlineCategory && !isBarter;
 
+  // Live job summary: auto-title, effort level, helpers needed.
+  // Recomputes whenever any selection changes, so the bottom panel
+  // mirrors what GUBER will publish without making the user type a title.
+  const jobMeta = useMemo(() => {
+    if (isVIJob || isBarter) return null;
+    if (!category || !serviceType) return null;
+
+    const summaryParts: { label: string; value: string }[] = [];
+
+    const services = jobDetails.services as string[] | undefined;
+    const surfaces = jobDetails.surfaces as string[] | undefined;
+    const itemTypes = jobDetails.itemTypes as string[] | undefined;
+    const issueType = jobDetails.issueType as string[] | undefined;
+    const yardSize = jobDetails.yardSize as string | undefined;
+    const homeSize = jobDetails.homeSize as string | undefined;
+    const cleaningType = jobDetails.cleaningType as string | undefined;
+    const volumeEstimate = jobDetails.volumeEstimate as string | undefined;
+    const squareFootage = jobDetails.squareFootage as string | undefined;
+    const petType = jobDetails.petType as string | undefined;
+    const petCount = jobDetails.petCount as string | undefined;
+    const errandType = jobDetails.errandType as string | undefined;
+    const itemType = jobDetails.itemType as string | undefined;
+    const deviceType = jobDetails.deviceType as string | undefined;
+    const jobType = jobDetails.jobType as string | undefined;
+    const helpersField = jobDetails.helpersNeeded as string | undefined;
+    const stairs = jobDetails.flightOfStairs as string | undefined;
+    const stairsNum = stairs ? parseInt(stairs) : 0;
+
+    let descriptor = "";
+    if (Array.isArray(services) && services.length > 0) {
+      descriptor = services.slice(0, 2).join(" + ");
+      summaryParts.push({ label: "Services", value: services.join(", ") });
+    } else if (Array.isArray(surfaces) && surfaces.length > 0) {
+      descriptor = surfaces.slice(0, 2).join(" + ");
+      summaryParts.push({ label: "Surfaces", value: surfaces.join(", ") });
+    } else if (Array.isArray(itemTypes) && itemTypes.length > 0) {
+      descriptor = itemTypes.slice(0, 2).join(" + ");
+      summaryParts.push({ label: "Items", value: itemTypes.join(", ") });
+    } else if (Array.isArray(issueType) && issueType.length > 0) {
+      descriptor = issueType.slice(0, 2).join(" + ");
+      summaryParts.push({ label: "Issues", value: issueType.join(", ") });
+    } else if (jobType) {
+      descriptor = jobType;
+      summaryParts.push({ label: "Type", value: jobType });
+    } else if (errandType) {
+      descriptor = errandType;
+      summaryParts.push({ label: "Errand", value: errandType });
+    } else if (itemType) {
+      descriptor = itemType;
+      summaryParts.push({ label: "Item", value: itemType });
+    } else if (deviceType) {
+      descriptor = deviceType;
+      summaryParts.push({ label: "Device", value: deviceType });
+    } else if (petType) {
+      descriptor = petCount && parseInt(petCount) > 1 ? `${petCount} ${petType}s` : petType;
+      summaryParts.push({ label: "Pet", value: descriptor });
+    }
+
+    const sizeQualifier = yardSize || homeSize || cleaningType || volumeEstimate || squareFootage;
+    if (sizeQualifier) summaryParts.push({ label: "Size", value: sizeQualifier });
+    if (helpersField) summaryParts.push({ label: "Helpers requested", value: helpersField });
+    if (stairsNum > 0) summaryParts.push({ label: "Stairs", value: `${stairsNum} flight${stairsNum > 1 ? "s" : ""}` });
+
+    const cleanSize = sizeQualifier ? sizeQualifier.replace(/\s*\([^)]*\)/g, "").trim() : "";
+    let autoTitle = `${serviceType} Needed`;
+    if (descriptor) autoTitle += ` - ${descriptor}`;
+    if (cleanSize) autoTitle += ` (${cleanSize})`;
+
+    let effortScore = 0;
+    if (Array.isArray(services)) effortScore += services.length;
+    if (Array.isArray(surfaces)) effortScore += surfaces.length;
+    if (Array.isArray(itemTypes)) effortScore += itemTypes.length;
+    if (Array.isArray(issueType)) effortScore += issueType.length;
+    if (yardSize?.includes("Large")) effortScore += 2;
+    if (yardSize?.includes("Very large")) effortScore += 1;
+    if (homeSize?.includes("3+") || homeSize?.toLowerCase?.().includes("commercial")) effortScore += 2;
+    if (cleaningType?.includes("Deep") || cleaningType?.includes("Move-in") || cleaningType?.includes("Post-construction")) effortScore += 2;
+    if (volumeEstimate?.includes("Full truck") || volumeEstimate?.includes("Multiple")) effortScore += 2;
+    if (squareFootage?.includes("2000+") || squareFootage?.includes("1000")) effortScore += 1;
+    if (stairsNum > 0) effortScore += 1;
+    if (urgentSwitch) effortScore += 1;
+    const minutesNum = estimatedMinutes ? parseInt(estimatedMinutes) : 0;
+    if (minutesNum >= 180) effortScore += 1;
+
+    const effortLevel: "Easy" | "Moderate" | "Heavy" =
+      effortScore <= 2 ? "Easy" : effortScore <= 5 ? "Moderate" : "Heavy";
+
+    let helpersNeeded = 1;
+    if (helpersField) {
+      const h = parseInt(helpersField);
+      if (Number.isFinite(h) && h > 0) helpersNeeded = h;
+      else if (helpersField.includes("+")) helpersNeeded = parseInt(helpersField) || 4;
+    } else {
+      if (homeSize?.includes("3+") || homeSize?.toLowerCase?.().includes("commercial")) helpersNeeded = 3;
+      else if (homeSize?.includes("2 Bedroom") || (Array.isArray(itemTypes) && itemTypes.includes("Furniture") && stairsNum > 0)) helpersNeeded = 2;
+      else if (volumeEstimate?.includes("Full truck") || volumeEstimate?.includes("Multiple")) helpersNeeded = 2;
+      else if (yardSize?.includes("Very large")) helpersNeeded = 2;
+    }
+
+    return { autoTitle, effortLevel, helpersNeeded, summaryParts };
+  }, [isVIJob, isBarter, category, serviceType, jobDetails, urgentSwitch, estimatedMinutes]);
+
   const checkoutMutation = useMutation({
     mutationFn: async () => {
       const payload: Record<string, any> = {
@@ -327,8 +429,8 @@ export default function PostJob() {
     }
     // Phase-2 structured coordination: every non-urgent in-person job needs at
     // least one valid future availability window so the worker has a slot to
-    // pick. Urgent and online-only jobs skip the no-chat scheduling flow.
-    if (!urgentSwitch && !isOnlineCategory && !hasAtLeastOneFutureWindow(availabilityWindows)) {
+    // pick. Urgent, online-only, and V&I jobs skip the no-chat scheduling flow.
+    if (!urgentSwitch && !isOnlineCategory && !isVIJob && !hasAtLeastOneFutureWindow(availabilityWindows)) {
       return "Add at least one availability window";
     }
     return "";
@@ -739,7 +841,7 @@ export default function PostJob() {
             </div>
           )}
 
-          {isBusinessAccount && !isBarter && (
+          {isBusinessAccount && !isBarter && isVIJob && (
             <div className="space-y-4 rounded-xl p-4 animate-fade-in" style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.18)" }} data-testid="section-task-tier">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-indigo-400" />
@@ -969,7 +1071,7 @@ export default function PostJob() {
             </div>
           )}
 
-          {!urgentSwitch && !isOnlineCategory && (
+          {!urgentSwitch && !isOnlineCategory && !isVIJob && (
             <AvailabilityWindowsPicker
               value={availabilityWindows}
               onChange={setAvailabilityWindows}
@@ -1042,6 +1144,61 @@ export default function PostJob() {
                   {proofRequirements.template.geoRequired && (
                     <Badge variant="secondary" className="text-[9px] gap-1"><MapPinned className="w-2.5 h-2.5" />GPS required</Badge>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {jobMeta && (
+            <div className="rounded-xl p-4 space-y-3 animate-fade-in" style={{ background: "rgba(0,229,229,0.05)", border: "1px solid rgba(0,229,229,0.20)" }} data-testid="panel-job-summary">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4" style={{ color: "#00E5E5" }} />
+                <span className="text-xs font-display font-bold uppercase tracking-wider" style={{ color: "#00E5E5" }}>Job Summary</span>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider font-display text-muted-foreground">Auto-Generated Title</Label>
+                <p className="text-sm font-display font-semibold leading-snug" data-testid="text-auto-title">{jobMeta.autoTitle}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md p-2 bg-muted/20 premium-border">
+                  <p className="text-[9px] uppercase tracking-wider font-display text-muted-foreground">Effort</p>
+                  <p
+                    className="text-sm font-display font-bold"
+                    style={{
+                      color: jobMeta.effortLevel === "Easy" ? "#22C55E" : jobMeta.effortLevel === "Moderate" ? "#F59E0B" : "#EF4444",
+                    }}
+                    data-testid="text-effort-level"
+                  >
+                    {jobMeta.effortLevel}
+                  </p>
+                </div>
+                <div className="rounded-md p-2 bg-muted/20 premium-border">
+                  <p className="text-[9px] uppercase tracking-wider font-display text-muted-foreground">Helpers Suggested</p>
+                  <p className="text-sm font-display font-bold flex items-center gap-1" data-testid="text-helpers-needed">
+                    <Users className="w-3 h-3" /> {jobMeta.helpersNeeded}
+                  </p>
+                </div>
+              </div>
+
+              {pricingSuggestion && pricingSuggestion.suggestedRangeLow > 0 && (
+                <div className="rounded-md p-2 bg-muted/20 premium-border">
+                  <p className="text-[9px] uppercase tracking-wider font-display text-muted-foreground">Suggested Price</p>
+                  <p className="text-sm font-display font-bold guber-text-green" data-testid="text-summary-price">
+                    ${pricingSuggestion.suggestedRangeLow}–${pricingSuggestion.suggestedRangeHigh}
+                  </p>
+                </div>
+              )}
+
+              {jobMeta.summaryParts.length > 0 && (
+                <div className="pt-1 border-t border-border/20 space-y-1">
+                  {jobMeta.summaryParts.map((p, i) => (
+                    <div key={i} className="flex justify-between gap-2 text-[11px]">
+                      <span className="text-muted-foreground">{p.label}</span>
+                      <span className="font-display font-medium text-right">{p.value}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
