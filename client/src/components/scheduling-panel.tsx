@@ -705,15 +705,36 @@ export function SchedulingPanel({ job, viewerId }: Props) {
 }
 
 // Re-export the gating helper so consumers don't have to duplicate the rule.
+//
+// Privacy rule: address + Open-in-Maps must NOT reveal until both
+// payment is held AND the schedule is locked in.
+//
+// Two regimes:
+//   - Structured (scheduleStatus is non-null): the only way to unlock is the
+//     full structured gate. Even if payment lands first (status = "funded"),
+//     we keep the address hidden until scheduleStatus === "scheduled".
+//   - Legacy (scheduleStatus is null/undefined — pre-Phase-2 jobs that never
+//     went through the new flow): fall back to the old job-status gate so
+//     existing in-flight jobs continue to behave correctly.
 export function isJobAddressUnlocked(job: {
   paymentAuthorized?: boolean | null;
   assignedHelperId?: number | null;
   scheduleStatus?: string | null;
   status?: string | null;
 }): boolean {
-  if (job.paymentAuthorized && job.assignedHelperId && job.scheduleStatus === "scheduled") {
-    return true;
+  if (job.scheduleStatus) {
+    return !!(
+      job.paymentAuthorized &&
+      job.assignedHelperId &&
+      job.scheduleStatus === "scheduled"
+    );
   }
-  const LEGACY_UNLOCKED = new Set(["funded", "active", "in_progress", "completion_submitted", "proof_submitted"]);
+  const LEGACY_UNLOCKED = new Set([
+    "funded",
+    "active",
+    "in_progress",
+    "completion_submitted",
+    "proof_submitted",
+  ]);
   return !!(job.status && LEGACY_UNLOCKED.has(job.status));
 }
