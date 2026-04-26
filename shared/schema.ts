@@ -9,6 +9,7 @@ import {
   real,
   serial,
   json,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -83,6 +84,9 @@ export const users = pgTable("users", {
   notifMessages: boolean("notif_messages").default(true),
   notifJobUpdates: boolean("notif_job_updates").default(true),
   notifCashDrops: boolean("notif_cash_drops").default(true),
+  notifReminderPreArrival: boolean("notif_reminder_pre_arrival").default(true),
+  notifReminderOnTheWay: boolean("notif_reminder_on_the_way").default(true),
+  notifReminderPayoutRelease: boolean("notif_reminder_payout_release").default(true),
   capabilitiesDescription: text("capabilities_description"),
   jobsAccepted: integer("jobs_accepted").default(0),
   jobsConfirmed: integer("jobs_confirmed").default(0),
@@ -1085,6 +1089,31 @@ export type InsertObservation = z.infer<typeof insertObservationSchema>;
 export type BulkJobBatch = typeof bulkJobBatches.$inferSelect;
 export type CashDrop = typeof cashDrops.$inferSelect;
 export type CashDropAttempt = typeof cashDropAttempts.$inferSelect;
+
+// Phase 5 — Smart notification reminders dedupe table.
+// Each row records that a given reminder was sent, so the cron sweeps
+// can fire each reminder exactly once per (job|cashDrop, type[, user]).
+export const remindersSent = pgTable("reminders_sent", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id"),
+  cashDropId: integer("cash_drop_id"),
+  userId: integer("user_id"),
+  reminderType: text("reminder_type").notNull(),
+  sentAt: timestamp("sent_at").defaultNow(),
+}, (t) => ({
+  // Atomic dedupe: claim with INSERT ... ON CONFLICT DO NOTHING.
+  // Per-job singleton reminders (pre_arrival, missing_otw, payout_release,
+  // at_risk_poster, at_risk_worker) are keyed by (job_id, reminder_type).
+  jobTypeUniq: uniqueIndex("reminders_sent_job_type_uniq")
+    .on(t.jobId, t.reminderType)
+    .where(sql`job_id IS NOT NULL`),
+  // Per-cash-drop-per-user reminders (drop_expiring) are keyed by
+  // (cash_drop_id, user_id, reminder_type).
+  dropUserTypeUniq: uniqueIndex("reminders_sent_drop_user_type_uniq")
+    .on(t.cashDropId, t.userId, t.reminderType)
+    .where(sql`cash_drop_id IS NOT NULL`),
+}));
+export type ReminderSent = typeof remindersSent.$inferSelect;
 
 export const directOffers = pgTable("direct_offers", {
   id: serial("id").primaryKey(),

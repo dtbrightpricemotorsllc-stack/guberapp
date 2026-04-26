@@ -41,6 +41,7 @@ import {
   TIMING as COORDINATION_TIMING,
   SCHEDULE_STATUS,
 } from "./coordination";
+import { claimReminder } from "./reminders";
 
 /** Create an in-app notification AND fire a background push alert to the user's device(s). */
 async function notify(
@@ -2094,6 +2095,9 @@ export async function registerRoutes(
         notifMessages: user.notifMessages ?? true,
         notifJobUpdates: user.notifJobUpdates ?? true,
         notifCashDrops: user.notifCashDrops ?? true,
+        notifReminderPreArrival: (user as any).notifReminderPreArrival ?? true,
+        notifReminderOnTheWay: (user as any).notifReminderOnTheWay ?? true,
+        notifReminderPayoutRelease: (user as any).notifReminderPayoutRelease ?? true,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -2102,14 +2106,32 @@ export async function registerRoutes(
 
   app.patch("/api/users/me/notification-preferences", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { notifNearbyJobs, notifMessages, notifJobUpdates, notifCashDrops } = req.body;
+      const {
+        notifNearbyJobs, notifMessages, notifJobUpdates, notifCashDrops,
+        notifReminderPreArrival, notifReminderOnTheWay, notifReminderPayoutRelease,
+      } = req.body;
       const updates: Record<string, boolean> = {};
       if (typeof notifNearbyJobs === "boolean") updates.notifNearbyJobs = notifNearbyJobs;
       if (typeof notifMessages === "boolean") updates.notifMessages = notifMessages;
       if (typeof notifJobUpdates === "boolean") updates.notifJobUpdates = notifJobUpdates;
       if (typeof notifCashDrops === "boolean") updates.notifCashDrops = notifCashDrops;
+      if (typeof notifReminderPreArrival === "boolean") updates.notifReminderPreArrival = notifReminderPreArrival;
+      if (typeof notifReminderOnTheWay === "boolean") updates.notifReminderOnTheWay = notifReminderOnTheWay;
+      if (typeof notifReminderPayoutRelease === "boolean") updates.notifReminderPayoutRelease = notifReminderPayoutRelease;
       await storage.updateUser(req.session.userId!, updates as any);
-      res.json({ success: true, ...updates });
+      // Return the full canonical preference object so the client always
+      // sees authoritative server state regardless of what was patched.
+      const fresh = await storage.getUser(req.session.userId!);
+      res.json({
+        success: true,
+        notifNearbyJobs: fresh?.notifNearbyJobs ?? true,
+        notifMessages: fresh?.notifMessages ?? true,
+        notifJobUpdates: fresh?.notifJobUpdates ?? true,
+        notifCashDrops: fresh?.notifCashDrops ?? true,
+        notifReminderPreArrival: (fresh as any)?.notifReminderPreArrival ?? true,
+        notifReminderOnTheWay: (fresh as any)?.notifReminderOnTheWay ?? true,
+        notifReminderPayoutRelease: (fresh as any)?.notifReminderPayoutRelease ?? true,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -13559,12 +13581,28 @@ YOUR BEHAVIOR:
         ));
       for (const j of atRiskJobs) {
         await storage.updateJob(j.id, { jobAtRisk: true } as any);
-        await notify(j.postedById, {
-          title: "Worker hasn't started yet",
-          body: `Your worker for "${j.title}" hasn't tapped "On my way" past their scheduled time. We're flagging this job at-risk.`,
-          jobId: j.id,
-          priority: "high",
-        });
+
+        // Phase 5 — push to BOTH parties (poster + worker) when at-risk
+        // flips. At-risk pushes intentionally bypass quiet hours but are
+        // still atomically deduped via reminders_sent so we never re-fire
+        // if the cron loops on the same job before someone clears the flag.
+        if (await claimReminder({ jobId: j.id, type: "at_risk_poster" })) {
+          await notify(j.postedById, {
+            title: "Worker hasn't started yet",
+            body: `Your worker for "${j.title}" hasn't tapped "On my way" past their scheduled time. We're flagging this job at-risk.`,
+            jobId: j.id,
+            priority: "high",
+          });
+        }
+
+        if (j.assignedHelperId && await claimReminder({ jobId: j.id, type: "at_risk_worker" })) {
+          await notify(j.assignedHelperId, {
+            title: "Job is at risk — head out now",
+            body: `"${j.title}" is past its scheduled start time. Tap "On my way" or cancel to release the job.`,
+            jobId: j.id,
+            priority: "high",
+          });
+        }
       }
     } catch (err) {
       console.error("[cron] coordination timeouts error:", err);

@@ -20,9 +20,21 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   console.warn("[push] VAPID keys missing — push notifications disabled");
 }
 
+export type PushAction = { action: string; title: string };
+
 export async function sendPushToUser(
   userId: number,
-  payload: { title: string; body: string; url?: string; icon?: string; tag?: string; priority?: "high" | "normal" }
+  payload: {
+    title: string;
+    body: string;
+    url?: string;
+    icon?: string;
+    tag?: string;
+    priority?: "high" | "normal";
+    // Phase 5 — optional action buttons rendered by the service worker.
+    // The SW routes taps by event.action via a deep-link query param.
+    actions?: PushAction[];
+  }
 ): Promise<void> {
   if (!vapidConfigured) return;
 
@@ -41,6 +53,7 @@ export async function sendPushToUser(
     badge: "/favicon.png",
     tag: payload.tag,
     priority: payload.priority || "normal",
+    actions: payload.actions || undefined,
   });
 
   await Promise.allSettled(

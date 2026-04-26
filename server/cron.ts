@@ -1,9 +1,11 @@
 import cron from "node-cron";
 import { db, pool } from "./db";
 import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
-import { and, eq, lt, lte, isNull, isNotNull, inArray, desc, notInArray } from "drizzle-orm";
+import { and, eq, lt, lte, gte, isNull, isNotNull, inArray, desc, notInArray } from "drizzle-orm";
 import { storage } from "./storage";
 import { notifyNearbyAvailableWorkers, notifyCashDropExpired } from "./notify-helpers";
+import { sendPushToUser } from "./push";
+import { claimReminder, isUserInQuietHours } from "./reminders";
 import { TRUST_ADJUSTMENTS } from "./pricing";
 import { getDemoUserIds } from "./demo-guard";
 import Stripe from "stripe";
@@ -531,13 +533,202 @@ async function pruneExpiredOAuthNonces(): Promise<number> {
   return result.rowCount ?? 0;
 }
 
+// ── Phase 5 — Smart notification reminder sweeps ────────────────────────
+// Each sweep is dedup-gated by reminders_sent so it fires at most once per
+// (job|cashDrop, type[, user]). Quiet hours (10pm–7am local) are respected
+// for all reminders here. The urgent at-risk push lives in the routes.ts
+// coordination cron and intentionally bypasses quiet hours.
+
+async function preArrivalReminderSweep(): Promise<number> {
+  const now = new Date();
+  const earliest = new Date(now.getTime() + 25 * 60_000);
+  const latest = new Date(now.getTime() + 35 * 60_000);
+
+  const candidates = await db.select({
+    id: jobs.id,
+    title: jobs.title,
+    assignedHelperId: jobs.assignedHelperId,
+  }).from(jobs).where(and(
+    eq(jobs.scheduleStatus, "scheduled"),
+    isNotNull(jobs.assignedHelperId),
+    isNotNull(jobs.selectedWorkerTime),
+    gte(jobs.selectedWorkerTime!, earliest),
+    lte(jobs.selectedWorkerTime!, latest),
+  ));
+
+  let sent = 0;
+  for (const j of candidates) {
+    if (!j.assignedHelperId) continue;
+    const helper = await storage.getUser(j.assignedHelperId);
+    if (!helper) continue;
+    if ((helper as any).notifReminderPreArrival === false) continue;
+    if (isUserInQuietHours(helper as any)) continue;
+    // Atomic claim — DB partial unique index guarantees single send.
+    if (!(await claimReminder({ jobId: j.id, type: "pre_arrival" }))) continue;
+
+    const title = "Heads up — your GUBER job starts in 30 min";
+    const body = `"${j.title}" begins soon. Tap "On the way" when you head out.`;
+    await storage.createNotification({
+      userId: helper.id, title, body, type: "job", jobId: j.id,
+    });
+    sendPushToUser(helper.id, {
+      title, body, url: `/jobs/${j.id}`, tag: `job-status-${j.id}`, priority: "normal",
+    }).catch(() => {});
+    sent++;
+  }
+  return sent;
+}
+
+async function missingOnTheWaySweep(): Promise<number> {
+  const now = new Date();
+  const earliest = new Date(now.getTime() - 15 * 60_000);
+  const latest = new Date(now.getTime() - 5 * 60_000);
+
+  const candidates = await db.select({
+    id: jobs.id,
+    title: jobs.title,
+    assignedHelperId: jobs.assignedHelperId,
+  }).from(jobs).where(and(
+    eq(jobs.scheduleStatus, "scheduled"),
+    isNotNull(jobs.assignedHelperId),
+    isNotNull(jobs.selectedWorkerTime),
+    gte(jobs.selectedWorkerTime!, earliest),
+    lte(jobs.selectedWorkerTime!, latest),
+    isNull(jobs.workerOnMyWayAt),
+    isNull(jobs.onTheWayAt),
+    isNull(jobs.workerArrivedAt),
+    isNull(jobs.arrivedAt),
+  ));
+
+  let sent = 0;
+  for (const j of candidates) {
+    if (!j.assignedHelperId) continue;
+    const helper = await storage.getUser(j.assignedHelperId);
+    if (!helper) continue;
+    if ((helper as any).notifReminderOnTheWay === false) continue;
+    if (isUserInQuietHours(helper as any)) continue;
+    if (!(await claimReminder({ jobId: j.id, type: "missing_otw" }))) continue;
+
+    const title = "Are you still on the way?";
+    const body = `"${j.title}" was scheduled to start. Tap "On the way" to confirm or snooze 5 minutes.`;
+    await storage.createNotification({
+      userId: helper.id, title, body, type: "job", jobId: j.id,
+    });
+    // url stays clean (no ?action=…) — only the explicit action button
+    // should POST on-the-way. The SW handler routes per-button.
+    sendPushToUser(helper.id, {
+      title, body,
+      url: `/jobs/${j.id}`,
+      tag: `job-status-${j.id}`,
+      priority: "high",
+      actions: [
+        { action: "on_the_way", title: "On the way" },
+        { action: "snooze", title: "Snooze 5m" },
+      ],
+    }).catch(() => {});
+    sent++;
+  }
+  return sent;
+}
+
+async function payoutReleaseReminderSweep(): Promise<number> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 2 * 60 * 60_000);
+
+  const candidates = await db.select({
+    id: jobs.id,
+    title: jobs.title,
+    postedById: jobs.postedById,
+  }).from(jobs).where(and(
+    eq(jobs.status, "completion_submitted"),
+    isNotNull(jobs.completedAt),
+    lte(jobs.completedAt!, cutoff),
+  ));
+
+  let sent = 0;
+  for (const j of candidates) {
+    const poster = await storage.getUser(j.postedById);
+    if (!poster) continue;
+    if ((poster as any).notifReminderPayoutRelease === false) continue;
+    if (isUserInQuietHours(poster as any)) continue;
+    if (!(await claimReminder({ jobId: j.id, type: "payout_release" }))) continue;
+
+    const title = "Don't forget to release payment";
+    const body = `Your worker submitted "${j.title}" 2+ hours ago. Tap to release payment.`;
+    await storage.createNotification({
+      userId: poster.id, title, body, type: "job", jobId: j.id,
+    });
+    // url stays clean — only the explicit "Release payment" button should
+    // trigger the release flow. Tapping the notification body just opens.
+    sendPushToUser(poster.id, {
+      title, body,
+      url: `/jobs/${j.id}`,
+      tag: `job-status-${j.id}`,
+      priority: "normal",
+      actions: [{ action: "release_payment", title: "Release payment" }],
+    }).catch(() => {});
+    sent++;
+  }
+  return sent;
+}
+
+async function cashDropExpiringSweep(): Promise<number> {
+  const now = new Date();
+  const earliest = new Date(now.getTime() + 4 * 60_000);
+  const latest = new Date(now.getTime() + 6 * 60_000);
+
+  const expiring = await db.select({
+    id: cashDrops.id,
+    title: cashDrops.title,
+  }).from(cashDrops).where(and(
+    eq(cashDrops.status, "active"),
+    isNotNull(cashDrops.endTime),
+    gte(cashDrops.endTime!, earliest),
+    lte(cashDrops.endTime!, latest),
+  ));
+
+  let sent = 0;
+  for (const d of expiring) {
+    const attempts = await storage.getCashDropAttempts(d.id);
+    const userIds = [...new Set(
+      attempts
+        .filter((a) => a.status !== "confirmed" && a.status !== "won" && a.status !== "rejected")
+        .map((a) => a.userId)
+    )];
+    for (const uid of userIds) {
+      const user = await storage.getUser(uid);
+      if (!user) continue;
+      if ((user as any).notifCashDrops === false) continue;
+      if (isUserInQuietHours(user as any)) continue;
+      if (!(await claimReminder({ cashDropId: d.id, userId: uid, type: "drop_expiring" }))) continue;
+
+      const title = "Cash Drop expiring in 5 min";
+      const body = `"${d.title || "Cash Drop"}" is closing soon. Submit your proof now or it'll be too late.`;
+      await storage.createNotification({
+        userId: uid, title, body, type: "cash_drop", cashDropId: d.id, jobId: null,
+      });
+      sendPushToUser(uid, {
+        title, body,
+        url: `/cash-drop/${d.id}`,
+        tag: `cashdrop-expiring-${d.id}`,
+        priority: "high",
+      }).catch(() => {});
+      sent++;
+    }
+  }
+  return sent;
+}
+
 export function startCron() {
   cron.schedule("*/2 * * * *", async () => {
     try {
       const expired = await autoExpireCashDrops();
       if (expired > 0) console.log(`[cron] auto-expired ${expired} cash drop(s) past endTime`);
+
+      const dropPings = await cashDropExpiringSweep();
+      if (dropPings > 0) console.log(`[cron] sent ${dropPings} cash-drop expiring reminder(s)`);
     } catch (err) {
-      console.error("[cron] error in cash drop auto-expire:", err);
+      console.error("[cron] error in 2-min sweep:", err);
     }
   });
 
@@ -570,9 +761,19 @@ export function startCron() {
 
       const prunedNonces = await pruneExpiredOAuthNonces();
       console.log(`[cron] pruned ${prunedNonces} expired OAuth nonce(s)`);
+
+      // Phase 5 reminder sweeps — dedup-gated, quiet-hours-respecting.
+      const preArrival = await preArrivalReminderSweep();
+      if (preArrival > 0) console.log(`[cron] sent ${preArrival} pre-arrival reminder(s)`);
+
+      const missingOtw = await missingOnTheWaySweep();
+      if (missingOtw > 0) console.log(`[cron] sent ${missingOtw} missing-on-the-way reminder(s)`);
+
+      const payoutPings = await payoutReleaseReminderSweep();
+      if (payoutPings > 0) console.log(`[cron] sent ${payoutPings} payout-release reminder(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }
   });
-  console.log("[cron] job expiration + stale boost + review timer cron started (every 5 min)");
+  console.log("[cron] job expiration + stale boost + review timer + reminder sweeps cron started");
 }

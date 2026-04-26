@@ -169,18 +169,24 @@ export default function Profile() {
     enabled: isOwnProfile,
   });
 
-  const { data: notifPrefs } = useQuery<{
+  type NotifPrefs = {
     notifNearbyJobs: boolean;
     notifMessages: boolean;
     notifJobUpdates: boolean;
     notifCashDrops: boolean;
-  }>({
+    notifReminderPreArrival: boolean;
+    notifReminderOnTheWay: boolean;
+    notifReminderPayoutRelease: boolean;
+  };
+  type NotifPrefKey = keyof NotifPrefs;
+
+  const { data: notifPrefs } = useQuery<NotifPrefs>({
     queryKey: ["/api/users/me/notification-preferences"],
     enabled: isOwnProfile,
   });
 
   const notifPrefMutation = useMutation({
-    mutationFn: async (updates: Partial<{ notifNearbyJobs: boolean; notifMessages: boolean; notifJobUpdates: boolean; notifCashDrops: boolean }>) => {
+    mutationFn: async (updates: Partial<NotifPrefs>) => {
       const resp = await apiRequest("PATCH", "/api/users/me/notification-preferences", updates);
       return resp.json();
     },
@@ -189,7 +195,7 @@ export default function Profile() {
     },
   });
 
-  const toggleNotifPref = (key: "notifNearbyJobs" | "notifMessages" | "notifJobUpdates" | "notifCashDrops") => {
+  const toggleNotifPref = (key: NotifPrefKey) => {
     if (!notifPrefs) return;
     notifPrefMutation.mutate({ [key]: !notifPrefs[key] });
   };
@@ -1253,6 +1259,9 @@ export default function Profile() {
                 { key: "notifMessages" as const, label: "Messages", desc: "Direct messages from hirers and workers" },
                 { key: "notifJobUpdates" as const, label: "Job Updates", desc: "Status changes on your active jobs" },
                 { key: "notifCashDrops" as const, label: "Cash Drops", desc: "Live cash drops in your area" },
+                { key: "notifReminderPreArrival" as const, label: "30-Minute Heads Up", desc: "Reminder 30 minutes before your scheduled job" },
+                { key: "notifReminderOnTheWay" as const, label: "On-the-Way Nudge", desc: "Friendly nudge if you haven't tapped \"On the way\" near start time" },
+                { key: "notifReminderPayoutRelease" as const, label: "Payout Release Reminder", desc: "Heads up if you haven't released payment 2 hours after submission" },
               ].map(({ key, label, desc }) => (
                 <div
                   key={key}

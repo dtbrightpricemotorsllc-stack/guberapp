@@ -1,4 +1,4 @@
-const CACHE_NAME = "guber-v10";
+const CACHE_NAME = "guber-v11";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -60,6 +60,13 @@ self.addEventListener("push", (event) => {
   const grouped = rawTag === "nearby-jobs" || rawTag === "messages" || rawTag.startsWith("job-status-") || rawTag.startsWith("pay-increase-");
   const tag = grouped ? rawTag : (rawTag ? rawTag + "-" + Date.now() : "guber-" + Date.now());
 
+  // Phase 5 — accept up to 2 server-supplied action buttons per push.
+  // Falls back to a single "View" button when none are provided.
+  const incomingActions = Array.isArray(payload.actions) ? payload.actions.slice(0, 2) : null;
+  const actions = incomingActions && incomingActions.length > 0
+    ? incomingActions
+    : [{ action: "open", title: "View" }];
+
   const options = {
     body: payload.body || "",
     icon: payload.icon || "/icon-192.png",
@@ -74,7 +81,7 @@ self.addEventListener("push", (event) => {
     renotify: true,
     silent: false,
     requireInteraction: isHighPriority,
-    actions: [{ action: "open", title: "View" }],
+    actions: actions,
   };
 
   event.waitUntil(
@@ -95,16 +102,44 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+
+  // Phase 5 — action button routing.
+  //   "snooze"          → just close, do nothing else (the next cron tick
+  //                       will re-evaluate; spec accepts a passive snooze).
+  //   "on_the_way"      → keep the deep link (?action=on_the_way) so the
+  //                       job page POSTs the on-the-way milestone for us.
+  //   "release_payment" → keep the deep link (?action=release).
+  //   default ("open"/no action) → open the supplied url.
+  const action = event.action || "open";
+  if (action === "snooze") return;
+
+  const baseUrl = event.notification.data?.url || "/";
+  // Default ("open"): strip any ?action=... so tapping the body never
+  // triggers a side-effect (e.g. accidental payment release).
+  // Action buttons explicitly opt-in by adding the right ?action= param.
+  let target = baseUrl;
+  try {
+    const u = new URL(baseUrl, self.location.origin);
+    u.searchParams.delete("action");
+    if (action === "on_the_way") {
+      u.searchParams.set("action", "on_the_way");
+    } else if (action === "release_payment") {
+      u.searchParams.set("action", "release");
+    }
+    target = u.pathname + (u.search ? u.search : "") + u.hash;
+  } catch {
+    target = baseUrl;
+  }
+
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const client of list) {
         if ("focus" in client) {
-          client.navigate(url);
+          client.navigate(target);
           return client.focus();
         }
       }
-      if (clients.openWindow) return clients.openWindow(url);
+      if (clients.openWindow) return clients.openWindow(target);
     })
   );
 });
