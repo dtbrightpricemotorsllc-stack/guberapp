@@ -52,8 +52,11 @@ export async function markReminderSent(key: ReminderKey): Promise<void> {
  * single-write even under overlapping cron runs.
  */
 export async function claimReminder(key: ReminderKey): Promise<boolean> {
+  // The conflict predicate must EXACTLY match the partial unique index
+  // predicates in scripts/post-merge.sh, otherwise Postgres throws
+  // "no unique or exclusion constraint matching the ON CONFLICT spec".
   const conflictTarget = key.cashDropId != null
-    ? "(cash_drop_id, user_id, reminder_type) WHERE cash_drop_id IS NOT NULL"
+    ? "(cash_drop_id, user_id, reminder_type) WHERE cash_drop_id IS NOT NULL AND user_id IS NOT NULL"
     : "(job_id, reminder_type) WHERE job_id IS NOT NULL";
 
   const result = await pool.query(
