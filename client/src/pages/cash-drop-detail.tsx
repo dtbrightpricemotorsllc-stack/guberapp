@@ -417,7 +417,7 @@ export default function CashDropDetail() {
             </div>
             <h2 className="font-display font-black text-lg mb-1" style={{ color: dropEndedAlert.wasEnRoute ? "#f87171" : "#9ca3af" }}>
               {dropEndedAlert.wasEnRoute
-                ? "Drop Claimed Before You Arrived"
+                ? "Drop claimed by someone else"
                 : dropEndedAlert.type === "expired" ? "Drop Expired" : "Drop Fully Claimed"}
             </h2>
             <p className="text-sm text-muted-foreground/70 leading-relaxed mb-5">
