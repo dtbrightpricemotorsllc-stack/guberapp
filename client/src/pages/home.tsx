@@ -240,13 +240,13 @@ export default function Home() {
             GET STARTED FREE
             <ChevronRight className="w-4 h-4" />
           </Link>
-          <a
-            href="https://guberapp.app/browse-jobs"
+          <Link
+            href="/browse-jobs"
             className="w-full sm:w-auto flex-1 h-13 px-7 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center gap-2"
             data-testid="link-hero-browsejobs"
           >
             BROWSE JOBS
-          </a>
+          </Link>
         </div>
 
         {/* Day-1 OG badge */}
@@ -297,13 +297,13 @@ export default function Home() {
             <h2 className="text-2xl font-display font-black tracking-wider">LIVE JOBS NEAR YOU</h2>
             <p className="text-muted-foreground text-sm mt-1">Real work posted right now in your area</p>
           </div>
-          <a
-            href="https://guberapp.app/browse-jobs"
+          <Link
+            href="/browse-jobs"
             className="flex items-center gap-1 text-xs font-display tracking-wider text-[#00E5E5] hover:opacity-80 transition-opacity"
             data-testid="link-see-all-jobs"
           >
             SEE ALL <ArrowRight className="w-3.5 h-3.5" />
-          </a>
+          </Link>
         </div>
 
         {jobsLoading ? (
@@ -341,9 +341,9 @@ export default function Home() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {CATEGORIES.map(({ label, img, desc }) => (
-            <a
+            <Link
               key={label}
-              href="https://guberapp.app/browse-jobs"
+              href="/browse-jobs"
               className="group relative overflow-hidden rounded-2xl aspect-[4/3] block"
               data-testid={`card-category-${label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`}
             >
@@ -396,14 +396,14 @@ export default function Home() {
                 Get paid to show up, document, and verify. Property walk-throughs, pre-purchase inspections,
                 online listing verification — real work that pays $40–$120+ per job.
               </p>
-              <a
-                href="https://guberapp.app/browse-jobs?category=Verify+%26+Inspect"
+              <Link
+                href="/browse-jobs?category=Verify+%26+Inspect"
                 className="inline-flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display tracking-[0.15em] premium-btn"
                 data-testid="link-vi-learn-more"
               >
                 SEE INSPECT JOBS
                 <ArrowRight className="w-4 h-4" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -459,13 +459,13 @@ export default function Home() {
               CREATE FREE ACCOUNT
               <ChevronRight className="w-4 h-4" />
             </Link>
-            <a
-              href="https://guberapp.app/browse-jobs"
+            <Link
+              href="/browse-jobs"
               className="w-full sm:w-auto h-13 px-8 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center"
               data-testid="link-cta-browse"
             >
               BROWSE OPEN JOBS
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -479,7 +479,7 @@ export default function Home() {
             <span className="w-px h-3 bg-white/10" />
             <Link href="/privacy" data-testid="link-footer-privacy">PRIVACY</Link>
             <span className="w-px h-3 bg-white/10" />
-            <a href="https://guberapp.app" data-testid="link-footer-app">GUBER APP</a>
+            <Link href="/" data-testid="link-footer-app">GUBER APP</Link>
           </div>
           <p className="text-[10px] font-display tracking-wider text-muted-foreground">
             GUBER GLOBAL LLC &mdash; GREENSBORO, NC
