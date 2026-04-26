@@ -610,12 +610,16 @@ async function missingOnTheWaySweep(): Promise<number> {
     if (!(await claimReminder({ jobId: j.id, type: "missing_otw" }))) continue;
 
     const title = "Are you still on the way?";
-    const body = `"${j.title}" was scheduled to start. Tap "On the way" to let your poster know you're heading out.`;
+    const body = `"${j.title}" was scheduled to start. Tap "On the way" to confirm or Snooze to dismiss.`;
     await storage.createNotification({
       userId: helper.id, title, body, type: "job", jobId: j.id,
     });
     // url stays clean (no ?action=…) — only the explicit action button
     // should trigger on-the-way. The SW handler routes per-button.
+    // Snooze is a client-side dismiss: the SW just closes the notification.
+    // Because reminders_sent already has a dedupe row for this job, the
+    // missing-OTW sweep won't re-fire for the same job, so a tap-snooze
+    // effectively silences this reminder permanently.
     sendPushToUser(helper.id, {
       title, body,
       url: `/jobs/${j.id}`,
@@ -623,6 +627,7 @@ async function missingOnTheWaySweep(): Promise<number> {
       priority: "high",
       actions: [
         { action: "on_the_way", title: "On the way" },
+        { action: "snooze", title: "Snooze 5 min" },
       ],
     }).catch(() => {});
     sent++;
