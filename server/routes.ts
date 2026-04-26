@@ -13583,25 +13583,34 @@ YOUR BEHAVIOR:
         await storage.updateJob(j.id, { jobAtRisk: true } as any);
 
         // Phase 5 — push to BOTH parties (poster + worker) when at-risk
-        // flips. At-risk pushes intentionally bypass quiet hours but are
-        // still atomically deduped via reminders_sent so we never re-fire
-        // if the cron loops on the same job before someone clears the flag.
-        if (await claimReminder({ jobId: j.id, type: "at_risk_poster" })) {
-          await notify(j.postedById, {
-            title: "Worker hasn't started yet",
-            body: `Your worker for "${j.title}" hasn't tapped "On my way" past their scheduled time. We're flagging this job at-risk.`,
-            jobId: j.id,
-            priority: "high",
-          });
+        // flips. At-risk pushes intentionally bypass quiet hours (it's
+        // urgent) but are gated by the existing notifJobUpdates pref
+        // (at-risk is a critical job-status update). Atomically deduped
+        // via reminders_sent so we never re-fire if the cron loops.
+        const poster = await storage.getUser(j.postedById);
+        if (poster && (poster as any).notifJobUpdates !== false) {
+          if (await claimReminder({ jobId: j.id, type: "at_risk_poster" })) {
+            await notify(j.postedById, {
+              title: "Worker hasn't started yet",
+              body: `Your worker for "${j.title}" hasn't tapped "On my way" past their scheduled time. We're flagging this job at-risk.`,
+              jobId: j.id,
+              priority: "high",
+            });
+          }
         }
 
-        if (j.assignedHelperId && await claimReminder({ jobId: j.id, type: "at_risk_worker" })) {
-          await notify(j.assignedHelperId, {
-            title: "Job is at risk — head out now",
-            body: `"${j.title}" is past its scheduled start time. Tap "On my way" or cancel to release the job.`,
-            jobId: j.id,
-            priority: "high",
-          });
+        if (j.assignedHelperId) {
+          const worker = await storage.getUser(j.assignedHelperId);
+          if (worker && (worker as any).notifJobUpdates !== false) {
+            if (await claimReminder({ jobId: j.id, type: "at_risk_worker" })) {
+              await notify(j.assignedHelperId, {
+                title: "Job is at risk — head out now",
+                body: `"${j.title}" is past its scheduled start time. Tap "On my way" or cancel to release the job.`,
+                jobId: j.id,
+                priority: "high",
+              });
+            }
+          }
         }
       }
     } catch (err) {

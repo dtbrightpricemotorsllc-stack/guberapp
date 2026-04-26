@@ -751,6 +751,49 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
     });
   };
 
+  // Phase 5 — handle ?action=on_the_way / ?action=release deep links from
+  // notification action buttons. Fires the right mutation exactly once,
+  // strips the param, and only acts when the user's role + job state
+  // actually allow it (so a stale/shared link can't trigger anything).
+  const actionFiredRef = useRef(false);
+  useEffect(() => {
+    if (actionFiredRef.current || !job || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    if (action !== "on_the_way" && action !== "release") return;
+
+    const isOwnerLocal = user.id === job.postedById;
+    const isHelperLocal = user.id === job.assignedHelperId;
+    const helperStageLocal = (job as any).helperStage as string | null;
+
+    if (action === "on_the_way") {
+      const canFire = isHelperLocal
+        && ["funded", "active", "in_progress"].includes(job.status)
+        && !helperStageLocal;
+      if (canFire) {
+        actionFiredRef.current = true;
+        handleOnMyWay();
+        toast({ title: "On the way", description: "Thanks — we let the poster know." });
+      } else {
+        actionFiredRef.current = true;
+      }
+    } else if (action === "release") {
+      const canFire = isOwnerLocal
+        && (job.status === "completion_submitted" || job.status === "in_progress" || job.status === "active" || job.status === "funded")
+        && !(job as any).buyerConfirmed;
+      if (canFire) {
+        actionFiredRef.current = true;
+        confirmMutation.mutate();
+      } else {
+        actionFiredRef.current = true;
+      }
+    }
+
+    params.delete("action");
+    const qs = params.toString();
+    window.history.replaceState({}, "", `/jobs/${jobId}${qs ? `?${qs}` : ""}`);
+  }, [job, user, jobId]);
+
   if (isLoading) {
     return <GuberLayout><div className="max-w-lg mx-auto px-4 py-8 space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-48" /></div></GuberLayout>;
   }
