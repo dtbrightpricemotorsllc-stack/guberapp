@@ -20,10 +20,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { type DetailOptionSet } from "@shared/schema";
 import { TASK_TIERS, PRICING_MODES, type TaskTierId, type PricingModeId } from "@shared/task-tiers";
 import { AvailabilityWindowsPicker, type AvailabilityWindow, hasAtLeastOneFutureWindow } from "@/components/availability-windows-picker";
+import { GuidedJobBuilder } from "@/components/guided-job-builder";
+import { findJobConfig, computeAutoTitle, computeEffort, computeHelpers, computeSuggestedPrice, detectContactBlock } from "@/lib/job-builder-config";
 
+// LIVE categories only. Marketplace and Barter Labor are intentionally
+// hidden from the picker until those flows are completed end-to-end.
 const mainCategories = [
-  "On-Demand Help", "General Labor", "Skilled Labor",
-  "Verify & Inspect", "Barter Labor", "Marketplace",
+  "On-Demand Help", "General Labor", "Skilled Labor", "Verify & Inspect",
 ];
 
 function filterNotesContent(text: string): string {
@@ -206,12 +209,39 @@ export default function PostJob() {
   const isGeneralLabor = category === "General Labor";
   const locationRequired = !isOnlineCategory && !isBarter;
 
+  // Try to load a guided builder config for the picked (category, serviceType).
+  // When found, the new tap-based GuidedJobBuilder takes over and the legacy
+  // checklists block stays hidden — keeps a single template across all live
+  // job types without breaking service types that aren't yet configured.
+  const guidedConfig = useMemo(
+    () => (isVIJob || isBarter ? null : findJobConfig(category, serviceType)),
+    [category, serviceType, isVIJob, isBarter],
+  );
+  const useGuidedBuilder = !!guidedConfig;
+  const [guidedValidation, setGuidedValidation] = useState<{ isValid: boolean; missingReason: string; contactBlockHit: boolean }>({
+    isValid: false,
+    missingReason: "",
+    contactBlockHit: false,
+  });
+
   // Live job summary: auto-title, effort level, helpers needed.
   // Recomputes whenever any selection changes, so the bottom panel
   // mirrors what GUBER will publish without making the user type a title.
   const jobMeta = useMemo(() => {
     if (isVIJob || isBarter) return null;
     if (!category || !serviceType) return null;
+
+    // Guided builder owns its own panel — return a thin meta shape so the
+    // rest of the page (button label, payload) still has values to read.
+    if (guidedConfig) {
+      const minutesNum = estimatedMinutes ? parseInt(estimatedMinutes) : 0;
+      return {
+        autoTitle: computeAutoTitle(guidedConfig, jobDetails),
+        effortLevel: computeEffort(guidedConfig, jobDetails, urgentSwitch, minutesNum),
+        helpersNeeded: computeHelpers(guidedConfig, jobDetails),
+        summaryParts: [] as { label: string; value: string }[],
+      };
+    }
 
     const summaryParts: { label: string; value: string }[] = [];
 
@@ -306,7 +336,7 @@ export default function PostJob() {
     }
 
     return { autoTitle, effortLevel, helpersNeeded, summaryParts };
-  }, [isVIJob, isBarter, category, serviceType, jobDetails, urgentSwitch, estimatedMinutes]);
+  }, [isVIJob, isBarter, category, serviceType, jobDetails, urgentSwitch, estimatedMinutes, guidedConfig]);
 
   const checkoutMutation = useMutation({
     mutationFn: async () => {
@@ -320,9 +350,23 @@ export default function PostJob() {
         ...(exactLat !== null && exactLng !== null ? { lat: exactLat, lng: exactLng } : {}),
       };
 
-      if (estimatedMinutes) {
-        payload.estimatedMinutes = estimatedMinutes;
-        payload.estimatedDurationHours = parseFloat(estimatedMinutes) / 60;
+      // Derive minutes from guided builder's estimatedTime chips when the
+      // legacy minutes select isn't shown.
+      let effectiveMinutes = estimatedMinutes;
+      if (!effectiveMinutes && useGuidedBuilder) {
+        const map: Record<string, string> = {
+          "Under 1 hour": "45",
+          "1–2 hours": "90",
+          "Half day": "240",
+          "Full day": "480",
+          "Multi-day": "960",
+        };
+        const label = jobDetails.estimatedTime as string | undefined;
+        if (label && map[label]) effectiveMinutes = map[label];
+      }
+      if (effectiveMinutes) {
+        payload.estimatedMinutes = effectiveMinutes;
+        payload.estimatedDurationHours = parseFloat(effectiveMinutes) / 60;
       }
 
       if (isVIJob) {
@@ -412,7 +456,11 @@ export default function PostJob() {
     if (isBarter && !barterOffering.trim()) return "Tell us what you're offering";
     if (locationRequired && zip.length < 5) return "Enter a 5-digit ZIP code";
 
-    if (checklists) {
+    if (useGuidedBuilder) {
+      // GuidedJobBuilder owns all section validation, contact-block,
+      // time-type, and helpers logic. Bubble its first missing reason up.
+      if (guidedValidation.missingReason) return guidedValidation.missingReason;
+    } else if (checklists) {
       const requiredChecklists = checklists.filter(c => c.required);
       for (const rc of requiredChecklists) {
         const val = jobDetails[rc.name];
@@ -420,6 +468,9 @@ export default function PostJob() {
           return `Fill in: ${rc.label || rc.name}`;
         }
       }
+    }
+    if (!useGuidedBuilder && !isBarter && generalNotes && detectContactBlock(generalNotes)) {
+      return "Notes can't include contact info or off-platform payment apps";
     }
     if (!isBarter && autoIncreaseEnabled) {
       const amt = parseFloat(autoIncreaseAmount);
@@ -569,7 +620,7 @@ export default function PostJob() {
                 </div>
               )}
 
-              {(isGeneralLabor || isSkilledLabor) && serviceType && (
+              {(isGeneralLabor || isSkilledLabor) && serviceType && !useGuidedBuilder && (
                 <div className="space-y-2">
                   <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display flex items-center gap-1">
                     <Clock className="w-3 h-3" />
@@ -592,6 +643,20 @@ export default function PostJob() {
                     Helps workers plan and adjusts pricing guidance
                   </p>
                 </div>
+              )}
+
+              {useGuidedBuilder && guidedConfig && (
+                <GuidedJobBuilder
+                  config={guidedConfig}
+                  jobDetails={jobDetails}
+                  onChange={setJobDetails}
+                  notes={generalNotes}
+                  onNotesChange={setGeneralNotes}
+                  estimatedMinutes={estimatedMinutes ? parseInt(estimatedMinutes) : 0}
+                  urgent={urgentSwitch}
+                  finalPrice={budgetNum}
+                  onValidationChange={setGuidedValidation}
+                />
               )}
 
               {isBarter && serviceType && (
@@ -669,7 +734,7 @@ export default function PostJob() {
                 </div>
               )}
 
-              {category && serviceType && checklists && checklists.length > 0 && (
+              {!useGuidedBuilder && category && serviceType && checklists && checklists.length > 0 && (
                 <div className="space-y-4 pt-2">
                   <div className="flex items-center gap-2 mb-1">
                     <Check className="w-4 h-4 guber-text-green" />

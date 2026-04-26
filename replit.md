@@ -24,6 +24,7 @@ GUBER employs a modern full-stack architecture with a focus on security, user ex
 - **State Management:** TanStack Query for efficient data fetching and synchronization.
 - **Payments:** Two-account Stripe setup (`stripeMain` for subscriptions/boosts, `stripe` for Connect operations like destination charges and payouts) with distinct webhooks.
 - **Advanced Job Features:**
+    - **Guided Job Builder (unified):** Single tap-based template that powers every On-Demand Help, General Labor, and Skilled Labor job type. Config lives in `client/src/lib/job-builder-config.ts` (sections, chips, effort/helpers/pricing rules per job type) and is rendered by `client/src/components/guided-job-builder.tsx`. Produces auto-title, Easy/Moderate/Heavy effort, helpers suggestion, suggested price range, live Job Summary panel, and contact-block validation on notes. Marketplace and Barter Labor are hidden from `mainCategories` until those flows are completed.
     - **V&I Smart Forms:** Multi-layer dropdowns (up to 6 layers) for dynamic job title and description generation.
     - **Time-Based Pricing:** Scales pricing suggestions based on estimated job durations.
     - **Barter Listings:** Structured format for barter jobs.
