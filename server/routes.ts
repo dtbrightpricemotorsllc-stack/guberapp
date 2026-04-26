@@ -41,7 +41,7 @@ import {
   TIMING as COORDINATION_TIMING,
   SCHEDULE_STATUS,
 } from "./coordination";
-import { claimReminder } from "./reminders";
+import { claimReminder, clearReminder, scheduleSnooze } from "./reminders";
 
 /** Create an in-app notification AND fire a background push alert to the user's device(s). */
 async function notify(
@@ -4300,7 +4300,108 @@ export async function registerRoutes(
     }
   });
 
+  // Phase 5 — real "Snooze 5m" handler for the missing-on-the-way push.
+  // The cron sweep is dedup-gated by the reminders_sent row, so a real
+  // snooze must (a) keep the dedupe row in place during the 5-minute
+  // window so the 2-minute cron stays silent, (b) re-deliver the push
+  // exactly once when the timer fires (if the worker still hasn't tapped
+  // on-the-way), then (c) drop the dedupe row so the cron loop can pick
+  // back up if the worker keeps ignoring it.
+  app.post("/api/reminders/snooze", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const rawJobId = (req.body ?? {}).jobId;
+      const type = (req.body ?? {}).type;
+      const jobId = typeof rawJobId === "number" ? rawJobId : parseInt(String(rawJobId ?? ""), 10);
+      if (!Number.isFinite(jobId) || jobId <= 0) {
+        return res.status(400).json({ message: "Invalid jobId" });
+      }
+      // Only the missing-on-the-way reminder supports snooze today.
+      if (type !== "missing_otw") {
+        return res.status(400).json({ message: "Unsupported reminder type" });
+      }
 
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      // Only the assigned helper may snooze their own nudge.
+      if (job.assignedHelperId !== userId) {
+        return res.status(403).json({ message: "Not assigned to this job" });
+      }
+      // If the worker has already moved on (tapped on-the-way / arrived /
+      // unassigned), there's nothing to snooze — just ack.
+      if (job.workerOnMyWayAt || job.onTheWayAt || job.workerArrivedAt || job.arrivedAt) {
+        return res.json({ snoozed: false, reason: "already_on_the_way" });
+      }
+
+      const key = { jobId, type: "missing_otw" as const };
+
+      // Defer the next nudge by 5 minutes. If the worker taps Snooze again
+      // during the wait, scheduleSnooze replaces the prior timer so we
+      // never fire two pushes back-to-back.
+      scheduleSnooze(key, 5, async () => {
+        // The dedupe row MUST be dropped on every terminal path — including
+        // job-deleted, helper-reassigned, and push-send failures — otherwise
+        // the stale row will mute future cron reminders for this job (or for
+        // the new helper if it was reassigned). Wrap the whole body in
+        // try/finally so cleanup runs no matter what.
+        try {
+          // Re-check world state at fire time — the worker may have tapped
+          // "On the way" between snooze and follow-up.
+          const fresh = await storage.getJob(jobId);
+          if (!fresh) return;
+          // If the helper changed during snooze, skip the push but still
+          // fall through to the finally so the dedupe row is cleared and
+          // the cron sweep can re-evaluate for the new helper.
+          if (fresh.assignedHelperId !== userId) return;
+          if (fresh.workerOnMyWayAt || fresh.onTheWayAt || fresh.workerArrivedAt || fresh.arrivedAt) {
+            return;
+          }
+          const helper = await storage.getUser(userId);
+          if (!helper) return;
+          if (helper.notifReminderOnTheWay === false) return;
+
+          const title = "Are you still on the way?";
+          const body = `"${fresh.title}" was scheduled to start. Tap "On the way" to confirm or Dismiss to silence this reminder.`;
+          await storage.createNotification({
+            userId: helper.id, title, body, type: "job", jobId: fresh.id,
+          });
+          // Don't let a transient push failure block dedupe cleanup —
+          // sendPushToUser already swallows per-subscription errors, but
+          // any unexpected throw here would otherwise skip the finally's
+          // intent. The catch keeps that path explicit.
+          try {
+            await sendPushToUser(helper.id, {
+              title, body,
+              url: `/jobs/${fresh.id}`,
+              tag: `job-status-${fresh.id}`,
+              priority: "high",
+              actions: [
+                { action: "on_the_way", title: "On the way" },
+                { action: "snooze", title: "Snooze 5m" },
+              ],
+            });
+          } catch (pushErr) {
+            console.warn("[reminders/snooze] push send failed", pushErr);
+          }
+        } finally {
+          // Drop the dedupe row so the 2-minute cron sweep can re-claim and
+          // re-fire if the worker still hasn't tapped on-the-way (and we're
+          // still inside the missing-on-the-way detection window). Runs on
+          // every terminal path including reassignment and errors.
+          try {
+            await clearReminder(key);
+          } catch (clearErr) {
+            console.warn("[reminders/snooze] clearReminder failed", clearErr);
+          }
+        }
+      });
+
+      return res.json({ snoozed: true, minutes: 5 });
+    } catch (err: any) {
+      console.error("[reminders/snooze]", err);
+      return res.status(500).json({ message: err.message });
+    }
+  });
 
   app.delete("/api/users/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);

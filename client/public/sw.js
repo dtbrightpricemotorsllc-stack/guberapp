@@ -1,4 +1,4 @@
-const CACHE_NAME = "guber-v11";
+const CACHE_NAME = "guber-v12";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -104,16 +104,40 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   // Phase 5 — action button routing.
-  //   "snooze"          → just close, do nothing else (the next cron tick
-  //                       will re-evaluate; spec accepts a passive snooze).
+  //   "snooze"          → POST to /api/reminders/snooze so the server can
+  //                       defer the next nudge by 5 minutes and re-deliver
+  //                       it if the worker still hasn't tapped on-the-way.
+  //                       The notification is already closed above; we don't
+  //                       open or focus a window.
   //   "on_the_way"      → keep the deep link (?action=on_the_way) so the
   //                       job page POSTs the on-the-way milestone for us.
   //   "release_payment" → keep the deep link (?action=release).
   //   default ("open"/no action) → open the supplied url.
   const action = event.action || "open";
-  if (action === "snooze") return;
 
   const baseUrl = event.notification.data?.url || "/";
+
+  if (action === "snooze") {
+    // Pull the job id out of the deep link (`/jobs/{id}`). If we can't
+    // parse one, just close — there's nothing meaningful to snooze.
+    let jobId = null;
+    try {
+      const u = new URL(baseUrl, self.location.origin);
+      const match = u.pathname.match(/^\/jobs\/(\d+)/);
+      if (match) jobId = parseInt(match[1], 10);
+    } catch {}
+    if (!jobId) return;
+    event.waitUntil(
+      fetch("/api/reminders/snooze", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, type: "missing_otw" }),
+      }).catch(() => {})
+    );
+    return;
+  }
+
   // Default ("open"): strip any ?action=... so tapping the body never
   // triggers a side-effect (e.g. accidental payment release).
   // Action buttons explicitly opt-in by adding the right ?action= param.

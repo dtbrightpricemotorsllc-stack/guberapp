@@ -616,12 +616,9 @@ async function missingOnTheWaySweep(): Promise<number> {
     });
     // url stays clean (no ?action=…) — only the explicit action button
     // should trigger on-the-way. The SW handler routes per-button.
-    // Dismiss is a client-side close: the SW just closes the notification.
-    // Because reminders_sent already has a dedupe row for this job, the
-    // missing-OTW sweep won't re-fire for the same job, so tapping Dismiss
-    // effectively silences this reminder permanently — the label matches
-    // the behavior. (A real 5-min snooze that re-fires is tracked as a
-    // follow-up since it requires a new endpoint, which Phase 5 disallows.)
+    // Tapping "Snooze 5m" hits POST /api/reminders/snooze, which defers the
+    // next nudge by 5 minutes and (after that delay) re-delivers the push
+    // if the worker still hasn't tapped "On the way".
     sendPushToUser(helper.id, {
       title, body,
       url: `/jobs/${j.id}`,
@@ -629,7 +626,7 @@ async function missingOnTheWaySweep(): Promise<number> {
       priority: "high",
       actions: [
         { action: "on_the_way", title: "On the way" },
-        { action: "snooze", title: "Dismiss" },
+        { action: "snooze", title: "Snooze 5m" },
       ],
     }).catch(() => {});
     sent++;

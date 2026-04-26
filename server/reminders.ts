@@ -107,3 +107,75 @@ export function isUserInQuietHours(user: Pick<User, "zipcode"> | null | undefine
   if (hour === 24) hour = 0;
   return hour >= 22 || hour < 7;
 }
+
+// ── Snooze support ────────────────────────────────────────────────────────
+// Workers can tap "Snooze 5m" on the missing-on-the-way push to push the
+// nudge out by 5 minutes. The cron sweep is dedup-gated by reminders_sent,
+// so a real snooze must (a) drop the dedupe row and (b) schedule a fresh
+// in-process timer that re-delivers the push if the worker still hasn't
+// tapped "On the way".
+
+/** In-process scheduler used by snooze actions. Cleared on restart — that's
+ *  acceptable because snooze is a best-effort UX nicety, not a guarantee. */
+const snoozeTimers = new Map<string, NodeJS.Timeout>();
+
+function snoozeKey(key: ReminderKey): string {
+  return `${key.type}|${key.jobId ?? ""}|${key.cashDropId ?? ""}|${key.userId ?? ""}`;
+}
+
+/** Drop the dedupe row for a reminder so the cron loop can re-evaluate it. */
+export async function clearReminder(key: ReminderKey): Promise<void> {
+  const conds = [eq(remindersSent.reminderType, key.type)];
+  conds.push(key.jobId != null ? eq(remindersSent.jobId, key.jobId) : isNull(remindersSent.jobId));
+  conds.push(key.cashDropId != null ? eq(remindersSent.cashDropId, key.cashDropId) : isNull(remindersSent.cashDropId));
+  conds.push(key.userId != null ? eq(remindersSent.userId, key.userId) : isNull(remindersSent.userId));
+  await db.delete(remindersSent).where(and(...conds));
+}
+
+/**
+ * Schedule a one-shot follow-up for a reminder. If the same key is snoozed
+ * again before `minutes` elapse, the previous timer is cancelled and replaced
+ * (so rapid double-taps don't fire two pushes back-to-back).
+ *
+ * The fire callback is responsible for re-checking world state (the worker
+ * may have tapped "On the way" between snooze and follow-up) and for
+ * delivering the push itself.
+ */
+export function scheduleSnooze(
+  key: ReminderKey,
+  minutes: number,
+  fire: () => Promise<void>,
+): void {
+  const k = snoozeKey(key);
+  const existing = snoozeTimers.get(k);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    snoozeTimers.delete(k);
+    try {
+      await fire();
+    } catch {
+      // Snooze is best-effort — swallow errors so they don't crash the host.
+    }
+  }, Math.max(0, minutes) * 60_000);
+
+  // Don't keep the event loop alive just for a snooze timer.
+  if (typeof timer.unref === "function") timer.unref();
+
+  snoozeTimers.set(k, timer);
+}
+
+/** Cancel a pending snooze timer (used by tests; harmless if none exists). */
+export function cancelSnooze(key: ReminderKey): void {
+  const k = snoozeKey(key);
+  const existing = snoozeTimers.get(k);
+  if (existing) {
+    clearTimeout(existing);
+    snoozeTimers.delete(k);
+  }
+}
+
+/** Test-only: number of currently pending snooze timers. */
+export function pendingSnoozeCount(): number {
+  return snoozeTimers.size;
+}
