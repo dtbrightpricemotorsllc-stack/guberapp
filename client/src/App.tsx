@@ -38,6 +38,7 @@ import JoinPage from "@/pages/join";
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const BrowseJobs = lazy(() => import("@/pages/browse-jobs"));
 const JobDetail = lazy(() => import("@/pages/job-detail"));
+const JobNavigate = lazy(() => import("@/pages/job-navigate"));
 const PostJob = lazy(() => import("@/pages/post-job"));
 const MyJobs = lazy(() => import("@/pages/my-jobs"));
 const Profile = lazy(() => import("@/pages/profile"));
@@ -199,6 +200,7 @@ function Router() {
       }} />
       <Route path="/dashboard" component={() => <ConsumerRoute component={Dashboard} />} />
       <Route path="/browse-jobs" component={() => <ProtectedRoute component={BrowseJobs} />} />
+      <Route path="/jobs/:id/navigate" component={() => <ProtectedRoute component={JobNavigate} />} />
       <Route path="/jobs/:id" component={() => <ProtectedRoute component={JobDetail} />} />
       <Route path="/post-job" component={() => <ConsumerRoute component={PostJob} />} />
       <Route path="/my-jobs" component={() => <ConsumerRoute component={MyJobs} />} />

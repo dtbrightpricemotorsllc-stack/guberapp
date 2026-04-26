@@ -1136,6 +1136,18 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
         {isActiveJob && (
           <div className="mb-4 space-y-2" data-testid="section-helper-milestone-actions">
+            {isJobAddressUnlocked(job as any) && ((job as any).lat || job.location) && (
+              <Link href={`/jobs/${jobId}/navigate`}>
+                <Button
+                  className="w-full h-14 font-display tracking-wider rounded-2xl text-white font-bold text-base"
+                  style={{ background: "linear-gradient(135deg, #16a34a, #047857)" }}
+                  data-testid="button-open-in-app-navigation"
+                >
+                  <Navigation className="w-5 h-5 mr-2" /> OPEN NAVIGATION
+                </Button>
+              </Link>
+            )}
+
             {showOnMyWay && (
               <Button
                 onClick={handleOnMyWay}
@@ -1172,7 +1184,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             {isActiveJob && isJobAddressUnlocked(job as any) && ((job as any).lat || job.location) && (
               <div className="space-y-2 pt-1" data-testid="section-navigation">
-                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Get Directions</p>
+                <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Or use external maps</p>
                 {job.location && (
                   <p className="text-xs text-muted-foreground px-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3 shrink-0" /> {job.location}
