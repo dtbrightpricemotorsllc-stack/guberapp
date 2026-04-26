@@ -537,19 +537,28 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       if (vars.statusType === "on_the_way") {
         setNavUrls(data.navigationUrls || { google: null, waze: null });
-        const pref = (user as any)?.preferredMapApp;
-        if (pref === "google_maps") {
-          openGoogleMapsForJob(job);
-          toast({ title: "On The Way!", description: "GPS logged. Opening Google Maps." });
-        } else if (pref === "waze") {
-          openWazeForJob(job);
-          toast({ title: "On The Way!", description: "GPS logged. Opening Waze." });
-        } else if (pref === "apple_maps") {
-          openAppleMapsForJob(job);
-          toast({ title: "On The Way!", description: "GPS logged. Opening Apple Maps." });
+        // Defense-in-depth: only auto-launch a map if the address is actually
+        // unlocked client-side. The server already returned navigationUrls
+        // with the full address, but we never want a deep-link to fire if
+        // gating logic somewhere upstream changes and we end up here without
+        // a confirmed schedule + held payment.
+        if (!isJobAddressUnlocked(job as any)) {
+          toast({ title: "On The Way!", description: "GPS logged." });
         } else {
-          setShowNavModal(true);
-          toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
+          const pref = (user as any)?.preferredMapApp;
+          if (pref === "google_maps") {
+            openGoogleMapsForJob(job);
+            toast({ title: "On The Way!", description: "GPS logged. Opening Google Maps." });
+          } else if (pref === "waze") {
+            openWazeForJob(job);
+            toast({ title: "On The Way!", description: "GPS logged. Opening Waze." });
+          } else if (pref === "apple_maps") {
+            openAppleMapsForJob(job);
+            toast({ title: "On The Way!", description: "GPS logged. Opening Apple Maps." });
+          } else {
+            setShowNavModal(true);
+            toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
+          }
         }
       } else if (vars.statusType === "arrived") {
         toast({ title: "Arrival Logged", description: "The poster has been notified you arrived." });
