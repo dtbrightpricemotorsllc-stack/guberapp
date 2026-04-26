@@ -756,14 +756,19 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   // refresh/back can't re-prompt), then prompt the user with an explicit
   // confirm before firing any state-changing mutation. This prevents a
   // crafted/shared link from silently moving the job forward.
-  const actionFiredRef = useRef(false);
+  const actionFiredRef = useRef<string | null>(null);
+  // Reset the single-fire guard whenever the job changes so the same
+  // tab can handle action deep-links for multiple jobs in one session.
   useEffect(() => {
-    if (actionFiredRef.current || !job || !user) return;
+    actionFiredRef.current = null;
+  }, [jobId]);
+  useEffect(() => {
+    if (actionFiredRef.current === String(jobId) || !job || !user) return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get("action");
     if (action !== "on_the_way" && action !== "release") return;
 
-    actionFiredRef.current = true;
+    actionFiredRef.current = String(jobId);
     params.delete("action");
     const qs = params.toString();
     window.history.replaceState({}, "", `/jobs/${jobId}${qs ? `?${qs}` : ""}`);
