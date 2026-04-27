@@ -786,10 +786,37 @@ export default function CashDropDetail() {
 
         {attempt?.status === "arrived" && (
           <div className="space-y-4">
-            {drop.clueText && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4">
-                <p className="text-[10px] font-display font-bold tracking-widest text-amber-400/70 uppercase mb-2">Clue</p>
-                <p className="text-sm text-amber-300 font-display font-semibold leading-relaxed">{drop.clueText}</p>
+            {(drop.clueText || (Array.isArray((drop as any).clueMediaUrls) && (drop as any).clueMediaUrls.length > 0)) && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 space-y-3">
+                <p className="text-[10px] font-display font-bold tracking-widest text-amber-400/70 uppercase">Clue</p>
+                {drop.clueText && (
+                  <p className="text-sm text-amber-300 font-display font-semibold leading-relaxed" data-testid="text-clue">{drop.clueText}</p>
+                )}
+                {Array.isArray((drop as any).clueMediaUrls) && (drop as any).clueMediaUrls.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {((drop as any).clueMediaUrls as string[]).map((url, i) => {
+                      const isVideo = /\.(mp4|mov|webm|avi)(\?|$)/i.test(url);
+                      return isVideo ? (
+                        <video
+                          key={url + i}
+                          src={url}
+                          controls
+                          playsInline
+                          className="w-full aspect-video object-cover rounded-lg border border-amber-500/20 bg-black"
+                          data-testid={`clue-media-video-${i}`}
+                        />
+                      ) : (
+                        <img
+                          key={url + i}
+                          src={url}
+                          alt={`Clue ${i + 1}`}
+                          className="w-full aspect-square object-cover rounded-lg border border-amber-500/20"
+                          data-testid={`clue-media-image-${i}`}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

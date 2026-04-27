@@ -426,20 +426,24 @@ export default function MapExplore() {
           const isHost = !!(this.dropData?.isHostDrop || this.dropData?.is_host_drop);
           const hostLogoUrl = this.dropData?.hostLogo || this.dropData?.host_logo || null;
 
+          const hasLogo = !!(isHost && hostLogoUrl);
+          const circleSize = hasLogo ? 56 : 38;
+          const ringSize = hasLogo ? 64 : 44;
+          const wrapperHeight = hasLogo ? 88 : 72;
           const wrapper = document.createElement("div");
-          wrapper.style.cssText = "position:relative;width:56px;height:72px;display:flex;flex-direction:column;align-items:center;";
+          wrapper.style.cssText = `position:relative;width:${ringSize + 12}px;height:${wrapperHeight}px;display:flex;flex-direction:column;align-items:center;`;
 
-          const ringColor = isHost && hostLogoUrl ? "#C9A84C" : "#22C55E";
+          const ringColor = hasLogo ? "#C9A84C" : "#22C55E";
 
           const rings: HTMLDivElement[] = [0,1,2].map(() => {
             const r = document.createElement("div");
-            r.style.cssText = `position:absolute;top:4px;left:50%;width:44px;height:44px;border-radius:50%;border:2px solid ${ringColor};pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);`;
+            r.style.cssText = `position:absolute;top:4px;left:50%;width:${ringSize}px;height:${ringSize}px;border-radius:50%;border:2px solid ${ringColor};pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);`;
             wrapper.appendChild(r);
             return r;
           });
 
           const circle = document.createElement("div");
-          circle.style.cssText = `position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:${isHost && hostLogoUrl ? "#000" : "#22C55E"};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px ${ringColor},0 0 28px ${ringColor}66,0 3px 10px rgba(0,0,0,0.55);margin-top:6px;overflow:hidden;`;
+          circle.style.cssText = `position:relative;z-index:10;width:${circleSize}px;height:${circleSize}px;border-radius:50%;background:${hasLogo ? "#000" : "#22C55E"};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px ${ringColor},0 0 28px ${ringColor}66,0 3px 10px rgba(0,0,0,0.55);margin-top:6px;overflow:hidden;`;
 
           if (isHost && hostLogoUrl) {
             const img = document.createElement("img");

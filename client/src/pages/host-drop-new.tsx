@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { gpsGetCurrentPosition } from "@/lib/gps";
-import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2, X, Ban } from "lucide-react";
+import { DollarSign, MapPin, Loader2, ChevronLeft, Info, Camera, Trash2, X, Ban, ImagePlus, Video } from "lucide-react";
 import type { CashDrop } from "@shared/schema";
 
 async function fileToBase64(file: File): Promise<string> {
@@ -201,6 +201,9 @@ export default function HostDropNew() {
   const [rewardPerWinner, setRewardPerWinner] = useState("");
   const [winnerLimit, setWinnerLimit] = useState("1");
   const [clueText, setClueText] = useState("");
+  const [clueMediaUrls, setClueMediaUrls] = useState<string[]>([]);
+  const [clueMediaUploading, setClueMediaUploading] = useState(false);
+  const clueMediaRef = useRef<HTMLInputElement>(null);
   const [addressInput, setAddressInput] = useState("");
   const [gpsLat, setGpsLat] = useState("");
   const [gpsLng, setGpsLng] = useState("");
@@ -243,6 +246,7 @@ export default function HostDropNew() {
     setRewardPerWinner(d.rewardPerWinner != null ? String(d.rewardPerWinner) : "");
     setWinnerLimit(String(d.winnerLimit ?? 1));
     setClueText(d.clueText ?? "");
+    setClueMediaUrls(Array.isArray(d.clueMediaUrls) ? d.clueMediaUrls.filter(Boolean) : []);
     setGpsLat(d.gpsLat != null ? String(d.gpsLat) : "");
     setGpsLng(d.gpsLng != null ? String(d.gpsLng) : "");
     setGpsRadius(String(d.gpsRadius ?? 200));
@@ -525,6 +529,84 @@ export default function HostDropNew() {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label className="text-xs font-display text-muted-foreground tracking-[0.12em]">CLUE PHOTOS / VIDEO (optional)</Label>
+            <p className="text-[10px] text-muted-foreground -mt-1">Add up to 5 visual hints. Shown to participants once they arrive.</p>
+            <div className="grid grid-cols-3 gap-2">
+              {clueMediaUrls.map((url, i) => {
+                const isVideo = /\.(mp4|mov|webm|avi)(\?|$)/i.test(url);
+                return (
+                  <div key={url + i} className="relative group aspect-square rounded-lg overflow-hidden border border-border/20 bg-muted/10" data-testid={`clue-media-${i}`}>
+                    {isVideo ? (
+                      <video src={url} className="w-full h-full object-cover" muted playsInline />
+                    ) : (
+                      <img src={url} alt={`Clue ${i + 1}`} className="w-full h-full object-cover" />
+                    )}
+                    {isVideo && (
+                      <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1.5 py-0.5 flex items-center gap-1">
+                        <Video className="w-2.5 h-2.5 text-white" />
+                        <span className="text-[8px] text-white font-display font-bold">VIDEO</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setClueMediaUrls(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-1 right-1 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      data-testid={`button-remove-clue-media-${i}`}
+                      aria-label="Remove"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                );
+              })}
+              {clueMediaUrls.length < 5 && (
+                <button
+                  type="button"
+                  onClick={() => clueMediaRef.current?.click()}
+                  disabled={clueMediaUploading}
+                  className="aspect-square rounded-lg border-2 border-dashed border-border/30 flex flex-col items-center justify-center gap-1 hover:border-primary/40 transition-colors bg-muted/10 disabled:opacity-50"
+                  data-testid="button-add-clue-media"
+                >
+                  {clueMediaUploading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    : <ImagePlus className="w-4 h-4 text-muted-foreground" />}
+                  <span className="text-[9px] text-muted-foreground font-display">{clueMediaUploading ? "Uploading…" : "Photo / Video"}</span>
+                </button>
+              )}
+            </div>
+            <input
+              ref={clueMediaRef}
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              data-testid="input-clue-media-file"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                const isVideo = file.type.startsWith("video/");
+                const maxBytes = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+                if (file.size > maxBytes) {
+                  toast({ title: "File too large", description: `${isVideo ? "Videos" : "Images"} must be under ${isVideo ? "50MB" : "10MB"}.`, variant: "destructive" });
+                  return;
+                }
+                setClueMediaUploading(true);
+                try {
+                  const fileBase64 = await fileToBase64(file);
+                  const res = await apiRequest("POST", "/api/upload-photo", { fileBase64 });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Upload failed");
+                  if (data.url) setClueMediaUrls(prev => [...prev, data.url]);
+                } catch (err: any) {
+                  toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setClueMediaUploading(false);
+                }
+              }}
+            />
+          </div>
+
           {/* Address search — drives gpsLat/gpsLng via geocoding */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -667,6 +749,7 @@ export default function HostDropNew() {
                 rewardPerWinner: physicalDrop ? "0" : rewardPerWinner,
                 winnerLimit,
                 clueText: clueText || undefined,
+                clueMediaUrls: clueMediaUrls.length ? clueMediaUrls : undefined,
                 gpsLat: gpsLat || undefined,
                 gpsLng: gpsLng || undefined,
                 gpsRadius,

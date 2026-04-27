@@ -421,14 +421,18 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           this.inner = inner;
           this.div.appendChild(inner);
 
+          const hasLogo = !!drop.hostLogoUrl;
+          const circleSize = hasLogo ? 56 : 38;
+          const ringSize = hasLogo ? 64 : 44;
+          const wrapperHeight = hasLogo ? 88 : 72;
           const wrapper = document.createElement("div");
-          wrapper.style.cssText = "position:relative;width:56px;height:72px;display:flex;flex-direction:column;align-items:center;";
+          wrapper.style.cssText = `position:relative;width:${ringSize + 12}px;height:${wrapperHeight}px;display:flex;flex-direction:column;align-items:center;`;
 
           const initColor = isClosed ? "#6B7280" : "#22C55E";
 
           const rings: HTMLDivElement[] = isClosed ? [] : [0,1,2].map(() => {
             const r = document.createElement("div");
-            r.style.cssText = `position:absolute;top:4px;left:50%;width:44px;height:44px;border-radius:50%;border:2px solid ${initColor};pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);`;
+            r.style.cssText = `position:absolute;top:4px;left:50%;width:${ringSize}px;height:${ringSize}px;border-radius:50%;border:2px solid ${initColor};pointer-events:none;opacity:0;transform:translateX(-50%) scale(1);`;
             wrapper.appendChild(r);
             return r;
           });
@@ -437,7 +441,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           const circleBoxShadow = isClosed
             ? "0 1px 6px rgba(0,0,0,0.4)"
             : `0 0 14px ${initColor},0 0 28px ${initColor}66,0 3px 10px rgba(0,0,0,0.55)`;
-          circle.style.cssText = `position:relative;z-index:10;width:38px;height:38px;border-radius:50%;background:${initColor};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:${circleBoxShadow};margin-top:6px;opacity:${isClosed ? "0.55" : "1"};`;
+          circle.style.cssText = `position:relative;z-index:10;width:${circleSize}px;height:${circleSize}px;border-radius:50%;background:${hasLogo ? "#000" : initColor};border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:${circleBoxShadow};margin-top:6px;opacity:${isClosed ? "0.55" : "1"};`;
 
           if (drop.hostLogoUrl) {
             const logoImg = document.createElement("img");

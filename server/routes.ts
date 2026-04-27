@@ -11278,7 +11278,7 @@ YOUR BEHAVIOR:
       }
       const {
         title, description, rewardPerWinner, winnerLimit, startTime, endTime,
-        gpsLat, gpsLng, gpsRadius, clueText, hostLogo,
+        gpsLat, gpsLng, gpsRadius, clueText, clueMediaUrls, hostLogo,
         physicalCashDrop, finalLocationMode, address,
       } = req.body;
       if (!title) return res.status(400).json({ error: "Title is required" });
@@ -11307,6 +11307,9 @@ YOUR BEHAVIOR:
         gpsLng: gpsLng ? parseFloat(gpsLng) : null,
         gpsRadius: gpsRadius ? parseInt(gpsRadius) : 200,
         clueText: clueText || null,
+        clueMediaUrls: Array.isArray(clueMediaUrls)
+          ? clueMediaUrls.filter((u: any) => typeof u === "string" && u.trim()).slice(0, 5)
+          : null,
         clueRevealOnArrival: false,
         requireInAppCamera: true,
         proofItems: [],
@@ -11402,7 +11405,7 @@ YOUR BEHAVIOR:
       const {
         title, description, rewardPerWinner, winnerLimit,
         startTime, endTime, gpsLat, gpsLng, gpsRadius,
-        clueText, physicalCashDrop, finalLocationMode,
+        clueText, clueMediaUrls, physicalCashDrop, finalLocationMode,
       } = req.body;
 
       // ── Strict parsers — reject garbage instead of coercing to 0/NaN. ──
@@ -11446,6 +11449,11 @@ YOUR BEHAVIOR:
       }
       if (description !== undefined) patchData.description = description || null;
       if (clueText !== undefined) patchData.clueText = clueText || null;
+      if (clueMediaUrls !== undefined) {
+        patchData.clueMediaUrls = Array.isArray(clueMediaUrls)
+          ? clueMediaUrls.filter((u: any) => typeof u === "string" && u.trim()).slice(0, 5)
+          : null;
+      }
 
       if (winnerLimit !== undefined) {
         const n = parseFinitePositiveInt(winnerLimit, "winnerLimit");

@@ -974,6 +974,7 @@ export const cashDrops = pgTable("cash_drops", {
   gpsLng: real("gps_lng"),
   gpsRadius: integer("gps_radius").default(200),
   clueText: text("clue_text"),
+  clueMediaUrls: text("clue_media_urls").array(),
   clueRevealOnArrival: boolean("clue_reveal_on_arrival").default(false),
   requireInAppCamera: boolean("require_in_app_camera").default(true),
   proofItems: json("proof_items").$type<{ label: string; type: "photo" | "video" }[]>(),
