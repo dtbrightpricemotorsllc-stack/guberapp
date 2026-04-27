@@ -20,6 +20,16 @@ import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop } from "@shared/schema";
 import {
+  DISPUTE_ISSUE_TYPES,
+  ADMIN_DISPUTE_DECISIONS,
+  HELPER_RESPONSE_WINDOW_HOURS,
+  RISK_WATCH_THRESHOLDS,
+  autoConfirmHoursFor,
+  type DisputeIssueType,
+  type AdminDisputeDecision,
+  type InternalPayoutStatus,
+} from "@shared/dispute";
+import {
   calculateJobPricing,
   getTrustInfo,
   getTrustLevel,
@@ -460,6 +470,39 @@ async function respondJob(req: Request, res: Response, job: any, extra?: Record<
   const sanitized = sanitizeJobForPublic(job, req.session.userId, isAdmin);
   if (extra) return res.json({ ...sanitized, ...extra });
   return res.json(sanitized);
+}
+
+// ── Risk-signal helpers (Task #317) ─────────────────────────────────────
+// Bumps a single signal counter for a user and (if normal-level) auto-promotes
+// them to "watch" once any threshold is crossed. Higher tiers (restricted /
+// suspended) only ever come from explicit admin action.
+async function bumpRiskSignal(userId: number, signal: keyof typeof RISK_WATCH_THRESHOLDS): Promise<void> {
+  try {
+    const u = await storage.getUser(userId);
+    if (!u) return;
+    const fieldMap: Record<keyof typeof RISK_WATCH_THRESHOLDS, string> = {
+      jobsDisputed: "jobsDisputed",
+      noShowCount: "noShowCount",
+      missingProofCount: "missingProofCount",
+      bypassAttemptCount: "bypassAttemptCount",
+      falseClaimFlagCount: "falseClaimFlagCount",
+    };
+    const field = fieldMap[signal];
+    const next = ((u as any)[field] || 0) + 1;
+    const updates: any = { [field]: next };
+    const currentLevel = (u as any).riskLevel || "normal";
+    if (currentLevel === "normal" && next >= RISK_WATCH_THRESHOLDS[signal]) {
+      updates.riskLevel = "watch";
+    }
+    await storage.updateUser(userId, updates);
+  } catch (err: any) {
+    console.error(`[risk] bumpRiskSignal failed userId=${userId} signal=${signal}:`, err.message);
+  }
+}
+
+// Re-evaluates risk level after a dispute event; opens dispute against this user.
+async function maybeBumpRiskWatch(userId: number): Promise<void> {
+  await bumpRiskSignal(userId, "jobsDisputed");
 }
 
 async function viewerIsAdmin(req: Request): Promise<boolean> {
@@ -6159,6 +6202,32 @@ export async function registerRoutes(
         if (proofs.length === 0) {
           return res.status(400).json({ message: "Proof submission required before confirming completion" });
         }
+        const tplId = job.proofTemplateId;
+        if (tplId) {
+          const checklistItems = await storage.getProofChecklistItems(tplId);
+          const isVI = !!job.verifyInspectCategory;
+          const requiredItems = checklistItems.filter(c => (c.quantityRequired ?? 1) > 0);
+          for (const item of requiredItems) {
+            const itemProofs = proofs.filter(p => p.checklistItemId === item.id);
+            const validProofs = itemProofs.filter(p => !p.notEncountered);
+            const required = item.quantityRequired ?? 1;
+            if (validProofs.length >= required) continue;
+            if (isVI) {
+              return res.status(400).json({
+                message: `Verify & Inspect requires every checklist item to have proof. Missing: "${item.label}".`,
+                code: "CHECKLIST_INCOMPLETE",
+                checklistItemId: item.id,
+              });
+            }
+            const skipped = itemProofs.find(p => p.notEncountered && p.notEncounteredReason);
+            if (skipped) continue;
+            return res.status(400).json({
+              message: `Checklist item "${item.label}" needs ${required} proof submission(s) or a reason it wasn't possible.`,
+              code: "CHECKLIST_INCOMPLETE",
+              checklistItemId: item.id,
+            });
+          }
+        }
       }
 
       const update: any = {};
@@ -6177,15 +6246,19 @@ export async function registerRoutes(
         update.helperConfirmed = true;
 
         const feeConfig = await getActiveFeeConfig();
+        // Category-aware auto-confirm window (Task #317): simple 24h, skilled 48h,
+        // V&I 24h, high-value (>=$500) 72h. Falls back to platform setting if higher.
+        const windowHours = autoConfirmHoursFor(job as any, feeConfig.reviewTimerHours);
         const reviewTimerDate = new Date();
-        reviewTimerDate.setHours(reviewTimerDate.getHours() + feeConfig.reviewTimerHours);
+        reviewTimerDate.setHours(reviewTimerDate.getHours() + windowHours);
         update.reviewTimerStartedAt = new Date();
         update.autoConfirmAt = reviewTimerDate;
         update.payoutStatus = "review_pending";
+        update.internalPayoutStatus = "pending_confirmation";
 
         await notify(job.postedById, {
           title: "Job Marked Complete — Review Now",
-          body: `Your worker marked "${job.title}" done. Review and confirm within ${feeConfig.reviewTimerHours}h or it auto-confirms.`,
+          body: `Your worker marked "${job.title}" done. Review and confirm within ${windowHours}h or it auto-confirms.`,
           jobId,
         });
       }
@@ -6218,10 +6291,13 @@ export async function registerRoutes(
 
         if (hasProof && !hasDispute) {
           update.payoutStatus = "payout_eligible";
+          update.internalPayoutStatus = "approved";
         } else if (!hasProof && job.proofRequired) {
           update.payoutStatus = "proof_missing";
+          update.internalPayoutStatus = "on_hold";
         } else {
           update.payoutStatus = "payout_eligible";
+          update.internalPayoutStatus = "approved";
         }
 
         if (job.assignedHelperId) {
@@ -6292,6 +6368,8 @@ export async function registerRoutes(
               const captured = await stripe.paymentIntents.capture(piId);
               const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
               update.payoutStatus = "paid_out";
+              update.internalPayoutStatus = "released";
+              update.payoutAmount = workerShare;
               update.chargedAt = new Date();
               console.log(`[GUBER][capture] jobId=${job.id} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
 
@@ -6375,6 +6453,7 @@ export async function registerRoutes(
               if (captureErr.code === "charge_expired_for_capture") {
                 console.error(`[GUBER][capture] jobId=${job.id} EXPIRED — 7-day authorization lapsed. Admin attention needed.`);
                 update.payoutStatus = "capture_expired";
+                update.internalPayoutStatus = "on_hold";
                 await notify(job.postedById, {
                   title: "Payment Hold Expired",
                   body: `The payment hold for "${job.title}" has expired. Please contact support to resolve.`,
@@ -6446,8 +6525,9 @@ export async function registerRoutes(
         // already handled above
       } else {
         const feeConfig = await getActiveFeeConfig();
+        const windowHoursElse = autoConfirmHoursFor(job as any, feeConfig.reviewTimerHours);
         const autoConfirmDate = new Date();
-        autoConfirmDate.setHours(autoConfirmDate.getHours() + feeConfig.reviewTimerHours);
+        autoConfirmDate.setHours(autoConfirmDate.getHours() + windowHoursElse);
         update.autoConfirmAt = autoConfirmDate;
         update.reviewTimerStartedAt = new Date();
       }
@@ -6470,10 +6550,16 @@ export async function registerRoutes(
     }
   });
 
+  // ── DISPUTE: open ──────────────────────────────────────────────────────
+  // Unified handler (Task #317). Accepts the new structured fields:
+  //   issueType  (one of DISPUTE_ISSUE_TYPES)
+  //   evidenceUrls (string[] — already-uploaded photo/video/screenshot URLs)
+  //   notes       (free-text description)
+  //   reason      (legacy alias for issueType / general label)
   app.post("/api/jobs/:id/dispute", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
-      const { reason, notes } = req.body;
+      const { reason, notes, issueType, evidenceUrls } = req.body || {};
       const job = await storage.getJob(jobId);
       if (!job) return res.status(404).json({ message: "Job not found" });
 
@@ -6481,28 +6567,62 @@ export async function registerRoutes(
       const isHelper = job.assignedHelperId === req.session.userId;
       if (!isBuyer && !isHelper) return res.status(403).json({ message: "Not authorized" });
 
-      const disputeStatuses = ["funded", "active", "in_progress", "completion_submitted", "completed_paid"];
+      const disputeStatuses = ["funded", "active", "in_progress", "completion_submitted", "completed_paid", "payout_eligible"];
       if (!disputeStatuses.includes(job.status)) {
         return res.status(400).json({ message: "Cannot dispute job in current status" });
       }
 
+      // Structured fields are required (Task #317): the API enforces the same
+      // contract as the frontend so callers can't bypass the taxonomy.
+      if (!issueType || typeof issueType !== "string") {
+        return res.status(400).json({ message: "issueType is required", code: "ISSUE_TYPE_REQUIRED" });
+      }
+      if (!(DISPUTE_ISSUE_TYPES as readonly string[]).includes(issueType)) {
+        return res.status(400).json({ message: "Invalid issueType", code: "ISSUE_TYPE_INVALID" });
+      }
+      const normalizedIssueType: DisputeIssueType = issueType as DisputeIssueType;
+      const trimmedNotes = typeof notes === "string" ? notes.trim() : "";
+      if (trimmedNotes.length === 0) {
+        return res.status(400).json({ message: "A written explanation is required", code: "NOTES_REQUIRED" });
+      }
+
+      const cleanEvidence: string[] = Array.isArray(evidenceUrls)
+        ? evidenceUrls.filter((u: any) => typeof u === "string" && u.length > 0).slice(0, 10)
+        : [];
+
+      const now = new Date();
+      const helperDeadline = new Date(now.getTime() + HELPER_RESPONSE_WINDOW_HOURS * 60 * 60 * 1000);
+
+      // Snapshot the prior status before flipping to "disputed" so
+      // close_no_action can restore the exact state deterministically.
+      const priorJobStatus = job.status;
       const updated = await storage.updateJob(jobId, {
         status: "disputed",
-        disputeReason: reason || "Dispute opened",
-        disputeNotes: notes || null,
+        preDisputeStatus: priorJobStatus,
+        disputeReason: reason || normalizedIssueType || "Dispute opened",
+        disputeNotes: trimmedNotes,
         payoutStatus: "dispute_locked",
+        internalPayoutStatus: "on_hold",
+        disputeStatus: "open",
+        disputeIssueType: normalizedIssueType,
+        disputeEvidenceUrls: cleanEvidence,
+        disputeOpenedAt: now,
+        helperResponseDeadline: helperDeadline,
       } as any);
 
       try {
         await db.insert(guberDisputes).values({
           jobId,
           openedByUserId: req.session.userId!,
-          reasonCode: reason || "general_dispute",
-          description: reason || "Dispute opened",
+          reasonCode: normalizedIssueType,
+          description: trimmedNotes,
           filedByRole: isBuyer ? "hirer" : "worker",
           againstUserId: isBuyer ? job.assignedHelperId : job.postedById,
           status: "open",
-          openedAt: new Date(),
+          openedAt: now,
+          issueType: normalizedIssueType,
+          evidenceUrls: cleanEvidence,
+          helperResponseDeadline: helperDeadline,
         } as any);
       } catch (disputeInsertErr: any) {
         console.error(`[dispute] Failed to insert guber_disputes row for job ${jobId}:`, disputeInsertErr.message);
@@ -6512,13 +6632,23 @@ export async function registerRoutes(
       if (buyer) {
         await storage.updateUser(buyer.id, { jobsDisputed: (buyer.jobsDisputed || 0) + 1 });
       }
+      // Risk-signal bump on the party being disputed against.
+      const targetUserId = isBuyer ? job.assignedHelperId : job.postedById;
+      if (targetUserId) {
+        await maybeBumpRiskWatch(targetUserId);
+      }
 
-      if (job.assignedHelperId) {
-        await storage.createNotification({
-          userId: job.assignedHelperId,
-          title: "Dispute Opened",
-          body: `A dispute has been opened on "${job.title}". Payout is locked until resolved.`,
-          type: "job",
+      if (job.assignedHelperId && isBuyer) {
+        await notify(job.assignedHelperId, {
+          title: "An issue was reported on this job",
+          body: `The poster reported an issue with "${job.title}". You have ${HELPER_RESPONSE_WINDOW_HOURS}h to respond before GUBER reviews.`,
+          jobId,
+          priority: "high",
+        });
+      } else if (isHelper) {
+        await notify(job.postedById, {
+          title: "Dispute Opened by Worker",
+          body: `The worker opened a dispute on "${job.title}". Payout is on hold.`,
           jobId,
         });
       }
@@ -6526,7 +6656,87 @@ export async function registerRoutes(
       await storage.createAuditLog({
         userId: req.session.userId,
         action: "dispute_opened",
-        details: `Dispute opened on job ${jobId}: ${reason || "No reason provided"}`,
+        details: `Dispute opened on job ${jobId}: issueType=${normalizedIssueType || "n/a"} reason=${reason || "n/a"}`,
+      });
+
+      await respondJob(req, res, updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── DISPUTE: helper response window ────────────────────────────────────
+  // Helper has HELPER_RESPONSE_WINDOW_HOURS to add their side of the story
+  // and additional evidence. After the deadline this returns a 410-style
+  // window-passed message and admin reviews on existing proof.
+  app.post("/api/jobs/:id/dispute/helper-response", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const { response, evidenceUrls } = req.body || {};
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Only the assigned worker can respond to this dispute" });
+      }
+      if (job.status !== "disputed") {
+        return res.status(400).json({ message: "Job is not in a disputed state" });
+      }
+      // Single-submit guard (Task #317): once a response is on file the
+      // helper cannot overwrite or amend it. Admin can still request more
+      // info via /resolve-dispute which clears these fields and resets the
+      // deadline.
+      if ((job as any).helperResponseAt || (job as any).helperResponse) {
+        return res.status(409).json({ message: "You have already responded to this dispute", code: "HELPER_RESPONSE_ALREADY_SUBMITTED" });
+      }
+      const deadline = (job as any).helperResponseDeadline as Date | null;
+      if (deadline && new Date(deadline).getTime() < Date.now()) {
+        return res.status(400).json({ message: "Response window has passed", code: "HELPER_RESPONSE_WINDOW_PASSED" });
+      }
+      if (!response || typeof response !== "string" || response.trim().length === 0) {
+        return res.status(400).json({ message: "Response text is required" });
+      }
+
+      const cleanEvidence: string[] = Array.isArray(evidenceUrls)
+        ? evidenceUrls.filter((u: any) => typeof u === "string" && u.length > 0).slice(0, 10)
+        : [];
+      const now = new Date();
+
+      const updated = await storage.updateJob(jobId, {
+        helperResponse: response.trim(),
+        helperResponseEvidenceUrls: cleanEvidence,
+        helperResponseAt: now,
+      } as any);
+
+      try {
+        // Mirror onto the most-recent active dispute row for this job —
+        // either initial "open" or the admin-driven "needs_more_info" state.
+        const rows = await db.select({ id: guberDisputes.id })
+          .from(guberDisputes)
+          .where(and(eq(guberDisputes.jobId, jobId), inArray(guberDisputes.status, ["open", "needs_more_info"])))
+          .orderBy(desc(guberDisputes.openedAt))
+          .limit(1);
+        if (rows[0]) {
+          await db.update(guberDisputes).set({
+            helperResponse: response.trim(),
+            helperResponseEvidenceUrls: cleanEvidence,
+            helperResponseAt: now,
+            status: "open",
+          } as any).where(eq(guberDisputes.id, rows[0].id));
+        }
+      } catch (mirrorErr: any) {
+        console.error(`[dispute] helper-response mirror failed for job ${jobId}:`, mirrorErr.message);
+      }
+
+      await notify(job.postedById, {
+        title: "Worker responded to your dispute",
+        body: `The worker added their side of the story for "${job.title}". GUBER will review.`,
+        jobId,
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "dispute_helper_response",
+        details: `Job ${jobId}: helper added response (${cleanEvidence.length} evidence file(s))`,
       });
 
       await respondJob(req, res, updated);
@@ -9336,82 +9546,164 @@ YOUR BEHAVIOR:
   });
 
   // ── DISPUTE ROUTES ────────────────────────────────────────────────────────
-  app.post("/api/jobs/:id/dispute", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const jobId = parseInt(req.params.id);
-      const { reason, notes } = req.body;
-      const job = await storage.getJob(jobId);
-      if (!job) return res.status(404).json({ message: "Job not found" });
-      if (job.postedById !== req.session.userId) return res.status(403).json({ message: "Only poster can open dispute" });
-
-      const disputeStatuses = ["in_progress", "active", "funded", "completion_submitted", "completed_paid", "payout_eligible"];
-      if (!disputeStatuses.includes(job.status)) {
-        return res.status(400).json({ message: "Cannot dispute job in current status" });
-      }
-
-      await storage.updateJob(jobId, {
-        status: "disputed",
-        disputeReason: reason || "Poster opened dispute",
-        disputeNotes: notes || null,
-        payoutStatus: "dispute_locked",
-      } as any);
-
-      try {
-        await db.insert(guberDisputes).values({
-          jobId,
-          openedByUserId: req.session.userId!,
-          reasonCode: reason || "general_dispute",
-          description: reason || "Poster opened dispute",
-          filedByRole: "hirer",
-          againstUserId: job.assignedHelperId || null,
-          status: "open",
-          openedAt: new Date(),
-        } as any);
-      } catch (disputeInsertErr: any) {
-        console.error(`[dispute] Failed to insert guber_disputes row for job ${jobId}:`, disputeInsertErr.message);
-      }
-
-      if (job.assignedHelperId) {
-        const helper = await storage.getUser(job.assignedHelperId);
-        if (helper) {
-          await storage.updateUser(helper.id, {
-            trustScore: adjustTrustScore(helper.trustScore || 50, TRUST_ADJUSTMENTS.DISPUTE_OPENED),
-            jobsDisputed: (helper.jobsDisputed || 0) + 1,
-          } as any);
-        }
-        await storage.createNotification({
-          userId: job.assignedHelperId,
-          title: "Dispute Opened",
-          body: `The poster has opened a dispute on "${job.title}". Payout is locked until resolved.`,
-          type: "job",
-          jobId,
-        });
-      }
-
-      await storage.createAuditLog({
-        userId: req.session.userId,
-        action: "dispute_opened",
-        details: `Job ${jobId}: ${reason || "No reason provided"}`,
-      });
-
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
+  // (Open + helper-response handlers live earlier in this file with the
+  // confirm flow — Task #317.)
 
   app.post("/api/admin/jobs/:id/resolve-dispute", requireAdmin, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
-      const { resolution, refundPoster, notes } = req.body;
+      const { resolution: rawResolution, refundPoster, notes, partialAmount } = req.body;
       const job = await storage.getJob(jobId);
       if (!job) return res.status(404).json({ message: "Job not found" });
 
+      // Normalize Task #317 action aliases onto the existing branches.
+      const aliasMap: Record<string, string> = {
+        release_payout: "worker_favor",
+        refund_poster: "poster_favor",
+        partial: "partial",
+      };
+      const resolution = aliasMap[rawResolution] || rawResolution;
+      const adminDecisionLabel: AdminDisputeDecision | string = (ADMIN_DISPUTE_DECISIONS as readonly string[]).includes(rawResolution)
+        ? rawResolution
+        : (rawResolution === "worker_favor" ? "release_payout" : rawResolution === "poster_favor" ? "refund_poster" : rawResolution);
+
+      const now = new Date();
       const update: any = {
-        disputeResolvedAt: new Date(),
+        disputeResolvedAt: now,
         disputeResolvedBy: req.session.userId,
         disputeNotes: notes || (job as any).disputeNotes,
+        adminDecision: adminDecisionLabel,
+        adminDecisionNotes: notes || null,
+        adminReviewedAt: now,
+        adminReviewedBy: req.session.userId,
       };
+
+      // ── Admin-only actions that don't touch Stripe (Task #317) ────────
+      if (rawResolution === "request_more_info") {
+        // Sub-state: keep job in "disputed" but reset helper response so the
+        // worker (and poster) can submit fresh information.
+        const newDeadline = new Date(Date.now() + HELPER_RESPONSE_WINDOW_HOURS * 3600 * 1000);
+        update.disputeStatus = "needs_more_info";
+        update.helperResponse = null;
+        update.helperResponseEvidenceUrls = null;
+        update.helperResponseAt = null;
+        update.helperResponseDeadline = newDeadline;
+        await storage.updateJob(jobId, update);
+        try {
+          await db.update(guberDisputes).set({
+            status: "needs_more_info",
+            adminDecision: adminDecisionLabel,
+            adminDecisionNotes: notes || null,
+            adminReviewedAt: now,
+            adminReviewedBy: req.session.userId,
+            helperResponse: null,
+            helperResponseEvidenceUrls: null,
+            helperResponseAt: null,
+          } as any).where(and(eq(guberDisputes.jobId, jobId), inArray(guberDisputes.status, ["open", "needs_more_info"])));
+        } catch {}
+        if (job.assignedHelperId) await notify(job.assignedHelperId, { title: "Admin needs more info", body: `GUBER needs more details about the dispute on "${job.title}". You have ${HELPER_RESPONSE_WINDOW_HOURS}h to respond.`, jobId });
+        await notify(job.postedById, { title: "Admin needs more info", body: `GUBER needs more details about the dispute on "${job.title}".`, jobId });
+        await storage.createAuditLog({ userId: req.session.userId, action: "dispute_request_more_info", details: `Job ${jobId}: ${notes || "no notes"} | new deadline ${newDeadline.toISOString()}` });
+        return res.json({ success: true, action: "request_more_info", helperResponseDeadline: newDeadline });
+      }
+      if (rawResolution === "close_no_action") {
+        const VALID_RESUME_STATUSES = new Set([
+          "funded", "active", "in_progress",
+          "completion_submitted", "completed_paid", "payout_eligible",
+        ]);
+        const snapshot = (job as any).preDisputeStatus as string | null | undefined;
+        const priorStatus = snapshot && VALID_RESUME_STATUSES.has(snapshot)
+          ? snapshot
+          : ((job as any).helperConfirmed ? "completion_submitted" : "in_progress");
+        update.disputeStatus = "resolved";
+        update.status = priorStatus;
+        update.internalPayoutStatus = (job as any).buyerConfirmed && (job as any).helperConfirmed
+          ? "approved"
+          : "pending_confirmation";
+        // Re-arm the auto-confirm window so the held PI can still capture/expire normally.
+        if (!(job as any).buyerConfirmed && (priorStatus === "completion_submitted" || priorStatus === "completed_paid")) {
+          const feeConfig = await getActiveFeeConfig();
+          const winHours = autoConfirmHoursFor(job as any, feeConfig.reviewTimerHours);
+          update.autoConfirmAt = new Date(Date.now() + winHours * 3600 * 1000);
+        }
+        const bothConfirmed = (job as any).buyerConfirmed && (job as any).helperConfirmed;
+        if (bothConfirmed || priorStatus === "completed_paid" || priorStatus === "payout_eligible") {
+          update.payoutStatus = "payout_eligible";
+        } else if (priorStatus === "completion_submitted") {
+          update.payoutStatus = "review_pending";
+        } else {
+          update.payoutStatus = "none";
+        }
+        await storage.updateJob(jobId, update);
+        try {
+          await db.update(guberDisputes).set({
+            status: "resolved", resolution: "close_no_action", resolutionType: "no_action",
+            resolvedAt: now, resolvedByUserId: req.session.userId,
+            adminDecision: adminDecisionLabel, adminDecisionNotes: notes || null, adminReviewedAt: now, adminReviewedBy: req.session.userId,
+          } as any).where(and(eq(guberDisputes.jobId, jobId), inArray(guberDisputes.status, ["open", "needs_more_info"])));
+        } catch {}
+        if (job.assignedHelperId) await notify(job.assignedHelperId, { title: "Dispute closed — no action", body: `The dispute on "${job.title}" was closed. Normal payout flow resumes.`, jobId });
+        await notify(job.postedById, { title: "Dispute closed — no action", body: `The dispute on "${job.title}" was closed. Normal payout flow resumes.`, jobId });
+        await storage.createAuditLog({ userId: req.session.userId, action: "dispute_close_no_action", details: `Job ${jobId}: resumed status=${priorStatus}` });
+        return res.json({ success: true, action: "close_no_action", resumedStatus: priorStatus });
+      }
+      if (rawResolution === "flag_user" || rawResolution === "suspend_user") {
+        const targetUserId = req.body.targetUserId || job.assignedHelperId;
+        if (!targetUserId) return res.status(400).json({ message: "targetUserId required" });
+        const targetUpdates: any = {};
+        const isSuspend = rawResolution === "suspend_user";
+        if (isSuspend) {
+          targetUpdates.riskLevel = "suspended";
+          targetUpdates.suspended = true;
+          targetUpdates.suspendedAt = now;
+          targetUpdates.suspensionReason = notes || `Dispute on job #${jobId}`;
+        } else {
+          targetUpdates.riskLevel = "restricted";
+          targetUpdates.falseClaimFlagCount = sql`COALESCE(false_claim_flag_count, 0) + 1`;
+        }
+        await storage.updateUser(targetUserId, targetUpdates);
+
+        // suspend_user is terminal — close the dispute and unwind the payout
+        // hold so the job no longer sits in disputed/dispute_locked. flag_user
+        // is non-terminal — record the admin review on the dispute row but
+        // leave it open for a follow-up resolution.
+        if (isSuspend) {
+          update.disputeStatus = "resolved";
+          update.status = "refunded";
+          update.payoutStatus = "refunded";
+          update.internalPayoutStatus = "refunded";
+          if ((job as any).stripePaymentIntentId) {
+            try { await stripe.paymentIntents.cancel((job as any).stripePaymentIntentId); } catch {}
+          }
+        } else {
+          update.disputeStatus = "needs_more_info";
+        }
+        await storage.updateJob(jobId, update);
+
+        try {
+          await db.update(guberDisputes).set({
+            status: isSuspend ? "resolved" : "needs_more_info",
+            resolution: isSuspend ? "suspend_user" : "flag_user",
+            resolutionType: isSuspend ? "user_suspended" : "user_flagged",
+            resolvedAt: isSuspend ? now : null,
+            resolvedByUserId: isSuspend ? req.session.userId : null,
+            adminDecision: adminDecisionLabel,
+            adminDecisionNotes: notes || null,
+            adminReviewedAt: now,
+            adminReviewedBy: req.session.userId,
+          } as any).where(and(eq(guberDisputes.jobId, jobId), inArray(guberDisputes.status, ["open", "needs_more_info"])));
+        } catch {}
+
+        await storage.createAuditLog({ userId: req.session.userId, action: rawResolution, details: `Job ${jobId} target=${targetUserId} notes=${notes || ""}` });
+        await notify(targetUserId, {
+          title: isSuspend ? "Account suspended" : "Account flagged",
+          body: isSuspend
+            ? "Your account has been suspended pending review by GUBER."
+            : "Your account has been flagged for review based on a recent dispute.",
+          priority: "high",
+        });
+        return res.json({ success: true, action: rawResolution, terminal: isSuspend });
+      }
 
       const piId = (job as any).stripePaymentIntentId;
 
@@ -9424,28 +9716,35 @@ YOUR BEHAVIOR:
           if (disputeJobPayoutStatus === "paid_out") {
             // Already captured — preserve state, no double-capture
             update.payoutStatus = "paid_out";
+            update.internalPayoutStatus = "released";
             console.log(`[GUBER][capture] dispute worker_favor jobId=${jobId} skipped — already paid_out`);
           } else if (disputeJobPayoutStatus === "capture_expired") {
             update.payoutStatus = "capture_expired";
+            update.internalPayoutStatus = "on_hold";
           } else {
             try {
               const captured = await stripe.paymentIntents.capture(piId);
               const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
               update.payoutStatus = "paid_out";
+              update.internalPayoutStatus = "released";
+              update.payoutAmount = (job as any).workerGrossShare || job.helperPayout || capturedAmount;
               update.chargedAt = new Date();
               console.log(`[GUBER][capture] dispute worker_favor jobId=${jobId} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
             } catch (captureErr: any) {
               if (captureErr.code === "charge_expired_for_capture") {
                 console.error(`[GUBER][capture] dispute worker_favor jobId=${jobId} EXPIRED — admin attention needed.`);
                 update.payoutStatus = "capture_expired";
+                update.internalPayoutStatus = "on_hold";
               } else {
                 console.error(`[GUBER][capture] dispute worker_favor jobId=${jobId} error: ${captureErr.message}`);
                 update.payoutStatus = "payout_eligible";
+                update.internalPayoutStatus = "approved";
               }
             }
           }
         } else {
           update.payoutStatus = "payout_eligible";
+          update.internalPayoutStatus = "approved";
         }
       } else if (resolution === "poster_favor") {
         if (refundPoster && piId) {
@@ -9454,6 +9753,7 @@ YOUR BEHAVIOR:
             await stripe.paymentIntents.cancel(piId);
             update.status = "refunded";
             update.payoutStatus = "refunded";
+            update.internalPayoutStatus = "refunded";
             update.refundedAt = new Date();
             update.refundAmount = job.budget;
             console.log(`[GUBER][cancel] dispute poster_favor jobId=${jobId} paymentIntentId=${piId} cancelled`);
@@ -9468,6 +9768,7 @@ YOUR BEHAVIOR:
                 } as any);
                 update.status = "refunded";
                 update.payoutStatus = "refunded";
+                update.internalPayoutStatus = "refunded";
                 update.refundedAt = new Date();
                 update.refundAmount = job.budget;
                 console.log(`[GUBER][refund] dispute poster_favor jobId=${jobId} paymentIntentId=${piId} refunded`);
@@ -9483,42 +9784,121 @@ YOUR BEHAVIOR:
         } else {
           update.status = "refunded";
           update.payoutStatus = "refunded";
+          update.internalPayoutStatus = "refunded";
         }
       } else if (resolution === "partial") {
+        // Partial decision: admin pays the worker `partialAmount` (custom
+        // amount they entered), and the remainder of the budget is treated
+        // as a refund to the poster. We capture in Stripe (Stripe-safe path
+        // — auth must be captured before refund), then record the split on
+        // the job so reporting and the ledger reflect the actual decision.
         update.status = "completed_paid";
         update.confirmedAt = new Date();
-        // Capture the full amount — admin handles any partial reimbursement outside Stripe
+        const helperShare = typeof partialAmount === "number" && partialAmount > 0 ? partialAmount : 0;
+        const totalBudget = job.budget || 0;
+        const refundShare = Math.max(0, Math.round((totalBudget - helperShare) * 100) / 100);
         if (piId) {
           const disputePartialPayoutStatus = (job as any).payoutStatus;
           if (disputePartialPayoutStatus === "paid_out") {
-            // Already captured — preserve state, no double-capture
             update.payoutStatus = "paid_out";
-            console.log(`[GUBER][capture] dispute partial jobId=${jobId} skipped — already paid_out`);
+            update.internalPayoutStatus = "partial_release";
+            // Already captured — issue the refund slice directly against the PI.
+            if (refundShare > 0) {
+              try {
+                await stripe.refunds.create({ payment_intent: piId, amount: Math.round(refundShare * 100) });
+                console.log(`[GUBER][refund] dispute partial jobId=${jobId} refundShare=$${refundShare} (post-capture)`);
+              } catch (refundErr: any) {
+                console.error(`[GUBER][refund] dispute partial jobId=${jobId} post-capture refund error: ${refundErr.message}`);
+              }
+            }
           } else if (disputePartialPayoutStatus === "capture_expired") {
             update.payoutStatus = "capture_expired";
+            update.internalPayoutStatus = "on_hold";
           } else {
             try {
               const captured = await stripe.paymentIntents.capture(piId);
               const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
               update.payoutStatus = "paid_out";
+              update.internalPayoutStatus = "partial_release";
+              update.payoutAmount = helperShare;
               update.chargedAt = new Date();
-              console.log(`[GUBER][capture] dispute partial jobId=${jobId} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
+              console.log(`[GUBER][capture] dispute partial jobId=${jobId} paymentIntentId=${piId} captured=$${capturedAmount} helperShare=$${helperShare} refundShare=$${refundShare}`);
+              // Stripe-safe partial refund: capture full auth, then refund
+              // the poster slice via the existing Stripe refund path.
+              if (refundShare > 0) {
+                try {
+                  await stripe.refunds.create({ payment_intent: piId, amount: Math.round(refundShare * 100) });
+                  update.refundedAt = new Date();
+                  console.log(`[GUBER][refund] dispute partial jobId=${jobId} refundShare=$${refundShare}`);
+                } catch (refundErr: any) {
+                  console.error(`[GUBER][refund] dispute partial jobId=${jobId} refund error: ${refundErr.message}`);
+                }
+              }
             } catch (captureErr: any) {
               if (captureErr.code === "charge_expired_for_capture") {
                 console.error(`[GUBER][capture] dispute partial jobId=${jobId} EXPIRED — admin attention needed.`);
                 update.payoutStatus = "capture_expired";
+                update.internalPayoutStatus = "on_hold";
               } else {
                 console.error(`[GUBER][capture] dispute partial jobId=${jobId} error: ${captureErr.message}`);
                 update.payoutStatus = "payout_eligible";
+                update.internalPayoutStatus = "approved";
               }
             }
           }
         } else {
           update.payoutStatus = "payout_eligible";
+          update.internalPayoutStatus = "partial_release";
+          update.payoutAmount = helperShare;
         }
+        update.partialRefundAmount = refundShare;
       }
 
       await storage.updateJob(jobId, update);
+
+      // Wire risk signals based on the issue type + admin's decision so the
+      // operational counters (missing-proof, no-show, false-claim) climb
+      // alongside jobsDisputed when admin actions confirm a pattern.
+      // NOTE: `resolution` is normalised to legacy values (poster_favor /
+      // worker_favor); use `rawResolution` to match the spec action names.
+      try {
+        const issueType = (job as any).disputeIssueType as DisputeIssueType | null;
+        const helperId = job.assignedHelperId as number | null;
+        const posterId = job.postedById as number;
+        const helperLost = rawResolution === "refund_poster" || rawResolution === "partial";
+        const posterLost = rawResolution === "release_payout";
+        if (issueType && helperId && helperLost) {
+          if (issueType === "missing_proof") {
+            await bumpRiskSignal(helperId, "missingProofCount");
+          } else if (issueType === "job_not_completed") {
+            await bumpRiskSignal(helperId, "noShowCount");
+          }
+        }
+        if (issueType && posterLost) {
+          // Poster's claim was rejected outright — count toward false-claim
+          // signal so repeat false-reporters get auto-bumped to "watch".
+          await bumpRiskSignal(posterId, "falseClaimFlagCount");
+        }
+      } catch (signalErr: any) {
+        console.error(`[risk] resolve-dispute signal wiring failed jobId=${jobId}:`, signalErr.message);
+      }
+
+      // Mirror final admin decision onto the open guber_disputes row.
+      try {
+        await db.update(guberDisputes).set({
+          status: "resolved",
+          resolution,
+          resolutionType: resolution,
+          resolvedAt: now,
+          resolvedByUserId: req.session.userId,
+          adminDecision: adminDecisionLabel,
+          adminDecisionNotes: notes || null,
+          adminReviewedAt: now,
+          adminReviewedBy: req.session.userId,
+        } as any).where(and(eq(guberDisputes.jobId, jobId), inArray(guberDisputes.status, ["open", "needs_more_info"])));
+      } catch (mirrorErr: any) {
+        console.error(`[dispute] resolve mirror failed for job ${jobId}:`, mirrorErr.message);
+      }
 
       if (resolution === "worker_favor" && update.payoutStatus === "paid_out") {
         const budgetAmount = job.budget || 0;
@@ -9539,11 +9919,13 @@ YOUR BEHAVIOR:
         });
       } else if (resolution === "partial" && update.payoutStatus === "paid_out") {
         const budgetAmount = job.budget || 0;
+        const helperShare = (update.payoutAmount as number) || 0;
+        const refundShare = (update.partialRefundAmount as number) || Math.max(0, budgetAmount - helperShare);
         await storage.createMoneyLedgerEntry({
           jobId, ledgerType: "dispute_resolved_partial", amount: budgetAmount,
           userIdOwner: job.postedById, userIdCounterparty: job.assignedHelperId || null,
           sourceSystem: "stripe", stripeObjectType: "payment_intent", stripeObjectId: piId || null,
-          description: `Dispute resolved with partial resolution — payment captured. Admin handles partial reimbursement separately.`,
+          description: `Dispute resolved with partial split — worker $${helperShare.toFixed(2)}, poster refund $${refundShare.toFixed(2)} (handled outside Stripe per spec).`,
         });
       }
 

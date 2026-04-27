@@ -27,6 +27,13 @@ DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCirc
 ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
+import {
+  DISPUTE_ISSUE_TYPE_LABELS,
+  DISPUTE_COPY,
+  isVerifyInspectJob,
+  isAutomotiveJob,
+  type DisputeIssueType,
+} from "@shared/dispute";
 import { Day1OGLogo } from "@/components/trust-badge";
 
 const RESTRICTION_CATEGORIES = [
@@ -5396,6 +5403,8 @@ const [bgRestrictions, setBgRestrictions] = useState<string[]>([]);
 const [disputeNotes, setDisputeNotes] = useState<Record<number, string>>({});
 const [disputeResolution, setDisputeResolution] = useState<Record<number, string>>({});
 const [disputeRefund, setDisputeRefund] = useState<Record<number, boolean>>({});
+const [disputePartialAmount, setDisputePartialAmount] = useState<Record<number, string>>({});
+const [disputeTargetUser, setDisputeTargetUser] = useState<Record<number, "helper" | "poster">>({});
 const [proofModalJob, setProofModalJob] = useState<{ id: number; title: string } | null>(null);
 
 const createDropFromSponsor = (sponsor: any) => {
@@ -5466,14 +5475,17 @@ onError: (err: any) => toast({ title: "Error", description: err.message, variant
 });
 
 const disputeMutation = useMutation({
-mutationFn: (data: { jobId: number; resolution: string; refundBuyer: boolean; notes?: string }) =>
-apiRequest("POST", "/api/admin/resolve-dispute", data),
+mutationFn: (data: { jobId: number; resolution: string; refundPoster?: boolean; notes?: string; partialAmount?: number; targetUserId?: number }) =>
+apiRequest("POST", `/api/admin/jobs/${data.jobId}/resolve-dispute`, data),
 onSuccess: (_, variables) => {
 queryClient.invalidateQueries({ queryKey: ["/api/admin/jobs"] });
-toast({ title: "Dispute resolved" });
+queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+toast({ title: "Dispute action complete", description: variables.resolution.replace(/_/g, " ") });
 setDisputeNotes(prev => { const n = { ...prev }; delete n[variables.jobId]; return n; });
 setDisputeResolution(prev => { const n = { ...prev }; delete n[variables.jobId]; return n; });
 setDisputeRefund(prev => { const n = { ...prev }; delete n[variables.jobId]; return n; });
+setDisputePartialAmount(prev => { const n = { ...prev }; delete n[variables.jobId]; return n; });
+setDisputeTargetUser(prev => { const n = { ...prev }; delete n[variables.jobId]; return n; });
 },
 onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
 });
@@ -6082,6 +6094,23 @@ disputedJobs.map((j) => {
 const poster = allUsers?.find(u => u.id === j.postedById);
 const helper = allUsers?.find(u => u.id === j.assignedHelperId);
 
+const issueLabel = j.disputeIssueType ? DISPUTE_ISSUE_TYPE_LABELS[j.disputeIssueType as DisputeIssueType] : null;
+const evidence: string[] = Array.isArray(j.disputeEvidenceUrls) ? j.disputeEvidenceUrls : [];
+const helperEvidence: string[] = Array.isArray(j.helperResponseEvidenceUrls) ? j.helperResponseEvidenceUrls : [];
+const isVI = isVerifyInspectJob(j);
+const isAuto = isAutomotiveJob(j);
+const action = disputeResolution[j.id] || "";
+const needsTarget = action === "flag_user" || action === "suspend_user";
+const needsPartial = action === "partial";
+const targetSel = disputeTargetUser[j.id] || "helper";
+const targetUserId = targetSel === "helper" ? j.assignedHelperId : j.postedById;
+const partialNum = parseFloat(disputePartialAmount[j.id] || "");
+const submitDisabled =
+  !action ||
+  disputeMutation.isPending ||
+  (needsTarget && !targetUserId) ||
+  (needsPartial && (!partialNum || partialNum <= 0 || partialNum > (j.budget || 0)));
+
 return (
 <div key={j.id} className="bg-card rounded-xl border border-destructive/30 p-4 space-y-3" data-testid={`dispute-job-${j.id}`}>
 <div>
@@ -6091,56 +6120,200 @@ return (
 <span>Poster: {poster?.fullName || `User #${j.postedById}`}</span>
 {j.assignedHelperId && <span>Helper: {helper?.fullName || `User #${j.assignedHelperId}`}</span>}
 {j.serviceType && <span>Service: {j.serviceType}</span>}
+{j.internalPayoutStatus && <span className="px-1.5 py-0.5 rounded bg-muted/30 text-[9px]">payout: {j.internalPayoutStatus}</span>}
 </div>
 {j.description && <p className="text-[10px] text-muted-foreground mt-1 bg-muted/10 rounded p-2">{j.description}</p>}
+</div>
+
+{isVI && (
+  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-[10px] text-amber-300/90 leading-relaxed" data-testid={`banner-vi-${j.id}`}>
+    <span className="font-semibold text-amber-400">V&amp;I guidance: </span>{DISPUTE_COPY.adminViBanner}
+  </div>
+)}
+{isAuto && (
+  <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-2.5 text-[10px] text-orange-300/90 leading-relaxed" data-testid={`banner-auto-${j.id}`}>
+    <span className="font-semibold text-orange-400">Automotive guidance: </span>{DISPUTE_COPY.adminAutomotiveBanner}
+  </div>
+)}
+
+{/* Poster's report (Task #317) */}
+{(issueLabel || j.disputeNotes || evidence.length > 0) && (
+<div className="rounded-lg border border-border/20 bg-background/40 p-3 space-y-2" data-testid={`dispute-report-${j.id}`}>
+<p className="text-[10px] font-semibold text-muted-foreground tracking-wider uppercase">Poster's report</p>
+{issueLabel && <p className="text-[11px]"><span className="text-muted-foreground">Issue type:</span> <span className="font-semibold text-foreground">{issueLabel}</span></p>}
+{j.disputeNotes && <p className="text-[11px] text-foreground whitespace-pre-wrap">{j.disputeNotes}</p>}
+{evidence.length > 0 && (
+  <div className="flex gap-1.5 flex-wrap">
+    {evidence.map((url, i) => (
+      <a key={i} href={url} target="_blank" rel="noopener noreferrer" data-testid={`dispute-evidence-${j.id}-${i}`}>
+        <img src={url} alt="" className="w-14 h-14 rounded object-cover border border-border/20 hover:opacity-80" />
+      </a>
+    ))}
+  </div>
+)}
+</div>
+)}
+
+{/* Helper's response (Task #317) */}
+<div className="rounded-lg border border-border/20 bg-background/40 p-3 space-y-2" data-testid={`helper-response-${j.id}`}>
+<p className="text-[10px] font-semibold text-muted-foreground tracking-wider uppercase">Helper's response</p>
+{j.helperResponse || j.helperResponseAt ? (
+  <>
+    {j.helperResponse && <p className="text-[11px] text-foreground whitespace-pre-wrap">{j.helperResponse}</p>}
+    {helperEvidence.length > 0 && (
+      <div className="flex gap-1.5 flex-wrap">
+        {helperEvidence.map((url, i) => (
+          <a key={i} href={url} target="_blank" rel="noopener noreferrer" data-testid={`helper-evidence-${j.id}-${i}`}>
+            <img src={url} alt="" className="w-14 h-14 rounded object-cover border border-border/20 hover:opacity-80" />
+          </a>
+        ))}
+      </div>
+    )}
+    {j.helperResponseAt && <p className="text-[9px] text-muted-foreground">Responded {new Date(j.helperResponseAt).toLocaleString()}</p>}
+  </>
+) : j.helperResponseDeadline && new Date(j.helperResponseDeadline).getTime() < Date.now() ? (
+  <p className="text-[11px] text-amber-400/80 italic">Response window passed — review using proof on file.</p>
+) : (
+  <p className="text-[11px] text-muted-foreground italic">
+    Awaiting helper response{j.helperResponseDeadline ? ` — deadline ${new Date(j.helperResponseDeadline).toLocaleString()}` : ""}.
+  </p>
+)}
+</div>
+
+{/* Section 6 — Evidence on file (GPS / safety / bypass / quality) */}
+<div className="rounded-lg border border-border/20 bg-background/40 p-3 space-y-2" data-testid={`evidence-on-file-${j.id}`}>
+<p className="text-[10px] font-semibold text-muted-foreground tracking-wider uppercase">Evidence on file</p>
+<div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+<div className="flex items-center gap-1.5" data-testid={`evidence-gps-${j.id}`}>
+  <MapPin className="w-3 h-3 text-muted-foreground" />
+  <span className="text-muted-foreground">Job GPS:</span>
+  <span className="font-mono text-foreground">
+    {j.lat != null && j.lng != null
+      ? `${Number(j.lat).toFixed(4)}, ${Number(j.lng).toFixed(4)}`
+      : "—"}
+  </span>
+</div>
+<div className="flex items-center gap-1.5" data-testid={`evidence-quality-${j.id}`}>
+  <span className="text-muted-foreground">Quality score:</span>
+  <span className="font-semibold text-foreground">
+    {j.jobQualityScore != null ? `${j.jobQualityScore}/100` : "—"}
+  </span>
+</div>
+<div className="flex items-center gap-1.5" data-testid={`evidence-safety-poster-${j.id}`}>
+  <span className="text-muted-foreground">Safety (poster):</span>
+  <span className={j.safetyConfirmedByPoster ? "text-emerald-400" : "text-amber-400"}>
+    {j.safetyConfirmedByPoster ? "confirmed" : "not confirmed"}
+  </span>
+</div>
+<div className="flex items-center gap-1.5" data-testid={`evidence-safety-helper-${j.id}`}>
+  <span className="text-muted-foreground">Safety (helper):</span>
+  <span className={j.safetyConfirmedByHelper ? "text-emerald-400" : "text-amber-400"}>
+    {j.safetyConfirmedByHelper ? "confirmed" : "not confirmed"}
+  </span>
+</div>
+<div className="flex items-center gap-1.5 col-span-2" data-testid={`evidence-bypass-${j.id}`}>
+  <span className="text-muted-foreground">Contact-bypass flagged:</span>
+  <span className={j.contactBypassFlagged ? "text-destructive font-semibold" : "text-foreground"}>
+    {j.contactBypassFlagged ? "YES" : "no"}
+  </span>
+</div>
+</div>
+<div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/10">
+{[{ u: poster, label: "Poster", testid: "poster" }, ...(helper ? [{ u: helper, label: "Helper", testid: "helper" }] : [])].map(({ u, label, testid }) => u && (
+  <div key={testid} className="text-[10px] space-y-0.5" data-testid={`risk-signals-${testid}-${j.id}`}>
+    <p className="font-semibold text-foreground/90">{label}: <span className={
+      u.riskLevel === "suspended" ? "text-destructive" :
+      u.riskLevel === "restricted" ? "text-amber-400" :
+      u.riskLevel === "watch" ? "text-yellow-400" : "text-emerald-400"
+    } data-testid={`risk-level-${testid}-${j.id}`}>{u.riskLevel || "normal"}</span></p>
+    <p className="text-muted-foreground">
+      disputes {u.jobsDisputed || 0} · no-show {u.noShowCount || 0} · missing-proof {u.missingProofCount || 0} · bypass {u.bypassAttemptCount || 0} · false-claim {u.falseClaimFlagCount || 0}
+    </p>
+  </div>
+))}
+</div>
 </div>
 
 <DisputeProofInline jobId={j.id} />
 
 <div className="border-t border-border/10 pt-3 space-y-2">
 <p className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
-<FileText className="w-3 h-3" /> Resolution
+<FileText className="w-3 h-3" /> Admin action
 </p>
-<div className="grid grid-cols-2 gap-2">
-<Select value={disputeResolution[j.id] || ""} onValueChange={v => setDisputeResolution(prev => ({ ...prev, [j.id]: v }))}>
+<Select value={action} onValueChange={v => setDisputeResolution(prev => ({ ...prev, [j.id]: v }))}>
 <SelectTrigger className="bg-background border-border/20 text-xs" data-testid={`select-resolution-${j.id}`}>
-<SelectValue placeholder="Resolution..." />
+<SelectValue placeholder="Choose action..." />
 </SelectTrigger>
 <SelectContent>
-<SelectItem value="completed">Completed (Release to Helper)</SelectItem>
-<SelectItem value="split">Split 50/50</SelectItem>
-<SelectItem value="cancelled">Cancelled (Refund Buyer)</SelectItem>
+<SelectItem value="release_payout">Release payout to helper</SelectItem>
+<SelectItem value="refund_poster">Refund poster (full)</SelectItem>
+<SelectItem value="partial">Partial — pay helper a custom amount</SelectItem>
+<SelectItem value="request_more_info">Request more info from both sides</SelectItem>
+<SelectItem value="close_no_action">Close — no action</SelectItem>
+<SelectItem value="flag_user">Flag user (restrict)</SelectItem>
+<SelectItem value="suspend_user">Suspend user</SelectItem>
 </SelectContent>
 </Select>
-<label className="flex items-center gap-1.5 text-xs">
+
+{action === "refund_poster" && (
+<label className="flex items-center gap-1.5 text-[11px]">
 <Checkbox
-checked={disputeRefund[j.id] || false}
-onCheckedChange={v => setDisputeRefund(prev => ({ ...prev, [j.id]: !!v }))}
+checked={disputeRefund[j.id] !== false}
+onCheckedChange={v => setDisputeRefund(prev => ({ ...prev, [j.id]: v !== false }))}
 data-testid={`check-refund-${j.id}`}
 />
-Refund Buyer
+Process refund through Stripe (cancel auth or refund capture)
 </label>
+)}
+
+{needsPartial && (
+<div className="space-y-1">
+<Label className="text-[10px] text-muted-foreground">Helper amount (max ${j.budget || 0})</Label>
+<Input
+type="number" step="0.01" min="0" max={j.budget || 0}
+value={disputePartialAmount[j.id] || ""}
+onChange={e => setDisputePartialAmount(prev => ({ ...prev, [j.id]: e.target.value }))}
+placeholder="e.g. 25.00"
+className="bg-background border-border/20 text-xs h-9"
+data-testid={`input-partial-amount-${j.id}`}
+/>
 </div>
+)}
+
+{needsTarget && (
+<Select value={targetSel} onValueChange={v => setDisputeTargetUser(prev => ({ ...prev, [j.id]: v as "helper" | "poster" }))}>
+<SelectTrigger className="bg-background border-border/20 text-xs" data-testid={`select-target-${j.id}`}>
+<SelectValue />
+</SelectTrigger>
+<SelectContent>
+{j.assignedHelperId && <SelectItem value="helper">Helper — {helper?.fullName || `User #${j.assignedHelperId}`}</SelectItem>}
+<SelectItem value="poster">Poster — {poster?.fullName || `User #${j.postedById}`}</SelectItem>
+</SelectContent>
+</Select>
+)}
+
 <Textarea
 value={disputeNotes[j.id] || ""}
 onChange={e => setDisputeNotes(prev => ({ ...prev, [j.id]: e.target.value }))}
-placeholder="Resolution notes..."
+placeholder="Notes (visible in audit log)..."
 className="bg-background border-border/20 text-xs"
 data-testid={`input-dispute-notes-${j.id}`}
 />
 <Button
 size="sm"
-disabled={!disputeResolution[j.id] || disputeMutation.isPending}
+disabled={submitDisabled}
 onClick={() => disputeMutation.mutate({
 jobId: j.id,
-resolution: disputeResolution[j.id],
-refundBuyer: disputeRefund[j.id] || false,
+resolution: action,
+refundPoster: action === "refund_poster" ? (disputeRefund[j.id] !== false) : undefined,
 notes: disputeNotes[j.id] || "",
+partialAmount: needsPartial ? partialNum : undefined,
+targetUserId: needsTarget ? (targetUserId as number) : undefined,
 })}
 className="font-display"
 data-testid={`button-resolve-dispute-${j.id}`}
 >
-<Gavel className="w-3 h-3 mr-1" /> Resolve Dispute
+<Gavel className="w-3 h-3 mr-1" /> Submit decision
 </Button>
 </div>
 </div>

@@ -212,6 +212,7 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
       status: "completed_paid",
       confirmedAt: now,
       payoutStatus: "payout_eligible",
+      internalPayoutStatus: "approved",
     };
 
     await db.update(jobs).set(update).where(eq(jobs.id, job.id));
@@ -230,7 +231,7 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
         const captured = await stripe.paymentIntents.capture(piId);
         const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
         // chargedAt set here — marks when funds actually settled (not at authorization)
-        await db.update(jobs).set({ payoutStatus: "paid_out", chargedAt: new Date() }).where(eq(jobs.id, job.id));
+        await db.update(jobs).set({ payoutStatus: "paid_out", internalPayoutStatus: "released", payoutAmount: canonicalWorkerShare, chargedAt: new Date() }).where(eq(jobs.id, job.id));
         captureSucceeded = true;
         console.log(`[GUBER][capture] cron jobId=${job.id} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
 
@@ -274,7 +275,7 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
         // Check for 7-day expiry (uncaptured authorization expires after 7 days)
         if (captureErr.code === "charge_expired_for_capture") {
           console.error(`[GUBER][capture] cron jobId=${job.id} EXPIRED — authorization lapsed. Needs admin attention.`);
-          await db.update(jobs).set({ payoutStatus: "capture_expired" }).where(eq(jobs.id, job.id));
+          await db.update(jobs).set({ payoutStatus: "capture_expired", internalPayoutStatus: "on_hold" }).where(eq(jobs.id, job.id));
           captureExpired = true;
           // Notify poster immediately — they need to contact support
           await storage.createNotification({
@@ -453,7 +454,8 @@ async function enforceDisputeSLA(): Promise<number> {
           await db.update(jobs).set({
             status: "cancelled",
             payoutStatus: refundSucceeded ? "refunded" : "cancelled",
-          }).where(eq(jobs.id, dispute.jobId));
+            internalPayoutStatus: refundSucceeded ? "refunded" : "on_hold",
+          } as any).where(eq(jobs.id, dispute.jobId));
 
           if (refundSucceeded) {
             await storage.createMoneyLedgerEntry({
@@ -725,6 +727,96 @@ async function cashDropExpiringSweep(): Promise<number> {
   return sent;
 }
 
+// Task #317 — Pings the poster once their per-job review window
+// (reviewTimerStartedAt -> autoConfirmAt) crosses its midpoint.
+async function autoConfirmMidpointSweep(): Promise<number> {
+  const now = new Date();
+  const candidates = await db.select({
+    id: jobs.id,
+    title: jobs.title,
+    postedById: jobs.postedById,
+    autoConfirmAt: jobs.autoConfirmAt,
+    reviewTimerStartedAt: jobs.reviewTimerStartedAt,
+  }).from(jobs).where(and(
+    eq(jobs.status, "completion_submitted"),
+    isNotNull(jobs.autoConfirmAt),
+    isNotNull(jobs.reviewTimerStartedAt),
+    gte(jobs.autoConfirmAt!, now),
+  ));
+
+  let sent = 0;
+  for (const j of candidates) {
+    const start = j.reviewTimerStartedAt;
+    const end = j.autoConfirmAt;
+    if (!start || !end) continue;
+
+    const startMs = new Date(start).getTime();
+    const endMs = new Date(end).getTime();
+    if (endMs <= startMs) continue;
+    const midpointMs = startMs + (endMs - startMs) / 2;
+    if (now.getTime() < midpointMs || now.getTime() >= endMs) continue;
+
+    const poster = await storage.getUser(j.postedById);
+    if (!poster) continue;
+    if (isUserInQuietHours(poster)) continue;
+    if (!(await claimReminder({ jobId: j.id, type: "auto_confirm_midpoint" }))) continue;
+
+    const remainingMs = endMs - now.getTime();
+    const remainingHours = Math.max(1, Math.round(remainingMs / 3_600_000));
+    const title = "Review window halfway done";
+    const body = `"${j.title}" auto-confirms in about ${remainingHours}h. Confirm completion or report an issue now.`;
+    await storage.createNotification({
+      userId: poster.id, title, body, type: "job", jobId: j.id,
+    });
+    sendPushToUser(poster.id, {
+      title, body, url: `/jobs/${j.id}`, tag: `job-status-${j.id}`, priority: "high",
+    }).catch(() => {});
+    sent++;
+  }
+  return sent;
+}
+
+// Task #317 — Pings the helper ~6h before their helperResponseDeadline
+// when they haven't responded yet, so the dispute window doesn't lapse silently.
+async function helperResponseBufferSweep(): Promise<number> {
+  const now = new Date();
+  const earliest = new Date(now.getTime() + 5.5 * 60 * 60_000);
+  const latest = new Date(now.getTime() + 6.5 * 60 * 60_000);
+  const candidates = await db.select({
+    id: jobs.id,
+    title: jobs.title,
+    assignedHelperId: jobs.assignedHelperId,
+    helperResponseDeadline: jobs.helperResponseDeadline,
+  }).from(jobs).where(and(
+    eq(jobs.status, "disputed"),
+    isNotNull(jobs.assignedHelperId),
+    isNull(jobs.helperResponseAt),
+    isNotNull(jobs.helperResponseDeadline),
+    gte(jobs.helperResponseDeadline!, earliest),
+    lte(jobs.helperResponseDeadline!, latest),
+  ));
+
+  let sent = 0;
+  for (const j of candidates) {
+    if (!j.assignedHelperId) continue;
+    const helper = await storage.getUser(j.assignedHelperId);
+    if (!helper) continue;
+    if (isUserInQuietHours(helper)) continue;
+    if (!(await claimReminder({ jobId: j.id, type: "helper_response_buffer" }))) continue;
+
+    const title = "6h left to respond to the dispute";
+    const body = `Add your side of the story for "${j.title}" before the response window closes.`;
+    await storage.createNotification({
+      userId: helper.id, title, body, type: "job", jobId: j.id,
+    });
+    sendPushToUser(helper.id, {
+      title, body, url: `/jobs/${j.id}`, tag: `job-status-${j.id}`, priority: "high",
+    }).catch(() => {});
+    sent++;
+  }
+  return sent;
+}
+
 export function startCron() {
   cron.schedule("*/2 * * * *", async () => {
     try {
@@ -777,6 +869,13 @@ export function startCron() {
 
       const payoutPings = await payoutReleaseReminderSweep();
       if (payoutPings > 0) console.log(`[cron] sent ${payoutPings} payout-release reminder(s)`);
+
+      // Task #317 — auto-confirm midpoint + helper response deadline buffer.
+      const acMid = await autoConfirmMidpointSweep();
+      if (acMid > 0) console.log(`[cron] sent ${acMid} auto-confirm midpoint reminder(s)`);
+
+      const hrBuf = await helperResponseBufferSweep();
+      if (hrBuf > 0) console.log(`[cron] sent ${hrBuf} helper-response buffer reminder(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }

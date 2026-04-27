@@ -125,6 +125,13 @@ export const users = pgTable("users", {
   // Worker's chosen navigation provider for the new GUBER Route screen.
   // null = ask each time (Phase 1 of the coordination overhaul).
   preferredMapApp: text("preferred_map_app"),
+  // ── Dispute & Payout Protection — user risk signals (Task #317) ─────
+  // normal | watch | restricted | suspended (default normal)
+  riskLevel: text("risk_level").default("normal"),
+  noShowCount: integer("no_show_count").default(0),
+  missingProofCount: integer("missing_proof_count").default(0),
+  bypassAttemptCount: integer("bypass_attempt_count").default(0),
+  falseClaimFlagCount: integer("false_claim_flag_count").default(0),
 });
 
 export const categories = pgTable("categories", {
@@ -349,6 +356,36 @@ export const jobs = pgTable("jobs", {
   jobAtRisk: boolean("job_at_risk").default(false),
   // open | dispute_locked | resolved | null
   disputeStatus: text("dispute_status"),
+  // ── Dispute & Payout Protection (Task #317) ─────────────────────────
+  // Structured 8-value enum from shared/dispute.ts (DISPUTE_ISSUE_TYPES).
+  disputeIssueType: text("dispute_issue_type"),
+  disputeEvidenceUrls: text("dispute_evidence_urls").array(),
+  disputeOpenedAt: timestamp("dispute_opened_at"),
+  // Snapshot of `status` at the moment a dispute was opened so admin
+  // close_no_action can deterministically restore the original lifecycle.
+  preDisputeStatus: text("pre_dispute_status"),
+  helperResponse: text("helper_response"),
+  helperResponseEvidenceUrls: text("helper_response_evidence_urls").array(),
+  helperResponseAt: timestamp("helper_response_at"),
+  helperResponseDeadline: timestamp("helper_response_deadline"),
+  // Admin decision audit trail.
+  adminDecision: text("admin_decision"),
+  adminDecisionNotes: text("admin_decision_notes"),
+  adminReviewedAt: timestamp("admin_reviewed_at"),
+  adminReviewedBy: integer("admin_reviewed_by"),
+  // Money outcomes (alongside existing refundAmount).
+  payoutAmount: real("payout_amount"),
+  partialRefundAmount: real("partial_refund_amount"),
+  // Safety attestations from each side.
+  safetyConfirmedByPoster: boolean("safety_confirmed_by_poster").default(false),
+  safetyConfirmedByHelper: boolean("safety_confirmed_by_helper").default(false),
+  // Internal mirror of payout lifecycle — does NOT drive Stripe.
+  // pending_confirmation | approved | on_hold | released | refunded | partial_release | null
+  internalPayoutStatus: text("internal_payout_status"),
+  // Surfaced to admin: simple counter signal of contact-bypass attempts on this job.
+  contactBypassFlagged: boolean("contact_bypass_flagged").default(false),
+  // Optional rolling quality score (0-100), if set by review pipeline.
+  jobQualityScore: integer("job_quality_score"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -626,6 +663,25 @@ export const insertJobSchema = createInsertSchema(jobs).omit({
   urgentArrivalDeadline: true,
   jobAtRisk: true,
   disputeStatus: true,
+  // ── Dispute & Payout Protection — server-controlled (Task #317) ─────
+  disputeIssueType: true,
+  disputeEvidenceUrls: true,
+  disputeOpenedAt: true,
+  helperResponse: true,
+  helperResponseEvidenceUrls: true,
+  helperResponseAt: true,
+  helperResponseDeadline: true,
+  adminDecision: true,
+  adminDecisionNotes: true,
+  adminReviewedAt: true,
+  adminReviewedBy: true,
+  payoutAmount: true,
+  partialRefundAmount: true,
+  safetyConfirmedByPoster: true,
+  safetyConfirmedByHelper: true,
+  internalPayoutStatus: true,
+  contactBypassFlagged: true,
+  jobQualityScore: true,
 });
 
 export const insertReviewSchema = createInsertSchema(reviews).omit({
@@ -1276,6 +1332,17 @@ export const guberDisputes = pgTable("guber_disputes", {
   adminNotes: text("admin_notes"),
   resolvedByUserId: integer("resolved_by_user_id"),
   slaWarningSentAt: timestamp("sla_warning_sent_at"),
+  // ── Dispute & Payout Protection (Task #317) — audit mirror ──────────
+  issueType: text("issue_type"),
+  evidenceUrls: text("evidence_urls").array(),
+  helperResponse: text("helper_response"),
+  helperResponseEvidenceUrls: text("helper_response_evidence_urls").array(),
+  helperResponseAt: timestamp("helper_response_at"),
+  helperResponseDeadline: timestamp("helper_response_deadline"),
+  adminDecision: text("admin_decision"),
+  adminDecisionNotes: text("admin_decision_notes"),
+  adminReviewedAt: timestamp("admin_reviewed_at"),
+  adminReviewedBy: integer("admin_reviewed_by"),
 });
 
 export const insertGuberDisputeSchema = createInsertSchema(guberDisputes).omit({
@@ -1287,6 +1354,13 @@ export const insertGuberDisputeSchema = createInsertSchema(guberDisputes).omit({
   adminNotes: true,
   resolvedByUserId: true,
   slaWarningSentAt: true,
+  helperResponse: true,
+  helperResponseEvidenceUrls: true,
+  helperResponseAt: true,
+  adminDecision: true,
+  adminDecisionNotes: true,
+  adminReviewedAt: true,
+  adminReviewedBy: true,
 });
 export type GuberDispute = typeof guberDisputes.$inferSelect;
 export type InsertGuberDispute = z.infer<typeof insertGuberDisputeSchema>;

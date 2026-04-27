@@ -15,7 +15,10 @@ export type ReminderType =
   | "at_risk_poster"
   | "at_risk_worker"
   | "payout_release"
-  | "drop_expiring";
+  | "drop_expiring"
+  // Task #317 — Dispute & Payout Protection.
+  | "auto_confirm_midpoint"
+  | "helper_response_buffer";
 
 export interface ReminderKey {
   jobId?: number | null;

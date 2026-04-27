@@ -22,6 +22,13 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import type { Job, User as UserType, ProofSubmission, BountyAttempt } from "@shared/schema";
+import {
+  DISPUTE_ISSUE_TYPES,
+  DISPUTE_ISSUE_TYPE_LABELS,
+  DISPUTE_COPY,
+  HELPER_RESPONSE_WINDOW_HOURS,
+  type DisputeIssueType,
+} from "@shared/dispute";
 
 function toLocalDatetimeString(date: Date): string {
   const y = date.getFullYear();
@@ -146,6 +153,15 @@ export default function JobDetail() {
   const [posterCancelNote, setPosterCancelNote] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectFeedback, setRejectFeedback] = useState("");
+  // ── Dispute & Payout Protection (Task #317) ─────────────────────────
+  const [showReportIssueModal, setShowReportIssueModal] = useState(false);
+  const [reportIssueType, setReportIssueType] = useState<DisputeIssueType | "">("");
+  const [reportIssueNotes, setReportIssueNotes] = useState("");
+  const [reportEvidenceUrls, setReportEvidenceUrls] = useState<string[]>([]);
+  const [reportEvidenceUploading, setReportEvidenceUploading] = useState(false);
+  const [helperResponseText, setHelperResponseText] = useState("");
+  const [helperResponseEvidenceUrls, setHelperResponseEvidenceUrls] = useState<string[]>([]);
+  const [helperResponseUploading, setHelperResponseUploading] = useState(false);
   const [showWaiverModal, setShowWaiverModal] = useState(false);
   const [waiverChecked, setWaiverChecked] = useState(false);
   const [categoryWaiverChecked, setCategoryWaiverChecked] = useState(false);
@@ -508,6 +524,60 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       toast({ title: "Escalated to Admin", description: "GUBER will review and resolve the dispute." });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // ── Dispute & Payout Protection (Task #317) ─────────────────────────
+  async function uploadEvidenceFile(file: File): Promise<string> {
+    const reader = new FileReader();
+    const b64: string = await new Promise((resolve, reject) => {
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const resp = await apiRequest("POST", "/api/upload-photo", { fileBase64: b64 });
+    const json = await resp.json();
+    if (!json?.url) throw new Error("Upload failed");
+    return json.url as string;
+  }
+
+  const reportIssueMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await apiRequest("POST", `/api/jobs/${jobId}/dispute`, {
+        issueType: reportIssueType,
+        notes: reportIssueNotes,
+        evidenceUrls: reportEvidenceUrls,
+      });
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      setShowReportIssueModal(false);
+      setReportIssueType("");
+      setReportIssueNotes("");
+      setReportEvidenceUrls([]);
+      toast({
+        title: DISPUTE_COPY.reportSubmittedTitle,
+        description: DISPUTE_COPY.reportSubmittedBody,
+      });
+    },
+    onError: (err: any) => toast({ title: "Could not report issue", description: err.message, variant: "destructive" }),
+  });
+
+  const helperResponseMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await apiRequest("POST", `/api/jobs/${jobId}/dispute/helper-response`, {
+        response: helperResponseText,
+        evidenceUrls: helperResponseEvidenceUrls,
+      });
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      setHelperResponseText("");
+      setHelperResponseEvidenceUrls([]);
+      toast({ title: "Response sent", description: "GUBER will review both sides and decide." });
+    },
+    onError: (err: any) => toast({ title: "Could not send response", description: err.message, variant: "destructive" }),
   });
 
   const posterCancelMutation = useMutation({
@@ -1984,42 +2054,179 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             )
           )}
 
-          {["in_progress", "active", "funded", "completion_submitted"].includes(job.status) && isOwner && !(job as any).buyerConfirmed && !job.proofRequired && job.proofStatus !== "rejected" && (
+          {job.status === "disputed" && isHelper && (() => {
+            const deadlineMs = job.helperResponseDeadline ? new Date(job.helperResponseDeadline).getTime() : 0;
+            const deadlinePassed = deadlineMs > 0 && Date.now() > deadlineMs;
+            const hasResponse = !!job.helperResponse || !!job.helperResponseAt;
+            const issueLabel = job.disputeIssueType ? DISPUTE_ISSUE_TYPE_LABELS[job.disputeIssueType as DisputeIssueType] : null;
+            const evidence: string[] = Array.isArray(job.disputeEvidenceUrls) ? job.disputeEvidenceUrls : [];
+
+            if (hasResponse) {
+              return (
+                <div className="bg-card rounded-2xl border border-amber-500/30 p-4 space-y-2" data-testid="card-helper-response-sent">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-400" />
+                    <p className="text-xs font-display font-bold text-amber-400">{DISPUTE_COPY.helperResponseSubmittedTitle}</p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{DISPUTE_COPY.helperResponseSubmittedBody}</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-card rounded-2xl border border-destructive/30 p-4 space-y-3" data-testid="card-helper-dispute-response">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-display font-bold text-destructive">{DISPUTE_COPY.helperResponseTitle}</p>
+                    {issueLabel && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Issue type: <span className="text-foreground font-semibold">{issueLabel}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {job.disputeNotes && (
+                  <div className="rounded-lg border border-border/30 bg-background/50 p-3">
+                    <p className="text-[10px] font-display tracking-wider uppercase text-muted-foreground mb-1">Poster's report</p>
+                    <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{job.disputeNotes}</p>
+                  </div>
+                )}
+
+                {evidence.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {evidence.map((url: string, i: number) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer" className="aspect-square rounded-lg overflow-hidden border border-border/30 bg-muted/20" data-testid={`img-poster-evidence-${i}`}>
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                {deadlinePassed ? (
+                  <p className="text-[11px] text-muted-foreground italic">{DISPUTE_COPY.helperResponseDeadlinePassed}</p>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">{DISPUTE_COPY.helperResponseBody}</p>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-display font-bold tracking-wider uppercase text-muted-foreground">
+                        {DISPUTE_COPY.helperResponseTextLabel}
+                      </label>
+                      <Textarea
+                        value={helperResponseText}
+                        onChange={(e) => setHelperResponseText(e.target.value)}
+                        placeholder={DISPUTE_COPY.helperResponseTextPlaceholder}
+                        className="bg-background border-border/30 min-h-[100px] text-sm"
+                        data-testid="input-helper-response"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-display font-bold tracking-wider uppercase text-muted-foreground">
+                        {DISPUTE_COPY.helperResponseEvidenceLabel}
+                      </label>
+                      {helperResponseEvidenceUrls.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {helperResponseEvidenceUrls.map((url, i) => (
+                            <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border/30 bg-muted/20">
+                              <img src={url} alt="" className="w-full h-full object-cover" />
+                              <button
+                                onClick={() => setHelperResponseEvidenceUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center"
+                                data-testid={`button-remove-helper-evidence-${i}`}
+                              >
+                                <X className="w-3 h-3 text-white" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <label className="flex items-center justify-center gap-2 h-10 rounded-xl border border-dashed border-border/40 bg-background hover:bg-muted/30 cursor-pointer text-xs text-muted-foreground">
+                        {helperResponseUploading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Camera className="w-4 h-4" /> Add evidence
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          className="hidden"
+                          disabled={helperResponseUploading}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setHelperResponseUploading(true);
+                            try {
+                              const url = await uploadEvidenceFile(file);
+                              setHelperResponseEvidenceUrls((prev) => [...prev, url]);
+                            } catch (err: any) {
+                              toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                            } finally {
+                              setHelperResponseUploading(false);
+                              e.target.value = "";
+                            }
+                          }}
+                          data-testid="input-upload-helper-evidence"
+                        />
+                      </label>
+                    </div>
+
+                    <Button
+                      onClick={() => helperResponseMutation.mutate()}
+                      disabled={!helperResponseText.trim() || helperResponseMutation.isPending || helperResponseUploading}
+                      className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-display tracking-wider"
+                      data-testid="button-submit-helper-response"
+                    >
+                      {helperResponseMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : DISPUTE_COPY.helperResponseSubmitButton}
+                    </Button>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {["in_progress", "active", "funded", "completion_submitted"].includes(job.status) && isOwner && !(job as any).buyerConfirmed && job.proofStatus !== "rejected" && (
             (job as any).helperConfirmed ? (
-              <>
+              <div className="space-y-3" data-testid="panel-poster-review">
+                <div className="rounded-2xl border border-border/30 bg-card/60 p-4">
+                  <p className="text-xs font-display font-bold uppercase tracking-wider text-foreground/90 mb-1.5" data-testid="text-poster-review-title">
+                    {DISPUTE_COPY.posterReviewTitle}
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed" data-testid="text-poster-review-body">
+                    {DISPUTE_COPY.posterReviewBody}
+                  </p>
+                </div>
                 <button
                   onClick={() => confirmMutation.mutate()}
                   disabled={confirmMutation.isPending}
-                  className="confirm-flash-btn w-full rounded-2xl font-display font-black text-black flex flex-col items-center justify-center gap-0.5 py-4 px-4 transition-opacity disabled:opacity-60"
+                  className="confirm-flash-btn w-full rounded-2xl font-display font-black text-black flex items-center justify-center gap-2 py-4 px-4 transition-opacity disabled:opacity-60"
                   data-testid="button-owner-confirm"
                 >
                   {confirmMutation.isPending ? (
                     <Loader2 className="w-5 h-5 animate-spin text-black" />
                   ) : (
                     <>
-                      <span className="flex items-center gap-2 text-sm tracking-widest uppercase leading-tight">
-                        <CheckCircle className="w-4 h-4 shrink-0" />
-                        CONFIRM WORK DONE
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                      <span className="text-sm tracking-widest uppercase leading-tight">
+                        {DISPUTE_COPY.posterConfirmButton}
                       </span>
-                      <span className="text-sm tracking-widest uppercase leading-tight">&amp; RELEASE PAYMENT</span>
                     </>
                   )}
                 </button>
-                <div className="flex justify-center mt-2">
+                <div className="flex justify-center">
                   <button
-                    onClick={() => {
-                      if (window.confirm("Are you sure you want to dispute this job? GUBER admin will review and reach out to both parties.")) {
-                        escalateMutation.mutate();
-                      }
-                    }}
-                    disabled={escalateMutation.isPending}
-                    className="text-[11px] text-muted-foreground hover:text-destructive/70 transition-colors underline-offset-2 hover:underline"
-                    data-testid="button-poster-dispute"
+                    onClick={() => setShowReportIssueModal(true)}
+                    className="text-[12px] text-muted-foreground hover:text-destructive/80 transition-colors underline-offset-2 hover:underline"
+                    data-testid="button-poster-report-issue"
                   >
-                    Not satisfied? File a dispute instead
+                    {DISPUTE_COPY.posterReportIssueButton}
                   </button>
                 </div>
-              </>
+              </div>
             ) : (
               <div className="bg-card rounded-2xl border border-border/20 p-4 text-center" data-testid="card-waiting-proof">
                 <Clock className="w-5 h-5 text-muted-foreground mx-auto mb-2" />
@@ -2678,6 +2885,128 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           </div>
         </div>
       )}
+      {/* ── Report Issue Modal (Task #317) ───────────────────────────────── */}
+      {showReportIssueModal && (
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center p-4" data-testid="modal-report-issue">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowReportIssueModal(false)} />
+          <div className="relative bg-card rounded-3xl border border-border/20 p-6 w-full max-w-lg space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-destructive/10 flex items-center justify-center border border-destructive/20">
+                  <AlertTriangle className="w-4 h-4 text-destructive" />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-base">{DISPUTE_COPY.reportModalTitle}</h3>
+                  <p className="text-[11px] text-muted-foreground">Helper has {HELPER_RESPONSE_WINDOW_HOURS}h to respond</p>
+                </div>
+              </div>
+              <button onClick={() => setShowReportIssueModal(false)} className="p-2 rounded-full hover:bg-muted" data-testid="button-close-report-issue">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">{DISPUTE_COPY.reportModalIntro}</p>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-display font-bold tracking-wider uppercase text-muted-foreground">
+                {DISPUTE_COPY.reportTypeLabel}
+              </label>
+              <Select value={reportIssueType} onValueChange={(v) => setReportIssueType(v as DisputeIssueType)}>
+                <SelectTrigger className="bg-background border-border/30 h-11 text-sm" data-testid="select-issue-type">
+                  <SelectValue placeholder={DISPUTE_COPY.reportTypePlaceholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISPUTE_ISSUE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t} data-testid={`option-issue-${t}`}>
+                      {DISPUTE_ISSUE_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-display font-bold tracking-wider uppercase text-muted-foreground">
+                {DISPUTE_COPY.reportDetailsLabel}
+              </label>
+              <Textarea
+                value={reportIssueNotes}
+                onChange={(e) => setReportIssueNotes(e.target.value)}
+                placeholder={DISPUTE_COPY.reportDetailsPlaceholder}
+                className="bg-background border-border/30 min-h-[110px] text-sm"
+                data-testid="input-issue-notes"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-display font-bold tracking-wider uppercase text-muted-foreground">
+                {DISPUTE_COPY.reportEvidenceLabel}
+              </label>
+              {reportEvidenceUrls.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {reportEvidenceUrls.map((url, i) => (
+                    <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border/30 bg-muted/20">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setReportEvidenceUrls((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center"
+                        data-testid={`button-remove-evidence-${i}`}
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="flex items-center justify-center gap-2 h-11 rounded-xl border border-dashed border-border/40 bg-background hover:bg-muted/30 cursor-pointer text-xs text-muted-foreground" data-testid="label-upload-evidence">
+                {reportEvidenceUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Camera className="w-4 h-4" /> Add photo / video / screenshot
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  className="hidden"
+                  disabled={reportEvidenceUploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setReportEvidenceUploading(true);
+                    try {
+                      const url = await uploadEvidenceFile(file);
+                      setReportEvidenceUrls((prev) => [...prev, url]);
+                    } catch (err: any) {
+                      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                    } finally {
+                      setReportEvidenceUploading(false);
+                      e.target.value = "";
+                    }
+                  }}
+                  data-testid="input-upload-evidence"
+                />
+              </label>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <Button variant="outline" onClick={() => setShowReportIssueModal(false)} className="flex-1 rounded-xl" data-testid="button-cancel-report">
+                Cancel
+              </Button>
+              <Button
+                onClick={() => reportIssueMutation.mutate()}
+                disabled={!reportIssueType || !reportIssueNotes.trim() || reportIssueMutation.isPending || reportEvidenceUploading}
+                className="flex-1 rounded-xl bg-destructive/20 text-destructive border border-destructive/40 hover:bg-destructive/30"
+                data-testid="button-submit-report"
+              >
+                {reportIssueMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : DISPUTE_COPY.reportSubmitButton}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showWaiverModal && job && (
         <div className="fixed inset-0 z-[9999] flex items-end justify-center p-4" data-testid="modal-job-waiver">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowWaiverModal(false)} />

@@ -1172,6 +1172,48 @@ export async function seedUploadQuotaColumns() {
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS upload_month_year TEXT`);
 }
 
+export async function seedDisputeProtectionColumns() {
+  // ── jobs: dispute & payout-protection fields (Task #317) ───────────
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS dispute_issue_type TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS dispute_evidence_urls TEXT[]`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS dispute_opened_at TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS pre_dispute_status TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS helper_response TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS helper_response_evidence_urls TEXT[]`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS helper_response_at TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS helper_response_deadline TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS admin_decision TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS admin_decision_notes TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS admin_reviewed_at TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS admin_reviewed_by INTEGER`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS payout_amount REAL`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS partial_refund_amount REAL`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS safety_confirmed_by_poster BOOLEAN DEFAULT FALSE`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS safety_confirmed_by_helper BOOLEAN DEFAULT FALSE`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS internal_payout_status TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contact_bypass_flagged BOOLEAN DEFAULT FALSE`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_quality_score INTEGER`);
+
+  // ── guber_disputes: audit-mirror fields ────────────────────────────
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS issue_type TEXT`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS evidence_urls TEXT[]`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS helper_response TEXT`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS helper_response_evidence_urls TEXT[]`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS helper_response_at TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS helper_response_deadline TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS admin_decision TEXT`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS admin_decision_notes TEXT`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS admin_reviewed_at TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE guber_disputes ADD COLUMN IF NOT EXISTS admin_reviewed_by INTEGER`);
+
+  // ── users: risk level & signal counters ────────────────────────────
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_level TEXT DEFAULT 'normal'`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS no_show_count INTEGER DEFAULT 0`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS missing_proof_count INTEGER DEFAULT 0`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS bypass_attempt_count INTEGER DEFAULT 0`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS false_claim_flag_count INTEGER DEFAULT 0`);
+}
+
 export async function seedBoostColumns() {
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS boost_suggested BOOLEAN DEFAULT FALSE`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS suggested_budget REAL`);

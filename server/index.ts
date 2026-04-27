@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCron } from "./cron";
-import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns } from "./seed";
+import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns } from "./seed";
 import { seedDemoAccounts } from "./seed-demo";
 import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
@@ -328,6 +328,8 @@ app.use((req, res, next) => {
   startCron();
   await seedReferralExpiry().catch(e => console.error("[seed] Referral expiry column error:", e));
   await seedCatalog().catch(e => console.error("[seed] catalog seed error:", e));
+  // Task #317: must run before syncAdminCredentials/seedDemoAccounts (which SELECT new columns)
+  await seedDisputeProtectionColumns().catch(e => console.error("[seed] Dispute protection columns error:", e));
   seedJobChecklists().catch(e => console.error("[seed] job checklist seed error:", e));
   syncAdminCredentials().catch(e => console.error("[seed] admin sync error:", e));
   syncOGPreapprovedEmails().catch(e => console.error("[seed] OG sync error:", e));
