@@ -3030,6 +3030,7 @@ const BLANK_FORM = {
   rewardType: "cash", rewardDescription: "", rewardQuantity: 0, rewardRedemptionType: "",
   redemptionType: "", redemptionInstructions: "", noPurchaseRequiredText: "", disclaimerText: "",
   gpsLat: "", gpsLng: "", gpsRadius: 200, clueText: "", clueRevealOnArrival: false,
+  clueMediaUrls: [] as string[],
   requireInAppCamera: false, proofItems: [] as { label: string; type: string }[],
   startTime: "", endTime: "",
   physicalCashDrop: false,
@@ -3043,6 +3044,7 @@ const [geocoding, setGeocoding] = useState(false);
 const [zipInput, setZipInput] = useState("");
 const [zipGeocoding, setZipGeocoding] = useState(false);
 const [useLocating, setUseLocating] = useState(false);
+const [clueUploading, setClueUploading] = useState(false);
 
 // Auto-open form and prefill from sponsor when directed from Sponsors tab
 useEffect(() => {
@@ -3098,6 +3100,7 @@ gpsLng: String(drop.gpsLng ?? drop.gps_lng ?? ""),
 gpsRadius: drop.gpsRadius ?? drop.gps_radius ?? 200,
 clueText: drop.clueText || drop.clue_text || "",
 clueRevealOnArrival: drop.clueRevealOnArrival ?? drop.clue_reveal_on_arrival ?? false,
+clueMediaUrls: Array.isArray(drop.clueMediaUrls || drop.clue_media_urls) ? (drop.clueMediaUrls || drop.clue_media_urls) : [],
 requireInAppCamera: drop.requireInAppCamera ?? drop.require_in_app_camera ?? false,
 proofItems: drop.proofItems || drop.proof_items || [],
 startTime: drop.startTime ? drop.startTime.slice(0, 16) : "",
@@ -3535,6 +3538,62 @@ data-testid="select-final-location-mode"
 <div className="space-y-2">
 <label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Clue Text</label>
 <Textarea value={form.clueText} onChange={(e) => setForm(f => ({ ...f, clueText: e.target.value }))} placeholder="Optional hint shown to participants — e.g. 'Look for the red awning'" className="premium-input rounded-md min-h-[70px]" data-testid="input-drop-clue" />
+</div>
+<div className="space-y-2">
+<label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Clue Photo(s)</label>
+<p className="text-[10px] text-muted-foreground">Add up to 5 images to help participants find the drop</p>
+{form.clueMediaUrls.length > 0 && (
+  <div className="grid grid-cols-3 gap-2">
+    {form.clueMediaUrls.map((url, i) => (
+      <div key={i} className="relative group rounded-md overflow-hidden aspect-square">
+        <img src={url} alt={`Clue photo ${i + 1}`} className="w-full h-full object-cover" data-testid={`img-clue-photo-${i}`} />
+        <button
+          type="button"
+          onClick={() => setForm(f => ({ ...f, clueMediaUrls: f.clueMediaUrls.filter((_, j) => j !== i) }))}
+          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          data-testid={`button-remove-clue-photo-${i}`}
+        >✕</button>
+      </div>
+    ))}
+  </div>
+)}
+{form.clueMediaUrls.length < 5 && (
+  <label className={`flex items-center gap-2 px-3 py-2 rounded-md glass-card-strong premium-border text-[12px] cursor-pointer transition-opacity ${clueUploading ? "opacity-50 pointer-events-none" : "hover:bg-white/[0.04]"}`} data-testid="button-upload-clue-photo">
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      disabled={clueUploading}
+      onChange={async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = "";
+        setClueUploading(true);
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          const res = await apiRequest("POST", "/api/upload-photo", { fileBase64: base64 });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Upload failed");
+          setForm(f => ({ ...f, clueMediaUrls: [...f.clueMediaUrls, data.url] }));
+        } catch (err: any) {
+          toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+        } finally {
+          setClueUploading(false);
+        }
+      }}
+    />
+    {clueUploading ? (
+      <span className="text-muted-foreground">Uploading…</span>
+    ) : (
+      <><span className="text-primary">＋</span><span className="text-muted-foreground">Add clue photo</span></>
+    )}
+  </label>
+)}
 </div>
 <div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border">
 <div>
