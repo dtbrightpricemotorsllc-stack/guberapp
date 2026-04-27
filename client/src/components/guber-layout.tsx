@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Notification } from "@shared/schema";
 import { subscribeToPush } from "@/lib/push";
-import { playGuberPing, unlockAudio } from "@/lib/notification-sound";
+import { playGuberPing, unlockAudio, playGuberSound, type SoundType } from "@/lib/notification-sound";
 import { isNativeApp, isAndroid } from "@/lib/platform";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { GpsDisclaimerModal } from "@/components/gps-disclaimer-modal";
@@ -36,6 +36,44 @@ import {
   Zap,
   Download,
 } from "lucide-react";
+
+const SOUND_PRIORITY: SoundType[] = ["money", "nearby", "action", "closed", "default"];
+
+function classifyNotification(n: Notification): SoundType {
+  const t = (n.title || "").toLowerCase();
+  const b = (n.body || "").toLowerCase();
+  const type = n.type || "";
+
+  if (type === "offer_funded") return "money";
+  if (type === "cash_drop") {
+    if (t.includes("live")) return "nearby";
+    if (t.includes("claimed") || b.includes("claimed")) return "closed";
+    return "nearby";
+  }
+  if (type === "offer_payment_failed" || type === "offer_payment_pending") return "closed";
+  if (type === "job") {
+    if (t.includes("payment") || t.includes("paid") || t.includes("locked") ||
+        t.includes("earned") || t.includes("payout") ||
+        b.includes("payment") || b.includes("paid") || b.includes("locked") ||
+        b.includes("earned") || b.includes("payout")) return "money";
+    return "action";
+  }
+  if (type === "system") {
+    if (t.includes("referral reward") || t.includes("payout")) return "money";
+    return "default";
+  }
+  return "default";
+}
+
+function classifyPush(tag: string, title: string): SoundType {
+  const tl = (title || "").toLowerCase();
+  if (tag.includes("cashdrop-claimed")) return "closed";
+  if (tag.includes("cashdrop")) return "nearby";
+  if (tl.includes("payment") || tl.includes("paid") || tl.includes("locked") || tl.includes("earned")) return "money";
+  if (tag.includes("job-status")) return "action";
+  if (tag === "nearby-jobs") return "nearby";
+  return "default";
+}
 
 export function GuberLayout({ children, hideHeader }: { children: React.ReactNode; hideHeader?: boolean }) {
   const { user, logout } = useAuth();
@@ -91,6 +129,20 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
   const unreadCount = notifications?.filter((n) => !n.read).length || 0;
   const prevUnreadRef = useRef<number | null>(null);
 
+  // Tracks which notification IDs have already triggered a typed WAV sound
+  const soundedIdsRef = useRef<Set<number>>(new Set());
+  // Whether soundedIdsRef has been seeded with the initial fetch
+  const seededRef = useRef(false);
+
+  const [moneyFlashVisible, setMoneyFlashVisible] = useState(false);
+  const moneyFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function triggerMoneyFlash() {
+    if (moneyFlashTimerRef.current) clearTimeout(moneyFlashTimerRef.current);
+    setMoneyFlashVisible(true);
+    moneyFlashTimerRef.current = setTimeout(() => setMoneyFlashVisible(false), 1800);
+  }
+
   // Unlock AudioContext on first tap (required by browsers before playing sound)
   useEffect(() => {
     const unlock = () => unlockAudio();
@@ -102,7 +154,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
     };
   }, []);
 
-  // Play GUBER ping when unread count rises (new notification arrived)
+  // Play GUBER ping when unread count rises (new notification arrived) — PRESERVED AS-IS
   useEffect(() => {
     if (prevUnreadRef.current !== null && unreadCount > prevUnreadRef.current) {
       playGuberPing();
@@ -110,12 +162,42 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
     prevUnreadRef.current = unreadCount;
   }, [unreadCount]);
 
-  // Play GUBER ping when a push arrives while the app is open
+  // Typed WAV + vibration dispatch for new notifications
+  useEffect(() => {
+    if (!notifications || notifications.length === 0) return;
+
+    if (!seededRef.current) {
+      // First fetch — seed all existing IDs so they don't trigger sounds
+      notifications.forEach((n) => soundedIdsRef.current.add(n.id));
+      seededRef.current = true;
+      return;
+    }
+
+    // Find notifications that haven't been sounded yet
+    const newOnes = notifications.filter((n) => !soundedIdsRef.current.has(n.id));
+    if (newOnes.length === 0) return;
+
+    // Mark them all as sounded
+    newOnes.forEach((n) => soundedIdsRef.current.add(n.id));
+
+    // Pick highest-priority sound type from the batch
+    const types = new Set(newOnes.map(classifyNotification));
+    const winner = SOUND_PRIORITY.find((t) => types.has(t)) ?? "default";
+
+    playGuberSound(winner);
+    if (winner === "money") triggerMoneyFlash();
+  }, [notifications]);
+
+  // Play typed sound when a push arrives while the app is open
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "GUBER_PUSH") {
-        playGuberPing();
+        const tag: string = event.data?.tag ?? "";
+        const title: string = event.data?.title ?? "";
+        const soundType = classifyPush(tag, title);
+        playGuberSound(soundType);
+        if (soundType === "money") triggerMoneyFlash();
       }
     };
     navigator.serviceWorker.addEventListener("message", handler);
@@ -273,6 +355,39 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
 
       <GUBERAssistant />
       {isAdmin && location === "/admin" && <AdminDiagnosticAssistant />}
+
+      {/* Money flash overlay */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          bottom: "90px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 9999,
+          pointerEvents: "none",
+          opacity: moneyFlashVisible ? 1 : 0,
+          transition: moneyFlashVisible
+            ? "opacity 0.25s ease-in"
+            : "opacity 0.4s ease-out",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <div
+          style={{
+            background: "linear-gradient(135deg, #f5a623 0%, #f7c94b 50%, #e8950c 100%)",
+            color: "#1a0e00",
+            fontWeight: 700,
+            fontSize: "13px",
+            letterSpacing: "0.02em",
+            padding: "8px 18px",
+            borderRadius: "999px",
+            boxShadow: "0 0 18px 4px rgba(245,166,35,0.55), 0 2px 8px rgba(0,0,0,0.35)",
+          }}
+        >
+          💰 Paid Instantly
+        </div>
+      </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 glass-nav border-t border-white/[0.06]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="flex items-center justify-around h-[68px] max-w-lg mx-auto px-3">

@@ -81,3 +81,33 @@ export function unlockAudio() {
     // ignore
   }
 }
+
+export type SoundType = "money" | "closed" | "action" | "default" | "nearby";
+
+function vibrateFor(type: SoundType): void {
+  if (!("vibrate" in navigator)) return;
+  try {
+    switch (type) {
+      case "money":  navigator.vibrate(200);          break;
+      case "action": navigator.vibrate([80, 50, 80]); break;
+      case "closed": navigator.vibrate(60);           break;
+      // "nearby" and "default": no vibration
+    }
+  } catch {
+    // ignore silently
+  }
+}
+
+export function playGuberSound(type: SoundType): void {
+  vibrateFor(type);
+
+  const audio = new Audio(`/sounds/guber_${type}.wav`);
+  audio.play().catch(() => {
+    // WAV failed — fall back to synthesized tones
+    if (type === "money") {
+      playGuberCashDrop();
+    } else {
+      playGuberPing();
+    }
+  });
+}
