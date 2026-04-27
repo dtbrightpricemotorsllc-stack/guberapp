@@ -57,9 +57,19 @@ export type JobTypeConfig = {
   helpersRules?: HelpersRule[];
   pricingModifiers?: PricingModifier[];
   blockKeywords?: string[]; // forbidden phrases in notes
+  // Optional callback for combinator helper rules that the simple
+  // single-field HelpersRule shape can't express (e.g. high urgency AND
+  // roadside). Returns the desired helpers count; the engine keeps the max
+  // of (base helpers, helpersRules max, helpersFn output).
+  helpersFn?: (jobDetails: Record<string, any>, currentHelpers: number) => number;
 };
 
 const MIN_PAYOUT = 15;
+
+// Universal automotive / boat / RV / roadside disclaimer. Shown on the
+// guided job summary panel for any vehicle-touching job type.
+export const AUTO_DISCLAIMER =
+  "GUBER connects users for assistance. Work is performed at your own risk. Always ensure safe conditions.";
 
 // ---------------------------------------------------------------------------
 // Universal helpers
@@ -126,6 +136,10 @@ export function computeHelpers(
       helpers = r.helpers;
     }
   });
+  if (config.helpersFn) {
+    const next = config.helpersFn(jobDetails, helpers);
+    if (Number.isFinite(next) && next > helpers) helpers = next;
+  }
   return helpers;
 }
 
@@ -457,6 +471,133 @@ const ON_DEMAND: JobTypeConfig[] = [
       { field: "proofNeeded", values: ["Video"], addLow: 5, addHigh: 10, reason: "video proof" },
     ],
   },
+  {
+    category: "On-Demand Help",
+    jobType: "Jump Start",
+    shortLabel: "Jump Start",
+    warning: "GUBER does not allow unsafe roadside work. Helper and poster must agree on a safe meeting point before accepting.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "issue", label: "Issue", options: ["Dead battery", "Lights left on", "Won't crank", "Other"], required: true, hasOther: true },
+      { name: "vehicleType", label: "Vehicle type", options: ["Car", "Truck", "SUV", "Van", "Motorcycle"], required: true, hasOther: true },
+      { name: "location", label: "Location", options: ["Driveway", "Parking lot", "Roadside", "Tight access"], required: true, hasOther: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 20,
+    basePriceHigh: 50,
+    effortRules: [
+      { field: "location", values: ["Roadside"], weight: 2 },
+      { field: "location", values: ["Tight access"], weight: 1 },
+      { field: "vehicleType", values: ["Truck", "Van"], weight: 1 },
+      { field: "urgency", values: ["High"], weight: 1 },
+    ],
+    pricingModifiers: [
+      { field: "location", values: ["Roadside"], addLow: 10, addHigh: 30, reason: "roadside" },
+      { field: "location", values: ["Tight access"], addLow: 5, addHigh: 15, reason: "tight access" },
+      { field: "urgency", values: ["High"], addLow: 10, addHigh: 25, reason: "high urgency" },
+    ],
+    helpersFn: (jd) => {
+      if (jd.urgency === "High" && jd.location === "Roadside") return 2;
+      return 1;
+    },
+  },
+  {
+    category: "On-Demand Help",
+    jobType: "Lockout Service",
+    shortLabel: "Lockout",
+    warning: "Helper must verify proof of ownership (ID + registration or matching documentation) before any lockout work.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "vehicleType", label: "Vehicle type", options: ["Car", "Truck", "SUV", "Van", "Motorcycle", "RV"], required: true, hasOther: true },
+      { name: "proofOfOwnership", label: "Proof of ownership", options: ["Yes — I have ID + registration on me", "No — need to retrieve documents"], required: true },
+      { name: "location", label: "Location", options: ["Driveway", "Parking lot", "Roadside", "Tight access"], required: true, hasOther: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 25,
+    basePriceHigh: 70,
+    effortRules: [
+      { field: "location", values: ["Roadside"], weight: 2 },
+      { field: "proofOfOwnership", values: ["No — need to retrieve documents"], weight: 1 },
+      { field: "urgency", values: ["High"], weight: 1 },
+    ],
+    pricingModifiers: [
+      { field: "location", values: ["Roadside"], addLow: 10, addHigh: 25, reason: "roadside" },
+      { field: "urgency", values: ["High"], addLow: 10, addHigh: 30, reason: "high urgency" },
+    ],
+    helpersFn: (jd) => {
+      if (jd.urgency === "High" && jd.location === "Roadside") return 2;
+      return 1;
+    },
+  },
+  {
+    category: "On-Demand Help",
+    jobType: "Vehicle Transport",
+    shortLabel: "Vehicle Transport",
+    warning: "Vehicle transport requires proper credentials, equipment, and capacity. Confirm a safe pickup and drop-off plan before accepting.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "vehicleType", label: "Vehicle type", options: ["Car", "Truck", "SUV", "Van", "Motorcycle", "Boat / trailer", "RV"], required: true, hasOther: true },
+      { name: "transportType", label: "Transport type", options: ["Drive it", "Trailer", "Flatbed"], required: true },
+      { name: "condition", label: "Vehicle condition", options: ["Running", "Non-running"], required: true },
+      { name: "distance", label: "Distance", options: ["Local (under 10 mi)", "Across town", "Long distance"], required: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 40,
+    basePriceHigh: 200,
+    effortRules: [
+      { field: "transportType", values: ["Trailer"], weight: 2 },
+      { field: "transportType", values: ["Flatbed"], weight: 2 },
+      { field: "condition", values: ["Non-running"], weight: 2 },
+      { field: "distance", values: ["Across town"], weight: 1 },
+      { field: "distance", values: ["Long distance"], weight: 3 },
+      { field: "urgency", values: ["High"], weight: 1 },
+    ],
+    pricingModifiers: [
+      { field: "transportType", values: ["Trailer"], addLow: 25, addHigh: 75, reason: "trailer" },
+      { field: "transportType", values: ["Flatbed"], addLow: 40, addHigh: 120, reason: "flatbed" },
+      { field: "condition", values: ["Non-running"], addLow: 20, addHigh: 60, reason: "non-running" },
+      { field: "distance", values: ["Across town"], addLow: 20, addHigh: 50, reason: "across town" },
+      { field: "distance", values: ["Long distance"], addLow: 75, addHigh: 250, reason: "long distance" },
+      { field: "urgency", values: ["High"], addLow: 15, addHigh: 50, reason: "high urgency" },
+    ],
+    helpersRules: [
+      { field: "condition", values: ["Non-running"], helpers: 2 },
+      { field: "transportType", values: ["Trailer", "Flatbed"], helpers: 2 },
+    ],
+  },
+  {
+    category: "On-Demand Help",
+    jobType: "Roadside Assistance",
+    shortLabel: "Roadside Assistance",
+    warning: "GUBER does not allow unsafe roadside or highway work. Helper and poster must agree on a safe meeting point before accepting.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "service", label: "Service needed", options: ["Tire change", "Lockout", "Jump start", "Fluid delivery", "Tow assistance"], required: true, hasOther: true },
+      { name: "vehicleType", label: "Vehicle type", options: ["Car", "Truck", "SUV", "Van", "Motorcycle", "RV"], required: true, hasOther: true },
+      { name: "location", label: "Location", options: ["Driveway", "Parking lot", "Roadside", "Highway shoulder", "Tight access"], required: true, hasOther: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 25,
+    basePriceHigh: 80,
+    effortRules: [
+      { field: "location", values: ["Roadside", "Highway shoulder"], weight: 2 },
+      { field: "service", values: ["Tow assistance"], weight: 2 },
+      { field: "service", values: ["Fluid delivery"], weight: 1 },
+      { field: "urgency", values: ["High"], weight: 2 },
+    ],
+    pricingModifiers: [
+      { field: "service", values: ["Tow assistance"], addLow: 20, addHigh: 70, reason: "tow assistance" },
+      { field: "service", values: ["Fluid delivery"], addLow: 10, addHigh: 30, reason: "fluid delivery" },
+      { field: "service", values: ["Tire change"], addLow: 10, addHigh: 30, reason: "tire change" },
+      { field: "location", values: ["Roadside"], addLow: 15, addHigh: 35, reason: "roadside" },
+      { field: "location", values: ["Highway shoulder"], addLow: 25, addHigh: 60, reason: "highway shoulder" },
+      { field: "urgency", values: ["High"], addLow: 15, addHigh: 45, reason: "high urgency" },
+    ],
+    helpersFn: (jd) => {
+      if (jd.urgency === "High" && (jd.location === "Roadside" || jd.location === "Highway shoulder")) return 2;
+      return 1;
+    },
+  },
 ];
 
 // =========================
@@ -707,6 +848,109 @@ const GENERAL_LABOR: JobTypeConfig[] = [
       { field: "size", values: ["Multiple rooms", "Whole home"], helpers: 2 },
     ],
   },
+  {
+    category: "General Labor",
+    jobType: "Vehicle Detailing",
+    shortLabel: "Vehicle Detailing",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "detailType", label: "Detail type", options: ["Full Detail", "Exterior Only", "Interior Only", "Wash + Vacuum"], required: true },
+      { name: "vehicleType", label: "Vehicle type", options: ["Car", "SUV", "Truck", "Van"], required: true, hasOther: true },
+      { name: "condition", label: "Current condition", options: ["Light", "Moderate", "Very dirty"], required: true },
+      { name: "supplies", label: "Supplies", options: ["Poster supplies", "Helper brings supplies"], required: true },
+    ],
+    basePriceLow: 30,
+    basePriceHigh: 90,
+    effortRules: [
+      { field: "detailType", values: ["Full Detail"], weight: 2 },
+      { field: "detailType", values: ["Interior Only", "Exterior Only"], weight: 1 },
+      { field: "vehicleType", values: ["SUV", "Truck", "Van"], weight: 1 },
+      { field: "condition", values: ["Moderate"], weight: 1 },
+      { field: "condition", values: ["Very dirty"], weight: 2 },
+      { field: "supplies", values: ["Helper brings supplies"], weight: 1 },
+    ],
+    pricingModifiers: [
+      { field: "detailType", values: ["Full Detail"], addLow: 25, addHigh: 70, reason: "full detail" },
+      { field: "detailType", values: ["Interior Only"], addLow: 10, addHigh: 30, reason: "interior detail" },
+      { field: "detailType", values: ["Exterior Only"], addLow: 5, addHigh: 25, reason: "exterior detail" },
+      { field: "vehicleType", values: ["SUV", "Truck"], addLow: 10, addHigh: 25, reason: "larger vehicle" },
+      { field: "vehicleType", values: ["Van"], addLow: 15, addHigh: 35, reason: "van size" },
+      { field: "condition", values: ["Moderate"], addLow: 5, addHigh: 15, reason: "moderate dirt" },
+      { field: "condition", values: ["Very dirty"], addLow: 15, addHigh: 40, reason: "very dirty" },
+      { field: "supplies", values: ["Helper brings supplies"], addLow: 10, addHigh: 25, reason: "helper supplies" },
+    ],
+  },
+  {
+    category: "General Labor",
+    jobType: "Boat Cleaning",
+    shortLabel: "Boat Cleaning",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "areas", label: "Areas to clean", options: ["Deck", "Exterior", "Interior", "Hull", "Engine compartment"], multi: true, required: true, hasOther: true },
+      { name: "boatSize", label: "Boat size", options: ["Small / personal watercraft", "Medium", "Large yacht"], required: true },
+      { name: "condition", label: "Current condition", options: ["Light", "Moderate", "Very dirty"], required: true },
+      { name: "supplies", label: "Supplies", options: ["Poster supplies", "Helper brings supplies"], required: true },
+    ],
+    basePriceLow: 40,
+    basePriceHigh: 120,
+    effortRules: [
+      { field: "areas", whenCountAtLeast: 3, weight: 1 },
+      { field: "areas", values: ["Hull"], weight: 1 },
+      { field: "areas", values: ["Engine compartment"], weight: 2 },
+      { field: "boatSize", values: ["Medium"], weight: 1 },
+      { field: "boatSize", values: ["Large yacht"], weight: 3 },
+      { field: "condition", values: ["Moderate"], weight: 1 },
+      { field: "condition", values: ["Very dirty"], weight: 2 },
+      { field: "supplies", values: ["Helper brings supplies"], weight: 1 },
+    ],
+    pricingModifiers: [
+      { field: "boatSize", values: ["Medium"], addLow: 20, addHigh: 60, reason: "medium boat" },
+      { field: "boatSize", values: ["Large yacht"], addLow: 80, addHigh: 250, reason: "large yacht" },
+      { field: "areas", values: ["Hull"], addLow: 20, addHigh: 50, reason: "hull cleaning" },
+      { field: "areas", values: ["Engine compartment"], addLow: 25, addHigh: 60, reason: "engine bay" },
+      { field: "condition", values: ["Very dirty"], addLow: 20, addHigh: 50, reason: "very dirty" },
+      { field: "supplies", values: ["Helper brings supplies"], addLow: 15, addHigh: 35, reason: "helper supplies" },
+    ],
+    helpersRules: [
+      { field: "boatSize", values: ["Large yacht"], helpers: 2 },
+    ],
+  },
+  {
+    category: "General Labor",
+    jobType: "RV Cleaning",
+    shortLabel: "RV Cleaning",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "areas", label: "Areas to clean", options: ["Interior", "Exterior wash", "Roof", "Awning", "Holding tanks"], multi: true, required: true, hasOther: true },
+      { name: "rvSize", label: "RV size / class", options: ["Class B / Camper Van", "Class C", "Class A", "Travel Trailer", "Fifth Wheel"], required: true },
+      { name: "condition", label: "Current condition", options: ["Light", "Moderate", "Very dirty"], required: true },
+      { name: "supplies", label: "Supplies", options: ["Poster supplies", "Helper brings supplies"], required: true },
+    ],
+    basePriceLow: 45,
+    basePriceHigh: 130,
+    effortRules: [
+      { field: "areas", whenCountAtLeast: 3, weight: 1 },
+      { field: "areas", values: ["Roof"], weight: 2 },
+      { field: "areas", values: ["Holding tanks"], weight: 2 },
+      { field: "rvSize", values: ["Class A", "Fifth Wheel"], weight: 2 },
+      { field: "rvSize", values: ["Class C", "Travel Trailer"], weight: 1 },
+      { field: "condition", values: ["Moderate"], weight: 1 },
+      { field: "condition", values: ["Very dirty"], weight: 2 },
+      { field: "supplies", values: ["Helper brings supplies"], weight: 1 },
+    ],
+    pricingModifiers: [
+      { field: "rvSize", values: ["Class C", "Travel Trailer"], addLow: 20, addHigh: 50, reason: "mid-size RV" },
+      { field: "rvSize", values: ["Class A", "Fifth Wheel"], addLow: 40, addHigh: 110, reason: "large RV" },
+      { field: "areas", values: ["Roof"], addLow: 20, addHigh: 50, reason: "roof access" },
+      { field: "areas", values: ["Holding tanks"], addLow: 25, addHigh: 60, reason: "tanks" },
+      { field: "condition", values: ["Very dirty"], addLow: 20, addHigh: 50, reason: "very dirty" },
+      { field: "supplies", values: ["Helper brings supplies"], addLow: 15, addHigh: 35, reason: "helper supplies" },
+    ],
+    helpersRules: [
+      { field: "rvSize", values: ["Class A", "Fifth Wheel"], helpers: 2 },
+      { field: "areas", values: ["Roof"], helpers: 2 },
+    ],
+  },
 ];
 
 // =========================
@@ -756,9 +1000,139 @@ const SKILLED_LABOR: JobTypeConfig[] = [
     basePriceHigh: 180,
   }),
   skilled("Welding", ["Small repair", "Gate/fence", "Trailer", "Equipment", "Custom"]),
-  skilled("Auto Repair", ["Brakes", "Battery", "No start", "Oil/service", "Diagnostics", "Suspension"], {
-    warning: "No unsafe roadside work. Helper and poster must agree on a safe location before accepting.",
-  }),
+  {
+    category: "Skilled Labor",
+    jobType: "Auto Repair",
+    shortLabel: "Auto Repair",
+    warning: "No unsafe roadside work. Helper and poster must agree on a safe location before accepting. Some repairs may require licensed/verified helpers.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "vehicleType", label: "Vehicle type", options: ["Car", "Truck", "SUV", "Van"], required: true, hasOther: true },
+      { name: "helpNeeded", label: "Help needed", options: ["Brakes", "Battery", "No start", "Oil/service", "Diagnostics", "Suspension", "AC/Heating", "Tires", "Roadside assistance"], multi: true, required: true, hasOther: true },
+      { name: "workLocation", label: "Work location", options: ["Driveway", "Garage", "Parking lot", "Roadside / Highway shoulder"], required: true },
+      { name: "partsSituation", label: "Parts situation", options: ["Helper brings parts", "Poster supplies parts", "Diagnose first"], required: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 45,
+    basePriceHigh: 200,
+    effortRules: [
+      { field: "helpNeeded", whenCountAtLeast: 2, weight: 1 },
+      { field: "helpNeeded", whenCountAtLeast: 3, weight: 1 },
+      { field: "helpNeeded", values: ["Brakes", "Suspension", "AC/Heating"], weight: 2 },
+      { field: "vehicleType", values: ["Truck", "Van"], weight: 1 },
+      { field: "workLocation", values: ["Roadside / Highway shoulder"], weight: 2 },
+      { field: "partsSituation", values: ["Helper brings parts"], weight: 1 },
+      { field: "urgency", values: ["High"], weight: 2 },
+    ],
+    pricingModifiers: [
+      { field: "helpNeeded", values: ["Brakes"], addLow: 30, addHigh: 80, reason: "brake work" },
+      { field: "helpNeeded", values: ["Suspension"], addLow: 40, addHigh: 120, reason: "suspension" },
+      { field: "helpNeeded", values: ["AC/Heating"], addLow: 30, addHigh: 100, reason: "AC / heating" },
+      { field: "helpNeeded", values: ["No start"], addLow: 25, addHigh: 75, reason: "no-start diagnosis" },
+      { field: "helpNeeded", values: ["Diagnostics"], addLow: 15, addHigh: 50, reason: "diagnostics" },
+      { field: "partsSituation", values: ["Helper brings parts"], addLow: 25, addHigh: 80, reason: "helper supplies parts" },
+      { field: "partsSituation", values: ["Diagnose first"], addLow: -15, addHigh: -30, reason: "diagnose-only scope" },
+      { field: "workLocation", values: ["Roadside / Highway shoulder"], addLow: 20, addHigh: 60, reason: "roadside risk" },
+      { field: "urgency", values: ["High"], addLow: 20, addHigh: 60, reason: "high urgency" },
+    ],
+    helpersRules: [
+      { field: "workLocation", values: ["Roadside / Highway shoulder"], helpers: 2 },
+    ],
+    helpersFn: (jd) => {
+      // High-risk: high urgency on a roadside/highway shoulder → at least 2 helpers
+      if (jd.urgency === "High" && jd.workLocation === "Roadside / Highway shoulder") return 2;
+      return 1;
+    },
+  },
+  {
+    category: "Skilled Labor",
+    jobType: "Marine / Boat Repair",
+    shortLabel: "Marine / Boat Repair",
+    warning: "Marine / boat repair may require specialized credentials. Confirm safe access and conditions before accepting.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "issueType", label: "Issue type", options: ["Engine", "Hull", "Electrical", "Plumbing", "Trailer", "Other"], multi: true, required: true, hasOther: true },
+      { name: "boatSize", label: "Boat size", options: ["Small / personal watercraft", "Medium", "Large yacht"], required: true },
+      { name: "workLocation", label: "Work location", options: ["Marina", "Storage yard", "Driveway", "On water (only if safe)"], required: true },
+      { name: "partsSituation", label: "Parts situation", options: ["Helper brings parts", "Poster supplies parts", "Diagnose first"], required: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 60,
+    basePriceHigh: 250,
+    effortRules: [
+      { field: "issueType", whenCountAtLeast: 2, weight: 1 },
+      { field: "issueType", values: ["Engine", "Hull"], weight: 2 },
+      { field: "boatSize", values: ["Medium"], weight: 1 },
+      { field: "boatSize", values: ["Large yacht"], weight: 3 },
+      { field: "workLocation", values: ["On water (only if safe)"], weight: 2 },
+      { field: "urgency", values: ["High"], weight: 2 },
+    ],
+    pricingModifiers: [
+      { field: "issueType", values: ["Engine"], addLow: 50, addHigh: 150, reason: "engine work" },
+      { field: "issueType", values: ["Hull"], addLow: 40, addHigh: 120, reason: "hull repair" },
+      { field: "issueType", values: ["Electrical"], addLow: 30, addHigh: 90, reason: "electrical" },
+      { field: "issueType", values: ["Trailer"], addLow: 20, addHigh: 60, reason: "trailer" },
+      { field: "boatSize", values: ["Medium"], addLow: 25, addHigh: 80, reason: "medium boat" },
+      { field: "boatSize", values: ["Large yacht"], addLow: 100, addHigh: 350, reason: "large yacht" },
+      { field: "workLocation", values: ["On water (only if safe)"], addLow: 25, addHigh: 80, reason: "on-water work" },
+      { field: "partsSituation", values: ["Helper brings parts"], addLow: 25, addHigh: 80, reason: "helper supplies parts" },
+      { field: "partsSituation", values: ["Diagnose first"], addLow: -20, addHigh: -40, reason: "diagnose-only scope" },
+      { field: "urgency", values: ["High"], addLow: 25, addHigh: 75, reason: "high urgency" },
+    ],
+    helpersRules: [
+      { field: "boatSize", values: ["Large yacht"], helpers: 2 },
+      { field: "issueType", values: ["Engine", "Hull"], helpers: 2 },
+    ],
+    helpersFn: (jd) => {
+      if (jd.urgency === "High" && jd.workLocation === "On water (only if safe)") return 2;
+      return 1;
+    },
+  },
+  {
+    category: "Skilled Labor",
+    jobType: "Towing / Hauling",
+    shortLabel: "Towing",
+    warning: "Towing requires proper equipment, capacity, and credentials. No unsafe roadside or highway work without agreement.",
+    disclaimer: AUTO_DISCLAIMER,
+    sections: [
+      { name: "towType", label: "Tow / haul type", options: ["Standard car tow", "Non-running vehicle", "Blocked vehicle", "Locked wheels", "Trailer hauling", "Equipment hauling"], multi: true, required: true, hasOther: true },
+      { name: "vehicleType", label: "Vehicle / load type", options: ["Car", "Truck", "SUV", "Van", "Motorcycle", "Boat / trailer", "RV"], required: true, hasOther: true },
+      { name: "distance", label: "Distance", options: ["Local (under 10 mi)", "Across town", "Long distance"], required: true },
+      { name: "equipment", label: "Equipment", options: ["Helper brings tow truck", "Poster has trailer", "Need flatbed"], required: true },
+      { name: "urgency", label: "Urgency", options: ["Low", "Medium", "High"], required: true },
+    ],
+    basePriceLow: 65,
+    basePriceHigh: 250,
+    effortRules: [
+      { field: "towType", whenCountAtLeast: 2, weight: 1 },
+      { field: "towType", values: ["Non-running vehicle", "Blocked vehicle", "Locked wheels"], weight: 2 },
+      { field: "towType", values: ["Equipment hauling", "Trailer hauling"], weight: 2 },
+      { field: "distance", values: ["Across town"], weight: 1 },
+      { field: "distance", values: ["Long distance"], weight: 3 },
+      { field: "equipment", values: ["Need flatbed"], weight: 2 },
+      { field: "urgency", values: ["High"], weight: 2 },
+    ],
+    pricingModifiers: [
+      { field: "towType", values: ["Non-running vehicle"], addLow: 25, addHigh: 75, reason: "non-running" },
+      { field: "towType", values: ["Blocked vehicle"], addLow: 30, addHigh: 90, reason: "blocked vehicle" },
+      { field: "towType", values: ["Locked wheels"], addLow: 35, addHigh: 100, reason: "locked wheels" },
+      { field: "towType", values: ["Trailer hauling"], addLow: 30, addHigh: 90, reason: "trailer hauling" },
+      { field: "towType", values: ["Equipment hauling"], addLow: 50, addHigh: 150, reason: "equipment hauling" },
+      { field: "distance", values: ["Across town"], addLow: 20, addHigh: 60, reason: "across town" },
+      { field: "distance", values: ["Long distance"], addLow: 75, addHigh: 250, reason: "long distance" },
+      { field: "equipment", values: ["Need flatbed"], addLow: 40, addHigh: 120, reason: "flatbed" },
+      { field: "urgency", values: ["High"], addLow: 25, addHigh: 75, reason: "high urgency" },
+    ],
+    helpersRules: [
+      { field: "towType", values: ["Blocked vehicle", "Locked wheels", "Equipment hauling", "Trailer hauling"], helpers: 2 },
+    ],
+    helpersFn: (jd) => {
+      // High-risk reinforcement: high urgency on equipment / trailer hauling stays at 2 helpers
+      const tow = Array.isArray(jd.towType) ? jd.towType : (jd.towType ? [jd.towType] : []);
+      if (jd.urgency === "High" && (tow.includes("Equipment hauling") || tow.includes("Trailer hauling"))) return 2;
+      return 1;
+    },
+  },
   skilled("Roofing", ["Leak check", "Shingle repair", "Gutter issue", "Inspection only"], {
     warning: "Roof work may be hazardous. Credentials, ladders, and safety gear required.",
   }),
@@ -868,6 +1242,43 @@ const VI: JobTypeConfig[] = [
     ],
     basePriceLow: 15,
     basePriceHigh: 30,
+  },
+  {
+    category: "Verify & Inspect",
+    jobType: "Boat Check",
+    disclaimer: `Visual verification only — not a marine survey, mechanical inspection, or guarantee. ${AUTO_DISCLAIMER}`,
+    sections: [
+      { name: "boatType", label: "Boat type", options: ["Personal watercraft", "Outboard", "Inboard", "Sailboat"], required: true, hasOther: true },
+      { name: "proofNeeded", label: "Proof needed", options: ["Exterior photos", "Interior photos", "Hull photos", "Engine compartment photos", "Trailer photos", "VIN / HIN photo", "Walkaround video"], multi: true, required: true },
+      { name: "checkFocus", label: "Check focus", options: ["Condition", "Damage", "Listing match", "Trailer condition", "Location confirmation"], multi: true, required: true, hasOther: true },
+    ],
+    basePriceLow: 35,
+    basePriceHigh: 80,
+    pricingModifiers: [
+      { field: "proofNeeded", values: ["Engine compartment photos"], addLow: 5, addHigh: 15, reason: "engine bay access" },
+      { field: "proofNeeded", values: ["Walkaround video"], addLow: 10, addHigh: 20, reason: "walkaround video" },
+      { field: "proofNeeded", whenCountAtLeast: 4, addLow: 10, addHigh: 25, reason: "many proofs" },
+      { field: "boatType", values: ["Inboard", "Sailboat"], addLow: 10, addHigh: 25, reason: "larger boat" },
+    ],
+  },
+  {
+    category: "Verify & Inspect",
+    jobType: "RV Check",
+    disclaimer: `Visual verification only — not a mechanical inspection or RV guarantee. ${AUTO_DISCLAIMER}`,
+    sections: [
+      { name: "rvType", label: "RV type / class", options: ["Class A", "Class B / Camper Van", "Class C", "Travel Trailer", "Fifth Wheel"], required: true, hasOther: true },
+      { name: "proofNeeded", label: "Proof needed", options: ["Exterior photos", "Interior photos", "Roof photos", "Slide-out photos", "Tire / undercarriage photos", "VIN photo", "Walkaround video"], multi: true, required: true },
+      { name: "checkFocus", label: "Check focus", options: ["Condition", "Damage", "Listing match", "Roof condition", "Slide-out function (visual)", "Location confirmation"], multi: true, required: true, hasOther: true },
+    ],
+    basePriceLow: 40,
+    basePriceHigh: 90,
+    pricingModifiers: [
+      { field: "proofNeeded", values: ["Roof photos"], addLow: 10, addHigh: 25, reason: "roof access" },
+      { field: "proofNeeded", values: ["Slide-out photos"], addLow: 5, addHigh: 15, reason: "slide-out documentation" },
+      { field: "proofNeeded", values: ["Walkaround video"], addLow: 10, addHigh: 20, reason: "walkaround video" },
+      { field: "proofNeeded", whenCountAtLeast: 4, addLow: 10, addHigh: 25, reason: "many proofs" },
+      { field: "rvType", values: ["Class A", "Fifth Wheel"], addLow: 10, addHigh: 25, reason: "larger RV" },
+    ],
   },
 ];
 

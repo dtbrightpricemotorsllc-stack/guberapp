@@ -405,11 +405,20 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 }
 
 const PREDEFINED_SERVICES: Record<string, string[]> = {
-  "On-Demand Help": ["Pet Care", "Errand Running", "Delivery", "Personal Assistant", "Tutoring", "Tech Support", "Event Help", "House Sitting"],
-  "General Labor": ["Moving", "Lawn Care", "Cleaning", "Hauling", "Assembly", "Demolition", "Pressure Washing", "Junk Removal"],
-  "Skilled Labor": ["Plumbing", "Electrical", "HVAC", "Carpentry", "Drywall", "Painting", "Welding", "Auto Repair", "Roofing", "Flooring"],
+  "On-Demand Help": ["Pet Care", "Errand Running", "Delivery", "Personal Assistant", "Tutoring", "Tech Support", "Event Help", "House Sitting", "Jump Start", "Lockout Service", "Vehicle Transport", "Roadside Assistance"],
+  "General Labor": ["Moving", "Lawn Care", "Cleaning", "Hauling", "Assembly", "Demolition", "Pressure Washing", "Junk Removal", "Vehicle Detailing", "Boat Cleaning", "RV Cleaning"],
+  "Skilled Labor": ["Plumbing", "Electrical", "HVAC", "Carpentry", "Drywall", "Painting", "Welding", "Auto Repair", "Roofing", "Flooring", "Marine / Boat Repair", "Towing / Hauling"],
   "Barter Labor": ["Trade Services", "Skill Exchange", "Item Exchange"],
   "Marketplace": ["Buy/Sell", "Rent", "Free Items"],
+};
+
+// Service types added by Task #319 (vehicle/boat/RV/automotive). These are
+// merged on top of any DB-backed service types returned for Skilled / General /
+// On-Demand Help so existing seeded environments still surface the new items.
+export const TASK_319_AUTOMOTIVE_SERVICES: Record<string, string[]> = {
+  "On-Demand Help": ["Jump Start", "Lockout Service", "Vehicle Transport", "Roadside Assistance"],
+  "General Labor": ["Vehicle Detailing", "Boat Cleaning", "RV Cleaning"],
+  "Skilled Labor": ["Marine / Boat Repair", "Towing / Hauling"],
 };
 
 const TIER_ORDER = ["community", "verified", "credentialed", "elite"];
@@ -4624,9 +4633,19 @@ export async function registerRoutes(
   // PREDEFINED SERVICES (non-V&I categories)
   app.get("/api/services/:category", async (req: Request, res: Response) => {
     const cat = decodeURIComponent(req.params.category);
+    const automotiveExtras = TASK_319_AUTOMOTIVE_SERVICES[cat] || [];
     if (cat === "Skilled Labor" || cat === "General Labor") {
       const sts = await storage.getServiceTypesByCategory(cat);
-      if (sts && sts.length > 0) return res.json(sts.map((st: any) => st.name));
+      if (sts && sts.length > 0) {
+        const dbNames = sts.map((st: any) => st.name);
+        // Merge automotive additions on top of DB-backed lists so existing
+        // seeded environments still surface the new vehicle/boat/RV types.
+        const merged = [...dbNames];
+        for (const name of automotiveExtras) {
+          if (!merged.includes(name)) merged.push(name);
+        }
+        return res.json(merged);
+      }
     }
     const services = PREDEFINED_SERVICES[cat] || [];
     res.json(services);

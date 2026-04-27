@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCron } from "./cron";
-import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns } from "./seed";
+import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedAutomotiveVIUseCases, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns } from "./seed";
 import { seedDemoAccounts } from "./seed-demo";
 import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
@@ -341,6 +341,7 @@ app.use((req, res, next) => {
   seedBoostColumns().catch(e => console.error("[seed] Boost columns error:", e));
   seedUploadQuotaColumns().catch(e => console.error("[seed] Upload quota columns error:", e));
   seedDroneServices().catch(e => console.error("[seed] Drone services seed error:", e));
+  seedAutomotiveVIUseCases().catch(e => console.error("[seed] Automotive V&I use cases seed error:", e));
   seedBarterChecklists().catch(e => console.error("[seed] Barter checklists seed error:", e));
   reseedOnlineItemsSituations().catch(e => console.error("[seed] Online Items reseed error:", e));
   seedPlatformSettings().catch(e => console.error("[seed] Platform settings seed error:", e));

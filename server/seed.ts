@@ -845,6 +845,17 @@ export async function seedServicePricingConfigs() {
       { category: "Skilled Labor", serviceTypeName: "Roofing", minPayout: 40, suggestedRangeLow: 50, suggestedRangeHigh: 250, estimatedMinutes: 180, complexityTier: "expert" },
       { category: "Skilled Labor", serviceTypeName: "Flooring", minPayout: 30, suggestedRangeLow: 40, suggestedRangeHigh: 150, estimatedMinutes: 120, complexityTier: "advanced" },
 
+      // Task #319: vehicle / boat / RV / automotive additions
+      { category: "On-Demand Help", serviceTypeName: "Jump Start", minPayout: 15, suggestedRangeLow: 20, suggestedRangeHigh: 60, estimatedMinutes: 30, complexityTier: "standard" },
+      { category: "On-Demand Help", serviceTypeName: "Lockout Service", minPayout: 20, suggestedRangeLow: 25, suggestedRangeHigh: 75, estimatedMinutes: 30, complexityTier: "standard" },
+      { category: "On-Demand Help", serviceTypeName: "Vehicle Transport", minPayout: 30, suggestedRangeLow: 45, suggestedRangeHigh: 200, estimatedMinutes: 60, complexityTier: "advanced" },
+      { category: "On-Demand Help", serviceTypeName: "Roadside Assistance", minPayout: 20, suggestedRangeLow: 25, suggestedRangeHigh: 90, estimatedMinutes: 30, complexityTier: "standard" },
+      { category: "General Labor", serviceTypeName: "Vehicle Detailing", minPayout: 25, suggestedRangeLow: 35, suggestedRangeHigh: 100, estimatedMinutes: 90, complexityTier: "standard" },
+      { category: "General Labor", serviceTypeName: "Boat Cleaning", minPayout: 30, suggestedRangeLow: 45, suggestedRangeHigh: 140, estimatedMinutes: 120, complexityTier: "standard" },
+      { category: "General Labor", serviceTypeName: "RV Cleaning", minPayout: 30, suggestedRangeLow: 50, suggestedRangeHigh: 150, estimatedMinutes: 120, complexityTier: "standard" },
+      { category: "Skilled Labor", serviceTypeName: "Marine / Boat Repair", minPayout: 50, suggestedRangeLow: 65, suggestedRangeHigh: 300, estimatedMinutes: 120, complexityTier: "expert" },
+      { category: "Skilled Labor", serviceTypeName: "Towing / Hauling", minPayout: 50, suggestedRangeLow: 65, suggestedRangeHigh: 300, estimatedMinutes: 60, complexityTier: "advanced" },
+
       { category: "Verify & Inspect", serviceTypeName: "Cleanliness + Damage Sweep", minPayout: 15, suggestedRangeLow: 20, suggestedRangeHigh: 35, estimatedMinutes: 20, complexityTier: "standard" },
       { category: "Verify & Inspect", serviceTypeName: "Supply/Restock Confirmation", minPayout: 10, suggestedRangeLow: 14, suggestedRangeHigh: 25, estimatedMinutes: 15, complexityTier: "basic" },
       { category: "Verify & Inspect", serviceTypeName: "Lockbox/Entry Check", minPayout: 8, suggestedRangeLow: 10, suggestedRangeHigh: 18, estimatedMinutes: 10, complexityTier: "basic" },
@@ -991,6 +1002,84 @@ export async function seedDroneServices() {
     console.log("[GUBER] Drone aerial inspection services seeded.");
   } catch (e) {
     console.error("[GUBER] seedDroneServices error:", e);
+  }
+}
+
+export async function seedAutomotiveVIUseCases() {
+  try {
+    const cat = await db.select().from(viCategories).where(eq(viCategories.name, "Wheels, Wings & Water"));
+    if (!cat.length) return;
+    const catId = cat[0].id;
+
+    const existing = await db.select().from(useCases).where(eq(useCases.viCategoryId, catId));
+    const existingNames = new Set(existing.map(u => u.name));
+    if (existingNames.has("Boat Check") && existingNames.has("RV Check")) {
+      console.log("[GUBER] Automotive V&I use cases already seeded.");
+      return;
+    }
+
+    const templates = await db.select().from(proofTemplates);
+    const ptVehicleStandard = templates.find(t => t.name === "Vehicle Standard");
+    const ptVehicleBasic = templates.find(t => t.name === "Vehicle Basic");
+    if (!ptVehicleStandard || !ptVehicleBasic) {
+      console.log("[GUBER] Vehicle proof templates not found, skipping automotive V&I use cases.");
+      return;
+    }
+
+    const sharedPacks = [
+      { name: "Basic Visual Pack (10 photos)", description: "10 photos covering all major angles and visible condition", proofTemplateId: ptVehicleBasic.id, minTier: "community", titleTemplate: "{useCase} - Basic Visual Pack", descriptionTemplate: "10-photo visual documentation covering all major angles and visible condition. Visual only — no diagnosis.", sortOrder: 1 },
+      { name: "Standard Pack (25 photos + walkaround video)", description: "25 photos plus walkaround video for comprehensive documentation", proofTemplateId: ptVehicleStandard.id, minTier: "verified", titleTemplate: "{useCase} - Standard Pack", descriptionTemplate: "Comprehensive 25-photo pack with walkaround video showing all angles, interior, and any visible issues.", sortOrder: 2 },
+    ];
+
+    if (!existingNames.has("Boat Check")) {
+      const ucBoatCheck = await storage.createUseCase({
+        viCategoryId: catId,
+        name: "Boat Check",
+        description: "Visual verification of a boat — exterior, interior, hull, engine bay, and trailer condition. Visual only.",
+        minTier: "verified",
+        sortOrder: 9,
+      });
+      for (const st of sharedPacks) {
+        await storage.createCatalogServiceType({ ...st, useCaseId: ucBoatCheck.id });
+      }
+      await storage.createCatalogServiceType({
+        useCaseId: ucBoatCheck.id,
+        name: "Hull / Engine Bay Focus",
+        description: "Focused visual documentation of hull and engine compartment. Visual only — no marine survey.",
+        proofTemplateId: ptVehicleStandard.id,
+        minTier: "verified",
+        titleTemplate: "Boat Check - Hull / Engine Bay Focus",
+        descriptionTemplate: "Focused visual documentation of hull condition and engine compartment. Visual only — not a marine survey or mechanical inspection.",
+        sortOrder: 3,
+      });
+    }
+
+    if (!existingNames.has("RV Check")) {
+      const ucRVCheck = await storage.createUseCase({
+        viCategoryId: catId,
+        name: "RV Check",
+        description: "Visual verification of an RV / trailer — exterior, interior, roof, slide-outs, and tires. Visual only.",
+        minTier: "verified",
+        sortOrder: 10,
+      });
+      for (const st of sharedPacks) {
+        await storage.createCatalogServiceType({ ...st, useCaseId: ucRVCheck.id });
+      }
+      await storage.createCatalogServiceType({
+        useCaseId: ucRVCheck.id,
+        name: "Roof / Slide-Out Focus",
+        description: "Focused visual documentation of roof and slide-out condition. Visual only — no mechanical inspection.",
+        proofTemplateId: ptVehicleStandard.id,
+        minTier: "verified",
+        titleTemplate: "RV Check - Roof / Slide-Out Focus",
+        descriptionTemplate: "Focused visual documentation of roof condition and slide-out function (visual). No mechanical inspection or RV guarantee.",
+        sortOrder: 3,
+      });
+    }
+
+    console.log("[GUBER] Automotive V&I use cases (Boat Check, RV Check) seeded.");
+  } catch (e) {
+    console.error("[GUBER] seedAutomotiveVIUseCases error:", e);
   }
 }
 
