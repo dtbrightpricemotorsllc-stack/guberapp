@@ -22,6 +22,32 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 
 export type PushAction = { action: string; title: string };
 
+/**
+ * Returns APNs-specific HTTP headers when the push endpoint is Apple's Web Push
+ * gateway (web.push.apple.com). These headers must be present so that iOS 16.4+
+ * treats the notification as a visible alert rather than a silent background push.
+ *
+ * References:
+ *   https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers
+ *   https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns#2947607
+ *   web-push options.headers: https://github.com/web-push-libs/web-push#sendnotificationpushsubscription-payload-options
+ *
+ * Research note on custom sounds:
+ * VAPID web-push to Apple's gateway does NOT support custom sounds via the
+ * aps.sound field. Apple's gateway translates the encrypted web-push payload to
+ * APNs internally without exposing aps.sound to callers. The system default
+ * notification sound is always used. Custom sounds require a native Capacitor
+ * push plugin (APNs direct) instead of the VAPID web-push path.
+ * See also: https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/
+ */
+function apnsHeaders(endpoint: string): Record<string, string> {
+  if (!endpoint.includes("web.push.apple.com")) return {};
+  return {
+    "apns-push-type": "alert",
+    "apns-priority": "10",
+  };
+}
+
 export async function sendPushToUser(
   userId: number,
   payload: {
@@ -63,7 +89,8 @@ export async function sendPushToUser(
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          pushPayload
+          pushPayload,
+          { headers: apnsHeaders(sub.endpoint) }
         );
       } catch (err: any) {
         if (err.statusCode === 410 || err.statusCode === 404) {
@@ -147,7 +174,8 @@ export async function sendPushBroadcast(
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          pushPayload
+          pushPayload,
+          { headers: apnsHeaders(sub.endpoint) }
         );
         sent++;
       } catch (err: any) {
