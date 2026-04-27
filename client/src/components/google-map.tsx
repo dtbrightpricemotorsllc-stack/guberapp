@@ -405,8 +405,8 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           if (!this.inner) return;
           const map = this.getMap() as google.maps.Map | undefined;
           const z = map?.getZoom?.() ?? 12;
-          // Base zoom 12 = 1.0x, scales up to ~2.4x at zoom 18, down to ~0.7x at zoom 8
-          const scale = Math.max(0.7, Math.min(2.4, 1 + (z - 12) * 0.22));
+          // Base zoom 12 = 1.0x, scales up to ~3.2x at zoom 18, down to ~0.65x at zoom 8
+          const scale = Math.max(0.65, Math.min(3.2, 1 + (z - 12) * 0.36));
           this.inner.style.transform = `translate(-50%,-50%) scale(${scale})`;
           this.inner.style.transformOrigin = "center center";
         }
@@ -422,9 +422,9 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           this.div.appendChild(inner);
 
           const hasLogo = !!drop.hostLogoUrl;
-          const circleSize = hasLogo ? 56 : 38;
-          const ringSize = hasLogo ? 64 : 44;
-          const wrapperHeight = hasLogo ? 88 : 72;
+          const circleSize = hasLogo ? 76 : 38;
+          const ringSize = hasLogo ? 88 : 44;
+          const wrapperHeight = hasLogo ? 112 : 72;
           const wrapper = document.createElement("div");
           wrapper.style.cssText = `position:relative;width:${ringSize + 12}px;height:${wrapperHeight}px;display:flex;flex-direction:column;align-items:center;`;
 

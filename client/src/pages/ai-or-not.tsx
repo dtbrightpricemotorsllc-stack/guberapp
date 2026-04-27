@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, CheckCircle } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
+import { GuberLayout } from "@/components/guber-layout";
 import shieldLogo from "@assets/__favicon_1773034423924.png";
 
 const MIN_SPLASH_MS = 3000;
@@ -167,24 +168,8 @@ export default function AiOrNot() {
   const externalUrl = signedUrl ?? "";
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#000", overflow: "hidden" }}>
-      {/* Back button */}
-      <button
-        onClick={() => navigate("/dashboard")}
-        style={{
-          position: "absolute", top: 56, left: 14, zIndex: 10002,
-          width: 36, height: 36, borderRadius: 12,
-          background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.15)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
-        }}
-        data-testid="button-back"
-      >
-        <ArrowLeft style={{ width: 16, height: 16, color: "#fff" }} />
-      </button>
-
+    <GuberLayout>
+      <div style={{ position: "relative", width: "100%", height: "calc(100vh - 56px - 68px - env(safe-area-inset-bottom, 0px))", background: "#000", overflow: "hidden" }} data-testid="container-ai-or-not">
       {/* Purchase activation toast — floats over the iframe once confirmed */}
       {purchaseConfirmed && (
         <div
@@ -277,6 +262,7 @@ export default function AiOrNot() {
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
       `}</style>
-    </div>
+      </div>
+    </GuberLayout>
   );
 }

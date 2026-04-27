@@ -70,8 +70,8 @@ export function GUBERAssistant() {
           className="fixed right-4 z-[55] h-11 px-4 rounded-full flex items-center gap-2 shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
           style={{
             bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 16px)",
-            background: "linear-gradient(135deg, hsl(152 100% 50%), hsl(152 100% 38%))",
-            boxShadow: "0 4px 20px hsl(152 100% 44% / 0.45), 0 2px 8px rgba(0,0,0,0.4)",
+            background: "linear-gradient(135deg, hsl(80 100% 55%), hsl(80 100% 40%))",
+            boxShadow: "0 4px 20px hsl(80 100% 50% / 0.55), 0 2px 8px rgba(0,0,0,0.4)",
           }}
           data-testid="button-guber-assistant"
           aria-label="Open GUBER Assistant"
