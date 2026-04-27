@@ -60,12 +60,12 @@ export default function DeleteAccount() {
               If you're unable to log in and want your account deleted, contact us directly and we'll process your request within 48 hours.
             </p>
             <a
-              href="mailto:support@guberapp.app?subject=Account%20Deletion%20Request"
+              href="mailto:support@guberapp.com?subject=Account%20Deletion%20Request"
               className="inline-flex items-center gap-2 text-sm font-display font-semibold text-primary hover:underline"
               data-testid="link-email-support"
             >
               <Mail className="w-4 h-4" />
-              support@guberapp.app
+              support@guberapp.com
             </a>
           </div>
         </section>

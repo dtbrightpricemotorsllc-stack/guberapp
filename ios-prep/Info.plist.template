@@ -19,9 +19,6 @@
   <key>NSLocationWhenInUseUsageDescription</key>
   <string>GUBER uses your location to show nearby jobs, Cash Drops, and workers in your area.</string>
 
-  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-  <string>GUBER uses your location in the background to notify you about nearby jobs and Cash Drops even when the app is minimized.</string>
-
   <!-- ─── Camera / Photo Library ────────────────────────────────────────── -->
   <!--
     Required for proof submission (job completion photos/video).

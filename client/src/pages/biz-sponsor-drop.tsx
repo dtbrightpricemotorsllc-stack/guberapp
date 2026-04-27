@@ -189,7 +189,7 @@ export default function BizSponsorDrop() {
   const cashAmount = parseFloat(cashContribution) || 0;
   const winnersCount = Math.max(1, parseInt(numberOfWinners) || 1);
   const estimatedDropValue = Math.round(cashAmount * 0.65);
-  const estimatedPrizePerWinner = Math.round(estimatedDropValue / winnersCount);
+  const estimatedRewardPerRecipient = Math.round(estimatedDropValue / winnersCount);
   const isBelowMinimum = cashContribution !== "" && cashAmount < 100;
 
   const submitMutation = useMutation({
@@ -422,8 +422,8 @@ export default function BizSponsorDrop() {
                     <p style={{ color: GOLD, fontSize: "12px", fontWeight: 600 }} data-testid="text-estimated-drop-value">
                       Estimated Drop Value: ${estimatedDropValue}
                     </p>
-                    <p style={{ color: "#A1A1AA", fontSize: "12px", fontWeight: 600, marginTop: 4 }} data-testid="text-estimated-prize-per-winner">
-                      Estimated Prize Per Winner: ${estimatedPrizePerWinner}
+                    <p style={{ color: "#A1A1AA", fontSize: "12px", fontWeight: 600, marginTop: 4 }} data-testid="text-estimated-reward-per-recipient">
+                      Estimated Reward Per Recipient: ${estimatedRewardPerRecipient}
                     </p>
                   </div>
                 )}

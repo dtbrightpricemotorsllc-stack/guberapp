@@ -92,6 +92,7 @@ function NavigationLaunchCover({ state, onClose }: { state: NonNullable<CoverSta
         onClick={onClose}
         style={{
           marginTop: 36,
+          marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
           background: "linear-gradient(135deg, hsl(80 100% 55%), hsl(80 100% 40%))",
           color: "#000",
           fontWeight: 800, fontSize: 13, fontFamily: "Oxanium, sans-serif",

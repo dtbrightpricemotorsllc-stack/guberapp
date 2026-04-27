@@ -172,7 +172,7 @@ export default function AiOrNot() {
       <button
         onClick={() => navigate("/dashboard")}
         style={{
-          position: "absolute", top: 56, left: 14, zIndex: 10002,
+          position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 14px)", left: 14, zIndex: 10002,
           width: 36, height: 36, borderRadius: 12,
           background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",

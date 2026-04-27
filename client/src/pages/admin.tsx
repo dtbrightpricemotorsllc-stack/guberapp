@@ -2939,7 +2939,7 @@ function PlatformSettingsTab() {
   const categoryDescriptions: Record<string, string> = {
     marketplace: "Fee rates, cashout modes, review timer, and auto-confirm behavior",
     trust: "Trust score thresholds and badge unlock rules",
-    cash_drop: "Cash Drop prize distribution and payout settings",
+    cash_drop: "Cash Drop reward distribution and payout settings",
   };
 
   const categories = Array.from(new Set((settings || []).map((s) => s.category)));
