@@ -137,6 +137,12 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
   const [moneyFlashVisible, setMoneyFlashVisible] = useState(false);
   const moneyFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (moneyFlashTimerRef.current) clearTimeout(moneyFlashTimerRef.current);
+    };
+  }, []);
+
   function triggerMoneyFlash() {
     if (moneyFlashTimerRef.current) clearTimeout(moneyFlashTimerRef.current);
     setMoneyFlashVisible(true);
@@ -164,10 +170,10 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
 
   // Typed WAV + vibration dispatch for new notifications
   useEffect(() => {
-    if (!notifications || notifications.length === 0) return;
+    if (notifications === undefined) return;
 
     if (!seededRef.current) {
-      // First fetch — seed all existing IDs so they don't trigger sounds
+      // First fetch (even if empty) — seed all existing IDs so they don't trigger sounds
       notifications.forEach((n) => soundedIdsRef.current.add(n.id));
       seededRef.current = true;
       return;
