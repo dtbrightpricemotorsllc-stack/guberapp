@@ -104,7 +104,9 @@ async function getSetting(key: string): Promise<string | null> {
 async function getActiveFeeConfig(): Promise<PlatformFeeConfig> {
   return loadFeeConfig(getSetting);
 }
-const TRUST_BOX_PRICE_ID = "price_1T1ToIRAzmUydsE3myv4vG3Z";
+const TRUST_BOX_PRICE_ID = "price_1T1ToIRAzmUydsE3myv4vG3Z"; // old Stripe account — legacy member verification only
+const TRUST_BOX_PAYROLL_PRICE_ID = process.env.STRIPE_PAYROLL_TRUST_BOX_PRICE_ID || "";
+const TRUST_BOX_PAYROLL_PRODUCT_ID = "prod_UPe4IX8VqvQklQ";
 
 const REFERRAL_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateReferralCode(): string {
@@ -330,9 +332,11 @@ async function notifyCashDropClaimed(dropId: number, dropTitle: string, winnerUs
 
 async function checkStripeForOGStatus(email: string): Promise<{ isOG: boolean; hasTrustBox: boolean }> {
   try {
-    const customers = await stripeMain.customers.list({ email: email.toLowerCase(), limit: 10 });
     let isOG = false;
     let hasTrustBox = false;
+
+    // Check old account (legacy members)
+    const customers = await stripeMain.customers.list({ email: email.toLowerCase(), limit: 10 });
     for (const customer of customers.data) {
       if (!isOG) {
         const sessions = await stripeMain.checkout.sessions.list({ customer: customer.id, limit: 100 });
@@ -348,6 +352,27 @@ async function checkStripeForOGStatus(email: string): Promise<{ isOG: boolean; h
       }
       if (isOG && hasTrustBox) break;
     }
+
+    // Also check payroll account (new members, in-app purchases)
+    if (!isOG || !hasTrustBox) {
+      const payrollCustomers = await stripe.customers.list({ email: email.toLowerCase(), limit: 10 });
+      for (const customer of payrollCustomers.data) {
+        if (!isOG) {
+          const sessions = await stripe.checkout.sessions.list({ customer: customer.id, limit: 100 });
+          for (const s of sessions.data) {
+            if (s.payment_status === "paid" && s.metadata?.type === "day1og") { isOG = true; break; }
+          }
+        }
+        if (!hasTrustBox) {
+          const subs = await stripe.subscriptions.list({ customer: customer.id, status: "active", limit: 20 });
+          for (const sub of subs.data) {
+            if (sub.items.data.some(i => (i.price.product as string) === TRUST_BOX_PAYROLL_PRODUCT_ID)) { hasTrustBox = true; break; }
+          }
+        }
+        if (isOG && hasTrustBox) break;
+      }
+    }
+
     return { isOG, hasTrustBox };
   } catch (err) {
     console.error("[GUBER] checkStripeForOGStatus error:", err);
@@ -3218,6 +3243,105 @@ export async function registerRoutes(
             notifyNearbyAvailableWorkers(job).catch(() => {});
             console.log(`[GUBER][webhook/connect] job_post: job ${jobId} updated → posted_public`);
           }
+        } else if (metadata?.type === "day1og") {
+          let ogUser: Awaited<ReturnType<typeof storage.getUser>> | undefined;
+          if (metadata?.userId) {
+            ogUser = await storage.getUser(parseInt(metadata.userId)) ?? undefined;
+          }
+          if (!ogUser) {
+            const emailToCheck = metadata?.userEmail || (session as any).customer_email || null;
+            if (emailToCheck) {
+              const allUsers = await storage.getAllUsers();
+              ogUser = allUsers.find((u) => u.email?.toLowerCase() === emailToCheck.toLowerCase()) ?? undefined;
+            }
+          }
+          if (!ogUser) {
+            const fallbackEmail = metadata?.userEmail || (session as any).customer_email;
+            if (fallbackEmail) {
+              await db.execute(sql`INSERT INTO og_preapproved_emails (email) VALUES (${fallbackEmail.toLowerCase()}) ON CONFLICT DO NOTHING`);
+              console.log(`[GUBER][webhook/connect] day1og: OG pre-approved email saved for future signup: ${fallbackEmail}`);
+            }
+          }
+          if (ogUser && !ogUser.day1OG) {
+            await storage.updateUser(ogUser.id, {
+              day1OG: true,
+              aiOrNotCredits: (ogUser.aiOrNotCredits || 0) + 5,
+              aiOrNotUnlimitedText: true,
+              trustScore: adjustTrustScore(ogUser.trustScore ?? 50, TRUST_ADJUSTMENTS.OG_STARTING_BONUS),
+            });
+            await storage.createAuditLog({
+              userId: ogUser.id,
+              action: "day1og_activated",
+              details: `Day-1 OG activated via Stripe payroll account. Email: ${ogUser.email}. Session: ${session.id}`,
+            });
+            await storage.createNotification({
+              userId: ogUser.id,
+              title: "Day-1 OG Activated!",
+              body: "You are now a Day-1 OG! Perks: free urgent toggle, 15% service fee, 5 AI or Not credits, unlimited text verification.",
+              type: "system",
+            });
+            console.log(`[GUBER][webhook/connect] day1og: user ${ogUser.id} (${ogUser.email}) updated → day1OG=true`);
+            if (ogUser.email) {
+              try {
+                const { Resend } = await import("resend");
+                const resend = new Resend(process.env.RESEND_API_KEY);
+                const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+                await resend.emails.send({
+                  from: `GUBER <noreply@${fromDomain}>`,
+                  to: ogUser.email,
+                  subject: "You're officially a GUBER Day-1 OG 🔥",
+                  html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#000;color:#fff;border-radius:16px;">
+  <h1 style="font-size:22px;font-weight:900;letter-spacing:-0.5px;margin-bottom:8px;">Welcome to the OG circle, ${ogUser.fullName?.split(" ")[0] || "friend"}.</h1>
+  <p style="color:#aaa;font-size:14px;margin-bottom:24px;">Your Day-1 OG status is now active on GUBER.</p>
+  <div style="background:#111;border-radius:12px;padding:20px;margin-bottom:24px;">
+    <p style="font-size:13px;color:#22c55e;font-weight:700;margin:0 0 12px;">YOUR PERKS</p>
+    <ul style="font-size:13px;color:#eee;padding-left:16px;margin:0;line-height:2;">
+      <li>15% platform fee on every job (vs 20% standard)</li>
+      <li>Free urgent toggle on every post, forever</li>
+      <li>5 AI or Not credits to start</li>
+      <li>Unlimited text verification</li>
+    </ul>
+  </div>
+  <a href="https://guberapp.app/dashboard" style="display:inline-block;background:#22c55e;color:#000;font-weight:800;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none;padding:14px 28px;border-radius:10px;">Open GUBER</a>
+  <p style="font-size:11px;color:#555;margin-top:24px;">This is a no-reply message. Questions? Visit guberapp.app.</p>
+</div>`,
+                });
+              } catch (emailErr: any) {
+                console.error("[GUBER][webhook/connect] OG activation email failed:", emailErr.message);
+              }
+            }
+          } else if (ogUser?.day1OG) {
+            console.log(`[GUBER][webhook/connect] day1og: user ${ogUser.id} already has day1OG — skipped`);
+          }
+
+        } else if (metadata?.type === "trust_box" && metadata?.userId) {
+          const userId = parseInt(metadata.userId);
+          const tbUser = await storage.getUser(userId);
+          if (tbUser) {
+            const subscriptionId = session.subscription as string | undefined;
+            const alreadyActive = tbUser.trustBoxPurchased;
+            await storage.updateUser(userId, {
+              trustBoxPurchased: true,
+              aiOrNotCredits: (tbUser.aiOrNotCredits || 0) + 5,
+              aiOrNotUnlimitedText: true,
+              ...(subscriptionId ? { trustBoxSubscriptionId: subscriptionId } : {}),
+            });
+            await storage.createAuditLog({
+              userId,
+              action: "trust_box_purchased",
+              details: `Trust Box subscription activated via payroll account checkout. Email: ${tbUser.email}. Sub: ${subscriptionId || "n/a"}. Session: ${session.id}`,
+            });
+            if (!alreadyActive) {
+              await storage.createNotification({
+                userId,
+                title: "Trust Box Active!",
+                body: "Your AI or Not premium subscription is live. Unlimited detections, text analysis, and more — $4.99/month.",
+                type: "system",
+              });
+            }
+            console.log(`[GUBER][webhook/connect] trust_box: user ${userId} updated → trustBoxPurchased=true, sub=${subscriptionId || "n/a"}`);
+          }
+
         } else {
           console.log(`[GUBER][webhook/connect] checkout.session.completed: unhandled type "${metadata?.type || "none"}" — ignored`);
         }
@@ -3272,6 +3396,94 @@ export async function registerRoutes(
             });
           }
           console.log(`[GUBER][webhook/connect] payment_failed: user ${userId}, intent ${intent.id}`);
+        }
+
+      } else if (event.type === "customer.subscription.created") {
+        const sub = event.data.object as Stripe.Subscription;
+        const subMeta = sub.metadata;
+        if (subMeta?.type === "trust_box" && subMeta?.userId) {
+          const userId = parseInt(subMeta.userId);
+          const isActive = sub.status === "active" || sub.status === "trialing";
+          if (isActive) {
+            const subUser = await storage.getUser(userId);
+            await storage.updateUser(userId, {
+              trustBoxPurchased: true,
+              trustBoxSubscriptionId: sub.id,
+              aiOrNotCredits: (subUser?.aiOrNotCredits || 0) + 5,
+              aiOrNotUnlimitedText: true,
+            });
+            await storage.createAuditLog({
+              userId,
+              action: "trust_box_purchased",
+              details: `Trust Box subscription created via payroll account. Sub: ${sub.id}. Status: ${sub.status}`,
+            });
+            console.log(`[GUBER][webhook/connect] subscription.created: user ${userId} → trustBoxPurchased=true, sub=${sub.id}`);
+          }
+        } else {
+          console.log(`[GUBER][webhook/connect] subscription.created: unhandled type "${subMeta?.type || "none"}" — ignored`);
+        }
+
+      } else if (event.type === "customer.subscription.updated") {
+        const sub = event.data.object as Stripe.Subscription;
+        const subMeta = sub.metadata;
+        if (subMeta?.type === "trust_box" && subMeta?.userId) {
+          const userId = parseInt(subMeta.userId);
+          const isActive = sub.status === "active" || sub.status === "trialing";
+          await storage.updateUser(userId, {
+            trustBoxPurchased: isActive,
+            trustBoxSubscriptionId: isActive ? sub.id : null,
+          });
+          console.log(`[GUBER][webhook/connect] subscription.updated: user ${userId} → trustBoxPurchased=${isActive}, status=${sub.status}`);
+        } else {
+          console.log(`[GUBER][webhook/connect] subscription.updated: unhandled type "${subMeta?.type || "none"}" — ignored`);
+        }
+
+      } else if (event.type === "customer.subscription.deleted") {
+        const sub = event.data.object as Stripe.Subscription;
+        const subMeta = sub.metadata;
+        if (subMeta?.type === "trust_box" && subMeta?.userId) {
+          const userId = parseInt(subMeta.userId);
+          await storage.updateUser(userId, { trustBoxPurchased: false, trustBoxSubscriptionId: null });
+          await storage.createAuditLog({
+            userId,
+            action: "trust_box_cancelled",
+            details: `Trust Box subscription cancelled/expired via payroll account. Sub: ${sub.id}`,
+          });
+          await storage.createNotification({
+            userId,
+            title: "Trust Box Ended",
+            body: "Your Trust Box subscription has ended. Resubscribe to restore AI or Not premium access.",
+            type: "system",
+          });
+          console.log(`[GUBER][webhook/connect] subscription.deleted: user ${userId} → trustBoxPurchased=false`);
+        } else {
+          console.log(`[GUBER][webhook/connect] subscription.deleted: unhandled type "${subMeta?.type || "none"}" — ignored`);
+        }
+
+      } else if (event.type === "invoice.paid") {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : (invoice.subscription as any)?.id;
+        if (subscriptionId) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const subMeta = sub.metadata;
+            if (subMeta?.type === "trust_box" && subMeta?.userId) {
+              const userId = parseInt(subMeta.userId);
+              await storage.updateUser(userId, { trustBoxPurchased: true, trustBoxSubscriptionId: sub.id });
+              await storage.createAuditLog({
+                userId,
+                action: "trust_box_renewed",
+                details: `Trust Box subscription renewed via payroll account. Invoice: ${invoice.id}. Sub: ${sub.id}`,
+              });
+              console.log(`[GUBER][webhook/connect] invoice.paid: user ${userId} Trust Box renewed — invoice ${invoice.id}`);
+            } else {
+              console.log(`[GUBER][webhook/connect] invoice.paid: sub ${subscriptionId} is not a trust_box — ignored`);
+            }
+          } catch (subErr: any) {
+            console.error(`[GUBER][webhook/connect] invoice.paid: failed to retrieve sub ${subscriptionId}:`, subErr.message);
+          }
+        } else {
+          console.log(`[GUBER][webhook/connect] invoice.paid: no subscription on invoice ${invoice.id} — ignored`);
         }
 
       } else if (event.type === "account.updated") {
@@ -7135,7 +7347,7 @@ export async function registerRoutes(
       const protocol = req.get("x-forwarded-proto") || "http";
       const baseUrl = `${protocol}://${host}`;
 
-      const stripeSession = await stripeMain.checkout.sessions.create({
+      const stripeSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         customer_email: user.email,
         line_items: [{
@@ -7162,7 +7374,7 @@ export async function registerRoutes(
     try {
       const { sessionId } = req.body;
       if (!sessionId) return res.status(400).json({ message: "Missing sessionId" });
-      const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
+      const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
 
       if (stripeSession.payment_status === "paid" && stripeSession.metadata?.type === "day1og") {
         const userId = parseInt(stripeSession.metadata.userId);
@@ -7238,12 +7450,14 @@ export async function registerRoutes(
       const protocol = req.get("x-forwarded-proto") || "http";
       const baseUrl = `${protocol}://${host}`;
 
-      const TRUST_BOX_PRICE_ID = "price_1T1ToIRAzmUydsE3myv4vG3Z";
+      if (!TRUST_BOX_PAYROLL_PRICE_ID) {
+        return res.status(503).json({ message: "Trust Box checkout not configured. Contact support@guberapp.com." });
+      }
 
-      const stripeSession = await stripeMain.checkout.sessions.create({
+      const stripeSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         customer_email: user.email,
-        line_items: [{ price: TRUST_BOX_PRICE_ID, quantity: 1 }],
+        line_items: [{ price: TRUST_BOX_PAYROLL_PRICE_ID, quantity: 1 }],
         mode: "subscription",
         success_url: `${baseUrl}/ai-or-not?trustbox=success`,
         cancel_url: `${baseUrl}/ai-or-not`,
@@ -7301,12 +7515,15 @@ export async function registerRoutes(
       }
 
       const baseUrl = returnUrl || "https://guberapp.app";
-      const TRUST_BOX_PRICE_ID_LOCAL = "price_1T1ToIRAzmUydsE3myv4vG3Z";
 
-      const stripeSession = await stripeMain.checkout.sessions.create({
+      if (!TRUST_BOX_PAYROLL_PRICE_ID) {
+        return res.status(503).json({ message: "Trust Box checkout not configured. Contact support@guberapp.com." });
+      }
+
+      const stripeSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         customer_email: user.email,
-        line_items: [{ price: TRUST_BOX_PRICE_ID_LOCAL, quantity: 1 }],
+        line_items: [{ price: TRUST_BOX_PAYROLL_PRICE_ID, quantity: 1 }],
         mode: "subscription",
         success_url: `${baseUrl}/ai-or-not?trustbox=success`,
         cancel_url: `${baseUrl}/ai-or-not`,
@@ -7328,7 +7545,16 @@ export async function registerRoutes(
       if (!user) return res.status(401).json({ message: "User not found" });
       if (!user.trustBoxSubscriptionId) return res.status(400).json({ message: "No active Trust Box subscription" });
 
-      await stripeMain.subscriptions.cancel(user.trustBoxSubscriptionId);
+      try {
+        await stripe.subscriptions.cancel(user.trustBoxSubscriptionId);
+      } catch (cancelErr: any) {
+        // If not found on payroll account, try the old account (legacy members)
+        if (cancelErr?.statusCode === 404 || cancelErr?.raw?.code === "resource_missing") {
+          await stripeMain.subscriptions.cancel(user.trustBoxSubscriptionId);
+        } else {
+          throw cancelErr;
+        }
+      }
       await storage.updateUser(user.id, { trustBoxPurchased: false, trustBoxSubscriptionId: null });
       await storage.createAuditLog({ userId: user.id, action: "trust_box_cancelled", details: `Trust Box subscription cancelled by user. Sub: ${user.trustBoxSubscriptionId}` });
       res.json({ message: "Trust Box subscription cancelled" });
@@ -7340,7 +7566,7 @@ export async function registerRoutes(
   app.post("/api/stripe/confirm-trust-box", requireAuth, async (req: Request, res: Response) => {
     try {
       const { sessionId } = req.body;
-      const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
+      const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
 
       const isTrustBox = stripeSession.metadata?.type === "trust_box";
       const isPaidOrActive = stripeSession.payment_status === "paid" || stripeSession.status === "complete";
