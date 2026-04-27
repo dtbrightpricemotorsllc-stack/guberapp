@@ -1,3 +1,24 @@
+const SOUND_PREF_KEY = "guber_notif_sound_enabled";
+const VIBRATION_PREF_KEY = "guber_notif_vibration_enabled";
+
+export function getNotifSoundEnabled(): boolean {
+  const val = localStorage.getItem(SOUND_PREF_KEY);
+  return val === null ? true : val === "true";
+}
+
+export function setNotifSoundEnabled(enabled: boolean): void {
+  localStorage.setItem(SOUND_PREF_KEY, String(enabled));
+}
+
+export function getNotifVibrationEnabled(): boolean {
+  const val = localStorage.getItem(VIBRATION_PREF_KEY);
+  return val === null ? true : val === "true";
+}
+
+export function setNotifVibrationEnabled(enabled: boolean): void {
+  localStorage.setItem(VIBRATION_PREF_KEY, String(enabled));
+}
+
 let audioCtx: AudioContext | null = null;
 
 function getCtx(): AudioContext {
@@ -33,6 +54,7 @@ function playTone(
 }
 
 export function playGuberPing() {
+  if (!getNotifSoundEnabled()) return;
   try {
     const ctx = getCtx();
     if (ctx.state === "suspended") ctx.resume();
@@ -54,6 +76,7 @@ export function playGuberPing() {
 }
 
 export function playGuberCashDrop() {
+  if (!getNotifSoundEnabled()) return;
   try {
     const ctx = getCtx();
     if (ctx.state === "suspended") ctx.resume();
@@ -85,6 +108,7 @@ export function unlockAudio() {
 export type SoundType = "money" | "closed" | "action" | "default" | "nearby";
 
 function vibrateFor(type: SoundType): void {
+  if (!getNotifVibrationEnabled()) return;
   if (!("vibrate" in navigator)) return;
   try {
     switch (type) {
@@ -100,6 +124,8 @@ function vibrateFor(type: SoundType): void {
 
 export function playGuberSound(type: SoundType): void {
   vibrateFor(type);
+
+  if (!getNotifSoundEnabled()) return;
 
   const audio = new Audio(`/sounds/guber_${type}.wav`);
   audio.play().catch(() => {

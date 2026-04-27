@@ -16,13 +16,17 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled, performBiometricAuth } from "@/lib/biometric";
+import {
+  getNotifSoundEnabled, setNotifSoundEnabled,
+  getNotifVibrationEnabled, setNotifVibrationEnabled,
+} from "@/lib/notification-sound";
 
 async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<string> {
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -61,6 +65,10 @@ export default function AccountSettings() {
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnabled, setBiometricEnabledState] = useState(false);
 
+  const [notifSoundEnabled, setNotifSoundEnabledState] = useState(true);
+  const [notifVibrationEnabled, setNotifVibrationEnabledState] = useState(true);
+  const [vibrationSupported, setVibrationSupported] = useState(false);
+
   const [preferredMapApp, setPreferredMapApp] = useState<string>("ask");
 
   useEffect(() => {
@@ -91,6 +99,12 @@ export default function AccountSettings() {
         setBiometricEnabledState(enabled);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    setNotifSoundEnabledState(getNotifSoundEnabled());
+    setNotifVibrationEnabledState(getNotifVibrationEnabled());
+    setVibrationSupported("vibrate" in navigator);
   }, []);
 
   const handleBiometricToggle = async (value: boolean) => {
@@ -359,6 +373,47 @@ export default function AccountSettings() {
             </div>
           </div>
         )}
+
+        <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3 mb-4" data-testid="card-notification-settings">
+          <div className="flex items-center gap-2 mb-1">
+            <Bell className="w-4 h-4 text-primary" />
+            <h3 className="font-display font-semibold text-sm">Notification Settings</h3>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+            <div>
+              <p className="font-display font-semibold text-sm">Notification sounds</p>
+              <p className="text-[11px] text-muted-foreground">Play audio for alerts and events</p>
+            </div>
+            <Switch
+              checked={notifSoundEnabled}
+              onCheckedChange={(v) => {
+                setNotifSoundEnabledState(v);
+                setNotifSoundEnabled(v);
+                toast({ title: v ? "Notification sounds on" : "Notification sounds off" });
+              }}
+              data-testid="switch-notif-sound"
+            />
+          </div>
+
+          {vibrationSupported && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+              <div>
+                <p className="font-display font-semibold text-sm">Vibration feedback</p>
+                <p className="text-[11px] text-muted-foreground">Vibrate on notifications and actions</p>
+              </div>
+              <Switch
+                checked={notifVibrationEnabled}
+                onCheckedChange={(v) => {
+                  setNotifVibrationEnabledState(v);
+                  setNotifVibrationEnabled(v);
+                  toast({ title: v ? "Vibration on" : "Vibration off" });
+                }}
+                data-testid="switch-notif-vibration"
+              />
+            </div>
+          )}
+        </div>
 
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
           <h3 className="font-display font-semibold text-sm mb-1 flex items-center gap-2">
