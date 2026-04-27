@@ -201,7 +201,15 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
       if (event.data?.type === "GUBER_PUSH") {
         const tag: string = event.data?.tag ?? "";
         const title: string = event.data?.title ?? "";
-        const soundType = classifyPush(tag, title);
+        const serverSound: string = event.data?.sound ?? "";
+        // Prefer the server-assigned sound filename; fall back to client-side heuristic
+        let soundType: SoundType;
+        if (serverSound && serverSound.startsWith("guber_")) {
+          const name = serverSound.replace("guber_", "").replace(".wav", "") as SoundType;
+          soundType = (["money", "action", "closed", "nearby", "default"] as SoundType[]).includes(name) ? name : "default";
+        } else {
+          soundType = classifyPush(tag, title);
+        }
         playGuberSound(soundType);
         if (soundType === "money") triggerMoneyFlash();
       }

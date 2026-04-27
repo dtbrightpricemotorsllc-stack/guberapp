@@ -54,6 +54,23 @@ import {
 import { claimReminder, clearReminder, scheduleSnooze, isUserInQuietHours } from "./reminders";
 
 /** Create an in-app notification AND fire a background push alert to the user's device(s). */
+function getSoundForNotificationType(type?: string): string {
+  switch (type) {
+    case "offer_funded":
+    case "payment":
+    case "cash_drop":
+      return "guber_money.wav";
+    case "offer_payment_pending":
+      return "guber_action.wav";
+    case "offer_payment_failed":
+      return "guber_closed.wav";
+    case "job":
+      return "guber_action.wav";
+    default:
+      return "guber_default.wav";
+  }
+}
+
 async function notify(
   userId: number,
   data: { title: string; body: string; type?: string; jobId?: number; tag?: string; priority?: "high" | "normal" },
@@ -73,6 +90,7 @@ async function notify(
     url: pushUrl || (data.jobId ? `/jobs/${data.jobId}` : "/notifications"),
     tag,
     priority: data.priority,
+    sound: getSoundForNotificationType(data.type),
   }).catch(() => {});
 }
 
@@ -280,7 +298,7 @@ async function notifyCashDropLive(drop: { id: number; title: string; description
     for (const u of ogRows.rows as { id: number }[]) {
       notifiedIds.add(u.id);
       await storage.createNotification({ userId: u.id, title: notifTitle, body: notifBody, type: "cash_drop", jobId: null, cashDropId: drop.id });
-      sendPushToUser(u.id, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-${drop.id}` }).catch(() => {});
+      sendPushToUser(u.id, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-${drop.id}`, sound: "guber_money.wav" }).catch(() => {});
     }
 
     if (drop.gpsLat != null && drop.gpsLng != null) {
@@ -300,7 +318,7 @@ async function notifyCashDropLive(drop: { id: number; title: string; description
         if (notifiedIds.has(u.id)) continue;
         notifiedIds.add(u.id);
         await storage.createNotification({ userId: u.id, title: notifTitle, body: notifBody, type: "cash_drop", jobId: null, cashDropId: drop.id });
-        sendPushToUser(u.id, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-${drop.id}` }).catch(() => {});
+        sendPushToUser(u.id, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-${drop.id}`, sound: "guber_money.wav" }).catch(() => {});
       }
     }
 
@@ -322,7 +340,7 @@ async function notifyCashDropClaimed(dropId: number, dropTitle: string, winnerUs
     const notifBody = `Someone snagged the "${dropTitle}" drop! Keep an eye out for the next one.`;
     for (const uid of notifyUserIds) {
       await storage.createNotification({ userId: uid, title: notifTitle, body: notifBody, type: "cash_drop", cashDropId: dropId, jobId: null });
-      sendPushToUser(uid, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-claimed-${dropId}` }).catch(() => {});
+      sendPushToUser(uid, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-claimed-${dropId}`, sound: "guber_closed.wav" }).catch(() => {});
     }
     console.log(`[GUBER] Notified ${notifyUserIds.length} participants that Cash Drop #${dropId} was claimed`);
   } catch (e: any) {
@@ -2393,6 +2411,7 @@ export async function registerRoutes(
           title: `New Verification: ${uploadLabel}`,
           body: `${uploaderName} submitted a ${uploadLabel.toLowerCase()}. Open admin panel to review.`,
           url: "/admin",
+          sound: "guber_action.wav",
         });
       }
 
@@ -4664,6 +4683,7 @@ export async function registerRoutes(
               url: `/jobs/${fresh.id}`,
               tag: `job-status-${fresh.id}`,
               priority: "high",
+              sound: "guber_action.wav",
               actions: [
                 { action: "on_the_way", title: "On the way" },
                 { action: "snooze", title: "Snooze 5m" },
@@ -4797,6 +4817,7 @@ export async function registerRoutes(
         title: `New Verification Request`,
         body: `${submitterName} submitted a ${typeLabel.toLowerCase()}. Open admin panel to review.`,
         url: "/admin",
+        sound: "guber_action.wav",
       });
     }
 

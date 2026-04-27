@@ -93,6 +93,7 @@ self.addEventListener("push", (event) => {
             type: "GUBER_PUSH",
             tag: rawTag,
             title: payload.title,
+            sound: payload.sound || "guber_default.wav",
           });
         });
       });

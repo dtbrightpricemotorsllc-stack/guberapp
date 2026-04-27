@@ -31,6 +31,7 @@ export async function sendPushToUser(
     icon?: string;
     tag?: string;
     priority?: "high" | "normal";
+    sound?: string;
     // Phase 5 — optional action buttons rendered by the service worker.
     // The SW routes taps by event.action via a deep-link query param.
     actions?: PushAction[];
@@ -53,6 +54,7 @@ export async function sendPushToUser(
     badge: "/favicon.png",
     tag: payload.tag,
     priority: payload.priority || "normal",
+    sound: payload.sound || "guber_default.wav",
     actions: payload.actions || undefined,
   });
 

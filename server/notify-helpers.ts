@@ -39,6 +39,7 @@ export async function notifyNearbyAvailableWorkers(
           body,
           url: `/jobs/${job.id}`,
           tag: `pay-increase-${job.id}`,
+          sound: "guber_nearby.wav",
         }).catch(() => {});
       }
     }
@@ -59,7 +60,7 @@ export async function notifyCashDropExpired(dropId: number, dropTitle: string) {
     const notifBody = `"${dropTitle}" passed its end time without being fully claimed.`;
     for (const uid of notifyUserIds) {
       await storage.createNotification({ userId: uid, title: notifTitle, body: notifBody, type: "cash_drop", cashDropId: dropId, jobId: null });
-      sendPushToUser(uid, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-expired-${dropId}` }).catch(() => {});
+      sendPushToUser(uid, { title: notifTitle, body: notifBody, url: `/cash-drops`, tag: `cashdrop-expired-${dropId}`, sound: "guber_closed.wav" }).catch(() => {});
     }
     console.log(`[GUBER] Notified ${notifyUserIds.length} participants that Cash Drop #${dropId} expired`);
   } catch (e: any) {
