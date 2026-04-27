@@ -11,67 +11,90 @@ This folder contains everything you need to initialize and configure the GUBER i
 3. CocoaPods: `sudo gem install cocoapods`
 4. Node.js 22+: `brew install node`
 
+> **Important:** These commands must be run on a Mac. The iOS project cannot be initialized on Linux or Windows — Xcode tools are macOS-only.
+
 ---
 
-## Step 1 — Initialize the iOS Project
+## Step 1 — Get the project onto your Mac
+
+Clone or pull the latest code from the repo, then install dependencies:
+
+```bash
+npm install
+npm run build
+```
+
+Confirm the build completes with no errors before continuing.
+
+---
+
+## Step 2 — Initialize the iOS Project
 
 Run these commands from the project root (same folder as `capacitor.config.ts`):
 
 ```bash
-npm install
 npx cap add ios
 npx cap sync ios
 ```
 
-This creates `ios/App/App/Info.plist` and the full Xcode project.
+This creates `ios/App/App/Info.plist` and the full Xcode workspace.
+
+> If you see `[fatal] The Capacitor CLI requires NodeJS >=22.0.0`, run `brew install node` first.
 
 ---
 
-## Step 2 — Add Required Privacy Descriptions to Info.plist
+## Step 3 — Add Required Privacy Descriptions to Info.plist
 
-Open `ios/App/App/Info.plist` and add the keys from `ios-prep/Info.plist.template`.
+Open `ios/App/App/Info.plist` in a text editor (or Xcode's property list editor) and add the keys from `ios-prep/Info.plist.template`.
 
-**These are mandatory for App Store submission:**
+**All 5 keys below are required for App Store submission:**
 
 | Key | Why it's needed |
 |-----|-----------------|
-| `NSLocationWhenInUseUsageDescription` | GPS for nearby jobs and Cash Drops |
-| `NSLocationAlwaysAndWhenInUseUsageDescription` | Background location alerts |
+| `NSLocationWhenInUseUsageDescription` | GPS for nearby jobs and Cash Drops while the app is open |
 | `NSCameraUsageDescription` | Job proof photo capture |
 | `NSPhotoLibraryUsageDescription` | Attach proof images |
 | `NSPhotoLibraryAddUsageDescription` | Save proof photos |
 | `NSMicrophoneUsageDescription` | Video proof recording |
 
-> **Without these keys, Apple will reject the app during review.**
+> **Do NOT add `NSLocationAlwaysAndWhenInUseUsageDescription`.**
+> GUBER uses location only while the app is open (when-in-use). Requesting background
+> location without a clear background use case is a common App Store rejection reason.
+
+After editing Info.plist, run sync once more to confirm no conflicts:
+
+```bash
+npx cap sync ios
+```
 
 ---
 
-## Step 3 — Google Sign-In Configuration
+## Step 4 — Google Sign-In Configuration
 
 The app uses the Capacitor Browser plugin for OAuth, which opens the Google sign-in
 page in Safari. No native Google SDK (GoogleSignIn.framework) is needed.
 
 **What's already configured:**
 - `ios.scheme = 'guber'` in `capacitor.config.ts` registers the `guber://` URL scheme
-- The Google OAuth callback now sets the session directly (web flow) — no token exchange
+- The Google OAuth callback sets the session directly (web flow) — no token exchange
 - For native iOS, the `guber://oauth-complete?t=TOKEN` deep link flow is unchanged
 
 **What to verify in Google Cloud Console:**
 1. Add `com.guber.app` as an iOS OAuth client (separate from the Web client)
-2. Add the following as authorized redirect URIs:
+2. Add the following as an authorized redirect URI:
    - `https://guberapp.app/api/auth/google/callback`
 3. Download `GoogleService-Info.plist` (only needed if you use Firebase; skip otherwise)
 
 ---
 
-## Step 4 — Business Mode & Feature Parity
+## Step 5 — Business Mode & Feature Parity
 
 Business mode, job gating, and all backend logic are identical on iOS — everything
 runs through the same `https://guberapp.app` server. No extra configuration needed.
 
 ---
 
-## Step 5 — Open in Xcode and Configure Signing
+## Step 6 — Open in Xcode and Configure Signing
 
 ```bash
 npx cap open ios
@@ -85,19 +108,19 @@ In Xcode:
 
 ---
 
-## Step 6 — Test on Device
+## Step 7 — Test on Device
 
 Connect an iPhone via USB and press Run (⌘R) in Xcode.
 
 Check that:
-- [ ] Location permission dialog appears on first launch
+- [ ] Location permission dialog appears on first launch (when-in-use only)
 - [ ] Google Sign-In opens in Safari and redirects back to the app
 - [ ] Camera permission dialog appears on first proof submission
 - [ ] All tabs and pages load from `https://guberapp.app`
 
 ---
 
-## Step 7 — Archive for App Store
+## Step 8 — Archive for App Store
 
 1. Product → Archive
 2. Distribute App → App Store Connect
@@ -116,12 +139,20 @@ Check that:
 | Age Rating | Fill out the questionnaire in App Store Connect |
 | Google iOS OAuth Client | Register `com.guber.app` in Google Cloud Console |
 | TestFlight beta | Recommended before public release — submit a build to TestFlight first |
-| App Review compliance | Ensure no contact-info scraping, comply with in-app purchase rules |
 
 ---
 
-## Notes on GPS (Already Fixed)
+## Notes on Location Permission (Important)
 
-The Android GPS issue (missing `ACCESS_FINE_LOCATION` in manifest) does not apply
-to iOS — iOS uses `Info.plist` privacy descriptions instead. As long as the keys in
-Step 2 are present, iOS will prompt the user for location permission automatically.
+GUBER uses `watchPosition` only while a job/map screen is open. This qualifies as
+**when-in-use** location access. Background location (`NSLocationAlwaysAndWhenInUseUsageDescription`)
+is NOT declared because GUBER does not track location when the app is in the background.
+Apple frequently rejects apps that request background location without a clear justification.
+
+---
+
+## Build Status
+
+The web build (`npm run build`) compiles clean with zero TypeScript errors as of the
+v1.2 compliance update. The build output lands in `dist/public/` which Capacitor reads
+via the `webDir: 'dist/public'` setting in `capacitor.config.ts`.

@@ -5,7 +5,17 @@ built on a machine with Android Studio or the Android command-line tools.
 
 ---
 
-## What Changed in This Release (v1.2)
+## What Changed in This Release (v1.3 — App Store Compliance)
+
+| Fix | Details |
+|-----|---------|
+| Account deletion email | `delete-account.tsx` contact address corrected to `support@guberapp.com` (was `.app`) |
+| Cash drop language | "Prize Per Winner" reframed as "Reward Per Recipient" in sponsor and admin views |
+| iOS safe-area | Navigation cover and AI-or-Not back button now clear the Dynamic Island and home indicator |
+
+---
+
+## What Changed in v1.2
 
 | Fix | Details |
 |-----|---------|
