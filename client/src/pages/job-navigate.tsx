@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { ArrowLeft, Navigation, MapPin, MapPinned, Loader2, Car, AlertTriangle, Map as MapIcon } from "lucide-react";
 import { GuberLayout } from "@/components/guber-layout";
+import { useNavigationCover } from "@/components/navigation-launch-cover";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -32,25 +33,23 @@ function buildDestination(j: any): string | null {
   return null;
 }
 
-function openGoogleMaps(j: any, origin: { lat: number; lng: number } | null) {
+function googleMapsUrl(j: any, origin: { lat: number; lng: number } | null): string | null {
   const dest = buildDestination(j);
-  if (!dest) return;
+  if (!dest) return null;
   const o = origin ? `&origin=${origin.lat},${origin.lng}` : "";
-  window.open(`https://www.google.com/maps/dir/?api=1${o}&destination=${dest}`, "_blank");
+  return `https://www.google.com/maps/dir/?api=1${o}&destination=${dest}`;
 }
 
-function openWaze(j: any) {
-  if (j.location?.trim()) {
-    window.open(`waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`, "_blank");
-  } else if (j.lat && j.lng) {
-    window.open(`waze://?ll=${j.lat},${j.lng}&navigate=yes`, "_blank");
-  }
+function wazeUrl(j: any): string | null {
+  if (j.location?.trim()) return `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`;
+  if (j.lat && j.lng) return `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
+  return null;
 }
 
-function openAppleMaps(j: any) {
+function appleMapsUrl(j: any): string | null {
   const dest = buildDestination(j);
-  if (!dest) return;
-  window.open(`https://maps.apple.com/?daddr=${dest}`, "_blank");
+  if (!dest) return null;
+  return `https://maps.apple.com/?daddr=${dest}`;
 }
 
 export default function JobNavigate() {
@@ -79,6 +78,8 @@ export default function JobNavigate() {
     queryKey: ["/api/jobs", jobId],
     enabled: !isNaN(jobId),
   });
+
+  const { cover: navCover, launch: launchNav } = useNavigationCover();
 
   const isHelper = !!(user && job && (job as any).assignedHelperId === user.id);
   const helperStage = (job as any)?.helperStage as string | null;
@@ -421,7 +422,10 @@ export default function JobNavigate() {
           </p>
           <div className="grid grid-cols-3 gap-2">
             <button
-              onClick={() => openGoogleMaps(job, userPos)}
+              onClick={() => {
+                const url = googleMapsUrl(job, userPos);
+                if (url) launchNav({ provider: "google", url, destLabel: job.title });
+              }}
               className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
               style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
               data-testid="link-google-maps"
@@ -430,7 +434,10 @@ export default function JobNavigate() {
               <span className="text-[10px] font-display font-bold text-blue-400">Google Maps</span>
             </button>
             <button
-              onClick={() => openWaze(job)}
+              onClick={() => {
+                const url = wazeUrl(job);
+                if (url) launchNav({ provider: "waze", url, destLabel: job.title });
+              }}
               className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
               style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
               data-testid="link-waze"
@@ -439,7 +446,10 @@ export default function JobNavigate() {
               <span className="text-[10px] font-display font-bold text-emerald-400">Waze</span>
             </button>
             <button
-              onClick={() => openAppleMaps(job)}
+              onClick={() => {
+                const url = appleMapsUrl(job);
+                if (url) launchNav({ provider: "apple", url, destLabel: job.title });
+              }}
               className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
               style={{ background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.22)" }}
               data-testid="link-apple-maps"
@@ -450,6 +460,7 @@ export default function JobNavigate() {
           </div>
         </div>
       </div>
+      {navCover}
     </GuberLayout>
   );
 }

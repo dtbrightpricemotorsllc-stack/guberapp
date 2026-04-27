@@ -3,6 +3,7 @@ import { gpsGetCurrentPosition } from "@/lib/gps";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { useRoute } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
+import { useNavigationCover } from "@/components/navigation-launch-cover";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,8 @@ export default function JobDetail() {
   const [showNavModal, setShowNavModal] = useState(false);
   const [navUrls, setNavUrls] = useState<{ google: string | null; waze: string | null }>({ google: null, waze: null });
 
+  const { cover: navCover, launch: launchNav } = useNavigationCover();
+
   const buildNavDestination = (j: any): string => {
     if (j.location && j.location.trim()) return encodeURIComponent(j.location.trim());
     if (j.lat && j.lng) return `${j.lat},${j.lng}`;
@@ -118,10 +121,10 @@ export default function JobDetail() {
     gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
       .then((pos) => {
         const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
-        window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`, "_blank");
+        launchNav({ provider: "google", url: `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`, destLabel: j.title });
       })
       .catch(() => {
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank");
+        launchNav({ provider: "google", url: `https://www.google.com/maps/dir/?api=1&destination=${dest}`, destLabel: j.title });
       });
   };
 
@@ -132,14 +135,13 @@ export default function JobDetail() {
     const wazeUrl = hasAddress
       ? `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`
       : `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
-    window.open(wazeUrl, "_blank");
-    setTimeout(() => openGoogleMapsForJob(j), 2000);
+    launchNav({ provider: "waze", url: wazeUrl, destLabel: j.title });
   };
 
   const openAppleMapsForJob = (j: any) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
-    window.open(`https://maps.apple.com/?daddr=${dest}`, "_blank");
+    launchNav({ provider: "apple", url: `https://maps.apple.com/?daddr=${dest}`, destLabel: j.title });
   };
 
   const [showEditModal, setShowEditModal] = useState(false);

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
+import { useNavigationCover } from "@/components/navigation-launch-cover";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -251,6 +252,8 @@ export default function CashDropDetail() {
   const previousStatusRef = useRef<string | null>(null);
   const [dropEndedAlert, setDropEndedAlert] = useState<{ type: "expired" | "claimed"; wasEnRoute: boolean } | null>(null);
   const [safetyModalOpen, setSafetyModalOpen] = useState(false);
+
+  const { cover: navCover, launch: launchNav } = useNavigationCover();
 
   const { data: drop, isLoading } = useQuery<CashDrop & { userAttempt: CashDropAttempt | null }>({
     queryKey: ["/api/cash-drops", id],
@@ -724,11 +727,9 @@ export default function CashDropDetail() {
             {(drop.gpsLat && drop.gpsLng) ? (
               <div className="space-y-2">
                 <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Navigation</p>
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${drop.gpsLat},${drop.gpsLng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-4 rounded-2xl transition-all active:scale-[0.98]"
+                <button
+                  onClick={() => launchNav({ provider: "google", url: `https://www.google.com/maps/dir/?api=1&destination=${drop.gpsLat},${drop.gpsLng}`, destLabel: drop.title || "Cash Drop" })}
+                  className="flex items-center gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] w-full text-left"
                   style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
                   data-testid="link-google-maps-cash-drop"
                 >
@@ -740,18 +741,11 @@ export default function CashDropDetail() {
                     <p className="text-xs text-muted-foreground">Turn-by-turn navigation</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-blue-400/50 flex-shrink-0" />
-                </a>
+                </button>
 
-                <a
-                  href={`waze://?ll=${drop.gpsLat},${drop.gpsLng}&navigate=yes`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.location.href = `waze://?ll=${drop.gpsLat},${drop.gpsLng}&navigate=yes`;
-                    setTimeout(() => {
-                      window.open(`https://www.google.com/maps/dir/?api=1&destination=${drop.gpsLat},${drop.gpsLng}`, "_blank");
-                    }, 2000);
-                  }}
-                  className="flex items-center gap-3 p-4 rounded-2xl transition-all active:scale-[0.98]"
+                <button
+                  onClick={() => launchNav({ provider: "waze", url: `waze://?ll=${drop.gpsLat},${drop.gpsLng}&navigate=yes`, destLabel: drop.title || "Cash Drop" })}
+                  className="flex items-center gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] w-full text-left"
                   style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
                   data-testid="link-waze-cash-drop"
                 >
@@ -763,7 +757,7 @@ export default function CashDropDetail() {
                     <p className="text-xs text-muted-foreground">Real-time traffic routing</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-400/50 flex-shrink-0" />
-                </a>
+                </button>
               </div>
             ) : (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/10 border border-white/[0.05]">
@@ -917,6 +911,7 @@ export default function CashDropDetail() {
         )}
 
       </div>
+      {navCover}
     </GuberLayout>
   );
 }
