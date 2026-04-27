@@ -751,6 +751,15 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 
+export const apnsDeviceTokens = pgTable("apns_device_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  deviceToken: text("device_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ApnsDeviceToken = typeof apnsDeviceTokens.$inferSelect;
+
 export const businessAccounts = pgTable("business_accounts", {
   id: serial("id").primaryKey(),
   ownerUserId: integer("owner_user_id").notNull().unique(),

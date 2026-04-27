@@ -9497,7 +9497,7 @@ YOUR BEHAVIOR:
     }
   });
 
-  const { saveSubscription, removeSubscription, VAPID_PUBLIC_KEY } = await import("./push");
+  const { saveSubscription, removeSubscription, saveApnsToken, removeApnsToken, VAPID_PUBLIC_KEY } = await import("./push");
 
   app.get("/api/push/vapid-public-key", (_req: Request, res: Response) => {
     if (!VAPID_PUBLIC_KEY) return res.status(503).json({ message: "Push not configured" });
@@ -9516,6 +9516,25 @@ YOUR BEHAVIOR:
   app.delete("/api/push/unsubscribe", requireAuth, async (req: Request, res: Response) => {
     const { endpoint } = req.body;
     if (endpoint) await removeSubscription(endpoint);
+    res.json({ ok: true });
+  });
+
+  // ── Native iOS APNs token routes (Capacitor @capacitor/push-notifications) ─
+  // These store the raw APNs device token obtained by the native plugin so the
+  // server can deliver pushes directly to APNs with a custom aps.sound field.
+
+  app.post("/api/push/apns-token", requireAuth, async (req: Request, res: Response) => {
+    const { deviceToken } = req.body;
+    if (!deviceToken || typeof deviceToken !== "string") {
+      return res.status(400).json({ message: "deviceToken is required" });
+    }
+    await saveApnsToken(req.session.userId!, deviceToken);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/push/apns-token", requireAuth, async (req: Request, res: Response) => {
+    const { deviceToken } = req.body;
+    if (deviceToken) await removeApnsToken(deviceToken, req.session.userId!);
     res.json({ ok: true });
   });
 

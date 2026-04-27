@@ -122,6 +122,16 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- apns_device_tokens: native iOS APNs device tokens from @capacitor/push-notifications
+-- Allows the server to deliver pushes directly to APNs with a custom aps.sound field
+-- instead of going through Apple's Web Push Gateway (which ignores aps.sound).
+CREATE TABLE IF NOT EXISTS apns_device_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  device_token TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 SQL
 
 echo "[post-merge] Schema sync complete."

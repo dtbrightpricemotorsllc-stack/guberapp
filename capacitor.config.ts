@@ -12,6 +12,11 @@ const config: CapacitorConfig = {
     Browser: {
       presentationStyle: 'popover',
     },
+    PushNotifications: {
+      // Present the notification as an alert when the app is in the foreground.
+      // Without this the notification is silent while the app is open.
+      presentationOptions: ['alert', 'badge', 'sound'],
+    },
     GoogleAuth: {
       scopes: ['profile', 'email'],
       // serverClientId must match the Web Application OAuth Client ID in Google Cloud Console.
