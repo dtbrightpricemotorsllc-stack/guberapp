@@ -5344,6 +5344,22 @@ const logoRef2 = useRef<HTMLInputElement>(null);
 
 useEffect(() => { setLocalUser(user); }, [user]);
 
+const { data: userAuditLogs, isLoading: auditLoading, isError: auditError } = useQuery<AuditLog[]>({
+  queryKey: ["/api/admin/users", user?.id, "audit-logs"],
+  queryFn: async () => {
+    if (!user?.id) return [];
+    const res = await fetch(`/api/admin/users/${user.id}/audit-logs`);
+    if (!res.ok) throw new Error("Failed to fetch audit logs");
+    return res.json();
+  },
+  enabled: open && !!user?.id,
+  staleTime: 30_000,
+});
+
+const disclaimerLogs = (userAuditLogs || []).filter(l =>
+  l.action === "liability_disclaimer_accepted" || l.action === "liability_disclaimer_reviewed"
+);
+
 if (!localUser) return null;
 
 const logo1: string | null = (localUser as any).cashDropBrandLogo ?? null;
@@ -5498,6 +5514,44 @@ return (
     </div>
   </div>
 )}
+
+{/* Disclaimer Audit Trail */}
+<div className="py-3 border-b border-border/20">
+  <div className="flex items-center gap-1.5 mb-2">
+    <ScrollText className="w-3 h-3 text-muted-foreground" />
+    <p className="text-[10px] text-muted-foreground font-semibold tracking-wider uppercase">Disclaimer Audit Trail</p>
+  </div>
+  {auditLoading ? (
+    <Skeleton className="h-8 rounded-lg" />
+  ) : auditError ? (
+    <p className="text-[11px] text-destructive italic" data-testid="disclaimer-audit-error">Could not load disclaimer history. Please try again.</p>
+  ) : disclaimerLogs.length === 0 ? (
+    <p className="text-[11px] text-muted-foreground italic" data-testid="disclaimer-audit-empty">No disclaimer events recorded.</p>
+  ) : (
+    <div className="space-y-1.5" data-testid="disclaimer-audit-list">
+      {disclaimerLogs.map(log => (
+        <div key={log.id} className="flex items-start gap-2 bg-muted/20 rounded-lg px-2 py-1.5" data-testid={`disclaimer-audit-entry-${log.id}`}>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="outline" className={`text-[8px] shrink-0 ${log.action === "liability_disclaimer_accepted" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-blue-500/10 text-blue-400 border-blue-500/30"}`} data-testid={`disclaimer-audit-action-${log.id}`}>
+                {log.action === "liability_disclaimer_accepted" ? "Accepted" : "Reviewed"}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground" data-testid={`disclaimer-audit-time-${log.id}`}>
+                {log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+              </span>
+            </div>
+            {log.ipAddress && (
+              <p className="text-[9px] text-muted-foreground mt-0.5" data-testid={`disclaimer-audit-ip-${log.id}`}>IP: {log.ipAddress}</p>
+            )}
+            {log.details && (
+              <p className="text-[9px] text-muted-foreground mt-0.5 truncate" data-testid={`disclaimer-audit-details-${log.id}`}>{log.details}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
 {/* Drop Logos */}
 {localUser.cashDropHostEnabled && (

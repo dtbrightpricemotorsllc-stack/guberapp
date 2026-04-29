@@ -4223,6 +4223,30 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/users/:id/audit-logs", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) return res.status(400).json({ message: "Invalid user id" });
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const logs = await db
+        .select({
+          id: auditLogsTable.id,
+          userId: auditLogsTable.userId,
+          action: auditLogsTable.action,
+          details: auditLogsTable.details,
+          ipAddress: auditLogsTable.ipAddress,
+          createdAt: auditLogsTable.createdAt,
+        })
+        .from(auditLogsTable)
+        .where(sqlEq(auditLogsTable.userId, userId))
+        .orderBy(sqlDesc(auditLogsTable.createdAt))
+        .limit(limit);
+      res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.patch("/api/admin/users/:id/tier", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
