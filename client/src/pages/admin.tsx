@@ -2542,8 +2542,10 @@ return (
             </p>
             {q.documentUrl && (() => {
               const url: string = q.documentUrl;
-              const isPdf = url.toLowerCase().includes(".pdf") || url.toLowerCase().includes("/raw/");
-              return isPdf ? (
+              const urlLower = url.toLowerCase().split("?")[0];
+              const isImage = /\.(jpe?g|png|gif|webp|avif|bmp)$/.test(urlLower) ||
+                (urlLower.includes("cloudinary.com") && !urlLower.includes("/raw/") && !urlLower.endsWith(".pdf"));
+              return !isImage ? (
                 <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1" data-testid={`link-qual-doc-${q.id}`}>
                   <FileText className="w-3 h-3" /> View PDF Document
                 </a>
