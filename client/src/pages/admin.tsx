@@ -645,6 +645,19 @@ const escape = (val: string | number | null | undefined) => {
   }
   return str;
 };
+
+const filterParts: string[] = [];
+if (fromDate) filterParts.push(`From: ${fromDate}`);
+if (toDate) filterParts.push(`To: ${toDate}`);
+if (debouncedUser) filterParts.push(`User: ${debouncedUser}`);
+if (actionFilter && actionFilter !== "all") filterParts.push(`Action: ${actionFilter}`);
+if (debouncedDetails) filterParts.push(`Details: ${debouncedDetails}`);
+
+const metaRows: string[][] = [];
+if (filterParts.length > 0) {
+  metaRows.push([`# Filters — ${filterParts.join(" | ")}`]);
+}
+
 const header = ["Timestamp", "Username", "User ID", "Action", "Details", "IP Address"];
 const rows = filtered.map(log => [
   log.createdAt ? new Date(log.createdAt).toISOString() : "",
@@ -654,12 +667,24 @@ const rows = filtered.map(log => [
   log.details ?? "",
   log.ipAddress ?? "",
 ]);
-const csv = [header, ...rows].map(row => row.map(escape).join(",")).join("\n");
+const csv = [...metaRows.map(r => r.map(escape).join(",")), [header, ...rows].map(row => row.map(escape).join(",")).join("\n")].join("\n");
 const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
 const url = URL.createObjectURL(blob);
 const a = document.createElement("a");
 a.href = url;
-a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+
+let filename: string;
+if (fromDate && toDate) {
+  filename = `audit-log-${fromDate}-to-${toDate}.csv`;
+} else if (fromDate) {
+  filename = `audit-log-from-${fromDate}.csv`;
+} else if (toDate) {
+  filename = `audit-log-to-${toDate}.csv`;
+} else {
+  filename = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+}
+
+a.download = filename;
 a.click();
 URL.revokeObjectURL(url);
 }
