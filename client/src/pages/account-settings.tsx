@@ -27,6 +27,7 @@ import {
   getNotifSoundEnabled, setNotifSoundEnabled,
   getNotifVibrationEnabled, setNotifVibrationEnabled,
 } from "@/lib/notification-sound";
+import { GlobalDisclaimerModal } from "@/components/liability-modals";
 
 async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<string> {
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -52,6 +53,7 @@ export default function AccountSettings() {
 
   const [bizConvertOpen, setBizConvertOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [disclaimerReviewOpen, setDisclaimerReviewOpen] = useState(false);
   const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
@@ -420,6 +422,34 @@ export default function AccountSettings() {
             <Shield className="w-4 h-4 text-muted-foreground" />
             Safety &amp; Support
           </h3>
+          <div className="p-3 rounded-xl border border-white/[0.06] bg-muted/10 space-y-2" data-testid="card-disclaimer-status">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-display font-semibold text-[12px]">Safety Disclaimer</p>
+                {user?.liabilityDisclaimerAcceptedAt ? (
+                  <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="text-disclaimer-accepted-date">
+                    Acknowledged on{" "}
+                    {new Date(user.liabilityDisclaimerAcceptedAt).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5 italic" data-testid="text-disclaimer-not-acknowledged">
+                    Not yet acknowledged
+                  </p>
+                )}
+              </div>
+              <button
+                className="text-[11px] text-primary/70 hover:text-primary underline-offset-2 hover:underline font-display tracking-wider shrink-0 mt-0.5"
+                onClick={() => setDisclaimerReviewOpen(true)}
+                data-testid="button-reread-disclaimer"
+              >
+                Re-read
+              </button>
+            </div>
+          </div>
           <div className="space-y-2">
             <a href="mailto:support@guberapp.com?subject=Safety Issue Report"
               className="w-full flex items-center gap-3 p-3 rounded-xl border border-white/[0.06] bg-muted/10 hover:bg-muted/20 transition-colors text-sm"
@@ -646,6 +676,12 @@ export default function AccountSettings() {
           </div>
         </div>
       </div>
+
+      <GlobalDisclaimerModal
+        open={disclaimerReviewOpen}
+        readOnly
+        onDismiss={() => setDisclaimerReviewOpen(false)}
+      />
 
       <Dialog open={cropOpen} onOpenChange={(open) => { if (!open) { setCropOpen(false); setRawSrc(null); } }}>
         <DialogContent className="max-w-sm p-0 overflow-hidden">

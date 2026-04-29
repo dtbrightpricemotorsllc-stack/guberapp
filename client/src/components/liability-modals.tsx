@@ -16,18 +16,16 @@ import {
 // safety acknowledgement required by the liability protection layer.
 // =============================================================================
 
-interface GlobalDisclaimerModalProps {
-  open: boolean;
-  onAccept: () => void;
-  onDismiss?: () => void;
-  isPending?: boolean;
-}
+type GlobalDisclaimerModalProps =
+  | { open: boolean; readOnly: true; onAccept?: never; onDismiss: () => void; isPending?: never }
+  | { open: boolean; readOnly?: false; onAccept: () => void; onDismiss?: () => void; isPending?: boolean };
 
 export function GlobalDisclaimerModal({
   open,
   onAccept,
   onDismiss,
   isPending,
+  readOnly,
 }: GlobalDisclaimerModalProps) {
   if (!open) return null;
   return (
@@ -35,7 +33,7 @@ export function GlobalDisclaimerModal({
       className="fixed inset-0 z-[10000] flex items-end justify-center p-4"
       data-testid="modal-global-liability-disclaimer"
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={readOnly ? onDismiss : undefined} />
       <div className="relative bg-card rounded-3xl border border-border/20 p-6 w-full max-w-lg space-y-5 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
@@ -49,10 +47,10 @@ export function GlobalDisclaimerModal({
               {GLOBAL_LIABILITY_DISCLAIMER.title}
             </h3>
             <p className="text-[11px] text-muted-foreground">
-              One-time acknowledgement
+              {readOnly ? "Review only — no action required" : "One-time acknowledgement"}
             </p>
           </div>
-          {onDismiss && (
+          {(readOnly || onDismiss) && (
             <button
               onClick={onDismiss}
               aria-label="Close"
@@ -73,18 +71,29 @@ export function GlobalDisclaimerModal({
           </p>
         </div>
 
-        <Button
-          onClick={onAccept}
-          disabled={!!isPending}
-          className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl"
-          data-testid="button-accept-global-disclaimer"
-        >
-          {isPending ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            GLOBAL_LIABILITY_DISCLAIMER.ctaLabel
-          )}
-        </Button>
+        {readOnly ? (
+          <Button
+            onClick={onDismiss}
+            variant="outline"
+            className="w-full h-12 font-display tracking-wider rounded-xl"
+            data-testid="button-close-global-disclaimer-readonly"
+          >
+            Close
+          </Button>
+        ) : (
+          <Button
+            onClick={onAccept}
+            disabled={!!isPending}
+            className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl"
+            data-testid="button-accept-global-disclaimer"
+          >
+            {isPending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              GLOBAL_LIABILITY_DISCLAIMER.ctaLabel
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );
