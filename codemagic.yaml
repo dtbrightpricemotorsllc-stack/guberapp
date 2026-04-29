@@ -8,15 +8,17 @@ workflows:
     # Environment variables — add ALL of these in the Codemagic dashboard under
     # your app's "Environment variables" section before triggering a build.
     #
-    # Code-signing variables (Settings → Code signing → Manual):
+    # Code-signing variables:
     #   CM_CERTIFICATE            Base64-encoded Apple Distribution .p12 certificate
     #   CM_CERTIFICATE_PASSWORD   Password for the .p12 certificate
     #   CM_PROVISIONING_PROFILE   Base64-encoded App Store provisioning profile (.mobileprovision)
+    #   DEVELOPMENT_TEAM          Your 10-character Apple Team ID (e.g. AB12CD34EF)
+    #                             Find it at developer.apple.com → Membership → Team ID
     #
-    # App Store Connect API key (required for upload):
+    # App Store Connect API key (required for TestFlight / App Store upload):
     #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Users & Access → Keys
     #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID shown next to the key name
-    #   APP_STORE_CONNECT_PRIVATE_KEY     Contents of the downloaded .p8 file (multiline ok)
+    #   APP_STORE_CONNECT_PRIVATE_KEY     Full contents of the downloaded .p8 file
     # ---------------------------------------------------------------------------
     environment:
       vars:
@@ -50,7 +52,6 @@ workflows:
           cp /tmp/profile.mobileprovision \
             ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID".mobileprovision
           echo "Installed provisioning profile: $PROFILE_UUID"
-          # Point xcode-project at the provisioning profile automatically
           xcode-project use-profiles
 
       - name: Xcode archive (App Store export)
@@ -59,9 +60,7 @@ workflows:
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
             --config Release \
-            --archive-xcargs "DEVELOPMENT_TEAM=$(security find-certificate -a -Z \
-              | grep -A 2 'Apple Distribution' | grep 'labl' \
-              | head -1 | awk -F'"' '{print $4}' | grep -oE '[A-Z0-9]{10}' || echo '')"
+            --archive-xcargs "DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -69,12 +68,10 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration
-        # The App Store Connect API integration must be configured in Codemagic
-        # dashboard under Integrations → App Store Connect before enabling this.
-        # Uncomment the lines below once credentials are added:
-        # api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        # key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        # issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        # API key credentials — set these three env vars in Codemagic dashboard.
+        # Do NOT use "auth: integration" and these fields at the same time; pick one.
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
         submit_to_app_store: false
