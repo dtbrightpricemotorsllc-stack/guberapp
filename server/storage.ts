@@ -164,6 +164,7 @@ export interface IStorage {
   getAllServicePricingConfigs(): Promise<import("@shared/schema").ServicePricingConfig[]>;
 
   getWorkerQualifications(userId: number): Promise<WorkerQualification[]>;
+  getApprovedQualifications(userId: number): Promise<Pick<WorkerQualification, "id" | "qualificationName">[]>;
   getAllPendingQualifications(): Promise<WorkerQualification[]>;
   createQualification(data: any): Promise<WorkerQualification>;
   updateQualification(id: number, data: Partial<WorkerQualification>): Promise<WorkerQualification | undefined>;
@@ -930,6 +931,16 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(workerQualifications)
       .where(eq(workerQualifications.userId, userId))
       .orderBy(desc(workerQualifications.createdAt));
+  }
+
+  async getApprovedQualifications(userId: number): Promise<Pick<WorkerQualification, "id" | "qualificationName">[]> {
+    return db.select({ id: workerQualifications.id, qualificationName: workerQualifications.qualificationName })
+      .from(workerQualifications)
+      .where(and(
+        eq(workerQualifications.userId, userId),
+        eq(workerQualifications.verificationStatus, "verified")
+      ))
+      .orderBy(workerQualifications.qualificationName);
   }
 
   async getAllPendingQualifications(): Promise<WorkerQualification[]> {

@@ -12583,6 +12583,70 @@ YOUR BEHAVIOR:
     }
   });
 
+  app.get("/api/users/me/qualifications", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const quals = await storage.getWorkerQualifications(userId);
+      res.json(quals.map(q => ({
+        id: q.id,
+        qualificationName: q.qualificationName,
+        verificationStatus: q.verificationStatus,
+        adminNotes: q.adminNotes,
+        createdAt: q.createdAt,
+        reviewedAt: q.reviewedAt,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/users/:id/certifications", async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) return res.status(400).json({ message: "Invalid user id" });
+      const certs = await storage.getApprovedQualifications(userId);
+      res.json(certs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/certifications/submit", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { qualificationName, fileBase64, fileName } = req.body;
+      if (!qualificationName || typeof qualificationName !== "string" || !qualificationName.trim()) {
+        return res.status(400).json({ message: "Certification name is required" });
+      }
+      if (!fileBase64) {
+        return res.status(400).json({ message: "Proof document is required" });
+      }
+
+      let documentUrl: string | null = null;
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const result = await cloudinary.uploader.upload(fileBase64, {
+          resource_type: "auto",
+          folder: "guber-certifications",
+          allowed_formats: ["jpg", "jpeg", "png", "gif", "webp", "pdf"],
+          public_id: `cert_${req.session.userId}_${Date.now()}`,
+        });
+        documentUrl = result.secure_url;
+      } else {
+        return res.status(503).json({ message: "Media storage not configured." });
+      }
+
+      const q = await storage.createQualification({
+        userId: req.session.userId!,
+        qualificationName: qualificationName.trim().slice(0, 200),
+        documentUrl,
+        verificationStatus: "pending",
+      });
+      res.status(201).json(q);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/resume/qualifications", requireAuth, async (req: Request, res: Response) => {
     try {
       const { qualificationName, documentUrl } = req.body;

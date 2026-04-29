@@ -2540,11 +2540,28 @@ return (
               Submitted by <span className="font-medium text-foreground">{q.workerName}</span>
               {q.workerGuberId && <span className="ml-1 font-mono text-primary/70">({q.workerGuberId})</span>}
             </p>
-            {q.documentUrl && (
-              <a href={q.documentUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1">
-                <FileText className="w-3 h-3" /> View Document
-              </a>
-            )}
+            {q.documentUrl && (() => {
+              const url: string = q.documentUrl;
+              const isPdf = url.toLowerCase().includes(".pdf") || url.toLowerCase().includes("/raw/");
+              return isPdf ? (
+                <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1" data-testid={`link-qual-doc-${q.id}`}>
+                  <FileText className="w-3 h-3" /> View PDF Document
+                </a>
+              ) : (
+                <div className="mt-2 space-y-1">
+                  <a href={url} target="_blank" rel="noopener noreferrer" data-testid={`link-qual-img-${q.id}`}>
+                    <img
+                      src={url}
+                      alt="Submitted certification document"
+                      className="max-h-48 w-full object-contain rounded-lg border border-border/20 bg-black/20 cursor-pointer hover:opacity-90 transition-opacity"
+                    />
+                  </a>
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary/70 hover:underline inline-flex items-center gap-1" data-testid={`link-qual-fullsize-${q.id}`}>
+                    <ExternalLink className="w-2.5 h-2.5" /> View full size
+                  </a>
+                </div>
+              );
+            })()}
           </div>
           <Badge variant="secondary" className="text-[10px] shrink-0">
             <Clock className="w-3 h-3 mr-1" />Pending

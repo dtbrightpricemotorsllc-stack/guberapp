@@ -27,8 +27,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { TrustBadge, TrustProgressBar, Day1OGBadge, Day1OGLogo } from "@/components/trust-badge";
-import { MapPin, Star, Edit, CheckCircle, Crown, Loader2, ShieldCheck, Camera, FileText, Upload, Clock, TrendingUp, Award, AlertCircle, FileUp, DollarSign, ExternalLink, Banknote, ChevronRight, Share2, Copy, Gift, Shield, Lock, Zap, MessageSquare, Bell } from "lucide-react";
+import { MapPin, Star, Edit, CheckCircle, Crown, Loader2, ShieldCheck, Camera, FileText, Upload, Clock, TrendingUp, Award, AlertCircle, FileUp, DollarSign, ExternalLink, Banknote, ChevronRight, Share2, Copy, Gift, Shield, Lock, Zap, MessageSquare, Bell, Plus, X as XIcon, BadgeCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -208,6 +209,68 @@ export default function Profile() {
   const toggleNotifPref = (key: NotifPrefKey) => {
     if (!notifPrefs) return;
     notifPrefMutation.mutate({ [key]: !notifPrefs[key] });
+  };
+
+  type MyQualification = {
+    id: number;
+    qualificationName: string;
+    verificationStatus: "pending" | "verified" | "rejected";
+    adminNotes: string | null;
+    createdAt: string | null;
+    reviewedAt: string | null;
+  };
+  type PublicCert = { id: number; qualificationName: string };
+
+  const { data: myQualifications } = useQuery<MyQualification[]>({
+    queryKey: ["/api/users/me/qualifications"],
+    enabled: isOwnProfile && !!currentUser,
+  });
+
+  const { data: publicCerts } = useQuery<PublicCert[]>({
+    queryKey: ["/api/users", String(targetId), "certifications"],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/${targetId}/certifications`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!targetId,
+  });
+
+  const [certName, setCertName] = useState("");
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const certFileRef = useRef<HTMLInputElement>(null);
+
+  const certSubmitMutation = useMutation({
+    mutationFn: async ({ name, file }: { name: string; file: File }) => {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+      const resp = await apiRequest("POST", "/api/certifications/submit", {
+        qualificationName: name,
+        fileBase64: base64,
+        fileName: file.name,
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.message || "Upload failed");
+      }
+      return resp.json();
+    },
+    onSuccess: () => {
+      setCertName("");
+      setCertFile(null);
+      if (certFileRef.current) certFileRef.current.value = "";
+      queryClient.invalidateQueries({ queryKey: ["/api/users/me/qualifications"] });
+      toast({ title: "Submitted", description: "Your certification is pending admin review." });
+    },
+    onError: (err: any) => toast({ title: "Submit Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleCertSubmit = () => {
+    if (!certName.trim() || !certFile) return;
+    certSubmitMutation.mutate({ name: certName.trim(), file: certFile });
   };
 
   const [countdownLabel, setCountdownLabel] = useState("");
@@ -487,6 +550,20 @@ export default function Profile() {
                 </span>
               )}
             </div>
+            {(publicCerts || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 justify-center mb-3" data-testid="container-cert-badges">
+                {(publicCerts || []).map((cert) => (
+                  <span
+                    key={cert.id}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-display font-semibold"
+                    style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)", color: "#fbbf24" }}
+                    data-testid={`cert-badge-${cert.id}`}
+                  >
+                    <BadgeCheck className="w-2.5 h-2.5" /> {cert.qualificationName}
+                  </span>
+                ))}
+              </div>
+            )}
             {displayUser.userBio && (
               <p className="text-sm text-muted-foreground mb-3 leading-relaxed max-w-sm">{displayUser.userBio}</p>
             )}
@@ -1018,6 +1095,99 @@ export default function Profile() {
             <p className="text-[10px] text-muted-foreground font-display mt-4 leading-relaxed">
               Uploads are reviewed by the GUBER trust team within 24-48 hours. Approval unlocks higher trust tiers and skilled labor jobs.
             </p>
+          </Card>
+        )}
+
+        {isOwnProfile && (
+          <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-5" data-testid="card-my-certifications">
+            <div className="flex items-center gap-2 mb-4">
+              <BadgeCheck className="w-4 h-4 text-amber-400" />
+              <h3 className="font-display font-semibold text-sm tracking-wide">My Certifications</h3>
+              <Badge variant="outline" className="text-[9px] ml-auto border-amber-400/30 text-amber-400/80">
+                {(myQualifications || []).filter(q => q.verificationStatus === "verified").length} approved
+              </Badge>
+            </div>
+
+            {(myQualifications || []).length > 0 && (
+              <div className="space-y-2 mb-4">
+                {(myQualifications || []).map((q) => (
+                  <div key={q.id} className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-muted/10 border border-border/10" data-testid={`cert-item-${q.id}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-display font-semibold truncate" data-testid={`cert-name-${q.id}`}>{q.qualificationName}</p>
+                      {q.adminNotes && q.verificationStatus === "rejected" && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">Note: {q.adminNotes}</p>
+                      )}
+                    </div>
+                    <span
+                      className="text-[9px] font-display font-bold px-2 py-0.5 rounded-full shrink-0"
+                      style={
+                        q.verificationStatus === "verified"
+                          ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.35)", color: "#86efac" }
+                          : q.verificationStatus === "rejected"
+                          ? { background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "#fca5a5" }
+                          : { background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)", color: "#fbbf24" }
+                      }
+                      data-testid={`cert-status-${q.id}`}
+                    >
+                      {q.verificationStatus === "verified" ? "Approved" : q.verificationStatus === "rejected" ? "Rejected" : "Pending"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(myQualifications || []).length === 0 && (
+              <p className="text-xs text-muted-foreground mb-4">No certifications submitted yet. Add yours below.</p>
+            )}
+
+            <div className="space-y-2 border-t border-border/10 pt-4">
+              <p className="text-[10px] text-muted-foreground font-display uppercase tracking-wider font-bold">Add a Certification</p>
+              <Input
+                placeholder="e.g. Food Handler Certificate, CPR Certified..."
+                value={certName}
+                onChange={(e) => setCertName(e.target.value)}
+                maxLength={200}
+                className="text-xs bg-background border-border/20 h-9"
+                data-testid="input-cert-name"
+              />
+              <div className="flex items-center gap-2">
+                <label className="flex-1 flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border border-dashed border-border/30 hover:border-primary/30 transition-colors relative bg-muted/5">
+                  <input
+                    ref={certFileRef}
+                    type="file"
+                    accept=".pdf,image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={(e) => setCertFile(e.target.files?.[0] || null)}
+                    data-testid="input-cert-file"
+                  />
+                  <Upload className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-[11px] text-muted-foreground truncate">
+                    {certFile ? certFile.name : "Attach proof (PDF or image)"}
+                  </span>
+                  {certFile && (
+                    <button
+                      type="button"
+                      className="ml-auto shrink-0"
+                      onClick={(e) => { e.preventDefault(); setCertFile(null); if (certFileRef.current) certFileRef.current.value = ""; }}
+                    >
+                      <XIcon className="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  )}
+                </label>
+              </div>
+              <Button
+                className="w-full h-9 text-xs font-display font-bold gap-2 guber-button"
+                disabled={!certName.trim() || !certFile || certSubmitMutation.isPending}
+                onClick={handleCertSubmit}
+                data-testid="button-submit-cert"
+              >
+                {certSubmitMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {certSubmitMutation.isPending ? "Submitting..." : "Submit for Review"}
+              </Button>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Once approved, your certification name will appear on your public profile. Your proof document stays private.
+              </p>
+            </div>
           </Card>
         )}
 
