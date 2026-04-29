@@ -24,7 +24,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronRight, FolderTree, P
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import {
@@ -596,6 +596,36 @@ if (action.startsWith("dispute_")) return "bg-yellow-500/10 text-yellow-400 bord
 return "bg-muted/30 text-muted-foreground border-border/30";
 }
 
+function exportCsv() {
+const escape = (val: string | number | null | undefined) => {
+  let str = val == null ? "" : String(val);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+const header = ["Timestamp", "Username", "User ID", "Action", "Details", "IP Address"];
+const rows = filtered.map(log => [
+  log.createdAt ? new Date(log.createdAt).toISOString() : "",
+  log.username ?? "",
+  log.userId ?? "",
+  log.action,
+  log.details ?? "",
+  log.ipAddress ?? "",
+]);
+const csv = [header, ...rows].map(row => row.map(escape).join(",")).join("\n");
+const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url;
+a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+a.click();
+URL.revokeObjectURL(url);
+}
+
 return (
 <div className="space-y-3" data-testid="admin-audit-logs">
 <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -622,6 +652,17 @@ return (
 {allActions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
 </SelectContent>
 </Select>
+<Button
+  variant="outline"
+  size="sm"
+  className="h-8 text-xs gap-1.5"
+  onClick={exportCsv}
+  disabled={filtered.length === 0}
+  data-testid="button-export-audit-csv"
+>
+  <Download className="w-3 h-3" />
+  Export CSV
+</Button>
 </div>
 </div>
 
