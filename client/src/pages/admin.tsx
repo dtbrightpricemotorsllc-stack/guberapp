@@ -579,6 +579,8 @@ const [debouncedUser, setDebouncedUser] = useState<string>("");
 const [offset, setOffset] = useState<number>(0);
 const [detailsSearch, setDetailsSearch] = useState<string>("");
 const [debouncedDetails, setDebouncedDetails] = useState<string>("");
+const [fromDate, setFromDate] = useState<string>("");
+const [toDate, setToDate] = useState<string>("");
 
 useEffect(() => {
   const t = setTimeout(() => {
@@ -595,17 +597,21 @@ useEffect(() => {
   return () => clearTimeout(t);
 }, [detailsSearch]);
 
+useEffect(() => { setOffset(0); }, [fromDate, toDate]);
+
 const queryParams = new URLSearchParams();
 if (debouncedUser) queryParams.set("user", debouncedUser);
 if (actionFilter !== "all") queryParams.set("action", actionFilter);
 queryParams.set("limit", String(PAGE_SIZE));
 if (offset > 0) queryParams.set("offset", String(offset));
 if (debouncedDetails) queryParams.set("details", debouncedDetails);
+if (fromDate) queryParams.set("from", fromDate);
+if (toDate) queryParams.set("to", toDate);
 const queryString = queryParams.toString();
 const apiUrl = `/api/admin/audit-logs?${queryString}`;
 
 const { data: page, isLoading } = useQuery<AuditLogPage>({
-queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter, offset, debouncedDetails],
+queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter, offset, debouncedDetails, fromDate, toDate],
 queryFn: async () => {
   const res = await fetch(apiUrl, { credentials: "include" });
   if (!res.ok) throw new Error(await res.text());
@@ -682,6 +688,23 @@ return (
   onChange={e => setDetailsSearch(e.target.value)}
   className="h-8 w-52 rounded-lg border border-border/20 bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
   data-testid="input-audit-details-search"
+/>
+<input
+  type="date"
+  value={fromDate}
+  onChange={e => setFromDate(e.target.value)}
+  className="h-8 rounded-lg border border-border/20 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+  data-testid="input-audit-date-from"
+  title="From date"
+/>
+<span className="text-xs text-muted-foreground">–</span>
+<input
+  type="date"
+  value={toDate}
+  onChange={e => setToDate(e.target.value)}
+  className="h-8 rounded-lg border border-border/20 bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+  data-testid="input-audit-date-to"
+  title="To date"
 />
 <Select value={actionFilter} onValueChange={setActionFilter}>
 <SelectTrigger className="w-48 bg-background border-border/20 text-xs" data-testid="select-audit-filter">

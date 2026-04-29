@@ -18,7 +18,7 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
-import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, type SQL } from "drizzle-orm";
+import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop } from "@shared/schema";
 import {
   DISPUTE_ISSUE_TYPES,
@@ -4208,6 +4208,8 @@ export async function registerRoutes(
       const userParam = (req.query.user as string || "").trim();
       const actionParam = (req.query.action as string || "").trim();
       const detailsParam = (req.query.details as string || "").trim();
+      const fromParam = (req.query.from as string || "").trim();
+      const toParam = (req.query.to as string || "").trim();
 
       const conditions: SQL<unknown>[] = [];
       if (userParam) {
@@ -4223,6 +4225,17 @@ export async function registerRoutes(
       }
       if (detailsParam) {
         conditions.push(ilike(auditLogsTable.details, `%${detailsParam}%`));
+      }
+      if (fromParam) {
+        const fromDate = new Date(fromParam);
+        if (isNaN(fromDate.getTime())) return res.status(400).json({ message: "Invalid 'from' date" });
+        conditions.push(gte(auditLogsTable.createdAt, fromDate));
+      }
+      if (toParam) {
+        const toDate = new Date(toParam);
+        if (isNaN(toDate.getTime())) return res.status(400).json({ message: "Invalid 'to' date" });
+        toDate.setUTCHours(23, 59, 59, 999);
+        conditions.push(lte(auditLogsTable.createdAt, toDate));
       }
 
       const baseQuery = db
