@@ -1,0 +1,80 @@
+workflows:
+  ios-app-store:
+    name: GUBER iOS — App Store
+    instance_type: mac_mini_m1
+    max_build_duration: 60
+
+    # ---------------------------------------------------------------------------
+    # Environment variables — add ALL of these in the Codemagic dashboard under
+    # your app's "Environment variables" section before triggering a build.
+    #
+    # Code-signing variables (Settings → Code signing → Manual):
+    #   CM_CERTIFICATE            Base64-encoded Apple Distribution .p12 certificate
+    #   CM_CERTIFICATE_PASSWORD   Password for the .p12 certificate
+    #   CM_PROVISIONING_PROFILE   Base64-encoded App Store provisioning profile (.mobileprovision)
+    #
+    # App Store Connect API key (required for upload):
+    #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Users & Access → Keys
+    #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID shown next to the key name
+    #   APP_STORE_CONNECT_PRIVATE_KEY     Contents of the downloaded .p8 file (multiline ok)
+    # ---------------------------------------------------------------------------
+    environment:
+      vars:
+        XCODE_WORKSPACE: ios/App/App.xcworkspace
+        XCODE_SCHEME: App
+        BUNDLE_ID: com.guber.app
+      xcode: 15.4
+
+    scripts:
+      - name: Install Node dependencies
+        script: npm ci
+
+      - name: Build web app
+        script: npm run build
+
+      - name: Sync Capacitor (copy web assets into Xcode project)
+        script: npx cap sync ios
+
+      - name: Set up code signing keychain
+        script: |
+          keychain initialize
+          # Import the distribution certificate
+          echo "$CM_CERTIFICATE" | base64 --decode > /tmp/cert.p12
+          keychain add-certificates --certificate /tmp/cert.p12 \
+            --certificate-password "$CM_CERTIFICATE_PASSWORD"
+          # Install the provisioning profile
+          echo "$CM_PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PROFILE_UUID=$(security cms -D -i /tmp/profile.mobileprovision \
+            | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+          cp /tmp/profile.mobileprovision \
+            ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID".mobileprovision
+          echo "Installed provisioning profile: $PROFILE_UUID"
+          # Point xcode-project at the provisioning profile automatically
+          xcode-project use-profiles
+
+      - name: Xcode archive (App Store export)
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --archive-xcargs "DEVELOPMENT_TEAM=$(security find-certificate -a -Z \
+              | grep -A 2 'Apple Distribution' | grep 'labl' \
+              | head -1 | awk -F'"' '{print $4}' | grep -oE '[A-Z0-9]{10}' || echo '')"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # The App Store Connect API integration must be configured in Codemagic
+        # dashboard under Integrations → App Store Connect before enabling this.
+        # Uncomment the lines below once credentials are added:
+        # api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        # key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        # issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
