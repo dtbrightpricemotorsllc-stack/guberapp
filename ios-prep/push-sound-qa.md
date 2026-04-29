@@ -16,7 +16,7 @@ requires a physical device with the app backgrounded or terminated.
 | `offer_funded` | `guber_money.wav` | Poster's offer is successfully funded |
 | `cash_drop` (live) | `guber_money.wav` | A cash drop goes live near the user |
 | `job` | `guber_action.wav` | New job posted nearby / reminder push |
-| `nearby` (default) | `guber_default.wav` | Any notification type not listed above |
+| `nearby` (explicit) | `guber_default.wav` | Nearby-alert push; intentionally uses the default chime (unrecognised types also fall back to this file) |
 | `closed` / `offer_payment_failed` | `guber_closed.wav` | Payment fails on a funded offer; or cash drop claimed by someone else |
 
 All four required WAV files must exist in the Xcode project under `ios/App/App/`
@@ -41,7 +41,7 @@ the device tests below confirm the WAV files actually play on real hardware.
 | Offer funded | `offer_funded` | `guber_money.wav` | PASS |
 | Job posted / reminder | `job` | `guber_action.wav` | PASS |
 | Cash drop live | `cash_drop` | `guber_money.wav` | PASS |
-| Nearby / default | _(any unmatched string)_ | `guber_default.wav` | PASS |
+| Nearby / default | `nearby` (explicit case) | `guber_default.wav` | PASS |
 | Payment failed / closed | `offer_payment_failed` | `guber_closed.wav` | PASS |
 
 ### Push payload — `server/push.ts` line 57
@@ -197,9 +197,12 @@ curl -X POST https://<your-server>/api/admin/test-push \
 
 ---
 
-## Test 4 — `nearby` (default) → `guber_default.wav`
+## Test 4 — `nearby` (explicit) → `guber_default.wav`
 
-**Trigger:** Any notification type that does not match a specific sound mapping — e.g. a `nearby` alert.
+**Trigger:** A notification sent with `type: "nearby"` — for example a broadcast
+announcement or a system alert. `nearby` is now an explicit case in
+`getSoundForNotificationType()` that intentionally returns `guber_default.wav`
+(the same chime as any other unmatched type).
 
 ### Steps (Option A — admin test push panel, fastest)
 
@@ -284,7 +287,7 @@ Fill this in once all five tests are complete and attach it to the task ticket.
 | 1 | `offer_funded` | `guber_money.wav` | | |
 | 2 | `job` | `guber_action.wav` | | |
 | 3 | `cash_drop` (live) | `guber_money.wav` | | |
-| 4 | `nearby` (default) | `guber_default.wav` | | |
+| 4 | `nearby` (explicit) | `guber_default.wav` | | |
 | 5 | `closed` / `offer_payment_failed` | `guber_closed.wav` | | |
 
 **Tester name:** ____________________________

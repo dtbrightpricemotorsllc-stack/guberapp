@@ -67,6 +67,9 @@ function getSoundForNotificationType(type?: string): string {
       return "guber_closed.wav";
     case "job":
       return "guber_action.wav";
+    case "nearby":
+      // Nearby alerts intentionally use the default chime — no dedicated sound.
+      return "guber_default.wav";
     default:
       return "guber_default.wav";
   }
