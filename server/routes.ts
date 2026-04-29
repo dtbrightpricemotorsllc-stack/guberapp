@@ -2336,6 +2336,24 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/users/me/review-liability-disclaimer", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user || !(user as any).liabilityDisclaimerAcceptedAt) {
+        return res.status(400).json({ message: "Disclaimer has not been accepted yet" });
+      }
+      await storage.createAuditLog({
+        userId,
+        action: "liability_disclaimer_reviewed",
+        details: "User re-read the global GUBER liability disclaimer from account settings",
+      });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/users/me/validate-username", requireAuth, async (req: Request, res: Response) => {
     const value = (req.query.value as string) || "";
     const validationError = validatePublicUsername(value.trim());

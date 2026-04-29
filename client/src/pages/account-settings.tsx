@@ -443,7 +443,10 @@ export default function AccountSettings() {
               </div>
               <button
                 className="text-[11px] text-primary/70 hover:text-primary underline-offset-2 hover:underline font-display tracking-wider shrink-0 mt-0.5"
-                onClick={() => setDisclaimerReviewOpen(true)}
+                onClick={() => {
+                  setDisclaimerReviewOpen(true);
+                  apiRequest("POST", "/api/users/me/review-liability-disclaimer").catch(() => {});
+                }}
                 data-testid="button-reread-disclaimer"
               >
                 Re-read
