@@ -5624,6 +5624,7 @@ queryKey: ["/api/admin/feedback/unread-count"], enabled: user?.role === "admin",
 const feedbackUnread = feedbackUnreadData?.count ?? 0;
 
 const [userSearch, setUserSearch] = useState("");
+const [disclaimerFilter, setDisclaimerFilter] = useState(false);
 const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 const [jobFilter, setJobFilter] = useState<"all" | "stuck" | "active" | "done">("all");
 const [includeDemoJobs, setIncludeDemoJobs] = useState(false);
@@ -5789,7 +5790,7 @@ return (
 <TabsContent value="users">
 {usersLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div> : (
 <div className="space-y-2">
-<div className="relative mb-3">
+<div className="relative mb-2">
 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
 <input
   type="text"
@@ -5799,6 +5800,16 @@ return (
   className="w-full bg-muted/20 border border-border/20 rounded-xl pl-8 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/30"
   data-testid="input-user-search"
 />
+</div>
+<div className="flex items-center gap-2 mb-3">
+<button
+  onClick={() => setDisclaimerFilter(v => !v)}
+  className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${disclaimerFilter ? "bg-destructive/10 border-destructive/30 text-destructive" : "bg-muted/20 border-border/20 text-muted-foreground hover:text-foreground"}`}
+  data-testid="button-filter-disclaimer"
+>
+  <ShieldCheck className="w-3 h-3" />
+  {disclaimerFilter ? "Showing: disclaimer not accepted" : "Filter: disclaimer not accepted"}
+</button>
 </div>
 <div className="bg-muted/20 rounded-lg p-3 mb-3">
 <div className="flex items-center gap-2 mb-1">
@@ -5813,6 +5824,7 @@ fair access while maintaining safety standards.
 </div>
 
 {(allUsers ?? []).filter(u => {
+  if (disclaimerFilter && u.liabilityDisclaimerAcceptedAt) return false;
   if (!userSearch.trim()) return true;
   const q = userSearch.toLowerCase();
   return (u.fullName || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q) || (u.username || "").toLowerCase().includes(q);
@@ -5983,6 +5995,17 @@ data-testid={`check-host-drop-${u.id}`}
 💰 Host Drops
 </label>
 </div>
+
+<div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-muted/20 border border-border/10" data-testid={`disclaimer-status-${u.id}`}>
+<ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${u.liabilityDisclaimerAcceptedAt ? "text-green-500" : "text-muted-foreground"}`} />
+<span className="text-[11px]">
+  {u.liabilityDisclaimerAcceptedAt
+    ? <>Disclaimer accepted: <span className="font-semibold" data-testid={`disclaimer-date-${u.id}`}>{new Date(u.liabilityDisclaimerAcceptedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</span></>
+    : <span className="text-muted-foreground">Disclaimer not yet accepted</span>
+  }
+</span>
+</div>
+
 {!u.day1OG && (
 <Button
 size="sm"
