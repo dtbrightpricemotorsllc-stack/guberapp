@@ -599,6 +599,32 @@ useEffect(() => {
 
 useEffect(() => { setOffset(0); }, [fromDate, toDate]);
 
+function applyPreset(preset: "today" | "last7" | "last30") {
+  const fmtLocal = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const now = new Date();
+  const today = fmtLocal(now);
+  if (preset === "today") {
+    setFromDate(today);
+    setToDate(today);
+  } else if (preset === "last7") {
+    const from = new Date(now);
+    from.setDate(now.getDate() - 6);
+    setFromDate(fmtLocal(from));
+    setToDate(today);
+  } else {
+    const from = new Date(now);
+    from.setDate(now.getDate() - 29);
+    setFromDate(fmtLocal(from));
+    setToDate(today);
+  }
+  setOffset(0);
+}
+
 const queryParams = new URLSearchParams();
 if (debouncedUser) queryParams.set("user", debouncedUser);
 if (actionFilter !== "all") queryParams.set("action", actionFilter);
@@ -714,6 +740,22 @@ return (
   className="h-8 w-52 rounded-lg border border-border/20 bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
   data-testid="input-audit-details-search"
 />
+<div className="flex items-center gap-1" data-testid="audit-date-presets">
+  {([
+    { label: "Today", preset: "today" },
+    { label: "Last 7 days", preset: "last7" },
+    { label: "Last 30 days", preset: "last30" },
+  ] as const).map(({ label, preset }) => (
+    <button
+      key={preset}
+      onClick={() => applyPreset(preset)}
+      data-testid={`button-audit-preset-${preset}`}
+      className="h-8 px-2 rounded-lg border border-border/20 bg-muted/30 hover:bg-muted/60 text-xs text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {label}
+    </button>
+  ))}
+</div>
 <input
   type="date"
   value={fromDate}
