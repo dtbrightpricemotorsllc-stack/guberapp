@@ -2015,7 +2015,13 @@ const testPushMutation = useMutation({
   mutationFn: () => apiRequest("POST", "/api/admin/test-push", { userId: Number(testPushUserId), type: testPushType }),
   onSuccess: async (res) => {
     const data = await res.json();
-    toast({ title: "Test push sent!", description: `User ${data.userId} | Type: ${data.type} | Sound: ${data.sound}` });
+    if (!data.hasTokens) {
+      toast({ title: "No device tokens found", description: `No device tokens found for user ${data.userId} — push was not delivered to any device.`, variant: "destructive" });
+    } else if (data.apnsSent === 0 && data.webPushSent === 0) {
+      toast({ title: "Tokens found — no push attempts made", description: `User ${data.userId} has registered tokens but no push attempts were made (e.g. push service unavailable). Check server logs for details.`, variant: "destructive" });
+    } else {
+      toast({ title: "Test push sent!", description: `User ${data.userId} | Type: ${data.type} | Sound: ${data.sound} | APNs targets: ${data.apnsSent} | Web targets: ${data.webPushSent}` });
+    }
   },
   onError: async (err: any) => {
     toast({ title: "Test push failed", description: err.message, variant: "destructive" });

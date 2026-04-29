@@ -140,7 +140,10 @@ export async function sendPushToUser(
     sound?: string;
     actions?: PushAction[];
   }
-): Promise<void> {
+): Promise<{ apnsSent: number; webPushSent: number; hasTokens: boolean }> {
+  let apnsSent = 0;
+  let webPushSent = 0;
+
   // ── 1. Native iOS path — APNs direct with custom sound ──────────────────
   const nativeTokenRows = await db
     .select()
@@ -159,17 +162,21 @@ export async function sendPushToUser(
         actions: payload.actions,
       }
     );
+    apnsSent = nativeTokenRows.length;
   }
 
   // ── 2. Web-push VAPID path — for non-iOS browsers ───────────────────────
-  if (!vapidConfigured) return;
-
+  // Always fetch subscriptions so hasTokens reflects registration, not send success.
   const subs = await db
     .select()
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.userId, userId));
 
-  if (!subs.length) return;
+  const hasTokens = nativeTokenRows.length > 0 || subs.length > 0;
+
+  if (!vapidConfigured || !subs.length) {
+    return { apnsSent, webPushSent, hasTokens };
+  }
 
   const pushPayload = JSON.stringify({
     title: payload.title,
@@ -185,6 +192,7 @@ export async function sendPushToUser(
 
   await Promise.allSettled(
     subs.map(async (sub) => {
+      webPushSent++;
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -202,6 +210,8 @@ export async function sendPushToUser(
       }
     })
   );
+
+  return { apnsSent, webPushSent, hasTokens };
 }
 
 export async function saveSubscription(

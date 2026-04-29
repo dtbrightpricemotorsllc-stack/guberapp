@@ -8829,7 +8829,7 @@ export async function registerRoutes(
       }
       const sound = getSoundForNotificationType(type);
       const { sendPushToUser } = await import("./push");
-      await sendPushToUser(numericUserId, {
+      const delivery = await sendPushToUser(numericUserId, {
         title: `[TEST] ${type}`,
         body: `Admin test push — type: ${type} | sound: ${sound}`,
         sound,
@@ -8838,9 +8838,9 @@ export async function registerRoutes(
       await storage.createAuditLog({
         userId: req.session.userId!,
         action: "admin_test_push",
-        details: `Target userId: ${numericUserId} | Type: ${type} | Sound: ${sound}`,
+        details: `Target userId: ${numericUserId} | Type: ${type} | Sound: ${sound} | APNs: ${delivery.apnsSent} | Web: ${delivery.webPushSent}`,
       });
-      res.json({ success: true, userId: numericUserId, type, sound });
+      res.json({ success: true, userId: numericUserId, type, sound, webPushSent: delivery.webPushSent, apnsSent: delivery.apnsSent, hasTokens: delivery.hasTokens });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
