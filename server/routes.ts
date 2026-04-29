@@ -18,7 +18,7 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
-import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
+import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, type SQL } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop } from "@shared/schema";
 import {
   DISPUTE_ISSUE_TYPES,
@@ -4204,7 +4204,23 @@ export async function registerRoutes(
   app.get("/api/admin/audit-logs", requireAdmin, async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
-      const logs = await db
+      const userParam = (req.query.user as string || "").trim();
+      const actionParam = (req.query.action as string || "").trim();
+
+      const conditions: SQL<unknown>[] = [];
+      if (userParam) {
+        const numericId = parseInt(userParam);
+        if (!isNaN(numericId)) {
+          conditions.push(or(ilike(usersTable.username, `%${userParam}%`), sqlEq(auditLogsTable.userId, numericId))!);
+        } else {
+          conditions.push(ilike(usersTable.username, `%${userParam}%`));
+        }
+      }
+      if (actionParam) {
+        conditions.push(sqlEq(auditLogsTable.action, actionParam));
+      }
+
+      const query = db
         .select({
           id: auditLogsTable.id,
           userId: auditLogsTable.userId,
@@ -4218,6 +4234,8 @@ export async function registerRoutes(
         .leftJoin(usersTable, sqlEq(auditLogsTable.userId, usersTable.id))
         .orderBy(sqlDesc(auditLogsTable.createdAt))
         .limit(limit);
+
+      const logs = await (conditions.length > 0 ? query.where(and(...conditions)) : query);
       res.json(logs);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

@@ -571,23 +571,33 @@ type AuditLogWithUser = AuditLog & { username?: string | null };
 function AuditLogTab() {
 const [actionFilter, setActionFilter] = useState<string>("all");
 const [userSearch, setUserSearch] = useState<string>("");
+const [debouncedUser, setDebouncedUser] = useState<string>("");
+
+useEffect(() => {
+  const t = setTimeout(() => setDebouncedUser(userSearch.trim()), 400);
+  return () => clearTimeout(t);
+}, [userSearch]);
+
+const queryParams = new URLSearchParams();
+if (debouncedUser) queryParams.set("user", debouncedUser);
+if (actionFilter !== "all") queryParams.set("action", actionFilter);
+const queryString = queryParams.toString();
+const apiUrl = `/api/admin/audit-logs${queryString ? `?${queryString}` : ""}`;
 
 const { data: logs, isLoading } = useQuery<AuditLogWithUser[]>({
-queryKey: ["/api/admin/audit-logs"],
+queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter],
+queryFn: async () => {
+  const res = await fetch(apiUrl, { credentials: "include" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+},
 staleTime: 30_000,
 });
 
 if (isLoading) return <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 rounded-xl" />)}</div>;
 
 const allActions = Array.from(new Set((logs || []).map(l => l.action)));
-const searchTerm = userSearch.trim().toLowerCase();
-const filtered = (logs || []).filter(l => {
-  const matchesAction = actionFilter === "all" || l.action === actionFilter;
-  const matchesUser = !searchTerm ||
-    (l.username || "").toLowerCase().includes(searchTerm) ||
-    String(l.userId || "").includes(searchTerm);
-  return matchesAction && matchesUser;
-});
+const filtered = logs || [];
 
 function getActionColor(action: string) {
 if (action === "contact_info_blocked") return "bg-destructive/10 text-destructive border-destructive/30";
