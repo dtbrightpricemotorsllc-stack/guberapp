@@ -623,6 +623,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(jobs)
       .where(and(
         eq(jobs.isPublished, true),
+        eq(jobs.isDemo, false),
         inArray(jobs.status, ["posted_public", "accepted_pending_payment", "in_progress", "active", "funded"])
       ));
   }
@@ -640,7 +641,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobCountsByZip(excludePosterIds?: number[]): Promise<{ zip: string; count: number }[]> {
-    const conditions = [isNotNull(jobs.zip), eq(jobs.isPublished, true)];
+    const conditions = [isNotNull(jobs.zip), eq(jobs.isPublished, true), eq(jobs.isDemo, false)];
     if (excludePosterIds && excludePosterIds.length > 0) {
       conditions.push(sql`${jobs.postedById} NOT IN (${sql.join(excludePosterIds.map(id => sql`${id}`), sql`, `)})`);
     }

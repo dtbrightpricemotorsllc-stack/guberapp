@@ -395,6 +395,8 @@ export const jobs = pgTable("jobs", {
   // Set the first time the assigned helper confirms the start-of-work
   // safety acknowledgement on this job (clock-in / on-the-way / start).
   helperSafetyConfirmedAt: timestamp("helper_safety_confirmed_at"),
+  // TRUE for all jobs created by the demo/seed accounts — never shown to real users.
+  isDemo: boolean("is_demo").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

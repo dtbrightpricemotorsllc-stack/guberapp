@@ -132,6 +132,17 @@ CREATE TABLE IF NOT EXISTS apns_device_tokens (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- jobs.is_demo: permanent flag for demo/seed jobs — prevents them from ever appearing
+-- on the public map or heat map regardless of demo-user ID caching state.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_demo boolean DEFAULT false;
+UPDATE jobs
+  SET is_demo = true
+  WHERE is_demo = false
+    AND posted_by_id IN (
+      SELECT id FROM users
+      WHERE email IN ('demo.consumer@guberapp.internal', 'demo.business@guberapp.internal')
+    );
+
 SQL
 
 echo "[post-merge] Schema sync complete."

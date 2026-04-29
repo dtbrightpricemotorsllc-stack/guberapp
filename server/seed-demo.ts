@@ -737,6 +737,7 @@ async function seedNationwideJobs() {
       postedById: j.poster,
       isPublished: true,
       isPaid: true,
+      isDemo: true,
       payType: j.payType,
       ...(j.barterOff ? { barterOffering: j.barterOff, barterNeed: j.barterNeed } : {}),
     }));
