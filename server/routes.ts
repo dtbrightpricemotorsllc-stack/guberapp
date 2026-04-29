@@ -4204,6 +4204,7 @@ export async function registerRoutes(
   app.get("/api/admin/audit-logs", requireAdmin, async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
       const userParam = (req.query.user as string || "").trim();
       const actionParam = (req.query.action as string || "").trim();
 
@@ -4220,7 +4221,7 @@ export async function registerRoutes(
         conditions.push(sqlEq(auditLogsTable.action, actionParam));
       }
 
-      const query = db
+      const baseQuery = db
         .select({
           id: auditLogsTable.id,
           userId: auditLogsTable.userId,
@@ -4233,10 +4234,13 @@ export async function registerRoutes(
         .from(auditLogsTable)
         .leftJoin(usersTable, sqlEq(auditLogsTable.userId, usersTable.id))
         .orderBy(sqlDesc(auditLogsTable.createdAt))
-        .limit(limit);
+        .limit(limit + 1)
+        .offset(offset);
 
-      const logs = await (conditions.length > 0 ? query.where(and(...conditions)) : query);
-      res.json(logs);
+      const rows = await (conditions.length > 0 ? baseQuery.where(and(...conditions)) : baseQuery);
+      const hasMore = rows.length > limit;
+      const logs = hasMore ? rows.slice(0, limit) : rows;
+      res.json({ logs, offset, limit, hasMore });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

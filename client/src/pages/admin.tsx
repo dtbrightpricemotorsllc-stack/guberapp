@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
-Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronRight, FolderTree, Plus,
+Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronLeft, ChevronRight, FolderTree, Plus,
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
@@ -568,24 +568,36 @@ data-testid="button-add-checklist-item">
 
 type AuditLogWithUser = AuditLog & { username?: string | null };
 
+type AuditLogPage = { logs: AuditLogWithUser[]; offset: number; limit: number; hasMore: boolean };
+
+const PAGE_SIZE = 100;
+
 function AuditLogTab() {
 const [actionFilter, setActionFilter] = useState<string>("all");
 const [userSearch, setUserSearch] = useState<string>("");
 const [debouncedUser, setDebouncedUser] = useState<string>("");
+const [offset, setOffset] = useState<number>(0);
 
 useEffect(() => {
-  const t = setTimeout(() => setDebouncedUser(userSearch.trim()), 400);
+  const t = setTimeout(() => {
+    setDebouncedUser(userSearch.trim());
+    setOffset(0);
+  }, 400);
   return () => clearTimeout(t);
 }, [userSearch]);
+
+useEffect(() => { setOffset(0); }, [actionFilter]);
 
 const queryParams = new URLSearchParams();
 if (debouncedUser) queryParams.set("user", debouncedUser);
 if (actionFilter !== "all") queryParams.set("action", actionFilter);
+queryParams.set("limit", String(PAGE_SIZE));
+if (offset > 0) queryParams.set("offset", String(offset));
 const queryString = queryParams.toString();
-const apiUrl = `/api/admin/audit-logs${queryString ? `?${queryString}` : ""}`;
+const apiUrl = `/api/admin/audit-logs?${queryString}`;
 
-const { data: logs, isLoading } = useQuery<AuditLogWithUser[]>({
-queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter],
+const { data: page, isLoading } = useQuery<AuditLogPage>({
+queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter, offset],
 queryFn: async () => {
   const res = await fetch(apiUrl, { credentials: "include" });
   if (!res.ok) throw new Error(await res.text());
@@ -596,8 +608,10 @@ staleTime: 30_000,
 
 if (isLoading) return <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 rounded-xl" />)}</div>;
 
-const allActions = Array.from(new Set((logs || []).map(l => l.action)));
-const filtered = logs || [];
+const filtered = page?.logs || [];
+const hasMore = page?.hasMore ?? false;
+const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+const allActions = Array.from(new Set(filtered.map(l => l.action)));
 
 function getActionColor(action: string) {
 if (action === "contact_info_blocked") return "bg-destructive/10 text-destructive border-destructive/30";
@@ -642,7 +656,7 @@ return (
 <div className="flex items-center gap-2">
 <ScrollText className="w-4 h-4 guber-text-green" />
 <h3 className="font-display font-semibold text-sm">Audit Log</h3>
-<span className="text-[10px] text-muted-foreground">({filtered.length} entries)</span>
+<span className="text-[10px] text-muted-foreground">({filtered.length} entries, page {currentPage})</span>
 </div>
 <div className="flex items-center gap-2 flex-wrap">
 <input
@@ -708,6 +722,32 @@ filtered.map(log => (
 </div>
 </div>
 </div>
+</div>
+
+<div className="flex items-center justify-between mt-2">
+<Button
+  variant="outline"
+  size="sm"
+  className="h-7 text-xs gap-1"
+  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+  disabled={offset === 0}
+  data-testid="button-audit-prev"
+>
+  <ChevronLeft className="w-3 h-3" />
+  Previous
+</Button>
+<span className="text-[10px] text-muted-foreground">Page {currentPage}</span>
+<Button
+  variant="outline"
+  size="sm"
+  className="h-7 text-xs gap-1"
+  onClick={() => setOffset(offset + PAGE_SIZE)}
+  disabled={!hasMore}
+  data-testid="button-audit-next"
+>
+  Next
+  <ChevronRight className="w-3 h-3" />
+</Button>
 </div>
 </div>
 );
