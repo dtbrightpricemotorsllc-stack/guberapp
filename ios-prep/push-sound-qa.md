@@ -88,9 +88,16 @@ Before starting the test session, confirm all of the following:
 
 ## Test 1 — `offer_funded` → `guber_money.wav`
 
-**Trigger:** An offer attached to an existing job is funded via Stripe.
+**Trigger:** An offer attached to an existing job is funded via Stripe — or via the admin test push panel.
 
-### Steps
+### Steps (Option A — admin test push panel, fastest)
+
+1. Open the admin panel (`/admin`) and go to the **Broadcast** tab.
+2. Scroll to the **Send Test Push (QA)** section.
+3. Enter the test user's User ID. Set **Notification Type** to **`offer_funded`**.
+4. Click **Send Test Push**. The toast will confirm `sound: guber_money.wav`.
+
+### Steps (Option B — real transaction)
 
 1. On the admin account (separate device or browser), post a new job as the test user or use an existing job the test user created.
 2. As an admin (or via a second user), submit an offer on that job.
@@ -122,21 +129,23 @@ Before starting the test session, confirm all of the following:
 2. Confirm the test user has **job notifications enabled** in their GUBER notification settings.
 3. The test device should receive a push within seconds of the job being posted.
 
-### Steps (Option B — reminder push via curl)
+### Steps (Option B — admin test push panel)
 
-If you have shell access to the server and a valid admin session cookie, you can fire a
-direct push to the test user's account:
+1. Open the admin panel (`/admin`) and go to the **Broadcast** tab.
+2. Scroll down to the **Send Test Push (QA)** section.
+3. Enter the test user's numeric User ID in the "Target User ID" field.
+4. Set the **Notification Type** dropdown to **`job`**.
+5. Click **Send Test Push**.
+6. A toast will confirm delivery and show the sound file used (`guber_action.wav`).
+
+### Steps (Option C — curl)
 
 ```bash
-curl -X POST https://<your-server>/api/admin/broadcast-push \
+curl -X POST https://<your-server>/api/admin/test-push \
   -H "Content-Type: application/json" \
   -b "connect.sid=<admin-session-cookie>" \
-  -d '{"title":"New job near you","body":"Someone posted a gig close by","audience":"all"}'
+  -d '{"userId":<target-user-id>,"type":"job"}'
 ```
-
-> Note: The broadcast endpoint uses `guber_default.wav`. To test `guber_action.wav`
-> specifically, use Option A (real job post) or trigger a job reminder via the
-> scheduling flow.
 
 ### Expected result
 
@@ -155,9 +164,16 @@ curl -X POST https://<your-server>/api/admin/broadcast-push \
 
 ## Test 3 — `cash_drop` (live) → `guber_money.wav`
 
-**Trigger:** Admin activates a cash drop that goes live.
+**Trigger:** Admin activates a cash drop that goes live — or via the admin test push panel.
 
-### Steps
+### Steps (Option A — admin test push panel, fastest)
+
+1. Open the admin panel (`/admin`) and go to the **Broadcast** tab.
+2. Scroll to the **Send Test Push (QA)** section.
+3. Enter the test user's User ID. Set **Notification Type** to **`cash_drop`**.
+4. Click **Send Test Push**. The toast will confirm `sound: guber_money.wav`.
+
+### Steps (Option B — real cash drop)
 
 1. Log in to the **admin panel** (`/admin`) as an admin user in a browser.
 2. Create a new Cash Drop with status set to **Live** (or activate an existing draft drop).
@@ -183,19 +199,22 @@ curl -X POST https://<your-server>/api/admin/broadcast-push \
 
 ## Test 4 — `nearby` (default) → `guber_default.wav`
 
-**Trigger:** Any notification type that does not match `offer_funded`, `cash_drop`, `job`,
-or `offer_payment_failed` — for example a broadcast announcement or a system alert.
+**Trigger:** Any notification type that does not match a specific sound mapping — e.g. a `nearby` alert.
 
-### Steps (admin broadcast)
+### Steps (Option A — admin test push panel, fastest)
 
-1. In the admin panel, go to **Broadcast Push** (or use the curl command below).
-2. Send a broadcast to all users with any title/body.
+1. Open the admin panel (`/admin`) and go to the **Broadcast** tab.
+2. Scroll to the **Send Test Push (QA)** section.
+3. Enter the test user's User ID. Set **Notification Type** to **`nearby`**.
+4. Click **Send Test Push**. The toast will confirm `sound: guber_default.wav`.
+
+### Steps (Option B — curl)
 
 ```bash
-curl -X POST https://<your-server>/api/admin/broadcast-push \
+curl -X POST https://<your-server>/api/admin/test-push \
   -H "Content-Type: application/json" \
   -b "connect.sid=<admin-session-cookie>" \
-  -d '{"title":"Test announcement","body":"This is a QA test push","audience":"all"}'
+  -d '{"userId":<target-user-id>,"type":"nearby"}'
 ```
 
 3. Confirm the test device receives the push with the app closed.
@@ -218,9 +237,16 @@ curl -X POST https://<your-server>/api/admin/broadcast-push \
 ## Test 5 — `closed` / `offer_payment_failed` → `guber_closed.wav`
 
 **Trigger:** A funded offer's payment fails, **or** a cash drop the test user entered is
-claimed by someone else (the "closed" path).
+claimed by someone else (the "closed" path) — or via the admin test push panel.
 
-### Steps (Option A — cash drop claimed by another user)
+### Steps (Option A — admin test push panel, fastest)
+
+1. Open the admin panel (`/admin`) and go to the **Broadcast** tab.
+2. Scroll to the **Send Test Push (QA)** section.
+3. Enter the test user's User ID. Set **Notification Type** to **`closed`**.
+4. Click **Send Test Push**. The toast will confirm `sound: guber_closed.wav`.
+
+### Steps (Option B — cash drop claimed by another user)
 
 1. Create a Cash Drop via the admin panel and activate it.
 2. Have the test user submit an entry for the cash drop.
@@ -228,7 +254,7 @@ claimed by someone else (the "closed" path).
    won via the admin panel).
 4. The test user (non-winner) will receive a "Cash Drop Has Been Claimed" notification.
 
-### Steps (Option B — offer payment failure)
+### Steps (Option C — offer payment failure)
 
 1. Use a test Stripe card that is set to fail (e.g. card number `4000000000000002`)
    during the offer-funding checkout step.

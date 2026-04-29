@@ -1978,6 +1978,21 @@ const [popupCtaUrl, setPopupCtaUrl] = useState("");
 const [popupCtaLabel, setPopupCtaLabel] = useState("");
 const [popupAudience, setPopupAudience] = useState("non_og");
 
+// Test push state
+const [testPushUserId, setTestPushUserId] = useState("");
+const [testPushType, setTestPushType] = useState("offer_funded");
+
+const testPushMutation = useMutation({
+  mutationFn: () => apiRequest("POST", "/api/admin/test-push", { userId: Number(testPushUserId), type: testPushType }),
+  onSuccess: async (res) => {
+    const data = await res.json();
+    toast({ title: "Test push sent!", description: `User ${data.userId} | Type: ${data.type} | Sound: ${data.sound}` });
+  },
+  onError: async (err: any) => {
+    toast({ title: "Test push failed", description: err.message, variant: "destructive" });
+  },
+});
+
 const popupBroadcastMutation = useMutation({
   mutationFn: () => apiRequest("POST", "/api/admin/broadcast-popup", {
     title: popupTitle,
@@ -2146,6 +2161,57 @@ data-testid="button-send-push-broadcast"
 <Bell className="w-4 h-4 mr-2" />
 )}
 {pushBroadcastMutation.isPending ? "Sending..." : "Send Push Notification to Everyone"}
+</Button>
+</div>
+</div>
+
+<div className="bg-card rounded-2xl border border-violet-500/30 p-5 space-y-4">
+<h3 className="font-display font-semibold text-sm flex items-center gap-2 text-violet-400">
+<Bell className="w-4 h-4" /> Send Test Push (QA)
+</h3>
+<p className="text-xs text-muted-foreground">
+Send a one-off test push to a specific user to verify custom sounds work correctly on device. The push uses the same sound mapping as production.
+</p>
+<div className="space-y-3">
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">Target User ID</label>
+<Input
+value={testPushUserId}
+onChange={(e) => setTestPushUserId(e.target.value)}
+placeholder="e.g. 42"
+type="number"
+min="1"
+className="bg-background border-border/30"
+data-testid="input-test-push-user-id"
+/>
+</div>
+<div>
+<label className="text-xs text-muted-foreground mb-1 block">Notification Type</label>
+<Select value={testPushType} onValueChange={setTestPushType}>
+<SelectTrigger className="bg-background border-border/30" data-testid="select-test-push-type">
+<SelectValue />
+</SelectTrigger>
+<SelectContent>
+<SelectItem value="offer_funded">offer_funded — guber_money.wav</SelectItem>
+<SelectItem value="job">job — guber_action.wav</SelectItem>
+<SelectItem value="cash_drop">cash_drop — guber_money.wav</SelectItem>
+<SelectItem value="nearby">nearby — guber_default.wav</SelectItem>
+<SelectItem value="closed">closed — guber_closed.wav</SelectItem>
+</SelectContent>
+</Select>
+</div>
+<Button
+onClick={() => testPushMutation.mutate()}
+disabled={testPushMutation.isPending || !testPushUserId.trim()}
+className="bg-violet-600 hover:bg-violet-700 text-white font-display w-full"
+data-testid="button-send-test-push"
+>
+{testPushMutation.isPending ? (
+<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+) : (
+<Bell className="w-4 h-4 mr-2" />
+)}
+{testPushMutation.isPending ? "Sending..." : "Send Test Push"}
 </Button>
 </div>
 </div>

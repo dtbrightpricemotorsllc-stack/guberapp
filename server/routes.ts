@@ -62,6 +62,7 @@ function getSoundForNotificationType(type?: string): string {
       return "guber_money.wav";
     case "offer_payment_pending":
       return "guber_action.wav";
+    case "closed":
     case "offer_payment_failed":
       return "guber_closed.wav";
     case "job":
@@ -8622,6 +8623,40 @@ export async function registerRoutes(
         details: `Title: "${title}" | Audience: ${audience || "all"} | Sent: ${result.sent} | Failed: ${result.failed}`,
       });
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Admin Test Push (targeted single-user, typed notification) ──────────
+  app.post("/api/admin/test-push", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId, type } = req.body || {};
+      if (!userId || !type) {
+        return res.status(400).json({ message: "userId and type are required" });
+      }
+      const numericUserId = Number(userId);
+      if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
+        return res.status(400).json({ message: "userId must be a positive integer" });
+      }
+      const validTypes = ["offer_funded", "job", "cash_drop", "nearby", "closed"];
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({ message: `type must be one of: ${validTypes.join(", ")}` });
+      }
+      const sound = getSoundForNotificationType(type);
+      const { sendPushToUser } = await import("./push");
+      await sendPushToUser(numericUserId, {
+        title: `[TEST] ${type}`,
+        body: `Admin test push — type: ${type} | sound: ${sound}`,
+        sound,
+        tag: `test-push-${type}`,
+      });
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "admin_test_push",
+        details: `Target userId: ${numericUserId} | Type: ${type} | Sound: ${sound}`,
+      });
+      res.json({ success: true, userId: numericUserId, type, sound });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
