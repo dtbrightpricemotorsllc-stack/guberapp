@@ -577,6 +577,8 @@ const [actionFilter, setActionFilter] = useState<string>("all");
 const [userSearch, setUserSearch] = useState<string>("");
 const [debouncedUser, setDebouncedUser] = useState<string>("");
 const [offset, setOffset] = useState<number>(0);
+const [detailsSearch, setDetailsSearch] = useState<string>("");
+const [debouncedDetails, setDebouncedDetails] = useState<string>("");
 
 useEffect(() => {
   const t = setTimeout(() => {
@@ -588,16 +590,22 @@ useEffect(() => {
 
 useEffect(() => { setOffset(0); }, [actionFilter]);
 
+useEffect(() => {
+  const t = setTimeout(() => { setDebouncedDetails(detailsSearch.trim()); setOffset(0); }, 400);
+  return () => clearTimeout(t);
+}, [detailsSearch]);
+
 const queryParams = new URLSearchParams();
 if (debouncedUser) queryParams.set("user", debouncedUser);
 if (actionFilter !== "all") queryParams.set("action", actionFilter);
 queryParams.set("limit", String(PAGE_SIZE));
 if (offset > 0) queryParams.set("offset", String(offset));
+if (debouncedDetails) queryParams.set("details", debouncedDetails);
 const queryString = queryParams.toString();
 const apiUrl = `/api/admin/audit-logs?${queryString}`;
 
 const { data: page, isLoading } = useQuery<AuditLogPage>({
-queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter, offset],
+queryKey: ["/api/admin/audit-logs", debouncedUser, actionFilter, offset, debouncedDetails],
 queryFn: async () => {
   const res = await fetch(apiUrl, { credentials: "include" });
   if (!res.ok) throw new Error(await res.text());
@@ -666,6 +674,14 @@ return (
   onChange={e => setUserSearch(e.target.value)}
   className="h-8 w-52 rounded-lg border border-border/20 bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
   data-testid="input-audit-user-search"
+/>
+<input
+  type="text"
+  placeholder="Search by event details…"
+  value={detailsSearch}
+  onChange={e => setDetailsSearch(e.target.value)}
+  className="h-8 w-52 rounded-lg border border-border/20 bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+  data-testid="input-audit-details-search"
 />
 <Select value={actionFilter} onValueChange={setActionFilter}>
 <SelectTrigger className="w-48 bg-background border-border/20 text-xs" data-testid="select-audit-filter">

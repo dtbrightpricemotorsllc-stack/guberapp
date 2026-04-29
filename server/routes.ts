@@ -4207,6 +4207,7 @@ export async function registerRoutes(
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
       const userParam = (req.query.user as string || "").trim();
       const actionParam = (req.query.action as string || "").trim();
+      const detailsParam = (req.query.details as string || "").trim();
 
       const conditions: SQL<unknown>[] = [];
       if (userParam) {
@@ -4219,6 +4220,9 @@ export async function registerRoutes(
       }
       if (actionParam) {
         conditions.push(sqlEq(auditLogsTable.action, actionParam));
+      }
+      if (detailsParam) {
+        conditions.push(ilike(auditLogsTable.details, `%${detailsParam}%`));
       }
 
       const baseQuery = db
