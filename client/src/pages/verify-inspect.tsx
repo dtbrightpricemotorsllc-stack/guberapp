@@ -37,6 +37,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { VisualOnlyLabel } from "@/components/liability-modals";
+import { detectViLanguageHit, replaceViLanguage, VI_LANGUAGE_HINT } from "@shared/liability";
 import {
   Select,
   SelectContent,
@@ -1200,18 +1202,52 @@ export default function VerifyInspect() {
                     </div>
                   ))}
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
-                      Anything specific to focus on? (optional)
-                    </label>
-                    <Textarea
-                      value={focusNote}
-                      onChange={(e) => setFocusNote(e.target.value)}
-                      placeholder="e.g. Check the back gate latch, look for water stains under the kitchen sink"
-                      rows={2}
-                      maxLength={500}
-                      className="premium-input rounded-md text-sm"
-                      data-testid="textarea-focus-note"
-                    />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-medium text-muted-foreground block font-display tracking-wide">
+                        Anything specific to focus on? (optional)
+                      </label>
+                      {/* Liability protection (Task #318): persistent V&I label */}
+                      <VisualOnlyLabel />
+                    </div>
+                    {(() => {
+                      // Liability protection (Task #318): detect violations on
+                      // the RAW input first so the helper always sees the
+                      // warning at the moment of typing — only then offer the
+                      // sanitized rewrite. Storing the raw value also keeps
+                      // server-side detection authoritative.
+                      const rawHit = detectViLanguageHit(focusNote);
+                      return (
+                        <>
+                          <Textarea
+                            value={focusNote}
+                            onChange={(e) => setFocusNote(e.target.value)}
+                            placeholder="e.g. Check the back gate latch, look for water stains under the kitchen sink"
+                            rows={2}
+                            maxLength={500}
+                            className="premium-input rounded-md text-sm"
+                            data-testid="textarea-focus-note"
+                          />
+                          {rawHit && (
+                            <div className="mt-1 space-y-1">
+                              <p
+                                className="text-[10px] text-amber-400/90 leading-relaxed"
+                                data-testid="text-vi-language-warning"
+                              >
+                                {rawHit.message}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setFocusNote(replaceViLanguage(focusNote))}
+                                className="text-[10px] text-amber-300 underline underline-offset-2 hover:text-amber-200"
+                                data-testid="button-vi-rewrite"
+                              >
+                                Rewrite for me
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : visibleDetailOptions && visibleDetailOptions.length > 0 ? (

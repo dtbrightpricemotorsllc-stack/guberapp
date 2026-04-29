@@ -13,6 +13,9 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<User | null>;
   signup: (data: { email: string; username: string; fullName: string; password: string; zipcode?: string }) => Promise<void>;
   logout: () => Promise<void>;
+  // Liability protection (Task #318): one-time global disclaimer.
+  acceptLiabilityDisclaimer: () => Promise<void>;
+  acceptingLiabilityDisclaimer: boolean;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -73,6 +76,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  // Task #318: one-time global liability disclaimer acknowledgement.
+  const liabilityDisclaimerMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/users/me/accept-liability-disclaimer");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
   const login = useCallback(async (email: string, password: string): Promise<User | null> => {
     return loginMutation.mutateAsync({ email, password });
   }, [loginMutation]);
@@ -89,8 +102,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return !!user?.email?.endsWith("@guberapp.internal");
   }, [user?.email]);
 
+  const acceptLiabilityDisclaimer = useCallback(async () => {
+    await liabilityDisclaimerMutation.mutateAsync();
+  }, [liabilityDisclaimerMutation]);
+
   return (
-    <AuthContext.Provider value={{ user: user ?? null, isLoading, isDemoUser, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{
+        user: user ?? null,
+        isLoading,
+        isDemoUser,
+        login,
+        signup,
+        logout,
+        acceptLiabilityDisclaimer,
+        acceptingLiabilityDisclaimer: liabilityDisclaimerMutation.isPending,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

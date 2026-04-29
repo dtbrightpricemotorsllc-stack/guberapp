@@ -22,6 +22,21 @@ import { TASK_TIERS, PRICING_MODES, type TaskTierId, type PricingModeId } from "
 import { AvailabilityWindowsPicker, type AvailabilityWindow, hasAtLeastOneFutureWindow } from "@/components/availability-windows-picker";
 import { GuidedJobBuilder } from "@/components/guided-job-builder";
 import { findJobConfig, computeAutoTitle, computeEffort, computeHelpers, computeSuggestedPrice, detectContactBlock } from "@/lib/job-builder-config";
+import {
+  GlobalDisclaimerModal,
+  SafetyGateModal,
+  CategoryDisclaimerCard,
+  NoEmploymentStatement,
+  PaymentSafetyStatement,
+  VisualOnlyLabel,
+  OffPlatformWarning,
+} from "@/components/liability-modals";
+import {
+  detectDisallowedJobContent,
+  detectSafetyTriggers,
+  getCategoryDisclaimer,
+  type SafetyTriggerHit,
+} from "@shared/liability";
 
 // LIVE categories only. Marketplace and Barter Labor are intentionally
 // hidden from the picker until those flows are completed end-to-end.
@@ -46,9 +61,19 @@ function filterNotesContent(text: string): string {
 }
 
 export default function PostJob() {
-  const { user, isDemoUser } = useAuth();
+  const { user, isDemoUser, acceptLiabilityDisclaimer, acceptingLiabilityDisclaimer } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
+  // Liability protection (Task #318): one-time global disclaimer is gated
+  // at the submit/confirmation moment (not on page mount), so it appears
+  // exactly when the user is committing to post a job.
+  const [globalDisclaimerOpen, setGlobalDisclaimerOpen] = useState(false);
+
+  // Safety-gate is shown right before checkout when the proposed job content
+  // matches one of the SAFETY_TRIGGERS (roadside / towing / heavy lifting / …).
+  const [safetyHits, setSafetyHits] = useState<SafetyTriggerHit[]>([]);
+  const [safetyGateOpen, setSafetyGateOpen] = useState(false);
   const searchStr = useSearch();
   const params = new URLSearchParams(searchStr);
 
@@ -425,6 +450,12 @@ export default function PostJob() {
       setLocation("/my-jobs");
     },
     onError: (err: any) => {
+      if (err.message?.includes("DISCLAIMER_REQUIRED") || err.status === 412) {
+        // Stale auth cache: server says we still need the disclaimer.
+        // Reopen the modal instead of showing a generic error.
+        setGlobalDisclaimerOpen(true);
+        return;
+      }
       if (err.message?.includes("ID_REQUIRED") || err.status === 403) {
         toast({ title: "ID Verification Required", description: "Go to Profile → Trust & Credentials to upload your ID.", variant: "destructive" });
       } else {
@@ -487,7 +518,94 @@ export default function PostJob() {
     return "";
   }, [category, isVIJob, serviceType, isBarter, budgetNum, minPayoutError, locationRequired, zip, checklists, jobDetails, barterNeed, barterOffering, autoIncreaseEnabled, autoIncreaseAmount, autoIncreaseMax, urgentSwitch, isOnlineCategory, availabilityWindows]);
 
-  const canSubmit = !missingReason;
+  // Liability protection (Task #318): inline disallowed-job detection. We use
+  // the same shared detector the server uses, so the user gets immediate
+  // feedback before the server rejects them.
+  const disallowedHit = useMemo(
+    () =>
+      detectDisallowedJobContent({
+        title: jobMeta?.autoTitle ?? null,
+        description: generalNotes || (isVIJob ? viDescription : null),
+        serviceType: serviceType || viCatalogServiceTypeName || null,
+        jobDetails: { ...jobDetails, ...(viJobDetails || {}) },
+      }),
+    [jobMeta?.autoTitle, generalNotes, isVIJob, viDescription, serviceType, viCatalogServiceTypeName, jobDetails, viJobDetails],
+  );
+
+  // Pick the right category-specific disclaimer (V&I / automotive / property /
+  // skilled). Shown inline above the post button — no extra confirm tap.
+  const categoryDisclaimer = useMemo(
+    () =>
+      getCategoryDisclaimer({
+        category: effectiveCategory,
+        verifyInspectCategory: viVerifyInspectCategory,
+        serviceType: serviceType || viCatalogServiceTypeName,
+        useCaseName: viUseCaseName,
+      }),
+    [effectiveCategory, viVerifyInspectCategory, serviceType, viCatalogServiceTypeName, viUseCaseName],
+  );
+
+  const canSubmit = !missingReason && !disallowedHit;
+
+  // Compute safety-trigger hits for the current draft so we can pre-flight the
+  // safety gate just before checkout.
+  const computeSafetyHits = (): SafetyTriggerHit[] =>
+    detectSafetyTriggers({
+      title: jobMeta?.autoTitle ?? null,
+      description: generalNotes || (isVIJob ? viDescription : null),
+      category: effectiveCategory,
+      serviceType: serviceType || viCatalogServiceTypeName,
+      jobDetails: { ...jobDetails, ...(viJobDetails || {}) },
+      location: location_,
+    });
+
+  const continueSubmitFlow = () => {
+    if (disallowedHit) {
+      toast({
+        title: "Job blocked",
+        description: disallowedHit.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    const hits = computeSafetyHits();
+    if (hits.length > 0) {
+      setSafetyHits(hits);
+      setSafetyGateOpen(true);
+      return;
+    }
+    checkoutMutation.mutate();
+  };
+
+  const handleSubmitClick = () => {
+    // Gate the global disclaimer at the submit moment so it appears exactly
+    // when the user is committing to post a job.
+    if (user && !(user as any).liabilityDisclaimerAcceptedAt) {
+      setGlobalDisclaimerOpen(true);
+      return;
+    }
+    continueSubmitFlow();
+  };
+
+  const handleSafetyGateConfirm = () => {
+    setSafetyGateOpen(false);
+    checkoutMutation.mutate();
+  };
+
+  const handleAcceptGlobalDisclaimer = async () => {
+    try {
+      await acceptLiabilityDisclaimer();
+      setGlobalDisclaimerOpen(false);
+      // Continue the submit flow the user was in the middle of.
+      setTimeout(() => continueSubmitFlow(), 0);
+    } catch (err: any) {
+      toast({
+        title: "Couldn't save acknowledgement",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleJobDetailChange = (name: string, value: any) => {
     setJobDetails(prev => ({ ...prev, [name]: value }));
@@ -537,6 +655,9 @@ export default function PostJob() {
                 <Lock className="w-4 h-4 guber-text-purple" />
                 <span className="text-xs text-muted-foreground uppercase tracking-wider font-display">Verify & Inspect Job</span>
               </div>
+              {/* Liability protection (Task #318): persistent V&I label */}
+              <VisualOnlyLabel />
+
 
               <div className="glass-card-strong rounded-md p-4 space-y-3">
                 <div className="space-y-1">
@@ -856,6 +977,7 @@ export default function PostJob() {
                   <p className="text-[10px] text-muted-foreground">
                     Contact information will be automatically removed.
                   </p>
+                  <OffPlatformWarning />
                 </div>
               )}
             </>
@@ -1310,7 +1432,29 @@ export default function PostJob() {
             </div>
           )}
 
-          <Button onClick={() => checkoutMutation.mutate()}
+          {/* Liability protection (Task #318): category-specific disclaimer */}
+          <CategoryDisclaimerCard disclaimer={categoryDisclaimer} />
+
+          {/* Liability protection (Task #318): inline disallowed-job warning */}
+          {disallowedHit && (
+            <div
+              className="rounded-md border border-destructive/30 bg-destructive/[0.06] p-3"
+              data-testid="text-disallowed-job-block"
+            >
+              <p className="text-[10px] font-display font-bold tracking-widest text-destructive uppercase mb-1">
+                Job not allowed
+              </p>
+              <p className="text-[11px] text-destructive/90 leading-relaxed">
+                {disallowedHit.message}
+              </p>
+            </div>
+          )}
+
+          {/* Persistent statements (Task #318): no-employment + payment safety */}
+          <NoEmploymentStatement />
+          <PaymentSafetyStatement />
+
+          <Button onClick={handleSubmitClick}
             disabled={checkoutMutation.isPending || !canSubmit || (category === "Verify & Inspect" && !isVIJob)}
             className="w-full font-display tracking-wider premium-btn bg-secondary text-secondary-foreground border border-secondary-border rounded-md gap-2"
             data-testid="button-post-job">
@@ -1329,6 +1473,20 @@ export default function PostJob() {
           )}
         </Card>
       </div>
+
+      {/* Liability protection modals (Task #318) */}
+      <GlobalDisclaimerModal
+        open={globalDisclaimerOpen}
+        onAccept={handleAcceptGlobalDisclaimer}
+        isPending={acceptingLiabilityDisclaimer}
+      />
+      <SafetyGateModal
+        open={safetyGateOpen}
+        hits={safetyHits}
+        onConfirm={handleSafetyGateConfirm}
+        onCancel={() => setSafetyGateOpen(false)}
+        isPending={checkoutMutation.isPending}
+      />
     </GuberLayout>
   );
 }

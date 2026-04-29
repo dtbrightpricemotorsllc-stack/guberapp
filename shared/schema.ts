@@ -132,6 +132,11 @@ export const users = pgTable("users", {
   missingProofCount: integer("missing_proof_count").default(0),
   bypassAttemptCount: integer("bypass_attempt_count").default(0),
   falseClaimFlagCount: integer("false_claim_flag_count").default(0),
+  // ── Liability protection (Task #318) ──
+  // Set the first time the user accepts the global GUBER liability
+  // disclaimer (one-time, app-wide). Existing per-job and per-category
+  // waivers are recorded on `assignments` instead.
+  liabilityDisclaimerAcceptedAt: timestamp("liability_disclaimer_accepted_at"),
 });
 
 export const categories = pgTable("categories", {
@@ -386,6 +391,10 @@ export const jobs = pgTable("jobs", {
   contactBypassFlagged: boolean("contact_bypass_flagged").default(false),
   // Optional rolling quality score (0-100), if set by review pipeline.
   jobQualityScore: integer("job_quality_score"),
+  // ── Liability protection (Task #318) ──
+  // Set the first time the assigned helper confirms the start-of-work
+  // safety acknowledgement on this job (clock-in / on-the-way / start).
+  helperSafetyConfirmedAt: timestamp("helper_safety_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

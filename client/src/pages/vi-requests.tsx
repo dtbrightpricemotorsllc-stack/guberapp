@@ -9,6 +9,12 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatJobTime } from "@/lib/job-time";
+import {
+  GlobalDisclaimerModal,
+  SafetyGateModal,
+  NoEmploymentStatement,
+} from "@/components/liability-modals";
+import { detectSafetyTriggers, type SafetyTriggerHit } from "@shared/liability";
 import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
 import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
 import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
@@ -41,11 +47,19 @@ type VIJob = {
 };
 
 export default function VIRequests() {
-  const { user } = useAuth();
+  const { user, acceptLiabilityDisclaimer, acceptingLiabilityDisclaimer } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [filter, setFilter] = useState("All");
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
+
+  // Liability protection (Task #318): the V&I "Take this" tap is an
+  // acceptance entry point, so it must enforce the same global
+  // disclaimer + safety gate chain as job-detail.
+  const [pendingJob, setPendingJob] = useState<VIJob | null>(null);
+  const [globalDisclaimerOpen, setGlobalDisclaimerOpen] = useState(false);
+  const [safetyHits, setSafetyHits] = useState<SafetyTriggerHit[]>([]);
+  const [safetyGateOpen, setSafetyGateOpen] = useState(false);
 
   const { data: jobs, isLoading } = useQuery<VIJob[]>({
     queryKey: ["/api/jobs"],
@@ -72,10 +86,65 @@ export default function VIRequests() {
       navigate("/my-jobs");
     },
     onError: (err: any) => {
-      toast({ title: "Could not accept", description: err.message, variant: "destructive" });
       setAcceptingId(null);
+      if (err.message?.includes("DISCLAIMER_REQUIRED") || err.status === 412) {
+        setGlobalDisclaimerOpen(true);
+        return;
+      }
+      toast({ title: "Could not accept", description: err.message, variant: "destructive" });
     },
   });
+
+  const computeSafetyHitsFor = (job: VIJob): SafetyTriggerHit[] => {
+    return detectSafetyTriggers({
+      title: job.title,
+      description: null,
+      serviceType: job.catalogServiceTypeName,
+      jobDetails: job.jobDetails,
+    });
+  };
+
+  const beginAcceptForJob = (job: VIJob) => {
+    setPendingJob(job);
+    if (user && !(user as any).liabilityDisclaimerAcceptedAt) {
+      setGlobalDisclaimerOpen(true);
+      return;
+    }
+    const hits = computeSafetyHitsFor(job);
+    if (hits.length > 0) {
+      setSafetyHits(hits);
+      setSafetyGateOpen(true);
+      return;
+    }
+    acceptMutation.mutate(job.id);
+  };
+
+  const handleAcceptGlobalDisclaimer = async () => {
+    try {
+      await acceptLiabilityDisclaimer();
+      setGlobalDisclaimerOpen(false);
+      if (pendingJob) {
+        const hits = computeSafetyHitsFor(pendingJob);
+        if (hits.length > 0) {
+          setSafetyHits(hits);
+          setSafetyGateOpen(true);
+        } else {
+          acceptMutation.mutate(pendingJob.id);
+        }
+      }
+    } catch (err: any) {
+      toast({
+        title: "Couldn't save acknowledgement",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSafetyGateConfirm = () => {
+    setSafetyGateOpen(false);
+    if (pendingJob) acceptMutation.mutate(pendingJob.id);
+  };
 
   function getCategoryImg(viCategory: string | null) {
     if (!viCategory) return null;
@@ -271,7 +340,7 @@ export default function VIRequests() {
                         </button>
                         {user && user.id !== job.assignedHelperId && (
                           <button
-                            onClick={() => acceptMutation.mutate(job.id)}
+                            onClick={() => beginAcceptForJob(job)}
                             disabled={isAccepting || acceptMutation.isPending}
                             className="flex-1 h-10 rounded-xl font-display font-bold text-xs tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95"
                             style={{ background: "linear-gradient(135deg, #7c3aed, #4c1d95)", color: "#fff", border: "none" }}
@@ -289,7 +358,27 @@ export default function VIRequests() {
             </div>
           )}
         </div>
+        <div className="px-4 pb-4">
+          <NoEmploymentStatement />
+        </div>
       </div>
+
+      <GlobalDisclaimerModal
+        open={globalDisclaimerOpen}
+        onAccept={handleAcceptGlobalDisclaimer}
+        isPending={acceptingLiabilityDisclaimer}
+      />
+
+      <SafetyGateModal
+        open={safetyGateOpen}
+        hits={safetyHits}
+        onConfirm={handleSafetyGateConfirm}
+        onCancel={() => {
+          setSafetyGateOpen(false);
+          setPendingJob(null);
+          setAcceptingId(null);
+        }}
+      />
     </GuberLayout>
   );
 }

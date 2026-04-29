@@ -3,6 +3,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import type { z } from "zod";
 import { signupSchema, loginSchema, businessSignupSchema } from "../shared/schema";
+import { OFF_PLATFORM_PATTERNS } from "../shared/liability";
 import { generateJWT } from "./jwt";
 
 type SignupInput = z.infer<typeof signupSchema>;
@@ -30,16 +31,33 @@ export async function comparePasswords(supplied: string, stored: string): Promis
 }
 
 export function contactInfoPattern(): RegExp {
-  return /(\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b)|(\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)|(@\w{2,})|((facebook|instagram|snapchat|twitter|tiktok|linkedin|whatsapp|telegram|signal|venmo|cashapp|zelle)[\s.:\/]*\w*)/gi;
+  return /(\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b)|(\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)|(@\w{2,})|((facebook|instagram|snapchat|twitter|tiktok|linkedin|whatsapp|telegram|signal|venmo|cashapp|zelle|paypal)[\s.:\/]*\w*)/gi;
 }
 
 export function filterContactInfo(text: string): { clean: string; blocked: boolean } {
   if (!text) return { clean: text, blocked: false };
+  let clean = text;
+  let blocked = false;
+
   const pattern = contactInfoPattern();
-  if (pattern.test(text)) {
-    return { clean: text.replace(pattern, "[blocked]"), blocked: true };
+  if (pattern.test(clean)) {
+    clean = clean.replace(pattern, "[blocked]");
+    blocked = true;
   }
-  return { clean: text, blocked: false };
+
+  // Strengthened off-platform / pay-outside guards (Task #318). The
+  // regexes from `shared/liability.ts` are global-ified here so each
+  // match (not just the first) is replaced.
+  for (const { re } of OFF_PLATFORM_PATTERNS) {
+    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+    const globalRe = new RegExp(re.source, flags);
+    if (globalRe.test(clean)) {
+      blocked = true;
+      clean = clean.replace(new RegExp(re.source, flags), "[blocked]");
+    }
+  }
+
+  return { clean, blocked };
 }
 
 export function sanitizeUser(user: any) {

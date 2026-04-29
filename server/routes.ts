@@ -15,6 +15,7 @@ import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth } from "./auth";
+import { detectDisallowedJobContent, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
@@ -2275,6 +2276,33 @@ export async function registerRoutes(
     }
   });
 
+  // Liability protection (Task #318): record one-time global liability
+  // disclaimer acknowledgement on the user. Idempotent — repeat calls are
+  // a no-op once the timestamp is set.
+  app.post("/api/users/me/accept-liability-disclaimer", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const existing = await storage.getUser(userId);
+      if (!existing) return res.status(404).json({ message: "User not found" });
+      const already = (existing as any).liabilityDisclaimerAcceptedAt;
+      if (!already) {
+        await storage.updateUser(userId, { liabilityDisclaimerAcceptedAt: new Date() } as any);
+        await storage.createAuditLog({
+          userId,
+          action: "liability_disclaimer_accepted",
+          details: "User accepted the global GUBER liability disclaimer (Task #318)",
+        });
+      }
+      const updated = await storage.getUser(userId);
+      res.json({
+        success: true,
+        liabilityDisclaimerAcceptedAt: (updated as any)?.liabilityDisclaimerAcceptedAt ?? null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/users/me/validate-username", requireAuth, async (req: Request, res: Response) => {
     const value = (req.query.value as string) || "";
     const validationError = validatePublicUsername(value.trim());
@@ -4426,6 +4454,39 @@ export async function registerRoutes(
       const parsed = insertJobSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
 
+      // Liability protection (Task #318): the global liability disclaimer
+      // must be acknowledged at least once before a user can post a job.
+      // Enforced server-side so direct API callers cannot bypass the
+      // client modal.
+      const poster = await storage.getUser(req.session.userId!);
+      if (!poster?.liabilityDisclaimerAcceptedAt) {
+        return res.status(412).json({
+          message: "DISCLAIMER_REQUIRED",
+          detail: "Please acknowledge the GUBER liability disclaimer before posting.",
+        });
+      }
+
+      // Liability protection (Task #318): mirror the create-checkout guard
+      // for jobs created directly (e.g. business posting flow).
+      const disallowedHit = detectDisallowedJobContent({
+        title: parsed.data.title || null,
+        description: parsed.data.description || null,
+        serviceType: (parsed.data as any).serviceType || null,
+        jobDetails: (parsed.data as any).jobDetails || null,
+      });
+      if (disallowedHit) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "disallowed_job_blocked",
+          details: `Blocked ${disallowedHit.category} content in /api/jobs`,
+        });
+        return res.status(400).json({
+          message: "DISALLOWED_JOB",
+          detail: disallowedHit.message,
+          category: disallowedHit.category,
+        });
+      }
+
       // Structured-coordination soft check: non-urgent jobs SHOULD post one or
       // more availability windows so the no-chat scheduling flow can engage.
       // We only warn (not reject) during the transition so the legacy post
@@ -4473,9 +4534,41 @@ export async function registerRoutes(
       }
 
       const { title, description, budget, location, zip, lat: rawLat, lng: rawLng } = req.body;
+
+      // Liability protection (Task #318): edits must be held to the same
+      // disallowed-content rules as create. Mirror the V&I language guard
+      // when the post is a Verify & Inspect job.
+      const editScreen = {
+        title: title ?? job.title ?? "",
+        description: description ?? (job as any).description ?? "",
+        category: job.category ?? null,
+        serviceType: (job as any).serviceType ?? null,
+        jobDetails: (job as any).jobDetails ?? null,
+      };
+      const editDisallowed = detectDisallowedJobContent(editScreen as any);
+      if (editDisallowed) {
+        return res.status(400).json({
+          message: "DISALLOWED_JOB_CONTENT",
+          detail: editDisallowed.message,
+        });
+      }
+
       const allowedUpdate: any = {};
-      if (title !== undefined) allowedUpdate.title = title;
-      if (description !== undefined) allowedUpdate.description = description;
+      if (title !== undefined) {
+        // Liability protection (Task #318): mirror create-time filters —
+        // strip phone/email/handle/off-platform mentions and apply V&I
+        // language scrub when applicable.
+        const cleanedTitle = filterContactInfo(String(title)).clean;
+        allowedUpdate.title = job.category === "Verify & Inspect"
+          ? replaceViLanguage(cleanedTitle)
+          : cleanedTitle;
+      }
+      if (description !== undefined) {
+        const cleanedDesc = filterContactInfo(String(description)).clean;
+        allowedUpdate.description = job.category === "Verify & Inspect"
+          ? replaceViLanguage(cleanedDesc)
+          : cleanedDesc;
+      }
       if (budget !== undefined) allowedUpdate.budget = parseFloat(budget);
       if (location !== undefined) allowedUpdate.location = location;
       if (zip !== undefined) allowedUpdate.zip = zip;
@@ -5076,6 +5169,17 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
 
+      // Liability protection (Task #318): the global liability disclaimer
+      // must be acknowledged at least once before a user can post a job.
+      // Enforced server-side so direct API callers cannot bypass the
+      // client modal.
+      if (!user.liabilityDisclaimerAcceptedAt) {
+        return res.status(412).json({
+          message: "DISCLAIMER_REQUIRED",
+          detail: "Please acknowledge the GUBER liability disclaimer before posting.",
+        });
+      }
+
       if (!user.idVerified) {
         return res.status(403).json({ message: "ID_REQUIRED", needsVerification: true, detail: "You must verify your ID before posting a job. Go to Profile → Trust & Credentials." });
       }
@@ -5089,6 +5193,27 @@ export async function registerRoutes(
       const exactLng = rawLng != null && !isNaN(parseFloat(rawLng)) ? parseFloat(rawLng) : null;
 
       if (!category) return res.status(400).json({ message: "Category is required" });
+
+      // Liability protection (Task #318): block disallowed job content before
+      // we ever create the row or hand off to Stripe.
+      const disallowedHit = detectDisallowedJobContent({
+        title: req.body?.title || null,
+        description: req.body?.description || null,
+        serviceType: serviceType || catalogServiceTypeName || null,
+        jobDetails: jobDetails || null,
+      });
+      if (disallowedHit) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "disallowed_job_blocked",
+          details: `Blocked ${disallowedHit.category} content in create-checkout`,
+        });
+        return res.status(400).json({
+          message: "DISALLOWED_JOB",
+          detail: disallowedHit.message,
+          category: disallowedHit.category,
+        });
+      }
 
       // Phase-2 structured coordination: posters of non-urgent jobs supply
       // one or more availability windows so the no-chat scheduling flow can
@@ -5137,7 +5262,19 @@ export async function registerRoutes(
               if (check.blocked) {
                 await storage.createAuditLog({ userId: req.session.userId, action: "contact_info_blocked", details: `Contact info in V&I jobDetails field: ${k}` });
               }
-              filteredDetails[k] = check.clean;
+              // Liability protection (Task #318): V&I jobs may not contain
+              // certification / guarantee / professional-opinion language.
+              // Apply the same guard server-side so direct API callers
+              // cannot bypass the client-side hint.
+              const viHit = detectViLanguageHit(check.clean);
+              if (viHit) {
+                await storage.createAuditLog({
+                  userId: req.session.userId,
+                  action: "vi_language_blocked",
+                  details: `V&I forbidden word "${viHit.word}" in jobDetails field: ${k}`,
+                });
+              }
+              filteredDetails[k] = replaceViLanguage(check.clean);
             }
           }
           const detailParts = Object.entries(filteredDetails)
@@ -5147,6 +5284,11 @@ export async function registerRoutes(
           }
           req.body.jobDetails = filteredDetails;
         }
+
+        // Apply the V&I scrub to the auto-generated description text too
+        // (which embeds the catalog template + the filtered details we
+        // just appended above).
+        description = replaceViLanguage(description);
 
         proofRequired = true;
       } else {
@@ -5452,6 +5594,16 @@ export async function registerRoutes(
 
       const helper = await storage.getUser(req.session.userId!);
       if (!helper) return res.status(401).json({ message: "User not found" });
+
+      // Liability protection (Task #318): the helper must have acknowledged
+      // the GUBER liability disclaimer at least once before accepting any
+      // job. Enforced server-side so the modal cannot be bypassed.
+      if (!helper.liabilityDisclaimerAcceptedAt) {
+        return res.status(412).json({
+          message: "DISCLAIMER_REQUIRED",
+          detail: "Please acknowledge the GUBER liability disclaimer before accepting jobs.",
+        });
+      }
 
       if (job.isBounty) {
         return res.status(400).json({ message: "BOUNTY_JOB", detail: "This is a bounty job. Use Submit Proof instead of Accept." });
@@ -6212,7 +6364,22 @@ export async function registerRoutes(
       if (job.assignedHelperId !== req.session.userId) return res.status(403).json({ message: "Not assigned" });
       if (job.status !== "funded") return res.status(400).json({ message: "Job must be funded first" });
 
-      await storage.updateJob(jobId, { status: "active" });
+      // Liability protection (Task #318): helper must tap "I'm ready — start"
+      // at least once before the job moves into work. Once recorded the
+      // confirmation persists for the rest of the job's lifecycle.
+      const alreadyConfirmed = !!(job as any).helperSafetyConfirmedAt;
+      const safetyConfirmed = req.body?.safetyConfirmed === true;
+      if (!alreadyConfirmed && !safetyConfirmed) {
+        return res.status(400).json({
+          message: "SAFETY_CONFIRM_REQUIRED",
+          detail: "Helper must confirm the start-of-work safety acknowledgement before starting.",
+        });
+      }
+      const now = new Date();
+      await storage.updateJob(jobId, {
+        status: "active",
+        ...(alreadyConfirmed ? {} : { helperSafetyConfirmedAt: now }),
+      } as any);
 
       const asgns = await storage.getAssignmentsByJob(jobId);
       const myAsgn = asgns.find(a => a.helperId === req.session.userId);
@@ -6259,6 +6426,19 @@ export async function registerRoutes(
       });
 
       if (statusType === "on_the_way") {
+        // Liability protection (Task #318): "on the way" is the helper's
+        // first physical commitment to the job. Require the start-of-work
+        // safety acknowledgement at least once before the milestone is
+        // recorded; persist on the job so subsequent transitions don't
+        // re-prompt.
+        const alreadyConfirmed = !!(job as any).helperSafetyConfirmedAt;
+        const safetyConfirmed = req.body?.safetyConfirmed === true;
+        if (!alreadyConfirmed && !safetyConfirmed) {
+          return res.status(400).json({
+            message: "SAFETY_CONFIRM_REQUIRED",
+            detail: "Helper must confirm the start-of-work safety acknowledgement before going on the way.",
+          });
+        }
         await storage.updateJob(jobId, {
           helperStage: "on_the_way",
           onTheWayAt: now,
@@ -6266,6 +6446,7 @@ export async function registerRoutes(
           // and future Phase 2 UI both see a consistent timestamp.
           workerOnMyWayAt: now,
           status: job.status === "funded" ? "active" : job.status,
+          ...(alreadyConfirmed ? {} : { helperSafetyConfirmedAt: now }),
         } as any);
 
         await notify(job.postedById, {
@@ -12862,6 +13043,12 @@ YOUR BEHAVIOR:
       if (!photoURLs || !Array.isArray(photoURLs) || photoURLs.length < 1) {
         return res.status(400).json({ error: "At least one photo required" });
       }
+      // Liability protection (Task #318): observations are V&I content. We
+      // strip diagnostic / opinion language from notes server-side so the
+      // record stays "visual documentation only" even if a helper bypasses
+      // the client-side sanitizer.
+      const sanitizedNotes = notes ? replaceViLanguage(String(notes)) : null;
+
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const obs = await storage.createObservation({
         helperId: userId,
@@ -12870,7 +13057,7 @@ YOUR BEHAVIOR:
         locationLng,
         address,
         photoURLs,
-        notes: notes || null,
+        notes: sanitizedNotes,
         tags: tags || [],
         status: "open",
         expiresAt,

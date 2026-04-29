@@ -44,6 +44,20 @@ import { formatJobTime } from "@/lib/job-time";
 import { Link, useLocation } from "wouter";
 import { SchedulingPanel, isJobAddressUnlocked } from "@/components/scheduling-panel";
 import {
+  GlobalDisclaimerModal,
+  SafetyGateModal,
+  HelperStartConfirmModal,
+  NoEmploymentStatement,
+  PaymentSafetyStatement,
+  VisualOnlyLabel,
+} from "@/components/liability-modals";
+import {
+  detectSafetyTriggers,
+  getCategoryDisclaimer,
+  type SafetyTriggerHit,
+  type CategoryDisclaimer,
+} from "@shared/liability";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -95,7 +109,7 @@ const POSTER_CANCEL_REASONS = [
 
 export default function JobDetail() {
   const [, params] = useRoute("/jobs/:id");
-  const { user } = useAuth();
+  const { user, acceptLiabilityDisclaimer, acceptingLiabilityDisclaimer } = useAuth();
   const { toast } = useToast();
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
@@ -167,6 +181,15 @@ export default function JobDetail() {
   const [showWaiverModal, setShowWaiverModal] = useState(false);
   const [waiverChecked, setWaiverChecked] = useState(false);
   const [categoryWaiverChecked, setCategoryWaiverChecked] = useState(false);
+
+  // Liability protection (Task #318): one-time global disclaimer + safety
+  // gate + helper start confirmation. None of these replace the existing
+  // waiver — they layer on top of it.
+  const [globalDisclaimerOpen, setGlobalDisclaimerOpen] = useState(false);
+  const [safetyGateOpen, setSafetyGateOpen] = useState(false);
+  const [safetyHits, setSafetyHits] = useState<SafetyTriggerHit[]>([]);
+  const [helperStartConfirmOpen, setHelperStartConfirmOpen] = useState(false);
+  const helperStartActionRef = useRef<null | "on_the_way" | "start_work">(null);
 
   // Bounty submission state
   const [showBountyForm, setShowBountyForm] = useState(false);
@@ -408,6 +431,12 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
     },
     onError: (err: any) => {
       setShowWaiverModal(false);
+      if (err.message?.includes("DISCLAIMER_REQUIRED") || err.status === 412) {
+        // Stale auth cache: server says we still need the disclaimer.
+        // Reopen the global modal instead of showing a generic error.
+        setGlobalDisclaimerOpen(true);
+        return;
+      }
       if (err.message?.includes("ID_REQUIRED")) {
         toast({ title: "ID Required", description: "You must verify your ID to accept jobs. Go to Profile → Trust & Credentials.", variant: "destructive" });
       } else if (err.message === "STRIPE_CONNECT_REQUIRED") {
@@ -601,7 +630,17 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   });
 
   const milestoneMutation = useMutation({
-    mutationFn: async (data: { statusType: string; gpsLat?: number; gpsLng?: number; cancelReason?: string; cancelStage?: string; cancelNotes?: string }) => {
+    mutationFn: async (data: {
+      statusType: string;
+      gpsLat?: number;
+      gpsLng?: number;
+      cancelReason?: string;
+      cancelStage?: string;
+      cancelNotes?: string;
+      // Liability protection (Task #318): server requires this for the
+      // first transition into "on the way" / "start work".
+      safetyConfirmed?: boolean;
+    }) => {
       const resp = await apiRequest("POST", `/api/jobs/${jobId}/milestone`, data);
       return resp.json();
     },
@@ -783,18 +822,83 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
     onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
-  const handleOnMyWay = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
-      .then((pos) => {
-        milestoneMutation.mutate({
-          statusType: "on_the_way",
-          gpsLat: pos.coords.latitude,
-          gpsLng: pos.coords.longitude,
+  // Liability protection (Task #318): kicks off the helper start-confirmation
+  // modal for the "on the way" milestone. The actual milestone fires only
+  // after the helper taps "I'M READY — START".
+  const requestHelperStart = (action: "on_the_way") => {
+    if ((job as any)?.helperSafetyConfirmedAt) {
+      // Already confirmed for this job — no need to re-prompt.
+      fireHelperStartAction(action);
+      return;
+    }
+    helperStartActionRef.current = action;
+    setHelperStartConfirmOpen(true);
+  };
+
+  const fireHelperStartAction = (action: "on_the_way") => {
+    if (action === "on_the_way") {
+      gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+        .then((pos) => {
+          milestoneMutation.mutate({
+            statusType: "on_the_way",
+            gpsLat: pos.coords.latitude,
+            gpsLng: pos.coords.longitude,
+            safetyConfirmed: true,
+          });
+        })
+        .catch(() => {
+          milestoneMutation.mutate({ statusType: "on_the_way", safetyConfirmed: true });
         });
-      })
-      .catch(() => {
-        milestoneMutation.mutate({ statusType: "on_the_way" });
-      });
+    }
+  };
+
+  const handleConfirmHelperStart = () => {
+    const action = helperStartActionRef.current;
+    setHelperStartConfirmOpen(false);
+    helperStartActionRef.current = null;
+    if (action === "on_the_way") fireHelperStartAction(action);
+  };
+
+  const handleOnMyWay = () => {
+    requestHelperStart("on_the_way");
+  };
+
+  // Liability protection (Task #318): single-tap-equivalent acceptance flow.
+  // Each modal in the chain auto-continues to the next, so the user never
+  // has to re-press ACCEPT JOB after acknowledging the global disclaimer
+  // or the safety gate. The waiver modal is the existing terminal step.
+  const openWaiverModal = () => {
+    setShowWaiverModal(true);
+    setWaiverChecked(false);
+    setCategoryWaiverChecked(false);
+    if (job?.urgentSwitch || job?.category === "On-Demand Help") {
+      const now = new Date();
+      setAvailableFrom(toLocalDatetimeString(now));
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
+      setAvailableTo(toLocalDatetimeString(endOfDay));
+    }
+  };
+
+  const beginAcceptFlow = () => {
+    if (!job) return;
+    if (user && !(user as any).liabilityDisclaimerAcceptedAt) {
+      setGlobalDisclaimerOpen(true);
+      return;
+    }
+    const hits = detectSafetyTriggers({
+      title: job.title ?? null,
+      description: (job as any).description ?? null,
+      category: job.category ?? null,
+      serviceType: (job as any).serviceType ?? null,
+      jobDetails: (job as any).jobDetails ?? null,
+      location: (job as any).location ?? null,
+    });
+    if (hits.length > 0) {
+      setSafetyHits(hits);
+      setSafetyGateOpen(true);
+      return;
+    }
+    openWaiverModal();
   };
 
   const handleArrived = () => {
@@ -885,6 +989,14 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   const isHelper = user?.id === job.assignedHelperId;
   const isLockedOrBeyond = ["funded", "active", "in_progress", "completion_submitted", "completed_paid", "proof_submitted"].includes(job.status);
   const isVIJob = job.category === "Verify & Inspect";
+  // Liability protection (Task #318): same shared resolver as post-job
+  // confirmation so the acceptance copy matches what the hirer agreed to.
+  const acceptCategoryDisclaimer: CategoryDisclaimer | null = getCategoryDisclaimer({
+    category: job.category ?? null,
+    verifyInspectCategory: (job as any).verifyInspectCategory ?? null,
+    serviceType: (job as any).serviceType ?? null,
+    useCaseName: (job as any).useCaseName ?? null,
+  });
   const isBountyJob = !!(job as any).isBounty;
   const isPAVJob = isBountyJob && isVIJob;
   const showClipboard = isHelper && ["funded", "active", "in_progress", "proof_submitted"].includes(job.status);
@@ -951,6 +1063,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               </Badge>
             )}
           </div>
+
+          {/* Liability protection (Task #318): persistent V&I label on the job header */}
+          {isVIJob && (
+            <div className="mb-3">
+              <VisualOnlyLabel />
+            </div>
+          )}
 
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Badge variant="outline" className="text-[11px] bg-muted/50 border-border/30">{job.category}</Badge>
@@ -1798,21 +1917,20 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           )}
 
           {job.status === "posted_public" && !isOwner && (
-            <Button onClick={() => {
-              setShowWaiverModal(true);
-              setWaiverChecked(false);
-              setCategoryWaiverChecked(false);
-              if (job.urgentSwitch || job.category === "On-Demand Help") {
-                const now = new Date();
-                setAvailableFrom(toLocalDatetimeString(now));
-                const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
-                setAvailableTo(toLocalDatetimeString(endOfDay));
-              }
-            }}
-              disabled={acceptMutation.isPending || (acceptMutation.error?.message === "STRIPE_CONNECT_REQUIRED")}
-              className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl" data-testid="button-accept-job">
-              <CheckCircle className="w-5 h-5 mr-2" /> ACCEPT JOB
-            </Button>
+            <>
+              {/* Liability protection (Task #318): persistent statements
+                  rendered next to the accept button. */}
+              <NoEmploymentStatement className="text-center" />
+              <PaymentSafetyStatement className="text-center" />
+              <Button
+                onClick={beginAcceptFlow}
+                disabled={acceptMutation.isPending || (acceptMutation.error?.message === "STRIPE_CONNECT_REQUIRED")}
+                className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl"
+                data-testid="button-accept-job"
+              >
+                <CheckCircle className="w-5 h-5 mr-2" /> ACCEPT JOB
+              </Button>
+            </>
           )}
 
           {job.status === "accepted_pending_payment" && isOwner && (
@@ -1988,6 +2106,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 );
               })()}
 
+              {job.category !== "Barter Labor" && (
+                <PaymentSafetyStatement className="mb-1" />
+              )}
               <div className="flex gap-2">
                 <Button onClick={() => lockMutation.mutate(confirmedStartTime || undefined)} disabled={lockMutation.isPending}
                   className="flex-1 h-12 font-display tracking-wider bg-secondary text-secondary-foreground rounded-xl" data-testid="button-lock-job">
@@ -3056,20 +3177,14 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               />
             </div>
 
-            {(job.category === "Verify & Inspect" || job.category === "Skilled Labor" || job.category === "General Labor" || job.category === "On-Demand Help" || job.category === "Marketplace") && (
+            {/* Liability protection (Task #318): use the SAME shared
+                category disclaimer copy as the post-job confirmation so
+                hirer-side and helper-side language can never drift. */}
+            {acceptCategoryDisclaimer && (
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 space-y-3">
-                <p className="text-[10px] font-display font-bold tracking-widest text-amber-400/80 uppercase">Category Notice</p>
+                <p className="text-[10px] font-display font-bold tracking-widest text-amber-400/80 uppercase">{acceptCategoryDisclaimer.title}</p>
                 <p className="text-[12px] text-muted-foreground leading-relaxed">
-                  {job.category === "Verify & Inspect"
-                    ? "This task is limited to visual verification and documentation only. It does not constitute a mechanical diagnosis, fitment guarantee, safety certification, structural opinion, or any form of professional advice. I may only document what is visually present or absent."
-                    : job.category === "Skilled Labor"
-                    ? "This task may involve skilled physical labor. I am responsible for my personal safety, proper tool use, equipment operation, and task judgment. GUBER does not supervise the work. I confirm I hold any required licenses or credentials for this service."
-                    : job.category === "General Labor"
-                    ? "This task may involve physical activity. I am responsible for personal safety, proper lifting, equipment use, and task judgment. GUBER does not supervise the work."
-                    : job.category === "Marketplace"
-                    ? "This task may involve meeting another user in person or exchanging goods. I should exercise caution, meet in safe and public locations, and trust my instincts. GUBER does not guarantee the conduct of other users."
-                    : "This task may involve meeting or interacting with another user. I should exercise caution and meet in safe, well-lit locations when possible. GUBER does not guarantee the conduct of other users."
-                  }
+                  {acceptCategoryDisclaimer.body}
                 </p>
                 <AccessibleCheckbox
                   checked={categoryWaiverChecked}
@@ -3132,7 +3247,12 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 !waiverChecked ||
                 !availableFrom ||
                 !availableTo ||
-                ((job.category === "Verify & Inspect" || job.category === "Skilled Labor" || job.category === "General Labor" || job.category === "On-Demand Help" || job.category === "Marketplace") && !categoryWaiverChecked)
+                // Liability protection (Task #318): the category waiver is
+                // required for exactly the buckets the shared resolver
+                // returns disclaimer copy for (Automotive / Skilled Labor /
+                // V&I / Property/Access). This guarantees the gate can
+                // never drift from the displayed copy.
+                (!!acceptCategoryDisclaimer && !categoryWaiverChecked)
               }
               className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl disabled:opacity-40"
               data-testid="button-confirm-accept-job"
@@ -3263,6 +3383,46 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           </div>
         </div>
       )}
+
+      {/* ── Liability protection modals (Task #318) ─────────────────────── */}
+      <GlobalDisclaimerModal
+        open={globalDisclaimerOpen}
+        onAccept={async () => {
+          try {
+            await acceptLiabilityDisclaimer();
+            setGlobalDisclaimerOpen(false);
+            // Auto-continue the acceptance flow so the user does not have
+            // to re-tap ACCEPT JOB after acknowledging the disclaimer.
+            setTimeout(beginAcceptFlow, 0);
+          } catch (err: any) {
+            toast({
+              title: "Couldn't save acknowledgement",
+              description: err?.message || "Please try again.",
+              variant: "destructive",
+            });
+          }
+        }}
+        isPending={acceptingLiabilityDisclaimer}
+      />
+      <SafetyGateModal
+        open={safetyGateOpen}
+        hits={safetyHits}
+        onConfirm={() => {
+          setSafetyGateOpen(false);
+          // Auto-continue into the waiver modal — no extra ACCEPT JOB tap.
+          openWaiverModal();
+        }}
+        onCancel={() => setSafetyGateOpen(false)}
+      />
+      <HelperStartConfirmModal
+        open={helperStartConfirmOpen}
+        onConfirm={handleConfirmHelperStart}
+        onCancel={() => {
+          setHelperStartConfirmOpen(false);
+          helperStartActionRef.current = null;
+        }}
+        isPending={milestoneMutation.isPending}
+      />
     </GuberLayout>
   );
 }

@@ -203,6 +203,8 @@ export function computeAutoTitle(
 // Notes contact-block
 // ---------------------------------------------------------------------------
 
+import { OFF_PLATFORM_PATTERNS } from "@shared/liability";
+
 const CONTACT_BLOCK_PATTERNS: { re: RegExp; label: string }[] = [
   { re: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/, label: "phone number" },
   { re: /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/, label: "email" },
@@ -211,12 +213,14 @@ const CONTACT_BLOCK_PATTERNS: { re: RegExp; label: string }[] = [
   { re: /\bzelle\b/i, label: "Zelle" },
   { re: /\bpaypal\b/i, label: "PayPal" },
   { re: /\b(call|text)\s*me\b/i, label: "off-platform contact" },
-  { re: /\bpay\s*(me\s*)?(in\s*)?cash\s*(in\s*hand)?\b/i, label: "off-platform payment" },
   { re: /\b(reach|contact)\s+me\s+(at|on)\b/i, label: "off-platform contact" },
   { re: /\bsnap(chat)?\s*[:@]?\w+/i, label: "Snapchat handle" },
   { re: /\bwhats?app\b/i, label: "WhatsApp" },
   { re: /\btelegram\b/i, label: "Telegram" },
   { re: /\binstagram\b|\big[:@]\w+/i, label: "Instagram" },
+  // Strengthened off-platform / pay-outside guards (Task #318) — sourced
+  // from shared/liability.ts so the same patterns apply on the server too.
+  ...OFF_PLATFORM_PATTERNS,
 ];
 
 export function detectContactBlock(text: string, extra: string[] = []): string | null {
