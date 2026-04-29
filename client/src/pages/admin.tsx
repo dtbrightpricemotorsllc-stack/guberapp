@@ -566,10 +566,13 @@ data-testid="button-add-checklist-item">
 );
 }
 
+type AuditLogWithUser = AuditLog & { username?: string | null };
+
 function AuditLogTab() {
 const [actionFilter, setActionFilter] = useState<string>("all");
+const [userSearch, setUserSearch] = useState<string>("");
 
-const { data: logs, isLoading } = useQuery<AuditLog[]>({
+const { data: logs, isLoading } = useQuery<AuditLogWithUser[]>({
 queryKey: ["/api/admin/audit-logs"],
 staleTime: 30_000,
 });
@@ -577,7 +580,14 @@ staleTime: 30_000,
 if (isLoading) return <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 rounded-xl" />)}</div>;
 
 const allActions = Array.from(new Set((logs || []).map(l => l.action)));
-const filtered = actionFilter === "all" ? (logs || []) : (logs || []).filter(l => l.action === actionFilter);
+const searchTerm = userSearch.trim().toLowerCase();
+const filtered = (logs || []).filter(l => {
+  const matchesAction = actionFilter === "all" || l.action === actionFilter;
+  const matchesUser = !searchTerm ||
+    (l.username || "").toLowerCase().includes(searchTerm) ||
+    String(l.userId || "").includes(searchTerm);
+  return matchesAction && matchesUser;
+});
 
 function getActionColor(action: string) {
 if (action === "contact_info_blocked") return "bg-destructive/10 text-destructive border-destructive/30";
@@ -594,6 +604,15 @@ return (
 <h3 className="font-display font-semibold text-sm">Audit Log</h3>
 <span className="text-[10px] text-muted-foreground">({filtered.length} entries)</span>
 </div>
+<div className="flex items-center gap-2 flex-wrap">
+<input
+  type="text"
+  placeholder="Search by username or user ID…"
+  value={userSearch}
+  onChange={e => setUserSearch(e.target.value)}
+  className="h-8 w-52 rounded-lg border border-border/20 bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+  data-testid="input-audit-user-search"
+/>
 <Select value={actionFilter} onValueChange={setActionFilter}>
 <SelectTrigger className="w-48 bg-background border-border/20 text-xs" data-testid="select-audit-filter">
 <SelectValue placeholder="Filter by action" />
@@ -603,6 +622,7 @@ return (
 {allActions.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
 </SelectContent>
 </Select>
+</div>
 </div>
 
 <div className="bg-card rounded-xl border border-border/20 overflow-hidden">
@@ -624,7 +644,7 @@ filtered.map(log => (
 {log.createdAt ? new Date(log.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"}
 </span>
 <span className="text-muted-foreground truncate" data-testid={`audit-user-${log.id}`}>
-{(log as any).username || log.userId || "-"}
+{log.username || log.userId || "-"}
 {log.userId && <span className="text-[9px] text-muted-foreground ml-0.5">#{log.userId}</span>}
 </span>
 <Badge variant="outline" className={`text-[8px] ${getActionColor(log.action)}`} data-testid={`audit-action-${log.id}`}>
