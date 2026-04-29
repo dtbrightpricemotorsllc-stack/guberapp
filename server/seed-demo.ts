@@ -15,6 +15,8 @@ async function hashPassword(password: string): Promise<string> {
 
 export const DEMO_CONSUMER_EMAIL = "demo.consumer@guberapp.internal";
 export const DEMO_BUSINESS_EMAIL = "demo.business@guberapp.internal";
+export const LIAB_TEST_EMAIL = "liability_test@guberapp.internal";
+export const LIAB_TEST_PASSWORD = "LibTest2026!";
 
 export async function seedDemoAccounts() {
   try {
@@ -23,10 +25,40 @@ export async function seedDemoAccounts() {
     await seedNationwideJobs();
     await seedNationwideCashDrops();
     await seedDemoReviewsAndWallet();
+    // liability test user is dev/test-only — never seed in production
+    if (process.env.NODE_ENV !== "production") {
+      await seedLiabilityTestUser();
+    }
     console.log("[GUBER] Demo accounts seeded.");
   } catch (e) {
     console.error("[GUBER] Demo seed error:", e);
   }
+}
+
+async function seedLiabilityTestUser() {
+  let existing = await storage.getUserByEmail(LIAB_TEST_EMAIL);
+  if (!existing) {
+    const pw = await hashPassword(LIAB_TEST_PASSWORD);
+    existing = await storage.createUser({
+      email: LIAB_TEST_EMAIL,
+      username: "liability_test_guber",
+      fullName: "Liability Test User",
+      password: pw,
+      role: "buyer",
+      tier: "community",
+      zipcode: "90210",
+      lat: 34.0522,
+      lng: -118.2437,
+      termsAcceptedAt: new Date("2026-01-01"),
+    });
+  }
+  await storage.updateUser(existing.id, {
+    idVerified: true,
+    profileComplete: true,
+  });
+  await db.execute(sql`
+    UPDATE users SET liability_disclaimer_accepted_at = NULL WHERE id = ${existing.id}
+  `);
 }
 
 async function seedDemoConsumer() {

@@ -298,7 +298,10 @@ export function GuidedJobBuilder({
           data-testid="textarea-guided-notes"
         />
         {contactBlockHit && (
-          <div className="flex items-start gap-2 rounded-md p-2 bg-destructive/10 border border-destructive/30">
+          <div
+            className="flex items-start gap-2 rounded-md p-2 bg-destructive/10 border border-destructive/30"
+            data-testid="text-contact-block-warning"
+          >
             <AlertTriangle className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />
             <p className="text-[11px] text-destructive">
               Notes look like they include a {contactBlockHit}. Please remove it — all contact and payment must stay on GUBER.

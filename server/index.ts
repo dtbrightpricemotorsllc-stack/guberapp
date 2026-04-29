@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCron } from "./cron";
-import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedAutomotiveVIUseCases, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns } from "./seed";
+import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedAutomotiveVIUseCases, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns, seedLiabilityColumns } from "./seed";
 import { seedDemoAccounts } from "./seed-demo";
 import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
@@ -32,7 +32,13 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later." },
-  skip: (req) => req.path.startsWith("/api/webhooks"),
+  skip: (req) =>
+    req.path.startsWith("/api/webhooks") ||
+    // When mounted at /api the router strips the prefix so req.path is /test/…
+    (process.env.NODE_ENV !== "production" && (req.path.startsWith("/test/") || req.path.startsWith("/api/test/"))) ||
+    // In dev/test environments allow the auth/login endpoint to be called
+    // freely so Playwright test suites are not blocked by the general cap.
+    (process.env.NODE_ENV !== "production" && (req.path === "/auth/login" || req.path === "/api/auth/login")),
 });
 
 const loginLimiter = rateLimit({
@@ -41,6 +47,8 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
+  // Skip in non-production so Playwright test suites can call login freely
+  skip: () => process.env.NODE_ENV !== "production",
   message: {
     message:
       "Too many failed login attempts. Please wait a minute and try again.",
@@ -330,6 +338,8 @@ app.use((req, res, next) => {
   await seedCatalog().catch(e => console.error("[seed] catalog seed error:", e));
   // Task #317: must run before syncAdminCredentials/seedDemoAccounts (which SELECT new columns)
   await seedDisputeProtectionColumns().catch(e => console.error("[seed] Dispute protection columns error:", e));
+  // Task #318: liability disclaimer & helper-safety columns — run before seedDemoAccounts
+  await seedLiabilityColumns().catch(e => console.error("[seed] Liability columns error:", e));
   seedJobChecklists().catch(e => console.error("[seed] job checklist seed error:", e));
   syncAdminCredentials().catch(e => console.error("[seed] admin sync error:", e));
   syncOGPreapprovedEmails().catch(e => console.error("[seed] OG sync error:", e));

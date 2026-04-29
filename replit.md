@@ -49,10 +49,12 @@ GUBER employs a modern full-stack architecture with a focus on security, user ex
 - **Google Play Compliance (Store Build Gating):** Runtime platform detection via `client/src/lib/platform.ts` using Capacitor's `getPlatform()`. Digital purchase UI (Day-1 OG, Trust Box, Marketplace Boost, Biz Verification fee) is hidden in Android/iOS store builds (`isStoreBuild`). Real-world service payments (job posting, V&I) and Stripe Connect onboarding are left untouched. AI or Not iframe gets `hideCheckout=1` query param in store builds and the postMessage checkout handler is blocked. Entitlements sync from backend via `/api/auth/me` regardless of platform.
 
 ## Testing
-- **Test Framework:** Vitest + Supertest for server integration tests
-- **Test Location:** `server/tests/`
-- **Run Tests:** `npx vitest run --config vitest.config.ts`
+- **Test Framework:** Vitest + Supertest for server integration tests; Playwright for e2e browser tests
+- **Test Location:** `server/tests/` (unit/integration), `e2e/` (Playwright browser tests)
+- **Run Unit Tests:** `npx vitest run --config vitest.config.ts`
+- **Run E2E Tests:** `npx playwright test` (requires `npm run dev` running on port 5000)
 - **OAuth State Tests:** `server/tests/oauth-state.test.ts` — validates Google OAuth state parameter handling (valid state, mismatched state, missing state, replay protection, session cleanup)
+- **Liability/Disclaimer E2E Tests (Task #323):** `e2e/liability-disclaimer.spec.ts` — 14 tests covering: GlobalDisclaimerModal UI (3), SafetyGateModal UI (2), server-side API gates (6: DISCLAIMER_REQUIRED, DISALLOWED_JOB, CONTACT_BLOCK, V&I sanitization, idempotent accept, DB persistence), disallowed-job client-side guard (1), off-platform contact block client-side UI (1), HelperStartConfirmModal browser flow (1). Test infrastructure: `liability_test@guberapp.internal` seeded only in non-production, dev-only `/api/test/reset-liability-disclaimer` and `/api/test/create-helper-assignment` endpoints for deterministic setup.
 
 ## External Dependencies
 - **Stripe Connect:** For handling all payment processing, including destination charges, connected accounts, and manual payouts.

@@ -15,7 +15,7 @@ import { sendPushToUser } from "./push";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth } from "./auth";
-import { detectDisallowedJobContent, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
+import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray } from "drizzle-orm";
@@ -723,6 +723,39 @@ export async function registerRoutes(
         : "e2e-test-token";
       const guberUrl = `guber://auth-success?token=${encodeURIComponent(token)}`;
       res.type("html").send(buildNativeBounceHtml(guberUrl));
+    });
+
+    app.post("/api/test/reset-liability-disclaimer", async (req: Request, res: Response) => {
+      const { email } = req.body as { email?: string };
+      if (!email) return res.status(400).json({ error: "email required" });
+      const user = await storage.getUserByEmail(email);
+      if (!user) return res.status(404).json({ error: "user not found" });
+      await db.execute(sql`UPDATE users SET liability_disclaimer_accepted_at = NULL WHERE id = ${user.id}`);
+      return res.json({ ok: true, userId: user.id });
+    });
+
+    app.post("/api/test/create-helper-assignment", async (req: Request, res: Response) => {
+      const { helperEmail, posterEmail } = req.body as { helperEmail?: string; posterEmail?: string };
+      if (!helperEmail || !posterEmail) return res.status(400).json({ error: "helperEmail and posterEmail required" });
+      const helper = await storage.getUserByEmail(helperEmail);
+      const poster = await storage.getUserByEmail(posterEmail);
+      if (!helper || !poster) return res.status(404).json({ error: "user not found" });
+      const rows = await db.execute(sql`
+        INSERT INTO jobs (
+          title, description, category, budget, location, location_approx,
+          zip, lat, lng, status, posted_by_id, assigned_helper_id,
+          is_published, is_paid, pay_type
+        ) VALUES (
+          'Test Helper Start Job', 'E2E test fixture job — helper start confirmation',
+          'On-Demand Help', 40,
+          'Los Angeles, CA', 'Los Angeles, CA',
+          '90210', 34.0522, -118.2437,
+          'funded', ${poster.id}, ${helper.id},
+          true, true, 'fixed'
+        ) RETURNING id
+      `);
+      const jobId = Number((rows.rows[0] as { id: number }).id);
+      return res.json({ ok: true, jobId });
     });
   }
 
@@ -5212,6 +5245,21 @@ export async function registerRoutes(
           message: "DISALLOWED_JOB",
           detail: disallowedHit.message,
           category: disallowedHit.category,
+        });
+      }
+
+      // Liability protection (Task #318): reject off-platform payment or contact
+      // phrases in the description before we touch Stripe or the DB.
+      const offPlatformHit = detectOffPlatformPhrase(req.body?.description);
+      if (offPlatformHit) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "contact_block_rejected",
+          details: `Off-platform phrase detected (${offPlatformHit}) in create-checkout description`,
+        });
+        return res.status(400).json({
+          message: "CONTACT_BLOCK",
+          detail: `Descriptions may not reference off-platform payment or contact methods (${offPlatformHit}).`,
         });
       }
 

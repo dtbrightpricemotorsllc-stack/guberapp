@@ -1371,3 +1371,8 @@ export async function seedPlatformSettings() {
     console.log("[GUBER] Platform settings already seeded.");
   }
 }
+
+export async function seedLiabilityColumns() {
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS liability_disclaimer_accepted_at TIMESTAMPTZ`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS helper_safety_confirmed_at TIMESTAMPTZ`);
+}

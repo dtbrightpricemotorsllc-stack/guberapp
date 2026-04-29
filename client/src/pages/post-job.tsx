@@ -1478,6 +1478,7 @@ export default function PostJob() {
       <GlobalDisclaimerModal
         open={globalDisclaimerOpen}
         onAccept={handleAcceptGlobalDisclaimer}
+        onDismiss={() => setGlobalDisclaimerOpen(false)}
         isPending={acceptingLiabilityDisclaimer}
       />
       <SafetyGateModal
