@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatJobTime } from "@/lib/job-time";
 import {
   GlobalDisclaimerModal,
+  HelperStartConfirmModal,
   SafetyGateModal,
   NoEmploymentStatement,
 } from "@/components/liability-modals";
@@ -44,6 +45,7 @@ type VIJob = {
   createdAt: string | null;
   assignedHelperId: number | null;
   jobDetails: Record<string, string> | null;
+  helperSafetyConfirmedAt: string | null;
 };
 
 export default function VIRequests() {
@@ -53,13 +55,14 @@ export default function VIRequests() {
   const [filter, setFilter] = useState("All");
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
 
-  // Liability protection (Task #318): the V&I "Take this" tap is an
+  // Liability protection (Task #318 + #324): the V&I "Take this" tap is an
   // acceptance entry point, so it must enforce the same global
-  // disclaimer + safety gate chain as job-detail.
+  // disclaimer + safety gate + start-confirm chain as job-detail.
   const [pendingJob, setPendingJob] = useState<VIJob | null>(null);
   const [globalDisclaimerOpen, setGlobalDisclaimerOpen] = useState(false);
   const [safetyHits, setSafetyHits] = useState<SafetyTriggerHit[]>([]);
   const [safetyGateOpen, setSafetyGateOpen] = useState(false);
+  const [helperStartConfirmOpen, setHelperStartConfirmOpen] = useState(false);
 
   const { data: jobs, isLoading } = useQuery<VIJob[]>({
     queryKey: ["/api/jobs"],
@@ -77,7 +80,7 @@ export default function VIRequests() {
   const acceptMutation = useMutation({
     mutationFn: async (jobId: number) => {
       setAcceptingId(jobId);
-      const resp = await apiRequest("POST", `/api/jobs/${jobId}/accept`, {});
+      const resp = await apiRequest("POST", `/api/jobs/${jobId}/accept`, { safetyConfirmed: true });
       return resp.json();
     },
     onSuccess: () => {
@@ -104,6 +107,17 @@ export default function VIRequests() {
     });
   };
 
+  // Advance past the safety gate / disclaimer chain and open the final
+  // start-confirm modal (unless the job already has helperSafetyConfirmedAt
+  // recorded, which prevents a double-prompt on subsequent navigations).
+  const openHelperStartConfirmOrAccept = (job: VIJob) => {
+    if (job.helperSafetyConfirmedAt) {
+      acceptMutation.mutate(job.id);
+    } else {
+      setHelperStartConfirmOpen(true);
+    }
+  };
+
   const beginAcceptForJob = (job: VIJob) => {
     setPendingJob(job);
     if (user && !(user as any).liabilityDisclaimerAcceptedAt) {
@@ -116,7 +130,7 @@ export default function VIRequests() {
       setSafetyGateOpen(true);
       return;
     }
-    acceptMutation.mutate(job.id);
+    openHelperStartConfirmOrAccept(job);
   };
 
   const handleAcceptGlobalDisclaimer = async () => {
@@ -129,7 +143,7 @@ export default function VIRequests() {
           setSafetyHits(hits);
           setSafetyGateOpen(true);
         } else {
-          acceptMutation.mutate(pendingJob.id);
+          openHelperStartConfirmOrAccept(pendingJob);
         }
       }
     } catch (err: any) {
@@ -143,6 +157,11 @@ export default function VIRequests() {
 
   const handleSafetyGateConfirm = () => {
     setSafetyGateOpen(false);
+    if (pendingJob) openHelperStartConfirmOrAccept(pendingJob);
+  };
+
+  const handleHelperStartConfirm = () => {
+    setHelperStartConfirmOpen(false);
     if (pendingJob) acceptMutation.mutate(pendingJob.id);
   };
 
@@ -378,6 +397,17 @@ export default function VIRequests() {
           setPendingJob(null);
           setAcceptingId(null);
         }}
+      />
+
+      <HelperStartConfirmModal
+        open={helperStartConfirmOpen}
+        onConfirm={handleHelperStartConfirm}
+        onCancel={() => {
+          setHelperStartConfirmOpen(false);
+          setPendingJob(null);
+          setAcceptingId(null);
+        }}
+        isPending={acceptMutation.isPending}
       />
     </GuberLayout>
   );

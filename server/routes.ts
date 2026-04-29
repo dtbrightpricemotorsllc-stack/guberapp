@@ -5679,6 +5679,18 @@ export async function registerRoutes(
             return res.status(403).json({ message: "This service requires verified credentials" });
           }
         }
+
+        // Liability protection (Task #324): V&I helpers must acknowledge the
+        // "I'm ready — start" confirmation before their first action on the
+        // job, matching the gate used by start-work and on_the_way milestones.
+        const alreadyConfirmed = !!(job as any).helperSafetyConfirmedAt;
+        const safetyConfirmed = req.body?.safetyConfirmed === true;
+        if (!alreadyConfirmed && !safetyConfirmed) {
+          return res.status(400).json({
+            message: "SAFETY_CONFIRM_REQUIRED",
+            detail: "Helper must confirm the start-of-work safety acknowledgement before accepting V&I jobs.",
+          });
+        }
       }
 
       if (job.category === "Skilled Labor") {
@@ -5731,6 +5743,7 @@ export async function registerRoutes(
       // /api/jobs/:id/select-time next. Legacy posts (no windows) keep the old
       // single-window accept behavior.
       const hasStructuredWindows = validateAvailabilityWindows((job as any).availabilityWindows);
+      const viSafetyConfirmed = job.category === "Verify & Inspect" && req.body?.safetyConfirmed === true && !(job as any).helperSafetyConfirmedAt;
       const updated = await storage.updateJob(jobId, {
         status: "accepted_pending_payment",
         assignedHelperId: req.session.userId!,
@@ -5742,6 +5755,7 @@ export async function registerRoutes(
               workerAcceptedAt: new Date(),
             }
           : {}),
+        ...(viSafetyConfirmed ? { helperSafetyConfirmedAt: new Date() } : {}),
       } as any);
 
       await storage.updateUser(helper.id, {
