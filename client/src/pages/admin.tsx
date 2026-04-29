@@ -1981,6 +1981,35 @@ const [popupAudience, setPopupAudience] = useState("non_og");
 // Test push state
 const [testPushUserId, setTestPushUserId] = useState("");
 const [testPushType, setTestPushType] = useState("offer_funded");
+const [userSearchQuery, setUserSearchQuery] = useState("");
+const [showUserSuggestions, setShowUserSuggestions] = useState(false);
+const [selectedUserLabel, setSelectedUserLabel] = useState("");
+const userSearchRef = useRef<HTMLDivElement>(null);
+
+const { data: allUsersForSearch } = useQuery<User[]>({
+  queryKey: ["/api/admin/users"],
+  enabled: showUserSuggestions && userSearchQuery.length >= 2,
+});
+
+const userSuggestions = (() => {
+  if (!allUsersForSearch || userSearchQuery.length < 2) return [];
+  const q = userSearchQuery.toLowerCase();
+  return allUsersForSearch.filter(u =>
+    (u.fullName && u.fullName.toLowerCase().includes(q)) ||
+    (u.email && u.email.toLowerCase().includes(q)) ||
+    (u.publicUsername && u.publicUsername.toLowerCase().includes(q))
+  ).slice(0, 8);
+})();
+
+useEffect(() => {
+  const handleClickOutside = (e: MouseEvent) => {
+    if (userSearchRef.current && !userSearchRef.current.contains(e.target as Node)) {
+      setShowUserSuggestions(false);
+    }
+  };
+  document.addEventListener("mousedown", handleClickOutside);
+  return () => document.removeEventListener("mousedown", handleClickOutside);
+}, []);
 
 const testPushMutation = useMutation({
   mutationFn: () => apiRequest("POST", "/api/admin/test-push", { userId: Number(testPushUserId), type: testPushType }),
@@ -2173,17 +2202,57 @@ data-testid="button-send-push-broadcast"
 Send a one-off test push to a specific user to verify custom sounds work correctly on device. The push uses the same sound mapping as production.
 </p>
 <div className="space-y-3">
-<div>
+<div ref={userSearchRef} className="relative">
 <label className="text-xs text-muted-foreground mb-1 block">Target User ID</label>
-<Input
-value={testPushUserId}
-onChange={(e) => setTestPushUserId(e.target.value)}
-placeholder="e.g. 42"
-type="number"
-min="1"
-className="bg-background border-border/30"
-data-testid="input-test-push-user-id"
-/>
+<div className="relative">
+  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+  <Input
+    value={selectedUserLabel || userSearchQuery}
+    onChange={(e) => {
+      setSelectedUserLabel("");
+      setTestPushUserId("");
+      setUserSearchQuery(e.target.value);
+      setShowUserSuggestions(true);
+    }}
+    onFocus={() => {
+      if (userSearchQuery.length >= 2) setShowUserSuggestions(true);
+    }}
+    placeholder="Search by name or email…"
+    className="bg-background border-border/30 pl-8"
+    data-testid="input-test-push-user-search"
+    autoComplete="off"
+  />
+  {testPushUserId && (
+    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-violet-400 font-mono">
+      ID&nbsp;{testPushUserId}
+    </span>
+  )}
+</div>
+{showUserSuggestions && userSuggestions.length > 0 && (
+  <div className="absolute z-50 mt-1 w-full bg-card border border-border/40 rounded-xl shadow-lg overflow-hidden">
+    {userSuggestions.map((u) => (
+      <button
+        key={u.id}
+        type="button"
+        className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-violet-500/10 transition-colors"
+        data-testid={`user-suggestion-${u.id}`}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setTestPushUserId(String(u.id));
+          setSelectedUserLabel(`${u.fullName || u.publicUsername || u.email} (ID ${u.id})`);
+          setUserSearchQuery("");
+          setShowUserSuggestions(false);
+        }}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">{u.fullName || u.publicUsername || "—"}</div>
+          <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+        </div>
+        <span className="text-xs text-violet-400 font-mono shrink-0">ID {u.id}</span>
+      </button>
+    ))}
+  </div>
+)}
 </div>
 <div>
 <label className="text-xs text-muted-foreground mb-1 block">Notification Type</label>
