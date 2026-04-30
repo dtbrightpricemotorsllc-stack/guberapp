@@ -176,13 +176,23 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
     };
   }, []);
 
-  // Play GUBER ping when unread count rises (new notification arrived) — PRESERVED AS-IS
+  // Play GUBER ping when unread count rises (new notification arrived).
+  // Important: do NOT fire on the initial fetch transition from
+  // `undefined` → loaded data, otherwise users with pre-existing unread
+  // items hear the alert every time they open the app. Wait until we
+  // have real data, seed prevUnreadRef silently, and only ping on
+  // subsequent rises.
   useEffect(() => {
-    if (prevUnreadRef.current !== null && unreadCount > prevUnreadRef.current) {
+    if (notifications === undefined) return;
+    if (prevUnreadRef.current === null) {
+      prevUnreadRef.current = unreadCount;
+      return;
+    }
+    if (unreadCount > prevUnreadRef.current) {
       playGuberPing();
     }
     prevUnreadRef.current = unreadCount;
-  }, [unreadCount]);
+  }, [notifications, unreadCount]);
 
   // Typed WAV + vibration dispatch for new notifications
   useEffect(() => {
