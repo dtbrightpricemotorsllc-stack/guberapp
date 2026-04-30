@@ -1850,6 +1850,10 @@ export default function VerifyInspect() {
               </>
             )}
           </Button>
+
+          <p className="text-[10px] text-muted-foreground/50 text-center leading-relaxed px-2" data-testid="text-vi-form-disclaimer">
+            Verify &amp; Inspect provides visual documentation only — not a legal guarantee of condition or authenticity. Use your own judgement before making purchasing decisions.
+          </p>
         </div>
       </div>
     </GuberLayout>
