@@ -646,8 +646,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         if (!isJobAddressUnlocked(job as any)) {
           toast({ title: "On The Way!", description: "GPS logged." });
         } else {
-          // useNavigationCover.launch() checks the user's preferredMapApp and
-          // either launches directly into the preferred app or shows the chooser sheet.
+          // Always opens the GUBER handoff sheet — the user picks the
+          // external map app from there so GUBER chrome stays visible
+          // and the user can cancel cleanly.
           openNavSheetForJob(job);
           toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
         }
