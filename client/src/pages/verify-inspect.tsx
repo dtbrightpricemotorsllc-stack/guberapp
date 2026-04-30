@@ -822,6 +822,10 @@ export default function VerifyInspect() {
             <Shield className="w-4 h-4" />
             TAKE REQUESTS — BROWSE OPEN REQUESTS
           </button>
+
+          <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed mt-4 px-2" data-testid="text-vi-disclaimer">
+            Verify &amp; Inspect provides visual documentation only — not a legal guarantee of condition or authenticity. Use your own judgement before making purchasing decisions.
+          </p>
         </div>
       </GuberLayout>
     );

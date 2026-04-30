@@ -681,6 +681,10 @@ export default function CashDropDetail() {
               {acceptMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "⚡ ACCEPT CASH DROP"}
             </Button>
 
+            <p className="text-[10px] text-amber-400/40 text-center leading-relaxed px-2" data-testid="text-cash-drop-disclaimer">
+              Cash Drops are public-area community reward events. Participation is voluntary. GUBER does not guarantee availability or payout timing.
+            </p>
+
             <AlertDialog open={safetyModalOpen} onOpenChange={setSafetyModalOpen}>
               <AlertDialogContent
                 className="max-w-sm rounded-2xl"
