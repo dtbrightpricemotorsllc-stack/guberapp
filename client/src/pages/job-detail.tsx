@@ -153,33 +153,6 @@ export default function JobDetail() {
     });
   };
 
-  // Direct-launch helpers — used by the on-the-way auto-launch flow when the
-  // user has a saved preferredMapApp, so we jump straight into their chosen
-  // map app instead of showing the chooser sheet.
-  const openGoogleMapsForJob = (j: Job) => {
-    const dest = buildNavDestination(j);
-    if (!dest) return;
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
-      .then((pos) => {
-        const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
-        window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`, "_blank", "noopener");
-      })
-      .catch(() => {
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank", "noopener");
-      });
-  };
-  const openWazeForJob = (j: Job) => {
-    if (j.location?.trim()) {
-      window.location.href = `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`;
-    } else if (j.lat && j.lng) {
-      window.location.href = `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
-    }
-  };
-  const openAppleMapsForJob = (j: Job) => {
-    const dest = buildNavDestination(j);
-    if (!dest) return;
-    window.open(`https://maps.apple.com/?daddr=${dest}`, "_blank", "noopener");
-  };
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", description: "", budget: "", location: "", zip: "", lat: null as number | null, lng: null as number | null });
@@ -673,20 +646,10 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         if (!isJobAddressUnlocked(job as any)) {
           toast({ title: "On The Way!", description: "GPS logged." });
         } else {
-          const pref = (user as any)?.preferredMapApp;
-          if (pref === "google_maps") {
-            openGoogleMapsForJob(job);
-            toast({ title: "On The Way!", description: "GPS logged. Opening Google Maps." });
-          } else if (pref === "waze") {
-            openWazeForJob(job);
-            toast({ title: "On The Way!", description: "GPS logged. Opening Waze." });
-          } else if (pref === "apple_maps") {
-            openAppleMapsForJob(job);
-            toast({ title: "On The Way!", description: "GPS logged. Opening Apple Maps." });
-          } else {
-            openNavSheetForJob(job);
-            toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
-          }
+          // useNavigationCover.launch() checks the user's preferredMapApp and
+          // either launches directly into the preferred app or shows the chooser sheet.
+          openNavSheetForJob(job);
+          toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
         }
       } else if (vars.statusType === "arrived") {
         toast({ title: "Arrival Logged", description: "The poster has been notified you arrived." });
