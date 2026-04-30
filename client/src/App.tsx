@@ -362,8 +362,27 @@ function NativeDeepLinkHandler() {
 // drive the universal badger LoadingSplash. The splash keeps animating
 // until auth resolves AND its built-in minVisibleMs (one full message
 // cycle) has elapsed, then fades out smoothly via onDone.
+//
+// On the very first cold-start splash of a session we also fire the
+// signature GUBER ping (once per tab session). This is gated by
+// sessionStorage so it never replays on hot reloads, route changes, or
+// in-app loading splashes — only the true app-launch moment. iOS
+// requires a prior user gesture for audio playback, so the call may be
+// silently no-op'd on the first ever launch; that's intentional.
+const COLD_START_PING_KEY = "guber_cold_start_pinged";
 function SplashWrapper({ onDone }: { onDone: () => void }) {
   const { isLoading } = useAuth();
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(COLD_START_PING_KEY) === "1") return;
+      sessionStorage.setItem(COLD_START_PING_KEY, "1");
+    } catch {
+      return;
+    }
+    import("@/lib/notification-sound")
+      .then(({ playGuberPing }) => playGuberPing())
+      .catch(() => {});
+  }, []);
   return <LoadingSplash loading={isLoading} onDone={onDone} />;
 }
 
