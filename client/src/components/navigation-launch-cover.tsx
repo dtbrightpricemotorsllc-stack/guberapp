@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ComponentType, type CSSProperties } from "react";
 import { Capacitor } from "@capacitor/core";
-import { Navigation, Car, Map as MapIcon, AlertTriangle, Shield, Check } from "lucide-react";
+import { Navigation, Car, AlertTriangle, Shield, Check } from "lucide-react";
+import { SiApple } from "react-icons/si";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,10 +22,10 @@ export type NavLaunchOpts = {
 
 type SheetState = (NavLaunchOpts & { open: boolean }) | null;
 
-const PROVIDER_META: Record<NavProvider, { name: string; tagline: string; color: string; Icon: typeof Navigation }> = {
+const PROVIDER_META: Record<NavProvider, { name: string; tagline: string; color: string; Icon: ComponentType<{ className?: string; style?: CSSProperties }> }> = {
   google: { name: "Open in Google Maps", tagline: "Turn-by-turn navigation", color: "#4285F4", Icon: Navigation },
   waze: { name: "Open in Waze", tagline: "Real-time traffic routing", color: "#22C55E", Icon: Car },
-  apple: { name: "Open in Apple Maps", tagline: "Apple Maps", color: "#94A3B8", Icon: MapIcon },
+  apple: { name: "Open in Apple Maps", tagline: "Built-in on iPhone", color: "#1C9BF0", Icon: SiApple },
 };
 
 const PREF_TO_PROVIDER: Record<string, NavProvider> = {
