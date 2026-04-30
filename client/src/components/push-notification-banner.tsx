@@ -1,26 +1,42 @@
 import { useState, useEffect } from "react";
-import { BellRing, BellOff, Smartphone, X } from "lucide-react";
+import { BellRing, BellOff, Smartphone, Volume2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/push";
 import { useAuth } from "@/lib/auth-context";
+import { isIOS as isNativeIOS } from "@/lib/platform";
 
 const DISMISS_KEY = "guber_push_banner_dismissed";
+const IOS_SOUND_HINT_KEY = "guber_ios_sound_hint_dismissed";
+
+function isIPhoneUser(): boolean {
+  if (isNativeIOS) return true;
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
 
 export function PushNotificationBanner() {
   const { user } = useAuth();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [enabling, setEnabling] = useState(false);
+  const [iosSoundHintDismissed, setIosSoundHintDismissed] = useState(true);
 
   useEffect(() => {
     const wasDismissed = localStorage.getItem(DISMISS_KEY) === "1";
     setDismissed(wasDismissed);
+    setIosSoundHintDismissed(localStorage.getItem(IOS_SOUND_HINT_KEY) === "1");
     setStatus(getPushStatus());
   }, []);
 
   const handleDismiss = () => {
     localStorage.setItem(DISMISS_KEY, "1");
     setDismissed(true);
+  };
+
+  const handleDismissIosSoundHint = () => {
+    localStorage.setItem(IOS_SOUND_HINT_KEY, "1");
+    setIosSoundHintDismissed(true);
   };
 
   const handleEnable = async () => {
@@ -36,8 +52,45 @@ export function PushNotificationBanner() {
     setEnabling(false);
   };
 
-  if (!status || dismissed) return null;
-  if (status === "granted" || status === "unsupported") return null;
+  if (!status) return null;
+
+  if (status === "granted") {
+    if (!iosSoundHintDismissed && isIPhoneUser()) {
+      return (
+        <div
+          className="mx-4 mt-3 mb-0 rounded-xl border border-blue-500/30 bg-blue-500/[0.08] p-3 flex items-start gap-3"
+          data-testid="banner-ios-sound-hint"
+        >
+          <Volume2 className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-blue-300">Heads up about iPhone alert sounds</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+              iOS plays GUBER's custom alert sounds while the app is open. Locked-screen alerts use your iPhone's default notification sound — make sure your ringer is on and Focus is off.
+            </p>
+            <Button
+              size="sm"
+              className="mt-2 bg-blue-500 hover:bg-blue-400 active:scale-95 text-white font-semibold text-[11px] h-7 px-3"
+              onClick={handleDismissIosSoundHint}
+              data-testid="button-dismiss-ios-sound-hint"
+            >
+              Got it
+            </Button>
+          </div>
+          <button
+            onClick={handleDismissIosSoundHint}
+            className="text-muted-foreground hover:text-muted-foreground transition-colors shrink-0 mt-0.5"
+            data-testid="button-close-ios-sound-hint"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  if (dismissed) return null;
+  if (status === "unsupported") return null;
 
   if (status === "ios-needs-install") {
     return (
