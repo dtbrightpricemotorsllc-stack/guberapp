@@ -430,11 +430,10 @@ export default function JobNavigate() {
                 const waze = wazeUrl(job) || undefined;
                 const apple = appleMapsUrl(job) || undefined;
                 if (!google && !waze && !apple) return;
-                const j = job as any;
-                const addr = j.location?.trim()
-                  ? j.location.trim()
-                  : j.lat && j.lng
-                    ? `${j.lat}, ${j.lng}`
+                const addr = job.location?.trim()
+                  ? job.location.trim()
+                  : job.lat && job.lng
+                    ? `${job.lat}, ${job.lng}`
                     : undefined;
                 launchNav({
                   destLabel: job.title || "Destination",

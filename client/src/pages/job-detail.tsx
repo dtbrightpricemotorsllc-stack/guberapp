@@ -130,52 +130,33 @@ export default function JobDetail() {
     return "";
   };
 
-  // All three external-map buttons open the same in-place handoff sheet so
-  // the GUBER chrome stays visible. The sheet opens IMMEDIATELY on tap with
-  // a destination-only Google URL; we then refine the Google URL with the
-  // user's current origin in the background so a fast geolocation upgrade
-  // arrives before they tap a provider, but a slow/denied lookup never
-  // delays the sheet appearing.
-  const openNavSheetForJob = (j: any) => {
+  // On-page map buttons open this in-place handoff sheet; the sheet shows
+  // Google + Waze (and Apple on iOS) and stays mounted while the user picks.
+  const openNavSheetForJob = (j: Job) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
     const hasAddress = !!j.location?.trim();
     const hasCoords = !!(j.lat && j.lng);
     const wazeUrl = hasAddress
-      ? `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`
+      ? `waze://?q=${encodeURIComponent(j.location!.trim())}&navigate=yes`
       : hasCoords
         ? `waze://?ll=${j.lat},${j.lng}&navigate=yes`
         : undefined;
-    const appleUrl = `https://maps.apple.com/?daddr=${dest}`;
-
-    const open = (googleUrl: string) =>
-      launchNav({
-        destLabel: j.title || "Destination",
-        destAddress: hasAddress ? j.location.trim() : hasCoords ? `${j.lat}, ${j.lng}` : undefined,
-        urls: { google: googleUrl, waze: wazeUrl, apple: appleUrl },
-      });
-
-    // 1) Open immediately with destination-only Google URL — no waiting.
-    open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`);
-
-    // 2) In parallel, try to upgrade the Google URL with origin-aware
-    //    routing. If GPS resolves quickly, the next launchNav() patches the
-    //    open sheet's URL set in place (state replacement).
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
-      .then((pos) => {
-        const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
-        open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`);
-      })
-      .catch(() => {
-        /* keep destination-only fallback */
-      });
+    launchNav({
+      destLabel: j.title || "Destination",
+      destAddress: hasAddress ? j.location!.trim() : hasCoords ? `${j.lat}, ${j.lng}` : undefined,
+      urls: {
+        google: `https://www.google.com/maps/dir/?api=1&destination=${dest}`,
+        waze: wazeUrl,
+        apple: `https://maps.apple.com/?daddr=${dest}`,
+      },
+    });
   };
 
-  // Direct-launch helpers — used when the user has a saved `preferredMapApp`
-  // so the on-the-way action skips the chooser sheet and jumps straight into
-  // their chosen map app. The on-page "Open in Google/Waze" buttons all use
-  // `openNavSheetForJob` instead so they show the in-place handoff sheet.
-  const openGoogleMapsForJob = (j: any) => {
+  // Direct-launch helpers — used by the on-the-way auto-launch flow when the
+  // user has a saved preferredMapApp, so we jump straight into their chosen
+  // map app instead of showing the chooser sheet.
+  const openGoogleMapsForJob = (j: Job) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
     gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
@@ -187,14 +168,14 @@ export default function JobDetail() {
         window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank", "noopener");
       });
   };
-  const openWazeForJob = (j: any) => {
+  const openWazeForJob = (j: Job) => {
     if (j.location?.trim()) {
       window.location.href = `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`;
     } else if (j.lat && j.lng) {
       window.location.href = `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
     }
   };
-  const openAppleMapsForJob = (j: any) => {
+  const openAppleMapsForJob = (j: Job) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
     window.open(`https://maps.apple.com/?daddr=${dest}`, "_blank", "noopener");
