@@ -10,7 +10,6 @@ import SplashScreen from "@/components/splash-screen";
 import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
-import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
@@ -35,6 +34,7 @@ import AcceptableUse from "@/pages/acceptable-use";
 import DeleteAccount from "@/pages/delete-account";
 import JoinPage from "@/pages/join";
 import LoadingDemo from "@/pages/loading-demo";
+import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
 const Dashboard = lazy(() => import("@/pages/dashboard"));
@@ -83,20 +83,17 @@ const BizVerification = lazy(() => import("@/pages/biz-verification"));
 const BizOffers = lazy(() => import("@/pages/biz-offers"));
 
 
+// Universal GUBER loading splash — replaces the legacy spinner-based loaders
+// so that every route-guard auth check and every lazy-loaded page Suspense
+// fallback shows the panda + neon shield splash with rotating messages.
+// Using `loading` literal-true here is intentional: the parent unmounts this
+// element when work is done, which provides a fast hand-off to the next view.
 function PageLoader() {
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>
-  );
+  return <LoadingSplash loading />;
 }
 
 function BizLoader() {
-  return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "#09090B" }}>
-      <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#C9A84C" }} />
-    </div>
-  );
+  return <LoadingSplash loading />;
 }
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
