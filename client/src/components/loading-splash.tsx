@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const PANDA_SRC = "/loading-panda.png";
+const BADGER_SRC = "/loading-badger.png";
 const CITY_BG_SRC = "/loading-city-bg.png";
 
 const SOLO_MESSAGES: string[] = [
@@ -90,7 +90,7 @@ export interface LoadingSplashProps {
 }
 
 /**
- * Universal GUBER loading splash. Drop-in overlay that shows a centered panda
+ * Universal GUBER loading splash. Drop-in overlay that shows the centered GUBER badger
  * mascot over a blurred neon-city backdrop with a randomized rotating message.
  *
  * Usage:
@@ -99,7 +99,7 @@ export interface LoadingSplashProps {
  * The component:
  *   - fades in from black (fast)
  *   - applies a very subtle slow zoom (push-in)
- *   - softly pulses the panda's neon halo every ~2s
+ *   - softly pulses the badger's neon halo every ~2s
  *   - rotates through one randomized message at a time (no repeats in a row)
  *   - occasionally pairs two related lines (e.g. "NEED MONEY?" → "POST A JOB.")
  *   - holds for at least one full message cycle before exit
@@ -263,7 +263,7 @@ export function LoadingSplash({
             transform: translate(-50%, -50%) scale(1.08);
           }
         }
-        @keyframes guber-loading-panda-pulse {
+        @keyframes guber-loading-badger-pulse {
           0%, 60%, 100% {
             filter:
               drop-shadow(0 0 6px rgba(0, 255, 150, 0.55))
@@ -331,7 +331,7 @@ export function LoadingSplash({
           }}
         />
 
-        {/* ── Centered panda + halo cluster (vertical 9:16 framing) ── */}
+        {/* ── Centered badger mascot + neon aura cluster (vertical 9:16 framing) ── */}
         <div
           style={{
             position: "relative",
@@ -344,112 +344,68 @@ export function LoadingSplash({
             zIndex: 2,
           }}
         >
-          {/* Soft outer halo aura behind the shield — pulses every ~2s */}
+          {/* Wide outer aura — broad green/gold wash that envelops the whole
+              mascot, sitting deep behind it. Provides the cinematic glow bed. */}
           <div
             aria-hidden="true"
             style={{
               position: "absolute",
-              top: "38%",
+              top: "44%",
               left: "50%",
-              width: "82%",
+              width: "115%",
               aspectRatio: "1 / 1",
               borderRadius: "50%",
               background:
-                "radial-gradient(circle, rgba(0,255,150,0.50) 0%, rgba(255,200,60,0.28) 35%, rgba(168,80,255,0.10) 60%, rgba(0,0,0,0) 78%)",
+                "radial-gradient(circle, rgba(0,255,150,0.42) 0%, rgba(255,200,60,0.22) 32%, rgba(168,80,255,0.12) 58%, rgba(0,0,0,0) 78%)",
               transform: "translate(-50%, -50%)",
               animation: "guber-loading-halo-pulse 2.2s ease-in-out infinite",
               willChange: "opacity, filter, transform",
+              filter: "blur(2px)",
             }}
           />
 
-          {/* Shield + panda cluster, scaled relative to the framing column.
-              The shield SVG sits behind the panda; the panda is positioned
-              inside the shield's upper body. Both share a subtle pulse so
-              the whole emblem reads as one glowing crest. */}
+          {/* Tighter inner shield-aura — a brighter green/gold ring that hugs
+              the badger's silhouette like a heroic backlight. Pulses with the
+              outer aura so the whole crest reads as one glowing emblem. */}
           <div
+            aria-hidden="true"
             data-testid="loading-shield"
             style={{
-              position: "relative",
-              width: "78%",
-              aspectRatio: "5 / 6",
-              animation: "guber-loading-panda-pulse 2.2s ease-in-out infinite",
-              willChange: "filter",
+              position: "absolute",
+              top: "46%",
+              left: "50%",
+              width: "76%",
+              aspectRatio: "1 / 1",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle, rgba(0,255,150,0.55) 0%, rgba(0,255,150,0.30) 28%, rgba(255,200,60,0.18) 50%, rgba(168,80,255,0.06) 70%, rgba(0,0,0,0) 84%)",
+              transform: "translate(-50%, -50%)",
+              animation: "guber-loading-badger-pulse 2.2s ease-in-out infinite",
+              willChange: "opacity, filter",
             }}
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 100 120"
-              preserveAspectRatio="xMidYMid meet"
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                overflow: "visible",
-              }}
-            >
-              <defs>
-                {/* Linear gradient for the shield stroke: green → gold → purple,
-                    matching the splash palette. */}
-                <linearGradient id="guber-shield-stroke" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#00FF96" />
-                  <stop offset="55%" stopColor="#FFC83C" />
-                  <stop offset="100%" stopColor="#A850FF" />
-                </linearGradient>
-                {/* Radial gradient for the inner shield fill — keeps the
-                    interior dark so the panda still pops, but adds a soft
-                    green wash. */}
-                <radialGradient id="guber-shield-fill" cx="50%" cy="42%" r="62%">
-                  <stop offset="0%" stopColor="rgba(0,255,150,0.08)" />
-                  <stop offset="60%" stopColor="rgba(0,0,0,0.78)" />
-                  <stop offset="100%" stopColor="rgba(0,0,0,0.92)" />
-                </radialGradient>
-              </defs>
-              {/* Heater shield silhouette */}
-              <path
-                d="M10 8 L90 8 L90 56 Q90 96 50 116 Q10 96 10 56 Z"
-                fill="url(#guber-shield-fill)"
-                stroke="url(#guber-shield-stroke)"
-                strokeWidth="2.4"
-                strokeLinejoin="round"
-                style={{
-                  filter:
-                    "drop-shadow(0 0 4px rgba(0,255,150,0.85)) drop-shadow(0 0 10px rgba(0,255,150,0.55)) drop-shadow(0 0 22px rgba(255,200,60,0.40)) drop-shadow(0 0 36px rgba(168,80,255,0.30))",
-                }}
-              />
-              {/* Inner accent line for extra neon depth */}
-              <path
-                d="M16 14 L84 14 L84 55 Q84 91 50 109 Q16 91 16 55 Z"
-                fill="none"
-                stroke="rgba(0,255,150,0.55)"
-                strokeWidth="0.8"
-                strokeLinejoin="round"
-                style={{
-                  filter: "drop-shadow(0 0 3px rgba(0,255,150,0.70))",
-                }}
-              />
-            </svg>
+          />
 
-            {/* The panda mascot, positioned inside the shield's upper body */}
-            <img
-              src={PANDA_SRC}
-              alt=""
-              draggable={false}
-              style={{
-                position: "absolute",
-                top: "16%",
-                left: "50%",
-                transform: "translateX(-50%)",
-                width: "62%",
-                height: "auto",
-                objectFit: "contain",
-                userSelect: "none",
-                filter:
-                  "drop-shadow(0 0 4px rgba(0,255,150,0.65)) drop-shadow(0 0 10px rgba(0,255,150,0.35))",
-              }}
-              data-testid="img-loading-panda"
-            />
-          </div>
+          {/* The GUBER badger mascot — hero of the splash. The image already
+              ships with a baked neon outline (cyan/magenta) and a chest shield,
+              so we keep the surrounding aura as the "shield" treatment rather
+              than overlaying a redundant SVG silhouette. */}
+          <img
+            src={BADGER_SRC}
+            alt=""
+            draggable={false}
+            style={{
+              position: "relative",
+              width: "82%",
+              height: "auto",
+              objectFit: "contain",
+              userSelect: "none",
+              animation: "guber-loading-badger-pulse 2.2s ease-in-out infinite",
+              willChange: "filter, transform",
+              filter:
+                "drop-shadow(0 0 6px rgba(0,255,150,0.55)) drop-shadow(0 0 16px rgba(255,200,60,0.30)) drop-shadow(0 0 32px rgba(168,80,255,0.22))",
+            }}
+            data-testid="img-loading-badger"
+          />
 
           {/* Rotating message slot — fixed height to prevent layout jump.
               aria-hidden because the parent already announces "Loading"; we
