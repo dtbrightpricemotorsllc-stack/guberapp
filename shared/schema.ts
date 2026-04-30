@@ -1077,6 +1077,13 @@ export const workerQualifications = pgTable("worker_qualifications", {
   documentUrl: text("document_url"),
   verificationStatus: text("verification_status").notNull().default("pending"),
   adminNotes: text("admin_notes"),
+  // ── AI-extracted credential card fields (Task #372) ─────────────────
+  // Populated on upload by analyzeCredentialImage(); workers may edit
+  // before submission. Surfaced on the credential card after admin approval.
+  issuingAuthority: text("issuing_authority"),
+  expirationDate: timestamp("expiration_date"),
+  credentialType: text("credential_type"),
+  aiExtracted: boolean("ai_extracted").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
 });

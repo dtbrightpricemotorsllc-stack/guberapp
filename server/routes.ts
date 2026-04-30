@@ -1515,12 +1515,30 @@ export async function registerRoutes(
     const unlocks = await storage.getBusinessUnlocks(acct.id);
     const unlockedUserIds = new Set(unlocks.map(u => u.userId));
 
+    // Pull verified credentials for every candidate in a single batched
+    // query (Task #372). Limit to the top 4 per worker to keep payload small.
+    const credsByUser = await storage.getApprovedQualificationsForUsers(
+      results.map((p) => p.userId),
+    );
+    const verifiedCredsByUser = new Map<number, any[]>();
+    for (const proj of results) {
+      const creds = credsByUser.get(proj.userId) || [];
+      verifiedCredsByUser.set(proj.userId, creds.slice(0, 4).map((c) => ({
+        id: c.id,
+        qualificationName: c.qualificationName,
+        credentialType: (c as any).credentialType || null,
+        issuingAuthority: (c as any).issuingAuthority || null,
+        expirationDate: (c as any).expirationDate || null,
+      })));
+    }
+
     const candidates = results.map(proj => {
       const isUnlocked = unlockedUserIds.has(proj.userId);
       return {
         ...proj,
         isUnlocked,
         isLimitedView: isLimited,
+        verifiedCredentials: verifiedCredsByUser.get(proj.userId) || [],
       };
     });
 
@@ -12719,7 +12737,65 @@ YOUR BEHAVIOR:
       const userId = parseInt(req.params.id);
       if (isNaN(userId)) return res.status(400).json({ message: "Invalid user id" });
       const certs = await storage.getApprovedQualifications(userId);
-      res.json(certs);
+      // Public endpoint — only expose safe credential-card fields. Never leak
+      // adminNotes, document URLs, timestamps, or aiExtracted internals.
+      const safe = certs.map((c) => ({
+        id: c.id,
+        qualificationName: c.qualificationName,
+        credentialType: (c as any).credentialType || null,
+        issuingAuthority: (c as any).issuingAuthority || null,
+        expirationDate: (c as any).expirationDate || null,
+      }));
+      res.json(safe);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Scan-only endpoint (Task #372): worker uploads a credential image, we run
+  // AI extraction and return the proposed credential card fields. Worker can
+  // edit them and then call POST /api/resume/qualifications to actually save.
+  app.post("/api/resume/qualifications/scan", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { fileBase64, documentUrl } = req.body;
+      if (!fileBase64 && !documentUrl) {
+        return res.status(400).json({ message: "fileBase64 or documentUrl is required" });
+      }
+
+      let uploadedUrl: string | null = null;
+      let scanInput: string;
+
+      if (fileBase64 && typeof fileBase64 === "string") {
+        // Upload first so the same URL can be persisted later.
+        if (!process.env.CLOUDINARY_CLOUD_NAME) {
+          return res.status(503).json({ message: "Media storage not configured." });
+        }
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const result = await cloudinary.uploader.upload(fileBase64, {
+          resource_type: "auto",
+          folder: "guber-certifications",
+          allowed_formats: ["jpg", "jpeg", "png", "gif", "webp", "pdf"],
+          public_id: `cert_${req.session.userId}_${Date.now()}`,
+        });
+        uploadedUrl = result.secure_url;
+        scanInput = uploadedUrl;
+      } else {
+        try {
+          const parsed = new URL(String(documentUrl));
+          if (parsed.protocol !== "https:") {
+            return res.status(400).json({ message: "Document URL must use https" });
+          }
+          uploadedUrl = parsed.toString();
+          scanInput = uploadedUrl;
+        } catch {
+          return res.status(400).json({ message: "Invalid document URL" });
+        }
+      }
+
+      const { analyzeCredentialImage } = await import("./id-vision");
+      const extracted = await analyzeCredentialImage(scanInput);
+
+      res.json({ documentUrl: uploadedUrl, extracted });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -12749,11 +12825,33 @@ YOUR BEHAVIOR:
         return res.status(503).json({ message: "Media storage not configured." });
       }
 
+      // Run AI extraction so the saved record carries pre-filled card fields.
+      let issuingAuthority: string | null = null;
+      let credentialType: string | null = null;
+      let expirationDate: Date | null = null;
+      let aiExtracted = false;
+      try {
+        const { analyzeCredentialImage } = await import("./id-vision");
+        const extracted = await analyzeCredentialImage(documentUrl);
+        if (!extracted.error) {
+          aiExtracted = true;
+          if (extracted.issuingAuthority) issuingAuthority = extracted.issuingAuthority;
+          if (extracted.credentialType) credentialType = extracted.credentialType;
+          if (extracted.expirationDate) expirationDate = new Date(`${extracted.expirationDate}T00:00:00Z`);
+        }
+      } catch (e: any) {
+        console.error("[GUBER] credential AI extraction failed:", e?.message);
+      }
+
       const q = await storage.createQualification({
         userId: req.session.userId!,
         qualificationName: qualificationName.trim().slice(0, 200),
         documentUrl,
         verificationStatus: "pending",
+        issuingAuthority,
+        credentialType,
+        expirationDate,
+        aiExtracted,
       });
       res.status(201).json(q);
     } catch (err: any) {
@@ -12763,7 +12861,7 @@ YOUR BEHAVIOR:
 
   app.post("/api/resume/qualifications", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { qualificationName, documentUrl } = req.body;
+      const { qualificationName, documentUrl, issuingAuthority, credentialType, expirationDate, aiExtracted } = req.body;
       if (!qualificationName || typeof qualificationName !== "string") {
         return res.status(400).json({ message: "qualificationName is required" });
       }
@@ -12779,11 +12877,53 @@ YOUR BEHAVIOR:
           return res.status(400).json({ message: "Invalid document URL" });
         }
       }
+
+      // Optional credential card fields (worker may have edited the AI preview).
+      const cleanIssuing = typeof issuingAuthority === "string" ? issuingAuthority.trim().slice(0, 200) : null;
+      const cleanType = typeof credentialType === "string" ? credentialType.trim().slice(0, 80) : null;
+      let cleanExp: Date | null = null;
+      if (expirationDate && typeof expirationDate === "string") {
+        const m = expirationDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) {
+          const d = new Date(`${expirationDate}T00:00:00Z`);
+          if (!isNaN(d.getTime())) cleanExp = d;
+        }
+      }
+
+      // If a fresh document was provided but no AI fields were sent in,
+      // run extraction server-side so the record always carries best-effort
+      // metadata (e.g. when uploaded via a third-party flow).
+      let didAi = !!aiExtracted;
+      if (safeDocUrl && !cleanIssuing && !cleanType && !cleanExp && !aiExtracted) {
+        try {
+          const { analyzeCredentialImage } = await import("./id-vision");
+          const ex = await analyzeCredentialImage(safeDocUrl);
+          if (!ex.error) {
+            didAi = true;
+            const q = await storage.createQualification({
+              userId: req.session.userId!,
+              qualificationName: qualificationName.trim().slice(0, 200),
+              documentUrl: safeDocUrl,
+              verificationStatus: "pending",
+              issuingAuthority: ex.issuingAuthority || null,
+              credentialType: ex.credentialType || null,
+              expirationDate: ex.expirationDate ? new Date(`${ex.expirationDate}T00:00:00Z`) : null,
+              aiExtracted: true,
+            });
+            return res.status(201).json(q);
+          }
+        } catch {}
+      }
+
       const q = await storage.createQualification({
         userId: req.session.userId!,
         qualificationName: qualificationName.trim().slice(0, 200),
         documentUrl: safeDocUrl,
         verificationStatus: "pending",
+        issuingAuthority: cleanIssuing || null,
+        credentialType: cleanType || null,
+        expirationDate: cleanExp,
+        aiExtracted: didAi,
       });
       res.status(201).json(q);
     } catch (err: any) {
@@ -12804,6 +12944,38 @@ YOUR BEHAVIOR:
         reviewedAt: new Date(),
       } as any);
       if (!updated) return res.status(404).json({ message: "Qualification not found" });
+
+      // Auto-promote the worker to the credentialed (Skilled) tier when any
+      // qualification is verified. Never silently demote on rejection — admins
+      // can always do that manually if a credential is later revoked. (Task #372)
+      if (verificationStatus === "verified") {
+        try {
+          const target = await storage.getUser(updated.userId);
+          if (target) {
+            const updates: any = {
+              credentialVerified: true,
+              credentialUploadPending: false,
+            };
+            const currentTier = String((target as any).tier || "community");
+            const currentRank = TIER_ORDER.indexOf(currentTier);
+            const credentialedRank = TIER_ORDER.indexOf("credentialed");
+            // Only bump up — never demote a worker who is already elite.
+            if (currentRank < credentialedRank) {
+              updates.tier = "credentialed";
+            }
+            await storage.updateUser(target.id, updates);
+            await storage.createNotification({
+              userId: target.id,
+              title: "Credential approved",
+              body: `Your "${updated.qualificationName}" credential is verified. You're now in the Skilled (credentialed) tier.`,
+              type: "system",
+            } as any);
+          }
+        } catch (e: any) {
+          console.error("[GUBER] credential auto-promotion failed:", e?.message);
+        }
+      }
+
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

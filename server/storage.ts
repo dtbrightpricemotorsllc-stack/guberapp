@@ -164,7 +164,8 @@ export interface IStorage {
   getAllServicePricingConfigs(): Promise<import("@shared/schema").ServicePricingConfig[]>;
 
   getWorkerQualifications(userId: number): Promise<WorkerQualification[]>;
-  getApprovedQualifications(userId: number): Promise<Pick<WorkerQualification, "id" | "qualificationName">[]>;
+  getApprovedQualifications(userId: number): Promise<WorkerQualification[]>;
+  getApprovedQualificationsForUsers(userIds: number[]): Promise<Map<number, WorkerQualification[]>>;
   getAllPendingQualifications(): Promise<WorkerQualification[]>;
   createQualification(data: any): Promise<WorkerQualification>;
   updateQualification(id: number, data: Partial<WorkerQualification>): Promise<WorkerQualification | undefined>;
@@ -934,14 +935,35 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(workerQualifications.createdAt));
   }
 
-  async getApprovedQualifications(userId: number): Promise<Pick<WorkerQualification, "id" | "qualificationName">[]> {
-    return db.select({ id: workerQualifications.id, qualificationName: workerQualifications.qualificationName })
+  async getApprovedQualifications(userId: number): Promise<WorkerQualification[]> {
+    return db.select()
       .from(workerQualifications)
       .where(and(
         eq(workerQualifications.userId, userId),
         eq(workerQualifications.verificationStatus, "verified")
       ))
       .orderBy(workerQualifications.qualificationName);
+  }
+
+  // Batched lookup used by Talent Explorer to avoid N+1 queries when
+  // hydrating verified credentials for many candidates at once. Returns a
+  // map of userId -> qualification rows.
+  async getApprovedQualificationsForUsers(userIds: number[]): Promise<Map<number, WorkerQualification[]>> {
+    const out = new Map<number, WorkerQualification[]>();
+    if (!userIds.length) return out;
+    const rows = await db.select()
+      .from(workerQualifications)
+      .where(and(
+        inArray(workerQualifications.userId, userIds),
+        eq(workerQualifications.verificationStatus, "verified"),
+      ))
+      .orderBy(workerQualifications.qualificationName);
+    for (const r of rows) {
+      const arr = out.get(r.userId) || [];
+      arr.push(r);
+      out.set(r.userId, arr);
+    }
+    return out;
   }
 
   async getAllPendingQualifications(): Promise<WorkerQualification[]> {

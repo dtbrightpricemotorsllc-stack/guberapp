@@ -11,8 +11,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Search, Filter, MapPin, Star, CheckCircle2, Shield, Clock,
   Zap, Lock, Eye, Bookmark, Send, ChevronDown, X, TrendingUp,
-  User, Award
+  User, Award, ShieldCheck
 } from "lucide-react";
+import { CredentialCard } from "@/components/credential-card";
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
@@ -173,6 +174,23 @@ function CandidateCard({
           {badges.includes("fast_response") && <BadgeChip label="Fast" color="#60A5FA" />}
           {badges.includes("frequent_worker") && <BadgeChip label="Frequent" color={PURPLE} />}
           {badges.includes("strong_proof") && <BadgeChip label="Strong Proof" color="#A78BFA" />}
+        </div>
+      )}
+
+      {Array.isArray(candidate.verifiedCredentials) && candidate.verifiedCredentials.length > 0 && (
+        <div className="mb-3.5" data-testid={`credentials-strip-${candidate.userId}`}>
+          <p className="text-[9px] uppercase tracking-wider mb-1.5 font-semibold flex items-center gap-1" style={{ color: GOLD_DK }}>
+            <ShieldCheck className="w-3 h-3" /> Verified Credentials
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {candidate.verifiedCredentials.map((cred: any) => (
+              <CredentialCard
+                key={cred.id}
+                credential={{ ...cred, verificationStatus: "verified" }}
+                variant="compact"
+              />
+            ))}
+          </div>
         </div>
       )}
 

@@ -16,8 +16,9 @@ import {
   ArrowLeft, Shield, Star, Award, Briefcase, Camera, MapPin,
   FileText, CheckCircle, XCircle, Clock, TrendingUp, Eye, EyeOff,
   Plus, Upload, ChevronDown, ChevronUp, User, Building2, Loader2,
-  Sparkles, Target,
+  Sparkles, Target, ScanLine, ShieldCheck,
 } from "lucide-react";
+import { CredentialCard } from "@/components/credential-card";
 
 const CONFIDENCE_MAP: Record<string, { color: string; bg: string; label: string }> = {
   VERIFIED: { color: "text-emerald-400", bg: "bg-emerald-500", label: "Verified" },
@@ -111,6 +112,14 @@ export default function ResumePage() {
   const [showAddQual, setShowAddQual] = useState(false);
   const [qualName, setQualName] = useState("");
   const [qualDocUrl, setQualDocUrl] = useState("");
+  const [qualIssuer, setQualIssuer] = useState("");
+  const [qualType, setQualType] = useState("");
+  const [qualExp, setQualExp] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
+  const [scanConfidence, setScanConfidence] = useState<number | null>(null);
+  const [scanIsCredential, setScanIsCredential] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     stats: true,
     categories: true,
@@ -135,6 +144,19 @@ export default function ResumePage() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const resetQualForm = () => {
+    setShowAddQual(false);
+    setQualName("");
+    setQualDocUrl("");
+    setQualIssuer("");
+    setQualType("");
+    setQualExp("");
+    setScanError(null);
+    setScanPreviewUrl(null);
+    setScanConfidence(null);
+    setScanIsCredential(true);
+  };
+
   const addQualMutation = useMutation({
     mutationFn: async (body: any) => {
       const res = await apiRequest("POST", "/api/resume/qualifications", body);
@@ -142,13 +164,43 @@ export default function ResumePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/resume"] });
-      setShowAddQual(false);
-      setQualName("");
-      setQualDocUrl("");
-      toast({ title: "Qualification submitted for review" });
+      resetQualForm();
+      toast({ title: "Credential submitted for review", description: "Once approved, it will appear as a verified card on your resume." });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const handleScanFile = async (file: File) => {
+    if (!file) return;
+    setScanError(null);
+    setScanning(true);
+    try {
+      const fileBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      const res = await apiRequest("POST", "/api/resume/qualifications/scan", { fileBase64 });
+      const json = await res.json();
+      const ex = json.extracted || {};
+      if (ex.error) {
+        setScanError(ex.error);
+      }
+      setScanPreviewUrl(json.documentUrl || null);
+      setQualDocUrl(json.documentUrl || "");
+      setQualName(ex.credentialName || "");
+      setQualIssuer(ex.issuingAuthority || "");
+      setQualType(ex.credentialType || "");
+      setQualExp(ex.expirationDate || "");
+      setScanConfidence(typeof ex.confidence === "number" ? ex.confidence : null);
+      setScanIsCredential(ex.isCredentialDocument !== false);
+    } catch (e: any) {
+      setScanError(e?.message || "Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -330,15 +382,13 @@ export default function ResumePage() {
                 <>
                   <Separator />
                   <div>
-                    <h2 className="text-xs font-bold tracking-widest text-muted-foreground uppercase mb-2">Verified Qualifications</h2>
-                    <div className="space-y-1.5">
+                    <h2 className="text-xs font-bold tracking-widest text-muted-foreground uppercase mb-3 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                      Certifications
+                    </h2>
+                    <div className="grid sm:grid-cols-2 gap-2.5" data-testid="section-certifications">
                       {resume.qualifications.map((q: any) => (
-                        <div key={q.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border/10" data-testid={`qual-${q.id}`}>
-                          <span className="text-sm font-medium truncate">{q.qualificationName}</span>
-                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/20 text-[10px]">
-                            <CheckCircle className="w-3 h-3 mr-1" />Verified
-                          </Badge>
-                        </div>
+                        <CredentialCard key={q.id} credential={q} />
                       ))}
                     </div>
                   </div>
@@ -572,59 +622,175 @@ export default function ResumePage() {
           {expandedSections.quals && (
             <CardContent className="pt-0 space-y-2">
               {resume.qualifications?.length === 0 && !showAddQual && (
-                <p className="text-sm text-muted-foreground">Add your qualifications and certifications to stand out to companies and earn more opportunities.</p>
+                <p className="text-sm text-muted-foreground">
+                  Snap a photo of any work credential — Food Handler card, CPR certification, trade license — and we'll extract the details automatically. Once an admin approves it, a verified card appears on your resume and you're upgraded to the Skilled tier.
+                </p>
               )}
-              {resume.qualifications?.map((q: any) => (
-                <div key={q.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/10" data-testid={`qual-${q.id}`}>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{q.qualificationName}</p>
-                    {q.documentUrl && (
-                      <a href={q.documentUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline">View document</a>
-                    )}
-                  </div>
-                  {q.verificationStatus === "verified" ? (
-                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/20 text-[10px]"><CheckCircle className="w-3 h-3 mr-1" />Verified</Badge>
-                  ) : q.verificationStatus === "rejected" ? (
-                    <Badge variant="destructive" className="text-[10px]"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-[10px]"><Clock className="w-3 h-3 mr-1" />Pending</Badge>
-                  )}
-                </div>
-              ))}
+
+              <div className="grid sm:grid-cols-2 gap-2.5">
+                {resume.qualifications?.map((q: any) => (
+                  <CredentialCard key={q.id} credential={q} />
+                ))}
+              </div>
 
               {!showAddQual && (
                 <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => setShowAddQual(true)} data-testid="button-add-qualification">
-                  <Plus className="w-4 h-4 mr-1" /> Add Qualification
+                  <ScanLine className="w-4 h-4 mr-1" /> Scan a Credential
                 </Button>
               )}
 
               {showAddQual && (
-                <div className="space-y-2 p-3 rounded-lg border border-border/20 bg-muted/20">
-                  <Input
-                    placeholder="Qualification name (e.g., CDL Class A)"
-                    value={qualName}
-                    onChange={(e) => setQualName(e.target.value)}
-                    maxLength={200}
-                    className="text-sm"
-                    data-testid="input-qual-name"
-                  />
-                  <Input
-                    placeholder="Document URL (optional, must be https)"
-                    value={qualDocUrl}
-                    onChange={(e) => setQualDocUrl(e.target.value)}
-                    className="text-sm"
-                    data-testid="input-qual-doc"
-                  />
+                <div className="space-y-3 p-3 rounded-xl border border-border/30 bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <ScanLine className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-semibold">Scan a credential</p>
+                  </div>
+
+                  {!scanPreviewUrl && (
+                    <div>
+                      <label
+                        htmlFor="qual-file-input"
+                        className={`flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed border-border/40 bg-background/40 cursor-pointer hover:border-primary/40 transition-colors ${scanning ? "opacity-60 pointer-events-none" : ""}`}
+                        data-testid="dropzone-qual-scan"
+                      >
+                        {scanning ? (
+                          <>
+                            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                            <span className="text-xs text-muted-foreground">Reading your document…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-6 h-6 text-muted-foreground" />
+                            <span className="text-xs font-medium">Tap to upload a photo of your card</span>
+                            <span className="text-[10px] text-muted-foreground">JPG, PNG, or PDF</span>
+                          </>
+                        )}
+                      </label>
+                      <input
+                        id="qual-file-input"
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        disabled={scanning}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleScanFile(f);
+                        }}
+                        data-testid="input-qual-file"
+                      />
+                    </div>
+                  )}
+
+                  {scanError && (
+                    <p className="text-[11px] text-amber-500" data-testid="text-scan-error">
+                      We couldn't auto-fill from the image ({scanError}). You can still type the details below.
+                    </p>
+                  )}
+
+                  {scanPreviewUrl && (
+                    <>
+                      <div className="rounded-lg border border-border/20 overflow-hidden bg-background/40">
+                        <img
+                          src={scanPreviewUrl}
+                          alt="Uploaded credential"
+                          className="w-full max-h-48 object-contain"
+                          data-testid="img-scan-preview"
+                        />
+                      </div>
+
+                      {scanConfidence !== null && (
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-primary" />
+                            AI confidence
+                          </span>
+                          <span className="font-semibold" data-testid="text-scan-confidence">
+                            {Math.round(scanConfidence * 100)}%
+                          </span>
+                        </div>
+                      )}
+
+                      {!scanIsCredential && (
+                        <p className="text-[11px] text-amber-500">
+                          This doesn't look like a credential document. Double-check the fields below before submitting.
+                        </p>
+                      )}
+
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Credential name (e.g., Food Handler Certified)"
+                          value={qualName}
+                          onChange={(e) => setQualName(e.target.value)}
+                          maxLength={200}
+                          className="text-sm"
+                          data-testid="input-qual-name"
+                        />
+                        <Input
+                          placeholder="Issuing authority"
+                          value={qualIssuer}
+                          onChange={(e) => setQualIssuer(e.target.value)}
+                          maxLength={200}
+                          className="text-sm"
+                          data-testid="input-qual-issuer"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            placeholder="Type (Food Handler, CPR…)"
+                            value={qualType}
+                            onChange={(e) => setQualType(e.target.value)}
+                            maxLength={80}
+                            className="text-sm"
+                            data-testid="input-qual-type"
+                          />
+                          <Input
+                            type="date"
+                            value={qualExp}
+                            onChange={(e) => setQualExp(e.target.value)}
+                            className="text-sm"
+                            data-testid="input-qual-expiration"
+                          />
+                        </div>
+                      </div>
+
+                      {qualName.trim() && (
+                        <div data-testid="credential-preview">
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-primary" /> Card Preview
+                          </p>
+                          <CredentialCard
+                            credential={{
+                              id: "preview",
+                              qualificationName: qualName,
+                              credentialType: qualType || null,
+                              issuingAuthority: qualIssuer || null,
+                              expirationDate: qualExp || null,
+                              documentUrl: qualDocUrl || null,
+                              verificationStatus: "pending",
+                            }}
+                            pending
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   <div className="flex gap-2">
                     <Button
                       size="sm"
-                      onClick={() => addQualMutation.mutate({ qualificationName: qualName, documentUrl: qualDocUrl || undefined })}
-                      disabled={!qualName.trim() || addQualMutation.isPending}
+                      onClick={() => addQualMutation.mutate({
+                        qualificationName: qualName,
+                        documentUrl: qualDocUrl || undefined,
+                        issuingAuthority: qualIssuer || undefined,
+                        credentialType: qualType || undefined,
+                        expirationDate: qualExp || undefined,
+                        aiExtracted: scanPreviewUrl ? true : false,
+                      })}
+                      disabled={!qualName.trim() || !scanPreviewUrl || addQualMutation.isPending || scanning}
                       data-testid="button-submit-qualification"
                     >
-                      {addQualMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" />Submit</>}
+                      {addQualMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" />Submit for Review</>}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setShowAddQual(false); setQualName(""); setQualDocUrl(""); }} data-testid="button-cancel-qual">
+                    <Button size="sm" variant="ghost" onClick={resetQualForm} data-testid="button-cancel-qual">
                       Cancel
                     </Button>
                   </div>
