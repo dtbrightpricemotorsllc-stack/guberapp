@@ -255,6 +255,23 @@ export default function CashDropDetail() {
 
   const { cover: navCover, launch: launchNav } = useNavigationCover();
 
+  const openNavSheetForDrop = (d: typeof drop) => {
+    if (!d || !d.gpsLat || !d.gpsLng) return;
+    const slotsLeftNow = (d.winnerLimit || 1) - (d.winnersFound || 0);
+    const isUnclaimable = ["closed", "expired"].includes(d.status) || slotsLeftNow <= 0;
+    launchNav({
+      destLabel: d.title || "Cash Drop",
+      destAddress: `${d.gpsLat.toFixed(5)}, ${d.gpsLng.toFixed(5)}`,
+      payoutDollars: typeof d.rewardPerWinner === "number" ? d.rewardPerWinner : undefined,
+      warning: isUnclaimable ? "This drop has already been claimed. You may be wasting a trip." : undefined,
+      urls: {
+        google: `https://www.google.com/maps/dir/?api=1&destination=${d.gpsLat},${d.gpsLng}`,
+        waze: `waze://?ll=${d.gpsLat},${d.gpsLng}&navigate=yes`,
+        apple: `https://maps.apple.com/?daddr=${d.gpsLat},${d.gpsLng}`,
+      },
+    });
+  };
+
   const { data: drop, isLoading } = useQuery<CashDrop & { userAttempt: CashDropAttempt | null }>({
     queryKey: ["/api/cash-drops", id],
     queryFn: async () => {
@@ -728,23 +745,7 @@ export default function CashDropDetail() {
               <div className="space-y-2">
                 <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1">Navigation</p>
                 <button
-                  onClick={() => {
-                    const slotsLeftNow = (drop.winnerLimit || 1) - (drop.winnersFound || 0);
-                    const isUnclaimable = isClosed || slotsLeftNow <= 0;
-                    launchNav({
-                      destLabel: drop.title || "Cash Drop",
-                      destAddress: `${drop.gpsLat?.toFixed(5)}, ${drop.gpsLng?.toFixed(5)}`,
-                      payoutDollars: typeof drop.rewardPerWinner === "number" ? drop.rewardPerWinner : undefined,
-                      warning: isUnclaimable
-                        ? "This drop has already been claimed. You may be wasting a trip."
-                        : undefined,
-                      urls: {
-                        google: `https://www.google.com/maps/dir/?api=1&destination=${drop.gpsLat},${drop.gpsLng}`,
-                        waze: `waze://?ll=${drop.gpsLat},${drop.gpsLng}&navigate=yes`,
-                        apple: `https://maps.apple.com/?daddr=${drop.gpsLat},${drop.gpsLng}`,
-                      },
-                    });
-                  }}
+                  onClick={() => openNavSheetForDrop(drop)}
                   className="flex items-center gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] w-full text-left"
                   style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
                   data-testid="link-google-maps-cash-drop"
@@ -760,23 +761,7 @@ export default function CashDropDetail() {
                 </button>
 
                 <button
-                  onClick={() => {
-                    const slotsLeftNow = (drop.winnerLimit || 1) - (drop.winnersFound || 0);
-                    const isUnclaimable = isClosed || slotsLeftNow <= 0;
-                    launchNav({
-                      destLabel: drop.title || "Cash Drop",
-                      destAddress: `${drop.gpsLat?.toFixed(5)}, ${drop.gpsLng?.toFixed(5)}`,
-                      payoutDollars: typeof drop.rewardPerWinner === "number" ? drop.rewardPerWinner : undefined,
-                      warning: isUnclaimable
-                        ? "This drop has already been claimed. You may be wasting a trip."
-                        : undefined,
-                      urls: {
-                        google: `https://www.google.com/maps/dir/?api=1&destination=${drop.gpsLat},${drop.gpsLng}`,
-                        waze: `waze://?ll=${drop.gpsLat},${drop.gpsLng}&navigate=yes`,
-                        apple: `https://maps.apple.com/?daddr=${drop.gpsLat},${drop.gpsLng}`,
-                      },
-                    });
-                  }}
+                  onClick={() => openNavSheetForDrop(drop)}
                   className="flex items-center gap-3 p-4 rounded-2xl transition-all active:scale-[0.98] w-full text-left"
                   style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
                   data-testid="link-waze-cash-drop"
