@@ -757,6 +757,49 @@ export async function registerRoutes(
       const jobId = Number((rows.rows[0] as { id: number }).id);
       return res.json({ ok: true, jobId });
     });
+
+    app.post("/api/test/create-cash-drop-fixture", async (req: Request, res: Response) => {
+      const {
+        userEmail,
+        allSlotsTaken = false,
+        createAcceptedAttempt = false,
+      } = req.body as { userEmail?: string; allSlotsTaken?: boolean; createAcceptedAttempt?: boolean };
+      if (!userEmail) return res.status(400).json({ error: "userEmail required" });
+      const user = await storage.getUserByEmail(userEmail);
+      if (!user) return res.status(404).json({ error: "user not found" });
+
+      const winnerLimit = 1;
+      const winnersFound = allSlotsTaken ? winnerLimit : 0;
+
+      const dropRows = await db.execute(sql`
+        INSERT INTO cash_drops (
+          title, description, reward_per_winner, winner_limit, winners_found,
+          status, gps_lat, gps_lng, gps_radius
+        ) VALUES (
+          'E2E Test Cash Drop', 'Playwright fixture cash drop', 20,
+          ${winnerLimit}, ${winnersFound},
+          'active', 34.0522, -118.2437, 200
+        ) RETURNING id
+      `);
+      const dropId = Number((dropRows.rows[0] as { id: number }).id);
+
+      if (createAcceptedAttempt) {
+        await db.execute(sql`
+          INSERT INTO cash_drop_attempts (cash_drop_id, user_id, status)
+          VALUES (${dropId}, ${user.id}, 'accepted')
+        `);
+      }
+
+      return res.json({ ok: true, dropId, userId: user.id });
+    });
+
+    app.post("/api/test/cleanup-cash-drop-fixture", async (req: Request, res: Response) => {
+      const { dropId } = req.body as { dropId?: number };
+      if (!dropId) return res.status(400).json({ error: "dropId required" });
+      await db.execute(sql`DELETE FROM cash_drop_attempts WHERE cash_drop_id = ${dropId}`);
+      await db.execute(sql`DELETE FROM cash_drops WHERE id = ${dropId}`);
+      return res.json({ ok: true });
+    });
   }
 
   app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
