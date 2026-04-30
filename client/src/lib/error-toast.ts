@@ -33,13 +33,13 @@ export function useErrorToast() {
   return function showError(err: any, fallbackTitle = "Something went wrong") {
     const known = KNOWN_ERRORS[err?.message];
     if (known) {
-      toast({ title: known.title, description: known.description, variant: "guber-error" as any });
+      toast({ title: known.title, description: known.description, variant: "guber-error" });
       return;
     }
     const title = fallbackTitle;
     const description =
       err?.detail ??
       (typeof err?.message === "string" && err.message.length < 100 ? err.message : undefined);
-    toast({ title, description, variant: "guber-error" as any });
+    toast({ title, description, variant: "guber-error" });
   };
 }
