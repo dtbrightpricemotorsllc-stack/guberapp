@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AccessibleCheckbox } from "@/components/ui/accessible-checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useErrorToast } from "@/lib/error-toast";
 import {
   MapPin, DollarSign, AlertTriangle, User,
   CheckCircle, Star, ArrowLeft, Lock, Shield,
@@ -111,6 +112,7 @@ export default function JobDetail() {
   const [, params] = useRoute("/jobs/:id");
   const { user, acceptLiabilityDisclaimer, acceptingLiabilityDisclaimer } = useAuth();
   const { toast } = useToast();
+  const showError = useErrorToast();
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
@@ -222,7 +224,7 @@ export default function JobDetail() {
     onSuccess: (data: any) => {
       if (data.url) window.location.href = data.url;
     },
-    onError: (err: any) => toast({ title: "Setup Failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Setup Failed"),
   });
 
   const jobId = params?.id;
@@ -279,7 +281,7 @@ export default function JobDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       toast({ title: "Payout Initiated!", description: data.message || "Your earnings are being sent to your payout account." });
     },
-    onError: (err: any) => toast({ title: "Payout Failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Payout Failed"),
   });
 
   const { data: workerInstructions } = useQuery<{
@@ -404,7 +406,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 </html>`);
       win.document.close();
     } catch (err: any) {
-      toast({ title: "Report Error", description: err.message, variant: "destructive" });
+      showError(err, "Report Error");
     }
   };
 
@@ -414,7 +416,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       toast({ title: "Success" });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const acceptMutation = useMutation({
@@ -437,13 +439,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         setGlobalDisclaimerOpen(true);
         return;
       }
-      if (err.message?.includes("ID_REQUIRED")) {
-        toast({ title: "ID Required", description: "You must verify your ID to accept jobs. Go to Profile → Trust & Credentials.", variant: "destructive" });
-      } else if (err.message === "STRIPE_CONNECT_REQUIRED") {
-        // Handled by the conditional UI below
-      } else {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
-      }
+      showError(err);
     },
   });
 
@@ -462,7 +458,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         toast({ title: "Job Locked!", description: "Your helper has been notified." });
       }
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const needMoreTimeMutation = useMutation({
@@ -474,7 +470,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       toast({ title: "Worker Notified", description: "The worker has been told you need more time." });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const confirmLockMutation = useMutation({
@@ -487,7 +483,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       toast({ title: "Payment Confirmed!", description: "Job locked. Your helper is on the way." });
       window.history.replaceState({}, "", `/jobs/${jobId}`);
     },
-    onError: (err: any) => toast({ title: "Payment error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Payment Error"),
   });
 
   useEffect(() => {
@@ -533,7 +529,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         }, 1200);
       }
     },
-    onError: (err: any) => toast({ title: "Confirm Failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Confirm Failed"),
   });
   const disputeMutation = action("dispute");
 
@@ -545,7 +541,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       setRejectFeedback("");
       toast({ title: "Proof Rejected", description: "The worker has been notified and can resubmit." });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const escalateMutation = useMutation({
@@ -554,7 +550,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       toast({ title: "Escalated to Admin", description: "GUBER will review and resolve the dispute." });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   // ── Dispute & Payout Protection (Task #317) ─────────────────────────
@@ -591,7 +587,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         description: DISPUTE_COPY.reportSubmittedBody,
       });
     },
-    onError: (err: any) => toast({ title: "Could not report issue", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Could Not Report Issue"),
   });
 
   const helperResponseMutation = useMutation({
@@ -608,7 +604,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       setHelperResponseEvidenceUrls([]);
       toast({ title: "Response sent", description: "GUBER will review both sides and decide." });
     },
-    onError: (err: any) => toast({ title: "Could not send response", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Could Not Send Response"),
   });
 
   const posterCancelMutation = useMutation({
@@ -626,7 +622,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       toast({ title: "Job Cancelled", description: "This job has been cancelled." });
       navigate("/my-jobs");
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const milestoneMutation = useMutation({
@@ -679,7 +675,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         navigate("/browse-jobs");
       }
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const reviewMutation = useMutation({
@@ -697,7 +693,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       toast({ title: "Review Submitted!", description: `Your review for ${revieweeName} has been saved.` });
       setTimeout(() => navigate("/jobs"), 1400);
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   // Bounty mutations and queries
@@ -724,7 +720,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       setBountyNotes("");
       toast({ title: "Proof Submitted!", description: "The poster will review and notify you of the decision." });
     },
-    onError: (err: any) => toast({ title: "Submission Failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Submission Failed"),
   });
 
   const bountyApproveMutation = useMutation({
@@ -737,7 +733,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       refetchAttempts();
       toast({ title: "Approved!", description: "Proof approved. Payout processing." });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const bountyRejectMutation = useMutation({
@@ -752,7 +748,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       setBountyRejectReason("");
       toast({ title: "Rejected", description: "Helper has been notified." });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   function captureGps() {
@@ -794,7 +790,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       setShowSellModal(false);
       navigate("/marketplace");
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err),
   });
 
   const editMutation = useMutation({
@@ -807,7 +803,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       setShowEditModal(false);
       toast({ title: "Post updated!" });
     },
-    onError: (err: any) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Update Failed"),
   });
 
   const deleteMutation = useMutation({
@@ -819,7 +815,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       toast({ title: "Post deleted" });
       navigate("/browse-jobs");
     },
-    onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) => showError(err, "Delete Failed"),
   });
 
   // Liability protection (Task #318): kicks off the helper start-confirmation
@@ -2287,7 +2283,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                               const url = await uploadEvidenceFile(file);
                               setHelperResponseEvidenceUrls((prev) => [...prev, url]);
                             } catch (err: any) {
-                              toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                              showError(err, "Upload Failed");
                             } finally {
                               setHelperResponseUploading(false);
                               e.target.value = "";
@@ -3102,7 +3098,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       const url = await uploadEvidenceFile(file);
                       setReportEvidenceUrls((prev) => [...prev, url]);
                     } catch (err: any) {
-                      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                      showError(err, "Upload Failed");
                     } finally {
                       setReportEvidenceUploading(false);
                       e.target.value = "";
@@ -3395,11 +3391,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             // to re-tap ACCEPT JOB after acknowledging the disclaimer.
             setTimeout(beginAcceptFlow, 0);
           } catch (err: any) {
-            toast({
-              title: "Couldn't save acknowledgement",
-              description: err?.message || "Please try again.",
-              variant: "destructive",
-            });
+            showError(err, "Couldn't Save Acknowledgement");
           }
         }}
         isPending={acceptingLiabilityDisclaimer}

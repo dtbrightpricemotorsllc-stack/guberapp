@@ -22,7 +22,19 @@ async function throwIfResNotOk(res: Response) {
       await handleExpiredSession();
     }
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let message = text;
+    let detail: string | undefined;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.message) {
+        message = parsed.message;
+        detail = parsed.detail ?? parsed.error;
+      }
+    } catch {}
+    const err: any = new Error(message);
+    err.detail = detail;
+    err.status = res.status;
+    throw err;
   }
 }
 
