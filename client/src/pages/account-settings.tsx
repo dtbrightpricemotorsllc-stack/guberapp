@@ -26,6 +26,7 @@ import { isBiometricSupported, getBiometricEnabled, setBiometricEnabled, perform
 import {
   getNotifSoundEnabled, setNotifSoundEnabled,
   getNotifVibrationEnabled, setNotifVibrationEnabled,
+  playGuberSound, unlockAudio, type SoundType,
 } from "@/lib/notification-sound";
 import { GlobalDisclaimerModal } from "@/components/liability-modals";
 
@@ -415,6 +416,49 @@ export default function AccountSettings() {
               />
             </div>
           )}
+
+          <div className="pt-2 mt-1 border-t border-white/[0.06] space-y-2" data-testid="card-test-sounds">
+            <p className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Test alert sounds</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">Tap a button to hear each alert. If you hear nothing, your phone may be on silent or sounds may be disabled above.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { type: "nearby",  label: "Nearby drop" },
+                { type: "money",   label: "Money / paid" },
+                { type: "action",  label: "Action needed" },
+                { type: "closed",  label: "Closed / claimed" },
+                { type: "default", label: "General alert" },
+              ] as Array<{ type: SoundType; label: string }>).map((s) => (
+                <Button
+                  key={s.type}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-xs font-display border-border/30 justify-start"
+                  onClick={() => {
+                    if (!notifSoundEnabled) {
+                      toast({
+                        title: "Notification sounds are off",
+                        description: "Turn the toggle on above to hear test sounds.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    // Force unlock now — this tap is a user gesture, so iOS
+                    // will let us prime the audio pipeline even if it hadn't
+                    // been unlocked earlier in the session.
+                    unlockAudio();
+                    playGuberSound(s.type);
+                  }}
+                  data-testid={`button-test-sound-${s.type}`}
+                >
+                  {s.label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground/80 leading-relaxed pt-1">
+              <strong className="text-muted-foreground">Not hearing alerts on iPhone?</strong> Check that your ringer switch is on, GUBER notifications are allowed in iOS Settings, and Focus / Do Not Disturb is off. iOS only plays GUBER's custom sounds while the app is open in the foreground — locked-screen alerts use your phone's default notification sound.
+            </p>
+          </div>
         </div>
 
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">

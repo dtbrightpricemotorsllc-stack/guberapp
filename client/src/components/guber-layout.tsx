@@ -2,14 +2,14 @@ import { useRef, useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Notification } from "@shared/schema";
 import { subscribeToPush } from "@/lib/push";
-import { playGuberPing, unlockAudio, playGuberSound, type SoundType } from "@/lib/notification-sound";
+import { playGuberPing, unlockAudio, isAudioUnlocked, playGuberSound, type SoundType } from "@/lib/notification-sound";
 import { isNativeApp, isAndroid } from "@/lib/platform";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { GpsDisclaimerModal } from "@/components/gps-disclaimer-modal";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "./guber-logo";
-import { GUBERAssistant } from "./guber-assistant";
+import { GUBERAssistant, GUBERAssistantHeaderButton } from "./guber-assistant";
 import { AdminDiagnosticAssistant } from "./admin-diagnostic-assistant";
 import { ActiveJobBanner } from "./active-job-banner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -149,14 +149,30 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
     moneyFlashTimerRef.current = setTimeout(() => setMoneyFlashVisible(false), 1800);
   }
 
-  // Unlock AudioContext on first tap (required by browsers before playing sound)
+  // Unlock AudioContext + HTMLAudio on the first user gesture. iOS is fussy
+  // about this — listen on a wide set of events and detach them all once any
+  // path successfully unlocks (tracked in sessionStorage so it persists
+  // across re-mounts during the same tab session).
   useEffect(() => {
-    const unlock = () => unlockAudio();
-    window.addEventListener("touchstart", unlock, { once: true });
-    window.addEventListener("click", unlock, { once: true });
+    if (isAudioUnlocked()) return;
+    const events: Array<keyof WindowEventMap> = [
+      "touchstart",
+      "touchend",
+      "click",
+      "pointerdown",
+      "keydown",
+    ];
+    const unlock = () => {
+      unlockAudio();
+      if (isAudioUnlocked()) {
+        events.forEach((e) => window.removeEventListener(e, unlock as EventListener));
+      }
+    };
+    events.forEach((e) =>
+      window.addEventListener(e, unlock as EventListener, { passive: true } as AddEventListenerOptions)
+    );
     return () => {
-      window.removeEventListener("touchstart", unlock);
-      window.removeEventListener("click", unlock);
+      events.forEach((e) => window.removeEventListener(e, unlock as EventListener));
     };
   }, []);
 
@@ -258,6 +274,8 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                   )}
                 </Button>
               </Link>
+
+              <GUBERAssistantHeaderButton />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

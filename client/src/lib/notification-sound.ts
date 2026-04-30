@@ -21,11 +21,25 @@ export function setNotifVibrationEnabled(enabled: boolean): void {
 
 let audioCtx: AudioContext | null = null;
 
+const AUDIO_UNLOCKED_KEY = "guber_audio_unlocked";
+
+let unlocked: boolean = (() => {
+  try {
+    return sessionStorage.getItem(AUDIO_UNLOCKED_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+
 function getCtx(): AudioContext {
   if (!audioCtx || audioCtx.state === "closed") {
     audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
   }
   return audioCtx;
+}
+
+export function isAudioUnlocked(): boolean {
+  return unlocked;
 }
 
 function playTone(
@@ -96,10 +110,79 @@ export function playGuberCashDrop() {
   }
 }
 
-export function unlockAudio() {
+// Aggressive iOS-friendly audio unlock. iOS Safari requires *both* an
+// AudioContext.resume() call AND a real audio buffer (or HTMLAudioElement)
+// playback within the same user gesture before any future programmatic
+// playback will be allowed. We try both in parallel, but we only flip the
+// `unlocked` flag (and persist it) after one of the paths *actually*
+// confirms success — so the layout's gesture listeners keep firing on
+// subsequent taps if the first attempt was partial.
+function markUnlocked(): void {
+  if (unlocked) return;
+  unlocked = true;
+  try {
+    sessionStorage.setItem(AUDIO_UNLOCKED_KEY, "1");
+  } catch {
+  }
+}
+
+export function unlockAudio(): void {
+  if (unlocked) return;
+
+  // --- AudioContext path -------------------------------------------------
   try {
     const ctx = getCtx();
-    if (ctx.state === "suspended") ctx.resume();
+
+    const finalizeContext = () => {
+      // Only count as success once the context is actually running. Calling
+      // start(0) on a suspended context is silently queued, which is what
+      // led to false positives previously.
+      if (ctx.state !== "running") return;
+      try {
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+        src.start(0);
+        markUnlocked();
+      } catch {
+        // ignore — HTMLAudio path may still succeed
+      }
+    };
+
+    if (ctx.state === "running") {
+      finalizeContext();
+    } else {
+      const p = ctx.resume();
+      if (p && typeof (p as any).then === "function") {
+        (p as Promise<void>).then(finalizeContext).catch(() => {});
+      } else {
+        finalizeContext();
+      }
+    }
+  } catch {
+    // AudioContext path failed — keep trying HTMLAudio
+  }
+
+  // --- HTMLAudioElement path --------------------------------------------
+  try {
+    const a = new Audio(
+      // tiny silent 8kHz mono WAV
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+    );
+    a.muted = true;
+    const p = a.play();
+    if (p && typeof p.then === "function") {
+      p.then(() => {
+        try { a.pause(); } catch {}
+        a.muted = false;
+        markUnlocked();
+      }).catch(() => {
+        // play() rejected — leave `unlocked` false so the next gesture retries.
+      });
+    }
+    // If play() returned no promise (very old browsers), don't speculatively
+    // mark unlocked — the AudioContext path is our source of truth there.
   } catch {
     // ignore
   }
