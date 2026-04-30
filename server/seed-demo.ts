@@ -20,6 +20,24 @@ export const LIAB_TEST_PASSWORD = "LibTest2026!";
 
 export async function seedDemoAccounts() {
   try {
+    // Defensive re-mark: ensure ALL demo jobs are flagged is_demo=true in every
+    // environment (dev, production, etc.).  The retroactive UPDATE may not have
+    // run against the production DB, so we do it here on every startup — it is
+    // idempotent and fast (indexed on posted_by_id).
+    await db.execute(sql`
+      UPDATE jobs
+      SET is_demo = true
+      WHERE posted_by_id IN (
+        SELECT id FROM users
+        WHERE email LIKE '%@guberapp.internal%'
+      )
+      AND (is_demo IS NULL OR is_demo = false)
+    `);
+    await db.execute(sql`
+      UPDATE jobs SET is_demo = true
+      WHERE title LIKE '%GUBER Demo Seed%' AND (is_demo IS NULL OR is_demo = false)
+    `);
+
     await seedDemoConsumer();
     await seedDemoBusinessUser();
     await seedNationwideJobs();
