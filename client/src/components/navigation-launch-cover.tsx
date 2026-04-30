@@ -149,9 +149,10 @@ function NavigationLaunchSheet({
               </div>
             ) : null}
 
-            {/* Provider buttons — on iOS, Apple Maps is a full primary button */}
+            {/* Provider buttons — Google + Waze only. Apple Maps is shown */}
+            {/* below as a small "More options" link on iOS only.            */}
             <div className="space-y-2">
-              {(isIOS() ? (["google", "waze", "apple"] as NavProvider[]) : (["google", "waze"] as NavProvider[])).map((provider) => {
+              {(["google", "waze"] as NavProvider[]).map((provider) => {
                 const url = state.urls[provider];
                 if (!url) return null;
                 const meta = PROVIDER_META[provider];
@@ -216,8 +217,8 @@ function NavigationLaunchSheet({
               })}
             </div>
 
-            {/* Apple Maps tertiary link — non-iOS only (iOS gets it as a primary button above) */}
-            {!isIOS() && state.urls.apple ? (
+            {/* Apple Maps tertiary link — iOS only (Apple Maps doesn't make sense on Android) */}
+            {isIOS() && state.urls.apple ? (
               <div className="pt-1 space-y-1">
                 <button
                   onClick={() => handleLaunch(state.urls.apple!)}
@@ -298,7 +299,11 @@ export function useNavigationCover() {
       const currentPref: string | null = (user as any)?.preferredMapApp ?? null;
       const currentProvider: NavProvider | null = currentPref ? (PREF_TO_PROVIDER[currentPref] ?? null) : null;
 
-      if (currentProvider) {
+      // Don't auto-launch Apple Maps on non-iOS platforms — its URL only opens
+      // a useless web page on Android. Fall through to the sheet instead.
+      const canAutoLaunch = currentProvider && (currentProvider !== "apple" || isIOS());
+
+      if (canAutoLaunch && currentProvider) {
         const url = opts.urls[currentProvider];
         if (url) {
           launchExternal(url);
