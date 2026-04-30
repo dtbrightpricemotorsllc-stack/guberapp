@@ -73,6 +73,18 @@ function useAssistantStore(): StoreState {
   return store;
 }
 
+// Allow other components (e.g. the admin diagnostic assistant) to subscribe
+// to the GUBER Assistant's open state so they can hide their own trigger and
+// auto-close their own sheet whenever this one is open.
+export function useGuberAssistantOpen(): boolean {
+  return useAssistantStore().open;
+}
+
+export function setGuberAssistantOpen(open: boolean) {
+  if (open) markSeen();
+  patchStore({ open });
+}
+
 function markSeen() {
   try {
     sessionStorage.setItem(SEEN_KEY, "1");

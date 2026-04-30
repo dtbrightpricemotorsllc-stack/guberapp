@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Activity, Send, Bot, Loader2, RefreshCw, Clipboard, ClipboardCheck, Pin, PinOff, X, Download, BookMarked, Pencil, Check, Search, CalendarRange, UserRound } from "lucide-react";
+import { useGuberAssistantOpen, setGuberAssistantOpen } from "./guber-assistant";
 
 interface Message {
   id: number;
@@ -48,6 +49,16 @@ type Tab = "chat" | "pinned";
 
 export function AdminDiagnosticAssistant() {
   const [open, setOpen] = useState(false);
+  const guberOpen = useGuberAssistantOpen();
+
+  // Only one assistant sheet on /admin can be open at a time. If the GUBER
+  // Assistant opens while this sheet is open, auto-close so the bottom sheets
+  // never stack and trap focus.
+  useEffect(() => {
+    if (guberOpen && open) {
+      setOpen(false);
+    }
+  }, [guberOpen, open]);
   const [tab, setTab] = useState<Tab>("chat");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -315,6 +326,7 @@ export function AdminDiagnosticAssistant() {
   }
 
   function handleOpen() {
+    setGuberAssistantOpen(false);
     setOpen(true);
     if (hasAutoScanned) {
       setHasAutoScanned(false);
@@ -361,7 +373,7 @@ export function AdminDiagnosticAssistant() {
 
   return (
     <>
-      {!open && (
+      {!open && !guberOpen && (
         <button
           onClick={handleOpen}
           className="fixed left-4 z-[55] w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105"
