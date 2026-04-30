@@ -1,6 +1,11 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getToken, clearToken } from "./token-storage";
 
+export interface ApiError extends Error {
+  status?: number;
+  detail?: string;
+}
+
 async function getBearerHeader(): Promise<Record<string, string>> {
   const token = await getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -31,7 +36,7 @@ async function throwIfResNotOk(res: Response) {
         detail = parsed.detail ?? parsed.error;
       }
     } catch {}
-    const err: any = new Error(message);
+    const err: ApiError = new Error(message);
     err.detail = detail;
     err.status = res.status;
     throw err;
