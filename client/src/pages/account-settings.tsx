@@ -111,6 +111,19 @@ export default function AccountSettings() {
     setVibrationSupported("vibrate" in navigator);
   }, []);
 
+  useEffect(() => {
+    if (window.location.hash === "#test-sounds") {
+      const el = document.getElementById("test-sounds");
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          el.setAttribute("tabindex", "-1");
+          el.focus({ preventScroll: true });
+        }, 300);
+      }
+    }
+  }, []);
+
   const handleBiometricToggle = async (value: boolean) => {
     if (value) {
       const verified = await performBiometricAuth("Confirm your identity to enable biometric unlock");
@@ -419,7 +432,7 @@ export default function AccountSettings() {
             </div>
           )}
 
-          <div className="pt-2 mt-1 border-t border-white/[0.06] space-y-2" data-testid="card-test-sounds">
+          <div id="test-sounds" className="pt-2 mt-1 border-t border-white/[0.06] space-y-2" data-testid="card-test-sounds">
             <p className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Test alert sounds</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">Tap a button to hear each alert. If you hear nothing, your phone may be on silent or sounds may be disabled above.</p>
             <div className="grid grid-cols-2 gap-2">
