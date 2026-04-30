@@ -50,11 +50,6 @@ function isIOS() {
 }
 
 function NavigationLaunchSheet({ state, onOpenChange }: { state: NavLaunchOpts; onOpenChange: (open: boolean) => void }) {
-  const googleUrl = state.urls.google;
-  const wazeUrl = state.urls.waze;
-  const appleUrl = state.urls.apple;
-  const showApple = !!appleUrl && isIOS();
-
   const handleLaunch = (url: string) => {
     // Defer the external launch by 600ms so the handoff sheet has time to
     // paint the user's tap (button press state + animation) before the OS
@@ -142,9 +137,9 @@ function NavigationLaunchSheet({ state, onOpenChange }: { state: NavLaunchOpts; 
               </div>
             ) : null}
 
-            {/* Two prominent provider buttons */}
+            {/* Provider buttons — on iOS, Apple Maps is a full primary button */}
             <div className="space-y-2">
-              {(["google", "waze"] as NavProvider[]).map((provider) => {
+              {(isIOS() ? (["google", "waze", "apple"] as NavProvider[]) : (["google", "waze"] as NavProvider[])).map((provider) => {
                 const url = state.urls[provider];
                 if (!url) return null;
                 const meta = PROVIDER_META[provider];
@@ -177,11 +172,11 @@ function NavigationLaunchSheet({ state, onOpenChange }: { state: NavLaunchOpts; 
               })}
             </div>
 
-            {/* Apple Maps tertiary link, iOS only */}
-            {showApple && appleUrl ? (
+            {/* Apple Maps tertiary link — non-iOS only (iOS gets it as a primary button above) */}
+            {!isIOS() && state.urls.apple ? (
               <div className="pt-1">
                 <button
-                  onClick={() => handleLaunch(appleUrl)}
+                  onClick={() => handleLaunch(state.urls.apple!)}
                   className="w-full text-center text-[12px] font-display font-semibold tracking-wide text-white/55 hover:text-white/80 transition-colors py-2"
                   data-testid="button-nav-launch-apple"
                 >
