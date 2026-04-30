@@ -12,47 +12,7 @@ import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
 import { getToken } from "@/lib/token-storage";
-
-type GooglePhase = null | "connecting" | "completing";
-
-function GoogleAuthOverlay({ phase }: { phase: GooglePhase }) {
-  if (!phase) return null;
-  return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center" data-testid="overlay-google-auth">
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full"
-          style={{ background: "radial-gradient(circle, hsl(152 100% 44% / 0.08), transparent 65%)" }}
-        />
-        <div
-          className="absolute bottom-[20%] right-[10%] w-[300px] h-[300px] rounded-full"
-          style={{ background: "radial-gradient(circle, hsl(275 85% 62% / 0.05), transparent 65%)" }}
-        />
-      </div>
-      <div className="relative z-10 flex flex-col items-center gap-8 text-center px-8">
-        <GuberLogo size="xl" />
-        {phase === "connecting" ? (
-          <div className="flex flex-col items-center gap-3">
-            <h2 className="text-xl font-display font-semibold tracking-wide text-foreground">
-              Connecting to Google…
-            </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-[260px]">
-              You'll return to GUBER automatically
-            </p>
-            <Loader2 className="w-5 h-5 animate-spin text-primary/50 mt-2" />
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-3">
-            <h2 className="text-xl font-display font-semibold tracking-wide text-foreground">
-              Signing you in…
-            </h2>
-            <Loader2 className="w-5 h-5 animate-spin text-primary/50 mt-2" />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
 
 export default function Login() {
   const { login } = useAuth();
@@ -64,7 +24,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [googlePhase, setGooglePhase] = useState<GooglePhase>(null);
   const [demoVisible, setDemoVisible] = useState(false);
   const [demoLoading, setDemoLoading] = useState<"consumer" | "business" | null>(null);
   const isNative = Capacitor.isNativePlatform();
@@ -72,6 +31,8 @@ export default function Login() {
   // 5-tap logo counter
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Synchronous in-flight lock for the Google sign-in handler — see comment in handler below.
+  const googleInFlightRef = useRef(false);
 
   const handleLogoTap = () => {
     tapCountRef.current += 1;
@@ -130,44 +91,61 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = async () => {
+    // Re-entry guard — second tap before the first attempt resolves is a no-op.
+    // Use a synchronous ref so back-to-back taps in the same JS turn can't slip
+    // through before React commits the loading state.
+    if (googleInFlightRef.current) return;
+    googleInFlightRef.current = true;
+    setGoogleLoading(true);
+    setGoogleAuthPhase("connecting");
     if (isNative) {
-      setGooglePhase("connecting");
-      setGoogleLoading(true);
       try {
         const result = await nativeGoogleSignIn();
         if (result.ok) {
-          setGooglePhase("completing");
-          await new Promise((r) => setTimeout(r, 650));
-          setLocation(returnTo || (result.accountType === "business" ? "/biz/dashboard" : "/dashboard"));
+          setGoogleAuthPhase("completing");
+          // Navigate immediately — the global overlay survives the route change
+          // and is cleared once the destination has had time to mount.
+          setLocation(returnTo || (result.accountType === "business" ? "/biz/dashboard" : "/dashboard"), { replace: true });
+          setTimeout(() => setGoogleAuthPhase(null), 600);
         } else if (result.reason === "plugin_not_available") {
           const browserResult = await browserGoogleSignIn({
             returnTo: returnTo || undefined,
             onPhaseChange: (phase) => {
-              if (phase === "completing") setGooglePhase("completing");
+              if (phase === "completing") setGoogleAuthPhase("completing");
             },
           });
           if (browserResult.ok) {
-            setGooglePhase("completing");
-            await new Promise((r) => setTimeout(r, 650));
-            setLocation(returnTo || (browserResult.accountType === "business" ? "/biz/dashboard" : "/dashboard"));
+            setGoogleAuthPhase("completing");
+            setLocation(returnTo || (browserResult.accountType === "business" ? "/biz/dashboard" : "/dashboard"), { replace: true });
+            setTimeout(() => setGoogleAuthPhase(null), 600);
           } else if (browserResult.reason !== "cancelled") {
-            setGooglePhase(null);
+            setGoogleAuthPhase(null);
             toast({ title: "Sign-In Failed", description: browserResult.message || "Please try again.", variant: "destructive" });
           } else {
-            setGooglePhase(null);
+            setGoogleAuthPhase(null);
           }
         } else if (result.reason !== "cancelled") {
-          setGooglePhase(null);
+          setGoogleAuthPhase(null);
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
         } else {
-          setGooglePhase(null);
+          setGoogleAuthPhase(null);
         }
       } finally {
         setGoogleLoading(false);
+        googleInFlightRef.current = false;
       }
     } else {
+      // Web/PWA: full-page redirect. Show the overlay so the moment of "leaving
+      // the app" feels like a controlled handoff instead of a blank flash.
       const googleUrl = new URL(`${window.location.origin}/api/auth/google`);
       if (returnTo) googleUrl.searchParams.set("returnTo", returnTo);
+      // Safety net: if navigation is blocked (popup blocker, very rare), clear
+      // the overlay after 10s so the user isn't stranded behind it.
+      setTimeout(() => {
+        setGoogleAuthPhase(null);
+        setGoogleLoading(false);
+        googleInFlightRef.current = false;
+      }, 10000);
       window.location.href = googleUrl.toString();
     }
   };
@@ -195,7 +173,6 @@ export default function Login() {
 
   return (
     <InAppBrowserGate>
-      <GoogleAuthOverlay phase={googlePhase} />
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 relative overflow-hidden" data-testid="page-login">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-[25%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-[0.06]"

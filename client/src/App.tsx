@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import SplashScreen from "@/components/splash-screen";
 import InstallPrompt from "@/components/install-prompt";
+import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
 import { Loader2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
@@ -374,6 +375,7 @@ function App() {
         <TooltipProvider>
           <AuthProvider>
             <Toaster />
+            <GoogleAuthOverlay />
             {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
             <InstallPrompt />
             <AnnouncementPopup />

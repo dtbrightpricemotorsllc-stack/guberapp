@@ -2046,27 +2046,59 @@ export async function registerRoutes(
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Signed in</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Signed in — GUBER</title>
   <style>
-    html,body{margin:0;padding:0;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box}
-    .card{max-width:320px}
-    h1{font-size:22px;font-weight:700;margin:0 0 8px}
-    p{font-size:15px;color:#aaa;margin:0 0 24px;line-height:1.5}
-    .check{font-size:56px;margin-bottom:16px}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#0a0a0a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;height:100%;width:100%;overflow:hidden}
+    body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top,0) 24px env(safe-area-inset-bottom,0)}
+    .glow-a{position:fixed;top:50%;left:50%;width:600px;height:600px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(0,224,124,0.08),transparent 65%);pointer-events:none}
+    .glow-b{position:fixed;bottom:18%;right:8%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,0.05),transparent 65%);pointer-events:none}
+    .card{position:relative;z-index:1;max-width:320px;text-align:center}
+    .brand{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-weight:800;letter-spacing:.18em;font-size:30px;color:#fff;margin:0 0 28px;text-transform:uppercase}
+    .brand span{color:#00e07c}
+    .check{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:rgba(0,224,124,0.12);border:1px solid rgba(0,224,124,0.35);margin-bottom:20px}
+    .check svg{width:28px;height:28px;color:#00e07c}
+    h1{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:18px;font-weight:600;letter-spacing:.05em;margin:0 0 10px;color:#fff}
+    p{font-size:13px;color:#9a9a9a;margin:0 0 24px;line-height:1.5;letter-spacing:.02em}
+    .spinner{width:18px;height:18px;border:2px solid rgba(0,224,124,0.2);border-top-color:rgba(0,224,124,0.6);border-radius:50%;margin:0 auto;animation:spin 0.9s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
+  <div class="glow-a"></div>
+  <div class="glow-b"></div>
   <div class="card">
-    <div class="check">✓</div>
+    <div class="brand">G<span>U</span>BER</div>
+    <div class="check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 13 10 18 19 7"/></svg>
+    </div>
     <h1>Signed in!</h1>
     <p>Returning to GUBER…</p>
+    <div class="spinner"></div>
   </div>
   <script>
-    try { window.close(); } catch(e) {}
-    setTimeout(function() {
-      if (!window.closed) { window.location.replace('/'); }
-    }, 2000);
+    (function () {
+      // Aggressively try to dismiss the system browser tab so the user lands
+      // back inside the GUBER app within ~300ms instead of staring at this page.
+      function tryClose() {
+        try { window.close(); } catch (e) {}
+        // Capacitor Browser plugin (in-app browser variant) listens for this
+        // postMessage and will close the tab if it owns the window.
+        try { window.parent && window.parent.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
+        try { window.opener && window.opener.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
+      }
+      tryClose();
+      setTimeout(tryClose, 100);
+      setTimeout(tryClose, 400);
+      // Final safety net: if the tab is still open after a couple of seconds
+      // (some Chrome Custom Tab builds refuse window.close), bounce to the
+      // app's home so the user at least sees the dark GUBER shell.
+      setTimeout(function () {
+        if (!window.closed) { window.location.replace('/'); }
+      }, 2200);
+    })();
   </script>
 </body>
 </html>`);
