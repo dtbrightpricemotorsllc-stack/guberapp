@@ -13,14 +13,25 @@ interface Message {
 }
 
 const GREETING = "Hey! I'm your GUBER Assistant. Ask me anything about jobs, Cash Drops, your wallet, OG perks, Verify & Inspect, or how the platform works. How can I help you today?";
+const SESSION_KEY = "guber_assistant_messages";
+
+function loadMessages(): Message[] {
+  try {
+    const stored = sessionStorage.getItem(SESSION_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Message[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+  }
+  return [{ role: "assistant", content: GREETING }];
+}
 
 export function GUBERAssistant() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: GREETING },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -34,6 +45,13 @@ export function GUBERAssistant() {
       setExpanded(false);
     }, 350);
   }
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages));
+    } catch {
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (open) {
