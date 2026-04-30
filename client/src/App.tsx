@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
-import SplashScreen from "@/components/splash-screen";
 import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
@@ -360,11 +359,12 @@ function NativeDeepLinkHandler() {
 }
 
 // Thin wrapper rendered inside AuthProvider so it can read isLoading and
-// pass it as `appReady` to the splash, allowing the splash to loop until
-// auth resolves before exiting.
+// drive the universal badger LoadingSplash. The splash keeps animating
+// until auth resolves AND its built-in minVisibleMs (one full message
+// cycle) has elapsed, then fades out smoothly via onDone.
 function SplashWrapper({ onDone }: { onDone: () => void }) {
   const { isLoading } = useAuth();
-  return <SplashScreen onDone={onDone} appReady={!isLoading} />;
+  return <LoadingSplash loading={isLoading} onDone={onDone} />;
 }
 
 function App() {
