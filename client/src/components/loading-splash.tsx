@@ -9,7 +9,6 @@ const SOLO_MESSAGES: string[] = [
   "VERIFY ANYTHING.",
   "NO GUESSING.",
   "REAL PEOPLE.",
-  "REAL MONEY.",
   "REAL FAST.",
   "WORK.",
   "HIRE.",
@@ -23,9 +22,7 @@ const SOLO_MESSAGES: string[] = [
 ];
 
 const PAIR_MESSAGES: Array<readonly [string, string]> = [
-  ["NEED MONEY?", "POST A JOB."],
   ["NEED HELP?", "GET IT DONE."],
-  ["NEED MONEY?", "WORK."],
   ["NEED HELP?", "HIRE."],
   ["AI OR NOT", "KNOW INSTANTLY"],
   ["REAL OR FAKE", "SEE THE TRUTH"],
