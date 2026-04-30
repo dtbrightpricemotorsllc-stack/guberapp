@@ -2,8 +2,9 @@ import { useCallback, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Navigation, Car, Map as MapIcon, AlertTriangle, Shield, Check } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import shieldLogo from "@assets/__favicon_1773034423924.png";
 
 export type NavProvider = "google" | "waze" | "apple";
@@ -278,7 +279,9 @@ function NavigationLaunchSheet({
 export function useNavigationCover() {
   const [state, setState] = useState<SheetState>(null);
 
-  const { data: user } = useQuery<any>({ queryKey: ["/api/auth/me"] });
+  // Properly typed auth user — used here to read the user's preferred map app
+  // so the sheet can show a "Default" badge next to that provider.
+  const { user } = useAuth();
 
   const prefMutation = useMutation({
     mutationFn: async (provider: NavProvider | null) => {
@@ -294,26 +297,14 @@ export function useNavigationCover() {
   const storedPref: string | null = user?.preferredMapApp ?? null;
   const preferredProvider: NavProvider | null = storedPref ? (PREF_TO_PROVIDER[storedPref] ?? null) : null;
 
-  const launch = useCallback(
-    (opts: NavLaunchOpts) => {
-      const currentPref: string | null = (user as any)?.preferredMapApp ?? null;
-      const currentProvider: NavProvider | null = currentPref ? (PREF_TO_PROVIDER[currentPref] ?? null) : null;
-
-      // Don't auto-launch Apple Maps on non-iOS platforms — its URL only opens
-      // a useless web page on Android. Fall through to the sheet instead.
-      const canAutoLaunch = currentProvider && (currentProvider !== "apple" || isIOS());
-
-      if (canAutoLaunch && currentProvider) {
-        const url = opts.urls[currentProvider];
-        if (url) {
-          launchExternal(url);
-          return;
-        }
-      }
-      setState({ ...opts, open: true });
-    },
-    [user],
-  );
+  // Always show the GUBER handoff sheet on launch — never auto-bypass into an
+  // external app. The user picks an app from the sheet each time so GUBER
+  // chrome stays visible and the user can cancel out cleanly. The "Default"
+  // badge in the sheet still highlights their preferred provider for fast
+  // selection.
+  const launch = useCallback((opts: NavLaunchOpts) => {
+    setState({ ...opts, open: true });
+  }, []);
 
   const close = useCallback(() => setState(null), []);
 
