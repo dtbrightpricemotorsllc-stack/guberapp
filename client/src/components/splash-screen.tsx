@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
 
+const MESSAGES = [
+  "80% of buyers get misled online… Use Verify & Inspect",
+  "Need money fast? Accept a job instantly",
+  "Need something done? Post → Get help immediately",
+  "Not sure if it's real? AI or Not has you covered",
+  "Buying out of state? Have it verified before you pay",
+  "No waiting. No guessing. Just real results",
+  "GUBER is loading opportunity…",
+];
+
+const MSG_INTERVAL_MS = 1500;
+const SAFETY_CAP_MS = 12000;
+
 interface SplashScreenProps {
   onDone: () => void;
 }
@@ -7,17 +20,43 @@ interface SplashScreenProps {
 export default function SplashScreen({ onDone }: SplashScreenProps) {
   const [phase, setPhase] = useState(0);
   const [doorsOpen, setDoorsOpen] = useState(false);
+  const [msgIndex, setMsgIndex] = useState(-1);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
-    const timers = [
-      setTimeout(() => setDoorsOpen(true), 300),   // doors start sliding apart
-      setTimeout(() => setPhase(1), 600),           // logo glow + text glitch (doors still opening)
-      setTimeout(() => setPhase(2), 820),           // rotating ring
-      setTimeout(() => setPhase(3), 1040),          // dots + scan line
-      setTimeout(() => setPhase(4), 1800),          // begin fade (unchanged from original)
-      setTimeout(() => onDone(), 2200),             // exit (unchanged from original)
-    ];
-    return () => timers.forEach(clearTimeout);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    timers.push(setTimeout(() => setDoorsOpen(true), 300));
+    timers.push(setTimeout(() => setPhase(1), 600));
+    timers.push(setTimeout(() => setPhase(2), 820));
+    timers.push(setTimeout(() => {
+      setPhase(3);
+      setMsgIndex(0);
+    }, 1040));
+
+    let count = 0;
+    const msgTimer = setInterval(() => {
+      count++;
+      if (count < MESSAGES.length) {
+        setMsgIndex(count);
+      } else {
+        clearInterval(msgTimer);
+        setExiting(true);
+        setTimeout(() => onDone(), 450);
+      }
+    }, MSG_INTERVAL_MS);
+
+    const safety = setTimeout(() => {
+      clearInterval(msgTimer);
+      setExiting(true);
+      setTimeout(() => onDone(), 450);
+    }, SAFETY_CAP_MS);
+
+    return () => {
+      timers.forEach(clearTimeout);
+      clearInterval(msgTimer);
+      clearTimeout(safety);
+    };
   }, [onDone]);
 
   return (
@@ -31,8 +70,8 @@ export default function SplashScreen({ onDone }: SplashScreenProps) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        opacity: phase >= 4 ? 0 : 1,
-        transition: phase >= 4 ? "opacity 0.42s cubic-bezier(0.4,0,1,1)" : "none",
+        opacity: exiting ? 0 : 1,
+        transition: exiting ? "opacity 0.42s cubic-bezier(0.4,0,1,1)" : "none",
         pointerEvents: "none",
         overflow: "hidden",
       }}
@@ -173,23 +212,31 @@ export default function SplashScreen({ onDone }: SplashScreenProps) {
           LOCAL TRUST NETWORK
         </p>
 
-        {/* Status text — phase 3+ */}
-        <p
-          style={{
-            color: phase >= 3 ? "rgba(255,255,255,0.28)" : "transparent",
-            fontSize: 11,
-            marginTop: 10,
-            letterSpacing: "0.05em",
-            fontFamily: "Oxanium, sans-serif",
-            transition: "color 0.5s ease",
-          }}
-        >
-          Accessing the GUBER network
-        </p>
+        {/* Rotating educational message — phase 3+ */}
+        <div style={{ height: 36, marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {msgIndex >= 0 && (
+            <p
+              key={msgIndex}
+              style={{
+                color: "rgba(201,168,76,0.75)",
+                fontSize: 12,
+                margin: 0,
+                letterSpacing: "0.03em",
+                fontFamily: "Oxanium, sans-serif",
+                fontWeight: 500,
+                maxWidth: 280,
+                lineHeight: 1.4,
+                animation: "guber-msg-cycle 1.4s ease both",
+              }}
+            >
+              {MESSAGES[msgIndex]}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Activity dots — phase 3+ */}
-      <div style={{ display: "flex", gap: 7, marginTop: 16, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 7, marginTop: 10, alignItems: "center" }}>
         {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
@@ -307,6 +354,12 @@ export default function SplashScreen({ onDone }: SplashScreenProps) {
         @keyframes guber-dot-pulse {
           0%, 80%, 100% { transform: scale(0.55); opacity: 0.25; }
           40%           { transform: scale(1);    opacity: 1; }
+        }
+        @keyframes guber-msg-cycle {
+          0%   { opacity: 0; transform: translateY(5px); }
+          15%  { opacity: 1; transform: translateY(0); }
+          78%  { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-4px); }
         }
       `}</style>
     </div>
