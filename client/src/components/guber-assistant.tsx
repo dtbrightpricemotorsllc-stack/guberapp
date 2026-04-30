@@ -14,6 +14,7 @@ interface Message {
 
 const GREETING = "Hey! I'm your GUBER Assistant. Ask me anything about jobs, Cash Drops, your wallet, OG perks, Verify & Inspect, or how the platform works. How can I help you today?";
 const SESSION_KEY = "guber_assistant_messages";
+const SEEN_KEY = "guber_assistant_seen";
 
 function loadMessages(): Message[] {
   try {
@@ -27,19 +28,36 @@ function loadMessages(): Message[] {
   return [{ role: "assistant", content: GREETING }];
 }
 
+function loadSeen(): boolean {
+  try {
+    return sessionStorage.getItem(SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function GUBERAssistant() {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>(loadMessages);
+  const [seen, setSeen] = useState<boolean>(loadSeen);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   if (location.startsWith("/admin")) return null;
 
+  const hasSavedThread = messages.length > 1;
+  const showBadge = hasSavedThread && !seen && !open;
+
   function handlePillClick() {
     setExpanded(true);
+    setSeen(true);
+    try {
+      sessionStorage.setItem(SEEN_KEY, "1");
+    } catch {
+    }
     setTimeout(() => {
       setOpen(true);
       setExpanded(false);
@@ -96,27 +114,43 @@ export function GUBERAssistant() {
   return (
     <>
       {!open && (
-        <button
-          onClick={handlePillClick}
-          className="fixed left-4 z-[55] h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105 overflow-hidden"
-          style={{
-            bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 60px)",
-            width: expanded ? "auto" : "2.75rem",
-            paddingLeft: expanded ? "1rem" : "0",
-            paddingRight: expanded ? "1rem" : "0",
-            gap: expanded ? "0.5rem" : "0",
-            transition: "width 0.25s ease, padding 0.25s ease, gap 0.25s ease",
-            background: "linear-gradient(135deg, hsl(80 100% 55%), hsl(80 100% 40%))",
-            boxShadow: "0 4px 20px hsl(80 100% 50% / 0.55), 0 2px 8px rgba(0,0,0,0.4)",
-          }}
-          data-testid="button-guber-assistant"
-          aria-label="Open GUBER Assistant"
+        <div
+          className="fixed left-4 z-[55]"
+          style={{ bottom: "calc(68px + env(safe-area-inset-bottom, 0px) + 60px)" }}
         >
-          <MessageSquare className="w-4 h-4 text-black flex-shrink-0" strokeWidth={2.5} />
-          {expanded && (
-            <span className="text-black font-display font-bold text-xs tracking-wide whitespace-nowrap">AI Help</span>
+          <button
+            onClick={handlePillClick}
+            className="relative h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95 hover:scale-105 overflow-hidden"
+            style={{
+              width: expanded ? "auto" : "2.75rem",
+              paddingLeft: expanded ? "1rem" : "0",
+              paddingRight: expanded ? "1rem" : "0",
+              gap: expanded ? "0.5rem" : "0",
+              transition: "width 0.25s ease, padding 0.25s ease, gap 0.25s ease",
+              background: "linear-gradient(135deg, hsl(80 100% 55%), hsl(80 100% 40%))",
+              boxShadow: "0 4px 20px hsl(80 100% 50% / 0.55), 0 2px 8px rgba(0,0,0,0.4)",
+            }}
+            data-testid="button-guber-assistant"
+            aria-label={showBadge ? "Open GUBER Assistant (saved conversation)" : "Open GUBER Assistant"}
+          >
+            <MessageSquare className="w-4 h-4 text-black flex-shrink-0" strokeWidth={2.5} />
+            {expanded && (
+              <span className="text-black font-display font-bold text-xs tracking-wide whitespace-nowrap">AI Help</span>
+            )}
+          </button>
+          {showBadge && (
+            <span
+              className="absolute -top-1 -right-1 w-3 h-3 rounded-full pointer-events-none"
+              style={{
+                background: "hsl(152 100% 44%)",
+                border: "2px solid hsl(222 47% 7%)",
+                boxShadow: "0 0 8px hsl(152 100% 44% / 0.8)",
+              }}
+              data-testid="badge-saved-conversation"
+              aria-hidden="true"
+            />
           )}
-        </button>
+        </div>
       )}
 
       <Sheet open={open} onOpenChange={setOpen}>
