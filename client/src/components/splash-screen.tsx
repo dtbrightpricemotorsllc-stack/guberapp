@@ -11,7 +11,7 @@ const MESSAGES = [
 ];
 
 const MSG_INTERVAL_MS = 1500;
-const SAFETY_CAP_MS = 12000;
+const SAFETY_CAP_MS = 13000;
 
 interface SplashScreenProps {
   onDone: () => void;
