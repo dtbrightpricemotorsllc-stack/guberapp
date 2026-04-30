@@ -344,40 +344,112 @@ export function LoadingSplash({
             zIndex: 2,
           }}
         >
-          {/* Soft neon green/gold halo behind the panda — pulses every ~2s */}
+          {/* Soft outer halo aura behind the shield — pulses every ~2s */}
           <div
             aria-hidden="true"
             style={{
               position: "absolute",
               top: "38%",
               left: "50%",
-              width: "72%",
+              width: "82%",
               aspectRatio: "1 / 1",
               borderRadius: "50%",
               background:
-                "radial-gradient(circle, rgba(0,255,150,0.55) 0%, rgba(255,200,60,0.32) 35%, rgba(168,80,255,0.10) 60%, rgba(0,0,0,0) 78%)",
+                "radial-gradient(circle, rgba(0,255,150,0.50) 0%, rgba(255,200,60,0.28) 35%, rgba(168,80,255,0.10) 60%, rgba(0,0,0,0) 78%)",
               transform: "translate(-50%, -50%)",
               animation: "guber-loading-halo-pulse 2.2s ease-in-out infinite",
               willChange: "opacity, filter, transform",
             }}
           />
 
-          {/* The panda mascot itself, with its own subtle glow pulse */}
-          <img
-            src={PANDA_SRC}
-            alt=""
-            draggable={false}
+          {/* Shield + panda cluster, scaled relative to the framing column.
+              The shield SVG sits behind the panda; the panda is positioned
+              inside the shield's upper body. Both share a subtle pulse so
+              the whole emblem reads as one glowing crest. */}
+          <div
+            data-testid="loading-shield"
             style={{
               position: "relative",
-              width: "62%",
-              height: "auto",
-              objectFit: "contain",
+              width: "78%",
+              aspectRatio: "5 / 6",
               animation: "guber-loading-panda-pulse 2.2s ease-in-out infinite",
               willChange: "filter",
-              userSelect: "none",
             }}
-            data-testid="img-loading-panda"
-          />
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 100 120"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                overflow: "visible",
+              }}
+            >
+              <defs>
+                {/* Linear gradient for the shield stroke: green → gold → purple,
+                    matching the splash palette. */}
+                <linearGradient id="guber-shield-stroke" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00FF96" />
+                  <stop offset="55%" stopColor="#FFC83C" />
+                  <stop offset="100%" stopColor="#A850FF" />
+                </linearGradient>
+                {/* Radial gradient for the inner shield fill — keeps the
+                    interior dark so the panda still pops, but adds a soft
+                    green wash. */}
+                <radialGradient id="guber-shield-fill" cx="50%" cy="42%" r="62%">
+                  <stop offset="0%" stopColor="rgba(0,255,150,0.08)" />
+                  <stop offset="60%" stopColor="rgba(0,0,0,0.78)" />
+                  <stop offset="100%" stopColor="rgba(0,0,0,0.92)" />
+                </radialGradient>
+              </defs>
+              {/* Heater shield silhouette */}
+              <path
+                d="M10 8 L90 8 L90 56 Q90 96 50 116 Q10 96 10 56 Z"
+                fill="url(#guber-shield-fill)"
+                stroke="url(#guber-shield-stroke)"
+                strokeWidth="2.4"
+                strokeLinejoin="round"
+                style={{
+                  filter:
+                    "drop-shadow(0 0 4px rgba(0,255,150,0.85)) drop-shadow(0 0 10px rgba(0,255,150,0.55)) drop-shadow(0 0 22px rgba(255,200,60,0.40)) drop-shadow(0 0 36px rgba(168,80,255,0.30))",
+                }}
+              />
+              {/* Inner accent line for extra neon depth */}
+              <path
+                d="M16 14 L84 14 L84 55 Q84 91 50 109 Q16 91 16 55 Z"
+                fill="none"
+                stroke="rgba(0,255,150,0.55)"
+                strokeWidth="0.8"
+                strokeLinejoin="round"
+                style={{
+                  filter: "drop-shadow(0 0 3px rgba(0,255,150,0.70))",
+                }}
+              />
+            </svg>
+
+            {/* The panda mascot, positioned inside the shield's upper body */}
+            <img
+              src={PANDA_SRC}
+              alt=""
+              draggable={false}
+              style={{
+                position: "absolute",
+                top: "16%",
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "62%",
+                height: "auto",
+                objectFit: "contain",
+                userSelect: "none",
+                filter:
+                  "drop-shadow(0 0 4px rgba(0,255,150,0.65)) drop-shadow(0 0 10px rgba(0,255,150,0.35))",
+              }}
+              data-testid="img-loading-panda"
+            />
+          </div>
 
           {/* Rotating message slot — fixed height to prevent layout jump.
               aria-hidden because the parent already announces "Loading"; we
