@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -71,6 +71,7 @@ export default function AccountSettings() {
   const [notifSoundEnabled, setNotifSoundEnabledState] = useState(true);
   const [notifVibrationEnabled, setNotifVibrationEnabledState] = useState(true);
   const [vibrationSupported, setVibrationSupported] = useState(false);
+  const [audioBlockedWarning, setAudioBlockedWarning] = useState(false);
 
   const [preferredMapApp, setPreferredMapApp] = useState<string>("ask");
 
@@ -393,6 +394,7 @@ export default function AccountSettings() {
               onCheckedChange={(v) => {
                 setNotifSoundEnabledState(v);
                 setNotifSoundEnabled(v);
+                setAudioBlockedWarning(false);
                 toast({ title: v ? "Notification sounds on" : "Notification sounds off" });
               }}
               data-testid="switch-notif-sound"
@@ -445,13 +447,7 @@ export default function AccountSettings() {
                     }
                     unlockAudio();
                     const ok = await playGuberSound(s.type);
-                    if (!ok) {
-                      toast({
-                        title: "Audio appears to be blocked",
-                        description: "Check your ringer switch, device volume, and that GUBER has audio permission. iPhones won't play sounds while the silent switch is on.",
-                        variant: "destructive",
-                      });
-                    }
+                    setAudioBlockedWarning(!ok);
                   }}
                   data-testid={`button-test-sound-${s.type}`}
                 >
@@ -459,6 +455,21 @@ export default function AccountSettings() {
                 </Button>
               ))}
             </div>
+            {audioBlockedWarning && (
+              <div
+                className="mt-2 flex items-start gap-2 p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-200"
+                role="alert"
+                data-testid="banner-audio-muted-warning"
+              >
+                <VolumeX className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-300" />
+                <div className="space-y-0.5">
+                  <p className="font-display font-semibold text-[12px] leading-snug">Sound is muted on this device</p>
+                  <p className="text-[10px] leading-relaxed text-amber-100/90">
+                    Your device may be muted or audio is blocked. Check your ringer switch and volume.
+                  </p>
+                </div>
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground/80 leading-relaxed pt-1">
               <strong className="text-muted-foreground">Not hearing alerts on iPhone?</strong> Check that your ringer switch is on, GUBER notifications are allowed in iOS Settings, and Focus / Do Not Disturb is off. iOS only plays GUBER's custom sounds while the app is open in the foreground — locked-screen alerts use your phone's default notification sound.
             </p>
