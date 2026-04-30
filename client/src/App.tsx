@@ -360,6 +360,14 @@ function NativeDeepLinkHandler() {
   return null;
 }
 
+// Thin wrapper rendered inside AuthProvider so it can read isLoading and
+// pass it as `appReady` to the splash, allowing the splash to loop until
+// auth resolves before exiting.
+function SplashWrapper({ onDone }: { onDone: () => void }) {
+  const { isLoading } = useAuth();
+  return <SplashScreen onDone={onDone} appReady={!isLoading} />;
+}
+
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
     if (import.meta.env.DEV && typeof window !== "undefined") {
@@ -376,7 +384,7 @@ function App() {
           <AuthProvider>
             <Toaster />
             <GoogleAuthOverlay />
-            {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
+            {!splashDone && <SplashWrapper onDone={() => setSplashDone(true)} />}
             <InstallPrompt />
             <AnnouncementPopup />
             <NativeDeepLinkHandler />

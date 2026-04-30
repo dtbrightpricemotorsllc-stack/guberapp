@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MESSAGES = [
   "80% of buyers get misled online… Use Verify & Inspect",
@@ -15,49 +15,81 @@ const SAFETY_CAP_MS = 12000;
 
 interface SplashScreenProps {
   onDone: () => void;
+  appReady?: boolean;
 }
 
-export default function SplashScreen({ onDone }: SplashScreenProps) {
+export default function SplashScreen({ onDone, appReady = false }: SplashScreenProps) {
   const [phase, setPhase] = useState(0);
   const [doorsOpen, setDoorsOpen] = useState(false);
   const [msgIndex, setMsgIndex] = useState(-1);
   const [exiting, setExiting] = useState(false);
 
+  const finishedRef = useRef(false);
+  const completedOneCycleRef = useRef(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const safetyRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appReadyRef = useRef(appReady);
+
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    appReadyRef.current = appReady;
+  }, [appReady]);
 
-    timers.push(setTimeout(() => setDoorsOpen(true), 300));
-    timers.push(setTimeout(() => setPhase(1), 600));
-    timers.push(setTimeout(() => setPhase(2), 820));
-    timers.push(setTimeout(() => {
-      setPhase(3);
-      setMsgIndex(0);
-    }, 1040));
+  const finish = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    if (safetyRef.current) { clearTimeout(safetyRef.current); safetyRef.current = null; }
+    setExiting(true);
+    setTimeout(() => onDone(), 450);
+  }, [onDone]);
 
-    let count = 0;
-    const msgTimer = setInterval(() => {
-      count++;
-      if (count < MESSAGES.length) {
-        setMsgIndex(count);
-      } else {
-        clearInterval(msgTimer);
-        setExiting(true);
-        setTimeout(() => onDone(), 450);
-      }
-    }, MSG_INTERVAL_MS);
+  // When appReady flips to true mid-loop, exit if at least one cycle is done.
+  useEffect(() => {
+    if (appReady && completedOneCycleRef.current) {
+      finish();
+    }
+  }, [appReady, finish]);
 
-    const safety = setTimeout(() => {
-      clearInterval(msgTimer);
-      setExiting(true);
-      setTimeout(() => onDone(), 450);
-    }, SAFETY_CAP_MS);
+  useEffect(() => {
+    const phasers = [
+      setTimeout(() => setDoorsOpen(true), 300),
+      setTimeout(() => setPhase(1), 600),
+      setTimeout(() => setPhase(2), 820),
+      setTimeout(() => {
+        setPhase(3);
+        // Show message 0 immediately at phase-3 start so it gets a full 1.5s.
+        setMsgIndex(0);
+
+        let tickCount = 0;
+
+        intervalRef.current = setInterval(() => {
+          tickCount++;
+          const newIdx = tickCount % MESSAGES.length;
+          setMsgIndex(newIdx);
+
+          // First time we complete one full pass (tickCount === MESSAGES.length means
+          // we just showed all 7 and are now on the second loop's first message).
+          if (tickCount >= MESSAGES.length && !completedOneCycleRef.current) {
+            completedOneCycleRef.current = true;
+          }
+
+          // Exit only when: (one full cycle done) AND (app is ready).
+          if (completedOneCycleRef.current && appReadyRef.current) {
+            finish();
+          }
+        }, MSG_INTERVAL_MS);
+      }, 1040),
+    ];
+
+    // Absolute safety cap — exits regardless of cycle/ready state.
+    safetyRef.current = setTimeout(finish, SAFETY_CAP_MS);
 
     return () => {
-      timers.forEach(clearTimeout);
-      clearInterval(msgTimer);
-      clearTimeout(safety);
+      phasers.forEach(clearTimeout);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (safetyRef.current) clearTimeout(safetyRef.current);
     };
-  }, [onDone]);
+  }, [finish]);
 
   return (
     <div
@@ -212,13 +244,14 @@ export default function SplashScreen({ onDone }: SplashScreenProps) {
           LOCAL TRUST NETWORK
         </p>
 
-        {/* Rotating educational message — phase 3+ */}
+        {/* Rotating educational messages — phase 3+. Fixed height so the
+            layout never shifts when messages swap. */}
         <div style={{ height: 36, marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {msgIndex >= 0 && (
             <p
               key={msgIndex}
               style={{
-                color: "rgba(201,168,76,0.75)",
+                color: "rgba(201,168,76,0.78)",
                 fontSize: 12,
                 margin: 0,
                 letterSpacing: "0.03em",
