@@ -130,9 +130,12 @@ export default function JobDetail() {
     return "";
   };
 
-  // All three external-map buttons open the same in-place handoff sheet so the
-  // GUBER chrome stays visible. We resolve geolocation once (best-effort) so the
-  // sheet can offer a fully-routed Google Maps URL with origin → destination.
+  // All three external-map buttons open the same in-place handoff sheet so
+  // the GUBER chrome stays visible. The sheet opens IMMEDIATELY on tap with
+  // a destination-only Google URL; we then refine the Google URL with the
+  // user's current origin in the background so a fast geolocation upgrade
+  // arrives before they tap a provider, but a slow/denied lookup never
+  // delays the sheet appearing.
   const openNavSheetForJob = (j: any) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
@@ -152,13 +155,19 @@ export default function JobDetail() {
         urls: { google: googleUrl, waze: wazeUrl, apple: appleUrl },
       });
 
+    // 1) Open immediately with destination-only Google URL — no waiting.
+    open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`);
+
+    // 2) In parallel, try to upgrade the Google URL with origin-aware
+    //    routing. If GPS resolves quickly, the next launchNav() patches the
+    //    open sheet's URL set in place (state replacement).
     gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
       .then((pos) => {
         const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
         open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`);
       })
       .catch(() => {
-        open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`);
+        /* keep destination-only fallback */
       });
   };
 
