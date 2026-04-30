@@ -730,7 +730,8 @@ export default function CashDropDetail() {
                 <button
                   onClick={() => {
                     const slotsLeftNow = (drop.winnerLimit || 1) - (drop.winnersFound || 0);
-                    const isUnclaimable = isClosed || slotsLeftNow <= 0;
+                    const claimedAt = (drop as any).claimedAt;
+                    const isUnclaimable = isClosed || slotsLeftNow <= 0 || !!claimedAt;
                     launchNav({
                       destLabel: drop.title || "Cash Drop",
                       destAddress: `${drop.gpsLat?.toFixed(5)}, ${drop.gpsLng?.toFixed(5)}`,
@@ -762,7 +763,8 @@ export default function CashDropDetail() {
                 <button
                   onClick={() => {
                     const slotsLeftNow = (drop.winnerLimit || 1) - (drop.winnersFound || 0);
-                    const isUnclaimable = isClosed || slotsLeftNow <= 0;
+                    const claimedAt = (drop as any).claimedAt;
+                    const isUnclaimable = isClosed || slotsLeftNow <= 0 || !!claimedAt;
                     launchNav({
                       destLabel: drop.title || "Cash Drop",
                       destAddress: `${drop.gpsLat?.toFixed(5)}, ${drop.gpsLng?.toFixed(5)}`,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Navigation, Car, Map as MapIcon, AlertTriangle, Shield } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -56,10 +56,11 @@ function NavigationLaunchSheet({ state, onOpenChange }: { state: NavLaunchOpts; 
   const showApple = !!appleUrl && isIOS();
 
   const handleLaunch = (url: string) => {
-    launchExternal(url);
-    // Give the OS a beat to swap apps before we collapse the sheet, so the
-    // user sees their tap register and the sheet animates out cleanly.
-    setTimeout(() => onOpenChange(false), 350);
+    // Defer the external launch by 600ms so the handoff sheet has time to
+    // paint the user's tap (button press state + animation) before the OS
+    // swaps to the map app. The sheet itself collapses shortly after.
+    setTimeout(() => launchExternal(url), 600);
+    setTimeout(() => onOpenChange(false), 950);
   };
 
   return (
@@ -212,15 +213,6 @@ function NavigationLaunchSheet({ state, onOpenChange }: { state: NavLaunchOpts; 
 
 export function useNavigationCover() {
   const [state, setState] = useState<SheetState>(null);
-
-  // Belt-and-suspenders: if the page unmounts while the sheet is open
-  // (e.g. user backgrounds the app, the OS unmounts), we want the next mount
-  // to be in a clean state — Sheet handles that, but make sure body scroll is restored.
-  useEffect(() => {
-    return () => {
-      // Radix restores scroll automatically on unmount of the Dialog Root.
-    };
-  }, []);
 
   const launch = useCallback((opts: NavLaunchOpts) => {
     setState({ ...opts, open: true });

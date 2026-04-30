@@ -162,10 +162,34 @@ export default function JobDetail() {
       });
   };
 
-  // Back-compat aliases — every existing button just opens the same sheet now.
-  const openGoogleMapsForJob = (j: any) => openNavSheetForJob(j);
-  const openWazeForJob = (j: any) => openNavSheetForJob(j);
-  const openAppleMapsForJob = (j: any) => openNavSheetForJob(j);
+  // Direct-launch helpers — used when the user has a saved `preferredMapApp`
+  // so the on-the-way action skips the chooser sheet and jumps straight into
+  // their chosen map app. The on-page "Open in Google/Waze" buttons all use
+  // `openNavSheetForJob` instead so they show the in-place handoff sheet.
+  const openGoogleMapsForJob = (j: any) => {
+    const dest = buildNavDestination(j);
+    if (!dest) return;
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
+      .then((pos) => {
+        const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
+        window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`, "_blank", "noopener");
+      })
+      .catch(() => {
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, "_blank", "noopener");
+      });
+  };
+  const openWazeForJob = (j: any) => {
+    if (j.location?.trim()) {
+      window.location.href = `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`;
+    } else if (j.lat && j.lng) {
+      window.location.href = `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
+    }
+  };
+  const openAppleMapsForJob = (j: any) => {
+    const dest = buildNavDestination(j);
+    if (!dest) return;
+    window.open(`https://maps.apple.com/?daddr=${dest}`, "_blank", "noopener");
+  };
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", description: "", budget: "", location: "", zip: "", lat: null as number | null, lng: null as number | null });
@@ -1436,7 +1460,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 )}
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => openGoogleMapsForJob(job)}
+                    onClick={() => openNavSheetForJob(job)}
                     className="flex items-center gap-2.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
                     style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
                     data-testid="link-google-maps"
@@ -1450,7 +1474,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     </div>
                   </button>
                   <button
-                    onClick={() => openWazeForJob(job)}
+                    onClick={() => openNavSheetForJob(job)}
                     className="flex items-center gap-2.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
                     style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
                     data-testid="link-waze"
