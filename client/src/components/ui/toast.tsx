@@ -46,6 +46,11 @@ const toastVariants = cva(
           "border-red-500/20",
           "shadow-black/60",
         ].join(" "),
+        "guber-error": [
+          "bg-[#0a0f0a]/95 backdrop-blur-xl",
+          "border-primary/25",
+          "shadow-black/60",
+        ].join(" "),
         success: [
           "bg-[#081a0e]/95 backdrop-blur-xl",
           "border-green-500/20",
