@@ -1,154 +1,242 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Navigation, Car, Map as MapIcon, CheckCircle } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Navigation, Car, Map as MapIcon, AlertTriangle, Shield } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import shieldLogo from "@assets/__favicon_1773034423924.png";
 
 export type NavProvider = "google" | "waze" | "apple";
 
-type NavLaunchOpts = {
-  provider: NavProvider;
-  url: string;
-  destLabel?: string;
+type NavUrls = Partial<Record<NavProvider, string>>;
+
+export type NavLaunchOpts = {
+  /** Title of the destination — e.g. job title or cash-drop title. */
+  destLabel: string;
+  /** Address line shown under the title (or coordinate string). Optional. */
+  destAddress?: string;
+  /** Payout amount in dollars (number) — shown only for cash drops. */
+  payoutDollars?: number;
+  /** When set, renders an unmissable yellow warning banner above the buttons. */
+  warning?: string;
+  /** URL builders for each provider. Whichever are present become tappable. */
+  urls: NavUrls;
 };
 
-type CoverState = (NavLaunchOpts & { status: "launching" | "launched" }) | null;
+type SheetState = (NavLaunchOpts & { open: boolean }) | null;
 
-const PROVIDERS: Record<NavProvider, { name: string; color: string; Icon: typeof Navigation }> = {
-  google: { name: "Google Maps", color: "#4285F4", Icon: Navigation },
-  waze: { name: "Waze", color: "#22C55E", Icon: Car },
-  apple: { name: "Apple Maps", color: "#94A3B8", Icon: MapIcon },
+const PROVIDER_META: Record<NavProvider, { name: string; tagline: string; color: string; Icon: typeof Navigation }> = {
+  google: { name: "Open in Google Maps", tagline: "Turn-by-turn navigation", color: "#4285F4", Icon: Navigation },
+  waze: { name: "Open in Waze", tagline: "Real-time traffic routing", color: "#22C55E", Icon: Car },
+  apple: { name: "Open in Apple Maps", tagline: "Apple Maps", color: "#94A3B8", Icon: MapIcon },
 };
 
-function NavigationLaunchCover({ state, onClose }: { state: NonNullable<CoverState>; onClose: () => void }) {
-  const cfg = PROVIDERS[state.provider];
-  const Icon = cfg.Icon;
+function launchExternal(url: string) {
+  try {
+    if (url.startsWith("waze://") || url.startsWith("comgooglemaps://") || url.startsWith("maps://")) {
+      // Custom schemes — window.open is unreliable here, fall back to direct nav.
+      window.location.href = url;
+    } else {
+      window.open(url, "_blank", "noopener");
+    }
+  } catch {
+    // ignore — sheet still closes
+  }
+}
+
+function isIOS() {
+  if (typeof window === "undefined") return false;
+  // Capacitor native iOS or a Safari-on-iPhone PWA
+  if (Capacitor.getPlatform?.() === "ios") return true;
+  return /iPad|iPhone|iPod/.test(window.navigator.userAgent);
+}
+
+function NavigationLaunchSheet({ state, onOpenChange }: { state: NavLaunchOpts; onOpenChange: (open: boolean) => void }) {
+  const googleUrl = state.urls.google;
+  const wazeUrl = state.urls.waze;
+  const appleUrl = state.urls.apple;
+  const showApple = !!appleUrl && isIOS();
+
+  const handleLaunch = (url: string) => {
+    launchExternal(url);
+    // Give the OS a beat to swap apps before we collapse the sheet, so the
+    // user sees their tap register and the sheet animates out cleanly.
+    setTimeout(() => onOpenChange(false), 350);
+  };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 10010, background: "#000", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
-      data-testid="cover-navigation-launch"
-    >
-      <button
-        onClick={onClose}
-        style={{
-          position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 14px)", left: 14, zIndex: 10012,
-          height: 38, paddingLeft: 12, paddingRight: 16, borderRadius: 14,
-          background: "rgba(255,255,255,0.08)", backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          display: "flex", alignItems: "center", gap: 6,
-          cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
-          color: "#fff", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
-          fontFamily: "Oxanium, sans-serif",
-        }}
-        data-testid="button-nav-cover-back"
+    <Sheet open={true} onOpenChange={onOpenChange} modal={false}>
+      <SheetContent
+        side="bottom"
+        hideOverlay
+        hideCloseButton
+        className="bg-transparent border-0 p-0 shadow-none focus:outline-none"
+        data-testid="sheet-navigation-launch"
       >
-        <ArrowLeft style={{ width: 16, height: 16 }} />
-        BACK TO GUBER
-      </button>
+        {/* Card sits with a small inset so the GUBER bottom nav stays visible underneath. */}
+        <div
+          className="mx-auto w-full max-w-md rounded-3xl border border-white/10 shadow-[0_-12px_48px_rgba(0,0,0,0.55)]"
+          style={{
+            background: "linear-gradient(180deg, rgba(20,22,28,0.96) 0%, rgba(10,12,16,0.98) 100%)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 6px)",
+          }}
+        >
+          {/* Drag handle */}
+          <div className="pt-3 pb-1 flex justify-center">
+            <div className="h-1.5 w-12 rounded-full bg-white/15" />
+          </div>
 
-      <img
-        src={shieldLogo}
-        alt="GUBER"
-        style={{ width: 110, height: 110, objectFit: "contain", filter: "drop-shadow(0 0 24px rgba(180,60,255,0.55)) drop-shadow(0 0 12px rgba(0,230,200,0.4))", marginBottom: 22 }}
-      />
+          <div className="px-5 pb-5 pt-2 space-y-4">
+            {/* Header: brand badge + destination */}
+            <div className="flex items-start gap-3">
+              <img
+                src={shieldLogo}
+                alt="GUBER"
+                className="h-11 w-11 flex-shrink-0 object-contain"
+                style={{ filter: "drop-shadow(0 0 12px rgba(180,60,255,0.45)) drop-shadow(0 0 8px rgba(0,230,200,0.35))" }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-display font-bold tracking-[0.18em] text-emerald-400/90 uppercase">
+                  Heading out
+                </p>
+                <h2
+                  className="font-display font-black text-base leading-tight text-white truncate"
+                  data-testid="text-nav-sheet-title"
+                >
+                  {state.destLabel}
+                </h2>
+                {state.destAddress ? (
+                  <p
+                    className="text-[11px] text-white/60 mt-0.5 truncate"
+                    data-testid="text-nav-sheet-address"
+                  >
+                    {state.destAddress}
+                  </p>
+                ) : null}
+              </div>
+              {typeof state.payoutDollars === "number" ? (
+                <div
+                  className="flex-shrink-0 px-2.5 py-1 rounded-lg border border-emerald-500/40"
+                  style={{ background: "rgba(34,197,94,0.12)" }}
+                  data-testid="badge-nav-sheet-payout"
+                >
+                  <span className="font-display font-black text-emerald-300 text-sm">
+                    ${state.payoutDollars.toFixed(state.payoutDollars % 1 === 0 ? 0 : 2)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 16px", borderRadius: 999, background: `${cfg.color}1F`, border: `1px solid ${cfg.color}55`, marginBottom: 14 }}>
-        <Icon style={{ width: 16, height: 16, color: cfg.color }} />
-        <span style={{ color: cfg.color, fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", fontFamily: "Oxanium, sans-serif" }}>
-          {state.status === "launched" ? `${cfg.name.toUpperCase()} OPENED` : `OPENING ${cfg.name.toUpperCase()}`}
-        </span>
-      </div>
+            {/* Optional claimed/expired warning banner */}
+            {state.warning ? (
+              <div
+                className="flex items-start gap-2.5 p-3 rounded-2xl border border-amber-500/40"
+                style={{ background: "rgba(245,158,11,0.10)" }}
+                data-testid="banner-nav-sheet-warning"
+              >
+                <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-[12px] text-amber-200 leading-snug font-medium">
+                  {state.warning}
+                </p>
+              </div>
+            ) : null}
 
-      <p style={{ color: "#fff", fontWeight: 800, fontSize: 18, margin: 0, fontFamily: "Oxanium, sans-serif", letterSpacing: "-0.01em", textAlign: "center", padding: "0 32px" }}>
-        {state.destLabel ? `Heading to ${state.destLabel}` : "Powered by GUBER"}
-      </p>
-      <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 8, textAlign: "center", padding: "0 36px", lineHeight: 1.5 }}>
-        Your job is still active in GUBER. Come back anytime — your progress is saved.
-      </p>
+            {/* Two prominent provider buttons */}
+            <div className="space-y-2">
+              {(["google", "waze"] as NavProvider[]).map((provider) => {
+                const url = state.urls[provider];
+                if (!url) return null;
+                const meta = PROVIDER_META[provider];
+                const Icon = meta.Icon;
+                return (
+                  <button
+                    key={provider}
+                    onClick={() => handleLaunch(url)}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-2xl text-left transition-all active:scale-[0.98]"
+                    style={{
+                      background: `${meta.color}1A`,
+                      border: `1px solid ${meta.color}55`,
+                    }}
+                    data-testid={`button-nav-launch-${provider}`}
+                  >
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${meta.color}26` }}
+                    >
+                      <Icon className="h-5 w-5" style={{ color: meta.color }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-display font-bold text-sm" style={{ color: meta.color }}>
+                        {meta.name}
+                      </p>
+                      <p className="text-[11px] text-white/55">{meta.tagline}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
-      {state.status === "launching" ? (
-        <div style={{ display: "flex", gap: 7, marginTop: 24 }}>
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: cfg.color,
-                animation: `nav-cover-bounce 1.3s ease-in-out ${i * 0.22}s infinite`,
-              }}
-            />
-          ))}
+            {/* Apple Maps tertiary link, iOS only */}
+            {showApple && appleUrl ? (
+              <div className="pt-1">
+                <button
+                  onClick={() => handleLaunch(appleUrl)}
+                  className="w-full text-center text-[12px] font-display font-semibold tracking-wide text-white/55 hover:text-white/80 transition-colors py-2"
+                  data-testid="button-nav-launch-apple"
+                >
+                  More options · Open in Apple Maps
+                </button>
+              </div>
+            ) : null}
+
+            {/* Reassurance + cancel */}
+            <div className="pt-1 space-y-3">
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-white/55">
+                <Shield className="h-3.5 w-3.5 text-emerald-400/80" />
+                <span>Your job is still active in GUBER.</span>
+              </div>
+              <button
+                onClick={() => onOpenChange(false)}
+                className="w-full py-3 rounded-2xl font-display font-bold text-[12px] tracking-[0.12em] uppercase text-white/70 hover:text-white border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+                data-testid="button-nav-sheet-cancel"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 22, color: "#22C55E" }}>
-          <CheckCircle style={{ width: 16, height: 16 }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", fontFamily: "Oxanium, sans-serif" }}>
-            LAUNCHED IN NEW TAB
-          </span>
-        </div>
-      )}
-
-      <button
-        onClick={onClose}
-        style={{
-          marginTop: 36,
-          marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
-          background: "linear-gradient(135deg, hsl(80 100% 55%), hsl(80 100% 40%))",
-          color: "#000",
-          fontWeight: 800, fontSize: 13, fontFamily: "Oxanium, sans-serif",
-          letterSpacing: "0.08em",
-          border: "none", borderRadius: 14,
-          padding: "12px 28px", cursor: "pointer",
-          boxShadow: "0 0 18px hsl(80 100% 50% / 0.45)",
-        }}
-        data-testid="button-nav-cover-done"
-      >
-        BACK TO JOB
-      </button>
-
-      <style>{`
-        @keyframes nav-cover-bounce {
-          0%, 80%, 100% { transform: scale(0.55); opacity: 0.35; }
-          40% { transform: scale(1.1); opacity: 1; }
-        }
-      `}</style>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
 export function useNavigationCover() {
-  const [state, setState] = useState<CoverState>(null);
+  const [state, setState] = useState<SheetState>(null);
 
-  // Lock background scroll while the cover is up
+  // Belt-and-suspenders: if the page unmounts while the sheet is open
+  // (e.g. user backgrounds the app, the OS unmounts), we want the next mount
+  // to be in a clean state — Sheet handles that, but make sure body scroll is restored.
   useEffect(() => {
-    if (!state) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [state]);
+    return () => {
+      // Radix restores scroll automatically on unmount of the Dialog Root.
+    };
+  }, []);
 
   const launch = useCallback((opts: NavLaunchOpts) => {
-    setState({ ...opts, status: "launching" });
-    // Defer the actual external open by ~600ms so the cover paints first.
-    // Fallback to location.href for waze:// (some browsers refuse window.open
-    // for non-https schemes from a setTimeout).
-    setTimeout(() => {
-      try {
-        if (opts.url.startsWith("waze://") || opts.url.startsWith("comgooglemaps://")) {
-          window.location.href = opts.url;
-        } else {
-          window.open(opts.url, "_blank", "noopener");
-        }
-      } catch {
-        // ignore
-      }
-      setState((prev) => (prev ? { ...prev, status: "launched" } : null));
-    }, 600);
+    setState({ ...opts, open: true });
   }, []);
 
   const close = useCallback(() => setState(null), []);
 
-  const cover = state ? <NavigationLaunchCover state={state} onClose={close} /> : null;
+  const cover =
+    state && state.open ? (
+      <NavigationLaunchSheet
+        state={state}
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+      />
+    ) : null;
 
   return { cover, launch };
 }

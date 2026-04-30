@@ -421,42 +421,59 @@ export default function JobNavigate() {
             Or use an external app
           </p>
           <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => {
-                const url = googleMapsUrl(job, userPos);
-                if (url) launchNav({ provider: "google", url, destLabel: job.title });
-              }}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
-              style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
-              data-testid="link-google-maps"
-            >
-              <Navigation className="w-4 h-4 text-blue-400" />
-              <span className="text-[10px] font-display font-bold text-blue-400">Google Maps</span>
-            </button>
-            <button
-              onClick={() => {
-                const url = wazeUrl(job);
-                if (url) launchNav({ provider: "waze", url, destLabel: job.title });
-              }}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
-              style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
-              data-testid="link-waze"
-            >
-              <Car className="w-4 h-4 text-emerald-400" />
-              <span className="text-[10px] font-display font-bold text-emerald-400">Waze</span>
-            </button>
-            <button
-              onClick={() => {
-                const url = appleMapsUrl(job);
-                if (url) launchNav({ provider: "apple", url, destLabel: job.title });
-              }}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
-              style={{ background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.22)" }}
-              data-testid="link-apple-maps"
-            >
-              <MapIcon className="w-4 h-4 text-slate-300" />
-              <span className="text-[10px] font-display font-bold text-slate-300">Apple Maps</span>
-            </button>
+            {(() => {
+              // All three buttons open the same in-place handoff sheet — the sheet
+              // itself shows Google Maps + Waze prominently and Apple Maps as a
+              // tertiary option on iOS.
+              const openSheet = () => {
+                const google = googleMapsUrl(job, userPos) || undefined;
+                const waze = wazeUrl(job) || undefined;
+                const apple = appleMapsUrl(job) || undefined;
+                if (!google && !waze && !apple) return;
+                const j = job as any;
+                const addr = j.location?.trim()
+                  ? j.location.trim()
+                  : j.lat && j.lng
+                    ? `${j.lat}, ${j.lng}`
+                    : undefined;
+                launchNav({
+                  destLabel: job.title || "Destination",
+                  destAddress: addr,
+                  urls: { google, waze, apple },
+                });
+              };
+              return (
+                <>
+                  <button
+                    onClick={openSheet}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
+                    style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
+                    data-testid="link-google-maps"
+                  >
+                    <Navigation className="w-4 h-4 text-blue-400" />
+                    <span className="text-[10px] font-display font-bold text-blue-400">Google Maps</span>
+                  </button>
+                  <button
+                    onClick={openSheet}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
+                    style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
+                    data-testid="link-waze"
+                  >
+                    <Car className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[10px] font-display font-bold text-emerald-400">Waze</span>
+                  </button>
+                  <button
+                    onClick={openSheet}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
+                    style={{ background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.22)" }}
+                    data-testid="link-apple-maps"
+                  >
+                    <MapIcon className="w-4 h-4 text-slate-300" />
+                    <span className="text-[10px] font-display font-bold text-slate-300">Apple Maps</span>
+                  </button>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

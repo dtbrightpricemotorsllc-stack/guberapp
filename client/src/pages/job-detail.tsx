@@ -120,7 +120,6 @@ export default function JobDetail() {
   const [sellForm, setSellForm] = useState({ category: "", condition: "", price: "", askingType: "fixed" });
   const [, navigate] = useLocation();
 
-  const [showNavModal, setShowNavModal] = useState(false);
   const [navUrls, setNavUrls] = useState<{ google: string | null; waze: string | null }>({ google: null, waze: null });
 
   const { cover: navCover, launch: launchNav } = useNavigationCover();
@@ -131,34 +130,42 @@ export default function JobDetail() {
     return "";
   };
 
-  const openGoogleMapsForJob = (j: any) => {
+  // All three external-map buttons open the same in-place handoff sheet so the
+  // GUBER chrome stays visible. We resolve geolocation once (best-effort) so the
+  // sheet can offer a fully-routed Google Maps URL with origin → destination.
+  const openNavSheetForJob = (j: any) => {
     const dest = buildNavDestination(j);
     if (!dest) return;
+    const hasAddress = !!j.location?.trim();
+    const hasCoords = !!(j.lat && j.lng);
+    const wazeUrl = hasAddress
+      ? `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`
+      : hasCoords
+        ? `waze://?ll=${j.lat},${j.lng}&navigate=yes`
+        : undefined;
+    const appleUrl = `https://maps.apple.com/?daddr=${dest}`;
+
+    const open = (googleUrl: string) =>
+      launchNav({
+        destLabel: j.title || "Destination",
+        destAddress: hasAddress ? j.location.trim() : hasCoords ? `${j.lat}, ${j.lng}` : undefined,
+        urls: { google: googleUrl, waze: wazeUrl, apple: appleUrl },
+      });
+
     gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 6000 })
       .then((pos) => {
         const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
-        launchNav({ provider: "google", url: `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`, destLabel: j.title });
+        open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`);
       })
       .catch(() => {
-        launchNav({ provider: "google", url: `https://www.google.com/maps/dir/?api=1&destination=${dest}`, destLabel: j.title });
+        open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`);
       });
   };
 
-  const openWazeForJob = (j: any) => {
-    const hasAddress = j.location?.trim();
-    const hasCoords = j.lat && j.lng;
-    if (!hasAddress && !hasCoords) return;
-    const wazeUrl = hasAddress
-      ? `waze://?q=${encodeURIComponent(j.location.trim())}&navigate=yes`
-      : `waze://?ll=${j.lat},${j.lng}&navigate=yes`;
-    launchNav({ provider: "waze", url: wazeUrl, destLabel: j.title });
-  };
-
-  const openAppleMapsForJob = (j: any) => {
-    const dest = buildNavDestination(j);
-    if (!dest) return;
-    launchNav({ provider: "apple", url: `https://maps.apple.com/?daddr=${dest}`, destLabel: j.title });
-  };
+  // Back-compat aliases — every existing button just opens the same sheet now.
+  const openGoogleMapsForJob = (j: any) => openNavSheetForJob(j);
+  const openWazeForJob = (j: any) => openNavSheetForJob(j);
+  const openAppleMapsForJob = (j: any) => openNavSheetForJob(j);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", description: "", budget: "", location: "", zip: "", lat: null as number | null, lng: null as number | null });
@@ -663,7 +670,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             openAppleMapsForJob(job);
             toast({ title: "On The Way!", description: "GPS logged. Opening Apple Maps." });
           } else {
-            setShowNavModal(true);
+            openNavSheetForJob(job);
             toast({ title: "On The Way!", description: "GPS logged. Launch navigation below." });
           }
         }
@@ -2662,88 +2669,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         </div>
       </div>
 
-      {showNavModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowNavModal(false)}>
-          <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
-            style={{ border: "1px solid rgba(255,255,255,0.08)" }}
-            onClick={e => e.stopPropagation()}
-            data-testid="modal-navigation">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-display font-extrabold">Launch Navigation</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">GPS logged • Choose your nav app</p>
-              </div>
-              <button onClick={() => setShowNavModal(false)} className="p-1.5 rounded-full hover:bg-muted">
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
-            </div>
-
-            <div className="space-y-3 mb-4">
-              {job && (
-                <button
-                  onClick={() => { setShowNavModal(false); openGoogleMapsForJob(job); }}
-                  className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
-                  style={{ background: "rgba(66,133,244,0.12)", border: "1px solid rgba(66,133,244,0.25)" }}
-                  data-testid="link-google-maps">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(66,133,244,0.2)" }}>
-                    <Navigation className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-display font-bold text-blue-400">Open in Google Maps</p>
-                    <p className="text-xs text-muted-foreground">Turn-by-turn navigation</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-blue-400/50 ml-auto" />
-                </button>
-              )}
-
-              {job && (
-                <button
-                  onClick={() => { setShowNavModal(false); openAppleMapsForJob(job); }}
-                  className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
-                  style={{ background: "rgba(180,180,180,0.10)", border: "1px solid rgba(180,180,180,0.22)" }}
-                  data-testid="link-apple-maps">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(180,180,180,0.18)" }}>
-                    <MapPin className="w-5 h-5 text-zinc-200" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-display font-bold text-zinc-200">Open in Apple Maps</p>
-                    <p className="text-xs text-muted-foreground">iOS native turn-by-turn</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-zinc-200/50 ml-auto" />
-                </button>
-              )}
-
-              {job && ((job as any).lat || job.location) && (
-                <button
-                  onClick={() => { setShowNavModal(false); openWazeForJob(job); }}
-                  className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
-                  style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}
-                  data-testid="link-waze">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(34,197,94,0.15)" }}>
-                    <Car className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-display font-bold text-emerald-400">Open in Waze</p>
-                    <p className="text-xs text-muted-foreground">Real-time traffic routing</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-emerald-400/50 ml-auto" />
-                </button>
-              )}
-
-              {!job && (
-                <div className="text-center py-4 text-muted-foreground text-sm">
-                  No address available for navigation.
-                </div>
-              )}
-            </div>
-
-            <Button onClick={() => setShowNavModal(false)} variant="outline"
-              className="w-full rounded-2xl border-border font-display tracking-wider" data-testid="button-close-nav">
-              CLOSE
-            </Button>
-          </div>
-        </div>
-      )}
+      {navCover}
 
       {showCancelModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowCancelModal(false)}>
