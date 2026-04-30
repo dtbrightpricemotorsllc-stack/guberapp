@@ -434,7 +434,7 @@ export default function AccountSettings() {
                   variant="outline"
                   size="sm"
                   className="h-9 text-xs font-display border-border/30 justify-start"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!notifSoundEnabled) {
                       toast({
                         title: "Notification sounds are off",
@@ -443,11 +443,15 @@ export default function AccountSettings() {
                       });
                       return;
                     }
-                    // Force unlock now — this tap is a user gesture, so iOS
-                    // will let us prime the audio pipeline even if it hadn't
-                    // been unlocked earlier in the session.
                     unlockAudio();
-                    playGuberSound(s.type);
+                    const ok = await playGuberSound(s.type);
+                    if (!ok) {
+                      toast({
+                        title: "Audio appears to be blocked",
+                        description: "Check your ringer switch, device volume, and that GUBER has audio permission. iPhones won't play sounds while the silent switch is on.",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                   data-testid={`button-test-sound-${s.type}`}
                 >

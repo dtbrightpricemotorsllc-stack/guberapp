@@ -35,12 +35,9 @@ function loadSeen(): boolean {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tiny module-scoped store so the header trigger button (rendered in
-// guber-layout.tsx) and the assistant Sheet (rendered separately) can stay
-// in sync without prop drilling or wrapping the whole tree in a Provider.
-// ---------------------------------------------------------------------------
-
+// Module-scoped store so the header trigger button and the assistant Sheet
+// (rendered in different parts of the tree) share open/seen/saved-thread
+// state without a Context provider.
 type StoreState = {
   open: boolean;
   hasSavedThread: boolean;
@@ -84,12 +81,8 @@ function markSeen() {
   patchStore({ seen: true });
 }
 
-// ---------------------------------------------------------------------------
-// Header trigger — small ~32px circular icon button in GUBER green/yellow.
-// Rendered inside <header> in guber-layout.tsx between the notification bell
-// and the avatar dropdown. Visible on every page (admin included).
-// ---------------------------------------------------------------------------
-
+// Header trigger — small ~32px gradient circle rendered between the bell
+// and the avatar in guber-layout.tsx. Visible on every page including /admin.
 export function GUBERAssistantHeaderButton() {
   const s = useAssistantStore();
   const showBadge = s.hasSavedThread && !s.seen && !s.open;
@@ -130,11 +123,8 @@ export function GUBERAssistantHeaderButton() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// The Sheet itself. State (open, messages, hasSavedThread) is shared with
-// the header trigger via the store above.
-// ---------------------------------------------------------------------------
-
+// The assistant Sheet. open/messages/hasSavedThread are shared with the
+// header trigger via the module store above.
 export function GUBERAssistant() {
   const s = useAssistantStore();
   const [messages, setMessages] = useState<Message[]>(loadMessages);

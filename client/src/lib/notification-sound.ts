@@ -205,18 +205,29 @@ function vibrateFor(type: SoundType): void {
   }
 }
 
-export function playGuberSound(type: SoundType): void {
+// Returns a promise resolving to true if playback was accepted by the
+// browser/OS, false otherwise. Existing fire-and-forget callers still work
+// (they just ignore the promise); the test-sound panel awaits it so it can
+// warn the user when playback is silently blocked (ringer muted, OS focus,
+// autoplay policy, etc.).
+export function playGuberSound(type: SoundType): Promise<boolean> {
   vibrateFor(type);
-
-  if (!getNotifSoundEnabled()) return;
+  if (!getNotifSoundEnabled()) return Promise.resolve(false);
 
   const audio = new Audio(`/sounds/guber_${type}.wav`);
-  audio.play().catch(() => {
-    // WAV failed — fall back to synthesized tones
-    if (type === "money") {
-      playGuberCashDrop();
-    } else {
-      playGuberPing();
-    }
-  });
+  return audio.play()
+    .then(() => true)
+    .catch(() => {
+      // WAV failed — fall back to the synthesized tones via AudioContext.
+      try {
+        if (type === "money") playGuberCashDrop();
+        else playGuberPing();
+        // We can't easily detect AudioContext-level failure, but if it
+        // didn't throw the chain is at least scheduled.
+        const ctx = audioCtx;
+        return !!(ctx && ctx.state === "running");
+      } catch {
+        return false;
+      }
+    });
 }
