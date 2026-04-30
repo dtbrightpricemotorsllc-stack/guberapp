@@ -34,6 +34,7 @@ import Privacy from "@/pages/privacy";
 import AcceptableUse from "@/pages/acceptable-use";
 import DeleteAccount from "@/pages/delete-account";
 import JoinPage from "@/pages/join";
+import LoadingDemo from "@/pages/loading-demo";
 
 // Authenticated consumer pages — lazy loaded
 const Dashboard = lazy(() => import("@/pages/dashboard"));
@@ -252,6 +253,7 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />
       <Route path="/delete-account" component={DeleteAccount} />
+      <Route path="/loading-demo" component={LoadingDemo} />
       <Route component={NotFound} />
     </Switch>
     </>
