@@ -269,7 +269,15 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
       };
       if (newGuberId) createPayload.guberId = newGuberId;
       if (newRefCode) createPayload.referralCode = newRefCode;
-      if (referrerId) createPayload.referredBy = referrerId;
+      if (referrerId) {
+        // GUBER Performance Shares attribution.
+        // Window = 30 days from signup. Stored at signup so it never moves.
+        createPayload.referredBy = referrerId;
+        const now = new Date();
+        createPayload.referredAt = now;
+        createPayload.performanceShareWindowEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        createPayload.performanceShareEligible = true;
+      }
       if (productionMode) {
         createPayload.zipcode = zipcode || null;
         createPayload.role = "buyer";

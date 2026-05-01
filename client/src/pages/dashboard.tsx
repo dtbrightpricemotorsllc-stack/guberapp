@@ -425,7 +425,7 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
-  const { data: referralData } = useQuery<{ code: string; link: string; count: number }>({
+  const { data: referralData } = useQuery<{ code: string; link: string; referredCount: number }>({
     queryKey: ["/api/users/me/referral"],
     enabled: !!user,
   });
@@ -699,7 +699,7 @@ export default function Dashboard() {
         <TodoReminderBox
           user={user}
           isAvailable={!!(user as any)?.isAvailable}
-          referralCount={referralData?.count ?? 0}
+          referralCount={referralData?.referredCount ?? 0}
         />
 
         {/* ── Hero Header ── */}
@@ -960,13 +960,13 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-1.5">
                       <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
                       <p className="text-[9px] font-display text-muted-foreground/35">
-                        {referralData?.count ?? 0} / 25 to unlock cash drops
+                        {referralData?.referredCount ?? 0} / 25 to unlock cash drops
                       </p>
                     </div>
                     <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
                       <div
                         className="h-full rounded-full"
-                        style={{ width: `${Math.min(100, Math.round(((referralData?.count ?? 0) / 25) * 100 + 8))}%`, background: "linear-gradient(90deg,#C6A85C,#e8c97a)", transition: "width 1s ease" }}
+                        style={{ width: `${Math.min(100, Math.round(((referralData?.referredCount ?? 0) / 25) * 100 + 8))}%`, background: "linear-gradient(90deg,#C6A85C,#e8c97a)", transition: "width 1s ease" }}
                         data-testid="bar-city-activation"
                       />
                     </div>

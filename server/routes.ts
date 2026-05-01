@@ -12,6 +12,7 @@ import Stripe from "stripe";
 import express from "express";
 import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import { sendPushToUser } from "./push";
+import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth } from "./auth";
@@ -138,6 +139,17 @@ function generateReferralCode(): string {
   return code;
 }
 
+/**
+ * Mark a referrals row as verified once the referred user passes a key
+ * milestone (currently: Stripe Connect activation).
+ *
+ * NOTE — Performance Shares migration:
+ * The previous version also handed out a "−5% per 10 referrals" fee discount
+ * via referralCount / referralFeePct / referralDiscountExpiresAt. Those columns
+ * remain on `users` for backwards compatibility but are NO LONGER updated.
+ * The actual referrer reward is now paid as cash on each completed-paid job
+ * via `awardReferralRewardForJob` (see server/referral-reward.ts).
+ */
 async function creditReferrer(referredUserId: number) {
   try {
     const ref = await db.select().from(referrals).where(sqlEq(referrals.referredId, referredUserId)).limit(1);
@@ -145,21 +157,10 @@ async function creditReferrer(referredUserId: number) {
     await db.update(referrals).set({ status: "verified" }).where(sqlEq(referrals.id, ref[0].id));
     const referrer = await storage.getUser(ref[0].referrerId);
     if (!referrer) return;
-    const newCount = ((referrer as any).referralCount || 0) + 1;
-    const newFeePct = Math.min(Math.floor(newCount / 10) * 0.05, 0.15);
-    const hitMilestone = newCount % 10 === 0;
-    const updates: Record<string, any> = { referralCount: newCount, referralFeePct: newFeePct };
-    if (hitMilestone) {
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      await db.execute(sql`UPDATE users SET referral_discount_expires_at = ${expiresAt.toISOString()} WHERE id = ${referrer.id}`);
-    }
-    await storage.updateUser(referrer.id, updates as any);
     await storage.createNotification({
       userId: referrer.id,
-      title: "Referral Reward!",
-      body: hitMilestone
-        ? `You hit ${newCount} referrals! Your −${newFeePct * 100}% fee discount is active for 30 days.`
-        : `A user you referred just completed setup. ${newCount} verified referral${newCount !== 1 ? "s" : ""} total.`,
+      title: "Referral verified",
+      body: `Someone you referred just activated their account. You'll earn a share of GUBER's platform fee on their completed jobs for the next 30 days.`,
       type: "system",
     });
   } catch (e: any) {
@@ -1974,6 +1975,12 @@ export async function registerRoutes(
         if (ro.rows.length) referrerId = (ro.rows[0] as any).id;
       }
 
+      // GUBER Performance Shares attribution: window starts at signup.
+      const psNow = new Date();
+      const psWindowEnd = referrerId
+        ? new Date(psNow.getTime() + 30 * 24 * 60 * 60 * 1000)
+        : null;
+
       user = await storage.createUser({
         email: googleUser.email,
         username,
@@ -1989,6 +1996,9 @@ export async function registerRoutes(
         guberId: newGuberId,
         referralCode: newRefCode,
         referredBy: referrerId,
+        referredAt: referrerId ? psNow : null,
+        performanceShareWindowEndsAt: psWindowEnd,
+        performanceShareEligible: !!referrerId,
       } as any);
 
       if (referrerId) {
@@ -4022,13 +4032,18 @@ export async function registerRoutes(
     }
   });
 
-  // ── Referral System ──────────────────────────────────────────────────────
+  // ── GUBER Performance Shares (referral cash rewards) ────────────────────
+  // Returns the viewer's referral code/link, their reward rate (Day-1 OG vs
+  // standard), totals earned/voided, recent reward rows, and — if the viewer
+  // is themselves a referred user — the countdown until their referrer's
+  // 30-day earning window expires.
   app.get("/api/users/me/referral", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      let user = await storage.getUser(userId);
+      const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
+      // Lazy-create referral code on first view.
       let code = (user as any).referralCode as string | null;
       if (!code) {
         let newCode = generateReferralCode();
@@ -4041,18 +4056,74 @@ export async function registerRoutes(
 
       const appBase = process.env.APP_URL || "https://guberapp.app";
       const link = `${appBase}/join/${code}`;
-      const count = (user as any).referralCount || 0;
-      const feePct = (user as any).referralFeePct || 0;
-      const progress = count % 10;
-      const nextThreshold = (Math.floor(count / 10) + (progress > 0 ? 1 : 0)) * 10 || 10;
-      const atMax = feePct >= 0.15;
-      const rawExpiry = (user as any).referralDiscountExpiresAt;
-      const expiresAt: string | null = rawExpiry ? new Date(rawExpiry).toISOString() : null;
-      const discountActive = feePct > 0 && expiresAt !== null && new Date(expiresAt) > new Date();
-      const msLeft = discountActive && expiresAt ? new Date(expiresAt).getTime() - Date.now() : 0;
-      const daysRemaining = discountActive ? Math.ceil(msLeft / (1000 * 60 * 60 * 24)) : null;
+      const isDay1OG = (user as any).day1OG === true;
+      const ratePct = isDay1OG ? 10 : 5;
 
-      res.json({ code, link, count, feePct, progress, nextThreshold, atMax, expiresAt, discountActive, daysRemaining });
+      // Count of users this person has referred (any status).
+      const referredCountRow = await db.execute(
+        sql`SELECT COUNT(*)::int AS n FROM users WHERE referred_by = ${userId}`,
+      );
+      const referredCount = ((referredCountRow.rows[0] as any)?.n as number) || 0;
+
+      // Earned vs voided totals from the per-job snapshot.
+      const totalsRow = await db.execute(sql`
+        SELECT
+          COALESCE(SUM(CASE WHEN referral_reward_status IN ('earned','paid') THEN referral_reward_amount ELSE 0 END), 0)::float AS earned,
+          COALESCE(SUM(CASE WHEN referral_reward_status = 'voided' THEN referral_reward_amount ELSE 0 END), 0)::float AS voided,
+          COUNT(*) FILTER (WHERE referral_reward_status IN ('earned','paid'))::int AS earned_count
+        FROM jobs WHERE referral_reward_user_id = ${userId}
+      `);
+      const totals = (totalsRow.rows[0] as any) || {};
+      const totalEarned = Number(totals.earned || 0);
+      const totalVoided = Number(totals.voided || 0);
+      const earnedJobsCount = Number(totals.earned_count || 0);
+
+      // Recent rewards for the activity list (last 10).
+      const recentRows = await db.execute(sql`
+        SELECT id, title, referral_reward_amount, referral_reward_status,
+               referral_reward_type, charged_at
+        FROM jobs
+        WHERE referral_reward_user_id = ${userId}
+        ORDER BY COALESCE(charged_at, created_at) DESC
+        LIMIT 10
+      `);
+      const recentRewards = recentRows.rows.map((r: any) => ({
+        jobId: r.id,
+        jobTitle: r.title,
+        amount: Number(r.referral_reward_amount || 0),
+        status: r.referral_reward_status,
+        type: r.referral_reward_type,
+        chargedAt: r.charged_at ? new Date(r.charged_at).toISOString() : null,
+      }));
+
+      // If the viewer themselves was referred, show their referrer's window
+      // status so they understand the program from both sides.
+      const wasReferred = !!(user as any).referredBy;
+      const myWindowEndsAt = (user as any).performanceShareWindowEndsAt
+        ? new Date((user as any).performanceShareWindowEndsAt as Date).toISOString()
+        : null;
+      const myWindowActive = !!myWindowEndsAt && new Date(myWindowEndsAt) > new Date();
+      const myWindowDaysRemaining = myWindowActive && myWindowEndsAt
+        ? Math.ceil((new Date(myWindowEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      res.json({
+        code,
+        link,
+        // `count` is a back-compat alias for legacy clients; new code uses `referredCount`.
+        count: referredCount,
+        isDay1OG,
+        ratePct,
+        referredCount,
+        earnedJobsCount,
+        totalEarned: Math.round(totalEarned * 100) / 100,
+        totalVoided: Math.round(totalVoided * 100) / 100,
+        recentRewards,
+        wasReferred,
+        myWindowEndsAt,
+        myWindowActive,
+        myWindowDaysRemaining,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5640,14 +5711,15 @@ export async function registerRoutes(
       const isOG = user.day1OG === true;
       const urgentFee = urgentSwitch ? (isOG ? 0 : URGENT_FEE) : 0;
 
-      // --- NEW DUAL-FEE MODEL ---
+      // --- DUAL-FEE MODEL ---
       // Poster pays a service fee on top of the base job price.
       // Worker's payout is reduced by a worker platform fee.
-      // Referral discounts only reduce the WORKER fee, never the poster fee.
-      const rawReferralDiscount = (user as any).referralFeePct || 0;
-      const discountExpiry = (user as any).referralDiscountExpiresAt ? new Date((user as any).referralDiscountExpiresAt) : null;
-      const referralActive = rawReferralDiscount > 0 && discountExpiry !== null && discountExpiry > new Date();
-      const referralDiscount = referralActive ? rawReferralDiscount : 0;
+      //
+      // NOTE: Referral rewards are now paid out as CASH on each completed-paid
+      // job (GUBER Performance Shares) and no longer reduce the worker fee.
+      // The legacy `referralFeePct` / `referralDiscountExpiresAt` fields are
+      // intentionally not read here.
+      const referralDiscount = 0;
 
       // Poster service fee (added on top of budget — does NOT affect worker payout)
       const posterFeePct = isOG ? POSTER_FEE_PCT_OG : POSTER_FEE_PCT;
@@ -7120,6 +7192,9 @@ export async function registerRoutes(
               update.payoutAmount = workerShare;
               update.chargedAt = new Date();
               console.log(`[GUBER][capture] jobId=${job.id} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
+
+              // GUBER Performance Shares — referrer's cash share of platform fee.
+              await awardReferralRewardForJob(job.id, capturedAmount);
 
               const platformFee = (job as any).platformFeeRate ? capturedAmount * (job as any).platformFeeRate : capturedAmount - workerShare;
               await storage.createMoneyLedgerEntry({
@@ -10519,6 +10594,8 @@ YOUR BEHAVIOR:
           if ((job as any).stripePaymentIntentId) {
             try { await stripe.paymentIntents.cancel((job as any).stripePaymentIntentId); } catch {}
           }
+          // GUBER Performance Shares — reverse any reward already credited.
+          await voidReferralRewardForJob(jobId, "dispute_suspend_user");
         } else {
           update.disputeStatus = "needs_more_info";
         }
@@ -10574,6 +10651,8 @@ YOUR BEHAVIOR:
               update.payoutAmount = (job as any).workerGrossShare || job.helperPayout || capturedAmount;
               update.chargedAt = new Date();
               console.log(`[GUBER][capture] dispute worker_favor jobId=${jobId} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
+              // GUBER Performance Shares — referrer's cash share of platform fee.
+              await awardReferralRewardForJob(jobId, capturedAmount);
             } catch (captureErr: any) {
               if (captureErr.code === "charge_expired_for_capture") {
                 console.error(`[GUBER][capture] dispute worker_favor jobId=${jobId} EXPIRED — admin attention needed.`);
@@ -10625,10 +10704,13 @@ YOUR BEHAVIOR:
               return res.status(500).json({ message: `Payment void failed: ${cancelErr.message}. Dispute not resolved.` });
             }
           }
+          // GUBER Performance Shares — reverse any reward already credited.
+          await voidReferralRewardForJob(jobId, "dispute_poster_favor");
         } else {
           update.status = "refunded";
           update.payoutStatus = "refunded";
           update.internalPayoutStatus = "refunded";
+          await voidReferralRewardForJob(jobId, "dispute_poster_favor");
         }
       } else if (resolution === "partial") {
         // Partial decision: admin pays the worker `partialAmount` (custom
@@ -10667,6 +10749,8 @@ YOUR BEHAVIOR:
               update.payoutAmount = helperShare;
               update.chargedAt = new Date();
               console.log(`[GUBER][capture] dispute partial jobId=${jobId} paymentIntentId=${piId} captured=$${capturedAmount} helperShare=$${helperShare} refundShare=$${refundShare}`);
+              // GUBER Performance Shares — referrer's cash share of platform fee.
+              await awardReferralRewardForJob(jobId, capturedAmount);
               // Stripe-safe partial refund: capture full auth, then refund
               // the poster slice via the existing Stripe refund path.
               if (refundShare > 0) {
@@ -10838,6 +10922,9 @@ YOUR BEHAVIOR:
         refundedAt: new Date(),
         refundAmount: refundedAmount,
       } as any);
+
+      // GUBER Performance Shares — reverse any referral reward already credited.
+      await voidReferralRewardForJob(jobId, "admin_refund");
 
       await storage.createNotification({
         userId: job.postedById,

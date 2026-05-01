@@ -173,7 +173,29 @@ export default function Profile() {
     staleTime: 0,
   });
 
-  const { data: referralData } = useQuery<{ code: string; link: string; count: number; feePct: number; progress: number; nextThreshold: number; atMax: boolean; expiresAt: string | null; discountActive: boolean; daysRemaining: number | null }>({
+  type ReferralRewardRow = {
+    jobId: number;
+    jobTitle: string | null;
+    amount: number;
+    status: "pending" | "earned" | "paid" | "voided" | null;
+    type: "day1_og" | "standard" | null;
+    chargedAt: string | null;
+  };
+  const { data: referralData } = useQuery<{
+    code: string;
+    link: string;
+    isDay1OG: boolean;
+    ratePct: number;
+    referredCount: number;
+    earnedJobsCount: number;
+    totalEarned: number;
+    totalVoided: number;
+    recentRewards: ReferralRewardRow[];
+    wasReferred: boolean;
+    myWindowEndsAt: string | null;
+    myWindowActive: boolean;
+    myWindowDaysRemaining: number;
+  }>({
     queryKey: ["/api/users/me/referral"],
     enabled: isOwnProfile,
   });
@@ -273,12 +295,14 @@ export default function Profile() {
     certSubmitMutation.mutate({ name: certName.trim(), file: certFile });
   };
 
+  // Countdown for the viewer's OWN Performance Shares window — the 30-day
+  // period during which their referrer (if any) still earns from their jobs.
   const [countdownLabel, setCountdownLabel] = useState("");
   useEffect(() => {
-    if (!referralData?.discountActive || !referralData.expiresAt) { setCountdownLabel(""); return; }
+    if (!referralData?.myWindowActive || !referralData.myWindowEndsAt) { setCountdownLabel(""); return; }
     const update = () => {
-      const ms = new Date(referralData.expiresAt!).getTime() - Date.now();
-      if (ms <= 0) { setCountdownLabel("Expired"); return; }
+      const ms = new Date(referralData.myWindowEndsAt!).getTime() - Date.now();
+      if (ms <= 0) { setCountdownLabel("Window ended"); return; }
       const totalHours = Math.floor(ms / (1000 * 60 * 60));
       const d = Math.floor(totalHours / 24);
       const h = totalHours % 24;
@@ -288,7 +312,7 @@ export default function Profile() {
     update();
     const id = setInterval(update, 60000);
     return () => clearInterval(id);
-  }, [referralData?.discountActive, referralData?.expiresAt]);
+  }, [referralData?.myWindowActive, referralData?.myWindowEndsAt]);
 
   const [showStripeGuide, setShowStripeGuide] = useState(false);
   const [selectedProfileType, setSelectedProfileType] = useState<"individual" | "company" | null>(null);
@@ -1260,34 +1284,39 @@ export default function Profile() {
           <Card className="glass-card rounded-xl p-5 mb-4 animate-fade-in stagger-5" data-testid="card-referrals">
             <div className="flex items-center gap-2 mb-4">
               <Gift className="w-4 h-4 text-primary" />
-              <h3 className="font-display font-semibold text-sm tracking-wide">Refer & Earn</h3>
-              {referralData.discountActive ? (
-                <Badge className="text-[9px] bg-green-500/15 text-green-400 border-green-500/20 ml-auto" data-testid="badge-fee-discount">
-                  −{Math.round(referralData.feePct * 100)}% fee active
-                </Badge>
-              ) : referralData.feePct > 0 && !referralData.discountActive ? (
-                <Badge className="text-[9px] bg-amber-500/15 text-amber-400 border-amber-500/20 ml-auto" data-testid="badge-fee-discount">
-                  Discount lapsed
-                </Badge>
-              ) : null}
+              <h3 className="font-display font-semibold text-sm tracking-wide">GUBER Performance Shares</h3>
+              <Badge
+                className={`text-[9px] ml-auto ${referralData.isDay1OG ? "bg-amber-500/15 text-amber-400 border-amber-500/20" : "bg-primary/15 text-primary border-primary/20"}`}
+                data-testid="badge-rate"
+              >
+                {referralData.ratePct}% rate{referralData.isDay1OG ? " — Day-1 OG" : ""}
+              </Badge>
             </div>
 
             <div className="space-y-3">
-              {referralData.discountActive && referralData.expiresAt && (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/8 border border-green-500/15" data-testid="block-discount-timer">
-                  <div>
-                    <p className="text-[10px] font-display font-semibold text-green-400">Fee discount active</p>
-                    <p className="text-[11px] font-mono text-green-300 mt-0.5" data-testid="text-countdown">{countdownLabel}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[9px] text-muted-foreground">Expires</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(referralData.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    </p>
-                  </div>
+              {/* Earnings summary */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 rounded-lg bg-green-500/8 border border-green-500/15 text-center">
+                  <p className="text-[9px] uppercase tracking-wider text-green-400/80 mb-0.5">Earned</p>
+                  <p className="font-mono font-bold text-sm text-green-300" data-testid="text-total-earned">
+                    ${referralData.totalEarned.toFixed(2)}
+                  </p>
                 </div>
-              )}
+                <div className="p-3 rounded-lg bg-muted/20 border border-border/20 text-center">
+                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground mb-0.5">Jobs Paid</p>
+                  <p className="font-mono font-bold text-sm text-foreground" data-testid="text-jobs-paid">
+                    {referralData.earnedJobsCount}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/20 border border-border/20 text-center">
+                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground mb-0.5">Referred</p>
+                  <p className="font-mono font-bold text-sm text-foreground" data-testid="text-referred-count">
+                    {referralData.referredCount}
+                  </p>
+                </div>
+              </div>
 
+              {/* Code + copy */}
               <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/20 border border-border/20">
                 <div>
                   <p className="text-[10px] text-muted-foreground mb-0.5">Your referral code</p>
@@ -1348,36 +1377,64 @@ export default function Profile() {
                   }
                 }}
               >
-                🚀 INVITE &amp; ACTIVATE YOUR CITY
+                INVITE &amp; ACTIVATE YOUR CITY
               </Button>
 
-              <div className="pt-1">
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[10px] text-muted-foreground" data-testid="text-referral-count">
-                    {referralData.count} verified referral{referralData.count !== 1 ? "s" : ""}
-                  </p>
-                  {referralData.atMax && referralData.discountActive ? (
-                    <p className="text-[10px] text-green-400 font-display font-semibold">Max tier — 30d discount active</p>
-                  ) : referralData.atMax ? (
-                    <p className="text-[10px] text-amber-400 font-display font-semibold">Max tier — discount lapsed</p>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground">{referralData.progress}/10 toward next −5% fee</p>
-                  )}
-                </div>
-                {!referralData.atMax && (
-                  <div className="w-full h-1.5 rounded-full bg-muted/30 overflow-hidden" data-testid="progress-referrals">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-500"
-                      style={{ width: `${(referralData.progress / 10) * 100}%` }}
-                    />
+              {/* Recent rewards (if any) */}
+              {referralData.recentRewards.length > 0 && (
+                <div className="pt-1" data-testid="block-recent-rewards">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Recent rewards</p>
+                  <div className="space-y-1.5">
+                    {referralData.recentRewards.slice(0, 5).map((r) => (
+                      <div
+                        key={r.jobId}
+                        className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-muted/15 border border-border/10"
+                        data-testid={`row-reward-${r.jobId}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] truncate text-foreground" data-testid={`text-reward-title-${r.jobId}`}>
+                            {r.jobTitle || `Job #${r.jobId}`}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground">
+                            {r.chargedAt ? new Date(r.chargedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                            {r.type === "day1_og" ? " · 10%" : " · 5%"}
+                          </p>
+                        </div>
+                        <p
+                          className={`font-mono text-[11px] font-semibold ${r.status === "voided" ? "text-muted-foreground line-through" : "text-green-400"}`}
+                          data-testid={`text-reward-amount-${r.jobId}`}
+                        >
+                          {r.status === "voided" ? "−" : "+"}${r.amount.toFixed(2)}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
+              {/* Window countdown if the viewer is themselves a referred user */}
+              {referralData.wasReferred && referralData.myWindowActive && (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/8 border border-amber-500/15" data-testid="block-my-window">
+                  <div>
+                    <p className="text-[10px] font-display font-semibold text-amber-400">Your referrer's earning window</p>
+                    <p className="text-[11px] font-mono text-amber-300 mt-0.5" data-testid="text-countdown">{countdownLabel}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] text-muted-foreground">Ends</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {referralData.myWindowEndsAt && new Date(referralData.myWindowEndsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* How it works */}
               <div className="flex items-start gap-2.5 p-3 rounded-lg bg-primary/5 border border-primary/10">
                 <TrendingUp className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Every 10 verified referrals earns a <span className="text-foreground font-semibold">−5% platform fee for 30 days</span>. Max −15% at 30 referrals. Referral counts when they complete Stripe Connect. Day-1 OG fee is separate.
+                  Earn <span className="text-foreground font-semibold">{referralData.ratePct}% of GUBER's platform fee</span> on every completed-paid job from people you refer, for <span className="text-foreground font-semibold">30 days</span> from their signup.
+                  {referralData.isDay1OG ? " You're a Day-1 OG — that's the 10% rate." : " Standard rate is 5%."}
+                  {" "}No reward on cancelled, refunded, or disputed jobs. Direct referrals only.
                 </p>
               </div>
             </div>

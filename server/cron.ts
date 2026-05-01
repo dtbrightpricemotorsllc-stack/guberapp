@@ -8,6 +8,7 @@ import { sendPushToUser } from "./push";
 import { claimReminder, isUserInQuietHours } from "./reminders";
 import { TRUST_ADJUSTMENTS } from "./pricing";
 import { getDemoUserIds } from "./demo-guard";
+import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
@@ -235,6 +236,10 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
         captureSucceeded = true;
         console.log(`[GUBER][capture] cron jobId=${job.id} paymentIntentId=${piId} captured=success amount=$${capturedAmount}`);
 
+        // GUBER Performance Shares — award the referrer (if any) their cash
+        // share of GUBER's platform fee on this completed-paid job.
+        await awardReferralRewardForJob(job.id, capturedAmount);
+
         const cronPlatformFee = job.platformFeeRate ? capturedAmount * job.platformFeeRate : capturedAmount - canonicalWorkerShare;
         await storage.createMoneyLedgerEntry({
           jobId: job.id,
@@ -456,6 +461,13 @@ async function enforceDisputeSLA(): Promise<number> {
             payoutStatus: refundSucceeded ? "refunded" : "cancelled",
             internalPayoutStatus: refundSucceeded ? "refunded" : "on_hold",
           } as any).where(eq(jobs.id, dispute.jobId));
+
+          // GUBER Performance Shares — reverse any referral reward already
+          // credited on this job (only matters if the dispute was opened
+          // post-capture and the SLA expired without an explicit decision).
+          if (refundSucceeded) {
+            await voidReferralRewardForJob(dispute.jobId, "dispute_sla_auto_refund");
+          }
 
           if (refundSucceeded) {
             await storage.createMoneyLedgerEntry({

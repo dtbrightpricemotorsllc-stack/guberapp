@@ -72,7 +72,19 @@ export const users = pgTable("users", {
   guberId: text("guber_id").unique(),
   publicUsername: text("public_username").unique(),
   referralCode: text("referral_code").unique(),
+  // ── Performance Shares (replaces old "fee discount per 10 referrals" model) ──
+  // referredBy = userId of the referrer (immutable once set).
+  // referredAt = signup date used to compute the 30-day window.
+  // performanceShareWindowEndsAt = referredAt + 30 days (cached for fast checks).
+  // performanceShareEligible = admin kill-switch (default true).
+  // referralCount / referralFeePct / referralDiscountExpiresAt are LEGACY columns
+  // retained only for backwards compatibility with old data; the new system does
+  // not read or update them. Reward = % of GUBER's platform fee on the referred
+  // user's completed-paid jobs (10% Day-1 OG referrer, 5% standard) for 30 days.
   referredBy: integer("referred_by"),
+  referredAt: timestamp("referred_at"),
+  performanceShareEligible: boolean("performance_share_eligible").default(true),
+  performanceShareWindowEndsAt: timestamp("performance_share_window_ends_at"),
   referralCount: integer("referral_count").default(0),
   referralFeePct: real("referral_fee_pct").default(0),
   referralDiscountExpiresAt: timestamp("referral_discount_expires_at"),
@@ -294,6 +306,17 @@ export const jobs = pgTable("jobs", {
   feeProfile: text("fee_profile"),
   refundedAt: timestamp("refunded_at"),
   refundAmount: real("refund_amount"),
+  // ── Performance Shares per-job reward snapshot (set at capture time) ────
+  // referralRewardUserId = the referrer who earned this reward (NULL if no
+  // active referral applied to this job). referralRewardStatus:
+  //   pending — reserved for future async accounting
+  //   earned  — calculated and credited to the referrer's wallet
+  //   paid    — paid out (future use; today wallet == paid)
+  //   voided  — refund/dispute reversed the original payment
+  referralRewardUserId: integer("referral_reward_user_id"),
+  referralRewardAmount: real("referral_reward_amount"),
+  referralRewardStatus: text("referral_reward_status"),
+  referralRewardType: text("referral_reward_type"),
   proofRequired: boolean("proof_required").default(false),
   proofTemplateId: integer("proof_template_id"),
   proofStatus: text("proof_status"),
