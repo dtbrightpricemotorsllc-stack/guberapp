@@ -1,7 +1,9 @@
-import { isIOS, isNativeApp } from "@/lib/platform";
+import { isAndroid, isIOS, isNativeApp } from "@/lib/platform";
 
-// Cache the current APNs device token so unsubscribeFromPush() can remove it.
-let currentApnsToken: string | null = null;
+// Cache the current native device token so unsubscribeFromPush() can remove it.
+// On iOS this is an APNs hex token; on Android it is an FCM registration token.
+// We track the route alongside the value so unsubscribe hits the right endpoint.
+let currentNativeToken: { value: string; route: "/api/push/apns-token" | "/api/push/fcm-token" } | null = null;
 
 const PUBLIC_KEY_URL = "/api/push/vapid-public-key";
 
@@ -49,16 +51,28 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
-// ── Native iOS Capacitor push (APNs direct — supports custom sounds) ─────────
+// ── Native Capacitor push (iOS APNs / Android FCM — supports custom sounds) ──
 
 /**
  * Register for push notifications via the Capacitor native plugin.
- * This is the only path that delivers custom sounds on iOS because it
- * talks directly to APNs instead of going through Apple's Web Push Gateway.
+ *
+ * The same plugin (@capacitor/push-notifications) handles both platforms but
+ * emits different token shapes:
+ *   - iOS:     APNs hex device token (delivered server-side via @parse/node-apn)
+ *   - Android: FCM registration token (delivered server-side via firebase-admin)
+ *
+ * We detect the platform and post the token to the appropriate endpoint.
+ * This is the only delivery path that supports custom GUBER sounds on native;
+ * the web-push VAPID gateway strips aps.sound on iOS Safari.
  */
-async function subscribeNativeIOS(userId: number): Promise<void> {
+async function subscribeNative(_userId: number): Promise<void> {
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
+
+    const route: "/api/push/apns-token" | "/api/push/fcm-token" = isIOS
+      ? "/api/push/apns-token"
+      : "/api/push/fcm-token";
+    const platformLabel = isIOS ? "apns" : "fcm";
 
     // Request permission
     const { receive } = await PushNotifications.requestPermissions();
@@ -66,36 +80,37 @@ async function subscribeNativeIOS(userId: number): Promise<void> {
 
     // Attach listeners BEFORE calling register() so the token event is never missed.
     PushNotifications.addListener("registration", async (token) => {
-      currentApnsToken = token.value;
+      currentNativeToken = { value: token.value, route };
       try {
-        await fetch("/api/push/apns-token", {
+        await fetch(route, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceToken: token.value }),
           credentials: "include",
         });
       } catch (err) {
-        console.warn("[push/apns] token upload failed:", err);
+        console.warn(`[push/${platformLabel}] token upload failed:`, err);
       }
     });
 
     PushNotifications.addListener("registrationError", (err) => {
-      console.warn("[push/apns] registration error:", err);
+      console.warn(`[push/${platformLabel}] registration error:`, err);
     });
 
-    // Register with APNs — fires the 'registration' listener with the device token.
+    // Register — fires the 'registration' listener with the device/registration token.
     await PushNotifications.register();
   } catch (err) {
     console.warn("[push/native] native push setup failed:", err);
   }
 }
 
-// ── Web-push VAPID (non-iOS browsers) ────────────────────────────────────────
+// ── Web-push VAPID (non-native browsers) ─────────────────────────────────────
 
 export async function subscribeToPush(userId: number): Promise<void> {
-  // Native iOS — use Capacitor plugin for APNs direct delivery with custom sounds
-  if (isNativeApp && isIOS) {
-    await subscribeNativeIOS(userId);
+  // Native iOS / Android — use Capacitor plugin for direct APNs / FCM delivery
+  // with custom GUBER sounds.
+  if (isNativeApp && (isIOS || isAndroid)) {
+    await subscribeNative(userId);
     return;
   }
 
@@ -144,19 +159,19 @@ async function sendSubscriptionToServer(sub: PushSubscription): Promise<void> {
 }
 
 export async function unsubscribeFromPush(): Promise<void> {
-  // Native iOS — remove APNs token from both the plugin and the server
-  if (isNativeApp && isIOS) {
+  // Native iOS / Android — remove the cached token from both the plugin and the server.
+  if (isNativeApp && (isIOS || isAndroid)) {
     try {
       const { PushNotifications } = await import("@capacitor/push-notifications");
       await PushNotifications.removeAllListeners();
-      if (currentApnsToken) {
-        await fetch("/api/push/apns-token", {
+      if (currentNativeToken) {
+        await fetch(currentNativeToken.route, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceToken: currentApnsToken }),
+          body: JSON.stringify({ deviceToken: currentNativeToken.value }),
           credentials: "include",
         });
-        currentApnsToken = null;
+        currentNativeToken = null;
       }
     } catch (err) {
       console.warn("[push/native] unsubscribe failed:", err);

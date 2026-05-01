@@ -1,7 +1,8 @@
 import webpush from "web-push";
 import apn from "@parse/node-apn";
+import admin from "firebase-admin";
 import { db } from "./db";
-import { pushSubscriptions, apnsDeviceTokens } from "@shared/schema";
+import { pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens } from "@shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
@@ -38,14 +39,52 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 const APNS_KEY_ID = process.env.APNS_KEY_ID || "";
 const APNS_TEAM_ID = process.env.APNS_TEAM_ID || "";
 const APNS_BUNDLE_ID = process.env.APNS_BUNDLE_ID || "com.guber.app";
-const APNS_PRIVATE_KEY = process.env.APNS_PRIVATE_KEY || "";
+const APNS_PRIVATE_KEY_RAW = process.env.APNS_PRIVATE_KEY || "";
+
+/**
+ * Normalize an APNs `.p8` private key into a strict PEM string that the
+ * jsonwebtoken library will accept as an ES256 signing key.
+ *
+ * Apple ships the key as a small PEM file:
+ *   -----BEGIN PRIVATE KEY-----
+ *   <base64 body, line-wrapped at 64 chars>
+ *   -----END PRIVATE KEY-----
+ *
+ * In practice users paste this into a single-line secret store, which
+ * loses the real newlines. We accept any of the following input shapes
+ * and rebuild a valid PEM:
+ *   • Already valid (real \n line breaks preserved)
+ *   • Escaped newlines (\\n)
+ *   • All-on-one-line with spaces between sections
+ *   • All-on-one-line with NO whitespace at all
+ */
+function normalizeApnsKey(raw: string): string {
+  if (!raw) return raw;
+  // First, convert any escaped \n into real newlines.
+  let s = raw.replace(/\\n/g, "\n").trim();
+  const begin = "-----BEGIN PRIVATE KEY-----";
+  const end = "-----END PRIVATE KEY-----";
+  if (!s.includes(begin) || !s.includes(end)) {
+    // Not a PEM — return as-is and let the apn library surface the error.
+    return s;
+  }
+  // Pull out the body between the markers, strip ALL whitespace (spaces,
+  // tabs, newlines, carriage returns), then re-wrap at 64 cols per RFC 7468.
+  const bodyStart = s.indexOf(begin) + begin.length;
+  const bodyEnd = s.indexOf(end);
+  const body = s.slice(bodyStart, bodyEnd).replace(/\s+/g, "");
+  const wrapped = body.match(/.{1,64}/g)?.join("\n") ?? body;
+  return `${begin}\n${wrapped}\n${end}\n`;
+}
+
+const APNS_PRIVATE_KEY = normalizeApnsKey(APNS_PRIVATE_KEY_RAW);
 
 let apnsProvider: apn.Provider | null = null;
 if (APNS_KEY_ID && APNS_TEAM_ID && APNS_PRIVATE_KEY) {
   try {
     apnsProvider = new apn.Provider({
       token: {
-        key: Buffer.from(APNS_PRIVATE_KEY.replace(/\\n/g, "\n")),
+        key: Buffer.from(APNS_PRIVATE_KEY),
         keyId: APNS_KEY_ID,
         teamId: APNS_TEAM_ID,
       },
@@ -58,6 +97,43 @@ if (APNS_KEY_ID && APNS_TEAM_ID && APNS_PRIVATE_KEY) {
 } else {
   console.warn(
     "[push/apns] APNs credentials missing (APNS_KEY_ID / APNS_TEAM_ID / APNS_PRIVATE_KEY) — native iOS push disabled"
+  );
+}
+
+// ── Firebase Cloud Messaging (native Android Capacitor) ───────────────────────
+//
+// On Android the @capacitor/push-notifications plugin registers with FCM and
+// returns a registration token. We send pushes to those tokens via the
+// firebase-admin SDK, which lets us include android.notification.sound for
+// the GUBER custom WAV files (must also be packaged in android/app/src/main/res/raw/).
+//
+// Required environment variable:
+//   FIREBASE_SERVICE_ACCOUNT  — full JSON contents of a Firebase service-account
+//                                key file (Project Settings → Service accounts →
+//                                "Generate new private key")
+
+const FIREBASE_SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT || "";
+
+let firebaseApp: admin.app.App | null = null;
+if (FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    const sa = JSON.parse(FIREBASE_SERVICE_ACCOUNT);
+    // Newlines inside the private_key field are commonly escaped as \n when
+    // pasted into single-line secret stores. Normalise them so the JWT signer
+    // gets a valid PEM.
+    if (typeof sa.private_key === "string") {
+      sa.private_key = sa.private_key.replace(/\\n/g, "\n");
+    }
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert(sa as admin.ServiceAccount),
+    });
+    console.log("[push/fcm] Firebase Admin configured — native Android push active");
+  } catch (e) {
+    console.warn("[push/fcm] Firebase Admin setup failed:", e);
+  }
+} else {
+  console.warn(
+    "[push/fcm] FIREBASE_SERVICE_ACCOUNT missing — native Android push disabled"
   );
 }
 
@@ -87,6 +163,68 @@ function apnsHeaders(endpoint: string): Record<string, string> {
     "apns-push-type": "alert",
     "apns-priority": "10",
   };
+}
+
+/** Send a notification to FCM registration tokens (native Android Capacitor path). */
+async function sendToFcmTokens(
+  tokens: string[],
+  payload: {
+    title: string;
+    body: string;
+    sound?: string;
+    url?: string;
+    tag?: string;
+  }
+): Promise<number> {
+  if (!firebaseApp || !tokens.length) return 0;
+
+  const messaging = admin.messaging(firebaseApp);
+
+  // Android sound is the resource name (no .wav extension) of a file in
+  // android/app/src/main/res/raw/. Channel "guber_default" is created by the
+  // native side via the Capacitor push plugin's default channel config.
+  const soundResource = (payload.sound || "guber_default.wav").replace(/\.wav$/i, "");
+
+  const message: admin.messaging.MulticastMessage = {
+    tokens,
+    notification: { title: payload.title, body: payload.body },
+    android: {
+      priority: "high",
+      notification: {
+        sound: soundResource,
+        channelId: "guber_default",
+        ...(payload.tag ? { tag: payload.tag } : {}),
+      },
+    },
+    data: {
+      url: payload.url || "/",
+      ...(payload.tag ? { tag: payload.tag } : {}),
+      ...(payload.sound ? { sound: payload.sound } : {}),
+    },
+  };
+
+  const result = await messaging.sendEachForMulticast(message);
+
+  // Clean up tokens that FCM no longer recognises.
+  await Promise.all(
+    result.responses.map(async (resp, idx) => {
+      if (resp.success) return;
+      const code = (resp.error as any)?.code as string | undefined;
+      if (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token" ||
+        code === "messaging/invalid-argument"
+      ) {
+        await db
+          .delete(fcmDeviceTokens)
+          .where(eq(fcmDeviceTokens.deviceToken, tokens[idx]));
+      } else if (code) {
+        console.warn(`[push/fcm] send failed (${code})`);
+      }
+    })
+  );
+
+  return result.successCount;
 }
 
 /** Send a notification directly to APNs device tokens (native iOS Capacitor path). */
@@ -140,8 +278,9 @@ export async function sendPushToUser(
     sound?: string;
     actions?: PushAction[];
   }
-): Promise<{ apnsSent: number; webPushSent: number; hasTokens: boolean }> {
+): Promise<{ apnsSent: number; fcmSent: number; webPushSent: number; hasTokens: boolean }> {
   let apnsSent = 0;
+  let fcmSent = 0;
   let webPushSent = 0;
 
   // ── 1. Native iOS path — APNs direct with custom sound ──────────────────
@@ -165,17 +304,37 @@ export async function sendPushToUser(
     apnsSent = nativeTokenRows.length;
   }
 
-  // ── 2. Web-push VAPID path — for non-iOS browsers ───────────────────────
+  // ── 2. Native Android path — FCM via firebase-admin ─────────────────────
+  const fcmTokenRows = await db
+    .select()
+    .from(fcmDeviceTokens)
+    .where(eq(fcmDeviceTokens.userId, userId));
+
+  if (fcmTokenRows.length) {
+    fcmSent = await sendToFcmTokens(
+      fcmTokenRows.map((r) => r.deviceToken),
+      {
+        title: payload.title,
+        body: payload.body,
+        sound: payload.sound || "guber_default.wav",
+        url: payload.url,
+        tag: payload.tag,
+      }
+    );
+  }
+
+  // ── 3. Web-push VAPID path — for non-native browsers ────────────────────
   // Always fetch subscriptions so hasTokens reflects registration, not send success.
   const subs = await db
     .select()
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.userId, userId));
 
-  const hasTokens = nativeTokenRows.length > 0 || subs.length > 0;
+  const hasTokens =
+    nativeTokenRows.length > 0 || fcmTokenRows.length > 0 || subs.length > 0;
 
   if (!vapidConfigured || !subs.length) {
-    return { apnsSent, webPushSent, hasTokens };
+    return { apnsSent, fcmSent, webPushSent, hasTokens };
   }
 
   const pushPayload = JSON.stringify({
@@ -269,6 +428,29 @@ export async function removeApnsToken(deviceToken: string, userId?: number): Pro
   await db.delete(apnsDeviceTokens).where(condition);
 }
 
+/** Save an FCM registration token received from the native Capacitor push plugin (Android). */
+export async function saveFcmToken(userId: number, deviceToken: string): Promise<void> {
+  await db
+    .insert(fcmDeviceTokens)
+    .values({ userId, deviceToken })
+    .onConflictDoUpdate({
+      target: fcmDeviceTokens.deviceToken,
+      set: { userId },
+    });
+}
+
+/**
+ * Remove an FCM registration token when the user unregisters or logs out.
+ * Same userId-scoping rules as removeApnsToken.
+ */
+export async function removeFcmToken(deviceToken: string, userId?: number): Promise<void> {
+  const condition =
+    userId !== undefined
+      ? and(eq(fcmDeviceTokens.deviceToken, deviceToken), eq(fcmDeviceTokens.userId, userId))
+      : eq(fcmDeviceTokens.deviceToken, deviceToken);
+  await db.delete(fcmDeviceTokens).where(condition);
+}
+
 export async function sendPushBroadcast(
   payload: { title: string; body: string; url?: string },
   audience: "all" | "og" | "non_og" | "trustbox" = "all"
@@ -317,7 +499,39 @@ export async function sendPushBroadcast(
     }
   }
 
-  // ── 2. Web-push VAPID path — for non-iOS browsers ───────────────────────
+  // ── 2. Native Android FCM path ──────────────────────────────────────────
+  if (firebaseApp) {
+    let fcmQuery = `
+      SELECT DISTINCT ON (fdt.user_id) fdt.device_token
+      FROM fcm_device_tokens fdt
+      JOIN users u ON u.id = fdt.user_id
+      WHERE u.role != 'admin'
+    `;
+    if (audience === "og") fcmQuery += ` AND u.day1_og = TRUE`;
+    if (audience === "non_og") fcmQuery += ` AND (u.day1_og = FALSE OR u.day1_og IS NULL)`;
+    if (audience === "trustbox") fcmQuery += ` AND u.trust_box_purchased = TRUE`;
+
+    const fcmResult = await db.execute(sql.raw(fcmQuery));
+    const fcmTokens = (fcmResult.rows as { device_token: string }[]).map((r) => r.device_token);
+
+    if (fcmTokens.length) {
+      // FCM multicast caps at 500 tokens per request.
+      const CHUNK = 500;
+      for (let i = 0; i < fcmTokens.length; i += CHUNK) {
+        const slice = fcmTokens.slice(i, i + CHUNK);
+        const successCount = await sendToFcmTokens(slice, {
+          title: payload.title,
+          body: payload.body,
+          sound: "guber_default.wav",
+          url: payload.url,
+        });
+        sent += successCount;
+        failed += slice.length - successCount;
+      }
+    }
+  }
+
+  // ── 3. Web-push VAPID path — for non-native browsers ────────────────────
   if (!vapidConfigured) return { sent, failed, total: sent + failed };
 
   let vapidQuery = `

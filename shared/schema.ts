@@ -771,6 +771,18 @@ export const apnsDeviceTokens = pgTable("apns_device_tokens", {
 
 export type ApnsDeviceToken = typeof apnsDeviceTokens.$inferSelect;
 
+// Firebase Cloud Messaging registration tokens for the native Android
+// Capacitor app. Stored separately from APNs tokens because the send path
+// differs (firebase-admin SDK vs node-apn) and tokens are not interchangeable.
+export const fcmDeviceTokens = pgTable("fcm_device_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  deviceToken: text("device_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type FcmDeviceToken = typeof fcmDeviceTokens.$inferSelect;
+
 export const businessAccounts = pgTable("business_accounts", {
   id: serial("id").primaryKey(),
   ownerUserId: integer("owner_user_id").notNull().unique(),

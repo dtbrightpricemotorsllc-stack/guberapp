@@ -9953,7 +9953,7 @@ YOUR BEHAVIOR:
     }
   });
 
-  const { saveSubscription, removeSubscription, saveApnsToken, removeApnsToken, VAPID_PUBLIC_KEY } = await import("./push");
+  const { saveSubscription, removeSubscription, saveApnsToken, removeApnsToken, saveFcmToken, removeFcmToken, VAPID_PUBLIC_KEY } = await import("./push");
 
   app.get("/api/push/vapid-public-key", (_req: Request, res: Response) => {
     if (!VAPID_PUBLIC_KEY) return res.status(503).json({ message: "Push not configured" });
@@ -9991,6 +9991,27 @@ YOUR BEHAVIOR:
   app.delete("/api/push/apns-token", requireAuth, async (req: Request, res: Response) => {
     const { deviceToken } = req.body;
     if (deviceToken) await removeApnsToken(deviceToken, req.session.userId!);
+    res.json({ ok: true });
+  });
+
+  // ── Native Android FCM token routes (Capacitor @capacitor/push-notifications) ─
+  // The plugin registers with Firebase Cloud Messaging on Android and emits the
+  // same `registration` event used for iOS, but with an FCM registration token
+  // instead of an APNs device token. We persist them in fcm_device_tokens so the
+  // server can deliver pushes via firebase-admin with custom GUBER channel sounds.
+
+  app.post("/api/push/fcm-token", requireAuth, async (req: Request, res: Response) => {
+    const { deviceToken } = req.body;
+    if (!deviceToken || typeof deviceToken !== "string") {
+      return res.status(400).json({ message: "deviceToken is required" });
+    }
+    await saveFcmToken(req.session.userId!, deviceToken);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/push/fcm-token", requireAuth, async (req: Request, res: Response) => {
+    const { deviceToken } = req.body;
+    if (deviceToken) await removeFcmToken(deviceToken, req.session.userId!);
     res.json({ ok: true });
   });
 
