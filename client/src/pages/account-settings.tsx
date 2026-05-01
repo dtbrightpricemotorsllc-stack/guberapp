@@ -704,8 +704,11 @@ export default function AccountSettings() {
                     <DialogHeader>
                       <DialogTitle className="text-destructive">Delete Account?</DialogTitle>
                       <DialogDescription className="space-y-2 pt-1">
-                        <span className="block font-semibold text-foreground">This action is permanent and cannot be undone.</span>
-                        <span className="block">All your jobs, reviews, verifications, and wallet history will be erased forever.</span>
+                        <span className="block font-semibold text-foreground">Your profile and login will be removed immediately.</span>
+                        <span className="block">Your name, photo, bio, location, and login credentials are wiped right away. You'll be signed out and unable to sign back in with this account.</span>
+                        <span className="block text-xs pt-2 text-muted-foreground" data-testid="text-retention-disclaimer">
+                          Some data may be retained for legal, safety, and fraud prevention purposes — including job history, payment records, device/IP logs, and verification records — for at least 90 days, or longer if required by law.
+                        </span>
                       </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2 pt-2">
@@ -720,7 +723,7 @@ export default function AccountSettings() {
                     <DialogHeader>
                       <DialogTitle className="text-destructive">Confirm Deletion</DialogTitle>
                       <DialogDescription className="pt-1">
-                        Type your email address <strong className="text-foreground">{user?.email}</strong> below to confirm you want to permanently delete your account.
+                        Type your email address <strong className="text-foreground">{user?.email}</strong> below to confirm you want to delete your account.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="py-2">

@@ -10,6 +10,7 @@ import {
   workerBusinessProjections, backgroundCheckEligibility, billingEvents, legalAcceptances,
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
+  pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
@@ -37,6 +38,12 @@ export interface IStorage {
   createUser(user: any): Promise<User>;
   updateUser(id: number, data: Partial<User>): Promise<User | undefined>;
   deleteUser(id: number): Promise<void>;
+  /**
+   * Soft-delete a user account: anonymize public-facing fields, revoke login,
+   * and set the 90-day retention purge timestamp. Job history, payment records,
+   * audit logs, and verification records are intentionally retained.
+   */
+  softDeleteUser(id: number, opts?: { reason?: string; retentionDays?: number }): Promise<void>;
   getAllUsers(): Promise<User[]>;
 
   getJobs(onlyPublished?: boolean): Promise<Job[]>;
@@ -299,6 +306,72 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: number): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
+  }
+
+  async softDeleteUser(
+    id: number,
+    opts?: { reason?: string; retentionDays?: number }
+  ): Promise<void> {
+    const retentionDays = opts?.retentionDays ?? 90;
+    const now = new Date();
+    const purgeAt = new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000);
+
+    // Anonymize unique fields so (a) the original email/username can be reused
+    // for re-registration, and (b) every login lookup-by-credential fails
+    // naturally without further code paths needing soft-delete awareness.
+    const tombstone = `deleted_${id}_${now.getTime()}`;
+
+    await db
+      .update(users)
+      .set({
+        // Tombstone unique fields
+        email: `${tombstone}@deleted.local`,
+        username: tombstone,
+        publicUsername: null,
+        guberId: null,
+        googleSub: null,
+        referralCode: null,
+        // Strip credentials — also blocks any in-flight session that bypasses
+        // the requireAuth deletedAt gate (defence in depth).
+        password: "",
+        // Clear public-facing profile data
+        fullName: "[deleted user]",
+        profilePhoto: null,
+        userBio: null,
+        skills: null,
+        capabilitiesDescription: null,
+        zipcode: null,
+        lat: null,
+        lng: null,
+        isAvailable: false,
+        cashDropBrandName: null,
+        cashDropBrandLogo: null,
+        cashDropLogo2: null,
+        // Revoke access defensively (covers any code path that checks
+        // suspended/banned but not deletedAt)
+        suspended: true,
+        // Mark soft-deletion + retention window
+        deletedAt: now,
+        deletionScheduledPurgeAt: purgeAt,
+        deletionReason: opts?.reason ?? null,
+      })
+      .where(eq(users.id, id));
+
+    // Cascade-delete privacy-sensitive push registration tokens so the user
+    // stops receiving notifications immediately. Job history, payments,
+    // audit logs, and verification records are intentionally NOT touched —
+    // they're retained for legal/safety/fraud-prevention purposes.
+    await Promise.all([
+      db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id)),
+      db.delete(apnsDeviceTokens).where(eq(apnsDeviceTokens.userId, id)),
+      db.delete(fcmDeviceTokens).where(eq(fcmDeviceTokens.userId, id)),
+      // Hide the worker from business talent search immediately. The
+      // projection row itself is retained (it's a derived stat snapshot,
+      // useful for audit), but flipping visibility prevents discovery.
+      db.update(workerBusinessProjections)
+        .set({ businessVisibilityStatus: "hidden" })
+        .where(eq(workerBusinessProjections.userId, id)),
+    ]);
   }
 
   async getAllUsers(): Promise<User[]> {

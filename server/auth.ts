@@ -162,6 +162,10 @@ export function handleLogin(storage: AuthStorage, deps: LoginDeps = {}) {
 
       let user = await storage.getUserByEmail(email);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
+      // Deleted accounts: anonymisation already breaks the email lookup above,
+      // but check explicitly in case an old credential reaches the legacy
+      // address row, and to surface a clear error rather than "Invalid credentials".
+      if ((user as any).deletedAt) return res.status(401).json({ message: "This account has been deleted." });
       if (user.banned) return res.status(403).json({ message: "Account permanently banned" });
       if (user.suspended) return res.status(403).json({ message: "Account suspended" });
 
@@ -419,6 +423,13 @@ export function handleMe(storage: AuthStorage) {
       return res.status(401).json({ message: "Not authenticated" });
     const user = await storage.getUser(req.session.userId);
     if (!user) return res.status(401).json({ message: "User not found" });
+    // Defensive: the global soft-delete gate already strips session.userId
+    // for deleted users, but check explicitly so this endpoint never returns
+    // a tombstone profile even if the gate is ever moved/disabled.
+    if ((user as any).deletedAt) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "Account no longer active" });
+    }
     res.json(sanitizeUser(user));
   };
 }

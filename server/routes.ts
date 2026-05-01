@@ -682,7 +682,40 @@ export async function registerRoutes(
     next();
   });
 
+  // Global soft-delete gate: runs after session + bearer hydration so EVERY
+  // authenticated route — including ones that use raw `if (!req.session.userId)`
+  // checks instead of requireAuth — is protected. If the user behind the
+  // current session/JWT has been soft-deleted we strip the session id so all
+  // downstream auth checks naturally fail with 401, and destroy the cookie
+  // session. We also cache the loaded user on req so duplicate lookups in
+  // requireAuth/handleMe can be skipped.
+  app.use(async (req: Request, _res: Response, next: Function) => {
+    if (req.session.userId) {
+      try {
+        const u = await storage.getUser(req.session.userId);
+        if (!u || (u as any).deletedAt) {
+          req.session.userId = undefined;
+          if (typeof (req.session as any).destroy === "function") {
+            req.session.destroy(() => {});
+          }
+        } else {
+          (req as any).currentUser = u;
+        }
+      } catch (err) {
+        // Fail closed on DB errors — clear the session so we can never
+        // accidentally honor a stale id for a soft-deleted account during
+        // a transient outage. The user will get 401s and can retry.
+        console.error("[soft-delete-gate] user lookup failed; clearing session:", err);
+        req.session.userId = undefined;
+      }
+    }
+    next();
+  });
+
   function requireAuth(req: Request, res: Response, next: Function) {
+    // The global soft-delete gate above has already stripped session.userId
+    // for any deleted account, so a missing userId here is the only check
+    // we need.
     if (!req.session.userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -1709,6 +1742,17 @@ export async function registerRoutes(
     let count = 0;
     for (const u of allUsers) {
       if (u.accountType === "business") continue;
+      // Skip soft-deleted users — and force any existing projection row hidden
+      // so a previously-published worker disappears from talent search even
+      // if their account was deleted between rebuild runs.
+      if ((u as any).deletedAt) {
+        await storage.upsertWorkerProjection({
+          userId: u.id,
+          businessVisibilityStatus: "hidden",
+          availabilityStatus: "unavailable",
+        } as any);
+        continue;
+      }
       if ((u.jobsCompleted || 0) < 1 && !u.isAvailable) continue;
 
       const reviews = await storage.getReviewsByUser(u.id);
@@ -1892,11 +1936,20 @@ export async function registerRoutes(
     if (!user) {
       user = await storage.getUserByEmail(googleUser.email);
       if (user) {
+        // Defensive: refuse to re-link a soft-deleted account via Google. The
+        // anonymised tombstone email also won't match googleUser.email so this
+        // branch is normally unreachable, but check explicitly for clarity.
+        if ((user as any).deletedAt) {
+          throw new Error("This account has been deleted.");
+        }
         console.log(`[GUBER auth] Google upsert — linking existing email account (userId=${user.id})`);
         await storage.updateUser(user.id, { googleSub: googleUser.sub, authProvider: "google" });
         user = (await storage.getUser(user.id))!;
       }
     } else {
+      if ((user as any).deletedAt) {
+        throw new Error("This account has been deleted.");
+      }
       console.log(`[GUBER auth] Google upsert — returning user (userId=${user.id})`);
     }
 
@@ -2462,6 +2515,9 @@ export async function registerRoutes(
   app.get("/api/users/:id", requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(parseInt(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
+    // Treat soft-deleted users as 404 — their profile/login data has been
+    // wiped and they should not be discoverable through public lookups.
+    if ((user as any).deletedAt) return res.status(404).json({ message: "User not found" });
 
     // Block non-admins from viewing admin profiles
     const requester = await storage.getUser(req.session.userId!);
@@ -5019,9 +5075,27 @@ export async function registerRoutes(
 
   app.delete("/api/users/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
-    if (req.session.userId !== id) return res.status(403).json({ message: "Can only delete your own account" });
-    await storage.deleteUser(id);
-    req.session.destroy(() => { res.json({ message: "Account deleted" }); });
+    if (req.session.userId !== id) {
+      return res.status(403).json({ message: "Can only delete your own account" });
+    }
+    // Soft-delete with 90-day retention window (per data-retention policy).
+    // Profile, login, and public-facing data are removed/anonymised right now;
+    // job history, payment records, device/IP audit logs, and verification
+    // records are retained for safety, fraud-prevention, and legal compliance.
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    await storage.softDeleteUser(id, { reason, retentionDays: 90 });
+    await storage.createAuditLog({
+      userId: id,
+      action: "account_self_deleted",
+      details: `User initiated soft-delete; retention window 90 days${reason ? ` — reason: ${reason}` : ""}`,
+    });
+    req.session.destroy(() => {
+      res.json({
+        message: "Account deleted",
+        retentionDays: 90,
+        disclaimer: "Some data may be retained for legal, safety, and fraud prevention purposes.",
+      });
+    });
   });
 
   app.get("/api/user/verification-status", requireAuth, async (req: Request, res: Response) => {
@@ -7823,6 +7897,13 @@ export async function registerRoutes(
         const userId = parseInt(stripeSession.metadata.userId);
 
         const existing = await storage.getUser(userId);
+        // Refuse to re-establish a session for, or grant perks to, a deleted
+        // account — this endpoint is unauthenticated and accepts a userId
+        // straight from Stripe metadata, so it's the one path that can wake
+        // up a deleted account if not gated here.
+        if (!existing || (existing as any).deletedAt) {
+          return res.status(404).json({ message: "Account no longer active" });
+        }
         await storage.updateUser(userId, {
           day1OG: true,
           aiOrNotCredits: (existing?.aiOrNotCredits || 0) + (existing?.day1OG ? 0 : 5),
@@ -10177,6 +10258,7 @@ YOUR BEHAVIOR:
       const helperId = parseInt(req.params.id);
       const helper = await storage.getUser(helperId);
       if (!helper) return res.status(404).json({ error: "User not found" });
+      if ((helper as any).deletedAt) return res.status(404).json({ error: "User not found" });
 
       const allJobs = await db.select().from(jobsTable).where(eq(jobsTable.assignedHelperId, helperId));
       const completed = allJobs.filter((j) => ["completion_submitted", "completed_paid"].includes(j.status)).length;
@@ -10989,6 +11071,7 @@ YOUR BEHAVIOR:
       const userId = parseInt(req.params.id);
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+      if ((user as any).deletedAt) return res.status(404).json({ message: "User not found" });
 
       const feeConfig = await getActiveFeeConfig();
       const trustInfo = getTrustInfo(user, feeConfig);
@@ -12757,6 +12840,9 @@ YOUR BEHAVIOR:
     try {
       const userId = parseInt(req.params.id);
       if (isNaN(userId)) return res.status(400).json({ message: "Invalid user id" });
+      const target = await storage.getUser(userId);
+      if (!target) return res.status(404).json({ message: "User not found" });
+      if ((target as any).deletedAt) return res.status(404).json({ message: "User not found" });
       const certs = await storage.getApprovedQualifications(userId);
       // Public endpoint — only expose safe credential-card fields. Never leak
       // adminNotes, document URLs, timestamps, or aiExtracted internals.

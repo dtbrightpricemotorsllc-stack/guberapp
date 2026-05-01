@@ -16,7 +16,7 @@ export default function DeleteAccount() {
           </div>
           <h1 className="text-2xl font-bold font-display tracking-tight" data-testid="heading-delete-account">Delete Your Account</h1>
         </div>
-        <p className="text-muted-foreground text-sm mb-10">Learn how to permanently delete your GUBER account and associated data.</p>
+        <p className="text-muted-foreground text-sm mb-10">Learn how to delete your GUBER account, what's removed, and what we're required to keep.</p>
 
         <section className="space-y-8">
           <div>
@@ -25,31 +25,42 @@ export default function DeleteAccount() {
               <li>Open the GUBER app and sign in to your account.</li>
               <li>Tap your <strong className="text-foreground">Profile</strong> icon, then go to <strong className="text-foreground">Account Settings</strong>.</li>
               <li>Scroll to the bottom and tap <strong className="text-foreground">"Delete Account"</strong>.</li>
-              <li>Confirm the deletion when prompted. Your account will be permanently removed.</li>
+              <li>Confirm by typing your email address. Your profile and login are removed immediately and you'll be signed out.</li>
             </ol>
           </div>
 
           <div>
-            <h2 className="text-lg font-semibold font-display mb-3" data-testid="heading-what-gets-deleted">What Gets Deleted</h2>
-            <p className="text-sm text-muted-foreground mb-3">When you delete your account, the following data is permanently removed:</p>
+            <h2 className="text-lg font-semibold font-display mb-3" data-testid="heading-what-gets-deleted">What Gets Removed Immediately</h2>
+            <p className="text-sm text-muted-foreground mb-3">The following profile and login data is wiped or anonymized as soon as you confirm:</p>
             <ul className="space-y-1.5 text-sm text-muted-foreground">
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Your profile information (name, email, photo, bio)</li>
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Job history and postings</li>
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Reviews and ratings</li>
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Wallet and transaction history</li>
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Notification preferences and push subscriptions</li>
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Verification documents and trust data</li>
-              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Business account and subscription data (if applicable)</li>
+              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Your name, email, profile photo, bio, and skills</li>
+              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Login credentials (password and Google sign-in link) — you can no longer sign in</li>
+              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Public username and any public-facing profile data</li>
+              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Saved location, ZIP code, and availability status</li>
+              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Push notification subscriptions on every device (web, iOS, Android)</li>
+              <li className="flex items-start gap-2"><span className="text-red-500 mt-0.5">•</span> Cash drop host branding (if applicable)</li>
             </ul>
           </div>
 
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/30 border border-border/50">
+          <div>
+            <h2 className="text-lg font-semibold font-display mb-3" data-testid="heading-what-we-retain">What We Retain (and Why)</h2>
+            <p className="text-sm text-muted-foreground mb-3">Some records are kept for at least 90 days — or longer if required by law — for safety, fraud prevention, and legal/financial compliance:</p>
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
+              <li className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">•</span> Job history (postings, assignments, completion status)</li>
+              <li className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">•</span> Payment records and wallet transactions (required by tax/financial law)</li>
+              <li className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">•</span> Device and IP logs (required for fraud prevention and dispute resolution)</li>
+              <li className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">•</span> Verification records (ID, selfie, credential check outcomes — not the source documents)</li>
+              <li className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">•</span> Audit logs of any safety, dispute, or moderation actions</li>
+            </ul>
+            <p className="text-xs text-muted-foreground mt-3">These records are linked to an anonymized internal ID — your name, email, and profile data are no longer attached to them.</p>
+          </div>
+
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/30 border border-border/50" data-testid="callout-retention">
             <Shield className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
             <div>
               <h3 className="text-sm font-semibold mb-1">Data Retention</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Account deletion is permanent and cannot be undone. All personal data is removed immediately upon deletion. 
-                Anonymized, non-identifiable transaction records may be retained for legal and financial compliance purposes for up to 90 days.
+                Some data may be retained for legal, safety, and fraud prevention purposes. Retained records are held for a minimum of 90 days, and longer where required by applicable law (for example, tax/financial regulations or active dispute investigations).
               </p>
             </div>
           </div>

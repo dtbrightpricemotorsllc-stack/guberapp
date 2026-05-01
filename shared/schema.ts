@@ -137,6 +137,17 @@ export const users = pgTable("users", {
   // disclaimer (one-time, app-wide). Existing per-job and per-category
   // waivers are recorded on `assignments` instead.
   liabilityDisclaimerAcceptedAt: timestamp("liability_disclaimer_accepted_at"),
+
+  // ── Soft-delete / data-retention fields ────────────────────────────────────
+  // When a user requests account deletion we set deletedAt + a 90-day purge
+  // window instead of hard-deleting the row. This preserves job history,
+  // payment records, device/IP audit logs, and verification records for the
+  // retention period required by safety, fraud-prevention, and legal/finance
+  // compliance. The purge cron (future) deletes rows whose purge timestamp
+  // has elapsed AND have no outstanding dispute / payment hold.
+  deletedAt: timestamp("deleted_at"),
+  deletionScheduledPurgeAt: timestamp("deletion_scheduled_purge_at"),
+  deletionReason: text("deletion_reason"),
 });
 
 export const categories = pgTable("categories", {
