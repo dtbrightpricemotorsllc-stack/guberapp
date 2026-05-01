@@ -14,5 +14,5 @@ project(':capacitor-preferences').projectDir = new File('../node_modules/@capaci
 include ':capacitor-biometric-auth'
 project(':capacitor-biometric-auth').projectDir = new File('../node_modules/@aparajita/capacitor-biometric-auth/android')
 
-include ':capacitor-google-auth'
-project(':capacitor-google-auth').projectDir = new File('../node_modules/@codetrix-studio/capacitor-google-auth/android')
+include ':capacitor-social-login'
+project(':capacitor-social-login').projectDir = new File('../node_modules/@capgo/capacitor-social-login/android')

@@ -17,19 +17,21 @@ const config: CapacitorConfig = {
       // Without this the notification is silent while the app is open.
       presentationOptions: ['alert', 'badge', 'sound'],
     },
-    GoogleAuth: {
-      scopes: ['profile', 'email'],
-      // The Android plugin (codetrix-studio/capacitor-google-auth) reads `clientId`
-      // (or `androidClientId`) — NOT `serverClientId`. The value must be the WEB
-      // Application OAuth Client ID from Google Cloud Console (same project that owns
-      // the Android OAuth client with this APK's package + SHA-1). Setting both keys
-      // covers the plugin's lookup chain and any future plugin version that prefers
-      // `serverClientId`.
-      // Set VITE_GOOGLE_WEB_CLIENT_ID in Replit Secrets and the Android build CI env,
-      // then run `npx cap sync android` before building the APK.
-      clientId: process.env.VITE_GOOGLE_WEB_CLIENT_ID || '',
-      serverClientId: process.env.VITE_GOOGLE_WEB_CLIENT_ID || '',
-      forceCodeForRefreshToken: true,
+    // @capgo/capacitor-social-login — replaces dead codetrix-studio plugin
+    // (which only supported Capacitor ≤6). Runtime init is in
+    // client/src/lib/native-google-sign-in.ts via SocialLogin.initialize().
+    // The webClientId is sourced from VITE_GOOGLE_WEB_CLIENT_ID, which must be
+    // set in BOTH Replit Secrets and the GitHub Actions env so it's baked into
+    // the production JS bundle.
+    SocialLogin: {
+      // Only bundle the Google provider — avoids pulling in Facebook/Twitter
+      // SDKs we don't use, keeping APK size and review surface smaller.
+      providers: {
+        google: true,
+        facebook: false,
+        apple: false,
+        twitter: false,
+      },
     },
   },
   ios: {
