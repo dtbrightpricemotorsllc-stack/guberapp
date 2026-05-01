@@ -29,8 +29,11 @@ export type PushStatus =
   | "default";           // permission not yet asked
 
 export function getPushStatus(): PushStatus {
-  // Native iOS Capacitor app — permissions handled natively
-  if (isNativeApp && isIOS) {
+  // Native iOS / Android Capacitor app — permissions handled natively by the
+  // @capacitor/push-notifications plugin, so we always report "default" so that
+  // the UI prompt flows trigger subscribeNative() instead of bailing out as
+  // "unsupported" (the WebView lacks PushManager).
+  if (isNativeApp && (isIOS || isAndroid)) {
     return "default";
   }
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {

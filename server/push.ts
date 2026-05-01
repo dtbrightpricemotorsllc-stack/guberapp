@@ -210,10 +210,12 @@ async function sendToFcmTokens(
     result.responses.map(async (resp, idx) => {
       if (resp.success) return;
       const code = (resp.error as any)?.code as string | undefined;
+      // Only delete on token-specific failure codes. messaging/invalid-argument
+      // is intentionally NOT treated as a token-invalid signal because it can
+      // also fire for malformed payloads, which would wrongly evict valid tokens.
       if (
         code === "messaging/registration-token-not-registered" ||
-        code === "messaging/invalid-registration-token" ||
-        code === "messaging/invalid-argument"
+        code === "messaging/invalid-registration-token"
       ) {
         await db
           .delete(fcmDeviceTokens)
@@ -370,7 +372,7 @@ export async function sendPushToUser(
     })
   );
 
-  return { apnsSent, webPushSent, hasTokens };
+  return { apnsSent, fcmSent, webPushSent, hasTokens };
 }
 
 export async function saveSubscription(
