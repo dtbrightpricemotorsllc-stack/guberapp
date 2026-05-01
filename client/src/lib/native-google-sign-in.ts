@@ -26,6 +26,24 @@ function maskClientId(raw: string): { clientIdPrefix?: string; clientIdLength?: 
   };
 }
 
+/**
+ * Fire-and-forget telemetry. Lets us see what the native plugin actually
+ * returns on a real device by reading server logs — needed because adb
+ * logcat isn't available to most testers. Never throws.
+ */
+function trace(stage: string, payload: Record<string, unknown>): void {
+  try {
+    fetch("/api/debug/sign-in-trace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage, ...payload, t: Date.now() }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // never let telemetry break the flow
+  }
+}
+
 export async function nativeGoogleSignIn(
   _opts?: { authPathBase?: string },
 ): Promise<NativeGoogleSignInResult> {
@@ -35,6 +53,7 @@ export async function nativeGoogleSignIn(
   // Surfaced in adb logcat under "chromium" / "Capacitor/Console" so a tester
   // can confirm the sync actually baked a clientId into the build.
   console.info("[google/native] init", { ...diag });
+  trace("entry", { ...diag });
 
   // Hard-fail before invoking the plugin if the build was synced without the
   // serverClientId — otherwise the plugin throws an opaque DEVELOPER_ERROR
@@ -45,6 +64,7 @@ export async function nativeGoogleSignIn(
       "without the Web OAuth client ID. Set it in your CI environment and run " +
       "`npx cap sync android` again before rebuilding.",
     );
+    trace("misconfigured_no_client_id", { ...diag });
     return {
       ok: false,
       reason: "misconfigured",
@@ -59,9 +79,11 @@ export async function nativeGoogleSignIn(
       scopes: ["profile", "email"],
       grantOfflineAccess: true,
     });
+    trace("plugin_initialized", { ...diag });
 
     const googleUser = await GoogleAuth.signIn();
     const idToken = googleUser.authentication?.idToken;
+    trace("signin_returned", { ...diag, hasIdToken: !!idToken });
 
     if (!idToken) {
       console.warn("[google/native] signIn returned no idToken", { ...diag });
@@ -91,7 +113,9 @@ export async function nativeGoogleSignIn(
   } catch (err: any) {
     const msg: string = err?.message || String(err);
     const code: string = err?.code != null ? String(err.code) : "";
-    console.warn("[google/native] signIn failed", { msg, code, ...diag });
+    const errName: string = err?.name || "";
+    console.warn("[google/native] signIn failed", { msg, code, errName, ...diag });
+    trace("signin_threw", { msg: msg.slice(0, 300), code, errName, ...diag });
 
     // Plugin truly missing from the build (web/PWA, or the Android Java side
     // never registered). Only this case is allowed to fall back to browser.

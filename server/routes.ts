@@ -2264,6 +2264,23 @@ export async function registerRoutes(
     }),
   );
 
+  // Diagnostic telemetry from the native client. Fire-and-forget — only
+  // surfaces in `fetch_deployment_logs` so we can see what error the codetrix
+  // plugin actually threw on a real device when the user reports sign-in
+  // falling back to the in-app browser. Body is intentionally permissive.
+  app.post("/api/debug/sign-in-trace", (req: Request, res: Response) => {
+    try {
+      const ua = String(req.headers["user-agent"] || "").slice(0, 160);
+      const body = req.body || {};
+      // Truncate to avoid log bloat on misuse.
+      const safe = JSON.stringify(body).slice(0, 800);
+      console.log(`[sign-in-trace] ua="${ua}" body=${safe}`);
+    } catch {
+      // ignore — best-effort diagnostic
+    }
+    res.status(204).end();
+  });
+
   // Deep link support for iOS Universal Links and Android App Links
   app.get("/.well-known/apple-app-site-association", (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "application/json");
