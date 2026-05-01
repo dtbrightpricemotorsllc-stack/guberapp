@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 // ─── 3-state permission tracking ─────────────────────────────────────────────
 
 const ALERT_STATUS_KEY = "guber_alert_status";
+const ALERT_MODAL_AUTOSHOWN_KEY = "guber_alert_modal_autoshown";
 export type AlertStatus = "never_asked" | "declined" | "granted";
 
 export function getAlertStatus(): AlertStatus {
@@ -15,6 +16,17 @@ export function getAlertStatus(): AlertStatus {
 
 export function setAlertStatus(status: AlertStatus): void {
   localStorage.setItem(ALERT_STATUS_KEY, status);
+}
+
+/** Has the auto-popup modal already been shown on a previous launch? */
+export function hasAutoShownAlertModal(): boolean {
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem(ALERT_MODAL_AUTOSHOWN_KEY) === "true";
+}
+
+/** Mark the auto-popup modal as shown so it never auto-pops again. */
+export function markAlertModalAutoShown(): void {
+  localStorage.setItem(ALERT_MODAL_AUTOSHOWN_KEY, "true");
 }
 
 /** True if we should prompt — covers both never_asked and declined */

@@ -23,6 +23,7 @@ import { buildReferralShareText } from "@/lib/referral";
 import {
   AlertPromptModal, AlertActionPrompt, MissedEventBanner,
   getAlertStatus, setAlertStatus, shouldShowAlertPrompt,
+  hasAutoShownAlertModal, markAlertModalAutoShown,
 } from "@/components/alert-prompt-modal";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 
@@ -306,14 +307,20 @@ export default function Dashboard() {
     localStorage.setItem("guber_mode", mode);
   }, [mode]);
 
-  // First-load prompt — show immediately when status="never_asked" and push not granted
+  // First-load prompt — show ONCE ever (effectively after signup), never on
+  // subsequent launches. Even if the user closes the app without interacting,
+  // the auto-shown flag is set so the modal won't pop up again on relaunch.
+  // Banners (action prompt, missed-event) can still appear contextually.
   useEffect(() => {
     if (!user) return;
     if (!shouldShowAlertPrompt()) return;
     const alertStatus = getAlertStatus();
-    if (alertStatus === "never_asked") {
+    if (alertStatus === "never_asked" && !hasAutoShownAlertModal()) {
       // Show full modal immediately (short render delay so page is visible first)
-      const t = setTimeout(() => setShowAlertModal(true), 400);
+      const t = setTimeout(() => {
+        setShowAlertModal(true);
+        markAlertModalAutoShown();
+      }, 400);
       return () => clearTimeout(t);
     }
     // status === "declined": check for missed notifications and show missed event banner
