@@ -81,7 +81,11 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
   const isAdmin = user?.role === "admin";
 
   useEffect(() => {
-    if (user?.id) subscribeToPush(user.id).catch(() => {});
+    // On login, only re-register the push token if permission is already
+    // granted. Never trigger the OS permission dialog from this auto-effect —
+    // Apple Guideline 4.5.4 expects a user-initiated, contextual ask. The
+    // dashboard / browse-jobs in-app prompts handle the actual ask.
+    if (user?.id) subscribeToPush(user.id, { promptIfNeeded: false }).catch(() => {});
   }, [user?.id]);
 
   const tapCountRef = useRef(0);

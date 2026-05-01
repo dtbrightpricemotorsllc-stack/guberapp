@@ -57,5 +57,7 @@
         <string>GUBER saves job proof photos to your library.</string>
         <key>NSMicrophoneUsageDescription</key>
         <string>GUBER needs microphone access to record video proof for job completion.</string>
+        <key>ITSAppUsesNonExemptEncryption</key>
+        <false/>
 </dict>
 </plist>

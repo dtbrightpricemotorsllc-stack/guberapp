@@ -68,7 +68,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
  * This is the only delivery path that supports custom GUBER sounds on native;
  * the web-push VAPID gateway strips aps.sound on iOS Safari.
  */
-async function subscribeNative(_userId: number): Promise<void> {
+async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolean }): Promise<void> {
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
@@ -77,9 +77,19 @@ async function subscribeNative(_userId: number): Promise<void> {
       : "/api/push/fcm-token";
     const platformLabel = isIOS ? "apns" : "fcm";
 
-    // Request permission
-    const { receive } = await PushNotifications.requestPermissions();
-    if (receive !== "granted") return;
+    // Apple Guideline 4.5.4 / Android 13 POST_NOTIFICATIONS: never trigger the
+    // OS permission dialog from a non-user-initiated path. Check current state
+    // first; if the user hasn't been asked yet ("prompt") and this call is the
+    // automatic on-login subscriber, bail out quietly. The contextual in-app
+    // prompts (dashboard / browse-jobs) call us with promptIfNeeded:true after
+    // explaining why notifications are useful, which then drives the OS dialog.
+    const current = await PushNotifications.checkPermissions();
+    if (current.receive === "denied") return;
+    if (current.receive !== "granted") {
+      if (opts?.promptIfNeeded === false) return;
+      const { receive } = await PushNotifications.requestPermissions();
+      if (receive !== "granted") return;
+    }
 
     // Attach listeners BEFORE calling register() so the token event is never missed.
     PushNotifications.addListener("registration", async (token) => {
@@ -109,11 +119,11 @@ async function subscribeNative(_userId: number): Promise<void> {
 
 // ── Web-push VAPID (non-native browsers) ─────────────────────────────────────
 
-export async function subscribeToPush(userId: number): Promise<void> {
+export async function subscribeToPush(userId: number, opts?: { promptIfNeeded?: boolean }): Promise<void> {
   // Native iOS / Android — use Capacitor plugin for direct APNs / FCM delivery
   // with custom GUBER sounds.
   if (isNativeApp && (isIOS || isAndroid)) {
-    await subscribeNative(userId);
+    await subscribeNative(userId, opts);
     return;
   }
 
