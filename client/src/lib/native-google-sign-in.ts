@@ -210,10 +210,44 @@ export async function browserGoogleSignIn(opts?: {
       resolve(result);
     };
 
+    // Shared single-poll helper. Returns true if a token was found and the
+    // success path was taken (so the caller knows finish() has been called).
+    const consumeTokenIfReady = async (
+      whence: "interval" | "browser_close" | "timeout",
+      attempts: number,
+    ): Promise<boolean> => {
+      if (resolved) return true; // already finished — never touch state again
+      try {
+        const res = await fetch(`/api/auth/google/poll?key=${encodeURIComponent(pollKey)}`);
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (!data.token) return false;
+        if (resolved) return true; // raced with another resolution; do nothing
+        trace("browser_poll_token_received", { attempts, whence });
+        opts?.onPhaseChange?.("completing");
+        await setToken(data.token);
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        await Browser.close().catch(() => {});
+        finish({ ok: true, accountType: data.user?.accountType });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     (async () => {
       try {
-        browserListener = await Browser.addListener("browserFinished", () => {
-          finish({ ok: false, reason: "cancelled" });
+        browserListener = await Browser.addListener("browserFinished", async () => {
+          // Race-fix: when the user closes the browser tab right after Google
+          // signs them in, there's a ~1s window where the token IS waiting on
+          // the server but the next scheduled poll hasn't fired yet. Do a
+          // final check before declaring cancellation — otherwise a successful
+          // sign-in looks like a cancel and the overlay sticks.
+          trace("browser_closed_event", {});
+          const consumed = await consumeTokenIfReady("browser_close", 0);
+          if (!consumed && !resolved) {
+            finish({ ok: false, reason: "cancelled" });
+          }
         });
 
         opts?.onPhaseChange?.("browser_open");
@@ -222,34 +256,19 @@ export async function browserGoogleSignIn(opts?: {
 
         let attempts = 0;
         pollInterval = setInterval(async () => {
+          if (resolved) return;
           attempts++;
           if (attempts > 200) {
             trace("browser_poll_timeout", { attempts });
             await Browser.close().catch(() => {});
-            finish({ ok: false, reason: "cancelled" });
+            if (!resolved) finish({ ok: false, reason: "cancelled" });
             return;
           }
-          try {
-            const res = await fetch(`/api/auth/google/poll?key=${encodeURIComponent(pollKey)}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (data.token) {
-                trace("browser_poll_token_received", { attempts });
-                opts?.onPhaseChange?.("completing");
-                await setToken(data.token);
-                queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-                if (browserListener) { browserListener.remove(); browserListener = null; }
-                await Browser.close().catch(() => {});
-                finish({ ok: true, accountType: data.user?.accountType });
-              }
-            }
-          } catch {
-            // network blip — keep polling
-          }
+          await consumeTokenIfReady("interval", attempts);
         }, 1500);
       } catch (err: any) {
         trace("browser_threw", { msg: String(err?.message || err).slice(0, 300) });
-        finish({ ok: false, reason: "error", message: err?.message || String(err) });
+        if (!resolved) finish({ ok: false, reason: "error", message: err?.message || String(err) });
       }
     })();
   });
