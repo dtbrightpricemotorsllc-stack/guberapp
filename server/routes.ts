@@ -2179,14 +2179,17 @@ export async function registerRoutes(
     body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top,0) 24px env(safe-area-inset-bottom,0)}
     .glow-a{position:fixed;top:50%;left:50%;width:600px;height:600px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(0,224,124,0.08),transparent 65%);pointer-events:none}
     .glow-b{position:fixed;bottom:18%;right:8%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,0.05),transparent 65%);pointer-events:none}
-    .card{position:relative;z-index:1;max-width:320px;text-align:center}
+    .card{position:relative;z-index:1;max-width:320px;text-align:center;width:100%}
     .brand{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-weight:800;letter-spacing:.18em;font-size:30px;color:#fff;margin:0 0 28px;text-transform:uppercase}
     .brand span{color:#00e07c}
     .check{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:rgba(0,224,124,0.12);border:1px solid rgba(0,224,124,0.35);margin-bottom:20px}
     .check svg{width:28px;height:28px;color:#00e07c}
     h1{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:18px;font-weight:600;letter-spacing:.05em;margin:0 0 10px;color:#fff}
-    p{font-size:13px;color:#9a9a9a;margin:0 0 24px;line-height:1.5;letter-spacing:.02em}
-    .spinner{width:18px;height:18px;border:2px solid rgba(0,224,124,0.2);border-top-color:rgba(0,224,124,0.6);border-radius:50%;margin:0 auto;animation:spin 0.9s linear infinite}
+    p{font-size:13px;color:#9a9a9a;margin:0 0 22px;line-height:1.5;letter-spacing:.02em}
+    .return-btn{display:block;width:100%;padding:14px 20px;background:#00e07c;color:#000;border:none;border-radius:12px;font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;text-decoration:none;text-align:center;-webkit-tap-highlight-color:transparent;transition:transform 0.1s ease, background 0.15s ease}
+    .return-btn:active{transform:scale(0.97);background:#00c66d}
+    .hint{font-size:11px;color:#666;margin:14px 0 0;letter-spacing:.04em}
+    .spinner{width:14px;height:14px;border:2px solid rgba(0,224,124,0.2);border-top-color:rgba(0,224,124,0.6);border-radius:50%;display:inline-block;vertical-align:-2px;margin-right:8px;animation:spin 0.9s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
@@ -2199,29 +2202,51 @@ export async function registerRoutes(
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 13 10 18 19 7"/></svg>
     </div>
     <h1>Signed in!</h1>
-    <p>Returning to GUBER…</p>
-    <div class="spinner"></div>
+    <p id="msg"><span class="spinner"></span>Returning to GUBER…</p>
+    <a id="returnBtn" href="guber://auth-success" class="return-btn">Return to GUBER</a>
+    <p class="hint">If nothing happens, tap the button above.</p>
   </div>
   <script>
     (function () {
-      // Aggressively try to dismiss the system browser tab so the user lands
-      // back inside the GUBER app within ~300ms instead of staring at this page.
-      function tryClose() {
+      var btn = document.getElementById('returnBtn');
+      var msg = document.getElementById('msg');
+
+      // Strategy: try multiple ways to bring the GUBER app forward.
+      // 1) window.close() — works in some browsers, blocked in Chrome Custom Tabs
+      //    unless triggered by user gesture.
+      // 2) postMessage — picked up by the Capacitor Browser plugin if it owns
+      //    the WebView, causing it to close.
+      // 3) guber:// deep link — registered intent in the Android manifest
+      //    brings the GUBER app to the foreground.
+      function returnToApp() {
         try { window.close(); } catch (e) {}
-        // Capacitor Browser plugin (in-app browser variant) listens for this
-        // postMessage and will close the tab if it owns the window.
         try { window.parent && window.parent.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
         try { window.opener && window.opener.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
+        // Deep link as the most reliable foreground-bringer on Android.
+        // This is harmless if window.close() already worked.
+        try { window.location.href = 'guber://auth-success'; } catch (e) {}
       }
-      tryClose();
-      setTimeout(tryClose, 100);
-      setTimeout(tryClose, 400);
-      // Final safety net: if the tab is still open after a couple of seconds
-      // (some Chrome Custom Tab builds refuse window.close), bounce to the
-      // app's home so the user at least sees the dark GUBER shell.
+
+      // The button click is a real user gesture, which Chrome Custom Tabs
+      // honor for window.close() and navigation.
+      if (btn) btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        returnToApp();
+      });
+
+      // Auto-attempt at progressively delayed intervals. Most installs will
+      // close within the first 200ms via the Capacitor poll → Browser.close()
+      // path; these JS attempts are belt-and-suspenders.
+      setTimeout(returnToApp, 50);
+      setTimeout(returnToApp, 300);
+      setTimeout(returnToApp, 800);
+
+      // After 2.5s, if the tab is still open the auto-close clearly didn't
+      // work. Make the message more explicit so the user knows to tap.
       setTimeout(function () {
-        if (!window.closed) { window.location.replace('/'); }
-      }, 2200);
+        if (window.closed) return;
+        if (msg) msg.innerHTML = 'Tap the button below to finish.';
+      }, 2500);
     })();
   </script>
 </body>

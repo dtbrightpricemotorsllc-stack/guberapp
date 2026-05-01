@@ -254,18 +254,22 @@ export async function browserGoogleSignIn(opts?: {
         await Browser.open({ url: authUrl.toString(), presentationStyle: "popover" });
         trace("browser_opened", {});
 
+        // Aggressive 300ms polling — the moment the OAuth callback stores
+        // the token server-side, the app picks it up and closes the browser.
+        // 300ms × 600 attempts = 3 min before the flow times out, which is
+        // plenty of time for a user to complete sign-in.
         let attempts = 0;
         pollInterval = setInterval(async () => {
           if (resolved) return;
           attempts++;
-          if (attempts > 200) {
+          if (attempts > 600) {
             trace("browser_poll_timeout", { attempts });
             await Browser.close().catch(() => {});
             if (!resolved) finish({ ok: false, reason: "cancelled" });
             return;
           }
           await consumeTokenIfReady("interval", attempts);
-        }, 1500);
+        }, 300);
       } catch (err: any) {
         trace("browser_threw", { msg: String(err?.message || err).slice(0, 300) });
         if (!resolved) finish({ ok: false, reason: "error", message: err?.message || String(err) });
