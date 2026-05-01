@@ -9750,9 +9750,12 @@ BEHAVIOR RULES:
         return res.status(400).json({ message: "messages must be a non-empty array" });
       }
 
-      // ── Live system snapshot ─────────────────────────────────────────────────
+      // ── Live system snapshot — wide-angle view of platform health ─────────
       const now = new Date();
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
       const [
         userCountsRaw,
@@ -9764,18 +9767,53 @@ BEHAVIOR RULES:
         walletTxAnomaliesRaw,
         disputedJobsRaw,
         payoutStatusRaw,
+        // ── Money flow ──────────────────────────────────────────────────────
+        escrowHeldRaw,
+        revenueTodayRaw,
+        revenue7dRaw,
+        revenue30dRaw,
+        payoutsPaidLast7dRaw,
+        payoutsPendingRaw,
+        failedPayoutsRaw,
+        refundsLast30dRaw,
+        avgJobValueRaw,
+        // ── User growth ─────────────────────────────────────────────────────
+        signupsTodayRaw,
+        signups7dRaw,
+        signupsPrev7dRaw,
+        signups30dRaw,
+        signupsPrev30dRaw,
+        activeUsers24hRaw,
+        activeUsers7dRaw,
+        usersBySignupSourceRaw,
+        verifiedUserPctRaw,
+        // ── Conversion / funnel ─────────────────────────────────────────────
+        postersWhoPostedRaw,
+        workersWhoAcceptedRaw,
+        signupsWithNoActivityRaw,
+        jobFunnelRaw,
+        avgTimeToAcceptanceRaw,
+        avgTimeToCompletionRaw,
+        // ── Engagement ──────────────────────────────────────────────────────
+        jobsPostedLast7dRaw,
+        jobsCompletedLast7dRaw,
+        disputesLast30dRaw,
+        cancellationRateRaw,
+        repeatPostersRaw,
+        // ── Trust / safety ──────────────────────────────────────────────────
+        suspendedUsersRaw,
+        bannedUsersRaw,
+        underReviewRaw,
+        avgRatingRaw,
       ] = await Promise.all([
-        // User breakdown
         db.execute(sql.raw(`
           SELECT role, COUNT(*) as count,
             SUM(CASE WHEN day1_og = true THEN 1 ELSE 0 END) as og_count
-          FROM users GROUP BY role
+          FROM users WHERE deleted_at IS NULL GROUP BY role
         `)),
-        // Jobs grouped by status
         db.execute(sql.raw(`
           SELECT status, COUNT(*) as count FROM jobs GROUP BY status ORDER BY count DESC
         `)),
-        // Jobs stuck >24h in actionable states (excluding admin-acknowledged ones)
         db.execute(sql.raw(`
           SELECT id, title, status, created_at FROM jobs
           WHERE status IN ('funded','proof_submitted','accepted_pending_payment','proof_needed')
@@ -9783,23 +9821,19 @@ BEHAVIOR RULES:
             AND stuck_acknowledged_at IS NULL
           ORDER BY created_at ASC LIMIT 10
         `)),
-        // Pending verifications
         db.execute(sql.raw(`
           SELECT COUNT(*) as count FROM audit_logs
           WHERE action IN ('credential_upload','id_upload')
             AND (review_status IS NULL OR review_status = 'pending')
         `)),
-        // Active cash drops
         db.execute(sql.raw(`
           SELECT id, title, reward_per_winner, created_at FROM cash_drops
           WHERE status = 'active' LIMIT 5
         `)),
-        // Last 15 audit log entries — action + timestamp only (no PII)
         db.execute(sql.raw(`
           SELECT action, created_at FROM audit_logs
           ORDER BY created_at DESC LIMIT 15
         `)),
-        // Wallet transaction anomalies: failed payouts and stuck pending transfers
         db.execute(sql.raw(`
           SELECT status, COUNT(*) as count, SUM(amount) as total_amount
           FROM wallet_transactions
@@ -9807,31 +9841,283 @@ BEHAVIOR RULES:
             AND created_at < '${oneDayAgo.toISOString()}'
           GROUP BY status
         `)),
-        // Disputed jobs detail
         db.execute(sql.raw(`
-          SELECT id, title, budget, created_at FROM jobs WHERE status = 'disputed' ORDER BY created_at DESC LIMIT 5
+          SELECT id, title, budget, dispute_reason, created_at FROM jobs
+          WHERE status = 'disputed' ORDER BY created_at DESC LIMIT 5
         `)),
-        // Payout status breakdown from jobs
         db.execute(sql.raw(`
           SELECT payout_status, COUNT(*) as count FROM jobs
           WHERE payout_status IS NOT NULL AND payout_status != 'none'
           GROUP BY payout_status ORDER BY count DESC
         `)),
+        // Total money sitting in escrow (charged but not yet paid out)
+        db.execute(sql.raw(`
+          SELECT
+            COUNT(*) as job_count,
+            COALESCE(SUM(final_price), 0) as total_held
+          FROM jobs
+          WHERE charged_at IS NOT NULL
+            AND paid_out_at IS NULL
+            AND status NOT IN ('cancelled','refunded')
+        `)),
+        // Platform fee revenue today
+        db.execute(sql.raw(`
+          SELECT COALESCE(SUM(platform_fee), 0) as revenue, COUNT(*) as job_count
+          FROM jobs WHERE charged_at >= '${oneDayAgo.toISOString()}'
+        `)),
+        db.execute(sql.raw(`
+          SELECT COALESCE(SUM(platform_fee), 0) as revenue, COUNT(*) as job_count
+          FROM jobs WHERE charged_at >= '${sevenDaysAgo.toISOString()}'
+        `)),
+        db.execute(sql.raw(`
+          SELECT COALESCE(SUM(platform_fee), 0) as revenue, COUNT(*) as job_count
+          FROM jobs WHERE charged_at >= '${thirtyDaysAgo.toISOString()}'
+        `)),
+        // Payouts actually paid out in last 7d
+        db.execute(sql.raw(`
+          SELECT COALESCE(SUM(helper_payout), 0) as total, COUNT(*) as count
+          FROM jobs WHERE paid_out_at >= '${sevenDaysAgo.toISOString()}'
+        `)),
+        // Payouts owed but not yet sent
+        db.execute(sql.raw(`
+          SELECT COALESCE(SUM(helper_payout), 0) as total, COUNT(*) as count
+          FROM jobs
+          WHERE confirmed_at IS NOT NULL
+            AND paid_out_at IS NULL
+            AND status = 'completed'
+        `)),
+        // Failed payouts
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count, COALESCE(SUM(helper_payout), 0) as total
+          FROM jobs WHERE payout_status = 'failed'
+        `)),
+        // Refunds in last 30 days
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count, COALESCE(SUM(refund_amount), 0) as total
+          FROM jobs WHERE refunded_at >= '${thirtyDaysAgo.toISOString()}'
+        `)),
+        // Average completed job value
+        db.execute(sql.raw(`
+          SELECT
+            COALESCE(AVG(final_price), 0) as avg_value,
+            COALESCE(AVG(platform_fee), 0) as avg_fee
+          FROM jobs WHERE status = 'completed'
+            AND completed_at >= '${thirtyDaysAgo.toISOString()}'
+        `)),
+        // Signups today
+        db.execute(sql.raw(`SELECT COUNT(*) as count FROM users WHERE created_at >= '${oneDayAgo.toISOString()}' AND deleted_at IS NULL`)),
+        db.execute(sql.raw(`SELECT COUNT(*) as count FROM users WHERE created_at >= '${sevenDaysAgo.toISOString()}' AND deleted_at IS NULL`)),
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count FROM users
+          WHERE created_at >= '${fourteenDaysAgo.toISOString()}'
+            AND created_at < '${sevenDaysAgo.toISOString()}'
+            AND deleted_at IS NULL
+        `)),
+        db.execute(sql.raw(`SELECT COUNT(*) as count FROM users WHERE created_at >= '${thirtyDaysAgo.toISOString()}' AND deleted_at IS NULL`)),
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count FROM users
+          WHERE created_at >= '${new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString()}'
+            AND created_at < '${thirtyDaysAgo.toISOString()}'
+            AND deleted_at IS NULL
+        `)),
+        // Active users (took any audit-logged action in last 24h)
+        db.execute(sql.raw(`
+          SELECT COUNT(DISTINCT user_id) as count FROM audit_logs
+          WHERE created_at >= '${oneDayAgo.toISOString()}' AND user_id IS NOT NULL
+        `)),
+        db.execute(sql.raw(`
+          SELECT COUNT(DISTINCT user_id) as count FROM audit_logs
+          WHERE created_at >= '${sevenDaysAgo.toISOString()}' AND user_id IS NOT NULL
+        `)),
+        // Signup source (auth provider)
+        db.execute(sql.raw(`
+          SELECT auth_provider, COUNT(*) as count FROM users
+          WHERE created_at >= '${thirtyDaysAgo.toISOString()}' AND deleted_at IS NULL
+          GROUP BY auth_provider
+        `)),
+        // % verified users (any verification step done)
+        db.execute(sql.raw(`
+          SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN email_verified = true THEN 1 ELSE 0 END) as email_verified,
+            SUM(CASE WHEN id_verified = true THEN 1 ELSE 0 END) as id_verified,
+            SUM(CASE WHEN profile_complete = true THEN 1 ELSE 0 END) as profile_complete
+          FROM users WHERE deleted_at IS NULL
+        `)),
+        // Posters who have ever posted vs total
+        db.execute(sql.raw(`
+          SELECT
+            (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as total_users,
+            (SELECT COUNT(DISTINCT posted_by_id) FROM jobs) as ever_posted,
+            (SELECT COUNT(DISTINCT posted_by_id) FROM jobs WHERE created_at >= '${thirtyDaysAgo.toISOString()}') as posted_30d
+        `)),
+        // Workers who have ever accepted a job
+        db.execute(sql.raw(`
+          SELECT
+            COUNT(DISTINCT assigned_helper_id) as ever_accepted,
+            (SELECT COUNT(DISTINCT assigned_helper_id) FROM jobs
+              WHERE assigned_helper_id IS NOT NULL
+                AND created_at >= '${thirtyDaysAgo.toISOString()}') as accepted_30d
+          FROM jobs WHERE assigned_helper_id IS NOT NULL
+        `)),
+        // Signups in last 30 days that have NO jobs posted/accepted
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count FROM users u
+          WHERE u.created_at >= '${thirtyDaysAgo.toISOString()}'
+            AND u.deleted_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.posted_by_id = u.id)
+            AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.assigned_helper_id = u.id)
+        `)),
+        // Job lifecycle funnel: posted → funded → proof_submitted → completed
+        db.execute(sql.raw(`
+          SELECT
+            COUNT(*) FILTER (WHERE status IN ('posted_public','open','draft','funded','proof_submitted','accepted_pending_payment','proof_needed','completed','disputed','cancelled') AND created_at >= '${thirtyDaysAgo.toISOString()}') as posted,
+            COUNT(*) FILTER (WHERE charged_at IS NOT NULL AND created_at >= '${thirtyDaysAgo.toISOString()}') as funded,
+            COUNT(*) FILTER (WHERE status = 'completed' AND created_at >= '${thirtyDaysAgo.toISOString()}') as completed,
+            COUNT(*) FILTER (WHERE status = 'disputed' AND created_at >= '${thirtyDaysAgo.toISOString()}') as disputed,
+            COUNT(*) FILTER (WHERE status = 'cancelled' AND created_at >= '${thirtyDaysAgo.toISOString()}') as cancelled
+          FROM jobs
+        `)),
+        // Avg minutes from job posted to worker accepted (locked_at)
+        db.execute(sql.raw(`
+          SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (locked_at - created_at)) / 60), 0) as avg_minutes
+          FROM jobs WHERE locked_at IS NOT NULL
+            AND created_at >= '${thirtyDaysAgo.toISOString()}'
+        `)),
+        // Avg hours from charged to completed
+        db.execute(sql.raw(`
+          SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at - charged_at)) / 3600), 0) as avg_hours
+          FROM jobs WHERE charged_at IS NOT NULL AND completed_at IS NOT NULL
+            AND completed_at >= '${thirtyDaysAgo.toISOString()}'
+        `)),
+        // Jobs posted per day last 7 days
+        db.execute(sql.raw(`
+          SELECT DATE(created_at) as day, COUNT(*) as count
+          FROM jobs WHERE created_at >= '${sevenDaysAgo.toISOString()}'
+          GROUP BY DATE(created_at) ORDER BY day DESC
+        `)),
+        db.execute(sql.raw(`
+          SELECT DATE(completed_at) as day, COUNT(*) as count
+          FROM jobs WHERE completed_at >= '${sevenDaysAgo.toISOString()}'
+          GROUP BY DATE(completed_at) ORDER BY day DESC
+        `)),
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count FROM jobs
+          WHERE status = 'disputed' AND created_at >= '${thirtyDaysAgo.toISOString()}'
+        `)),
+        db.execute(sql.raw(`
+          SELECT
+            COALESCE(AVG(cancellation_rate), 0) as avg_cancel_rate,
+            SUM(canceled_count) as total_cancellations
+          FROM users WHERE deleted_at IS NULL
+        `)),
+        // Repeat posters (posted more than once in 30d)
+        db.execute(sql.raw(`
+          SELECT COUNT(*) as count FROM (
+            SELECT posted_by_id FROM jobs
+            WHERE created_at >= '${thirtyDaysAgo.toISOString()}'
+            GROUP BY posted_by_id HAVING COUNT(*) > 1
+          ) t
+        `)),
+        db.execute(sql.raw(`SELECT COUNT(*) as count FROM users WHERE suspended = true AND deleted_at IS NULL`)),
+        db.execute(sql.raw(`SELECT COUNT(*) as count FROM users WHERE banned = true AND deleted_at IS NULL`)),
+        db.execute(sql.raw(`SELECT COUNT(*) as count FROM users WHERE under_review = true AND deleted_at IS NULL`)),
+        db.execute(sql.raw(`
+          SELECT COALESCE(AVG(rating), 0) as avg_rating, SUM(review_count) as total_reviews
+          FROM users WHERE review_count > 0 AND deleted_at IS NULL
+        `)),
       ]);
 
       const pendingVerifCount = Number((pendingVerificationsRaw.rows[0] as Record<string, unknown>)?.count ?? 0);
 
+      // Compute derived growth metrics
+      const signups7d = Number((signups7dRaw.rows[0] as any)?.count ?? 0);
+      const signupsPrev7d = Number((signupsPrev7dRaw.rows[0] as any)?.count ?? 0);
+      const signups30d = Number((signups30dRaw.rows[0] as any)?.count ?? 0);
+      const signupsPrev30d = Number((signupsPrev30dRaw.rows[0] as any)?.count ?? 0);
+      const wowGrowth = signupsPrev7d > 0 ? Math.round(((signups7d - signupsPrev7d) / signupsPrev7d) * 100) : null;
+      const momGrowth = signupsPrev30d > 0 ? Math.round(((signups30d - signupsPrev30d) / signupsPrev30d) * 100) : null;
+
+      const funnel = jobFunnelRaw.rows[0] as any;
+      const fundingRate = Number(funnel?.posted ?? 0) > 0
+        ? Math.round((Number(funnel.funded) / Number(funnel.posted)) * 100)
+        : null;
+      const completionRate = Number(funnel?.funded ?? 0) > 0
+        ? Math.round((Number(funnel.completed) / Number(funnel.funded)) * 100)
+        : null;
+      const disputeRate = Number(funnel?.completed ?? 0) > 0
+        ? Math.round((Number(funnel.disputed) / (Number(funnel.completed) + Number(funnel.disputed))) * 1000) / 10
+        : null;
+
       const snapshot = {
         timestamp: now.toISOString(),
-        users: userCountsRaw.rows,
-        jobStatuses: jobStatusesRaw.rows,
-        stuckJobs: stuckJobsRaw.rows,
-        pendingVerifications: pendingVerifCount,
-        activeDrops: activeDropsRaw.rows,
-        recentAuditActions: recentAuditRaw.rows,
-        walletTransactionAnomalies: walletTxAnomaliesRaw.rows,
-        disputedJobs: disputedJobsRaw.rows,
-        payoutStatusBreakdown: payoutStatusRaw.rows,
+        operations: {
+          users: userCountsRaw.rows,
+          jobStatuses: jobStatusesRaw.rows,
+          stuckJobs: stuckJobsRaw.rows,
+          pendingVerifications: pendingVerifCount,
+          activeDrops: activeDropsRaw.rows,
+          recentAuditActions: recentAuditRaw.rows,
+          disputedJobs: disputedJobsRaw.rows,
+          payoutStatusBreakdown: payoutStatusRaw.rows,
+        },
+        moneyFlow: {
+          escrowHeld: escrowHeldRaw.rows[0],
+          revenue: {
+            today: revenueTodayRaw.rows[0],
+            last7d: revenue7dRaw.rows[0],
+            last30d: revenue30dRaw.rows[0],
+          },
+          payouts: {
+            paidLast7d: payoutsPaidLast7dRaw.rows[0],
+            pendingNow: payoutsPendingRaw.rows[0],
+            failed: failedPayoutsRaw.rows[0],
+          },
+          refundsLast30d: refundsLast30dRaw.rows[0],
+          averageJobValue: avgJobValueRaw.rows[0],
+          walletTransactionAnomalies: walletTxAnomaliesRaw.rows,
+        },
+        userGrowth: {
+          signups: {
+            today: Number((signupsTodayRaw.rows[0] as any)?.count ?? 0),
+            last7d: signups7d,
+            previous7d: signupsPrev7d,
+            weekOverWeekPctChange: wowGrowth,
+            last30d: signups30d,
+            previous30d: signupsPrev30d,
+            monthOverMonthPctChange: momGrowth,
+          },
+          activeUsers: {
+            last24h: Number((activeUsers24hRaw.rows[0] as any)?.count ?? 0),
+            last7d: Number((activeUsers7dRaw.rows[0] as any)?.count ?? 0),
+          },
+          signupSourceLast30d: usersBySignupSourceRaw.rows,
+          verification: verifiedUserPctRaw.rows[0],
+        },
+        conversion: {
+          posters: postersWhoPostedRaw.rows[0],
+          workers: workersWhoAcceptedRaw.rows[0],
+          inactiveSignupsLast30d: Number((signupsWithNoActivityRaw.rows[0] as any)?.count ?? 0),
+          jobFunnel30d: funnel,
+          fundingRatePct: fundingRate,
+          completionRatePct: completionRate,
+          disputeRatePct: disputeRate,
+          avgMinutesToAcceptance: Math.round(Number((avgTimeToAcceptanceRaw.rows[0] as any)?.avg_minutes ?? 0)),
+          avgHoursToCompletion: Math.round(Number((avgTimeToCompletionRaw.rows[0] as any)?.avg_hours ?? 0)),
+        },
+        engagement: {
+          jobsPostedPerDayLast7d: jobsPostedLast7dRaw.rows,
+          jobsCompletedPerDayLast7d: jobsCompletedLast7dRaw.rows,
+          disputesLast30d: Number((disputesLast30dRaw.rows[0] as any)?.count ?? 0),
+          cancellation: cancellationRateRaw.rows[0],
+          repeatPosters30d: Number((repeatPostersRaw.rows[0] as any)?.count ?? 0),
+        },
+        trustSafety: {
+          suspendedUsers: Number((suspendedUsersRaw.rows[0] as any)?.count ?? 0),
+          bannedUsers: Number((bannedUsersRaw.rows[0] as any)?.count ?? 0),
+          underReview: Number((underReviewRaw.rows[0] as any)?.count ?? 0),
+          ratings: avgRatingRaw.rows[0],
+        },
       };
 
       const ALLOWED_ROLES = new Set(["user", "assistant"]);
@@ -9860,42 +10146,303 @@ BEHAVIOR RULES:
         baseURL: aiBaseURL,
       });
 
-      const systemPrompt = `You are an AI system diagnostic assistant for GUBER — an on-demand labor platform. You are speaking directly to the platform admin (non-technical). Your job is to analyze live system data and surface problems, anomalies, or things that need attention in plain English.
+      // ── Tools the model can call to drill into specific entities ──────────
+      const tools = [
+        {
+          type: "function" as const,
+          function: {
+            name: "get_user_details",
+            description: "Fetch detailed information about a specific user by their numeric user ID. Use this when the admin asks about a particular user, when investigating why a user is stuck, suspended, or under review, or when you need to understand a single user's full picture (verification status, jobs, ratings, financial activity).",
+            parameters: {
+              type: "object",
+              properties: { userId: { type: "number", description: "The numeric user ID" } },
+              required: ["userId"],
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "lookup_user_by_email",
+            description: "Look up a user by email address (case-insensitive). Returns the user ID and core profile so you can then call get_user_details if needed.",
+            parameters: {
+              type: "object",
+              properties: { email: { type: "string", description: "The user's email address" } },
+              required: ["email"],
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "get_job_details",
+            description: "Fetch full details about a specific job by ID — status, parties, money, timestamps, dispute info. Use when the admin asks about a job, investigating a stuck job, dispute, or payout problem.",
+            parameters: {
+              type: "object",
+              properties: { jobId: { type: "number", description: "The numeric job ID" } },
+              required: ["jobId"],
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "get_audit_history",
+            description: "Fetch recent audit log entries for a specific user. Returns the actions they have taken with timestamps. Use to understand what a user has been doing, or to investigate suspicious activity.",
+            parameters: {
+              type: "object",
+              properties: {
+                userId: { type: "number", description: "The user ID" },
+                limit: { type: "number", description: "Max rows to return (default 25, max 100)" },
+              },
+              required: ["userId"],
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "list_recent_disputes",
+            description: "List the most recent disputed jobs with full context (parties, money, dispute reason). Use when the admin asks about recent disputes or wants to know which disputes need attention.",
+            parameters: {
+              type: "object",
+              properties: { limit: { type: "number", description: "Max rows (default 10, max 25)" } },
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "list_failed_payouts",
+            description: "List jobs whose payouts failed or are stuck. Use to investigate payment health issues.",
+            parameters: {
+              type: "object",
+              properties: { limit: { type: "number", description: "Max rows (default 10, max 25)" } },
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "search_jobs",
+            description: "Search jobs by status and/or date range. Use to find patterns (e.g. all jobs cancelled this week, all funded jobs from a given date).",
+            parameters: {
+              type: "object",
+              properties: {
+                status: { type: "string", description: "Job status filter (optional)" },
+                sinceHoursAgo: { type: "number", description: "Only return jobs newer than this many hours (optional)" },
+                limit: { type: "number", description: "Max rows (default 20, max 50)" },
+              },
+            },
+          },
+        },
+      ];
+
+      // ── Tool implementations ──────────────────────────────────────────────
+      function clampLimit(raw: unknown, def: number, max: number): number {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n <= 0) return def;
+        return Math.min(Math.max(Math.floor(n), 1), max);
+      }
+      async function runTool(name: string, args: any): Promise<string> {
+        try {
+          if (name === "get_user_details") {
+            const userId = Number(args?.userId);
+            if (!Number.isFinite(userId)) return JSON.stringify({ error: "Invalid userId" });
+            const u = await storage.getUser(userId);
+            if (!u) return JSON.stringify({ error: "User not found" });
+            const jobs = await storage.getJobsByUser(userId);
+            const safe = {
+              id: u.id, email: u.email, fullName: u.fullName, role: u.role, tier: u.tier,
+              createdAt: u.createdAt, suspended: u.suspended, banned: u.banned, underReview: u.underReview,
+              emailVerified: u.emailVerified, idVerified: u.idVerified, profileComplete: u.profileComplete,
+              backgroundCheckStatus: u.backgroundCheckStatus, trustScore: u.trustScore,
+              rating: u.rating, reviewCount: u.reviewCount,
+              jobsCompleted: u.jobsCompleted, jobsDisputed: u.jobsDisputed, strikes: u.strikes,
+              cancellationRate: u.cancellationRate, canceledCount: u.canceledCount,
+              authProvider: u.authProvider, day1OG: u.day1OG, badgeTier: u.badgeTier,
+              stripeAccountStatus: u.stripeAccountStatus,
+              jobsPostedCount: jobs.filter(j => j.postedById === userId).length,
+              jobsAcceptedCount: jobs.filter(j => j.assignedHelperId === userId).length,
+              recentJobs: jobs.slice(0, 5).map(j => ({
+                id: j.id, title: j.title, status: j.status, role: j.postedById === userId ? "poster" : "worker",
+                createdAt: j.createdAt, finalPrice: j.finalPrice,
+              })),
+            };
+            return JSON.stringify(safe);
+          }
+          if (name === "lookup_user_by_email") {
+            const email = String(args?.email ?? "").trim().toLowerCase();
+            if (!email) return JSON.stringify({ error: "Email required" });
+            const u = await storage.getUserByEmail(email);
+            if (!u) return JSON.stringify({ error: "User not found" });
+            return JSON.stringify({
+              id: u.id, email: u.email, fullName: u.fullName, role: u.role, tier: u.tier, createdAt: u.createdAt,
+              suspended: u.suspended, banned: u.banned, underReview: u.underReview,
+            });
+          }
+          if (name === "get_job_details") {
+            const jobId = Number(args?.jobId);
+            if (!Number.isFinite(jobId)) return JSON.stringify({ error: "Invalid jobId" });
+            const j = await storage.getJob(jobId);
+            if (!j) return JSON.stringify({ error: "Job not found" });
+            return JSON.stringify({
+              id: j.id, title: j.title, status: j.status, category: j.category,
+              postedById: j.postedById, assignedHelperId: j.assignedHelperId,
+              budget: j.budget, finalPrice: j.finalPrice, platformFee: j.platformFee, helperPayout: j.helperPayout,
+              payoutStatus: j.payoutStatus, isPaid: j.isPaid,
+              createdAt: j.createdAt, lockedAt: j.lockedAt, chargedAt: j.chargedAt,
+              completedAt: j.completedAt, confirmedAt: j.confirmedAt, paidOutAt: j.paidOutAt,
+              disputeReason: j.disputeReason, disputeNotes: j.disputeNotes,
+              refundedAt: j.refundedAt, refundAmount: j.refundAmount,
+            });
+          }
+          if (name === "get_audit_history") {
+            const userId = Number(args?.userId);
+            if (!Number.isFinite(userId)) return JSON.stringify({ error: "Invalid userId" });
+            const limit = clampLimit(args?.limit, 25, 100);
+            const rows = await db.execute(sql.raw(`
+              SELECT action, details, created_at, review_status FROM audit_logs
+              WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${limit}
+            `));
+            return JSON.stringify(rows.rows);
+          }
+          if (name === "list_recent_disputes") {
+            const limit = clampLimit(args?.limit, 10, 25);
+            const rows = await db.execute(sql.raw(`
+              SELECT id, title, status, posted_by_id, assigned_helper_id, final_price,
+                     dispute_reason, dispute_notes, created_at
+              FROM jobs WHERE status = 'disputed'
+              ORDER BY created_at DESC LIMIT ${limit}
+            `));
+            return JSON.stringify(rows.rows);
+          }
+          if (name === "list_failed_payouts") {
+            const limit = clampLimit(args?.limit, 10, 25);
+            const rows = await db.execute(sql.raw(`
+              SELECT id, title, status, posted_by_id, assigned_helper_id, helper_payout,
+                     payout_status, completed_at, confirmed_at
+              FROM jobs WHERE payout_status IN ('failed','pending')
+                AND confirmed_at IS NOT NULL
+                AND paid_out_at IS NULL
+              ORDER BY confirmed_at ASC LIMIT ${limit}
+            `));
+            return JSON.stringify(rows.rows);
+          }
+          if (name === "search_jobs") {
+            const limit = clampLimit(args?.limit, 20, 50);
+            const filters: string[] = [];
+            const status = typeof args?.status === "string" ? args.status.replace(/[^a-z_]/gi, "") : "";
+            if (status) filters.push(`status = '${status}'`);
+            const hours = Number(args?.sinceHoursAgo);
+            if (Number.isFinite(hours) && hours > 0) {
+              const since = new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString();
+              filters.push(`created_at >= '${since}'`);
+            }
+            const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+            const rows = await db.execute(sql.raw(`
+              SELECT id, title, status, posted_by_id, assigned_helper_id, final_price, created_at
+              FROM jobs ${where} ORDER BY created_at DESC LIMIT ${limit}
+            `));
+            return JSON.stringify(rows.rows);
+          }
+          return JSON.stringify({ error: `Unknown tool: ${name}` });
+        } catch (err: any) {
+          return JSON.stringify({ error: err?.message || "Tool execution failed" });
+        }
+      }
+
+      const systemPrompt = `You are the senior diagnostic analyst for GUBER — an on-demand labor marketplace. You speak directly to the platform owner (non-technical). Your job is to find what's wrong, explain why, and tell them exactly what to do about it.
 
 LIVE SYSTEM SNAPSHOT (as of ${now.toISOString()}):
 ${JSON.stringify(snapshot, null, 2)}
 
-WHAT THE DATA MEANS:
-- users: breakdown by role (consumer, admin, business) and how many are Day-1 OG members
-- jobStatuses: jobs grouped by their current status. Key statuses: posted_public (open), funded (worker assigned, payment held), proof_submitted (worker submitted proof, awaiting approval), disputed (in dispute), completed
-- stuckJobs: jobs that have been in an actionable state (funded/proof_submitted/etc.) for over 24 hours without moving — these may indicate admin action needed or a bug
-- pendingVerifications: credential/ID uploads waiting for admin review
-- activeDrops: currently live cash drop events
-- recentAuditActions: the last 15 recorded system action types with timestamps (no user data)
-- walletTransactionAnomalies: wallet_transactions that are 'failed' or 'pending' for over 24h — indicates stuck payments or payout failures
-- disputedJobs: jobs currently in dispute that may need admin attention
-- payoutStatusBreakdown: breakdown of job payout_status values (e.g. 'pending','paid','failed') — key signal for payment health
+WHAT EACH SECTION MEANS:
+- operations: current job statuses, stuck jobs (>24h in actionable state), pending verifications, active cash drops, recent action types, disputes, payout status
+- moneyFlow: live escrow held (charged but not paid out), platform fee revenue (today/7d/30d), payouts paid vs pending vs failed, refunds, average job value
+- userGrowth: signups today/7d/30d with week-over-week and month-over-month % change, active users (24h/7d), signup sources, verification rates
+- conversion: % of users who actually post or accept, signups with no activity, posted→funded→completed funnel for last 30d, dispute rate, time-to-acceptance, time-to-completion
+- engagement: jobs posted/completed per day for last 7d, dispute count last 30d, cancellation stats, repeat posters
+- trustSafety: suspended/banned/under-review counts and rating averages
 
-YOUR BEHAVIOR:
-- Proactively flag anything that looks wrong or needs attention — don't wait to be asked
-- Explain issues in plain English that a non-technical business owner can understand
-- For each problem you find, briefly suggest what action should be taken
-- Be concise but complete — use bullet points for clarity
-- If everything looks healthy, say so clearly
-- Do NOT reveal raw database IDs in bulk — only mention specific IDs if they're directly relevant to an issue
-- Never make up data — only reference what's in the snapshot above`;
+DIAGNOSTIC FRAMEWORK — FOLLOW THIS ORDER:
+1. SCAN: Look at every section. Compare current numbers against past trends in the data (e.g. signups7d vs previous7d, today vs last week).
+2. RANK: Sort issues by impact: (a) money-at-risk first (failed payouts, stuck escrow, disputed jobs), (b) growth/conversion drops second, (c) ops backlog third.
+3. ROOT-CAUSE: For each issue you flag, hypothesize WHY it's happening using related data. Don't just say "stuck jobs exist" — say "5 jobs stuck at proof_submitted >24h, suggesting workers submit but admin review queue is backed up (verifications pending = X)".
+4. DRILL DOWN: When the admin asks about a specific user, job, dispute, or you need more context to root-cause something — CALL THE TOOLS. Don't guess. Tools available: get_user_details, lookup_user_by_email, get_job_details, get_audit_history, list_recent_disputes, list_failed_payouts, search_jobs.
+5. RECOMMEND: For every issue, give a concrete next action the admin can take today.
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        temperature: 0.3,
-        max_tokens: 600,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...sanitized,
-        ],
-      });
+OUTPUT STYLE:
+- Lead with the most urgent issue. Don't bury bad news.
+- Use bullet points and short headers. Bold the issue, plain text the explanation, then "→ Action:" line.
+- Quote concrete numbers from the data ("$1,240 in escrow held by 8 jobs over 24 hours old").
+- If a metric is missing/zero, say so plainly — never make up data.
+- For growth: comment on direction (up/down %) AND magnitude. A 5% drop on 1000 signups is different from a 5% drop on 10.
+- If everything is genuinely healthy, say so confidently and call out the strongest positive signals.
+- Keep it tight — every sentence earns its place.`;
 
-      const reply = completion.choices[0]?.message?.content?.trim() || "Unable to generate diagnostic. Please try again.";
+      // ── Tool-calling loop (max 4 iterations) ──────────────────────────────
+      const conversation: any[] = [
+        { role: "system", content: systemPrompt },
+        ...sanitized,
+      ];
+      let reply = "";
+      const MAX_TOOL_ITERATIONS = 4;
+      for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1",
+          temperature: 0.2,
+          max_tokens: 1800,
+          messages: conversation,
+          tools,
+          tool_choice: "auto",
+        });
+        const msg = completion.choices[0]?.message;
+        if (!msg) break;
+        conversation.push(msg);
+        const toolCalls = msg.tool_calls ?? [];
+        if (toolCalls.length === 0) {
+          reply = msg.content?.trim() || "";
+          break;
+        }
+        // Execute each tool call and append the result
+        for (const call of toolCalls) {
+          if (call.type !== "function") continue;
+          let parsedArgs: any = {};
+          try { parsedArgs = JSON.parse(call.function.arguments || "{}"); } catch { /* ignore */ }
+          const result = await runTool(call.function.name, parsedArgs);
+          conversation.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: result,
+          });
+        }
+      }
+
+      // If the model exhausted all tool iterations without producing a final
+      // textual answer, force a final summarization turn (no tools allowed)
+      // so the admin always gets a real diagnostic instead of a fallback.
+      if (!reply) {
+        try {
+          const finalCompletion = await openai.chat.completions.create({
+            model: "gpt-4.1",
+            temperature: 0.2,
+            max_tokens: 1800,
+            messages: [
+              ...conversation,
+              {
+                role: "user",
+                content: "Based on everything you've gathered, give me your final diagnostic now in plain English. No more tool calls.",
+              },
+            ],
+          });
+          reply = finalCompletion.choices[0]?.message?.content?.trim() || "";
+        } catch (err: any) {
+          console.error("[GUBER] admin diagnostic — final summarization failed:", err?.message);
+        }
+      }
+
+      if (!reply) reply = "Unable to generate diagnostic. Please try again.";
       res.json({ reply });
     } catch (err: any) {
       console.error("[GUBER] admin diagnostic error:", err?.status, err?.code, err?.message, err?.stack?.split("\n")[1]);
