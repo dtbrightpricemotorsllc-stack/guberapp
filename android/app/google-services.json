@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "38604986942",
+    "project_id": "guber-50609",
+    "storage_bucket": "guber-50609.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:38604986942:android:eb55f319b8814c4ac64f6f",
+        "android_client_info": {
+          "package_name": "com.guber.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_r204B0HHlT2NRGfrU8SQYZKaPUaSea4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
