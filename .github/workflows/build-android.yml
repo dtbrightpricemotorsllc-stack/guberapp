@@ -29,6 +29,10 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          # Vite inlines any env var prefixed with VITE_ into the production
+          # JS bundle at build time. Without this the Google Sign-In plugin
+          # initializes with an empty webClientId and silently fails on Android.
+          VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
