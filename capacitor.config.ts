@@ -19,11 +19,15 @@ const config: CapacitorConfig = {
     },
     GoogleAuth: {
       scopes: ['profile', 'email'],
-      // serverClientId must match the Web Application OAuth Client ID in Google Cloud Console.
-      // This is used by the Android plugin to request an ID token the backend will accept.
-      // Set VITE_GOOGLE_WEB_CLIENT_ID in Replit Secrets (same value as GOOGLE_CLIENT_ID) and
-      // run `npx cap sync` to apply. The VITE_ prefix is required so Vite also exposes it
-      // to the frontend (native-google-sign-in.ts reads import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID).
+      // The Android plugin (codetrix-studio/capacitor-google-auth) reads `clientId`
+      // (or `androidClientId`) — NOT `serverClientId`. The value must be the WEB
+      // Application OAuth Client ID from Google Cloud Console (same project that owns
+      // the Android OAuth client with this APK's package + SHA-1). Setting both keys
+      // covers the plugin's lookup chain and any future plugin version that prefers
+      // `serverClientId`.
+      // Set VITE_GOOGLE_WEB_CLIENT_ID in Replit Secrets and the Android build CI env,
+      // then run `npx cap sync android` before building the APK.
+      clientId: process.env.VITE_GOOGLE_WEB_CLIENT_ID || '',
       serverClientId: process.env.VITE_GOOGLE_WEB_CLIENT_ID || '',
       forceCodeForRefreshToken: true,
     },
