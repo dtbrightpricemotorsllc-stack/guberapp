@@ -2166,6 +2166,14 @@ export async function registerRoutes(
             expiresAt: Date.now() + 5 * 60 * 1000,
           });
           console.log(`[GUBER auth] Google auth complete (native/poll) — userId=${user.id} pollKey=${pollKey.slice(0, 8)}…`);
+          // Build the deep link with the JWT embedded so the "Return to GUBER"
+          // button can hand the token directly to the app via the guber://
+          // scheme. This works even if the in-app polling has been paused by
+          // Android's WebView background-throttling (which is the common case
+          // on Android 13+ — polling is suspended while the user is in the
+          // browser tab, so the auto-close path is unreliable on Android).
+          const deepLinkReturnTo = returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
+          const deepLinkUrl = `guber://auth-success?token=${encodeURIComponent(jwtToken)}${deepLinkReturnTo}`;
           return res.type("html").send(`<!DOCTYPE html>
 <html>
 <head>
@@ -2203,50 +2211,47 @@ export async function registerRoutes(
     </div>
     <h1>Signed in!</h1>
     <p id="msg"><span class="spinner"></span>Returning to GUBER…</p>
-    <a id="returnBtn" href="guber://auth-success" class="return-btn">Return to GUBER</a>
+    <a id="returnBtn" href="${deepLinkUrl}" class="return-btn">Return to GUBER</a>
     <p class="hint">If nothing happens, tap the button above.</p>
   </div>
   <script>
     (function () {
       var btn = document.getElementById('returnBtn');
       var msg = document.getElementById('msg');
+      var deepLink = ${JSON.stringify(deepLinkUrl)};
 
-      // Strategy: try multiple ways to bring the GUBER app forward.
-      // 1) window.close() — works in some browsers, blocked in Chrome Custom Tabs
-      //    unless triggered by user gesture.
-      // 2) postMessage — picked up by the Capacitor Browser plugin if it owns
-      //    the WebView, causing it to close.
-      // 3) guber:// deep link — registered intent in the Android manifest
-      //    brings the GUBER app to the foreground.
+      // Strategy: bring GUBER forward via the guber:// deep link, which
+      // carries the JWT directly so the app doesn't have to poll. Polling is
+      // unreliable on Android because the OS pauses background WebView timers
+      // while the user is in the browser tab.
       function returnToApp() {
         try { window.close(); } catch (e) {}
         try { window.parent && window.parent.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
         try { window.opener && window.opener.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
-        // Deep link as the most reliable foreground-bringer on Android.
-        // This is harmless if window.close() already worked.
-        try { window.location.href = 'guber://auth-success'; } catch (e) {}
+        try { window.location.href = deepLink; } catch (e) {}
       }
 
-      // The button click is a real user gesture, which Chrome Custom Tabs
-      // honor for window.close() and navigation.
+      // Button tap is a real user gesture, which Chrome Custom Tab and
+      // Samsung Internet both honor for custom-scheme navigation.
       if (btn) btn.addEventListener('click', function (e) {
         e.preventDefault();
         returnToApp();
       });
 
-      // Auto-attempt at progressively delayed intervals. Most installs will
-      // close within the first 200ms via the Capacitor poll → Browser.close()
-      // path; these JS attempts are belt-and-suspenders.
+      // Best-effort auto-attempts. Many Android browsers (Chrome Custom Tab,
+      // Samsung Internet) block intent navigation without a user gesture, so
+      // these often won't fire — that's why the button is the primary path.
       setTimeout(returnToApp, 50);
       setTimeout(returnToApp, 300);
       setTimeout(returnToApp, 800);
 
-      // After 2.5s, if the tab is still open the auto-close clearly didn't
-      // work. Make the message more explicit so the user knows to tap.
+      // After 1.2s, if the tab is still open the auto-close didn't work
+      // (the common case on Android). Surface the manual button instructions
+      // sooner so the user isn't waiting on something that won't happen.
       setTimeout(function () {
         if (window.closed) return;
         if (msg) msg.innerHTML = 'Tap the button below to finish.';
-      }, 2500);
+      }, 1200);
     })();
   </script>
 </body>
