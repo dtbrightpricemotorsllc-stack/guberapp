@@ -141,6 +141,19 @@ export default function WalletPage() {
     staleTime: 0,
   });
 
+  // Performance Shares summary — small at-a-glance for referrers.
+  const { data: perfShares } = useQuery<{
+    ratePct: number;
+    isDay1OG: boolean;
+    referredCount: number;
+    earnedJobsCount: number;
+    totalEarned: number;
+  }>({
+    queryKey: ["/api/users/me/referral"],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
   const claimMutation = useMutation({
     mutationFn: async () => {
       const resp = await apiRequest("POST", "/api/wallet/claim-pending-payouts");
@@ -292,6 +305,32 @@ export default function WalletPage() {
             <div>
               <p className="text-xs font-display font-semibold text-emerald-400">GUBER Credit Balance</p>
               <p className="text-lg font-display font-bold text-emerald-300">${creditBalance.toFixed(2)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* GUBER Performance Shares — small at-a-glance summary for referrers. */}
+        {perfShares && (perfShares.referredCount > 0 || perfShares.totalEarned > 0) && (
+          <div
+            className="mb-4 rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.06] to-amber-600/[0.03] p-3 flex items-center gap-3"
+            data-testid="banner-performance-shares"
+          >
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+              <Zap className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-display font-semibold text-amber-400 uppercase tracking-wider">
+                GUBER Performance Shares · {perfShares.ratePct}%{perfShares.isDay1OG ? " Day-1 OG" : ""}
+              </p>
+              <div className="flex items-baseline gap-3 mt-0.5">
+                <p className="text-lg font-display font-bold text-amber-300" data-testid="text-perf-earned">
+                  ${perfShares.totalEarned.toFixed(2)}
+                </p>
+                <p className="text-[11px] text-muted-foreground" data-testid="text-perf-shares">
+                  {perfShares.referredCount} share{perfShares.referredCount !== 1 ? "s" : ""}
+                  {perfShares.earnedJobsCount > 0 ? ` · ${perfShares.earnedJobsCount} paid job${perfShares.earnedJobsCount !== 1 ? "s" : ""}` : ""}
+                </p>
+              </div>
             </div>
           </div>
         )}
