@@ -109,6 +109,11 @@ export default function Login() {
           setLocation(returnTo || (result.accountType === "business" ? "/biz/dashboard" : "/dashboard"), { replace: true });
           setTimeout(() => setGoogleAuthPhase(null), 600);
         } else if (result.reason === "plugin_not_available") {
+          // Only the genuine "plugin missing from build" path falls back to
+          // the in-app browser. Misconfiguration (wrong SHA-1, missing
+          // Web client ID) used to land here too and silently obscured the
+          // real problem behind a browser-redirect — that fallback is now
+          // gated to true plugin absence.
           const browserResult = await browserGoogleSignIn({
             returnTo: returnTo || undefined,
             onPhaseChange: (phase) => {
@@ -125,6 +130,13 @@ export default function Login() {
           } else {
             setGoogleAuthPhase(null);
           }
+        } else if (result.reason === "misconfigured") {
+          setGoogleAuthPhase(null);
+          toast({
+            title: "Google Sign-In Setup Issue",
+            description: result.message || "This build isn't authorized for Google Sign-In yet.",
+            variant: "destructive",
+          });
         } else if (result.reason !== "cancelled") {
           setGoogleAuthPhase(null);
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });

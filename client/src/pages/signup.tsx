@@ -109,6 +109,10 @@ export default function Signup() {
           setLocation(returnTo || "/dashboard", { replace: true });
           setTimeout(() => setGoogleAuthPhase(null), 600);
         } else if (result.reason === "plugin_not_available") {
+          // Only the genuine "plugin missing from build" path falls back to
+          // the in-app browser. Misconfiguration (wrong SHA-1, missing Web
+          // client ID) is surfaced as an error toast instead of silently
+          // bouncing the user into the browser flow.
           const browserResult = await browserGoogleSignIn({
             returnTo: returnTo || undefined,
             onPhaseChange: (phase) => {
@@ -126,6 +130,13 @@ export default function Signup() {
           } else {
             setGoogleAuthPhase(null);
           }
+        } else if (result.reason === "misconfigured") {
+          setGoogleAuthPhase(null);
+          toast({
+            title: "Google Sign-In Setup Issue",
+            description: result.message || "This build isn't authorized for Google Sign-In yet.",
+            variant: "destructive",
+          });
         } else if (result.reason !== "cancelled") {
           setGoogleAuthPhase(null);
           toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });

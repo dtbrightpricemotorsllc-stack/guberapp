@@ -6,16 +6,56 @@ import { queryClient } from "@/lib/queryClient";
 export interface NativeGoogleSignInResult {
   ok: boolean;
   accountType?: string;
-  reason?: "cancelled" | "error" | "plugin_not_available";
+  reason?: "cancelled" | "error" | "plugin_not_available" | "misconfigured";
   message?: string;
+  /** Diagnostic — present in dev tools / native logcat for support triage. */
+  diagnostic?: { clientIdPrefix?: string; clientIdLength?: number };
+}
+
+/**
+ * Mask a client ID so we can log it safely. Returns the leading 12 chars
+ * (project number portion) and the total length — enough to verify in
+ * Android logcat that the right value reached the WebView, never enough to
+ * leak the credential.
+ */
+function maskClientId(raw: string): { clientIdPrefix?: string; clientIdLength?: number } {
+  if (!raw) return { clientIdPrefix: "(empty)", clientIdLength: 0 };
+  return {
+    clientIdPrefix: raw.slice(0, 12) + "…",
+    clientIdLength: raw.length,
+  };
 }
 
 export async function nativeGoogleSignIn(
   _opts?: { authPathBase?: string },
 ): Promise<NativeGoogleSignInResult> {
+  const clientId = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || "";
+  const diag = maskClientId(clientId);
+
+  // Surfaced in adb logcat under "chromium" / "Capacitor/Console" so a tester
+  // can confirm the sync actually baked a clientId into the build.
+  console.info("[google/native] init", { ...diag });
+
+  // Hard-fail before invoking the plugin if the build was synced without the
+  // serverClientId — otherwise the plugin throws an opaque DEVELOPER_ERROR
+  // that callers used to misinterpret as "user cancelled".
+  if (!clientId) {
+    console.warn(
+      "[google/native] VITE_GOOGLE_WEB_CLIENT_ID is empty — the build was synced " +
+      "without the Web OAuth client ID. Set it in your CI environment and run " +
+      "`npx cap sync android` again before rebuilding.",
+    );
+    return {
+      ok: false,
+      reason: "misconfigured",
+      message: "Google Sign-In is missing its Web Client ID. Please contact support.",
+      diagnostic: diag,
+    };
+  }
+
   try {
     await GoogleAuth.initialize({
-      clientId: import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || "",
+      clientId,
       scopes: ["profile", "email"],
       grantOfflineAccess: true,
     });
@@ -24,7 +64,13 @@ export async function nativeGoogleSignIn(
     const idToken = googleUser.authentication?.idToken;
 
     if (!idToken) {
-      return { ok: false, reason: "error", message: "No ID token returned from Google" };
+      console.warn("[google/native] signIn returned no idToken", { ...diag });
+      return {
+        ok: false,
+        reason: "misconfigured",
+        message: "Google didn't return an ID token. The Android OAuth client may be missing this app's signing certificate (SHA-1).",
+        diagnostic: diag,
+      };
     }
 
     const res = await fetch("/api/auth/google/native", {
@@ -36,30 +82,52 @@ export async function nativeGoogleSignIn(
     const data = await res.json();
 
     if (!res.ok) {
-      return { ok: false, reason: "error", message: data.message || "Sign-in failed" };
+      return { ok: false, reason: "error", message: data.message || "Sign-in failed", diagnostic: diag };
     }
 
     await setToken(data.token);
     queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    return { ok: true, accountType: data.user?.accountType };
+    return { ok: true, accountType: data.user?.accountType, diagnostic: diag };
   } catch (err: any) {
     const msg: string = err?.message || String(err);
+    const code: string = err?.code != null ? String(err.code) : "";
+    console.warn("[google/native] signIn failed", { msg, code, ...diag });
+
+    // Plugin truly missing from the build (web/PWA, or the Android Java side
+    // never registered). Only this case is allowed to fall back to browser.
     if (
       msg.includes("not implemented") ||
       msg.includes("not available") ||
       msg.includes("No implementation found")
     ) {
-      return { ok: false, reason: "plugin_not_available" };
+      return { ok: false, reason: "plugin_not_available", diagnostic: diag };
     }
+
+    // User dismissal — silent.
     if (
       msg.includes("cancel") ||
       msg.includes("Cancel") ||
-      msg.includes("12501") ||
-      msg.includes("dismissed")
+      msg.includes("dismissed") ||
+      code === "12501"
     ) {
-      return { ok: false, reason: "cancelled" };
+      return { ok: false, reason: "cancelled", diagnostic: diag };
     }
-    return { ok: false, reason: "error", message: msg };
+
+    // DEVELOPER_ERROR (10) means the SHA-1 / package name combination is not
+    // registered in the Google Cloud project that owns the Web client, OR
+    // google-services.json doesn't contain an Android OAuth entry for this
+    // package. We label this distinctly so the call sites stop silently
+    // bouncing the user into the browser.
+    if (code === "10" || msg.includes("DEVELOPER_ERROR") || msg.includes("ApiException: 10")) {
+      return {
+        ok: false,
+        reason: "misconfigured",
+        message: "Android Google Sign-In isn't authorized for this build. The signing certificate (SHA-1) for this APK isn't registered with the OAuth client.",
+        diagnostic: diag,
+      };
+    }
+
+    return { ok: false, reason: "error", message: msg, diagnostic: diag };
   }
 }
 
