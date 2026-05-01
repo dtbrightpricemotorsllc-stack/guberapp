@@ -44,12 +44,18 @@ export function PushNotificationBanner() {
   const handleEnable = async () => {
     if (!user?.id) return;
     setEnabling(true);
-    await subscribeToPush(user.id);
-    const next = getPushStatus();
-    setStatus(next);
-    if (next === "granted") {
+    // Trust the boolean result — getPushStatus() always returns "default"
+    // on native iOS/Android, so we'd otherwise never advance to "granted".
+    const granted = await subscribeToPush(user.id);
+    if (granted) {
+      setStatus("granted");
       localStorage.removeItem(DISMISS_KEY);
       setDismissed(true);
+    } else {
+      // Refresh from getPushStatus() to catch web "denied" transitions; on
+      // native this still returns "default", which is harmless because the
+      // banner re-renders on next mount once the in-memory hint changes.
+      setStatus(getPushStatus());
     }
     setEnabling(false);
   };

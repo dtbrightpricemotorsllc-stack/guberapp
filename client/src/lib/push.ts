@@ -68,7 +68,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
  * This is the only delivery path that supports custom GUBER sounds on native;
  * the web-push VAPID gateway strips aps.sound on iOS Safari.
  */
-async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolean }): Promise<void> {
+async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolean }): Promise<boolean> {
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
@@ -84,11 +84,11 @@ async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolea
     // prompts (dashboard / browse-jobs) call us with promptIfNeeded:true after
     // explaining why notifications are useful, which then drives the OS dialog.
     const current = await PushNotifications.checkPermissions();
-    if (current.receive === "denied") return;
+    if (current.receive === "denied") return false;
     if (current.receive !== "granted") {
-      if (opts?.promptIfNeeded === false) return;
+      if (opts?.promptIfNeeded === false) return false;
       const { receive } = await PushNotifications.requestPermissions();
-      if (receive !== "granted") return;
+      if (receive !== "granted") return false;
     }
 
     // Attach listeners BEFORE calling register() so the token event is never missed.
@@ -112,39 +112,50 @@ async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolea
 
     // Register — fires the 'registration' listener with the device/registration token.
     await PushNotifications.register();
+    return true;
   } catch (err) {
     console.warn("[push/native] native push setup failed:", err);
+    return false;
   }
 }
 
 // ── Web-push VAPID (non-native browsers) ─────────────────────────────────────
 
-export async function subscribeToPush(userId: number, opts?: { promptIfNeeded?: boolean }): Promise<void> {
+/**
+ * Subscribe the user to push. Returns true if permission was granted and the
+ * registration call succeeded; false if denied, dismissed, or otherwise blocked.
+ * Callers (modals, prompts) use the return value to decide whether to show
+ * success UI — `getPushStatus()` is unreliable on native (always returns
+ * "default" because the WebView can't read the OS permission directly).
+ */
+export async function subscribeToPush(
+  userId: number,
+  opts?: { promptIfNeeded?: boolean },
+): Promise<boolean> {
   // Native iOS / Android — use Capacitor plugin for direct APNs / FCM delivery
   // with custom GUBER sounds.
   if (isNativeApp && (isIOS || isAndroid)) {
-    await subscribeNative(userId, opts);
-    return;
+    return await subscribeNative(userId, opts);
   }
 
   // All other platforms — standard Web Push via VAPID
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
 
   try {
     const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
     await navigator.serviceWorker.ready;
 
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") return;
+    if (permission !== "granted") return false;
 
     const existing = await reg.pushManager.getSubscription();
     if (existing) {
       await sendSubscriptionToServer(existing);
-      return;
+      return true;
     }
 
     const keyRes = await fetch(PUBLIC_KEY_URL);
-    if (!keyRes.ok) return;
+    if (!keyRes.ok) return false;
     const { publicKey } = await keyRes.json();
 
     const subscription = await reg.pushManager.subscribe({
@@ -153,8 +164,10 @@ export async function subscribeToPush(userId: number, opts?: { promptIfNeeded?: 
     });
 
     await sendSubscriptionToServer(subscription);
+    return true;
   } catch (err) {
     console.warn("[push] subscription failed:", err);
+    return false;
   }
 }
 

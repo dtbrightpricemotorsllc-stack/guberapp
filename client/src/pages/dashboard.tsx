@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
-import { getPushStatus, subscribeToPush } from "@/lib/push";
+import { subscribeToPush } from "@/lib/push";
 import { buildReferralShareText } from "@/lib/referral";
 import {
   AlertPromptModal, AlertActionPrompt, MissedEventBanner,
@@ -347,8 +347,11 @@ export default function Dashboard() {
     setShowActionPrompt(false);
     setShowMissedBanner(false);
     if (user?.id) {
-      await subscribeToPush(user.id);
-      setAlertStatus(getPushStatus() === "granted" ? "granted" : "declined");
+      // Use the boolean return from subscribeToPush — getPushStatus() lies
+      // on native (always returns "default"), which previously made the
+      // "Turn on job alerts" banner appear to do nothing even on success.
+      const granted = await subscribeToPush(user.id);
+      setAlertStatus(granted ? "granted" : "declined");
     }
   };
 

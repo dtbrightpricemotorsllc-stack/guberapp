@@ -38,11 +38,12 @@ export function AlertPromptModal({ onClose }: AlertPromptModalProps) {
   const handleEnable = async () => {
     if (!user?.id) return;
     setEnabling(true);
-    await subscribeToPush(user.id);
-    const status = getPushStatus();
+    // subscribeToPush now returns whether permission was actually granted —
+    // do NOT trust getPushStatus() here, it always returns "default" on native.
+    const granted = await subscribeToPush(user.id);
     setEnabling(false);
-    setAlertStatus(status === "granted" ? "granted" : "declined");
-    if (status === "granted") {
+    setAlertStatus(granted ? "granted" : "declined");
+    if (granted) {
       setDone(true);
       setTimeout(onClose, 1600);
     } else {

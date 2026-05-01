@@ -214,20 +214,31 @@ export function playGuberSound(type: SoundType): Promise<boolean> {
   vibrateFor(type);
   if (!getNotifSoundEnabled()) return Promise.resolve(false);
 
-  const audio = new Audio(`/sounds/guber_${type}.wav`);
-  return audio.play()
-    .then(() => true)
-    .catch(() => {
-      // WAV failed — fall back to the synthesized tones via AudioContext.
+  // Race the actual playback against a 1.5s safety timeout. On some Android
+  // WebViews `audio.play()` can hang indefinitely (no resolve, no reject) if
+  // autoplay is blocked or the asset can't be decoded — that previously made
+  // the in-app sound test buttons appear "frozen". The timeout guarantees the
+  // caller always gets a boolean and can show the audio-blocked warning.
+  const playback: Promise<boolean> = (async () => {
+    try {
+      const audio = new Audio(`/sounds/guber_${type}.wav`);
+      await audio.play();
+      return true;
+    } catch {
       try {
         if (type === "money") playGuberCashDrop();
         else playGuberPing();
-        // We can't easily detect AudioContext-level failure, but if it
-        // didn't throw the chain is at least scheduled.
         const ctx = audioCtx;
         return !!(ctx && ctx.state === "running");
       } catch {
         return false;
       }
-    });
+    }
+  })();
+
+  const timeout = new Promise<boolean>((resolve) => {
+    setTimeout(() => resolve(false), 1500);
+  });
+
+  return Promise.race([playback, timeout]);
 }

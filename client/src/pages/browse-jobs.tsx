@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatJobTime } from "@/lib/job-time";
 import { shouldShowAlertPrompt } from "@/components/alert-prompt-modal";
-import { subscribeToPush, getPushStatus } from "@/lib/push";
+import { subscribeToPush } from "@/lib/push";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import type { Job, ServiceType } from "@shared/schema";
 import onDemandImg from "@assets/category-images/on_demand_help.png";
@@ -95,8 +95,10 @@ export default function BrowseJobs() {
 
   const handleEnableAlerts = async () => {
     if (!user?.id) return;
-    await subscribeToPush(user.id);
-    if (getPushStatus() === "granted") setAlertsJustEnabled(true);
+    // Use the boolean return from subscribeToPush — getPushStatus() always
+    // returns "default" on native and would never trigger the success state.
+    const granted = await subscribeToPush(user.id);
+    if (granted) setAlertsJustEnabled(true);
   };
 
   const { data: jobs, isLoading } = useQuery<Job[]>({
