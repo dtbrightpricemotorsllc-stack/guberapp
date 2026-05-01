@@ -1,5 +1,6 @@
 import { SocialLogin } from "@capgo/capacitor-social-login";
 import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 import { setToken } from "@/lib/token-storage";
 import { queryClient } from "@/lib/queryClient";
 
@@ -65,6 +66,17 @@ export async function nativeGoogleSignIn(
 
   console.info("[google/native] init", { ...diag });
   trace("entry", { ...diag });
+
+  // Pre-flight: APKs built before the @capgo/capacitor-social-login plugin
+  // landed have no native side for it, so calling SocialLogin.* throws
+  // "GoogleAuth plugin is not implemented on android". That's the path most
+  // currently-installed phones are on. Detecting this up front and returning
+  // plugin_not_available immediately lets the caller skip straight to the
+  // Chrome-Custom-Tab fallback without the visible failed attempt.
+  if (Capacitor.isNativePlatform() && !Capacitor.isPluginAvailable("SocialLogin")) {
+    trace("plugin_not_registered_in_apk", { ...diag });
+    return { ok: false, reason: "plugin_not_available", diagnostic: diag };
+  }
 
   if (!clientId) {
     console.warn(
@@ -186,12 +198,15 @@ export async function browserGoogleSignIn(opts?: {
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let browserListener: Awaited<ReturnType<typeof Browser.addListener>> | null = null;
 
+  trace("browser_entry", { pollKeyPrefix: pollKey.slice(0, 6) });
+
   return new Promise<NativeGoogleSignInResult>((resolve) => {
     const finish = (result: NativeGoogleSignInResult) => {
       if (resolved) return;
       resolved = true;
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       if (browserListener) { browserListener.remove(); browserListener = null; }
+      trace("browser_finish", { ok: result.ok, reason: result.reason || "" });
       resolve(result);
     };
 
@@ -203,11 +218,13 @@ export async function browserGoogleSignIn(opts?: {
 
         opts?.onPhaseChange?.("browser_open");
         await Browser.open({ url: authUrl.toString(), presentationStyle: "popover" });
+        trace("browser_opened", {});
 
         let attempts = 0;
         pollInterval = setInterval(async () => {
           attempts++;
           if (attempts > 200) {
+            trace("browser_poll_timeout", { attempts });
             await Browser.close().catch(() => {});
             finish({ ok: false, reason: "cancelled" });
             return;
@@ -217,6 +234,7 @@ export async function browserGoogleSignIn(opts?: {
             if (res.ok) {
               const data = await res.json();
               if (data.token) {
+                trace("browser_poll_token_received", { attempts });
                 opts?.onPhaseChange?.("completing");
                 await setToken(data.token);
                 queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -230,6 +248,7 @@ export async function browserGoogleSignIn(opts?: {
           }
         }, 1500);
       } catch (err: any) {
+        trace("browser_threw", { msg: String(err?.message || err).slice(0, 300) });
         finish({ ok: false, reason: "error", message: err?.message || String(err) });
       }
     })();
