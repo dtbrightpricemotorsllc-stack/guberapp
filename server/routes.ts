@@ -2223,7 +2223,7 @@ export async function registerRoutes(
     <h1>Signed in!</h1>
     <p id="msg"><span class="spinner"></span>Returning to GUBER…</p>
     <a id="returnBtn" href="${intentUrl}" class="return-btn">Return to GUBER</a>
-    <p class="hint">If nothing happens, tap the button above.</p>
+    <p class="hint">If the button doesn't work, tap the <strong>X</strong> in the top-left corner to close this tab — you'll be signed in.</p>
   </div>
   <script>
     (function () {
@@ -2273,7 +2273,7 @@ export async function registerRoutes(
       // Surface the manual button instructions so the user knows what to do.
       setTimeout(function () {
         if (window.closed) return;
-        if (msg) msg.innerHTML = 'Tap the button below to finish.';
+        if (msg) msg.innerHTML = 'Tap the green button below to finish.';
       }, 1200);
     })();
   </script>
