@@ -2199,18 +2199,16 @@ export async function registerRoutes(
     body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top,0) 24px env(safe-area-inset-bottom,0)}
     .glow-a{position:fixed;top:50%;left:50%;width:600px;height:600px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(0,224,124,0.08),transparent 65%);pointer-events:none}
     .glow-b{position:fixed;bottom:18%;right:8%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,0.05),transparent 65%);pointer-events:none}
-    .card{position:relative;z-index:1;max-width:320px;text-align:center;width:100%}
+    .card{position:relative;z-index:1;max-width:340px;text-align:center;width:100%}
     .brand{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-weight:800;letter-spacing:.18em;font-size:30px;color:#fff;margin:0 0 28px;text-transform:uppercase}
     .brand span{color:#00e07c}
-    .check{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:rgba(0,224,124,0.12);border:1px solid rgba(0,224,124,0.35);margin-bottom:20px}
-    .check svg{width:28px;height:28px;color:#00e07c}
-    h1{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:18px;font-weight:600;letter-spacing:.05em;margin:0 0 10px;color:#fff}
-    p{font-size:13px;color:#9a9a9a;margin:0 0 22px;line-height:1.5;letter-spacing:.02em}
-    .return-btn{display:block;width:100%;padding:14px 20px;background:#00e07c;color:#000;border:none;border-radius:12px;font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;text-decoration:none;text-align:center;-webkit-tap-highlight-color:transparent;transition:transform 0.1s ease, background 0.15s ease}
-    .return-btn:active{transform:scale(0.97);background:#00c66d}
-    .hint{font-size:11px;color:#666;margin:14px 0 0;letter-spacing:.04em}
-    .spinner{width:14px;height:14px;border:2px solid rgba(0,224,124,0.2);border-top-color:rgba(0,224,124,0.6);border-radius:50%;display:inline-block;vertical-align:-2px;margin-right:8px;animation:spin 0.9s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
+    .check{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:rgba(0,224,124,0.14);border:1px solid rgba(0,224,124,0.4);margin-bottom:24px}
+    .check svg{width:32px;height:32px;color:#00e07c}
+    h1{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:22px;font-weight:700;letter-spacing:.04em;margin:0 0 16px;color:#fff}
+    .big-hint{font-size:15px;color:#cfcfcf;margin:0;line-height:1.55;letter-spacing:.01em}
+    .big-hint strong{color:#00e07c;font-size:18px;font-weight:700;padding:0 2px}
+    .arrow-up{position:fixed;top:54px;left:18px;font-size:42px;color:#00e07c;line-height:1;animation:bounce 1.4s ease-in-out infinite;pointer-events:none;text-shadow:0 0 18px rgba(0,224,124,0.6)}
+    @keyframes bounce{0%,100%{transform:translate(0,0)}50%{transform:translate(-4px,-4px)}}
   </style>
 </head>
 <body>
@@ -2221,33 +2219,10 @@ export async function registerRoutes(
     <div class="check">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 13 10 18 19 7"/></svg>
     </div>
-    <h1>Signed in!</h1>
-    <p>You're signed in. Tap the <strong>X</strong> in the top-left corner to return to GUBER.</p>
-    <a id="returnBtn" href="#" class="return-btn">Close this tab</a>
-    <p class="hint">If the button doesn't work, tap the <strong>X</strong> in the top-left corner.</p>
+    <h1>You're signed in!</h1>
+    <p class="big-hint">Tap the <strong>×</strong> in the top-left corner of this tab to return to GUBER.</p>
+    <div class="arrow-up">↖</div>
   </div>
-  <script>
-    (function () {
-      var btn = document.getElementById('returnBtn');
-
-      // The native GUBER app is polling the server in the background and
-      // will close this tab + sign the user in automatically within ~300ms.
-      //
-      // The button below is a backup in case that auto-close doesn't fire
-      // (e.g. user is on a very old APK that pre-dates the polling logic).
-      // It does ONLY window.close() — no history.back(), no deep links, no
-      // intent URLs. Earlier versions tried those and accidentally either
-      // re-triggered the OAuth chain or fell through to a browser_fallback_url
-      // that opened the PWA in the browser. Both broke the flow.
-      //
-      // window.close() requires a user gesture in most modern browsers, so
-      // we never attempt it automatically here — only on a real button tap.
-      if (btn) btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        try { window.close(); } catch (err) {}
-      });
-    })();
-  </script>
 </body>
 </html>`);
         }

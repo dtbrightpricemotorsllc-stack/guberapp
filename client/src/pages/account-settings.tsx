@@ -28,6 +28,7 @@ import {
   getNotifVibrationEnabled, setNotifVibrationEnabled,
   playGuberSound, unlockAudio, type SoundType,
 } from "@/lib/notification-sound";
+import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/push";
 import { GlobalDisclaimerModal } from "@/components/liability-modals";
 
 async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<string> {
@@ -72,6 +73,8 @@ export default function AccountSettings() {
   const [notifVibrationEnabled, setNotifVibrationEnabledState] = useState(true);
   const [vibrationSupported, setVibrationSupported] = useState(false);
   const [audioBlockedWarning, setAudioBlockedWarning] = useState(false);
+  const [pushStatus, setPushStatus] = useState<PushStatus | null>(null);
+  const [enablingPush, setEnablingPush] = useState(false);
 
   const [preferredMapApp, setPreferredMapApp] = useState<string>("ask");
 
@@ -109,7 +112,32 @@ export default function AccountSettings() {
     setNotifSoundEnabledState(getNotifSoundEnabled());
     setNotifVibrationEnabledState(getNotifVibrationEnabled());
     setVibrationSupported("vibrate" in navigator);
+    setPushStatus(getPushStatus());
   }, []);
+
+  const handleEnablePush = async () => {
+    if (!user?.id) return;
+    setEnablingPush(true);
+    try {
+      const granted = await subscribeToPush(user.id);
+      if (granted) {
+        setPushStatus("granted");
+        toast({ title: "Push alerts enabled", description: "You'll get instant notifications for new jobs and payments." });
+      } else {
+        // Re-read status to surface "denied" transitions on web.
+        setPushStatus(getPushStatus());
+        toast({
+          title: "Couldn't enable push alerts",
+          description: "Make sure notifications are allowed for GUBER in your phone's settings.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Couldn't enable push alerts", description: err?.message || "Try again in a moment.", variant: "destructive" });
+    } finally {
+      setEnablingPush(false);
+    }
+  };
 
   useEffect(() => {
     if (window.location.hash === "#test-sounds") {
@@ -396,6 +424,38 @@ export default function AccountSettings() {
             <Bell className="w-4 h-4 text-primary" />
             <h3 className="font-display font-semibold text-sm">Notification Settings</h3>
           </div>
+
+          {pushStatus && pushStatus !== "unsupported" && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+              <div className="flex-1 min-w-0 pr-3">
+                <p className="font-display font-semibold text-sm">Push alerts</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {pushStatus === "granted"
+                    ? "You're set up to get instant alerts for new jobs and payments."
+                    : pushStatus === "denied"
+                    ? "Alerts are blocked. Allow notifications for GUBER in your phone's settings, then come back here."
+                    : pushStatus === "ios-needs-install"
+                    ? "Add GUBER to your home screen first (Safari → Share → Add to Home Screen) to enable push alerts."
+                    : "Get instant alerts when someone accepts your job, pays you, or a cash drop is nearby."}
+                </p>
+              </div>
+              {pushStatus === "granted" ? (
+                <span className="text-[11px] font-display font-semibold text-primary px-2 py-1 rounded-md bg-primary/10 border border-primary/30 shrink-0" data-testid="status-push-enabled">
+                  ON
+                </span>
+              ) : pushStatus === "default" ? (
+                <Button
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-[12px] h-8 px-3 shrink-0"
+                  onClick={handleEnablePush}
+                  disabled={enablingPush}
+                  data-testid="button-enable-push"
+                >
+                  {enablingPush ? "..." : "Enable"}
+                </Button>
+              ) : null}
+            </div>
+          )}
 
           <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
             <div>

@@ -113,6 +113,14 @@ export function PushNotificationBanner() {
 
   if (dismissed) return null;
   if (status === "unsupported") return null;
+  // The "default" state (push available but not yet enabled) used to render
+  // a yellow "Turn on job alerts" nag here. Users found it intrusive and the
+  // Enable button silently failed on some Android builds. Push enable now
+  // lives in Account Settings → Notification Settings → "Enable push alerts"
+  // so users can turn it on intentionally without seeing a banner every login.
+  // We still surface the genuinely-actionable error states below ("denied"
+  // and "ios-needs-install"), since those need user action to unblock.
+  if (status === "default") return null;
 
   if (status === "ios-needs-install") {
     return (
