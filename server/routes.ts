@@ -2166,14 +2166,25 @@ export async function registerRoutes(
             expiresAt: Date.now() + 5 * 60 * 1000,
           });
           console.log(`[GUBER auth] Google auth complete (native/poll) — userId=${user.id} pollKey=${pollKey.slice(0, 8)}…`);
-          // Build the deep link with the JWT embedded so the "Return to GUBER"
-          // button can hand the token directly to the app via the guber://
-          // scheme. This works even if the in-app polling has been paused by
-          // Android's WebView background-throttling (which is the common case
-          // on Android 13+ — polling is suspended while the user is in the
-          // browser tab, so the auto-close path is unreliable on Android).
-          const deepLinkReturnTo = returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
-          const deepLinkUrl = `guber://auth-success?token=${encodeURIComponent(jwtToken)}${deepLinkReturnTo}`;
+          // Build deep links so the "Return to GUBER" button can hand the JWT
+          // directly to the app. We provide TWO formats and try both:
+          //
+          //   1. Android intent:// URL — the official Android mechanism for
+          //      launching an app from a browser tab. Samsung Internet and
+          //      Chrome Custom Tab both honor this from a user gesture, even
+          //      when they would block a plain custom-scheme navigation.
+          //      Includes the package name (com.guber.app) so Android knows
+          //      exactly which app to open with no chooser dialog.
+          //
+          //   2. Plain guber:// URL — fallback for iOS / older Android
+          //      browsers that don't understand intent:// syntax.
+          //
+          // Polling is unreliable on Android because the OS pauses background
+          // WebView timers while the user is in the browser tab, so the
+          // auto-close path can't be trusted. The button is the real path.
+          const deepLinkQuery = `token=${encodeURIComponent(jwtToken)}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+          const guberSchemeUrl = `guber://auth-success?${deepLinkQuery}`;
+          const intentUrl = `intent://auth-success?${deepLinkQuery}#Intent;scheme=guber;package=com.guber.app;S.browser_fallback_url=${encodeURIComponent("https://guberapp.app/auth-success?" + deepLinkQuery)};end`;
           return res.type("html").send(`<!DOCTYPE html>
 <html>
 <head>
@@ -2211,43 +2222,55 @@ export async function registerRoutes(
     </div>
     <h1>Signed in!</h1>
     <p id="msg"><span class="spinner"></span>Returning to GUBER…</p>
-    <a id="returnBtn" href="${deepLinkUrl}" class="return-btn">Return to GUBER</a>
+    <a id="returnBtn" href="${intentUrl}" class="return-btn">Return to GUBER</a>
     <p class="hint">If nothing happens, tap the button above.</p>
   </div>
   <script>
     (function () {
       var btn = document.getElementById('returnBtn');
       var msg = document.getElementById('msg');
-      var deepLink = ${JSON.stringify(deepLinkUrl)};
+      var intentUrl = ${JSON.stringify(intentUrl)};
+      var schemeUrl = ${JSON.stringify(guberSchemeUrl)};
+      var isAndroid = /Android/i.test(navigator.userAgent);
 
-      // Strategy: bring GUBER forward via the guber:// deep link, which
-      // carries the JWT directly so the app doesn't have to poll. Polling is
-      // unreliable on Android because the OS pauses background WebView timers
-      // while the user is in the browser tab.
+      // Step 1: try the closest thing to "tap the X close button" available
+      // to JS — close the browser tab. This works in some Custom Tab variants
+      // when triggered by a real user gesture (button tap).
+      // Step 2: fire the appropriate launch URL — intent:// on Android
+      // (which Samsung Internet and Chrome Custom Tab both honor reliably),
+      // plain guber:// on iOS / others.
       function returnToApp() {
         try { window.close(); } catch (e) {}
         try { window.parent && window.parent.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
         try { window.opener && window.opener.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
-        try { window.location.href = deepLink; } catch (e) {}
+        try {
+          window.location.href = isAndroid ? intentUrl : schemeUrl;
+        } catch (e) {}
+        // Last resort: try to navigate back, which dismisses the Custom Tab
+        // in most Android browsers and brings the calling app forward.
+        setTimeout(function () {
+          if (!window.closed) {
+            try { window.history.back(); } catch (e) {}
+            try { window.close(); } catch (e) {}
+          }
+        }, 400);
       }
 
       // Button tap is a real user gesture, which Chrome Custom Tab and
-      // Samsung Internet both honor for custom-scheme navigation.
+      // Samsung Internet both honor for intent:// navigation.
       if (btn) btn.addEventListener('click', function (e) {
         e.preventDefault();
         returnToApp();
       });
 
-      // Best-effort auto-attempts. Many Android browsers (Chrome Custom Tab,
-      // Samsung Internet) block intent navigation without a user gesture, so
-      // these often won't fire — that's why the button is the primary path.
+      // Best-effort auto-attempts. Most Android browsers block intent
+      // navigation without a gesture, but try anyway — costs nothing.
       setTimeout(returnToApp, 50);
       setTimeout(returnToApp, 300);
       setTimeout(returnToApp, 800);
 
-      // After 1.2s, if the tab is still open the auto-close didn't work
-      // (the common case on Android). Surface the manual button instructions
-      // sooner so the user isn't waiting on something that won't happen.
+      // After 1.2s, if the tab is still open the auto-close didn't work.
+      // Surface the manual button instructions so the user knows what to do.
       setTimeout(function () {
         if (window.closed) return;
         if (msg) msg.innerHTML = 'Tap the button below to finish.';
