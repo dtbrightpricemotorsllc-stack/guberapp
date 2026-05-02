@@ -2222,59 +2222,30 @@ export async function registerRoutes(
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 13 10 18 19 7"/></svg>
     </div>
     <h1>Signed in!</h1>
-    <p id="msg"><span class="spinner"></span>Returning to GUBER…</p>
-    <a id="returnBtn" href="#" class="return-btn">Close &amp; Return to GUBER</a>
-    <p class="hint">If the button doesn't work, tap the <strong>X</strong> in the top-left corner to close this tab — you're already signed in.</p>
+    <p>You're signed in. Tap the <strong>X</strong> in the top-left corner to return to GUBER.</p>
+    <a id="returnBtn" href="#" class="return-btn">Close this tab</a>
+    <p class="hint">If the button doesn't work, tap the <strong>X</strong> in the top-left corner.</p>
   </div>
   <script>
     (function () {
       var btn = document.getElementById('returnBtn');
-      var msg = document.getElementById('msg');
-      var isAndroid = /Android/i.test(navigator.userAgent);
 
-      // Strategy: close this browser tab. The native GUBER app is polling the
-      // server in the background AND has a "browser closed" listener. The
-      // moment this tab disappears, the app picks up the JWT and signs in.
+      // The native GUBER app is polling the server in the background and
+      // will close this tab + sign the user in automatically within ~300ms.
       //
-      // We deliberately do NOT try to launch the app via guber:// or intent://
-      // from this page. Earlier attempts went through Samsung Internet's
-      // browser_fallback_url and accidentally opened the PWA in the browser
-      // instead of returning to the native app. Closing the tab is the proven
-      // path because the X button in the top-left corner does the same thing.
-      function closeTab() {
-        try { window.parent && window.parent.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
-        try { window.opener && window.opener.postMessage({ type: 'guber-auth-complete' }, '*'); } catch (e) {}
-        try { window.close(); } catch (e) {}
-        // history.back() dismisses Chrome Custom Tab and most Android browser
-        // tabs, and surfaces whichever app opened the tab — the native GUBER.
-        setTimeout(function () {
-          if (window.closed) return;
-          try { window.history.back(); } catch (e) {}
-        }, 150);
-        setTimeout(function () {
-          if (window.closed) return;
-          try { window.close(); } catch (e) {}
-        }, 400);
-      }
-
-      // Button tap is a real user gesture — both window.close() and
-      // history.back() are far more likely to succeed when triggered by one.
+      // The button below is a backup in case that auto-close doesn't fire
+      // (e.g. user is on a very old APK that pre-dates the polling logic).
+      // It does ONLY window.close() — no history.back(), no deep links, no
+      // intent URLs. Earlier versions tried those and accidentally either
+      // re-triggered the OAuth chain or fell through to a browser_fallback_url
+      // that opened the PWA in the browser. Both broke the flow.
+      //
+      // window.close() requires a user gesture in most modern browsers, so
+      // we never attempt it automatically here — only on a real button tap.
       if (btn) btn.addEventListener('click', function (e) {
         e.preventDefault();
-        closeTab();
+        try { window.close(); } catch (err) {}
       });
-
-      // Best-effort auto-close. Most Android browsers block this without a
-      // gesture, but iOS Safari and some configurations honor it.
-      setTimeout(closeTab, 100);
-      setTimeout(closeTab, 600);
-
-      // After 1.2s, if the tab is still open the auto-close didn't work.
-      // Surface the manual button instructions so the user knows what to do.
-      setTimeout(function () {
-        if (window.closed) return;
-        if (msg) msg.innerHTML = 'Tap the green button below to finish.';
-      }, 1200);
     })();
   </script>
 </body>
