@@ -4074,6 +4074,9 @@ data-testid="select-final-location-mode"
 {drop.status === "active" && (
 <Button size="sm" onClick={() => patchMutation.mutate({ id: drop.id, data: { status: "closed" } })} disabled={patchMutation.isPending} variant="outline" className="h-7 text-[10px] font-display border-border/30 px-2" data-testid={`button-close-drop-${drop.id}`}>Close</Button>
 )}
+{(drop.status === "expired" || drop.status === "closed") && (
+<Button size="sm" onClick={() => patchMutation.mutate({ id: drop.id, data: { status: "active", closedAt: null } })} disabled={patchMutation.isPending} className="h-7 text-[10px] font-display bg-emerald-500 text-black hover:bg-emerald-400 px-2" data-testid={`button-reactivate-drop-${drop.id}`}>Reactivate</Button>
+)}
 <Button size="sm" variant="ghost" onClick={() => setReviewDrop(reviewDrop === drop.id ? null : drop.id)} className="h-7 text-[10px] font-display px-2 text-primary" data-testid={`button-review-drop-${drop.id}`}>
 {reviewDrop === drop.id ? "Hide" : "Submissions"}
 </Button>
