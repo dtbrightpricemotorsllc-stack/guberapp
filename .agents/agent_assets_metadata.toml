@@ -96,6 +96,12 @@ uri = "file://client/public/loading-city-bg.png"
 type = "image"
 title = "neon city loading background"
 
+[[generated]]
+id = "GGuKKlTg7c2jcVAt5IYk_"
+uri = "file://client/public/loading-badger-aiming-up.png"
+type = "image"
+title = "badger aiming phone up"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"

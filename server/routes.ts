@@ -2207,13 +2207,30 @@ export async function registerRoutes(
     h1{font-family:'Oxanium','Inter',-apple-system,sans-serif;font-size:22px;font-weight:700;letter-spacing:.04em;margin:0 0 16px;color:#fff}
     .big-hint{font-size:15px;color:#cfcfcf;margin:0;line-height:1.55;letter-spacing:.01em}
     .big-hint strong{color:#00e07c;font-size:18px;font-weight:700;padding:0 2px}
-    .arrow-up{position:fixed;top:54px;left:18px;font-size:42px;color:#00e07c;line-height:1;animation:bounce 1.4s ease-in-out infinite;pointer-events:none;text-shadow:0 0 18px rgba(0,224,124,0.6)}
-    @keyframes bounce{0%,100%{transform:translate(0,0)}50%{transform:translate(-4px,-4px)}}
+
+    /* Exit cue: badger mascot aiming a neon laser at the close (X) button. */
+    .exit-cue{position:fixed;top:0;left:0;width:240px;height:240px;pointer-events:none;z-index:2}
+    .badger{position:absolute;top:70px;left:24px;width:118px;height:auto;display:block;filter:drop-shadow(0 0 12px rgba(0,224,124,0.25))}
+    /* Laser beam: thin core stripe with green + purple glow halo, rotated up-left toward the X. */
+    .laser{position:absolute;top:88px;left:54px;width:44px;height:5px;border-radius:3px;transform-origin:left center;transform:rotate(230deg);background:linear-gradient(90deg,#00e07c 0%,#7af5b8 30%,#c9a8ff 65%,#a855f7 100%);box-shadow:0 0 6px #00e07c,0 0 14px rgba(0,224,124,0.85),0 0 22px rgba(168,85,247,0.7),0 0 32px rgba(168,85,247,0.45);animation:beam 1.2s ease-in-out infinite alternate}
+    /* Charge dot at the phone end — sits on top of the laser origin. */
+    .charge{position:absolute;top:84px;left:50px;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle,#fff 0%,#00e07c 35%,rgba(0,224,124,0) 70%);box-shadow:0 0 12px #00e07c,0 0 24px rgba(168,85,247,0.6);animation:charge 1.2s ease-in-out infinite alternate}
+    /* Impact burst near the X button. */
+    .impact{position:absolute;top:42px;left:14px;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,0.9) 0%,rgba(122,245,184,0.7) 25%,rgba(168,85,247,0.5) 55%,rgba(168,85,247,0) 75%);animation:impact 1.2s ease-in-out infinite alternate-reverse}
+    @keyframes beam{0%{opacity:.75;box-shadow:0 0 4px #00e07c,0 0 10px rgba(0,224,124,0.7),0 0 18px rgba(168,85,247,0.55),0 0 26px rgba(168,85,247,0.35)}100%{opacity:1;box-shadow:0 0 8px #00e07c,0 0 18px rgba(0,224,124,0.95),0 0 28px rgba(168,85,247,0.85),0 0 40px rgba(168,85,247,0.55)}}
+    @keyframes charge{0%{transform:scale(.85);opacity:.7}100%{transform:scale(1.15);opacity:1}}
+    @keyframes impact{0%{transform:scale(.7);opacity:.55}100%{transform:scale(1.2);opacity:1}}
   </style>
 </head>
 <body>
   <div class="glow-a"></div>
   <div class="glow-b"></div>
+  <div class="exit-cue">
+    <div class="impact"></div>
+    <div class="laser"></div>
+    <div class="charge"></div>
+    <img class="badger" src="/loading-badger-aiming-up.png" alt="">
+  </div>
   <div class="card">
     <div class="brand">G<span>U</span>BER</div>
     <div class="check">
@@ -2221,7 +2238,6 @@ export async function registerRoutes(
     </div>
     <h1>You're signed in!</h1>
     <p class="big-hint">Tap the <strong>×</strong> in the top-left corner of this tab to return to GUBER.</p>
-    <div class="arrow-up">↖</div>
   </div>
 </body>
 </html>`);
