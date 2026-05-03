@@ -3413,6 +3413,15 @@ const BLANK_FORM = {
   physicalCashDrop: false,
   winnerProofRequirement: "none",
 };
+// Convert a UTC ISO timestamp from the server into the local "YYYY-MM-DDTHH:MM" string
+// that <input type="datetime-local"> expects, so the admin sees and edits times in their
+// own timezone (matching what they originally typed in).
+const toLocalInputValue = (iso: string) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 const [form, setForm] = useState({ ...BLANK_FORM });
 const [reviewDrop, setReviewDrop] = useState<number | null>(null);
 const [editingDrop, setEditingDrop] = useState<any | null>(null);
@@ -3480,8 +3489,8 @@ clueRevealOnArrival: drop.clueRevealOnArrival ?? drop.clue_reveal_on_arrival ?? 
 clueMediaUrls: Array.isArray(drop.clueMediaUrls || drop.clue_media_urls) ? (drop.clueMediaUrls || drop.clue_media_urls) : [],
 requireInAppCamera: drop.requireInAppCamera ?? drop.require_in_app_camera ?? false,
 proofItems: drop.proofItems || drop.proof_items || [],
-startTime: drop.startTime ? drop.startTime.slice(0, 16) : "",
-endTime: drop.endTime ? drop.endTime.slice(0, 16) : "",
+startTime: drop.startTime ? toLocalInputValue(drop.startTime) : "",
+endTime: drop.endTime ? toLocalInputValue(drop.endTime) : "",
 physicalCashDrop: drop.physicalCashDrop ?? drop.physical_cash_drop ?? false,
 winnerProofRequirement: drop.winnerProofRequirement || drop.winner_proof_requirement || "none",
 });
@@ -3562,7 +3571,21 @@ enabled: !!reviewDrop,
 
 const createMutation = useMutation({
 mutationFn: (statusOverride?: string) => {
-const payload = { ...form, ...(statusOverride ? { status: statusOverride } : {}) };
+// datetime-local inputs return naive strings like "2026-05-03T19:00" with no timezone.
+// Convert through new Date() so the browser interprets them as the admin's local time
+// and we send a proper UTC ISO string to the server (otherwise the server reads them as UTC
+// and the cron auto-expires drops hours before the admin's local end time).
+const toIso = (v: string) => {
+  if (!v) return "";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "" : d.toISOString();
+};
+const payload = {
+  ...form,
+  startTime: toIso(form.startTime),
+  endTime: toIso(form.endTime),
+  ...(statusOverride ? { status: statusOverride } : {}),
+};
 return editingDrop
 ? apiRequest("PATCH", `/api/admin/cash-drops/${editingDrop.id}`, payload)
 : apiRequest("POST", "/api/admin/cash-drops", payload);
