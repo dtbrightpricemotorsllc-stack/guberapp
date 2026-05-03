@@ -12006,7 +12006,7 @@ OUTPUT STYLE:
     try {
       const {
         title, description, rewardPerWinner, winnerLimit, startTime, endTime,
-        gpsLat, gpsLng, gpsRadius, clueText, clueRevealOnArrival, requireInAppCamera,
+        gpsLat, gpsLng, gpsRadius, clueText, clueMediaUrls, clueRevealOnArrival, requireInAppCamera,
         proofItems, sponsorName, sponsorId, isSponsored, brandingEnabled,
         cashWinnerCount, rewardWinnerCount, finalLocationMode,
         rewardType, rewardDescription, rewardQuantity, rewardRedemptionType,
@@ -12033,7 +12033,9 @@ OUTPUT STYLE:
         gpsLat: gpsLat ? parseFloat(gpsLat) : null,
         gpsLng: gpsLng ? parseFloat(gpsLng) : null,
         gpsRadius: gpsRadius ? parseInt(gpsRadius) : 200,
-        clueText, clueRevealOnArrival: !!clueRevealOnArrival, requireInAppCamera: requireInAppCamera !== false,
+        clueText,
+        clueMediaUrls: Array.isArray(clueMediaUrls) ? clueMediaUrls : [],
+        clueRevealOnArrival: !!clueRevealOnArrival, requireInAppCamera: requireInAppCamera !== false,
         proofItems: proofItems || [],
         sponsorName: sponsorName || null,
         sponsorId: sponsorId ? parseInt(sponsorId) : null,
