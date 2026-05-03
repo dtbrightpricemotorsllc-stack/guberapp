@@ -2210,7 +2210,7 @@ export async function registerRoutes(
 
     /* Exit cue: badger mascot aiming a neon laser at the close (X) button. */
     .exit-cue{position:fixed;top:0;left:0;width:240px;height:240px;pointer-events:none;z-index:2}
-    .badger{position:absolute;top:70px;left:24px;width:118px;height:auto;display:block;filter:drop-shadow(0 0 12px rgba(0,224,124,0.25))}
+    .badger{position:absolute;top:70px;left:24px;width:118px;height:auto;display:block}
     /* Laser beam: thin core stripe with green + purple glow halo, rotated up-left toward the X. */
     .laser{position:absolute;top:88px;left:54px;width:44px;height:5px;border-radius:3px;transform-origin:left center;transform:rotate(230deg);background:linear-gradient(90deg,#00e07c 0%,#7af5b8 30%,#c9a8ff 65%,#a855f7 100%);box-shadow:0 0 6px #00e07c,0 0 14px rgba(0,224,124,0.85),0 0 22px rgba(168,85,247,0.7),0 0 32px rgba(168,85,247,0.45);animation:beam 1.2s ease-in-out infinite alternate}
     /* Charge dot at the phone end — sits on top of the laser origin. */
