@@ -1089,39 +1089,52 @@ export async function registerRoutes(
     const lat = parseFloat(req.query.lat as string);
     const lng = parseFloat(req.query.lng as string);
     if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "lat and lng required" });
-    try {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (apiKey) {
-        try {
-          const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-          const resp = await fetch(url);
-          const contentType = resp.headers.get("content-type") || "";
-          if (contentType.includes("application/json")) {
-            const data = await resp.json() as any;
-            if (data.status === "OK" && data.results?.[0]) {
-              const result = data.results[0];
-              const address = result.formatted_address as string;
-              const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
-              const zip = zipComp?.short_name || null;
-              return res.json({ address, zip });
-            }
-          }
-        } catch {
-          // Google Maps unavailable — fall through to Nominatim
+
+    // Try Google Maps first (server-side). Wrapped so any failure — including the
+    // common case where GOOGLE_MAPS_API_KEY has HTTP referer restrictions and is
+    // rejected with an HTML/XML error page — falls cleanly through to Nominatim.
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+        const resp = await fetch(url);
+        const text = await resp.text();
+        let data: any = null;
+        try { data = JSON.parse(text); } catch { /* non-JSON body (HTML/XML error page) — ignore */ }
+        if (data?.status === "OK" && data.results?.[0]) {
+          const result = data.results[0];
+          const address = result.formatted_address as string;
+          const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
+          const zip = zipComp?.short_name || null;
+          return res.json({ address, zip });
         }
+        if (data?.status && data.status !== "OK") {
+          console.warn(`[reverse-geocode] Google returned ${data.status}${data.error_message ? `: ${data.error_message}` : ""}`);
+        }
+      } catch (err: any) {
+        console.warn(`[reverse-geocode] Google call failed: ${err?.message || err}`);
       }
-      // Nominatim fallback
+    }
+
+    // Nominatim fallback. Also fully wrapped so we never 500 the client and start
+    // a retry storm — a missing address is a soft failure.
+    try {
       const nomUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
       const nomResp = await fetch(nomUrl, { headers: { "User-Agent": "GUBER/1.0 contact@guberapp.app" } });
-      const nomData = await nomResp.json() as any;
+      const nomText = await nomResp.text();
+      let nomData: any = null;
+      try { nomData = JSON.parse(nomText); } catch { /* Nominatim error page or rate-limit HTML — ignore */ }
       if (nomData?.display_name) {
         const zip = nomData.address?.postcode || null;
         return res.json({ address: nomData.display_name, zip });
       }
-      return res.status(404).json({ error: "Address not found" });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.warn(`[reverse-geocode] Nominatim call failed: ${err?.message || err}`);
     }
+
+    // Soft failure: return null fields with 200 so the client can render the
+    // raw GPS coordinates without spamming the endpoint with retries.
+    return res.json({ address: null, zip: null });
   });
 
   // AUTH
