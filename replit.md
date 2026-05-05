@@ -62,4 +62,26 @@ GUBER employs a modern full-stack architecture with a focus on security, user ex
 - **Stripe Connect:** For handling all payment processing, including destination charges, connected accounts, and manual payouts.
 - **Google Maps JS API:** Provides interactive mapping capabilities for job and worker locations.
 - **PostgreSQL:** The primary relational database for persistent data storage.
+
+## Production Ops & Cost Controls (Autoscale)
+The production deployment is **Autoscale** (`.replit` `[deployment] deploymentTarget = "autoscale"`). To actually realize the per-request pricing of Autoscale (and not pay for an always-warm instance), the app must have NO recurring in-process timers. Two pieces are required for this to work:
+
+**1. Set these env vars on the production Autoscale deployment (Replit → Deployments → Settings → Secrets):**
+- `DISABLE_BACKGROUND_JOBS=true` — gates every `setInterval` and `node-cron` registration in the app. With this set, `startCron()` early-returns and the four in-process sweeps (offer expiration, coordination timeouts, plus the two in-memory Map cleanups for OAuth poll tokens and AI-game rounds, which are now lazy) never wire up.
+- `CRON_SECRET=<long random string>` — required by `POST /api/internal/cron/run`; requests without a matching `x-cron-secret` header get 401.
+
+**2. Create a Replit Scheduled Deployment** (Deployments → Create deployment → Scheduled) that runs every 2 minutes:
+```
+curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" \
+  https://guberapp.app/api/internal/cron/run
+```
+This single endpoint runs the union of every periodic sweep that used to live inside the app process: cash-drop expiry, cash-drop expiring pings, unaccepted-job expiration, stale-job boost flagging, auto-pay-increase, review-timer auto-confirm, dispute SLA enforcement, observation expiry, stuck-purchasing-observation recovery, OAuth nonce pruning, all 5 reminder sweeps (pre-arrival, missing on-the-way, payout-release, auto-confirm midpoint, helper-response buffer), direct-offer expiration, and the 3 coordination-timeout sweeps.
+
+**Where the code lives:**
+- `server/cron.ts` → `runAllScheduledSweeps()` (exported). `startCron()` at the bottom is a no-op when `DISABLE_BACKGROUND_JOBS=true`.
+- `server/routes.ts` → `runOfferExpirationSweep()` and `runCoordinationTimeoutSweep()` are local async functions inside `registerRoutes()`. The `/api/internal/cron/run` handler calls both, then dynamically imports and calls `runAllScheduledSweeps()`.
+
+**Dev mode:** Leave `DISABLE_BACKGROUND_JOBS` unset locally — timers run in-process exactly as before so you don't need a scheduled deployment for development.
+
+**Reverse-geocode hardening:** `/api/places/reverse-geocode` (server/routes.ts) catches Google Maps non-JSON error pages (HTML/XML "RefererNotAllowedMapError" responses), logs once with the response prefix, then falls back to OpenStreetMap Nominatim (with a `User-Agent` header). On total failure it returns `200 { city: null, state: null, formatted: null }` instead of `500`, so client retry storms can't loop and keep the Autoscale instance warm. **If reverse-geocode keeps failing in prod**, the root cause is the `GOOGLE_MAPS_API_KEY` having HTTP-referer restrictions — server-side calls have no referer so Google rejects them. Fix in Google Cloud Console: create a **separate** API key with no application restrictions (or "IP addresses" restriction) for server use, and store it as a new secret (e.g. `GOOGLE_MAPS_SERVER_KEY`). The browser key stays referer-restricted for the frontend.
 - **AI or Not Service:** An external AI service integrated via an iframe for specific features.

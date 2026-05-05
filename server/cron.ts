@@ -829,7 +829,85 @@ async function helperResponseBufferSweep(): Promise<number> {
   return sent;
 }
 
+// Public single-shot runner used by /api/internal/cron/run when this app is
+// driven by a Replit Scheduled Deployment (DISABLE_BACKGROUND_JOBS=true).
+// Runs the union of every periodic sweep that used to live inside the two
+// node-cron schedules below. Idempotent and safe to call concurrently —
+// each helper either updates rows by status or is dedup-gated.
+export async function runAllScheduledSweeps(): Promise<void> {
+  // 2-min cadence work
+  try {
+    const expired = await autoExpireCashDrops();
+    if (expired > 0) console.log(`[cron] auto-expired ${expired} cash drop(s) past endTime`);
+
+    const dropPings = await cashDropExpiringSweep();
+    if (dropPings > 0) console.log(`[cron] sent ${dropPings} cash-drop expiring reminder(s)`);
+  } catch (err) {
+    console.error("[cron] error in 2-min sweep:", err);
+  }
+
+  // 5-min cadence work
+  try {
+    const expired = await expireUnacceptedJobs();
+    if (expired > 0) console.log(`[cron] expired ${expired} unaccepted job(s)`);
+
+    const boosted = await flagStaleJobs();
+    if (boosted > 0) console.log(`[cron] flagged ${boosted} stale job(s) for boost suggestion`);
+
+    const autoIncreased = await autoIncreaseJobs();
+    if (autoIncreased > 0) console.log(`[cron] auto-increased pay on ${autoIncreased} job(s)`);
+
+    const autoConfirmed = await autoConfirmReviewTimerJobs();
+    if (autoConfirmed > 0) console.log(`[cron] auto-confirmed ${autoConfirmed} job(s) after review timer`);
+
+    const slaResolved = await enforceDisputeSLA();
+    if (slaResolved > 0) console.log(`[cron] auto-resolved ${slaResolved} dispute(s) due to SLA expiry`);
+
+    const expiredObs = await storage.expireOldObservations();
+    if (expiredObs > 0) console.log(`[cron] expired ${expiredObs} old observation(s)`);
+
+    const stuckCutoff = new Date(Date.now() - 10 * 60 * 1000);
+    const recovered = await db.update(observations)
+      .set({ status: "open", purchasedByCompanyId: null, purchasePrice: null, purchasedAt: null })
+      .where(and(eq(observations.status, "purchasing"), lt(observations.purchasedAt!, stuckCutoff)))
+      .returning();
+    if (recovered.length > 0) console.log(`[cron] recovered ${recovered.length} stuck purchasing observation(s)`);
+
+    const prunedNonces = await pruneExpiredOAuthNonces();
+    if (prunedNonces > 0) console.log(`[cron] pruned ${prunedNonces} expired OAuth nonce(s)`);
+
+    // Phase 5 reminder sweeps — dedup-gated, quiet-hours-respecting.
+    const preArrival = await preArrivalReminderSweep();
+    if (preArrival > 0) console.log(`[cron] sent ${preArrival} pre-arrival reminder(s)`);
+
+    const missingOtw = await missingOnTheWaySweep();
+    if (missingOtw > 0) console.log(`[cron] sent ${missingOtw} missing-on-the-way reminder(s)`);
+
+    const payoutPings = await payoutReleaseReminderSweep();
+    if (payoutPings > 0) console.log(`[cron] sent ${payoutPings} payout-release reminder(s)`);
+
+    // Task #317 — auto-confirm midpoint + helper response deadline buffer.
+    const acMid = await autoConfirmMidpointSweep();
+    if (acMid > 0) console.log(`[cron] sent ${acMid} auto-confirm midpoint reminder(s)`);
+
+    const hrBuf = await helperResponseBufferSweep();
+    if (hrBuf > 0) console.log(`[cron] sent ${hrBuf} helper-response buffer reminder(s)`);
+  } catch (err) {
+    console.error("[cron] error in 5-min sweep:", err);
+  }
+}
+
 export function startCron() {
+  // Cost guard: when DISABLE_BACKGROUND_JOBS=true (set on the production
+  // Autoscale deployment), we skip wiring node-cron schedules entirely so
+  // the process has no recurring timers and can be scaled to zero by
+  // Replit Autoscale. The same sweeps still run — driven externally by a
+  // Replit Scheduled Deployment hitting /api/internal/cron/run.
+  if (process.env.DISABLE_BACKGROUND_JOBS === "true") {
+    console.log("[cron] DISABLE_BACKGROUND_JOBS=true — in-process schedules skipped (use /api/internal/cron/run via Scheduled Deployment).");
+    return;
+  }
+
   cron.schedule("*/2 * * * *", async () => {
     try {
       const expired = await autoExpireCashDrops();

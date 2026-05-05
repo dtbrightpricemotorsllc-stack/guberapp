@@ -7,7 +7,7 @@ import { pool } from "./db";
 import { ALL_GAME_IMAGES } from "./game-images";
 import { storage } from "./storage";
 import { signupSchema, loginSchema, businessSignupSchema, businessAccessRequestSchema, businessVerificationSchema, businessOfferSchema } from "@shared/schema";
-import { randomBytes, createHmac } from "crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "crypto";
 import Stripe from "stripe";
 import express from "express";
 import { computeGraceEndsAt, computeExpiresAt } from "./rules";
@@ -2089,14 +2089,20 @@ export async function registerRoutes(
   // The app supplies a random pollKey before opening the browser. After OAuth
   // completes, the server stores the JWT here. The app retrieves it by polling
   // /api/auth/google/poll — one-time use, 5-minute TTL.
+  //
+  // Cost note: previously a setInterval swept this Map every 60s, which kept
+  // the Autoscale instance alive forever. We now evict expired entries lazily
+  // (on read + on insert when the map exceeds a small high-water mark) so the
+  // process can scale to zero when idle.
   // ---------------------------------------------------------------------------
   const pollTokenStore = new Map<string, { jwt: string; accountType: string; expiresAt: number }>();
-  setInterval(() => {
+  function sweepPollTokenStoreIfLarge() {
+    if (pollTokenStore.size <= 100) return;
     const now = Date.now();
     for (const [k, v] of pollTokenStore) {
       if (now >= v.expiresAt) pollTokenStore.delete(k);
     }
-  }, 60_000);
+  }
 
   app.get("/api/auth/google", handleGoogleAuthStart);
 
@@ -2107,6 +2113,7 @@ export async function registerRoutes(
     }
     const entry = pollTokenStore.get(key);
     if (!entry || Date.now() >= entry.expiresAt) {
+      if (entry) pollTokenStore.delete(key); // lazy-evict expired entry
       return res.status(202).json({ pending: true });
     }
     pollTokenStore.delete(key); // one-time use
@@ -2173,6 +2180,7 @@ export async function registerRoutes(
         if (pollKey) {
           // Polling flow: store JWT for the app to retrieve; return a self-contained
           // success page that closes the Chrome Custom Tab automatically.
+          sweepPollTokenStoreIfLarge();
           pollTokenStore.set(pollKey, {
             jwt: jwtToken,
             accountType: user.accountType || "worker",
@@ -9522,11 +9530,16 @@ Input body: ${JSON.stringify((body || "").trim())}`;
   });
 
   // ── AI or Not Game ─────────────────────────────────────────────────────
+  // Cost note: previously a setInterval swept this Map every 5 min, which
+  // kept the Autoscale instance alive 24/7. We now evict expired rounds
+  // lazily (on read + when adding a new round if the map gets large) so the
+  // process can scale to zero when idle.
   const gameRounds = new Map<string, { imageId: string; isAI: boolean; description: string; tip: string; createdAt: number }>();
-  setInterval(() => {
+  function sweepGameRoundsIfLarge() {
+    if (gameRounds.size <= 100) return;
     const cutoff = Date.now() - 15 * 60 * 1000;
     for (const [k, v] of gameRounds.entries()) { if (v.createdAt < cutoff) gameRounds.delete(k); }
-  }, 5 * 60 * 1000);
+  }
 
   app.post("/api/ai-game/challenge", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -9535,6 +9548,7 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       const pool = available.length > 0 ? available : ALL_GAME_IMAGES;
       const image = pool[Math.floor(Math.random() * pool.length)];
       const roundId = randomBytes(16).toString("hex");
+      sweepGameRoundsIfLarge();
       gameRounds.set(roundId, { imageId: image.id, isAI: image.isAI, description: image.description, tip: image.tip, createdAt: Date.now() });
       res.json({ roundId, imageUrl: image.url, imageId: image.id, difficulty: image.difficulty });
     } catch (err: any) {
@@ -9547,6 +9561,12 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       const { roundId, guess } = req.body;
       const round = gameRounds.get(roundId);
       if (!round) return res.status(400).json({ message: "Round not found or expired. Start a new round." });
+      // True evict-on-read: enforce the original 15-minute TTL even when the
+      // map is small enough that sweepGameRoundsIfLarge() is a no-op.
+      if (Date.now() - round.createdAt > 15 * 60 * 1000) {
+        gameRounds.delete(roundId);
+        return res.status(400).json({ message: "Round not found or expired. Start a new round." });
+      }
       gameRounds.delete(roundId);
       const correct = (guess === "ai") === round.isAI;
       res.json({ correct, wasAI: round.isAI, description: round.description, tip: round.tip });
@@ -15622,7 +15642,11 @@ OUTPUT STYLE:
     }
   });
 
-  setInterval(async () => {
+  // ── Direct-offer expiration sweep ────────────────────────────────────────
+  // Hoisted into a named function so Replit Scheduled Deployments can drive
+  // it via /api/internal/cron/run instead of the in-process setInterval
+  // below (which prevents Autoscale from scaling to zero).
+  async function runOfferExpirationSweep(): Promise<void> {
     try {
       const expired = await storage.getExpiredOffers();
       for (const offer of expired) {
@@ -15755,10 +15779,14 @@ OUTPUT STYLE:
     } catch (err) {
       console.error("[cron] offer expiration error:", err);
     }
-  }, 60 * 1000);
+  }
+  if (process.env.DISABLE_BACKGROUND_JOBS !== "true") {
+    setInterval(runOfferExpirationSweep, 60 * 1000);
+  }
 
-  // ── Coordination timeouts cron ───────────────────────────────────────────
-  // Runs every 2 minutes. Three sweeps:
+  // ── Coordination timeouts sweep ──────────────────────────────────────────
+  // Runs every 2 minutes (in-process) or via /api/internal/cron/run when
+  // DISABLE_BACKGROUND_JOBS=true (Scheduled Deployment driven). Three sweeps:
   //   1. pending_poster_confirmation older than 30 min → revert to
   //      pending_worker_time so the worker can re-pick (prevents zombie
   //      pending selections holding the job hostage).
@@ -15768,7 +15796,7 @@ OUTPUT STYLE:
   //      worker_on_my_way_at → set job_at_risk=true and notify the poster.
   // All sweeps are no-ops on empty result sets and never throw past the
   // catch boundary.
-  setInterval(async () => {
+  async function runCoordinationTimeoutSweep(): Promise<void> {
     try {
       const now = new Date();
       const posterDeadline = new Date(now.getTime() - COORDINATION_TIMING.POSTER_CONFIRM_TIMEOUT_MIN * 60_000);
@@ -15896,7 +15924,61 @@ OUTPUT STYLE:
     } catch (err) {
       console.error("[cron] coordination timeouts error:", err);
     }
-  }, 2 * 60 * 1000);
+  }
+  if (process.env.DISABLE_BACKGROUND_JOBS !== "true") {
+    setInterval(runCoordinationTimeoutSweep, 2 * 60 * 1000);
+  }
+
+  // ── Internal cron endpoint (Scheduled Deployment driven) ─────────────────
+  // Replit Scheduled Deployment hits this every 2 min with header
+  //   x-cron-secret: <CRON_SECRET>
+  // It runs every periodic sweep we used to run inside this process via
+  // setInterval / node-cron. Set DISABLE_BACKGROUND_JOBS=true on the main
+  // Autoscale deployment so the in-process timers above stay quiet and the
+  // instance can actually scale to zero between requests.
+  app.post("/api/internal/cron/run", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return res.status(503).json({ error: "CRON_SECRET not configured" });
+    const provided = req.header("x-cron-secret") || "";
+    // Timing-safe comparison: equal-length guard first (timingSafeEqual throws
+    // on length mismatch and the length itself isn't sensitive here, but we
+    // still want constant-time once lengths match to avoid byte-by-byte
+    // discovery of the secret).
+    const a = Buffer.from(provided);
+    const b = Buffer.from(secret);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    const started = Date.now();
+    const results: Record<string, string> = {};
+    let anyFailed = false;
+
+    // In-route sweeps (closure over storage/db/etc.)
+    try { await runOfferExpirationSweep(); results.offerExpiration = "ok"; }
+    catch (e: any) { anyFailed = true; results.offerExpiration = `err: ${e?.message || e}`; }
+
+    try { await runCoordinationTimeoutSweep(); results.coordinationTimeouts = "ok"; }
+    catch (e: any) { anyFailed = true; results.coordinationTimeouts = `err: ${e?.message || e}`; }
+
+    // Module-level sweeps from server/cron.ts
+    try {
+      const { runAllScheduledSweeps } = await import("./cron");
+      await runAllScheduledSweeps();
+      results.scheduledSweeps = "ok";
+    } catch (e: any) {
+      anyFailed = true;
+      results.scheduledSweeps = `err: ${e?.message || e}`;
+    }
+
+    // 502 on partial failure so Replit Scheduled Deployment surfaces it as
+    // a failed run (and any retry/alert policy fires).
+    res.status(anyFailed ? 502 : 200).json({
+      ok: !anyFailed,
+      durationMs: Date.now() - started,
+      results,
+    });
+  });
 
   return httpServer;
 }
