@@ -15930,23 +15930,32 @@ OUTPUT STYLE:
   }
 
   // ── Internal cron endpoint (Scheduled Deployment driven) ─────────────────
-  // Replit Scheduled Deployment hits this every 2 min with header
-  //   x-cron-secret: <CRON_SECRET>
-  // It runs every periodic sweep we used to run inside this process via
+  // An external cron pinger hits this every 2 min. Two equivalent ways to
+  // authenticate:
+  //   POST /api/internal/cron/run   header: x-cron-secret: <CRON_SECRET>
+  //   GET  /api/internal/cron/run?secret=<CRON_SECRET>
+  // The GET variant exists because some free cron services (e.g. cron-job.org
+  // free tier) don't expose request method or custom headers in their UI.
+  // Both run the same periodic sweeps we used to run inside this process via
   // setInterval / node-cron. Set DISABLE_BACKGROUND_JOBS=true on the main
   // Autoscale deployment so the in-process timers above stay quiet and the
   // instance can actually scale to zero between requests.
-  app.post("/api/internal/cron/run", async (req: Request, res: Response) => {
+  const handleCronRun = async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;
     if (!secret) return res.status(503).json({ error: "CRON_SECRET not configured" });
-    const provided = req.header("x-cron-secret") || "";
+
+    // Header takes precedence (POST path); fall back to ?secret= query (GET path).
+    const headerVal = req.header("x-cron-secret") || "";
+    const queryVal = typeof req.query.secret === "string" ? req.query.secret : "";
+    const provided = headerVal || queryVal;
+
     // Timing-safe comparison: equal-length guard first (timingSafeEqual throws
     // on length mismatch and the length itself isn't sensitive here, but we
     // still want constant-time once lengths match to avoid byte-by-byte
     // discovery of the secret).
     const a = Buffer.from(provided);
     const b = Buffer.from(secret);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    if (a.length === 0 || a.length !== b.length || !timingSafeEqual(a, b)) {
       return res.status(401).json({ error: "unauthorized" });
     }
 
@@ -15971,14 +15980,23 @@ OUTPUT STYLE:
       results.scheduledSweeps = `err: ${e?.message || e}`;
     }
 
-    // 502 on partial failure so Replit Scheduled Deployment surfaces it as
-    // a failed run (and any retry/alert policy fires).
+    const durationMs = Date.now() - started;
+    const ranCount = Object.values(results).filter((v) => v === "ok").length;
+    console.log(
+      `[cron] external ${req.method} run: ${ranCount}/${Object.keys(results).length} sweeps ok in ${durationMs}ms${anyFailed ? " (partial failure)" : ""}`,
+    );
+
+    // 502 on partial failure so the external scheduler surfaces it as a
+    // failed run (and any retry/alert policy fires).
     res.status(anyFailed ? 502 : 200).json({
       ok: !anyFailed,
-      durationMs: Date.now() - started,
+      durationMs,
       results,
     });
-  });
+  };
+
+  app.post("/api/internal/cron/run", handleCronRun);
+  app.get("/api/internal/cron/run", handleCronRun);
 
   return httpServer;
 }
