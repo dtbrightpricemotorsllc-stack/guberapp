@@ -138,6 +138,17 @@ export async function generateVideo(opts: GenerateVideoOpts): Promise<GenerateVi
  * Falls back to "not flagged" if OpenAI is not configured — we never block on
  * an infrastructure error, but we DO log it for ops.
  */
+export class ModerationUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModerationUnavailableError";
+  }
+}
+
+export function isModerationConfigured(): boolean {
+  return !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+}
+
 export async function moderatePrompt(prompt: string): Promise<{ flagged: boolean; reason?: string }> {
   return runOmniModeration([{ type: "text", text: prompt }], "Prompt");
 }
@@ -157,12 +168,19 @@ type ModInput =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
+// Fail-closed semantics: throws ModerationUnavailableError when OpenAI is
+// not configured or the request fails. The route MUST refuse to spend Fal
+// credits in that case (return 503) — silently skipping moderation would
+// violate our AUP commitment to pre-screen uploaded media and prompts.
 async function runOmniModeration(input: ModInput[], label: string): Promise<{ flagged: boolean; reason?: string }> {
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  if (!apiKey) return { flagged: false };
+  if (!apiKey) {
+    throw new ModerationUnavailableError(`${label} moderation unavailable: OpenAI not configured`);
+  }
+  let res: Response;
   try {
-    const res = await fetch(`${(baseUrl || "https://api.openai.com/v1").replace(/\/$/, "")}/moderations`, {
+    res = await fetch(`${(baseUrl || "https://api.openai.com/v1").replace(/\/$/, "")}/moderations`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -170,19 +188,20 @@ async function runOmniModeration(input: ModInput[], label: string): Promise<{ fl
       },
       body: JSON.stringify({ model: "omni-moderation-latest", input }),
     });
-    if (!res.ok) {
-      console.warn(`[GUBER][studio] ${label} moderation HTTP`, res.status, "— allowing");
-      return { flagged: false };
-    }
-    const data = (await res.json()) as { results?: Array<{ flagged?: boolean; categories?: Record<string, boolean> }> };
-    const r = data.results?.[0];
-    if (r?.flagged) {
-      const cats = r.categories ? Object.entries(r.categories).filter(([_, v]) => v).map(([k]) => k) : [];
-      return { flagged: true, reason: cats.length ? `${label} flagged: ${cats.join(", ")}` : `${label} flagged by moderation` };
-    }
-    return { flagged: false };
   } catch (err: any) {
-    console.warn(`[GUBER][studio] ${label} moderation error:`, err.message);
-    return { flagged: false };
+    console.warn(`[GUBER][studio] ${label} moderation network error:`, err.message);
+    throw new ModerationUnavailableError(`${label} moderation network error: ${err.message}`);
   }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.warn(`[GUBER][studio] ${label} moderation HTTP`, res.status, body.slice(0, 200));
+    throw new ModerationUnavailableError(`${label} moderation HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { results?: Array<{ flagged?: boolean; categories?: Record<string, boolean> }> };
+  const r = data.results?.[0];
+  if (r?.flagged) {
+    const cats = r.categories ? Object.entries(r.categories).filter(([_, v]) => v).map(([k]) => k) : [];
+    return { flagged: true, reason: cats.length ? `${label} flagged: ${cats.join(", ")}` : `${label} flagged by moderation` };
+  }
+  return { flagged: false };
 }

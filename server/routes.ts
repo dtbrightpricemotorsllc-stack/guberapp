@@ -8239,26 +8239,51 @@ export async function registerRoutes(
     const creditsCost = 1;
     const durationSeconds = 5;
 
-    // 1. Provider availability check BEFORE charging.
-    const { isFalConfigured, generateVideo, moderatePrompt, moderateImage } = await import("./fal");
+    // 1. Provider + moderation availability checks BEFORE charging. Both must
+    //    be configured — moderation is fail-closed (we refuse to generate if
+    //    we can't pre-screen content).
+    const { isFalConfigured, isModerationConfigured, generateVideo, moderatePrompt, moderateImage, ModerationUnavailableError } = await import("./fal");
     if (!isFalConfigured()) {
       return res.status(503).json({
         message: "GUBER Studio is launching soon — the AI video provider isn't connected yet. Your credits are safe and will work the moment we go live.",
       });
     }
+    if (!isModerationConfigured()) {
+      console.warn("[GUBER][studio] moderation unavailable — refusing generation (fail-closed)");
+      return res.status(503).json({
+        message: "GUBER Studio is temporarily unavailable: content moderation is offline. Please try again shortly.",
+      });
+    }
 
-    // 2. Resolve vibe (if any) and compose the final prompt.
+    // 2. Resolve vibe (if any) and ENFORCE TIER GATING server-side. The UI
+    //    disables locked vibes, but a malicious client could POST a premium
+    //    vibe id directly — refuse it here.
     let vibe: import("@shared/schema").StudioVibe | undefined;
     if (vibeId) {
       const vibes = await storage.getStudioVibes({ activeOnly: true });
       vibe = vibes.find((v) => v.id === vibeId);
+      if (!vibe) return res.status(400).json({ message: "Selected vibe not found." });
+      if (vibe.tierRequired !== "standard" && tier === "standard") {
+        return res.status(403).json({ message: `That vibe is for ${vibe.tierRequired} tier. Upgrade to unlock it.` });
+      }
+      if (vibe.tierRequired === "business" && tier !== "business") {
+        return res.status(403).json({ message: "That vibe is for Business tier only." });
+      }
     }
     const composedPrompt = [promptRaw, vibe?.promptModifier].filter(Boolean).join(", ") || "high quality cinematic short clip";
 
-    // 3a. Text moderation (always — the vibe-modifier is technically user-driven choice).
-    const promptMod = await moderatePrompt(composedPrompt);
-    if (promptMod.flagged) {
-      return res.status(400).json({ message: promptMod.reason || "Prompt blocked by content moderation. Try a different idea." });
+    // 3a. Text moderation (fail-closed — throws ModerationUnavailableError if
+    //     the upstream is unhealthy, which we catch and surface as 503).
+    try {
+      const promptMod = await moderatePrompt(composedPrompt);
+      if (promptMod.flagged) {
+        return res.status(400).json({ message: promptMod.reason || "Prompt blocked by content moderation. Try a different idea." });
+      }
+    } catch (err: any) {
+      if (err instanceof ModerationUnavailableError) {
+        return res.status(503).json({ message: "Content moderation is temporarily offline. Your credits are safe — please try again shortly." });
+      }
+      throw err;
     }
 
     // 4. Upload reference image (if any) to Cloudinary so we get an https URL
@@ -8281,11 +8306,18 @@ export async function registerRoutes(
       }
 
       // 3b. Image moderation — block prohibited content (CSAM, gore, etc.)
-      // BEFORE charging or calling Fal. This satisfies our AUP commitment to
-      // pre-screen uploaded media.
-      const imageMod = await moderateImage(sourceImageUrl);
-      if (imageMod.flagged) {
-        return res.status(400).json({ message: imageMod.reason || "Reference image blocked by content moderation." });
+      // BEFORE charging or calling Fal. Fail-closed: a moderation outage
+      // returns 503 instead of letting the image through.
+      try {
+        const imageMod = await moderateImage(sourceImageUrl);
+        if (imageMod.flagged) {
+          return res.status(400).json({ message: imageMod.reason || "Reference image blocked by content moderation." });
+        }
+      } catch (err: any) {
+        if (err instanceof ModerationUnavailableError) {
+          return res.status(503).json({ message: "Image moderation is temporarily offline. Your credits are safe — please try again shortly." });
+        }
+        throw err;
       }
     }
 
