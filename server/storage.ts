@@ -10,8 +10,10 @@ import {
   workerBusinessProjections, backgroundCheckEligibility, billingEvents, legalAcceptances,
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
+  studioVideos, studioVibes,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
+  type StudioVideo, type InsertStudioVideo, type StudioVibe, type InsertStudioVibe,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
@@ -45,6 +47,18 @@ export interface IStorage {
    */
   softDeleteUser(id: number, opts?: { reason?: string; retentionDays?: number }): Promise<void>;
   getAllUsers(): Promise<User[]>;
+
+  // ── AI Video Studio (task-439) ──
+  // Atomic credit ops via SQL `studio_credits + n` so concurrent generations
+  // can't double-spend. decrement returns the new balance, or null if balance
+  // would go negative (caller treats as "insufficient credits").
+  incrementStudioCredits(userId: number, amount: number): Promise<number>;
+  decrementStudioCredits(userId: number, amount: number): Promise<number | null>;
+  createStudioVideo(data: InsertStudioVideo): Promise<StudioVideo>;
+  updateStudioVideo(id: number, data: Partial<StudioVideo>): Promise<StudioVideo | undefined>;
+  getStudioVideosByUser(userId: number, limit?: number): Promise<StudioVideo[]>;
+  getStudioVibes(opts?: { activeOnly?: boolean }): Promise<StudioVibe[]>;
+  createStudioVibe(data: InsertStudioVibe): Promise<StudioVibe>;
 
   getJobs(onlyPublished?: boolean): Promise<Job[]>;
   getJob(id: number): Promise<Job | undefined>;
@@ -376,6 +390,58 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  // ── AI Video Studio (task-439) ──
+  async incrementStudioCredits(userId: number, amount: number): Promise<number> {
+    const [row] = await db
+      .update(users)
+      .set({ studioCredits: sql`COALESCE(${users.studioCredits}, 0) + ${amount}` })
+      .where(eq(users.id, userId))
+      .returning({ balance: users.studioCredits });
+    return row?.balance ?? 0;
+  }
+
+  async decrementStudioCredits(userId: number, amount: number): Promise<number | null> {
+    // Conditional update: only deducts if current balance is sufficient.
+    // Returning null signals "insufficient credits" to the caller.
+    const [row] = await db
+      .update(users)
+      .set({ studioCredits: sql`COALESCE(${users.studioCredits}, 0) - ${amount}` })
+      .where(and(eq(users.id, userId), sql`COALESCE(${users.studioCredits}, 0) >= ${amount}`))
+      .returning({ balance: users.studioCredits });
+    return row ? (row.balance ?? 0) : null;
+  }
+
+  async createStudioVideo(data: InsertStudioVideo): Promise<StudioVideo> {
+    const [row] = await db.insert(studioVideos).values(data).returning();
+    return row;
+  }
+
+  async updateStudioVideo(id: number, data: Partial<StudioVideo>): Promise<StudioVideo | undefined> {
+    const [row] = await db.update(studioVideos).set(data).where(eq(studioVideos.id, id)).returning();
+    return row;
+  }
+
+  async getStudioVideosByUser(userId: number, limit: number = 50): Promise<StudioVideo[]> {
+    return db.select().from(studioVideos)
+      .where(eq(studioVideos.userId, userId))
+      .orderBy(desc(studioVideos.createdAt))
+      .limit(limit);
+  }
+
+  async getStudioVibes(opts?: { activeOnly?: boolean }): Promise<StudioVibe[]> {
+    if (opts?.activeOnly) {
+      return db.select().from(studioVibes)
+        .where(eq(studioVibes.active, true))
+        .orderBy(studioVibes.sortOrder);
+    }
+    return db.select().from(studioVibes).orderBy(studioVibes.sortOrder);
+  }
+
+  async createStudioVibe(data: InsertStudioVibe): Promise<StudioVibe> {
+    const [row] = await db.insert(studioVibes).values(data).returning();
+    return row;
   }
 
   async getJobs(onlyPublished: boolean = true): Promise<Job[]> {

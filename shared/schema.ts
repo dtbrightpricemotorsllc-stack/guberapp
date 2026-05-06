@@ -61,6 +61,17 @@ export const users = pgTable("users", {
   backgroundCheckRestrictions: json("background_check_restrictions").$type<string[]>(),
   aiOrNotCredits: integer("ai_or_not_credits").default(0),
   aiOrNotUnlimitedText: boolean("ai_or_not_unlimited_text").default(false),
+  // ── AI Video Studio ──
+  // studioCredits: balance of generations available. Each Standard 5s clip = 1 credit.
+  // Premium chained 10s = 2 credits (future tier). Granted via Stripe credit packs,
+  // 1 free trial credit at signup, and 1 free credit/month for Day-1 OG members.
+  // studioTier: which Studio experience the user has access to. "standard" is default
+  // (text-to-video + curated vibes). "creator" and "business" are reserved for
+  // future upgrade tiers (reference uploads, brand kits, ad templates, etc.).
+  // studioCreditsLastDripAt: tracks last OG monthly drip so cron doesn't double-grant.
+  studioCredits: integer("studio_credits").default(0),
+  studioTier: text("studio_tier").default("standard"),
+  studioCreditsLastDripAt: timestamp("studio_credits_last_drip_at"),
   trustBoxPurchased: boolean("trust_box_purchased").default(false),
   trustBoxSubscriptionId: text("trust_box_subscription_id"),
   monthlyImageUploads: integer("monthly_image_uploads").default(0),
@@ -1519,3 +1530,61 @@ export const insertPinnedFindingSchema = createInsertSchema(pinnedFindings).omit
 });
 export type PinnedFinding = typeof pinnedFindings.$inferSelect;
 export type InsertPinnedFinding = z.infer<typeof insertPinnedFindingSchema>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI VIDEO STUDIO
+// ─────────────────────────────────────────────────────────────────────────────
+// studioVideos: every generation attempt. Stores the source image (if any),
+// chosen vibe, prompt, generated video URL (Cloudinary), credit cost, status,
+// and tier the user was on when generating. Soft-failures (moderation block,
+// provider error) record `status="failed"` with an `errorReason` and refund
+// the credit; hard-success records the resulting clip.
+//
+// studioVibes: curated reference clips ("vibe presets") shown in the carousel.
+// active=false hides without deleting. order controls carousel order.
+// Seeded by an admin once FAL_KEY is configured (or via uploaded clips).
+
+export const studioVideos = pgTable("studio_videos", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  tier: text("tier").notNull().default("standard"), // standard | creator | business
+  sourceImageUrl: text("source_image_url"),         // optional reference photo
+  vibeId: integer("vibe_id"),                       // optional vibe preset chosen
+  prompt: text("prompt").notNull(),
+  durationSeconds: integer("duration_seconds").notNull().default(5),
+  creditsCost: integer("credits_cost").notNull().default(1),
+  videoUrl: text("video_url"),                      // Cloudinary URL once generated
+  thumbnailUrl: text("thumbnail_url"),
+  status: text("status").notNull().default("pending"), // pending | succeeded | failed | refunded
+  errorReason: text("error_reason"),
+  falJobId: text("fal_job_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+export const insertStudioVideoSchema = createInsertSchema(studioVideos).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+export type StudioVideo = typeof studioVideos.$inferSelect;
+export type InsertStudioVideo = z.infer<typeof insertStudioVideoSchema>;
+
+export const studioVibes = pgTable("studio_vibes", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  previewVideoUrl: text("preview_video_url"),       // Cloudinary URL of the looping preview
+  thumbnailUrl: text("thumbnail_url"),
+  promptModifier: text("prompt_modifier").notNull(),// appended to the user's prompt at generation time
+  tierRequired: text("tier_required").notNull().default("standard"),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertStudioVibeSchema = createInsertSchema(studioVibes).omit({
+  id: true,
+  createdAt: true,
+});
+export type StudioVibe = typeof studioVibes.$inferSelect;
+export type InsertStudioVibe = z.infer<typeof insertStudioVibeSchema>;

@@ -20,6 +20,15 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Mapping:** Google Maps JS API
 - **Testing:** Vitest, Supertest, Playwright
 
+## AI Video Studio (task-439, v1 foundation)
+- **Page:** `client/src/pages/studio.tsx` (route `/studio`)
+- **Provider:** Fal.ai. Single integration point: `server/fal.ts`. Requires `FAL_KEY` secret. Until set, `/api/studio/generate` returns 503 and never charges credits.
+- **Credit packs:** Starter $5/8, Plus $20/50, Pro $50/150 (defined inline in `server/routes.ts` near the trust-box checkout).
+- **Free credits:** Every new signup gets 1 trial credit (`server/auth.ts` handleSignup). OG monthly drip is **deferred** to a follow-up task.
+- **Storage tables:** `studio_videos`, `studio_vibes`, plus `users.studio_credits`, `users.studio_tier`, `users.studio_credits_last_drip_at`. Schema in `shared/schema.ts`; raw SQL in `scripts/post-merge.sh`.
+- **Tiers:** `studio_tier` defaults to `standard`. `creator` and `business` are reserved — Studio page shows upgrade teaser.
+- **Webhook:** `metadata.type === "studio_credits"` branch in the main Stripe webhook (`server/routes.ts`) increments balance + creates audit log + notification.
+
 ## Where things live
 - **Job Builder Config:** `client/src/lib/job-builder-config.ts`
 - **Guided Job Builder Component:** `client/src/components/guided-job-builder.tsx`
@@ -66,6 +75,9 @@ I prefer a concise and direct communication style. I value iterative development
 **IMPORTANT: Do NOT use task agents / project task queue.** All work must be done directly by the main agent in this environment. Parallel/isolated task agents have caused duplicate code and merge conflicts (e.g. duplicate ActiveAreasTab). Handle every request directly here.
 
 ## Gotchas
+- **Studio FAL_KEY:** `/api/studio/generate` requires `FAL_KEY`. Without it the route returns 503 and never deducts credits. Vibe presets table (`studio_vibes`) is empty — needs admin seed (or follow-up "generate vibes via Fal.ai" task) before the carousel renders content.
+
+
 - **Autoscale Production:** To maintain Autoscale's per-request pricing, ensure no recurring in-process timers are running; use `DISABLE_BACKGROUND_JOBS=true` and a `CRON_SECRET` with a scheduled `curl` command.
 - **Google Maps API Key:** Server-side Google Maps API calls require a separate API key with no HTTP-referer restrictions (or "IP addresses" restriction) if `GOOGLE_MAPS_API_KEY` has referer restrictions.
 - **Account Deletion:** Users are soft-deleted, anonymizing data while retaining records for legal/safety reasons. Public lookups for deleted users return 404.

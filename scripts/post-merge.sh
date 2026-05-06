@@ -132,6 +132,44 @@ CREATE TABLE IF NOT EXISTS apns_device_tokens (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- AI Video Studio (task-439): credits balance, tier, OG drip tracker + tables.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_credits integer DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_tier text DEFAULT 'standard';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_credits_last_drip_at timestamp;
+
+CREATE TABLE IF NOT EXISTS studio_videos (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  tier text NOT NULL DEFAULT 'standard',
+  source_image_url text,
+  vibe_id integer,
+  prompt text NOT NULL,
+  duration_seconds integer NOT NULL DEFAULT 5,
+  credits_cost integer NOT NULL DEFAULT 1,
+  video_url text,
+  thumbnail_url text,
+  status text NOT NULL DEFAULT 'pending',
+  error_reason text,
+  fal_job_id text,
+  created_at timestamp DEFAULT now(),
+  completed_at timestamp
+);
+CREATE INDEX IF NOT EXISTS studio_videos_user_idx ON studio_videos(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS studio_vibes (
+  id serial PRIMARY KEY,
+  slug text NOT NULL UNIQUE,
+  name text NOT NULL,
+  description text,
+  preview_video_url text,
+  thumbnail_url text,
+  prompt_modifier text NOT NULL,
+  tier_required text NOT NULL DEFAULT 'standard',
+  active boolean NOT NULL DEFAULT true,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamp DEFAULT now()
+);
+
 -- jobs.is_demo: permanent flag for demo/seed jobs — prevents them from ever appearing
 -- on the public map or heat map regardless of demo-user ID caching state.
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_demo boolean DEFAULT false;

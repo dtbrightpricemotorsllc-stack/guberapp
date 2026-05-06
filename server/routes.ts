@@ -3097,6 +3097,44 @@ export async function registerRoutes(
             console.log(`[GUBER][webhook/main] trust_box: user ${userId} updated → trustBoxPurchased=true, sub=${subscriptionId || "n/a"}`);
           }
 
+        } else if (metadata?.type === "studio_credits" && metadata?.userId && metadata?.credits) {
+          // AI Video Studio credit-pack purchase (task-439). Grant atomically
+          // and notify. Stripe will redeliver the same checkout.session.completed
+          // event on retries, so we guard against double-granting by checking
+          // audit_logs for an existing entry tagged with this session.id before
+          // incrementing the balance.
+          const userId = parseInt(metadata.userId);
+          const credits = parseInt(metadata.credits) || 0;
+          const packId = metadata.packId || "unknown";
+          if (credits > 0) {
+            const sessionTag = `[session:${session.id}]`;
+            const [existing] = await db
+              .select({ id: auditLogsTable.id })
+              .from(auditLogsTable)
+              .where(and(
+                eq(auditLogsTable.action, "studio_credits_purchased"),
+                ilike(auditLogsTable.details, `%${sessionTag}%`),
+              ))
+              .limit(1);
+            if (existing) {
+              console.log(`[GUBER][webhook/main] studio_credits: session ${session.id} already processed (audit #${existing.id}) — skipping duplicate`);
+              return res.json({ received: true });
+            }
+            const newBalance = await storage.incrementStudioCredits(userId, credits);
+            await storage.createAuditLog({
+              userId,
+              action: "studio_credits_purchased",
+              details: `${sessionTag} Studio credit pack "${packId}" purchased: +${credits} credits. New balance: ${newBalance}.`,
+            });
+            await storage.createNotification({
+              userId,
+              title: "Studio Credits Added!",
+              body: `+${credits} GUBER Studio credits. Balance: ${newBalance}. Tap to start generating.`,
+              type: "system",
+            });
+            console.log(`[GUBER][webhook/main] studio_credits: user ${userId} +${credits} (pack=${packId}, balance=${newBalance})`);
+          }
+
         } else if (metadata?.type === "marketplace_boost" && metadata?.itemId) {
           const itemId = parseInt(metadata.itemId);
           const boostedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -8090,6 +8128,219 @@ export async function registerRoutes(
   });
 
   // TRUST BOX - $4.99 AI or Not premium access
+  // ───────────────────────────────────────────────────────────────────────────
+  // AI VIDEO STUDIO (task-439)
+  // Credit packs: $5 / 8 credits, $20 / 50 credits, $50 / 150 credits.
+  // Mirrors the OG checkout pattern: create Stripe Checkout Session with
+  // metadata.type="studio_credits" + pack id; webhook increments balance.
+  // ───────────────────────────────────────────────────────────────────────────
+  const STUDIO_CREDIT_PACKS = {
+    starter:  { credits: 8,   priceCents: 500,  label: "Starter Pack" },
+    plus:     { credits: 50,  priceCents: 2000, label: "Plus Pack" },
+    pro:      { credits: 150, priceCents: 5000, label: "Pro Pack" },
+  } as const;
+  type StudioPackId = keyof typeof STUDIO_CREDIT_PACKS;
+
+  app.get("/api/studio/packs", (_req: Request, res: Response) => {
+    res.json(Object.entries(STUDIO_CREDIT_PACKS).map(([id, p]) => ({
+      id, credits: p.credits, priceCents: p.priceCents, label: p.label,
+    })));
+  });
+
+  app.post("/api/stripe/studio-credits-checkout", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const packId = String(req.body?.packId || "") as StudioPackId;
+      const pack = STUDIO_CREDIT_PACKS[packId];
+      if (!pack) return res.status(400).json({ message: "Invalid pack" });
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const host = req.get("host") || "localhost:5000";
+      const protocol = req.get("x-forwarded-proto") || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      const stripeSession = await stripeMain.checkout.sessions.create({
+        payment_method_types: ["card"],
+        customer_email: user.email,
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `GUBER Studio · ${pack.label}`,
+              description: `${pack.credits} AI video credits for GUBER Studio.`,
+            },
+            unit_amount: pack.priceCents,
+          },
+          quantity: 1,
+        }],
+        mode: "payment",
+        success_url: `${baseUrl}/studio?credits=success`,
+        cancel_url: `${baseUrl}/studio?credits=cancel`,
+        metadata: {
+          userId: String(user.id),
+          userEmail: user.email,
+          type: "studio_credits",
+          packId,
+          credits: String(pack.credits),
+        },
+      });
+
+      res.json({ checkoutUrl: stripeSession.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Studio API: balance, vibes, history, generate ────────────────────────
+  app.get("/api/studio/me", requireAuth, async (req: Request, res: Response) => {
+    const user = await storage.getUser(req.session.userId!);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    const { isFalConfigured } = await import("./fal");
+    res.json({
+      credits: user.studioCredits ?? 0,
+      tier: user.studioTier ?? "standard",
+      day1OG: !!user.day1OG,
+      providerReady: isFalConfigured(),
+    });
+  });
+
+  app.get("/api/studio/vibes", requireAuth, async (_req: Request, res: Response) => {
+    const vibes = await storage.getStudioVibes({ activeOnly: true });
+    res.json(vibes);
+  });
+
+  app.get("/api/studio/videos", requireAuth, async (req: Request, res: Response) => {
+    const videos = await storage.getStudioVideosByUser(req.session.userId!, 50);
+    res.json(videos);
+  });
+
+  app.post("/api/studio/generate", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const prompt = String(req.body?.prompt || "").trim();
+    const vibeId = req.body?.vibeId ? parseInt(String(req.body.vibeId), 10) : null;
+    const sourceImageBase64: string | undefined = req.body?.sourceImageBase64;
+
+    if (!prompt || prompt.length < 4) return res.status(400).json({ message: "Prompt is required (min 4 characters)." });
+    if (prompt.length > 500) return res.status(400).json({ message: "Prompt is too long (max 500 characters)." });
+
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    // Standard tier = 1 credit per 5s clip. Future Premium chained-10s = 2 credits.
+    const tier = user.studioTier ?? "standard";
+    const creditsCost = 1;
+    const durationSeconds = 5;
+
+    // 1. Provider availability check BEFORE charging.
+    const { isFalConfigured, generateVideo, moderatePrompt, FalNotConfiguredError, FalGenerationError } = await import("./fal");
+    if (!isFalConfigured()) {
+      return res.status(503).json({
+        message: "GUBER Studio is launching soon — the AI video provider isn't connected yet. Your credits are safe and will work the moment we go live.",
+      });
+    }
+
+    // 2. Resolve vibe (if any) and compose the final prompt.
+    let composedPrompt = prompt;
+    let vibe: import("@shared/schema").StudioVibe | undefined;
+    if (vibeId) {
+      const vibes = await storage.getStudioVibes({ activeOnly: true });
+      vibe = vibes.find((v) => v.id === vibeId);
+      if (vibe) composedPrompt = `${prompt}, ${vibe.promptModifier}`;
+    }
+
+    // 3. Moderation check (free).
+    const mod = await moderatePrompt(composedPrompt);
+    if (mod.flagged) {
+      return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation. Try a different idea." });
+    }
+
+    // 4. Atomically deduct credits. Fail-fast if insufficient.
+    const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
+    if (newBalance === null) {
+      return res.status(402).json({ message: "You don't have enough Studio credits. Buy a credit pack to keep generating." });
+    }
+
+    // 5. Optionally upload the reference image to Cloudinary first (so Fal can
+    //    fetch it via https URL, and so we have a permanent record).
+    let sourceImageUrl: string | undefined;
+    if (sourceImageBase64 && typeof sourceImageBase64 === "string") {
+      try {
+        if (!process.env.CLOUDINARY_CLOUD_NAME) throw new Error("Cloudinary not configured");
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const up = await cloudinary.uploader.upload(sourceImageBase64, {
+          resource_type: "image",
+          folder: "guber-studio-sources",
+          allowed_formats: ["jpg", "jpeg", "png", "webp"],
+        });
+        sourceImageUrl = up.secure_url;
+      } catch (err: any) {
+        // Refund and bail before calling Fal.
+        await storage.incrementStudioCredits(userId, creditsCost);
+        return res.status(500).json({ message: `Reference image upload failed: ${err.message}` });
+      }
+    }
+
+    // 6. Create the pending row so we have a paper trail even if the server
+    //    restarts mid-generation.
+    const videoRow = await storage.createStudioVideo({
+      userId,
+      tier,
+      sourceImageUrl: sourceImageUrl ?? null,
+      vibeId: vibe?.id ?? null,
+      prompt: composedPrompt,
+      durationSeconds,
+      creditsCost,
+      status: "pending",
+    } as any);
+
+    // 7. Call Fal.ai. ANY failure → refund credit, mark row failed.
+    try {
+      const result = await generateVideo({ prompt: composedPrompt, imageUrl: sourceImageUrl, durationSeconds: durationSeconds as 5 });
+
+      // 8. Re-host the resulting clip on Cloudinary so we control the URL.
+      let finalVideoUrl = result.videoUrl;
+      let thumbnailUrl: string | null = null;
+      try {
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const uploaded = await cloudinary.uploader.upload(result.videoUrl, {
+          resource_type: "video",
+          folder: "guber-studio-outputs",
+        });
+        finalVideoUrl = uploaded.secure_url;
+        // Cloudinary auto-generates a poster jpg by swapping the extension.
+        thumbnailUrl = finalVideoUrl.replace(/\.(mp4|mov|webm)$/i, ".jpg");
+      } catch (err: any) {
+        console.warn(`[GUBER][studio] Cloudinary re-host failed, keeping Fal URL: ${err.message}`);
+      }
+
+      const updated = await storage.updateStudioVideo(videoRow.id, {
+        status: "succeeded",
+        videoUrl: finalVideoUrl,
+        thumbnailUrl,
+        falJobId: result.jobId,
+        completedAt: new Date(),
+      });
+
+      res.json({ video: updated, balance: newBalance });
+    } catch (err: any) {
+      // Refund + mark failed
+      const refundedBalance = await storage.incrementStudioCredits(userId, creditsCost);
+      await storage.updateStudioVideo(videoRow.id, {
+        status: "refunded",
+        errorReason: err?.message?.slice(0, 500) || "Unknown generation error",
+        completedAt: new Date(),
+      });
+      const isConfigErr = err?.name === "FalNotConfiguredError";
+      res.status(isConfigErr ? 503 : 502).json({
+        message: isConfigErr
+          ? "GUBER Studio is launching soon — the AI video provider isn't connected yet."
+          : `Generation failed and your credit was refunded: ${err.message}`,
+        balance: refundedBalance,
+      });
+    }
+  });
+
   app.post("/api/stripe/trust-box-checkout", requireAuth, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);

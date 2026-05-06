@@ -288,6 +288,11 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
         createPayload.zipcode = zipcode || null;
       }
 
+      // AI Video Studio (task-439): grant 1 free trial credit to every new
+      // signup so first-touch users can try a generation without paying.
+      createPayload.studioCredits = 1;
+      createPayload.studioTier = "standard";
+
       const user = await storage.createUser(createPayload);
 
       if (referrerId && deps.recordReferral) {

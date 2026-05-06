@@ -24,6 +24,19 @@ function AUPContent() {
       </div>
 
       <div className="space-y-6">
+        <Section title="AI-Generated Media (GUBER Studio)">
+          <p>
+            GUBER Studio uses third-party AI to generate short video clips from text prompts and optional reference images you provide. By using Studio you confirm:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>You will not generate sexual, violent, hateful, deceptive, or otherwise unlawful content. Prompts are screened by automated moderation; flagged prompts are blocked and the credit is refunded.</li>
+            <li>You will not upload reference images of any person (including yourself) without that person's permission, and you will not generate content impersonating real public figures or private individuals.</li>
+            <li>You will not use Studio output to commit fraud, defame anyone, or violate the rights of others (including copyright, trademark, and right of publicity).</li>
+            <li>Generated clips are watermarked or otherwise identifiable as AI-generated where required by law or platform of distribution; you are responsible for proper disclosure.</li>
+            <li>GUBER may review, remove, or refuse to generate any content that violates this policy or the law, and may suspend Studio access for repeated violations without refund of remaining credits.</li>
+          </ul>
+        </Section>
+
         <Section title="Platform Rule">
           <p className="text-foreground font-semibold border border-primary/20 rounded-xl p-4 bg-primary/[0.04]">
             GUBER allows visual verification, errands, inspections, documentation, and general task-based services. Jobs involving illegal activity, hazardous physical labor, or licensed professional services without proper credentials are prohibited.
