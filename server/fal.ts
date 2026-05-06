@@ -139,6 +139,25 @@ export async function generateVideo(opts: GenerateVideoOpts): Promise<GenerateVi
  * an infrastructure error, but we DO log it for ops.
  */
 export async function moderatePrompt(prompt: string): Promise<{ flagged: boolean; reason?: string }> {
+  return runOmniModeration([{ type: "text", text: prompt }], "Prompt");
+}
+
+/**
+ * Image moderation pre-check using OpenAI's omni-moderation-latest model
+ * (which natively supports image_url input). Runs BEFORE we spend a Fal credit
+ * so users uploading prohibited photos (e.g. CSAM, gore, real-person nudity)
+ * are blocked at the upload step. Like text moderation we fail-open on infra
+ * errors but log them.
+ */
+export async function moderateImage(imageUrl: string): Promise<{ flagged: boolean; reason?: string }> {
+  return runOmniModeration([{ type: "image_url", image_url: { url: imageUrl } }], "Image");
+}
+
+type ModInput =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+async function runOmniModeration(input: ModInput[], label: string): Promise<{ flagged: boolean; reason?: string }> {
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   if (!apiKey) return { flagged: false };
@@ -149,21 +168,21 @@ export async function moderatePrompt(prompt: string): Promise<{ flagged: boolean
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ model: "omni-moderation-latest", input: prompt }),
+      body: JSON.stringify({ model: "omni-moderation-latest", input }),
     });
     if (!res.ok) {
-      console.warn("[GUBER][studio] moderation HTTP", res.status, "— allowing prompt");
+      console.warn(`[GUBER][studio] ${label} moderation HTTP`, res.status, "— allowing");
       return { flagged: false };
     }
     const data = (await res.json()) as { results?: Array<{ flagged?: boolean; categories?: Record<string, boolean> }> };
     const r = data.results?.[0];
     if (r?.flagged) {
       const cats = r.categories ? Object.entries(r.categories).filter(([_, v]) => v).map(([k]) => k) : [];
-      return { flagged: true, reason: cats.length ? `Prompt flagged: ${cats.join(", ")}` : "Prompt flagged by moderation" };
+      return { flagged: true, reason: cats.length ? `${label} flagged: ${cats.join(", ")}` : `${label} flagged by moderation` };
     }
     return { flagged: false };
   } catch (err: any) {
-    console.warn("[GUBER][studio] moderation error:", err.message);
+    console.warn(`[GUBER][studio] ${label} moderation error:`, err.message);
     return { flagged: false };
   }
 }

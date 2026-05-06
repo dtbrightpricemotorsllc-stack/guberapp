@@ -331,6 +331,11 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
                       <FileText className="w-4 h-4 text-muted-foreground" /> AI or Not
                     </Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/studio" className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5 text-sm" data-testid="link-nav-studio">
+                      <Zap className="w-4 h-4 text-primary/80" /> GUBER Studio
+                    </Link>
+                  </DropdownMenuItem>
                   {isAdmin && (
                     <>
                       <DropdownMenuSeparator className="bg-white/[0.06] mx-1" />

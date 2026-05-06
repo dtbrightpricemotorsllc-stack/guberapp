@@ -8217,12 +8217,19 @@ export async function registerRoutes(
 
   app.post("/api/studio/generate", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
-    const prompt = String(req.body?.prompt || "").trim();
+    const promptRaw = String(req.body?.prompt || "").trim();
     const vibeId = req.body?.vibeId ? parseInt(String(req.body.vibeId), 10) : null;
     const sourceImageBase64: string | undefined = req.body?.sourceImageBase64;
 
-    if (!prompt || prompt.length < 4) return res.status(400).json({ message: "Prompt is required (min 4 characters)." });
-    if (prompt.length > 500) return res.status(400).json({ message: "Prompt is too long (max 500 characters)." });
+    // Zero-prompt is allowed IF the user provided either a reference image or
+    // a vibe preset (the vibe's promptModifier becomes the seed). Both empty =
+    // we have nothing to send to the model.
+    if (!promptRaw && !sourceImageBase64 && !vibeId) {
+      return res.status(400).json({ message: "Add a prompt, a reference image, or pick a vibe to start." });
+    }
+    if (promptRaw && promptRaw.length > 500) {
+      return res.status(400).json({ message: "Prompt is too long (max 500 characters)." });
+    }
 
     const user = await storage.getUser(userId);
     if (!user) return res.status(401).json({ message: "User not found" });
@@ -8233,7 +8240,7 @@ export async function registerRoutes(
     const durationSeconds = 5;
 
     // 1. Provider availability check BEFORE charging.
-    const { isFalConfigured, generateVideo, moderatePrompt, FalNotConfiguredError, FalGenerationError } = await import("./fal");
+    const { isFalConfigured, generateVideo, moderatePrompt, moderateImage } = await import("./fal");
     if (!isFalConfigured()) {
       return res.status(503).json({
         message: "GUBER Studio is launching soon — the AI video provider isn't connected yet. Your credits are safe and will work the moment we go live.",
@@ -8241,28 +8248,23 @@ export async function registerRoutes(
     }
 
     // 2. Resolve vibe (if any) and compose the final prompt.
-    let composedPrompt = prompt;
     let vibe: import("@shared/schema").StudioVibe | undefined;
     if (vibeId) {
       const vibes = await storage.getStudioVibes({ activeOnly: true });
       vibe = vibes.find((v) => v.id === vibeId);
-      if (vibe) composedPrompt = `${prompt}, ${vibe.promptModifier}`;
+    }
+    const composedPrompt = [promptRaw, vibe?.promptModifier].filter(Boolean).join(", ") || "high quality cinematic short clip";
+
+    // 3a. Text moderation (always — the vibe-modifier is technically user-driven choice).
+    const promptMod = await moderatePrompt(composedPrompt);
+    if (promptMod.flagged) {
+      return res.status(400).json({ message: promptMod.reason || "Prompt blocked by content moderation. Try a different idea." });
     }
 
-    // 3. Moderation check (free).
-    const mod = await moderatePrompt(composedPrompt);
-    if (mod.flagged) {
-      return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation. Try a different idea." });
-    }
-
-    // 4. Atomically deduct credits. Fail-fast if insufficient.
-    const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
-    if (newBalance === null) {
-      return res.status(402).json({ message: "You don't have enough Studio credits. Buy a credit pack to keep generating." });
-    }
-
-    // 5. Optionally upload the reference image to Cloudinary first (so Fal can
-    //    fetch it via https URL, and so we have a permanent record).
+    // 4. Upload reference image (if any) to Cloudinary so we get an https URL
+    //    we can both moderate AND hand to Fal. We do this BEFORE deducting
+    //    credits so an upload-failure or image-moderation block never charges
+    //    the user.
     let sourceImageUrl: string | undefined;
     if (sourceImageBase64 && typeof sourceImageBase64 === "string") {
       try {
@@ -8275,10 +8277,22 @@ export async function registerRoutes(
         });
         sourceImageUrl = up.secure_url;
       } catch (err: any) {
-        // Refund and bail before calling Fal.
-        await storage.incrementStudioCredits(userId, creditsCost);
         return res.status(500).json({ message: `Reference image upload failed: ${err.message}` });
       }
+
+      // 3b. Image moderation — block prohibited content (CSAM, gore, etc.)
+      // BEFORE charging or calling Fal. This satisfies our AUP commitment to
+      // pre-screen uploaded media.
+      const imageMod = await moderateImage(sourceImageUrl);
+      if (imageMod.flagged) {
+        return res.status(400).json({ message: imageMod.reason || "Reference image blocked by content moderation." });
+      }
+    }
+
+    // 5. Atomically deduct credits. Fail-fast if insufficient.
+    const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
+    if (newBalance === null) {
+      return res.status(402).json({ message: "You don't have enough Studio credits. Buy a credit pack to keep generating." });
     }
 
     // 6. Create the pending row so we have a paper trail even if the server
@@ -8292,7 +8306,7 @@ export async function registerRoutes(
       durationSeconds,
       creditsCost,
       status: "pending",
-    } as any);
+    });
 
     // 7. Call Fal.ai. ANY failure → refund credit, mark row failed.
     try {

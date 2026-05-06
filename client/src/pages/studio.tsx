@@ -9,8 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { StudioVideo, StudioVibe } from "@shared/schema";
-import { Sparkles, Image as ImageIcon, Coins, Lock, Zap, Loader2, Download, Wand2 } from "lucide-react";
+import { Sparkles, Image as ImageIcon, Coins, Lock, Zap, Loader2, Download, Wand2, Share2, FileText, Briefcase, Gift } from "lucide-react";
 import { Link } from "wouter";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type StudioMe = { credits: number; tier: string; day1OG: boolean; providerReady: boolean };
 type Pack = { id: string; credits: number; priceCents: number; label: string };
@@ -107,7 +108,11 @@ export default function StudioPage() {
     }
   }, [toast]);
 
-  const canGenerate = prompt.trim().length >= 4 && credits >= 1 && !generateMutation.isPending;
+  // Zero-prompt is allowed when the user provides EITHER a reference image OR
+  // a vibe preset (the vibe's prompt-modifier seeds the model). The server
+  // enforces this same rule.
+  const hasInput = prompt.trim().length > 0 || !!sourceImage || !!vibeId;
+  const canGenerate = hasInput && credits >= 1 && !generateMutation.isPending;
 
   const sortedHistory = useMemo(() => (history || []).filter((v) => v.status === "succeeded" || v.status === "pending"), [history]);
 
@@ -281,9 +286,35 @@ export default function StudioPage() {
                   <div className="p-2">
                     <p className="text-[11px] line-clamp-2 leading-tight">{v.prompt}</p>
                     {v.videoUrl && (
-                      <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-[10px] mt-1">
-                        <a href={v.videoUrl} download data-testid={`link-download-${v.id}`}><Download className="w-3 h-3 mr-1" /> Download</a>
-                      </Button>
+                      <div className="flex items-center gap-1 mt-1">
+                        <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-[10px]">
+                          <a href={v.videoUrl} download data-testid={`link-download-${v.id}`}><Download className="w-3 h-3 mr-1" /> Save</a>
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" data-testid={`button-saveto-${v.id}`}>
+                              <Share2 className="w-3 h-3 mr-1" /> Use in…
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/resume?studioVideoId=${v.id}`} data-testid={`saveto-resume-${v.id}`}>
+                                <FileText className="w-4 h-4 mr-2" /> My Resume
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/biz/dashboard?studioVideoId=${v.id}`} data-testid={`saveto-promo-${v.id}`}>
+                                <Briefcase className="w-4 h-4 mr-2" /> Business Promo
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/host-drop/new?studioVideoId=${v.id}`} data-testid={`saveto-drop-${v.id}`}>
+                                <Gift className="w-4 h-4 mr-2" /> Cash Drop
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     )}
                   </div>
                 </Card>
