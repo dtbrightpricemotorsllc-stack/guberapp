@@ -1,87 +1,75 @@
 # GUBER - Trust-Enforced Local Visibility Network
 
-## Overview
-GUBER is a local visibility network connecting individuals needing assistance with those who can provide it, emphasizing trust and efficient local service delivery. It features a post-first job flow, where job posting is free, and payment occurs only upon worker lock-in via Stripe. A core security measure is mandatory ID verification for both job posters and workers. The project aims to capture a significant market share in the local service economy by offering a streamlined, secure, and user-friendly experience, including a platform for passive income through real-world observations and a business-to-business talent scouting platform.
+GUBER is a local visibility network connecting individuals needing assistance with those who can provide it, emphasizing trust and efficient local service delivery.
 
-## User Preferences
+## Run & Operate
+- **Run Unit Tests:** `npx vitest run --config vitest.config.ts`
+- **Run E2E Tests:** `npx playwright test` (requires `npm run dev` running on port 5000)
+- **Production Autoscale Environment Variables:**
+    - `DISABLE_BACKGROUND_JOBS=true`
+    - `CRON_SECRET=<long random string>`
+- **Scheduled Deployment Cron Job:** `curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" https://guberapp.app/api/internal/cron/run`
+
+## Stack
+- **Frontend:** React, TypeScript, Vite, TailwindCSS
+- **Backend:** Express.js, Node.js
+- **Database:** PostgreSQL with Drizzle ORM
+- **State Management:** TanStack Query
+- **Authentication:** `express-session`, `scrypt`
+- **Payments:** Stripe Connect
+- **Mapping:** Google Maps JS API
+- **Testing:** Vitest, Supertest, Playwright
+
+## Where things live
+- **Job Builder Config:** `client/src/lib/job-builder-config.ts`
+- **Guided Job Builder Component:** `client/src/components/guided-job-builder.tsx`
+- **Dispute Issue Types:** `shared/dispute.ts`
+- **Credential Card Component:** `client/src/components/credential-card.tsx`
+- **Platform Detection:** `client/src/lib/platform.ts`
+- **Push Notification Logic (Server):** `server/push.ts`
+- **Push Notification Logic (Client):** `client/src/lib/push.ts`
+- **Cron Job Logic:** `server/cron.ts`, `server/routes.ts`
+- **Reverse Geocoding:** `/api/places/reverse-geocode` (server/routes.ts)
+- **Account Settings UI:** `client/src/pages/account-settings.tsx`
+- **Delete Account UI:** `client/src/pages/delete-account.tsx`
+- **Server Tests:** `server/tests/`
+- **E2E Tests:** `e2e/`
+
+## Architecture decisions
+- **Post-First Job Flow:** Job posting is free; payment occurs only upon worker lock-in.
+- **Mandatory ID Verification:** For both job posters and workers to ensure security and trust.
+- **Strictly Dropdown-Driven Input:** For job creation to ensure structured data and dynamic form fields.
+- **Fuzzed Coordinates:** For privacy on map displays.
+- **Dual-Path Push Notifications:** VAPID web-push for browsers and APNs direct delivery for native iOS Capacitor builds.
+- **Soft-Delete for User Accounts:** Anonymizes personal data while retaining essential records for legal, safety, and fraud prevention.
+
+## Product
+- **Core Functionality:** Connects individuals needing assistance with local service providers.
+- **Payment System:** Stripe-based, supporting destination charges, payouts, subscriptions, and boosts.
+- **Job Features:** Guided job builder, V&I smart forms, time-based pricing, barter listings, milestone tracking, proof engine, auto-pay increase.
+- **Trust & Reliability System:** Worker reliability tracking, badge tiers, dynamic trust scores.
+- **Admin Panel:** Role-based access for managing users, jobs, catalog, disputes, and proof templates.
+- **Direct Offer System:** Private hirer-to-worker offers with structured counters and expiration.
+- **Worker Clock-In System:** Workers must clock in to appear on maps and receive offers.
+- **Money Ledger:** Comprehensive tracking of all financial transactions for compliance.
+- **Dispute Resolution:** Structured issue taxonomy, evidence uploads, and admin-led resolution.
+- **Observation Marketplace:** Passive income opportunity for workers via real-world observations.
+- **GUBER Resume:** Auto-tracking work record with qualification management.
+- **AI Credential Cards:** AI-powered extraction and verification of worker credentials.
+- **Cash Drop System:** Alternative payment for marketing/promotional expenses.
+- **GUBER Business:** Platform for companies to scout talent, manage offers, and verify workers.
+- **Capacitor Integration:** Mobile app support for native features.
+
+## User preferences
 I prefer a concise and direct communication style. I value iterative development and clear explanations of the changes made. Please ask for confirmation before implementing major architectural changes or introducing new external dependencies. For code, I appreciate well-structured and readable solutions.
 
 **IMPORTANT: Do NOT use task agents / project task queue.** All work must be done directly by the main agent in this environment. Parallel/isolated task agents have caused duplicate code and merge conflicts (e.g. duplicate ActiveAreasTab). Handle every request directly here.
 
-## System Architecture
-GUBER employs a modern full-stack architecture with a focus on security, user experience, and scalability.
+## Gotchas
+- **Autoscale Production:** To maintain Autoscale's per-request pricing, ensure no recurring in-process timers are running; use `DISABLE_BACKGROUND_JOBS=true` and a `CRON_SECRET` with a scheduled `curl` command.
+- **Google Maps API Key:** Server-side Google Maps API calls require a separate API key with no HTTP-referer restrictions (or "IP addresses" restriction) if `GOOGLE_MAPS_API_KEY` has referer restrictions.
+- **Account Deletion:** Users are soft-deleted, anonymizing data while retaining records for legal/safety reasons. Public lookups for deleted users return 404.
+- **Google Play Compliance:** Digital purchase UI is hidden in Android/iOS store builds (`isStoreBuild`) to comply with store guidelines.
 
-**UI/UX Decisions:**
-- **Theme & Branding:** Dark theme with neon green/purple accents, rainbow gradient separators, and custom shadcn/ui components.
-- **Navigation:** Bottom tab navigation for core functionalities.
-- **Job Creation:** Strictly dropdown-driven input to ensure structured data and dynamic form fields based on service categories.
-- **Map Integration:** Google Maps displaying category-colored pins, fuzzed coordinates for privacy, and specific markers for user and worker locations.
-- **Business/Enterprise Mode:** A distinct dark theme for business users with specialized dashboards and navigation for talent scouting and bulk job posting.
-
-**Technical Implementations:**
-- **Core Stack:** React, TypeScript, Vite, TailwindCSS, Express.js, PostgreSQL with Drizzle ORM.
-- **Authentication:** Session-based authentication using `express-session` and `scrypt` for password hashing.
-- **State Management:** TanStack Query for efficient data fetching and synchronization.
-- **Payments:** Two-account Stripe setup (`stripeMain` for subscriptions/boosts, `stripe` for Connect operations like destination charges and payouts) with distinct webhooks.
-- **Advanced Job Features:**
-    - **Guided Job Builder (unified):** Single tap-based template that powers every On-Demand Help, General Labor, and Skilled Labor job type. Config lives in `client/src/lib/job-builder-config.ts` (sections, chips, effort/helpers/pricing rules per job type) and is rendered by `client/src/components/guided-job-builder.tsx`. Produces auto-title, Easy/Moderate/Heavy effort, helpers suggestion, suggested price range, live Job Summary panel, and contact-block validation on notes. Marketplace and Barter Labor are hidden from `mainCategories` until those flows are completed. Vehicle/boat/RV/automotive coverage (Vehicle Detailing, Boat Cleaning, RV Cleaning, Auto Repair custom rewrite, Marine / Boat Repair, Towing / Hauling, Jump Start, Lockout Service, Vehicle Transport, Roadside Assistance, plus Boat Check / RV Check V&I reference configs) shares the universal `AUTO_DISCLAIMER` and uses an optional `helpersFn` combinator on `JobTypeConfig` for high-risk helper bumps (e.g. high urgency on a roadside / equipment hauling). Server merges these names on top of any DB-backed `service_types` rows in `GET /api/services/:category` via `TASK_319_AUTOMOTIVE_SERVICES`, and `seedServicePricingConfigs` adds matching `service_pricing_config` rows idempotently.
-    - **V&I Smart Forms:** Multi-layer dropdowns (up to 6 layers) for dynamic job title and description generation.
-    - **Time-Based Pricing:** Scales pricing suggestions based on estimated job durations.
-    - **Barter Listings:** Structured format for barter jobs.
-    - **Milestone System:** Tracks job progress with GPS snapshots for "On My Way" and "Arrived."
-    - **Proof Engine:** "Worker Clipboard" for photo/video proof with geo-locking.
-    - **Auto Pay Increase:** Optional feature for job posters to automatically increase job payouts over time.
-- **Trust & Reliability:** A system tracking helper reliability (completion/cancellation rates) influencing badge tiers and job eligibility, along with a dynamic trust score.
-- **Admin Panel:** Role-based access for managing users, jobs, catalog, disputes, and proof templates.
-- **Direct Offer System:** Private hirer-to-worker offers with structured counters (+5%/+10%/+15%, max 2 per side, $2 minimum increase), 60-minute expiration, privacy before acceptance (worker sees rating/trust only, not hirer identity), payment required after worker accepts to unlock full details.
-- **Worker Clock-In System:** Workers must clock in (`isAvailable` + `clockedInAt`) to appear on maps and receive direct offers. Clock out removes from map and blocks new offers.
-- **Map Mode Separation:** Dashboard Hire mode shows only workers, Work mode shows only jobs. Full map page defaults to Jobs Only with Jobs/Workers toggle.
-- **Money Ledger & Compliance:** Full payment tracking with `guber_payments`, `money_ledger`, `guber_disputes`, `cancellation_log`, and `fund_claims_or_holds` tables. Every dollar has source, owner, purpose, timestamps, and linked records.
-- **Dispute & Payout Protection (Task #317):** Structured 8-value issue-type taxonomy in `shared/dispute.ts` (`DISPUTE_ISSUE_TYPES`), evidence uploads on poster reports and helper responses, 24h helper response window, category-aware auto-confirm windows (24/48/24/72h for simple/skilled/V&I/high-value $500+) via `autoConfirmHoursFor()`. Admin actions: release_payout, refund_poster, partial, request_more_info, close_no_action, flag_user, suspend_user. Admin UI shows V&I and automotive guidance banners. Internal `payoutStatus` mirror (`pending_confirmation|approved|on_hold|released|refunded|partial_release`) is updated on every transition (confirm, auto-confirm, capture_expired, SLA refund, dispute resolution). User `riskLevel` (`normal|watch|restricted|suspended`) auto-promotes from `normal` to `watch` after threshold dispute signals; `restricted`/`suspended` only via admin action. Endpoints: `POST /api/jobs/:id/dispute` (open with structured fields), `POST /api/jobs/:id/dispute/helper-response`, `POST /api/admin/jobs/:id/resolve-dispute`.
-- **Privacy Features:** Contact information filtering, fuzzed location coordinates, and audit logging.
-- **Observation Marketplace:** A passive income system for workers to submit real-world observations (photos + GPS + notes) for purchase by companies, with automated expiry and conversion to draft jobs.
-- **GUBER Resume:** A private, auto-tracking worker work record system with denormalized data and qualification management.
-- **AI Credential Cards (Task #372):** Workers scan certification documents (Food Handler, CPR, trade licenses) via `POST /api/resume/qualifications/scan`; `analyzeCredentialImage` (server/id-vision.ts) extracts `credentialName`, `issuingAuthority`, `expirationDate`, `credentialType`. Workers can edit fields before saving via `POST /api/resume/qualifications`. Admin approval at `PATCH /api/resume/qualifications/:id/review` with `verified` auto-promotes the worker (sets `credentialVerified=true`, bumps tier to `credentialed` if not already higher) and emits a notification. Verified credentials render as `<CredentialCard>` (`client/src/components/credential-card.tsx`) on resume `/resume`, on viewable resumes for unlocked business viewers, and as compact inline cards on Talent Explorer candidate cards via the `verifiedCredentials` field returned from `/api/business/talent-explorer`. New columns on `worker_qualifications`: `issuing_authority`, `expiration_date`, `credential_type`, `ai_extracted`.
-- **Cash Drop System:** An alternative payment system for marketing/promotional expenses, not tied to Stripe, with external payout methods and a GUBER Credit option.
-- **Platform Settings:** Database-driven key-value store for configurable platform parameters, accessible via an admin UI.
-- **GUBER Business:** A platform for companies to scout talent, manage offers, and verify workers, with tiered access, subscription plans, and background check eligibility tracking.
-- **Capacitor Integration:** Mobile app support using Capacitor for native functionality, including native OAuth flows and deep linking.
-- **Push Notifications (dual-path):** Web browsers use standard VAPID web-push (`server/push.ts`, `client/src/lib/push.ts`). Native iOS Capacitor builds use `@capacitor/push-notifications` to register directly with APNs, storing the device token in the `apns_device_tokens` table. APNs direct delivery (`@parse/node-apn`) carries `aps.sound: guber_default.wav` which Apple's Web Push Gateway cannot forward. Server-side routing: if a user has a native APNs token it is used first; VAPID web-push is used for all other subscriptions. APNs credentials required: `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY` (p8 key content), and optionally `APNS_BUNDLE_ID` (defaults to `com.guber.app`).
-- **Google Play Compliance (Store Build Gating):** Runtime platform detection via `client/src/lib/platform.ts` using Capacitor's `getPlatform()`. Digital purchase UI (Day-1 OG, Trust Box, Marketplace Boost, Biz Verification fee) is hidden in Android/iOS store builds (`isStoreBuild`). Real-world service payments (job posting, V&I) and Stripe Connect onboarding are left untouched. AI or Not iframe gets `hideCheckout=1` query param in store builds and the postMessage checkout handler is blocked. Entitlements sync from backend via `/api/auth/me` regardless of platform.
-- **Account Deletion / Data Retention (soft-delete):** `DELETE /api/users/:id` is a soft-delete: `storage.softDeleteUser` anonymises unique fields (email→`deleted_<id>_<ts>@deleted.local`, username/publicUsername/guberId/googleSub/referralCode→tombstone or null), wipes credentials (`password=""`), wipes profile-visible fields (fullName, photo, bio, skills, lat/lng, zipcode, cashDropBrand*), sets `suspended=true`, sets new columns `deletedAt` + `deletionScheduledPurgeAt` (now + 90d) + `deletionReason`. Cascade-deletes push tokens (`pushSubscriptions`/`apnsDeviceTokens`/`fcmDeviceTokens`) and flips `worker_business_projections.businessVisibilityStatus='hidden'` for talent search. Job history, payment records, audit logs, and verification records are intentionally retained. A global middleware in `server/routes.ts` (right after the bearer-JWT hydration middleware) loads the user once per authenticated request and strips `session.userId` if `deletedAt` is set — fail-closed on DB errors — so every downstream auth path (raw `if (!req.session.userId)` and `requireAuth`) blocks deleted accounts. Public lookups `/api/users/:id`, `/badges`, `/reliability`, `/certifications` return 404 for deleted users. `/api/business/refresh-projections` and the unauthenticated `/api/stripe/confirm-og` endpoint also explicitly skip/reject deleted accounts. Frontend copy in `client/src/pages/account-settings.tsx` (Danger Zone dialog) and `client/src/pages/delete-account.tsx` reflects the honest immediate-vs-retained split with the disclaimer "Some data may be retained for legal, safety, and fraud prevention purposes." Background purge cron based on `deletionScheduledPurgeAt` is intentionally future work — only the timestamp is stored today.
-
-## Testing
-- **Test Framework:** Vitest + Supertest for server integration tests; Playwright for e2e browser tests
-- **Test Location:** `server/tests/` (unit/integration), `e2e/` (Playwright browser tests)
-- **Run Unit Tests:** `npx vitest run --config vitest.config.ts`
-- **Run E2E Tests:** `npx playwright test` (requires `npm run dev` running on port 5000)
-- **OAuth State Tests:** `server/tests/oauth-state.test.ts` — validates Google OAuth state parameter handling (valid state, mismatched state, missing state, replay protection, session cleanup)
-- **Liability/Disclaimer E2E Tests (Task #323):** `e2e/liability-disclaimer.spec.ts` — 14 tests covering: GlobalDisclaimerModal UI (3), SafetyGateModal UI (2), server-side API gates (6: DISCLAIMER_REQUIRED, DISALLOWED_JOB, CONTACT_BLOCK, V&I sanitization, idempotent accept, DB persistence), disallowed-job client-side guard (1), off-platform contact block client-side UI (1), HelperStartConfirmModal browser flow (1). Test infrastructure: `liability_test@guberapp.internal` seeded only in non-production, dev-only `/api/test/reset-liability-disclaimer` and `/api/test/create-helper-assignment` endpoints for deterministic setup.
-
-## External Dependencies
-- **Stripe Connect:** For handling all payment processing, including destination charges, connected accounts, and manual payouts.
-- **Google Maps JS API:** Provides interactive mapping capabilities for job and worker locations.
-- **PostgreSQL:** The primary relational database for persistent data storage.
-
-## Production Ops & Cost Controls (Autoscale)
-The production deployment is **Autoscale** (`.replit` `[deployment] deploymentTarget = "autoscale"`). To actually realize the per-request pricing of Autoscale (and not pay for an always-warm instance), the app must have NO recurring in-process timers. Two pieces are required for this to work:
-
-**1. Set these env vars on the production Autoscale deployment (Replit → Deployments → Settings → Secrets):**
-- `DISABLE_BACKGROUND_JOBS=true` — gates every `setInterval` and `node-cron` registration in the app. With this set, `startCron()` early-returns and the four in-process sweeps (offer expiration, coordination timeouts, plus the two in-memory Map cleanups for OAuth poll tokens and AI-game rounds, which are now lazy) never wire up.
-- `CRON_SECRET=<long random string>` — required by `POST /api/internal/cron/run`; requests without a matching `x-cron-secret` header get 401.
-
-**2. Create a Replit Scheduled Deployment** (Deployments → Create deployment → Scheduled) that runs every 2 minutes:
-```
-curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" \
-  https://guberapp.app/api/internal/cron/run
-```
-This single endpoint runs the union of every periodic sweep that used to live inside the app process: cash-drop expiry, cash-drop expiring pings, unaccepted-job expiration, stale-job boost flagging, auto-pay-increase, review-timer auto-confirm, dispute SLA enforcement, observation expiry, stuck-purchasing-observation recovery, OAuth nonce pruning, all 5 reminder sweeps (pre-arrival, missing on-the-way, payout-release, auto-confirm midpoint, helper-response buffer), direct-offer expiration, and the 3 coordination-timeout sweeps.
-
-**Where the code lives:**
-- `server/cron.ts` → `runAllScheduledSweeps()` (exported). `startCron()` at the bottom is a no-op when `DISABLE_BACKGROUND_JOBS=true`.
-- `server/routes.ts` → `runOfferExpirationSweep()` and `runCoordinationTimeoutSweep()` are local async functions inside `registerRoutes()`. The `/api/internal/cron/run` handler calls both, then dynamically imports and calls `runAllScheduledSweeps()`.
-
-**Dev mode:** Leave `DISABLE_BACKGROUND_JOBS` unset locally — timers run in-process exactly as before so you don't need a scheduled deployment for development.
-
-**Reverse-geocode hardening:** `/api/places/reverse-geocode` (server/routes.ts) catches Google Maps non-JSON error pages (HTML/XML "RefererNotAllowedMapError" responses), logs once with the response prefix, then falls back to OpenStreetMap Nominatim (with a `User-Agent` header). On total failure it returns `200 { city: null, state: null, formatted: null }` instead of `500`, so client retry storms can't loop and keep the Autoscale instance warm. **If reverse-geocode keeps failing in prod**, the root cause is the `GOOGLE_MAPS_API_KEY` having HTTP-referer restrictions — server-side calls have no referer so Google rejects them. Fix in Google Cloud Console: create a **separate** API key with no application restrictions (or "IP addresses" restriction) for server use, and store it as a new secret (e.g. `GOOGLE_MAPS_SERVER_KEY`). The browser key stays referer-restricted for the frontend.
-- **AI or Not Service:** An external AI service integrated via an iframe for specific features.
+## Pointers
+- _Populate as you build_

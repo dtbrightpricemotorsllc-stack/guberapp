@@ -1,0 +1,158 @@
+<!doctype html>
+<!--
+  GUBER — One-Page Executive Summary
+  ==================================
+  Open in any browser. To save as PDF: Chrome → Print → "Save as PDF"
+  → Layout "Portrait" → Margins "None". This page is sized to print
+  cleanly on a single Letter / A4 page.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>GUBER — Executive Summary</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a;--ink:#f5f5f5;--muted:#9aa0a6;--neon:#39ff14;--purple:#a259ff;--rule:#1f1f1f;--card:#141414;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#222;font-family:'Inter',sans-serif;color:var(--ink)}
+  .page{
+    width:8.5in;min-height:11in;margin:24px auto;background:var(--bg);
+    padding:.55in .55in .5in;
+    box-shadow:0 8px 32px rgba(0,0,0,.6);
+    display:flex;flex-direction:column;gap:.18in;
+  }
+  h1{font-family:'Oxanium',sans-serif;font-size:34pt;letter-spacing:.04em;margin:0;text-transform:uppercase;line-height:1}
+  h2{font-family:'Oxanium',sans-serif;font-size:11pt;color:var(--neon);text-transform:uppercase;letter-spacing:.1em;margin:0 0 .04in;font-weight:700}
+  p{font-size:9.5pt;line-height:1.45;margin:0;color:var(--ink)}
+  .muted{color:var(--muted)}
+  .header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid var(--rule);padding-bottom:.12in}
+  .tagline{font-size:11pt;color:var(--muted);margin-top:4px}
+  .meta{font-size:8pt;color:var(--muted);text-align:right;letter-spacing:.06em;text-transform:uppercase}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:.22in}
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:.18in}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:.14in .16in}
+  ul{margin:.06in 0 0;padding-left:14pt}
+  li{font-size:9pt;line-height:1.4;margin:2pt 0}
+  li::marker{color:var(--neon)}
+  table{width:100%;border-collapse:collapse;font-size:8.5pt}
+  th,td{text-align:left;padding:4pt 6pt;border-bottom:1px solid var(--rule)}
+  th{font-family:'Oxanium',sans-serif;color:var(--neon);text-transform:uppercase;font-size:7.5pt;letter-spacing:.06em}
+  td.num{font-family:'Oxanium',sans-serif;font-weight:700;color:var(--ink);text-align:right;white-space:nowrap}
+  .stat{display:flex;align-items:baseline;gap:6pt}
+  .stat .v{font-family:'Oxanium',sans-serif;font-size:24pt;color:var(--neon);font-weight:800;line-height:1}
+  .stat .l{font-size:8pt;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .footer{margin-top:auto;border-top:1px solid var(--rule);padding-top:.1in;font-size:7.5pt;color:var(--muted);display:flex;justify-content:space-between;letter-spacing:.06em;text-transform:uppercase}
+  .neon{color:var(--neon)}
+  .purple{color:var(--purple)}
+  @media print{
+    @page{size:letter portrait;margin:0}
+    html,body{background:#0a0a0a}
+    .page{margin:0;box-shadow:none;width:100%;min-height:100vh}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div>
+      <h1>Guber</h1>
+      <div class="tagline">Trust-enforced local visibility network</div>
+    </div>
+    <div class="meta">
+      Executive Summary · 2026<br/>
+      guberapp.app
+    </div>
+  </div>
+
+  <div>
+    <h2>The opportunity</h2>
+    <p>Hundreds of billions of dollars of local micro-services move through Craigslist, Facebook groups, and cash every year — with zero infrastructure for trust, payment, or proof. GUBER is the trust layer: <span class="neon">verified identity on both sides</span>, <span class="neon">money on-platform via Stripe Connect</span>, and <span class="neon">structured proof of work with GPS-locked photos and checklists</span>. Live on web and native iOS.</p>
+  </div>
+
+  <div class="row">
+    <div>
+      <h2>What's already shipped</h2>
+      <ul>
+        <li>50+ user-facing pages on web + Capacitor iOS app</li>
+        <li>50+ database tables: jobs, payments, money ledger, disputes, businesses, sponsors, observations</li>
+        <li>Two Stripe accounts (subscriptions + Connect) with split webhooks</li>
+        <li>Push notifications: VAPID web-push + APNs direct</li>
+        <li>Admin panel, dispute resolution, soft-delete + retention</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Eleven live revenue streams</h2>
+      <ul>
+        <li>Job platform fee 20% + 3.2% processing</li>
+        <li>Trust Box subscription $4.99/mo</li>
+        <li>Business verification $49 + Scout Plan $99/mo + add-on unlocks</li>
+        <li>Marketplace boosts (7-day featured)</li>
+        <li>Cash Drop brand sponsorships</li>
+        <li>Observation marketplace (20% take)</li>
+        <li>Direct Offers via Stripe Connect application_fee</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="row3">
+    <div class="card">
+      <h2>Cost story</h2>
+      <div class="stat" style="margin-top:4pt"><div class="v">~$0</div><div class="l">per day idle</div></div>
+      <p style="margin-top:4pt">Re-architected to true serverless autoscale — down from ~$50/day. Infrastructure now scales linearly with revenue, not calendar time.</p>
+    </div>
+    <div class="card">
+      <h2>Defensibility</h2>
+      <p style="margin-top:4pt">Verified-identity + proof-of-work dataset that compounds per user. None of the incumbents (Craigslist, TaskRabbit, Uber) collect this. Combined B2B side (Scout Plan + Observations) gives a second revenue engine no peer-to-peer competitor has.</p>
+    </div>
+    <div class="card">
+      <h2>Network effect</h2>
+      <p style="margin-top:4pt">Every new verified helper makes the marketplace more useful for posters, more attractive to businesses, and more valuable to data buyers. Cash Drops are sponsor-funded acquisition events.</p>
+    </div>
+  </div>
+
+  <div>
+    <h2>Monetization at a glance</h2>
+    <table>
+      <thead><tr><th>Stream</th><th>Who pays</th><th>Price</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Job platform fee</td><td>Poster (taken from helper share)</td><td class="num">20%</td><td>Live</td></tr>
+        <tr><td>Job processing fee</td><td>Poster</td><td class="num">3.2%</td><td>Live</td></tr>
+        <tr><td>Trust Box subscription</td><td>End user</td><td class="num">$4.99 / mo</td><td>Live</td></tr>
+        <tr><td>Business Scout Plan</td><td>Business</td><td class="num">$99 / mo</td><td>Live</td></tr>
+        <tr><td>Business verification fee</td><td>Business</td><td class="num">$49 once</td><td>Live</td></tr>
+        <tr><td>Cash Drop sponsorships</td><td>Brand</td><td class="num">Sponsor + platform share</td><td>Live</td></tr>
+        <tr><td>Observation marketplace</td><td>Buyer (helper 80%)</td><td class="num">20%</td><td>Live</td></tr>
+        <tr><td>Marketplace boost</td><td>Seller</td><td class="num">7-day featured</td><td>Live</td></tr>
+        <tr><td>Sponsored visibility / content</td><td>Brand</td><td class="num">Per-impression / pack</td><td>Emerging</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row" style="margin-top:auto">
+    <div>
+      <h2>Traction (founder fills in)</h2>
+      <ul>
+        <li>Total users to date: <span class="neon">[ ___ ]</span></li>
+        <li>Verified helpers: <span class="neon">[ ___ ]</span></li>
+        <li>Lifetime jobs posted: <span class="neon">[ ___ ]</span></li>
+        <li>GMV processed via Stripe: <span class="neon">[ ___ ]</span></li>
+        <li>Active anchor metros: <span class="neon">[ ___ ]</span></li>
+      </ul>
+    </div>
+    <div>
+      <h2>The ask</h2>
+      <p>Raising <span class="neon">$[___]</span> as equity OR a structured profit-share against platform-fee revenue. Capital deploys to paid acquisition in anchor metros, B2B sales hires for Scout Plan + Cash Drop sponsorships, and App Store launch polish. <span class="neon">Product is shipped — capital is growth, not engineering.</span></p>
+      <p style="margin-top:6pt"><span class="purple">Contact:</span> [your name] · [email] · guberapp.app</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>GUBER · CONFIDENTIAL</span>
+    <span>guberapp.app</span>
+  </div>
+</div>
+</body>
+</html>

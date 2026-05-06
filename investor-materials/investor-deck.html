@@ -1,0 +1,491 @@
+<!doctype html>
+<!--
+  GUBER — Investor Pitch Deck
+  ===========================
+  HOW TO EDIT: every slide is a <section class="slide">…</section> block
+  below. Open this file in any text editor (or Replit) and change the words
+  between the tags. Don't worry about the CSS at the top.
+
+  HOW TO PRESENT: open this file in a browser. Use the right/left arrow
+  keys (or Space / Shift+Space) to advance slides. Press F for fullscreen.
+
+  HOW TO SAVE AS PDF: open in Chrome → File → Print → Destination "Save
+  as PDF" → Layout "Landscape" → Margins "None" → Save. Each slide
+  becomes one PDF page automatically.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GUBER — Investor Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oxanium:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a;
+    --bg2:#111;
+    --ink:#f5f5f5;
+    --muted:#9aa0a6;
+    --neon:#39ff14;
+    --neon-dim:#0f7a08;
+    --purple:#a259ff;
+    --rule:#1f1f1f;
+    --good:#39ff14;
+    --warn:#ffb020;
+    --card:#141414;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,Segoe UI,sans-serif;overflow:hidden}
+  body.scroll{overflow:auto}
+  .deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:6vh 8vw;
+    opacity:0;pointer-events:none;
+    transition:opacity .25s ease;
+    background:radial-gradient(circle at 20% 0%, #1a0a2a 0%, var(--bg) 55%);
+  }
+  .slide.active{opacity:1;pointer-events:auto}
+  h1,h2,h3{font-family:'Oxanium',sans-serif;letter-spacing:.04em;margin:0 0 .4em}
+  h1{font-size:6vw;line-height:1;font-weight:800;text-transform:uppercase}
+  h2{font-size:3.2vw;line-height:1.1;font-weight:700}
+  h3{font-size:1.6vw;font-weight:600;color:var(--neon)}
+  p,li{font-size:1.5vw;line-height:1.5;color:var(--ink)}
+  .muted{color:var(--muted)}
+  .neon{color:var(--neon)}
+  .purple{color:var(--purple)}
+  .tagline{font-size:2vw;color:var(--muted);margin-top:1vh;letter-spacing:.04em}
+  .footer{position:fixed;bottom:1.6vh;left:0;right:0;display:flex;justify-content:space-between;padding:0 3vw;color:var(--muted);font-size:.85vw;letter-spacing:.08em;text-transform:uppercase}
+  .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--neon),var(--purple));transition:width .25s}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:3vw;align-items:start}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:2vw;align-items:start}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:1.4vw;align-items:start}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:1.8vw}
+  .card .num{font-family:'Oxanium',sans-serif;font-size:2.8vw;color:var(--neon);font-weight:800;line-height:1}
+  .card h4{font-family:'Oxanium',sans-serif;font-size:1.3vw;margin:.6em 0 .3em;letter-spacing:.04em}
+  .card p{font-size:1.05vw;color:var(--muted);margin:0}
+  .pill{display:inline-block;padding:.35em .9em;border-radius:999px;font-size:.95vw;font-weight:600;background:rgba(57,255,20,.12);color:var(--neon);border:1px solid rgba(57,255,20,.25);margin-right:.4em}
+  .pill.purple{background:rgba(162,89,255,.12);color:var(--purple);border-color:rgba(162,89,255,.25)}
+  .pill.warn{background:rgba(255,176,32,.12);color:var(--warn);border-color:rgba(255,176,32,.25)}
+  table{width:100%;border-collapse:collapse;margin-top:2vh;font-size:1.1vw}
+  th,td{text-align:left;padding:.9em 1em;border-bottom:1px solid var(--rule)}
+  th{font-family:'Oxanium',sans-serif;font-weight:700;color:var(--neon);text-transform:uppercase;letter-spacing:.06em;font-size:.9vw}
+  td.num{font-family:'Oxanium',sans-serif;font-weight:700;color:var(--ink)}
+  .bigstat{display:flex;flex-direction:column;align-items:flex-start;gap:.4vh}
+  .bigstat .v{font-family:'Oxanium',sans-serif;font-size:5vw;color:var(--neon);font-weight:800;line-height:1}
+  .bigstat .l{font-size:1vw;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  ul{margin:1em 0 0;padding-left:1.2em}
+  li{margin:.5em 0}
+  li::marker{color:var(--neon)}
+  .chips{display:flex;flex-wrap:wrap;gap:.6vw;margin-top:1.2vh}
+  .chip{font-size:1vw;padding:.4em .9em;border:1px solid var(--rule);border-radius:8px;background:#0f0f0f;color:#ddd}
+  .center{text-align:center}
+  .arrow{position:fixed;bottom:1vh;right:2vw;font-size:.85vw;color:var(--muted);letter-spacing:.06em}
+  .pdfbtn{position:fixed;top:14px;right:18px;z-index:10;background:var(--neon);color:#000;border:0;border-radius:8px;padding:.7em 1.2em;font-family:'Oxanium',sans-serif;font-weight:700;font-size:.95vw;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;box-shadow:0 4px 16px rgba(57,255,20,.25)}
+  .pdfbtn:hover{background:#5cff3a}
+  .appendix-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4vw;margin-top:2vh}
+  .appendix-grid .card h4{font-size:1.1vw;margin:0 0 .4em;color:var(--neon)}
+  .appendix-grid .card p{font-size:.95vw;line-height:1.45}
+  @media print{
+    @page{size:landscape;margin:0}
+    html,body{background:#0a0a0a;overflow:visible}
+    body.scroll,body{overflow:visible}
+    .deck{height:auto;width:100%;overflow:visible}
+    .slide{position:relative;opacity:1;pointer-events:auto;height:100vh;page-break-after:always;break-after:page}
+    .footer,.arrow,.progress,.pdfbtn{display:none}
+  }
+</style>
+</head>
+<body>
+<button class="pdfbtn" onclick="window.print()" title="Save the entire deck as a PDF">⬇ Download PDF</button>
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide">
+    <h1>Guber</h1>
+    <div class="tagline">Trust-enforced local visibility network</div>
+    <p style="margin-top:6vh;font-size:1.4vw;color:var(--muted);max-width:60ch">
+      The local services marketplace built around <span class="neon">verified identity</span>,
+      <span class="neon">on-platform money</span>, and <span class="neon">structured proof of work</span>.
+      Live on web and iOS. Multi-sided revenue. Idle infrastructure cost ~<span class="neon">$0/day</span>.
+    </p>
+    <div style="margin-top:8vh;color:var(--muted);font-size:1vw;letter-spacing:.1em;text-transform:uppercase">
+      Investor / Profit-Share Brief · 2026 · guberapp.app
+    </div>
+  </section>
+
+  <!-- 2. PROBLEM -->
+  <section class="slide">
+    <h2>Local help is broken.</h2>
+    <div class="grid-2" style="margin-top:3vh">
+      <div>
+        <h3>For the person who needs help</h3>
+        <ul>
+          <li>Craigslist & Facebook groups: anonymous strangers, no recourse, payment off-platform.</li>
+          <li>TaskRabbit / Handy: rigid categories, opaque pricing, limited geography.</li>
+          <li>Phone-a-friend: unreliable, awkward, no proof anything actually got done.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>For the person who wants to earn</h3>
+        <ul>
+          <li>Gig platforms take <span class="neon">25–40%</span> and dictate the work.</li>
+          <li>No way to prove a clean track record across platforms.</li>
+          <li>Cash work has no receipts, no protection, no future.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:4vh;font-size:1.2vw">
+      The result: trillions of dollars of micro-services move through informal channels every year with
+      <span class="neon">zero infrastructure</span> for trust, payment, or proof.
+    </p>
+  </section>
+
+  <!-- 3. SOLUTION -->
+  <section class="slide">
+    <h2>Guber is the trust layer.</h2>
+    <div class="grid-3" style="margin-top:3vh">
+      <div class="card">
+        <div class="num">ID</div>
+        <h4>Verified identity, both sides</h4>
+        <p>Mandatory ID + selfie verification for posters and helpers. No anonymous accounts.</p>
+      </div>
+      <div class="card">
+        <div class="num">$</div>
+        <h4>Money on-platform</h4>
+        <p>Stripe Connect for every dollar. Escrow on lock-in, payout on confirmation. Fully traceable money ledger.</p>
+      </div>
+      <div class="card">
+        <div class="num">✓</div>
+        <h4>Structured proof of work</h4>
+        <p>GPS-locked photos, video, dynamic checklists. Every job ends with verifiable evidence.</p>
+      </div>
+    </div>
+    <p style="margin-top:4vh;font-size:1.4vw">
+      The result: <span class="neon">a local marketplace where strangers can transact safely</span> —
+      because identity, money, and proof are all enforced by the platform, not the user.
+    </p>
+  </section>
+
+  <!-- 4. PRODUCT — WHAT'S BUILT -->
+  <section class="slide">
+    <h2>This is shipped software.</h2>
+    <p class="muted" style="font-size:1.3vw;margin-top:0">Not a deck. Not a prototype. <span class="neon">50+ live product surfaces</span> on web + native iOS today.</p>
+    <div class="grid-4" style="margin-top:3vh">
+      <div class="card"><h4 class="neon">Jobs Marketplace</h4><p>Guided builder, V&I smart forms, time-based pricing, barter, milestones, GPS proof, auto-pay-increase.</p></div>
+      <div class="card"><h4 class="neon">Direct Offers</h4><p>Real-time worker→hirer offers via Stripe Connect with structured counters and 60-min expiry.</p></div>
+      <div class="card"><h4 class="neon">Cash Drops</h4><p>Geo-targeted gamified rewards. Brands sponsor. Users hunt. Platform takes share.</p></div>
+      <div class="card"><h4 class="neon">Trust Box (AI or Not)</h4><p>$4.99/mo AI-content detection + unlimited text verification subscription.</p></div>
+      <div class="card"><h4 class="neon">Business Scout Plan</h4><p>$99/mo recurring B2B plan with 20 talent unlocks/mo + add-on packs.</p></div>
+      <div class="card"><h4 class="neon">Observation Marketplace</h4><p>Workers submit real-world observations with GPS/photo. Businesses buy. 20% platform cut.</p></div>
+      <div class="card"><h4 class="neon">V&I Verification</h4><p>Verify-and-Inspect jobs for vehicles, properties, marketplace listings, salvage.</p></div>
+      <div class="card"><h4 class="neon">GUBER Resume</h4><p>Auto-tracked work record + AI-extracted credential cards (CPR, food handler, trade licenses).</p></div>
+    </div>
+  </section>
+
+  <!-- 5. BUSINESS MODEL — MATRIX -->
+  <section class="slide">
+    <h2>How GUBER makes money.</h2>
+    <p class="muted" style="font-size:1.1vw;margin:0">Eleven distinct revenue streams. All wired to Stripe.</p>
+    <table>
+      <thead><tr><th>Stream</th><th>Who pays</th><th>Price</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Job platform fee</td><td>Job poster (taken from helper share)</td><td class="num">20%</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Job processing fee</td><td>Job poster (added on top)</td><td class="num">3.2%</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Worker cashout — early</td><td>Helper</td><td class="num">2%</td><td><span class="pill warn">Flag-gated</span></td></tr>
+        <tr><td>Worker cashout — instant</td><td>Helper</td><td class="num">5%</td><td><span class="pill warn">Flag-gated</span></td></tr>
+        <tr><td>Trust Box subscription</td><td>End user</td><td class="num">$4.99 / mo</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Day-1 OG tier</td><td>Helper / supporter</td><td class="num">One-time</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Business verification</td><td>Business</td><td class="num">$49 one-time</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Business Scout Plan</td><td>Business</td><td class="num">$99 / mo</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Extra unlock packs</td><td>Business</td><td class="num">Per-pack</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Marketplace boost (7-day featured)</td><td>Seller</td><td class="num">Per-listing</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Cash Drop sponsorships</td><td>Brand sponsor</td><td class="num">Sponsor + platform share</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Observation marketplace</td><td>Business buyer (helper gets 80%)</td><td class="num">20% platform fee</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Direct Offers (Stripe Connect)</td><td>Hirer (gross-up math)</td><td class="num">Application fee</td><td><span class="pill">Live</span></td></tr>
+        <tr><td>Sponsored visibility / content licensing</td><td>Brand sponsor</td><td class="num">Per-impression / pack</td><td><span class="pill purple">Emerging</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 6. MULTI-SIDED MARKETPLACE -->
+  <section class="slide">
+    <h2>Five sides. One platform.</h2>
+    <div class="grid-3" style="margin-top:3vh">
+      <div class="card">
+        <h4 class="neon">Helpers</h4>
+        <p>Earn on local jobs, observations, Cash Drops, and Direct Offers. Build a portable, verified resume.</p>
+        <div class="chips"><span class="chip">Job earnings</span><span class="chip">Observation income</span><span class="chip">Trust Box</span></div>
+      </div>
+      <div class="card">
+        <h4 class="neon">Posters</h4>
+        <p>Anyone needing local help. Pay only when a verified helper locks in. 3.2% processing.</p>
+        <div class="chips"><span class="chip">Pay-on-lockin</span><span class="chip">Auto-pay increase</span></div>
+      </div>
+      <div class="card">
+        <h4 class="neon">Businesses</h4>
+        <p>Scout verified talent, post bulk jobs, buy observations, sponsor Cash Drops. $99/mo recurring.</p>
+        <div class="chips"><span class="chip">Scout Plan</span><span class="chip">Bulk post</span><span class="chip">Talent unlocks</span></div>
+      </div>
+      <div class="card">
+        <h4 class="purple">Brand Sponsors</h4>
+        <p>Run gamified, geo-targeted Cash Drops. Reach local users where they already are.</p>
+        <div class="chips"><span class="chip">Cash Drop sponsor</span><span class="chip">Featured boost</span></div>
+      </div>
+      <div class="card">
+        <h4 class="purple">Data Buyers</h4>
+        <p>License real-world observations submitted by verified helpers. Vehicle condition, property checks, marketplace authenticity.</p>
+        <div class="chips"><span class="chip">Observation API</span><span class="chip">V&I reports</span></div>
+      </div>
+      <div class="card" style="border-color:rgba(57,255,20,.4)">
+        <h4 class="neon">Network effect</h4>
+        <p>Every new verified helper makes the marketplace more useful for posters AND more attractive to businesses AND more valuable to data buyers.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. INFRASTRUCTURE & TRACTION -->
+  <section class="slide">
+    <h2>Infrastructure already in the ground.</h2>
+    <div class="grid-2" style="margin-top:3vh">
+      <div>
+        <ul>
+          <li><span class="neon">50+ live database tables</span> — jobs, payments, money ledger, disputes, business accounts, sponsors, observations, credentials.</li>
+          <li><span class="neon">50+ user-facing pages</span> across web + native iOS (Capacitor).</li>
+          <li><span class="neon">Two Stripe accounts</span> wired for split monetization (subscriptions vs Connect payouts) with separate webhooks.</li>
+          <li>Push notifications: <span class="neon">VAPID web-push + APNs direct delivery</span> for native iOS.</li>
+          <li>OAuth: Google web + native. Sign in with Apple + Apple Pay queued for the next App Store build.</li>
+          <li>Admin panel with role-based access for users, jobs, catalog, disputes, proof templates.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Fill in the founder's actual numbers</h3>
+        <p class="muted" style="font-size:1.1vw">These are placeholders — replace with real values before each meeting.</p>
+        <div class="grid-2" style="margin-top:1vh;gap:1.5vw">
+          <div class="card"><div class="num">[ ]</div><h4>Total registered users</h4><p>To-date signups</p></div>
+          <div class="card"><div class="num">[ ]</div><h4>Verified helpers</h4><p>ID + selfie passed</p></div>
+          <div class="card"><div class="num">[ ]</div><h4>Jobs posted</h4><p>Lifetime</p></div>
+          <div class="card"><div class="num">[ ]</div><h4>GMV processed</h4><p>Through Stripe</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. THE COST STORY -->
+  <section class="slide">
+    <h2>Operating cost ≈ <span class="neon">$0/day idle.</span></h2>
+    <div class="grid-2" style="margin-top:3vh;align-items:center">
+      <div>
+        <p style="font-size:1.5vw">In April 2026 we re-architected the production deployment from always-warm to <span class="neon">true serverless autoscale</span>:</p>
+        <ul>
+          <li>Eliminated all in-process timers and background jobs.</li>
+          <li>Moved every periodic sweep behind a single secured external cron endpoint.</li>
+          <li>Replaced the always-warm pinger with a free 2-minute scheduled GET.</li>
+        </ul>
+        <p class="muted" style="margin-top:2vh;font-size:1.2vw">The platform now scales to zero between requests — we pay only when users actually use it.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3vh;align-items:center">
+        <div class="bigstat"><div class="v">~$50</div><div class="l">per day · before</div></div>
+        <div style="font-size:3vw;color:var(--neon)">↓</div>
+        <div class="bigstat"><div class="v">~$0</div><div class="l">per day · idle now</div></div>
+        <div class="pill" style="font-size:1.2vw">~99% reduction</div>
+      </div>
+    </div>
+    <p class="muted center" style="margin-top:3vh;font-size:1vw">
+      Investor takeaway: <span class="neon">unit economics work from user #1.</span>
+      Infrastructure scales linearly with revenue, not with calendar time.
+    </p>
+  </section>
+
+  <!-- 9. MARKET -->
+  <section class="slide">
+    <h2>The market is enormous and informal.</h2>
+    <div class="grid-3" style="margin-top:3vh">
+      <div class="card">
+        <h4 class="neon">U.S. local services</h4>
+        <p style="font-size:1.2vw;color:var(--ink)">Roughly <span class="neon">$600B+/yr</span> in home services, gig labor, and on-demand help. Most of it is still cash, Craigslist, or word-of-mouth.</p>
+        <p class="muted" style="font-size:.9vw;margin-top:1vh">Source ranges vary by report; verify before each meeting.</p>
+      </div>
+      <div class="card">
+        <h4 class="neon">Verified-data B2B</h4>
+        <p style="font-size:1.2vw;color:var(--ink)">Insurance, lending, marketplaces, and OEMs spend <span class="neon">billions</span> on third-party physical inspection — a market GUBER can address with V&I + Observations.</p>
+      </div>
+      <div class="card">
+        <h4 class="neon">Local advertising</h4>
+        <p style="font-size:1.2vw;color:var(--ink)">U.S. local digital ad spend exceeds <span class="neon">$170B/yr</span>. Cash Drops give brands a measurable, gamified, geo-targeted alternative to display ads.</p>
+      </div>
+    </div>
+    <p style="margin-top:4vh;font-size:1.3vw">
+      GUBER doesn't need to win all of any of these markets to be a meaningful business —
+      <span class="neon">capturing a fraction of one of them returns the round.</span>
+    </p>
+  </section>
+
+  <!-- 10. COMPETITION & DEFENSIBILITY -->
+  <section class="slide">
+    <h2>Why we win.</h2>
+    <table>
+      <thead><tr><th></th><th>Craigslist / FB Groups</th><th>TaskRabbit / Handy</th><th>Uber / DoorDash</th><th class="neon">GUBER</th></tr></thead>
+      <tbody>
+        <tr><td>Verified identity (both sides)</td><td>—</td><td>Workers only</td><td>Workers only</td><td class="num neon">✓ Both</td></tr>
+        <tr><td>Money on-platform</td><td>—</td><td>✓</td><td>✓</td><td class="num neon">✓</td></tr>
+        <tr><td>Structured proof of work</td><td>—</td><td>—</td><td>Receipt only</td><td class="num neon">✓ GPS + photo + checklist</td></tr>
+        <tr><td>Open category set</td><td>✓ but unsafe</td><td>Limited</td><td>Single vertical</td><td class="num neon">✓ Open + verified</td></tr>
+        <tr><td>B2B side (talent + data)</td><td>—</td><td>—</td><td>—</td><td class="num neon">✓ Scout Plan + Observations</td></tr>
+        <tr><td>Brand-sponsored gamification</td><td>—</td><td>—</td><td>—</td><td class="num neon">✓ Cash Drops</td></tr>
+        <tr><td>Take rate</td><td>0%</td><td>~25–30%</td><td>~25–40%</td><td class="num neon">~20% + 3.2%</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-top:3vh;font-size:1.1vw">Defensibility is the <span class="neon">verified-identity + proof-of-work data</span> we accumulate per user — none of which the incumbents collect.</p>
+  </section>
+
+  <!-- 11. GROWTH -->
+  <section class="slide">
+    <h2>How we grow.</h2>
+    <div class="grid-2" style="margin-top:3vh">
+      <div>
+        <h3>Demand-side levers</h3>
+        <ul>
+          <li><span class="neon">Cash Drops</span> drive viral local downloads — every drop is a free acquisition event funded by the brand sponsor.</li>
+          <li><span class="neon">Day-1 OG</span> tier creates evangelists. Lower fees + retention perks in exchange for early adoption.</li>
+          <li><span class="neon">Performance Shares</span> referral system: referrer gets a share of GUBER's platform fee on referred-user jobs for 30 days. Pure cash, no credits.</li>
+          <li><span class="neon">SEO</span>: structured job pages indexed by Google with clean URLs and an /jobs sitemap.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Supply-side levers</h3>
+        <ul>
+          <li><span class="neon">Verified-helper directory</span> grows with every job — credentials, ratings, proof history compound.</li>
+          <li><span class="neon">B2B Scout Plan</span> drags businesses (and their bulk job volume) onto the platform. Recurring $99/mo.</li>
+          <li><span class="neon">Observation Marketplace</span> turns passive walking-around into income — a unique on-ramp competitors can't match.</li>
+          <li><span class="neon">Native iOS app</span> in App Store + Sign in with Apple + Apple Pay (queued) maximize trust signals on mobile.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. ROADMAP -->
+  <section class="slide">
+    <h2>What's next, in order.</h2>
+    <div class="grid-3" style="margin-top:3vh">
+      <div class="card">
+        <h4 class="neon">Now (0–30 days)</h4>
+        <ul style="margin:0">
+          <li>Sign in with Apple + Apple Pay for App Store submission.</li>
+          <li>Cloud photo storage migration to Cloudflare R2.</li>
+          <li>Launch performance hardening for first-paint.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="neon">Next (30–90 days)</h4>
+        <ul style="margin:0">
+          <li>Scale paid acquisition in 2–3 anchor metros.</li>
+          <li>Activate Cash Drop sponsorship sales pipeline.</li>
+          <li>B2B sales: onboard 25 paying Scout Plan accounts.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="purple">Then (90–180 days)</h4>
+        <ul style="margin:0">
+          <li>Observation Marketplace API for insurance & marketplace partners.</li>
+          <li>Sponsored-visibility ad product.</li>
+          <li>Android store launch.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. APPENDIX — WHAT'S ALREADY BUILT -->
+  <section class="slide">
+    <h2>Appendix · What's already built.</h2>
+    <p class="muted" style="font-size:1.1vw;margin:0">Every product surface below is shipped code, in production today. Reviewable on request.</p>
+    <div class="appendix-grid">
+      <div class="card"><h4>Jobs Marketplace</h4><p>Guided job builder with effort + helpers + price suggestions, V&I smart forms, time-based pricing, barter listings, milestone tracking, GPS-locked proof engine, auto-pay-increase.</p></div>
+      <div class="card"><h4>Direct Offers</h4><p>Worker→hirer real-time offers via Stripe Connect with structured counters, 60-min expiry, privacy-before-acceptance.</p></div>
+      <div class="card"><h4>Cash Drops</h4><p>Geo-targeted gamified rewards with brand-sponsor economics. VAPID + APNs push to nearby + OG users.</p></div>
+      <div class="card"><h4>Trust Box (AI or Not)</h4><p>$4.99/mo subscription. AI-content detection, unlimited text verification, badge.</p></div>
+      <div class="card"><h4>Business Scout Plan</h4><p>$49 verification + $99/mo recurring with 20 talent unlocks, plus add-on unlock packs and bulk job posting.</p></div>
+      <div class="card"><h4>Observation Marketplace</h4><p>Workers submit GPS+photo observations; businesses purchase; 80/20 helper-platform split.</p></div>
+      <div class="card"><h4>V&I Verification</h4><p>Verify-and-Inspect jobs across vehicles, properties, marketplace listings, salvage. Multi-layer dropdowns.</p></div>
+      <div class="card"><h4>GUBER Resume</h4><p>Auto-tracked work record + AI-extracted credential cards (CPR, food handler, trade licenses) with admin approval.</p></div>
+      <div class="card"><h4>Money Ledger & Disputes</h4><p>Full payment tracking (guber_payments, money_ledger, guber_disputes), structured 8-issue taxonomy, evidence uploads, admin resolution workflow.</p></div>
+      <div class="card"><h4>Marketplace + Boost</h4><p>Item listings (Buy/Sell, Rent, Free) with paid 7-day featured boost upsell.</p></div>
+      <div class="card"><h4>Capacitor iOS app</h4><p>Native iOS build (com.guber.app), APNs push, native Google OAuth, store-build gating for Google Play compliance.</p></div>
+      <div class="card"><h4>Admin Panel</h4><p>Role-based access for managing users, jobs, catalog, disputes, proof templates, platform settings.</p></div>
+    </div>
+  </section>
+
+  <!-- 14. THE ASK -->
+  <section class="slide">
+    <h2>The ask.</h2>
+    <div class="grid-2" style="margin-top:3vh">
+      <div>
+        <p style="font-size:1.6vw">We're raising <span class="neon">$[___]</span> in exchange for either equity or a structured profit-share against platform-fee revenue.</p>
+        <h3 style="margin-top:3vh">Use of capital</h3>
+        <ul>
+          <li>Paid acquisition in anchor metros (~__%)</li>
+          <li>B2B sales hires for Scout Plan + sponsorships (~__%)</li>
+          <li>Apple App Store + Android launch polish (~__%)</li>
+          <li>12 months of runway at sub-$5/day infrastructure cost</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Why now</h3>
+        <ul>
+          <li>Product is shipped — capital goes straight to growth, not engineering.</li>
+          <li>Unit economics already work at scale-to-zero infra cost.</li>
+          <li>Multiple revenue streams hedge against any one not landing.</li>
+          <li>App Store presence imminent — first-mover trust signal in a still-informal market.</li>
+        </ul>
+        <div style="margin-top:4vh">
+          <div class="pill" style="font-size:1.3vw">Contact: [your email]</div>
+          <div class="pill purple" style="font-size:1.3vw">guberapp.app</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="footer">
+  <span>GUBER · INVESTOR DECK</span>
+  <span><span id="cur">1</span> / <span id="tot">13</span></span>
+</div>
+<div class="arrow">← → arrows · F fullscreen · P print to PDF</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const tot = document.getElementById('tot');
+  const cur = document.getElementById('cur');
+  const prog = document.getElementById('progress');
+  let i = 0;
+  tot.textContent = slides.length;
+  function show(n){
+    i = Math.max(0, Math.min(slides.length-1, n));
+    slides.forEach((s,idx)=>s.classList.toggle('active', idx===i));
+    cur.textContent = i+1;
+    prog.style.width = ((i+1)/slides.length*100)+'%';
+    location.hash = '#s'+(i+1);
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key==='ArrowRight'||e.key===' '||(e.key==='Enter'&&!e.shiftKey)) { show(i+1); e.preventDefault(); }
+    else if (e.key==='ArrowLeft'||(e.key===' '&&e.shiftKey)) { show(i-1); e.preventDefault(); }
+    else if (e.key==='Home') show(0);
+    else if (e.key==='End') show(slides.length-1);
+    else if (e.key==='f'||e.key==='F') { document.documentElement.requestFullscreen?.(); }
+    else if (e.key==='p'||e.key==='P') { window.print(); }
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('a,button,input,select,textarea')) return;
+    const x = e.clientX, w = window.innerWidth;
+    show(x < w/3 ? i-1 : i+1);
+  });
+  // Initial: jump to hash if present
+  const m = (location.hash||'').match(/^#s(\d+)/);
+  show(m ? parseInt(m[1],10)-1 : 0);
+</script>
+</body>
+</html>
