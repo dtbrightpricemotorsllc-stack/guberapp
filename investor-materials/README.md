@@ -8,6 +8,9 @@ This folder contains everything needed to pitch GUBER to an investor or profit-s
 |---|---|---|
 | `investor-deck.html` | Full 14-slide pitch deck (title, problem, solution, product, business model, multi-sided marketplace, infrastructure & traction, cost story, market, competition, growth, roadmap, appendix of shipped surfaces, the ask). Dark-themed, branded, keyboard-navigable, has a Download PDF button, prints cleanly. | In-person meetings, screen-shares, Zoom calls. |
 | `executive-summary.html` | One-page summary, prints to a single Letter/A4 page. | Cold outreach attachments, leave-behinds, "send me a one-pager" requests. |
+| `GUBER-Investor-Deck.pdf` | Pre-rendered landscape PDF of the deck. **Regenerate after editing the HTML** (see below). | Email attachment for cold outreach. |
+| `GUBER-Executive-Summary.pdf` | Pre-rendered portrait one-pager. **Regenerate after editing the HTML** (see below). | Email attachment for cold outreach. |
+| `build-pdfs.sh` | One-command regenerator for both PDFs (uses headless Chromium). | Run after editing either HTML file. |
 | `monetization-matrix.md` | Source-of-truth table of every revenue stream with exact code references. | Answering "how exactly do you make money?" and prepping for due diligence. |
 | `README.md` | This file. | You are here. |
 
@@ -18,7 +21,17 @@ This folder contains everything needed to pitch GUBER to an investor or profit-s
 2. Use **→ / Space** to advance, **←** to go back, **F** for fullscreen.
 3. The progress bar at the top and slide counter at the bottom show where you are.
 
-### Save as PDF
+### Save as PDF (the easy way)
+
+Just run the helper script — it regenerates both PDFs in one shot using headless Chromium:
+
+```bash
+./investor-materials/build-pdfs.sh
+```
+
+It writes `GUBER-Investor-Deck.pdf` (landscape, 14 pages) and `GUBER-Executive-Summary.pdf` (portrait, single page) into this folder. **Run it any time you edit either HTML file** so the attached PDFs stay in sync with the source.
+
+### Save as PDF (manual fallback, if the script can't run)
 1. Open `investor-deck.html` in Chrome.
 2. **File → Print** (or Cmd/Ctrl+P).
 3. Destination: **Save as PDF**.
