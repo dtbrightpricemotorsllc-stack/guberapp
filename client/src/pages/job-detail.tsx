@@ -1501,6 +1501,32 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               const povSummary = proof.povSummary;
               const matchedItems = povSummary?.items?.filter((i) => i.matched && typeof i.timestampSec === "number") || [];
               const unmatchedItems = povSummary?.items?.filter((i) => !i.matched) || [];
+              const isImportedClip =
+                captureMeta?.deviceKind === "paired-android" ||
+                captureMeta?.deviceKind === "paired-ios";
+              const recordedAt = isImportedClip && captureMeta?.recordedAt
+                ? new Date(captureMeta.recordedAt)
+                : null;
+              const recordedAgeSec: number | null =
+                isImportedClip && typeof captureMeta?.recordedAgeSec === "number"
+                  ? captureMeta.recordedAgeSec
+                  : null;
+              const freshnessFlags = captureMeta?.freshnessFlags ?? [];
+              const gpsDistanceMeters: number | null =
+                typeof captureMeta?.gpsDistanceMeters === "number"
+                  ? captureMeta.gpsDistanceMeters
+                  : null;
+              const formatRelativeAge = (sec: number) => {
+                if (sec < 60) return "just now";
+                if (sec < 3600) return `${Math.round(sec / 60)} min ago`;
+                if (sec < 86400) return `${Math.round(sec / 3600)} hr ago`;
+                const days = Math.round(sec / 86400);
+                if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+                const months = Math.round(days / 30);
+                if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+                const years = Math.round(days / 365);
+                return `${years} year${years === 1 ? "" : "s"} ago`;
+              };
               return (
                 <div key={proof.id} className="bg-background rounded-xl p-4 space-y-3" data-testid={`card-proof-${proof.id}`}>
                   {captureMeta?.deviceKind && (
@@ -1512,6 +1538,60 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     >
                       POV · {captureMeta.deviceKind === "paired-android" || captureMeta.deviceKind === "paired-ios" ? "Imported Clip" : captureMeta.deviceKind === "phone-handsfree" ? "Phone" : "Wearable"}
                     </Badge>
+                  )}
+                  {isImportedClip && (
+                    <div className="space-y-1.5">
+                      {recordedAt && recordedAgeSec != null && (
+                        <p
+                          className="text-[11px] text-muted-foreground flex items-center gap-1"
+                          title={recordedAt.toLocaleString()}
+                          data-testid={`text-recorded-age-${proof.id}`}
+                        >
+                          <Clock className="w-3 h-3" />
+                          Imported clip · recorded {formatRelativeAge(recordedAgeSec)}
+                        </p>
+                      )}
+                      {freshnessFlags.includes("recorded_before_job") && (
+                        <Badge
+                          variant="outline"
+                          className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]"
+                          data-testid={`badge-flag-stale-${proof.id}`}
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                          Recorded before this job started
+                        </Badge>
+                      )}
+                      {freshnessFlags.includes("recorded_in_future") && (
+                        <Badge
+                          variant="outline"
+                          className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]"
+                          data-testid={`badge-flag-future-${proof.id}`}
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                          Recording timestamp looks off
+                        </Badge>
+                      )}
+                      {freshnessFlags.includes("missing_recorded_at") && (
+                        <Badge
+                          variant="outline"
+                          className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]"
+                          data-testid={`badge-flag-missing-${proof.id}`}
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                          No recording timestamp on file
+                        </Badge>
+                      )}
+                      {freshnessFlags.includes("location_mismatch") && gpsDistanceMeters != null && (
+                        <Badge
+                          variant="outline"
+                          className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]"
+                          data-testid={`badge-flag-location-${proof.id}`}
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                          Uploaded ~{gpsDistanceMeters >= 1000 ? `${(gpsDistanceMeters / 1000).toFixed(1)} km` : `${gpsDistanceMeters} m`} from the job address
+                        </Badge>
+                      )}
+                    </div>
                   )}
                   {proof.videoUrl && (
                     <video

@@ -548,6 +548,14 @@ export const proofSubmissions = pgTable("proof_submissions", {
     gpsAtStart?: { lat: number; lng: number; accuracy?: number } | null;
     receivedAt?: string;
     consentVersion?: number;
+    // ── Imported-clip freshness (paired-* only, task-461) ──
+    fileLastModified?: string;
+    recordedAt?: string | null;
+    recordedAgeSec?: number | null;
+    gpsDistanceMeters?: number | null;
+    freshnessFlags?: Array<
+      "recorded_before_job" | "recorded_in_future" | "missing_recorded_at" | "location_mismatch"
+    >;
   }>(),
   povSummary: json("pov_summary").$type<{
     status: "pending" | "ready" | "failed" | "skipped";

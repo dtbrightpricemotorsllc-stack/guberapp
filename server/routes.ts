@@ -20,7 +20,7 @@ import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHi
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
-import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop } from "@shared/schema";
+import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
 import {
   DISPUTE_ISSUE_TYPES,
   ADMIN_DISPUTE_DECISIONS,
@@ -7268,14 +7268,77 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Not assigned to this job" });
       }
 
-      const allowedKinds = new Set(["phone-handsfree", "paired-android", "paired-ios", "direct-api"]);
-      if (!allowedKinds.has(captureMeta.deviceKind)) {
+      type CaptureMetaShape = NonNullable<ProofSubmission["captureMeta"]>;
+      const meta = captureMeta as CaptureMetaShape;
+      const allowedKinds: ReadonlySet<CaptureMetaShape["deviceKind"]> =
+        new Set(["phone-handsfree", "paired-android", "paired-ios", "direct-api"] as const);
+      if (!meta || !allowedKinds.has(meta.deviceKind)) {
         return res.status(400).json({ message: "Unknown deviceKind" });
       }
 
-      const enrichedMeta = {
-        ...captureMeta,
-        receivedAt: new Date().toISOString(),
+      // ── Freshness / location heuristics for imported paired-wearable clips ──
+      // Imported clips can be old footage shot elsewhere. Flag obvious mismatches
+      // so the hirer-side proof card can warn reviewers. We never block the
+      // upload — flagging is advisory.
+      type FreshnessFlag = NonNullable<CaptureMetaShape["freshnessFlags"]>[number];
+      const freshnessFlags: FreshnessFlag[] = [];
+      const isPairedImport =
+        meta.deviceKind === "paired-android" || meta.deviceKind === "paired-ios";
+      const receivedAtMs = Date.now();
+      let recordedAtIso: string | null = null;
+      let recordedAgeSec: number | null = null;
+      let gpsDistanceMeters: number | null = null;
+
+      if (isPairedImport) {
+        const lastMod = meta.fileLastModified ? new Date(meta.fileLastModified) : null;
+        if (lastMod && !isNaN(lastMod.getTime())) {
+          recordedAtIso = lastMod.toISOString();
+          recordedAgeSec = Math.max(0, Math.round((receivedAtMs - lastMod.getTime()) / 1000));
+          // Anchor: the moment the job was locked in (worker accepted + funded).
+          // Fall back to acceptedAt-style fields, then job.startTime, then now.
+          const anchorMs =
+            job.lockedAt ? new Date(job.lockedAt).getTime() :
+            job.workerAcceptedAt ? new Date(job.workerAcceptedAt).getTime() :
+            job.startTime ? new Date(job.startTime).getTime() :
+            receivedAtMs;
+          // Older than 24h before the job started → almost certainly old footage.
+          const STALE_BEFORE_MS = 24 * 60 * 60 * 1000;
+          if (lastMod.getTime() < anchorMs - STALE_BEFORE_MS) {
+            freshnessFlags.push("recorded_before_job");
+          }
+          // Recorded after upload (clock skew or fabrication).
+          if (lastMod.getTime() > receivedAtMs + 5 * 60 * 1000) {
+            freshnessFlags.push("recorded_in_future");
+          }
+        } else {
+          freshnessFlags.push("missing_recorded_at");
+        }
+
+        // Distance check: GPS at upload vs. job location.
+        const gps = meta.gpsAtStart;
+        if (
+          gps && typeof gps.lat === "number" && typeof gps.lng === "number" &&
+          typeof job.lat === "number" && typeof job.lng === "number"
+        ) {
+          gpsDistanceMeters = Math.round(
+            haversineMeters(gps.lat, gps.lng, job.lat, job.lng),
+          );
+          // Job lat/lng is fuzzed by ~150 m for privacy; use a generous threshold.
+          if (gpsDistanceMeters > 1000) {
+            freshnessFlags.push("location_mismatch");
+          }
+        }
+      }
+
+      const enrichedMeta: CaptureMetaShape = {
+        ...meta,
+        receivedAt: new Date(receivedAtMs).toISOString(),
+        ...(isPairedImport ? {
+          recordedAt: recordedAtIso,
+          recordedAgeSec,
+          gpsDistanceMeters,
+          freshnessFlags,
+        } : {}),
       };
 
       const proof = await storage.createProofSubmission({
@@ -7285,9 +7348,9 @@ export async function registerRoutes(
         imageUrls: null,
         videoUrl,
         notes: null,
-        gpsLat: captureMeta?.gpsAtStart?.lat ?? null,
-        gpsLng: captureMeta?.gpsAtStart?.lng ?? null,
-        gpsTimestamp: captureMeta?.captureStartedAt ? new Date(captureMeta.captureStartedAt) : null,
+        gpsLat: meta.gpsAtStart?.lat ?? null,
+        gpsLng: meta.gpsAtStart?.lng ?? null,
+        gpsTimestamp: meta.captureStartedAt ? new Date(meta.captureStartedAt) : null,
         notEncountered: false,
         notEncounteredReason: null,
         captureMeta: enrichedMeta,
@@ -7296,9 +7359,9 @@ export async function registerRoutes(
       await storage.updateJob(payload.jobId, { proofStatus: "submitted", status: "proof_submitted" });
 
       let durationSec = 0;
-      if (captureMeta.captureStartedAt && captureMeta.captureEndedAt) {
+      if (meta.captureStartedAt && meta.captureEndedAt) {
         durationSec = Math.max(0, Math.round(
-          (new Date(captureMeta.captureEndedAt).getTime() - new Date(captureMeta.captureStartedAt).getTime()) / 1000,
+          (new Date(meta.captureEndedAt).getTime() - new Date(meta.captureStartedAt).getTime()) / 1000,
         ));
       }
       await storage.createAuditLog({
@@ -7306,10 +7369,11 @@ export async function registerRoutes(
         action: "handsfree_proof_uploaded",
         details: JSON.stringify({
           jobId: payload.jobId,
-          deviceKind: captureMeta.deviceKind,
-          deviceModel: captureMeta.deviceModel?.slice(0, 120),
+          deviceKind: meta.deviceKind,
+          deviceModel: meta.deviceModel?.slice(0, 120),
           durationSec,
-          consentVersion: captureMeta.consentVersion ?? 1,
+          consentVersion: meta.consentVersion ?? 1,
+          ...(isPairedImport ? { freshnessFlags, recordedAgeSec, gpsDistanceMeters } : {}),
         }),
       });
 
