@@ -82,6 +82,10 @@ export const users = pgTable("users", {
   // when Stripe fires customer.subscription.deleted (which also clears
   // studioSubscriptionId).
   studioSubscriptionCancelAtPeriodEnd: boolean("studio_subscription_cancel_at_period_end").default(false),
+  // Studio clip pinned to the worker's GUBER Resume / shown on biz dashboard.
+  // Both reference studio_videos.id; null = no clip pinned.
+  studioResumeVideoId: integer("studio_resume_video_id"),
+  studioBusinessPromoVideoId: integer("studio_business_promo_video_id"),
   trustBoxPurchased: boolean("trust_box_purchased").default(false),
   trustBoxSubscriptionId: text("trust_box_subscription_id"),
   monthlyImageUploads: integer("monthly_image_uploads").default(0),
@@ -1095,6 +1099,8 @@ export const cashDrops = pgTable("cash_drops", {
   hostUserId: integer("host_user_id").references(() => users.id),
   hostLogo: text("host_logo"),
   approvalStatus: text("approval_status").default("approved"),
+  // Studio clip attached to this drop (rendered alongside clue media).
+  studioVideoId: integer("studio_video_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

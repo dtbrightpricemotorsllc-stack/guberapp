@@ -8646,6 +8646,48 @@ export async function registerRoutes(
     res.json(videos);
   });
 
+  // Single-clip fetch — used by host-drop-new and other "Use in…" surfaces to
+  // resolve a studioVideoId URL param into a renderable video URL. Ownership
+  // enforced: a worker can only inspect their own clips.
+  app.get("/api/studio/videos/:id", requireAuth, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    const v = await storage.getStudioVideo(id);
+    if (!v || v.userId !== req.session.userId!) return res.status(404).json({ message: "Clip not found" });
+    res.json(v);
+  });
+
+  // Pin a Studio clip onto the worker's resume or business promo slot.
+  // Body: { studioVideoId: number, target: "resume" | "business_promo" }
+  // Pass studioVideoId=null to clear. Ownership + completion checked.
+  app.post("/api/studio/attach", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const target = String(req.body?.target || "");
+      if (target !== "resume" && target !== "business_promo") {
+        return res.status(400).json({ message: "Invalid target" });
+      }
+      const rawId = req.body?.studioVideoId;
+      let videoId: number | null = null;
+      if (rawId !== null && rawId !== undefined && rawId !== "") {
+        videoId = parseInt(String(rawId), 10);
+        if (!Number.isFinite(videoId)) return res.status(400).json({ message: "Invalid studioVideoId" });
+        const v = await storage.getStudioVideo(videoId);
+        if (!v || v.userId !== userId) return res.status(404).json({ message: "Clip not found" });
+        if (v.status !== "succeeded" || !v.videoUrl) {
+          return res.status(400).json({ message: "Clip isn't ready yet" });
+        }
+      }
+      const updates: any = target === "resume"
+        ? { studioResumeVideoId: videoId }
+        : { studioBusinessPromoVideoId: videoId };
+      await storage.updateUser(userId, updates);
+      res.json({ ok: true, target, studioVideoId: videoId });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/studio/generate", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
     const promptRaw = String(req.body?.prompt || "").trim();
@@ -13534,7 +13576,7 @@ OUTPUT STYLE:
       const {
         title, description, rewardPerWinner, winnerLimit, startTime, endTime,
         gpsLat, gpsLng, gpsRadius, clueText, clueMediaUrls, hostLogo,
-        physicalCashDrop, finalLocationMode, address,
+        physicalCashDrop, finalLocationMode, address, studioVideoId,
       } = req.body;
       if (!title) return res.status(400).json({ error: "Title is required" });
       if (!physicalCashDrop && !rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
@@ -13548,6 +13590,18 @@ OUTPUT STYLE:
       const validLocationModes = ["none", "name_only", "destination"];
       const locMode = validLocationModes.includes(finalLocationMode) ? finalLocationMode : "name_only";
       const isPhysical = !!physicalCashDrop;
+
+      // Validate studioVideoId (if provided) — must belong to this user and be ready.
+      let resolvedStudioVideoId: number | null = null;
+      if (studioVideoId !== undefined && studioVideoId !== null && studioVideoId !== "") {
+        const sid = parseInt(String(studioVideoId), 10);
+        if (Number.isFinite(sid)) {
+          const v = await storage.getStudioVideo(sid);
+          if (v && v.userId === userId && v.status === "succeeded" && v.videoUrl) {
+            resolvedStudioVideoId = sid;
+          }
+        }
+      }
 
       const drop = await storage.createCashDrop({
         title,
@@ -13581,6 +13635,7 @@ OUTPUT STYLE:
         hostUserId: currentUser.id,
         hostLogo: resolvedLogo,
         approvalStatus: needsApproval ? "pending" : "approved",
+        studioVideoId: resolvedStudioVideoId,
       });
 
       await storage.createAuditLog({
@@ -14165,7 +14220,15 @@ OUTPUT STYLE:
       if (!user) return res.status(401).json({ message: "User not found" });
       const resume = buildResumeData(user);
       const qualifications = await storage.getWorkerQualifications(user.id);
-      res.json({ ...resume, qualifications });
+      const promoVideoId = (user as any).studioResumeVideoId as number | null | undefined;
+      let studioPromo: { id: number; videoUrl: string; thumbnailUrl: string | null } | null = null;
+      if (promoVideoId) {
+        const v = await storage.getStudioVideo(promoVideoId);
+        if (v && v.videoUrl && v.status === "succeeded") {
+          studioPromo = { id: v.id, videoUrl: v.videoUrl, thumbnailUrl: v.thumbnailUrl ?? null };
+        }
+      }
+      res.json({ ...resume, qualifications, studioPromo });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -14201,6 +14264,15 @@ OUTPUT STYLE:
       }
 
       const resume = buildResumeData(target);
+      const promoVideoId = (target as any).studioResumeVideoId as number | null | undefined;
+      let studioPromo: { id: number; videoUrl: string; thumbnailUrl: string | null } | null = null;
+      if (promoVideoId) {
+        const v = await storage.getStudioVideo(promoVideoId);
+        if (v && v.videoUrl && v.status === "succeeded") {
+          studioPromo = { id: v.id, videoUrl: v.videoUrl, thumbnailUrl: v.thumbnailUrl ?? null };
+        }
+      }
+      (resume as any).studioPromo = studioPromo;
       const allQuals = await storage.getWorkerQualifications(targetId);
       const qualifications = isAdmin
         ? allQuals

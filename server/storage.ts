@@ -57,6 +57,7 @@ export interface IStorage {
   createStudioVideo(data: InsertStudioVideo): Promise<StudioVideo>;
   updateStudioVideo(id: number, data: Partial<StudioVideo>): Promise<StudioVideo | undefined>;
   getStudioVideosByUser(userId: number, limit?: number): Promise<StudioVideo[]>;
+  getStudioVideo(id: number): Promise<StudioVideo | undefined>;
   getStudioVibes(opts?: { activeOnly?: boolean }): Promise<StudioVibe[]>;
   createStudioVibe(data: InsertStudioVibe): Promise<StudioVibe>;
 
@@ -428,6 +429,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(studioVideos.userId, userId))
       .orderBy(desc(studioVideos.createdAt))
       .limit(limit);
+  }
+
+  async getStudioVideo(id: number): Promise<StudioVideo | undefined> {
+    const [row] = await db.select().from(studioVideos).where(eq(studioVideos.id, id)).limit(1);
+    return row;
   }
 
   async getStudioVibes(opts?: { activeOnly?: boolean }): Promise<StudioVibe[]> {

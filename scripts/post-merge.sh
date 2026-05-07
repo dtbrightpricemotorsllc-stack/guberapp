@@ -139,6 +139,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_credits_last_drip_at timestamp
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_subscription_id text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_subscription_status text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_subscription_cancel_at_period_end boolean DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_resume_video_id integer;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_business_promo_video_id integer;
+ALTER TABLE cash_drops ADD COLUMN IF NOT EXISTS studio_video_id integer;
 
 CREATE TABLE IF NOT EXISTS studio_videos (
   id serial PRIMARY KEY,

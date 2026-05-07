@@ -221,6 +221,32 @@ export default function HostDropNew() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // ── Studio "Use in… Cash Drop" handoff ───────────────────────────────
+  // Studio links here with ?studioVideoId=N. We resolve the clip's URL,
+  // pre-populate it as a clue media item, and pass studioVideoId through
+  // to /api/cash-drops/host/create so the drop row records the link.
+  const studioVideoIdFromUrl = (() => {
+    if (typeof window === "undefined") return null;
+    const sid = new URLSearchParams(window.location.search).get("studioVideoId");
+    if (!sid) return null;
+    const n = parseInt(sid, 10);
+    return Number.isFinite(n) ? n : null;
+  })();
+  const [attachedStudioVideoId] = useState<number | null>(studioVideoIdFromUrl);
+  const studioClipQuery = useQuery<any>({
+    queryKey: ["/api/studio/videos", studioVideoIdFromUrl],
+    enabled: !!studioVideoIdFromUrl && !isEdit,
+  });
+  const studioPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (studioPrefilledRef.current) return;
+    const url = studioClipQuery.data?.videoUrl;
+    if (!url) return;
+    studioPrefilledRef.current = true;
+    setClueMediaUrls(prev => prev.includes(url) ? prev : [...prev, url]);
+    toast({ title: "Studio clip added", description: "Your AI clip was added as a clue video for this drop." });
+  }, [studioClipQuery.data]);
+
   // When editing, fetch the existing drop and prefill the form once it loads.
   // Errors here mean the user doesn't own the drop — bounce them home.
   // refetchOnWindowFocus is disabled because a refetch would otherwise wipe
@@ -758,6 +784,7 @@ export default function HostDropNew() {
                 physicalCashDrop: physicalDrop,
                 finalLocationMode,
                 address: addressInput || undefined,
+                studioVideoId: attachedStudioVideoId ?? undefined,
               };
               if (isEdit) patchMutation.mutate(payload);
               else createMutation.mutate(payload);

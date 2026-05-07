@@ -879,6 +879,51 @@ async function studioMonthlyDrip(): Promise<number> {
   return dripped;
 }
 
+// Day-1 OG monthly Studio credit drip — grants 2 free Studio credits per
+// 30-day window to OG members. Gated on studioCreditsLastDripAt so re-running
+// the cron multiple times within a window is a no-op. Returns count granted.
+async function ogStudioCreditDripSweep(): Promise<number> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+  const eligible = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(
+      eq(users.day1OG, true),
+      or(
+        isNull(users.studioCreditsLastDripAt),
+        lt(users.studioCreditsLastDripAt!, cutoff),
+      ),
+    ));
+  let granted = 0;
+  for (const u of eligible) {
+    // Conditional update so concurrent cron runs can't double-grant.
+    const [row] = await db.update(users)
+      .set({
+        studioCredits: sql`COALESCE(${users.studioCredits}, 0) + 2`,
+        studioCreditsLastDripAt: new Date(),
+      })
+      .where(and(
+        eq(users.id, u.id),
+        eq(users.day1OG, true),
+        or(
+          isNull(users.studioCreditsLastDripAt),
+          lt(users.studioCreditsLastDripAt!, cutoff),
+        ),
+      ))
+      .returning({ id: users.id });
+    if (row) {
+      granted++;
+      await storage.createNotification({
+        userId: u.id,
+        title: "+2 Studio credits",
+        body: "Your Day-1 OG monthly drip just landed. Make something.",
+        type: "system",
+      }).catch(() => {});
+    }
+  }
+  return granted;
+}
+
 // Public single-shot runner used by /api/internal/cron/run when this app is
 // driven by a Replit Scheduled Deployment (DISABLE_BACKGROUND_JOBS=true).
 // Runs the union of every periodic sweep that used to live inside the two
@@ -945,6 +990,9 @@ export async function runAllScheduledSweeps(): Promise<void> {
 
     const studioDrip = await studioMonthlyDrip();
     if (studioDrip > 0) console.log(`[cron] dripped studio credits to ${studioDrip} subscriber(s)`);
+
+    const ogDrip = await ogStudioCreditDripSweep();
+    if (ogDrip > 0) console.log(`[cron] granted ${ogDrip} OG monthly Studio drip(s)`);
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -1022,6 +1070,9 @@ export function startCron() {
 
       const studioDrip = await studioMonthlyDrip();
       if (studioDrip > 0) console.log(`[cron] dripped studio credits to ${studioDrip} subscriber(s)`);
+
+      const ogDrip = await ogStudioCreditDripSweep();
+      if (ogDrip > 0) console.log(`[cron] granted ${ogDrip} OG monthly Studio drip(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }
