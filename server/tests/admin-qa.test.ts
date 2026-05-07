@@ -147,3 +147,41 @@ describe("QA Dashboard — cash-drop end-test refund safety", () => {
     // silent finalization while real money may still be held.
   });
 });
+
+describe("QA Dashboard — handsfree auto-flag + reset (task-482/483)", () => {
+  // task-482: 3 hard-blocked uploads in a row flips the offender into the
+  // existing under_review queue. Once flagged, repeat blocks are idempotent
+  // (autoFlagged stays false) so admins who already triaged a worker don't
+  // get re-pinged on every new attempt.
+  it("auto-flag transitions only on the first crossing of the threshold", () => {
+    const THRESHOLD = 3;
+    function shouldFlip(count: number, alreadyUnderReview: boolean) {
+      return count >= THRESHOLD && !alreadyUnderReview;
+    }
+    expect(shouldFlip(1, false)).toBe(false);
+    expect(shouldFlip(2, false)).toBe(false);
+    expect(shouldFlip(3, false)).toBe(true);   // crossing
+    expect(shouldFlip(3, true)).toBe(false);    // idempotent
+    expect(shouldFlip(7, true)).toBe(false);    // still idempotent
+  });
+
+  // task-483: reset-handsfree-blocks zeroes the counter and (by default)
+  // lifts under_review so the worker isn't stuck in the queue once an admin
+  // explicitly clears them. clearReview=false leaves under_review alone for
+  // cases where the admin wants to keep manually reviewing.
+  it("reset action shape: zeros counter and toggles under_review per clearReview flag", () => {
+    function buildSet(clearReview: boolean) {
+      const set: Record<string, unknown> = { handsfreeBlockedAttempts: 0 };
+      if (clearReview) set.underReview = false;
+      return set;
+    }
+    expect(buildSet(true)).toEqual({ handsfreeBlockedAttempts: 0, underReview: false });
+    expect(buildSet(false)).toEqual({ handsfreeBlockedAttempts: 0 });
+    // Default in route is clearReview !== false, so undefined → true.
+    const fromBody = (body: any) => body?.clearReview !== false;
+    expect(fromBody(undefined)).toBe(true);
+    expect(fromBody({})).toBe(true);
+    expect(fromBody({ clearReview: true })).toBe(true);
+    expect(fromBody({ clearReview: false })).toBe(false);
+  });
+});

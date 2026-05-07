@@ -433,6 +433,21 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         await db.update(users).set({ studioCredits: credits }).where(eq(users.id, id));
         result.credits = credits; break;
       }
+      case "reset-handsfree-blocks": {
+        // task-483: clears the per-user blocked-attempt counter that
+        // task-479 surfaces to hirers + admins. Optionally also lifts
+        // under_review if the auto-flag (task-482) was the reason the
+        // worker landed in the queue. Admin signals intent via
+        // body.clearReview; default true since this action is invoked
+        // explicitly from the user profile.
+        const clearReview = req.body?.clearReview !== false;
+        const set: Record<string, unknown> = { handsfreeBlockedAttempts: 0 };
+        if (clearReview) set.underReview = false;
+        await db.update(users).set(set).where(eq(users.id, id));
+        result.previousCount = u.handsfreeBlockedAttempts ?? 0;
+        result.clearedReview = clearReview;
+        break;
+      }
       default:
         return res.status(400).json({ message: `unknown action: ${action}` });
     }

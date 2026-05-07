@@ -34,7 +34,7 @@ export default function AdminUserProfile() {
           <h1 className="text-2xl font-bold">{u.fullName} <span className="text-sm text-muted-foreground">#{u.id}</span></h1>
           <div className="text-sm text-muted-foreground">{u.email} · {u.role} · {u.tier}{u.day1OG && " · OG"}{u.isTestUser && " · TEST"}</div>
           {(u.handsfreeBlockedAttempts ?? 0) > 0 && (
-            <div className="mt-1">
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <Badge
                 variant="outline"
                 className="bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
@@ -42,6 +42,27 @@ export default function AdminUserProfile() {
               >
                 {u.handsfreeBlockedAttempts} blocked hands-free upload{u.handsfreeBlockedAttempts === 1 ? "" : "s"}
               </Badge>
+              {u.underReview && (
+                <Badge
+                  variant="outline"
+                  className="bg-orange-500/15 text-orange-300 border-orange-500/30"
+                  data-testid="badge-under-review"
+                >
+                  Under admin review
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                data-testid="button-reset-handsfree-blocks"
+                onClick={() => {
+                  if (confirm(`Reset ${u.handsfreeBlockedAttempts} blocked-upload count${u.underReview ? " and clear admin review" : ""}?`)) {
+                    action.mutate({ act: "reset-handsfree-blocks", body: { clearReview: true } });
+                  }
+                }}
+              >
+                Reset blocks
+              </Button>
             </div>
           )}
         </div>

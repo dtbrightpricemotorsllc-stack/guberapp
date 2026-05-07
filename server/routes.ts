@@ -7403,6 +7403,44 @@ export async function registerRoutes(
             .returning({ count: usersTable.handsfreeBlockedAttempts });
           newBlockedCount = row?.count ?? null;
         } catch {}
+        // task-482: once a worker hits the auto-flag threshold, route them
+        // into the existing admin under_review queue. Atomic single-statement
+        // transition — under_review is flipped only when it's currently false
+        // AND the counter has crossed the threshold, so two concurrent
+        // rejections can't both write the audit. The .returning() result
+        // tells us whether THIS request was the one that flipped the flag.
+        const HANDSFREE_AUTO_FLAG_THRESHOLD = 3;
+        let autoFlagged = false;
+        if (newBlockedCount !== null && newBlockedCount >= HANDSFREE_AUTO_FLAG_THRESHOLD) {
+          try {
+            const flipped = await db
+              .update(usersTable)
+              .set({ underReview: true })
+              .where(
+                and(
+                  eq(usersTable.id, req.session.userId!),
+                  eq(usersTable.underReview, false),
+                  gte(
+                    sql`COALESCE(${usersTable.handsfreeBlockedAttempts}, 0)`,
+                    HANDSFREE_AUTO_FLAG_THRESHOLD,
+                  ),
+                ),
+              )
+              .returning({ id: usersTable.id });
+            if (flipped.length > 0) {
+              autoFlagged = true;
+              await storage.createAuditLog({
+                userId: req.session.userId,
+                action: "handsfree_auto_flagged",
+                details: JSON.stringify({
+                  jobId: payload.jobId,
+                  blockedAttemptsTotal: newBlockedCount,
+                  threshold: HANDSFREE_AUTO_FLAG_THRESHOLD,
+                }),
+              });
+            }
+          } catch {}
+        }
         await storage.createAuditLog({
           userId: req.session.userId,
           action: "handsfree_proof_blocked",
@@ -7411,6 +7449,7 @@ export async function registerRoutes(
             deviceKind: meta.deviceKind,
             reasons: hardBlockReasons,
             blockedAttemptsTotal: newBlockedCount,
+            autoFlagged,
           }),
         });
         return res.status(422).json({
