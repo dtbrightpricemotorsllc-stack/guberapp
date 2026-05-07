@@ -12,11 +12,12 @@ Continuous point-of-view (POV) video evidence for V&I jobs, captured from a wear
 - Token issued by `GET /api/jobs/:id/wearable-upload-token` (HMAC-SHA256, 15-min TTL, payload `{jobId, helperId, exp, nonce}`). Verified server-side in `server/wearable-token.ts`.
 - Pros: zero hardware cost, available on every modern phone. Cons: heavier than glasses, no eye-line framing.
 
-### 2. Paired Android Capacitor device import — v1.5
+### 2. Paired Android Capacitor device import — live (Task #457)
 - Worker pairs a wearable camera (any vendor) over Bluetooth or local Wi-Fi using the **native** Capacitor app.
-- The Android shell exposes a "Pick captured clip" file picker (`<input type="file" accept="video/*" capture>`). Worker selects the most recent clip; the Capacitor layer uploads via the same `/api/proof/wearable-upload` flow with `captureMeta.deviceKind = "paired-android"` and `deviceModel` populated from the file metadata.
-- The web build shows an "Available in the GUBER mobile app" hint instead. No Replit-side changes needed — this is a Capacitor-shell follow-up.
-- Pros: vendor-neutral; works with any wearable that drops MP4 onto the phone. Cons: manual file-pick step.
+- The Android shell renders an "Import Clip" button in `client/src/components/handsfree-capture.tsx` next to "Phone POV". It opens a `<input type="file" accept="video/*" capture="environment">` picker so the worker selects the most recent clip from the paired wearable's gallery folder (or shoots one with the system camera as a fallback).
+- The Capacitor layer uploads through the same `/api/proof/wearable-upload` flow with `captureMeta.deviceKind = "paired-android"`. Basic file metadata (`fileName`, `fileType`, `fileSizeBytes`, `fileLastModified`) is added to `captureMeta`; `captureStartedAt` is anchored to the file's `lastModified` timestamp so reviewers see when the clip was actually shot, not when it was imported.
+- Gating: `isNativeApp && isAndroid` from `client/src/lib/platform.ts`. The web and iOS builds show a disabled "Import in app" button plus the hint "Importing a clip from a paired wearable is available in the GUBER mobile app." Phone POV recording remains available on every platform.
+- Pros: vendor-neutral; works with any wearable that drops MP4 onto the phone. Cons: manual file-pick step. iOS support is deferred (Photos picker is not exposed by the standard Capacitor file input in the same way).
 
 ### 3. Documented direct-API contract — for partners
 Any wearable or PWA that can hit the contract may submit POV proof:
