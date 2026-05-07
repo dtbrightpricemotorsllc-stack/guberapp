@@ -4937,7 +4937,7 @@ export async function registerRoutes(
       // Allowlist visibility (task-462): hide allowlist jobs from non-listed
       // viewers (helpers + owner + admin always pass).
       const { canViewItem } = await import("./visibility.js");
-      if (!isHelper && !(await canViewItem("job", job as any, { viewerId: req.session.userId, isAdmin, isOwner }))) {
+      if (!isHelper && !(await canViewItem("job", { id: job.id, visibility: job.visibility }, { viewerId: req.session.userId, isAdmin, isOwner }))) {
         return res.status(404).json({ message: "Job not found" });
       }
       // Strangers can't peek at unpublished/draft jobs by guessing IDs.
@@ -12731,12 +12731,12 @@ OUTPUT STYLE:
       const isAdmin = await viewerIsAdmin(req);
       const { listAllowlistedItemIds, filterVisibleItems } = await import("./visibility.js");
       const allowlisted = await listAllowlistedItemIds("cash_drop", req.session?.userId);
-      drops = filterVisibleItems(drops as any, {
+      drops = filterVisibleItems(drops, {
         viewerId: req.session?.userId,
         isAdmin,
         allowlistedIds: allowlisted,
-        ownerCheck: (d: any) => d.hostUserId === req.session?.userId,
-      }) as any;
+        ownerCheck: (d) => d.hostUserId === req.session?.userId,
+      });
       res.json(drops);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -12751,7 +12751,7 @@ OUTPUT STYLE:
       // Allowlist visibility (task-462): hide allowlist drops from non-listed viewers.
       const { canViewItem } = await import("./visibility.js");
       const isAdmin = await viewerIsAdmin(req);
-      if (!(await canViewItem("cash_drop", drop as any, { viewerId: userId, isAdmin, isOwner: drop.hostUserId === userId }))) {
+      if (!(await canViewItem("cash_drop", { id: drop.id, visibility: drop.visibility }, { viewerId: userId, isAdmin, isOwner: drop.hostUserId === userId }))) {
         return res.status(404).json({ error: "Cash Drop not found" });
       }
 
@@ -12776,7 +12776,7 @@ OUTPUT STYLE:
       // Allowlist visibility (task-462): block participation by non-listed users.
       const { canViewItem } = await import("./visibility.js");
       const isAdmin = await viewerIsAdmin(req);
-      if (!(await canViewItem("cash_drop", drop as any, { viewerId: userId, isAdmin, isOwner: drop.hostUserId === userId }))) {
+      if (!(await canViewItem("cash_drop", { id: drop.id, visibility: drop.visibility }, { viewerId: userId, isAdmin, isOwner: drop.hostUserId === userId }))) {
         return res.status(404).json({ error: "Cash Drop not found" });
       }
       if (drop.status !== "active") return res.status(400).json({ error: "Cash Drop is not active" });
@@ -12837,7 +12837,7 @@ OUTPUT STYLE:
       if (!dropForGate) return res.status(404).json({ error: "Cash Drop not found" });
       const { canViewItem } = await import("./visibility.js");
       const isAdmin = await viewerIsAdmin(req);
-      if (!(await canViewItem("cash_drop", dropForGate as any, { viewerId: userId, isAdmin, isOwner: dropForGate.hostUserId === userId }))) {
+      if (!(await canViewItem("cash_drop", { id: dropForGate.id, visibility: dropForGate.visibility }, { viewerId: userId, isAdmin, isOwner: dropForGate.hostUserId === userId }))) {
         return res.status(404).json({ error: "Cash Drop not found" });
       }
     }
@@ -12881,7 +12881,7 @@ OUTPUT STYLE:
       if (!dropForGate) return res.status(404).json({ error: "Cash Drop not found" });
       const { canViewItem } = await import("./visibility.js");
       const isAdmin = await viewerIsAdmin(req);
-      if (!(await canViewItem("cash_drop", dropForGate as any, { viewerId: userId, isAdmin, isOwner: dropForGate.hostUserId === userId }))) {
+      if (!(await canViewItem("cash_drop", { id: dropForGate.id, visibility: dropForGate.visibility }, { viewerId: userId, isAdmin, isOwner: dropForGate.hostUserId === userId }))) {
         return res.status(404).json({ error: "Cash Drop not found" });
       }
     }

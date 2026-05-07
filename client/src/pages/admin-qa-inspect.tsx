@@ -133,11 +133,9 @@ export default function AdminQaInspect() {
               {data.verification.suspended && <Badge variant="destructive">SUSPENDED</Badge>}
               {data.verification.banned && <Badge variant="destructive">BANNED</Badge>}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {data.verification.idFrontUrl && <MediaLightbox url={data.verification.idFrontUrl} label="ID front" />}
-              {data.verification.idBackUrl && <MediaLightbox url={data.verification.idBackUrl} label="ID back" />}
-              {data.verification.selfieUrl && <MediaLightbox url={data.verification.selfieUrl} label="Selfie" />}
-            </div>
+            {/* Verification photo URLs are not stored on the user row in this
+                schema — only the boolean flags above. KYC document storage is
+                handled out-of-band; surface only what the row actually has. */}
             <pre className="overflow-auto text-xs">{JSON.stringify(data.verification, null, 2)}</pre>
             <Button asChild variant="outline" size="sm"><Link href={`/admin/users/${data.user.id}`}>Open full profile →</Link></Button>
           </CardContent>
