@@ -138,9 +138,15 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
   app.post("/api/admin/qa/sandbox/test-jobs", requireAdmin, requireStripeTestMode, async (req, res) => {
     const category = String(req.body?.category || "General Labor");
     const posterId = Number(req.body?.posterId);
+    const helperId = req.body?.helperId ? Number(req.body.helperId) : null;
+    const verifyInspectCategory = req.body?.verifyInspectCategory ? String(req.body.verifyInspectCategory) : null;
     if (!posterId) return res.status(400).json({ message: "posterId required" });
     const poster = await storage.getUser(posterId);
     if (!poster?.isTestUser) return res.status(400).json({ message: "posterId must be a test user" });
+    if (helperId) {
+      const helper = await storage.getUser(helperId);
+      if (!helper?.isTestUser) return res.status(400).json({ message: "helperId must be a test user" });
+    }
     const [j] = await db.insert(jobs).values({
       title: `QA test job — ${category} ${Date.now()}`,
       description: "Auto-created by /admin/qa sandbox.",
@@ -151,16 +157,49 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       zip: "90210",
       lat: 34.0522,
       lng: -118.2437,
-      status: "posted_public",
+      status: helperId ? "in_progress" : "posted_public",
       postedById: posterId,
+      assignedHelperId: helperId,
+      verifyInspectCategory,
       isPublished: true,
       isPaid: true,
       payType: "fixed",
       isTestJob: true,
       visibility: "public",
     }).returning();
-    await audit(req, "qa_create_test_job", { jobId: j.id, category, posterId });
+    await audit(req, "qa_create_test_job", { jobId: j.id, category, posterId, helperId, verifyInspectCategory });
     res.json(j);
+  });
+
+  // Task #494 — Seed a V&I proof submission for the satisfy/retake e2e walkthrough.
+  // Test-mode + admin gated; only allowed against jobs flagged isTestJob.
+  app.post("/api/admin/qa/sandbox/test-jobs/:jobId/seed-proof", requireAdmin, requireStripeTestMode, async (req, res) => {
+    const jobId = parseInt(req.params.jobId);
+    const job = await storage.getJob(jobId);
+    if (!job?.isTestJob) return res.status(400).json({ message: "Job must be a test job" });
+    if (!job.assignedHelperId) return res.status(400).json({ message: "Job must have assignedHelperId" });
+
+    const reviewWindowMs = Number(req.body?.reviewWindowMs ?? 24 * 60 * 60 * 1000);
+    const proof = await storage.createProofSubmission({
+      jobId,
+      checklistItemId: null,
+      submittedBy: job.assignedHelperId,
+      imageUrls: '["https://res.cloudinary.com/qa/image/upload/v1/qa-test.jpg"]',
+      videoUrl: null,
+      notes: "QA seeded proof",
+      gpsLat: job.lat,
+      gpsLng: job.lng,
+      gpsTimestamp: new Date(),
+    });
+    if (job.category === "Verify & Inspect") {
+      await storage.updateProofSubmission(proof.id, {
+        reviewDecision: "pending",
+        reviewWindowExpiresAt: new Date(Date.now() + reviewWindowMs),
+      });
+    }
+    await audit(req, "qa_seed_proof", { jobId, proofId: proof.id });
+    const fresh = await storage.getProofSubmission(proof.id);
+    res.json(fresh);
   });
 
   app.post("/api/admin/qa/sandbox/reset", requireAdmin, requireStripeTestMode, async (req, res) => {

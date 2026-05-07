@@ -84,6 +84,11 @@ export default function AdminQaInspect() {
         <Card>
           <CardHeader><CardTitle>Proof #{data.proof.id} · job #{data.proof.jobId}</CardTitle></CardHeader>
           <CardContent>
+            {data.proof.mediaPurgedAt && (
+              <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-[11px] text-yellow-700 dark:text-yellow-300" data-testid="text-admin-media-purged">
+                Detailed proof media for V&I jobs is retained for 30 days only. Purged at {new Date(data.proof.mediaPurgedAt).toLocaleString()}.
+              </div>
+            )}
             <div className="mb-3 flex flex-wrap gap-2">
               {data.proof.videoUrl && <MediaLightbox url={data.proof.videoUrl} label="video" />}
               {(() => { try { const arr = JSON.parse(data.proof.imageUrls || "[]"); return arr.map((u: string, i: number) => <MediaLightbox key={i} url={u} label={`img ${i + 1}`} />); } catch { return null; } })()}

@@ -274,7 +274,7 @@ export default function MarketplacePreview() {
           <div className="space-y-2.5 mb-4">
             {[
               "Buy with verified confidence — no surprises",
-              "Request a GUBER inspection before you purchase",
+              "Request GUBER visual proof — eyes on the ground — before you purchase",
               "Avoid scams completely with proof-backed listings",
             ].map((point) => (
               <div key={point} className="flex items-start gap-2.5">

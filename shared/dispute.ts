@@ -200,7 +200,7 @@ export const DISPUTE_COPY = {
     "The 24-hour response window has passed. GUBER will review using the proof and information already on file.",
 
   adminViBanner:
-    "V&I disputes are documentation-based only. Review proof submission, location/time correctness, and checklist completion. Do not make mechanical, legal, or safety judgements.",
+    "V&I disputes are documentation-based only. Review proof submission, location/time correctness, and checklist completion. The helper is an \"eyes on the ground\" visual reporter — never an inspector, diagnostician, or certifier. Do not make mechanical, legal, or safety judgements.",
   adminAutomotiveBanner:
     "Automotive / roadside review: check safety confirmation, photos, completion notes, location, timestamps, and proof of attempt. GUBER does not guarantee repair outcome, diagnosis accuracy, or vehicle condition.",
 

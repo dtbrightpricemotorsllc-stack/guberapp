@@ -1400,7 +1400,7 @@ export default function PostJob() {
               You are responsible for the accuracy of your job posting. Illegal, unsafe, or prohibited jobs are not allowed and may be removed without notice.
             </p>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              GUBER allows visual verification, errands, inspections, documentation, and general task-based services. Jobs involving <strong className="text-muted-foreground/80">illegal activity</strong>, <strong className="text-muted-foreground/80">hazardous physical labor</strong>, or <strong className="text-muted-foreground/80">licensed professional services without credentials</strong> are prohibited.
+              GUBER allows visual proof (eyes on the ground — not inspections), errands, documentation, and general task-based services. Jobs involving <strong className="text-muted-foreground/80">illegal activity</strong>, <strong className="text-muted-foreground/80">hazardous physical labor</strong>, or <strong className="text-muted-foreground/80">licensed professional services without credentials</strong> are prohibited.
             </p>
             {(category === "Skilled Labor" || category === "General Labor") && (
               <p className="text-[11px] text-amber-400/70 leading-relaxed mt-1">

@@ -271,6 +271,50 @@ CREATE TABLE IF NOT EXISTS cash_drop_events (
 CREATE INDEX IF NOT EXISTS cash_drop_events_drop_idx
   ON cash_drop_events (cash_drop_id, created_at DESC);
 
+-- ── V&I Satisfied / Request-Retake review flow + 30-day media retention (task-494) ──
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS review_decision text DEFAULT 'pending';
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS reviewed_at timestamp;
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS reviewed_by integer;
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS retake_count integer DEFAULT 0;
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS retake_reasons text[];
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS review_window_expires_at timestamp;
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS media_purged_at timestamp;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS vi_retake_count integer DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS vi_retake_reasons text[];
+CREATE INDEX IF NOT EXISTS proof_submissions_review_window_idx
+  ON proof_submissions (review_window_expires_at)
+  WHERE review_decision = 'pending';
+CREATE INDEX IF NOT EXISTS proof_submissions_media_purge_idx
+  ON proof_submissions (created_at)
+  WHERE media_purged_at IS NULL;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS excessive_retake_count integer DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS poor_proof_count integer DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS task_history_summary (
+  id serial PRIMARY KEY,
+  job_id integer NOT NULL UNIQUE,
+  poster_id integer,
+  helper_id integer,
+  category text,
+  vi_category text,
+  job_type text,
+  proof_review_decision text,
+  retake_count integer DEFAULT 0,
+  proof_count integer DEFAULT 0,
+  completion_status text,
+  outcome text,
+  poster_rating_impact real,
+  worker_rating_impact real,
+  metadata jsonb,
+  completed_at timestamp,
+  created_at timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_history_summary_helper_idx
+  ON task_history_summary (helper_id, completed_at DESC);
+CREATE INDEX IF NOT EXISTS task_history_summary_poster_idx
+  ON task_history_summary (poster_id, completed_at DESC);
+
 SQL
 
 echo "[post-merge] Schema sync complete."

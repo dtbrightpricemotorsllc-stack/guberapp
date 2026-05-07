@@ -44,7 +44,7 @@ function VerifiedBadge({ item }: { item: MarketplaceItem }) {
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
       style={{ background: "rgba(0,180,80,0.12)", color: "#16a34a", border: "1px solid rgba(0,180,80,0.25)" }}
-      title={`Verified by ${item.verifiedByName || "GUBER Inspector"}${date ? ` on ${date}` : ""}`}>
+      title={`Visual proof by ${item.verifiedByName || "GUBER helper"}${date ? ` on ${date}` : ""}`}>
       <ShieldCheck className="w-2.5 h-2.5" />
       GUBER VERIFIED{date ? ` · ${date}` : ""}
     </span>
@@ -217,9 +217,10 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   <span className="text-sm font-display font-bold text-emerald-400">GUBER Verified Item</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  This item was physically inspected by a certified GUBER inspector
+                  A local GUBER helper went on-site and documented this item with photos and short video
                   {item.verifiedByName ? ` (${item.verifiedByName})` : ""}
                   {verificationDate ? ` on ${verificationDate}` : ""}.
+                  Visual proof only — no diagnoses, certifications, or appraisals.
                   {item.verificationNotes && ` Notes: ${item.verificationNotes}`}
                 </p>
               </>
@@ -230,7 +231,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   <span className="text-sm font-display font-bold text-muted-foreground">Not Yet Verified</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  This item has not been verified by a GUBER inspector. Consider requesting a V&I inspection for buyer confidence.
+                  No on-site visual proof on file yet. Consider requesting a V&I visit so a local helper can take fresh photos and video for buyer confidence.
                 </p>
               </>
             )}
@@ -420,11 +421,11 @@ function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 <ShieldCheck className="w-3 h-3" />
                 V&I JOB ID (OPTIONAL — FOR GUBER VERIFIED BADGE)
               </label>
-              <input className={inputClass} placeholder="Paste the V&I job ID if already inspected"
+              <input className={inputClass} placeholder="Paste the V&I job ID if already documented"
                 value={form.viJobId} onChange={e => setForm(f => ({ ...f, viJobId: e.target.value }))}
                 data-testid="input-listing-vi-job" />
               <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">
-                If a V&I inspector already verified this item (e.g. car inspection, property check), enter the job ID to auto-attach the verification report and earn the GUBER Verified badge.
+                If a GUBER V&I helper already documented this item on-site (e.g. car visual check, property visit), enter the job ID to auto-attach the visual proof and earn the GUBER Verified badge.
               </p>
             </div>
           </div>
@@ -493,7 +494,7 @@ export default function Marketplace() {
           <div className="absolute bottom-0 left-0 right-0 px-4 py-3 flex items-end justify-between">
             <div>
               <p className="font-display font-extrabold text-white text-lg tracking-tight leading-none">GUBER Marketplace</p>
-              <p className="text-white/90 text-xs mt-0.5">Verified items only — real people, real inspections</p>
+              <p className="text-white/90 text-xs mt-0.5">Verified items only — real people, real visual proof</p>
             </div>
             {user && (
               <Button size="sm" onClick={() => setShowPostModal(true)}
@@ -511,9 +512,9 @@ export default function Marketplace() {
           <div>
             <p className="text-xs font-display font-bold text-emerald-400 mb-0.5">What is GUBER Marketplace?</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Items for sale that have been physically verified by a GUBER inspector — not just described, but actually checked.
-              Got a car inspected but the buyer backed out? List it here with your verification report attached.
-              Everything legal is welcome.
+              Items for sale that have on-site visual proof from a local GUBER helper — photos and short video, not just a written description.
+              Got a car documented for a buyer who backed out? List it here with the V&I proof attached.
+              Visual proof only — no inspectors, certifications, or appraisals. Everything legal is welcome.
             </p>
           </div>
         </div>

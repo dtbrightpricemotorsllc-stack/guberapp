@@ -177,6 +177,58 @@ export const VI_FORBIDDEN_WORDS = [
   "passes inspection",
   "roadworthy",
   "structurally sound",
+  // Task #494 — never act as inspector / diagnostician / certifier.
+  // Includes plain "drive" / "drives" / "driving" because operating the
+  // subject vehicle is out of scope (helpers are eyes on the ground only,
+  // never operators) — covers solicitations like "drive the car around
+  // the lot" that "test drive" alone wouldn't catch.
+  "drive",
+  "drives",
+  "driving",
+  "test drive",
+  "test-drive",
+  "drove",
+  "operate the vehicle",
+  "operate the car",
+  "start the engine",
+  "turn the key",
+  "fix",
+  "fixes",
+  "fix it",
+  "repair",
+  "repaired",
+  "repairs",
+  "service the",
+  "tune up",
+  "tune-up",
+  "assess",
+  "assessment",
+  "diagnostic",
+  "diagnosed",
+  "diagnose",
+  "diagnosis",
+  "mechanical opinion",
+  "mechanically sound",
+  "expert opinion",
+  "professional inspection",
+  "professional opinion",
+  "appraisal",
+  "appraised",
+  "authenticity verified",
+  "authenticity confirmed",
+  "verified authentic",
+  "take apart",
+  "disassemble",
+  "remove panel",
+  "remove cover",
+  "crawl underneath",
+  "trespass",
+  "restricted area",
+  "hidden surveillance",
+  "covert recording",
+  "stalk",
+  "harass",
+  "emergency response",
 ];
 
 export const VI_LANGUAGE_HINT =
@@ -429,3 +481,81 @@ export const STATEMENTS = {
   offPlatform:
     "For your safety and protection, keep communication and payment inside GUBER.",
 };
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 8. VI_COPY — single source of truth for V&I positioning copy (Task #494)
+// V&I is "visual proof / eyes on the ground" — never inspector, diagnostician,
+// certifier, or appraiser. All user-facing V&I strings should originate here.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const VI_COPY = {
+  // Brand-line tagline used wherever V&I is introduced (home, marketplace,
+  // verify-inspect landing, post-job summary, marketing HTML).
+  tagline: "Visual proof — eyes on the ground, not inspectors.",
+  shortTagline: "Visual proof. No diagnoses, no certifications.",
+
+  // Hero blurb for landing & marketing pages. Replaces every "certified
+  // GUBER inspector" / "professional inspection" / "diagnose" phrasing.
+  heroBlurb:
+    "GUBER's Verify & Inspect helpers are local people who go take photos and short video for you. They document what's there — they do not diagnose, repair, certify, appraise, or vouch for safety.",
+
+  // Short positioning line used on cards, badges, and small surfaces.
+  positioning: "Eyes on the ground — visual proof only.",
+
+  // Posted under proof submission UI.
+  helperSubmitNote:
+    "Document what you can see. Don't disassemble, drive, repair, or claim something is safe, sound, or authentic — just photos, short video, and what you observed.",
+
+  // Hirer-side proof review banner.
+  reviewBanner:
+    "These are visual notes from a local helper — not a professional inspection or appraisal. Use them to decide whether to take a closer look, not as a final verdict.",
+
+  // Retake / Satisfied control labels.
+  satisfiedButton: "Satisfied — release payment",
+  satisfiedHint:
+    "Marks the proof as accepted and releases payment to the helper. You can still file a dispute later if something material was missed.",
+  retakeButton: "Request retake",
+  retakeHint:
+    "Send the helper back for additional or clearer photos. The first request is free; the helper has a fresh window to respond.",
+  retakeReasonRequired:
+    "Tell the helper exactly what to redo (e.g. \"need a clearer photo of the VIN tag\"). Required from the second retake on.",
+  retakeMaxReached:
+    "This proof has reached the retake limit. Either accept it and release payment, or file a dispute.",
+
+  // Auto-satisfy banner shown when the review window expires without action.
+  autoSatisfyBanner:
+    "Review window elapsed without action. Proof was auto-accepted and payment was released. You may still report an issue under Disputes.",
+
+  // 30-day media retention.
+  mediaRetentionNotice:
+    "Detailed proof media (photos, video) is retained for 30 days after job completion, then purged. The summary record stays on your history forever.",
+  mediaPurgedNotice:
+    "Detailed proof media for this job has been purged (30-day retention). The summary record below is permanent.",
+
+  // V&I rating impact line — keep it neutral and proof-focused.
+  ratingImpactNote:
+    "V&I ratings reflect documentation quality and timeliness only — never mechanical, legal, or safety judgement.",
+} as const;
+
+export type ProofReviewDecision =
+  | "pending"
+  | "satisfied"
+  | "retake_requested"
+  | "auto_satisfied";
+
+// Proof review state lifecycle (Task #494):
+//   submitted → pending  →  satisfied | retake_requested | auto_satisfied
+// retake_requested loops back to "pending" once the helper resubmits.
+export const PROOF_REVIEW_DECISIONS: ProofReviewDecision[] = [
+  "pending",
+  "satisfied",
+  "retake_requested",
+  "auto_satisfied",
+];
+
+// Beyond this many retakes, the hirer must either accept or open a dispute.
+// (Helper reliability counter `excessiveRetakeCount` increments at this point.)
+export const VI_RETAKE_LIMIT = 3;
+
+// Days of detailed-media retention for V&I proof submissions.
+export const VI_MEDIA_RETENTION_DAYS = 30;

@@ -740,7 +740,7 @@ export default function VerifyInspect() {
               <div className="flex-1 min-w-0">
                 <p className="text-[9px] font-display font-bold tracking-widest text-primary/80 uppercase mb-1">GUBER</p>
                 <h1 className="text-2xl font-display font-black text-white tracking-tight leading-tight">Verify &amp; Inspect</h1>
-                <p className="text-white/80 text-xs mt-1">Visual proof jobs — on-site verification</p>
+                <p className="text-white/80 text-xs mt-1">Visual proof — eyes on the ground, not inspectors</p>
               </div>
               <img
                 src={viLogoImg}
@@ -752,7 +752,7 @@ export default function VerifyInspect() {
           </div>
 
           <div className="mb-4">
-            <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground mb-3 uppercase">Inspection Categories</p>
+            <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground mb-3 uppercase">Visual-Proof Categories</p>
             {catsError ? (
               <div className="text-center py-10">
                 <AlertCircle className="w-8 h-8 text-destructive/50 mx-auto mb-3" />
@@ -872,7 +872,7 @@ export default function VerifyInspect() {
             );
           })()}
           <p className="text-sm text-muted-foreground">
-            Build your inspection request step by step
+            Build your visual-proof request step by step
           </p>
           <div className="flex items-center gap-1.5 mt-3">
             {[1, 2, 3, 4, 5].map((s) => (

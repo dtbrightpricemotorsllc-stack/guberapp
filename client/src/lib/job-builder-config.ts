@@ -1176,7 +1176,7 @@ const VI: JobTypeConfig[] = [
   {
     category: "Verify & Inspect",
     jobType: "Vehicle Check",
-    disclaimer: "Visual verification only — not a mechanical inspection or guarantee.",
+    disclaimer: "Visual proof only — eyes on the ground, not an inspector. No mechanical diagnoses, no guarantees.",
     sections: [
       { name: "vehicleType", label: "Vehicle type", options: ["Car", "Truck", "Motorcycle", "Boat", "RV"], required: true, hasOther: true },
       { name: "proofNeeded", label: "Proof needed", options: ["Exterior photos", "Interior photos", "VIN photo", "Video walkaround", "Start/run video if safe"], multi: true, required: true },
@@ -1250,7 +1250,7 @@ const VI: JobTypeConfig[] = [
   {
     category: "Verify & Inspect",
     jobType: "Boat Check",
-    disclaimer: `Visual verification only — not a marine survey, mechanical inspection, or guarantee. ${AUTO_DISCLAIMER}`,
+    disclaimer: `Visual proof only — eyes on the ground, not a surveyor or inspector. No marine survey, mechanical diagnosis, or guarantees. ${AUTO_DISCLAIMER}`,
     sections: [
       { name: "boatType", label: "Boat type", options: ["Personal watercraft", "Outboard", "Inboard", "Sailboat"], required: true, hasOther: true },
       { name: "proofNeeded", label: "Proof needed", options: ["Exterior photos", "Interior photos", "Hull photos", "Engine compartment photos", "Trailer photos", "VIN / HIN photo", "Walkaround video"], multi: true, required: true },
@@ -1268,7 +1268,7 @@ const VI: JobTypeConfig[] = [
   {
     category: "Verify & Inspect",
     jobType: "RV Check",
-    disclaimer: `Visual verification only — not a mechanical inspection or RV guarantee. ${AUTO_DISCLAIMER}`,
+    disclaimer: `Visual proof only — eyes on the ground, not an inspector. No mechanical diagnoses or RV guarantees. ${AUTO_DISCLAIMER}`,
     sections: [
       { name: "rvType", label: "RV type / class", options: ["Class A", "Class B / Camper Van", "Class C", "Travel Trailer", "Fifth Wheel"], required: true, hasOther: true },
       { name: "proofNeeded", label: "Proof needed", options: ["Exterior photos", "Interior photos", "Roof photos", "Slide-out photos", "Tire / undercarriage photos", "VIN photo", "Walkaround video"], multi: true, required: true },

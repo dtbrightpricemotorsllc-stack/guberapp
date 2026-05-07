@@ -41,13 +41,13 @@ const CATEGORIES = [
   { label: "Skilled Labor",   img: skilledLaborImg,  desc: "Trades, repairs, installs — your craft pays." },
   { label: "On-Demand Help",  img: onDemandHelpImg,  desc: "Errands, delivery, quick tasks near you." },
   { label: "Barter Labor",    img: barterLaborImg,   desc: "Trade skills for goods. No cash required." },
-  { label: "Verify & Inspect",img: verifyInspectImg, desc: "Get paid to document, inspect & verify." },
+  { label: "Verify & Inspect",img: verifyInspectImg, desc: "Visual proof — eyes on the ground, not inspectors." },
   { label: "Marketplace",     img: marketplaceImg,   desc: "Buy, sell, and trade local items." },
 ];
 
 const QUOTES = [
   { text: "Made $140 in one weekend doing yard work. GUBER made it dead simple.", name: "Marcus T.", location: "Mobile, AL" },
-  { text: "Posted my first inspection gig and had someone at the property same day.", name: "Janelle R.", location: "Saraland, AL" },
+  { text: "Posted my first V&I request and had someone at the property taking photos the same day.", name: "Janelle R.", location: "Saraland, AL" },
   { text: "Finally a platform that pays fast and keeps sketchy people out.", name: "Devon W.", location: "Daphne, AL" },
 ];
 
@@ -393,15 +393,16 @@ export default function Home() {
               </div>
               <h2 className="text-2xl font-display font-black tracking-wider mb-3">VERIFY &amp; INSPECT</h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                Get paid to show up, document, and verify. Property walk-throughs, pre-purchase inspections,
-                online listing verification — real work that pays $40–$120+ per job.
+                Get paid to show up and document — visual proof, eyes on the ground. Property walk-throughs,
+                pre-purchase photo runs, online listing verification. Helpers are eyes on the ground — they don't certify, diagnose, or
+                appraise — they just take clear photos and short video. $40–$120+ per job.
               </p>
               <Link
                 href="/browse-jobs?category=Verify+%26+Inspect"
                 className="inline-flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display tracking-[0.15em] premium-btn"
                 data-testid="link-vi-learn-more"
               >
-                SEE INSPECT JOBS
+                SEE V&I JOBS
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>

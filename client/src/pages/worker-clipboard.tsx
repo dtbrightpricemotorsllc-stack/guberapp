@@ -393,6 +393,62 @@ export default function WorkerClipboard() {
           </div>
         </div>
 
+        {/* Task #494 — Surface retake requests from the hirer to the worker.
+            When the hirer has hit "Request retake" on the latest proof,
+            job.proofStatus is set to "retake_requested" and the running
+            list of reasons is mirrored on job.viRetakeReasons. The latest
+            reason is the most actionable one. */}
+        {job.proofStatus === "retake_requested" && (
+          <div
+            className="glass-card rounded-2xl p-4 mb-4 border border-amber-500/40 bg-amber-500/5"
+            data-testid="banner-retake-requested"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                <span className="text-amber-400 text-sm font-bold">!</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-display font-bold text-amber-300" data-testid="text-retake-title">
+                  Hirer requested a retake
+                </p>
+                {Array.isArray((job as any).viRetakeReasons) && (job as any).viRetakeReasons.length > 0 ? (
+                  <p
+                    className="text-[11px] text-foreground/80 leading-relaxed mt-1"
+                    data-testid="text-retake-latest-reason"
+                  >
+                    "{(job as any).viRetakeReasons[(job as any).viRetakeReasons.length - 1]}"
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+                    No reason provided. Re-capture clearer visual proof and resubmit.
+                  </p>
+                )}
+                {Array.isArray((job as any).viRetakeReasons) && (job as any).viRetakeReasons.length > 1 && (
+                  <details className="mt-2">
+                    <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground">
+                      View all {(job as any).viRetakeReasons.length} retake reasons
+                    </summary>
+                    <ul className="mt-1.5 space-y-1 pl-3">
+                      {(job as any).viRetakeReasons.map((r: string, i: number) => (
+                        <li
+                          key={i}
+                          className="text-[10px] text-muted-foreground italic"
+                          data-testid={`text-retake-reason-${i}`}
+                        >
+                          {i + 1}. {r}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                <p className="text-[10px] text-muted-foreground mt-2">
+                  Re-capture per the request and resubmit. The hirer has another review window once you do.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {job.category === "Verify & Inspect" && handsFreeEnabled && (
           <div className="glass-card rounded-2xl p-4 mb-4 border border-primary/30 bg-primary/5">
             <div className="flex items-start gap-3">
@@ -402,7 +458,7 @@ export default function WorkerClipboard() {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-display font-bold">Hands-Free POV Capture</p>
                 <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">
-                  Mount your phone facing forward and record continuous video evidence. Hirer sees a "POV" badge on review.
+                  Mount your phone facing forward and record what you can see — clear, continuous visual proof. You're documenting, not diagnosing or certifying. Hirer sees a "POV" badge on review.
                 </p>
               </div>
               <Button

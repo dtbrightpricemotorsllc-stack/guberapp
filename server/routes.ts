@@ -7183,6 +7183,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Job must be funded, active, or in progress to submit proof" });
       }
 
+      // Task #494 — fresh review window per submission. ONLY V&I jobs get a
+      // review_window_expires_at; non-V&I categories keep their existing
+      // proof flow untouched (so cron auto-satisfy + media purge never affects
+      // them, and generic proofs aren't pushed to payout by the V&I pipeline).
+      const isViJob = job.category === "Verify & Inspect";
+      const reviewWindowHours = autoConfirmHoursFor(job as any);
+      const reviewWindowExpiresAt = (isViJob && !req.body.notEncountered)
+        ? new Date(Date.now() + reviewWindowHours * 60 * 60 * 1000)
+        : null;
+
       const proof = await storage.createProofSubmission({
         jobId,
         submittedBy: req.session.userId!,
@@ -7195,6 +7205,14 @@ export async function registerRoutes(
         gpsTimestamp: req.body.gpsTimestamp ? new Date(req.body.gpsTimestamp) : null,
         notEncountered: req.body.notEncountered || false,
         notEncounteredReason: req.body.notEncounteredReason || null,
+        // Only V&I proofs participate in the review pipeline. Non-V&I rows
+        // get a null decision so cron sweeps and gateViReview ignore them.
+        reviewDecision: (isViJob && !req.body.notEncountered) ? "pending" : null,
+        reviewWindowExpiresAt,
+        // Carry the job-level retake counter onto each new proof row so the
+        // resume/admin views show the running total even after resubmits.
+        retakeCount: job.viRetakeCount ?? 0,
+        retakeReasons: job.viRetakeReasons ?? [],
       });
 
       const proofUpdate: any = { proofStatus: req.body.notEncountered ? "not_encountered" : "submitted" };
@@ -7236,6 +7254,254 @@ export async function registerRoutes(
     const jobId = parseInt(req.params.id);
     const proofs = await storage.getProofsByJob(jobId);
     res.json(proofs);
+  });
+
+  // ── Task #494 — Satisfied / Request-Retake review flow ────────────────────
+  // V&I-only hirer-side controls on a submitted proof. Both routes:
+  //   • require job.category === "Verify & Inspect"
+  //   • require an open review window (reviewWindowExpiresAt > now,
+  //     reviewDecision in {pending, retake_requested})
+  //   • read/write the *job-level* retake counter so the per-job cap survives
+  //     fresh proof submissions (each resubmit creates a new proof row).
+  //   • track requester (poster) reliability via excessiveRetakeCount when
+  //     they exceed the limit; only flag worker poorProofCount on the first
+  //     retake per job (single low-quality signal, not per repeated retake).
+  const VI_RETAKE_LIMIT = 3;
+
+  type ReviewWindowGate =
+    | { ok: true; proof: NonNullable<Awaited<ReturnType<typeof storage.getProofSubmission>>>; job: NonNullable<Awaited<ReturnType<typeof storage.getJob>>>; isAdmin: boolean }
+    | { ok: false; status: number; message: string };
+
+  async function gateViReview(
+    req: Request,
+    proofId: number,
+    requireOpenWindow: boolean,
+  ): Promise<ReviewWindowGate> {
+    const proof = await storage.getProofSubmission(proofId);
+    if (!proof) return { ok: false, status: 404, message: "Proof not found" };
+    const job = await storage.getJob(proof.jobId);
+    if (!job) return { ok: false, status: 404, message: "Job not found" };
+    if (job.category !== "Verify & Inspect") {
+      return { ok: false, status: 400, message: "This action is only available on V&I jobs." };
+    }
+    const viewer = await storage.getUser(req.session.userId!);
+    const isPoster = job.postedById === req.session.userId;
+    const isAdmin = viewer?.role === "admin";
+    if (!isPoster && !isAdmin) {
+      return { ok: false, status: 403, message: "Only the job poster can review this proof." };
+    }
+    if (requireOpenWindow) {
+      // A live or previously-opened dispute freezes the proof — neither
+      // satisfy nor retake are allowed while evidence is being adjudicated.
+      if (job.disputeOpenedAt || (job.status as string) === "disputed") {
+        return { ok: false, status: 409, message: "This job is in dispute — the proof is frozen as evidence." };
+      }
+      // Only "pending" rows are reviewable. "satisfied" / "auto_satisfied" are
+      // terminal; "retake_requested" is the helper's turn — the hirer must
+      // wait for the helper to resubmit (which creates a fresh proof row in
+      // "pending" state) before they can re-review.
+      if (proof.reviewDecision !== "pending") {
+        const message = proof.reviewDecision === "retake_requested"
+          ? "Already requested a retake — wait for the helper's resubmission before reviewing again."
+          : "This proof has already been reviewed.";
+        return { ok: false, status: 409, message };
+      }
+      const expiresAt = proof.reviewWindowExpiresAt ? new Date(proof.reviewWindowExpiresAt).getTime() : 0;
+      if (!expiresAt || expiresAt <= Date.now()) {
+        return { ok: false, status: 410, message: "The review window has expired and the proof was auto-satisfied." };
+      }
+    }
+    return { ok: true, proof, job, isAdmin };
+  }
+
+  app.get("/api/jobs/:id/proof-review-state", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      const isPoster = job.postedById === req.session.userId;
+      const isHelper = job.assignedHelperId === req.session.userId;
+      const viewer = await storage.getUser(req.session.userId!);
+      const isAdmin = viewer?.role === "admin";
+      if (!isPoster && !isHelper && !isAdmin) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      const proofs = await storage.getProofsByJob(jobId);
+      const latest = proofs
+        .filter((p) => !p.notEncountered)
+        .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))[0] || null;
+      const usedRetakes = job.viRetakeCount ?? 0;
+      const expiresAt = latest?.reviewWindowExpiresAt
+        ? new Date(latest.reviewWindowExpiresAt).getTime()
+        : 0;
+      // Aligned with gateViReview(): only "pending" is reviewable. Other
+      // states ("retake_requested" → helper's turn; "satisfied" /
+      // "auto_satisfied" → terminal) close the hirer's window. A live
+      // dispute also forces the window closed so the UI stops offering
+      // satisfy/retake controls while evidence is being adjudicated.
+      const isVI = job.category === "Verify & Inspect";
+      const disputeBlocks = !!job.disputeOpenedAt || (job.status as string) === "disputed";
+      const windowOpen = !!latest
+        && (latest.reviewDecision || "pending") === "pending"
+        && expiresAt > Date.now()
+        && !disputeBlocks;
+      res.json({
+        latest,
+        retakeLimit: VI_RETAKE_LIMIT,
+        retakesUsed: usedRetakes,
+        windowExpiresAt: latest?.reviewWindowExpiresAt ?? null,
+        windowOpen,
+        canSatisfy: isVI && (isPoster || isAdmin) && windowOpen,
+        canRetake: isVI && (isPoster || isAdmin) && windowOpen && usedRetakes < VI_RETAKE_LIMIT,
+        retakeRequiresReason: usedRetakes >= 1,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/proof/:id/satisfy", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const proofId = parseInt(req.params.id);
+      const gate = await gateViReview(req, proofId, true);
+      if (!gate.ok) return res.status(gate.status).json({ message: gate.message });
+      const { proof, job } = gate;
+
+      await storage.updateProofSubmission(proofId, {
+        reviewDecision: "satisfied",
+        reviewedAt: new Date(),
+        reviewedBy: req.session.userId!,
+      });
+
+      // Hand off to the existing auto-confirm cron path: setting autoConfirmAt
+      // to now (and ensuring status is completion_submitted) lets
+      // autoConfirmReviewTimerJobs() do the Stripe capture + ledger writes.
+      await storage.updateJob(proof.jobId, {
+        status: "completion_submitted",
+        proofStatus: "approved",
+        autoConfirmAt: new Date(),
+      });
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "vi.proof.satisfied",
+        details: JSON.stringify({ proofId, jobId: proof.jobId }),
+      });
+
+      if (job.assignedHelperId) {
+        await notify(job.assignedHelperId, {
+          title: "Proof accepted ✅",
+          body: `The hirer marked your proof on "${job.title}" as Satisfied. Payment is being released.`,
+          jobId: job.id,
+          priority: "high",
+        });
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/proof/:id/retake", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const proofId = parseInt(req.params.id);
+      const gate = await gateViReview(req, proofId, true);
+      if (!gate.ok) return res.status(gate.status).json({ message: gate.message });
+      const { proof, job } = gate;
+
+      // Job-level retake counter is the source of truth — survives resubmits.
+      const currentRetakes = job.viRetakeCount ?? 0;
+      if (currentRetakes >= VI_RETAKE_LIMIT) {
+        return res.status(400).json({
+          message: "Retake limit reached. Either accept the proof or open a dispute.",
+          retakeLimit: VI_RETAKE_LIMIT,
+        });
+      }
+
+      const reason = (req.body?.reason || "").toString().trim();
+      // Reason is mandatory from the second retake on so helpers always have
+      // actionable feedback. The first retake may be reasonless.
+      if (currentRetakes >= 1 && !reason) {
+        return res.status(400).json({ message: "A reason is required for additional retakes." });
+      }
+      if (reason.length > 600) {
+        return res.status(400).json({ message: "Retake reason is too long (max 600 chars)." });
+      }
+
+      const newCount = currentRetakes + 1;
+      const reviewWindowHours = autoConfirmHoursFor(job);
+      const newWindow = new Date(Date.now() + reviewWindowHours * 60 * 60 * 1000);
+      const reasonsList = [...(job.viRetakeReasons || []), reason || "(no reason provided)"];
+
+      await storage.updateProofSubmission(proofId, {
+        reviewDecision: "retake_requested",
+        reviewedAt: new Date(),
+        reviewedBy: req.session.userId!,
+        retakeCount: newCount,
+        retakeReasons: reasonsList,
+        reviewWindowExpiresAt: newWindow,
+      });
+
+      // Job-level: push back to in_progress, clear pending auto-confirm,
+      // and persist the running retake counter for the next resubmission.
+      await storage.updateJob(proof.jobId, {
+        status: "in_progress",
+        proofStatus: "retake_requested",
+        autoConfirmAt: null,
+        viRetakeCount: newCount,
+        viRetakeReasons: reasonsList,
+      });
+
+      // Reliability counters per code-review correction:
+      //   • Worker (helper) gets a poorProofCount bump only on the FIRST
+      //     retake for this job — a single quality signal per job, not per
+      //     repeated retake from the same hirer.
+      //   • Poster gets excessiveRetakeCount bumped when they cross the
+      //     policy ceiling — flags serial-retaker hirers.
+      if (newCount === 1 && job.assignedHelperId) {
+        const helper = await storage.getUser(job.assignedHelperId);
+        if (helper) {
+          await storage.updateUser(helper.id, {
+            poorProofCount: (helper.poorProofCount || 0) + 1,
+          });
+        }
+      }
+      if (newCount >= VI_RETAKE_LIMIT) {
+        const poster = await storage.getUser(job.postedById);
+        if (poster) {
+          await storage.updateUser(poster.id, {
+            excessiveRetakeCount: (poster.excessiveRetakeCount || 0) + 1,
+          });
+        }
+      }
+
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "vi.proof.retake_requested",
+        details: JSON.stringify({
+          proofId,
+          jobId: proof.jobId,
+          retakeCount: newCount,
+          reason: reason.slice(0, 240),
+        }),
+      });
+
+      if (job.assignedHelperId) {
+        await notify(job.assignedHelperId, {
+          title: "Retake requested",
+          body: reason
+            ? `The hirer asked for a retake on "${job.title}": ${reason.slice(0, 140)}`
+            : `The hirer asked for a retake on "${job.title}". Please resubmit clearer proof.`,
+          jobId: job.id,
+          priority: "high",
+        });
+      }
+
+      res.json({ ok: true, retakeCount: newCount, retakeLimit: VI_RETAKE_LIMIT });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // ── HANDS-FREE / WEARABLE POV CAPTURE (task-454) ─────────────────────────
@@ -7604,6 +7870,10 @@ export async function registerRoutes(
         } : {}),
       };
 
+      // Task #494 — fresh review window per submission.
+      const wearableReviewHours = autoConfirmHoursFor(job as any);
+      const wearableReviewExpiresAt = new Date(Date.now() + wearableReviewHours * 60 * 60 * 1000);
+
       const proof = await storage.createProofSubmission({
         jobId: payload.jobId,
         submittedBy: req.session.userId!,
@@ -7617,6 +7887,8 @@ export async function registerRoutes(
         notEncountered: false,
         notEncounteredReason: null,
         captureMeta: enrichedMeta,
+        reviewDecision: "pending",
+        reviewWindowExpiresAt: wearableReviewExpiresAt,
       });
 
       await storage.updateJob(payload.jobId, { proofStatus: "submitted", status: "proof_submitted" });

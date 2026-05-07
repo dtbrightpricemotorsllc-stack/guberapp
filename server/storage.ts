@@ -11,6 +11,7 @@ import {
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
   studioVideos, studioVibes,
+  taskHistorySummary,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
   type StudioVideo, type InsertStudioVideo, type StudioVibe, type InsertStudioVibe,
@@ -27,9 +28,10 @@ import {
   type DirectOffer, type GuberPayment, type MoneyLedgerEntry,
   type GuberDispute, type CancellationLogEntry, type FundClaimOrHold,
   type PinnedFinding,
+  type TaskHistorySummary,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, sql, isNotNull, count, inArray, lt, isNull } from "drizzle-orm";
+import { eq, ne, desc, and, or, sql, isNotNull, count, inArray, lt, lte, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -133,6 +135,13 @@ export interface IStorage {
   getProofsByJob(jobId: number): Promise<ProofSubmission[]>;
   getProofSubmission(id: number): Promise<ProofSubmission | undefined>;
   updateProofSubmission(id: number, data: Partial<typeof proofSubmissions.$inferInsert>): Promise<ProofSubmission | undefined>;
+  // Task #494 — V&I review flow.
+  getPendingReviewProofs(now: Date): Promise<ProofSubmission[]>;
+  getProofsToPurgeMedia(cutoff: Date): Promise<ProofSubmission[]>;
+  // Task #494 — task history summary.
+  upsertTaskHistorySummary(data: Partial<typeof taskHistorySummary.$inferInsert> & { jobId: number }): Promise<TaskHistorySummary>;
+  getTaskHistorySummary(jobId: number): Promise<TaskHistorySummary | undefined>;
+  getTaskHistoryForUser(userId: number, role: "poster" | "helper", limit?: number): Promise<TaskHistorySummary[]>;
 
   createWalletTransaction(data: any): Promise<WalletTransaction>;
   getWalletByUser(userId: number): Promise<WalletTransaction[]>;
@@ -748,6 +757,104 @@ export class DatabaseStorage implements IStorage {
   async updateProofSubmission(id: number, data: Partial<typeof proofSubmissions.$inferInsert>): Promise<ProofSubmission | undefined> {
     const [p] = await db.update(proofSubmissions).set(data).where(eq(proofSubmissions.id, id)).returning();
     return p;
+  }
+
+  // Task #494 — V&I Satisfied / Request-Retake review flow.
+  // Only V&I jobs participate in the auto-satisfy / review-window pipeline so
+  // generic non-V&I proof flows are completely unaffected.
+  async getPendingReviewProofs(now: Date): Promise<ProofSubmission[]> {
+    // Auto-satisfy is V&I-only AND must skip jobs that ever had a dispute
+    // opened (disputeOpenedAt IS NOT NULL) — opening a dispute freezes
+    // the review-window auto-finalization regardless of current job.status.
+    const rows = await db
+      .select({ p: proofSubmissions })
+      .from(proofSubmissions)
+      .innerJoin(jobs, eq(jobs.id, proofSubmissions.jobId))
+      .where(
+        and(
+          eq(jobs.category, "Verify & Inspect"),
+          eq(proofSubmissions.reviewDecision, "pending"),
+          isNotNull(proofSubmissions.reviewWindowExpiresAt),
+          lte(proofSubmissions.reviewWindowExpiresAt, now),
+          isNull(jobs.disputeOpenedAt),
+          ne(jobs.status, "disputed"),
+        ),
+      );
+    return rows.map((r) => r.p);
+  }
+
+  async getProofsToPurgeMedia(cutoff: Date): Promise<ProofSubmission[]> {
+    // Targets per Task #494 spec:
+    //   - parent job is V&I (jobs.category = 'Verify & Inspect')
+    //   - parent job actually completed (jobs.completed_at <= cutoff,
+    //     i.e. ≥ 30 days since completion)
+    //   - NO dispute was *ever* opened (disputeOpenedAt IS NULL) — once a
+    //     dispute is filed the proof + media must be retained as evidence
+    //     even after a resolution, regardless of current job.status
+    //   - mediaPurgedAt is still NULL (not yet purged)
+    const rows = await db
+      .select({ p: proofSubmissions })
+      .from(proofSubmissions)
+      .innerJoin(jobs, eq(jobs.id, proofSubmissions.jobId))
+      .where(
+        and(
+          eq(jobs.category, "Verify & Inspect"),
+          isNotNull(jobs.completedAt),
+          lte(jobs.completedAt, cutoff),
+          ne(jobs.status, "disputed"),
+          isNull(jobs.disputeOpenedAt),
+          isNull(proofSubmissions.mediaPurgedAt),
+        ),
+      )
+      .limit(200);
+    return rows.map((r) => r.p);
+  }
+
+  // Task #494 — task history summary (permanent, lightweight).
+  async upsertTaskHistorySummary(
+    data: Partial<typeof taskHistorySummary.$inferInsert> & { jobId: number },
+  ): Promise<TaskHistorySummary> {
+    const existing = await db
+      .select()
+      .from(taskHistorySummary)
+      .where(eq(taskHistorySummary.jobId, data.jobId))
+      .limit(1);
+    if (existing[0]) {
+      const [row] = await db
+        .update(taskHistorySummary)
+        .set(data)
+        .where(eq(taskHistorySummary.jobId, data.jobId))
+        .returning();
+      return row;
+    }
+    const [row] = await db
+      .insert(taskHistorySummary)
+      .values(data as typeof taskHistorySummary.$inferInsert)
+      .returning();
+    return row;
+  }
+
+  async getTaskHistorySummary(jobId: number): Promise<TaskHistorySummary | undefined> {
+    const [row] = await db
+      .select()
+      .from(taskHistorySummary)
+      .where(eq(taskHistorySummary.jobId, jobId))
+      .limit(1);
+    return row;
+  }
+
+  async getTaskHistoryForUser(
+    userId: number,
+    role: "poster" | "helper",
+    limit: number = 100,
+  ): Promise<TaskHistorySummary[]> {
+    const col = role === "poster" ? taskHistorySummary.posterId : taskHistorySummary.helperId;
+    return db
+      .select()
+      .from(taskHistorySummary)
+      .where(eq(col, userId))
+      .orderBy(desc(taskHistorySummary.completedAt))
+      .limit(limit);
   }
 
   async createWalletTransaction(data: any): Promise<WalletTransaction> {

@@ -183,6 +183,9 @@ export const users = pgTable("users", {
   missingProofCount: integer("missing_proof_count").default(0),
   bypassAttemptCount: integer("bypass_attempt_count").default(0),
   falseClaimFlagCount: integer("false_claim_flag_count").default(0),
+  // Task #494 — V&I retake reliability signals.
+  excessiveRetakeCount: integer("excessive_retake_count").default(0),
+  poorProofCount: integer("poor_proof_count").default(0),
   // ── Liability protection (Task #318) ──
   // Set the first time the user accepts the global GUBER liability
   // disclaimer (one-time, app-wide). Existing per-job and per-category
@@ -361,6 +364,12 @@ export const jobs = pgTable("jobs", {
   proofRequired: boolean("proof_required").default(false),
   proofTemplateId: integer("proof_template_id"),
   proofStatus: text("proof_status"),
+  // Task #494 — V&I retake state at the JOB level so the limit is enforced
+  // across resubmits (each new proof_submissions row has its own per-row
+  // retake_count, but the job-level counter is the source of truth for the
+  // VI_RETAKE_LIMIT cap).
+  viRetakeCount: integer("vi_retake_count").default(0),
+  viRetakeReasons: text("vi_retake_reasons").array(),
   helperStage: text("helper_stage"),
   onTheWayAt: timestamp("on_the_way_at"),
   arrivedAt: timestamp("arrived_at"),
@@ -604,6 +613,17 @@ export const proofSubmissions = pgTable("proof_submissions", {
     }>;
     error?: string;
   }>(),
+  // ── V&I Satisfied / Request-Retake review flow (Task #494) ──────────────
+  reviewDecision: text("review_decision").default("pending"),       // pending | satisfied | retake_requested | auto_satisfied
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: integer("reviewed_by"),
+  retakeCount: integer("retake_count").default(0),
+  retakeReasons: text("retake_reasons").array(),
+  reviewWindowExpiresAt: timestamp("review_window_expires_at"),
+  // 30-day media retention (Task #494). Set when cron purges Cloudinary
+  // assets and clears imageUrls/videoUrl on this row. The summary record
+  // (`task_history_summary`) survives forever.
+  mediaPurgedAt: timestamp("media_purged_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1726,3 +1746,37 @@ export const cashDropEvents = pgTable("cash_drop_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 export type CashDropEvent = typeof cashDropEvents.$inferSelect;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TASK HISTORY SUMMARY (Task #494) — permanent, lightweight per-job record.
+// ─────────────────────────────────────────────────────────────────────────────
+// Detailed proof media is purged after 30 days, but a one-row summary is kept
+// forever so resumes, dashboards, and admin pages can still show "completed
+// V&I — Vehicle Check — 2 retakes — auto-satisfied" indefinitely.
+export const taskHistorySummary = pgTable("task_history_summary", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").notNull().unique(),
+  posterId: integer("poster_id"),
+  helperId: integer("helper_id"),
+  category: text("category"),
+  viCategory: text("vi_category"),
+  jobType: text("job_type"),
+  // V&I review summary
+  proofReviewDecision: text("proof_review_decision"),  // satisfied | retake_requested | auto_satisfied | pending | none
+  retakeCount: integer("retake_count").default(0),
+  proofCount: integer("proof_count").default(0),
+  // Outcome
+  completionStatus: text("completion_status"),  // completed_paid | cancelled | disputed | refunded
+  outcome: text("outcome"),                     // free-form short label
+  posterRatingImpact: real("poster_rating_impact"),  // signed delta applied to poster
+  workerRatingImpact: real("worker_rating_impact"),  // signed delta applied to worker
+  metadata: json("metadata").$type<Record<string, any>>(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertTaskHistorySummarySchema = createInsertSchema(taskHistorySummary).omit({
+  id: true,
+  createdAt: true,
+});
+export type TaskHistorySummary = typeof taskHistorySummary.$inferSelect;
+export type InsertTaskHistorySummary = z.infer<typeof insertTaskHistorySummarySchema>;

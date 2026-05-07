@@ -1032,6 +1032,207 @@ async function ogStudioCreditDripSweep(): Promise<number> {
   return granted;
 }
 
+// ─── Task #494 — V&I auto-satisfy expired proof reviews ───────────────────
+// Pending V&I proofs whose review_window_expires_at has elapsed get marked
+// "auto_satisfied", and the job is handed to the existing
+// autoConfirmReviewTimerJobs path (which captures the Stripe authorization
+// and releases payout). Idempotent and safe to re-run.
+export async function autoSatisfyExpiredProofReviews(): Promise<number> {
+  const now = new Date();
+  const expired = await storage.getPendingReviewProofs(now);
+  let satisfied = 0;
+  for (const proof of expired) {
+    try {
+      // Defend against races: re-fetch the job and abort if a dispute was
+      // opened between the storage filter and now. We must NEVER mutate the
+      // proof's reviewDecision once a dispute exists — the proof becomes
+      // evidence and any auto-finalization is suppressed.
+      const job = await storage.getJob(proof.jobId);
+      if (!job) continue;
+      if (job.disputeOpenedAt || (job.status as string) === "disputed") {
+        continue;
+      }
+      await storage.updateProofSubmission(proof.id, {
+        reviewDecision: "auto_satisfied",
+        reviewedAt: now,
+      });
+      if (!["completed_paid", "cancelled", "disputed"].includes(job.status as string)) {
+        await storage.updateJob(proof.jobId, {
+          status: "completion_submitted",
+          proofStatus: "approved",
+          autoConfirmAt: now,
+        });
+        if (job.postedById) {
+          await storage.createNotification({
+            userId: job.postedById,
+            title: "Review window elapsed",
+            body: `"${job.title}" was auto-accepted because the review window passed without action. Payment was released.`,
+            type: "job",
+            jobId: job.id,
+          }).catch(() => {});
+        }
+      }
+      await storage.createAuditLog({
+        userId: null,
+        action: "vi.proof.auto_satisfied",
+        details: JSON.stringify({ proofId: proof.id, jobId: proof.jobId }),
+      });
+      satisfied++;
+    } catch (err) {
+      console.error(`[cron] autoSatisfy proof ${proof.id} failed:`, err);
+    }
+  }
+  return satisfied;
+}
+
+// ─── Task #494 — 30-day media retention purge ─────────────────────────────
+// Per spec: 30 days *after job completion* on V&I jobs only, skipping any
+// job in active dispute. Before purging the row's media we upsert a
+// permanent task_history_summary so resumes/dashboards/admin pages can
+// still surface "completed V&I — N retakes — auto-satisfied" forever.
+// We then null all media-bearing fields (image_urls, video_url, notes,
+// capture_meta, pov_summary) and stamp media_purged_at. Best-effort
+// per-row — failures don't block other rows.
+export async function purgeViProofMedia(): Promise<number> {
+  const VI_MEDIA_RETENTION_DAYS = 30;
+  const cutoff = new Date(Date.now() - VI_MEDIA_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const candidates = await storage.getProofsToPurgeMedia(cutoff);
+  if (candidates.length === 0) return 0;
+
+  const { destroyAsset } = await import("./cloudinary.js");
+  let purged = 0;
+
+  // Group candidates by jobId so we upsert task_history_summary once per
+  // job (using the LATEST proof's outcome), not once per proof row. This
+  // keeps the persistent summary deterministic when a job has multiple
+  // proof rows (e.g. retakes) — last-write-wins iteration ordering can
+  // never silently overwrite the final outcome with an earlier one.
+  const byJob = new Map<number, typeof candidates>();
+  for (const p of candidates) {
+    const arr = byJob.get(p.jobId) ?? [];
+    arr.push(p);
+    byJob.set(p.jobId, arr);
+  }
+
+  for (const [jobId, jobProofs] of byJob.entries()) {
+    try {
+      const job = await storage.getJob(jobId);
+      // Storage already filtered V&I + completedAt + non-disputed +
+      // disputeOpenedAt IS NULL. Defend against races: any dispute ever
+      // opened on this job — even one already resolved — freezes media
+      // purge so the evidence is retained.
+      if (!job || job.category !== "Verify & Inspect") continue;
+      if ((job.status as string) === "disputed") continue;
+      if (job.disputeOpenedAt) continue;
+      if (!job.completedAt || job.completedAt > cutoff) continue;
+
+      // Destroy Cloudinary assets across every proof for this job.
+      const aggDestroyed: string[] = [];
+      const aggFailed: { url: string; reason?: string }[] = [];
+      for (const proof of jobProofs) {
+        const urls: string[] = [];
+        if (proof.videoUrl) urls.push(proof.videoUrl);
+        if (proof.imageUrls) {
+          try {
+            const parsed = typeof proof.imageUrls === "string" ? JSON.parse(proof.imageUrls) : proof.imageUrls;
+            if (Array.isArray(parsed)) urls.push(...parsed.filter((u) => typeof u === "string"));
+          } catch {
+            urls.push(String(proof.imageUrls));
+          }
+        }
+        for (const u of urls) {
+          try {
+            const r = await destroyAsset(u);
+            if (r.ok) aggDestroyed.push(r.publicId || u);
+            else aggFailed.push({ url: u, reason: r.publicId ? `not_destroyed:${r.publicId}` : "unknown" });
+          } catch (e: any) {
+            aggFailed.push({ url: u, reason: e?.message || "throw" });
+          }
+        }
+      }
+
+      // Pick the LATEST proof (by id desc — schema serial id is monotonic)
+      // as the canonical outcome for this job's permanent summary. This is
+      // deterministic regardless of iteration order of jobProofs.
+      const allProofs = await storage.getProofsByJob(jobId);
+      const latest = [...allProofs].sort((a, b) => (b.id as number) - (a.id as number))[0];
+      const finalDecision = latest?.reviewDecision ?? "none";
+
+      // Permanent summary BEFORE we drop the detail. Upserted ONCE per job.
+      await storage.upsertTaskHistorySummary({
+        jobId,
+        posterId: job.postedById,
+        helperId: job.assignedHelperId ?? null,
+        category: job.category,
+        viCategory: job.verifyInspectCategory ?? null,
+        jobType: job.jobType ?? null,
+        proofReviewDecision: finalDecision,
+        retakeCount: job.viRetakeCount ?? 0,
+        proofCount: allProofs.length,
+        completionStatus: job.status ?? null,
+        outcome: finalDecision === "auto_satisfied"
+          ? "auto-satisfied (review window elapsed)"
+          : finalDecision === "satisfied"
+            ? "satisfied by hirer"
+            : null,
+        completedAt: job.completedAt,
+        metadata: {
+          retentionDays: VI_MEDIA_RETENTION_DAYS,
+          destroyedAssets: aggDestroyed.length,
+          failedAssets: aggFailed.length,
+          ...(aggFailed.length > 0 ? { failedUrls: aggFailed } : {}),
+        },
+      });
+
+      // Deadline-enforced 30d scrub: clear DB fields on EVERY proof row for
+      // this job unconditionally; orphaned Cloudinary assets are tracked
+      // separately for out-of-band retry. Checklist responses live inside
+      // proof_submissions (one row per checklistItemId) so they are covered
+      // by the same UPDATE; there is no separate checklist-results or
+      // proof-messages table in this schema.
+      const purgedAt = new Date();
+      for (const proof of jobProofs) {
+        await storage.updateProofSubmission(proof.id, {
+          imageUrls: null,
+          videoUrl: null,
+          notes: null,
+          notEncounteredReason: null,
+          captureMeta: null,
+          povSummary: null,
+          mediaPurgedAt: purgedAt,
+        });
+        await storage.createAuditLog({
+          userId: null,
+          action: "vi.proof.media_purged",
+          details: JSON.stringify({
+            proofId: proof.id,
+            jobId,
+            retentionDays: VI_MEDIA_RETENTION_DAYS,
+          }),
+        });
+        purged++;
+      }
+
+      if (aggFailed.length > 0) {
+        // Out-of-band: orphaned Cloudinary assets that survived the scrub.
+        // Retry job can read these from this audit entry.
+        await storage.createAuditLog({
+          userId: null,
+          action: "vi.proof.cloudinary_orphan_pending",
+          details: JSON.stringify({
+            jobId,
+            failedCount: aggFailed.length,
+            failedUrls: aggFailed,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error(`[cron] purgeViProofMedia job ${jobId} failed:`, err);
+    }
+  }
+  return purged;
+}
+
 // Public single-shot runner used by /api/internal/cron/run when this app is
 // driven by a Replit Scheduled Deployment (DISABLE_BACKGROUND_JOBS=true).
 // Runs the union of every periodic sweep that used to live inside the two
@@ -1107,6 +1308,13 @@ export async function runAllScheduledSweeps(): Promise<void> {
 
     const clearedHf = await clearStaleHandsfreeReviewSweep();
     if (clearedHf > 0) console.log(`[cron] auto-cleared hands-free under_review for ${clearedHf} user(s)`);
+
+    // Task #494 — V&I review window auto-satisfy + 30-day media retention purge.
+    const autoSat = await autoSatisfyExpiredProofReviews();
+    if (autoSat > 0) console.log(`[cron] auto-satisfied ${autoSat} V&I proof(s) past review window`);
+
+    const purged = await purgeViProofMedia();
+    if (purged > 0) console.log(`[cron] purged media on ${purged} V&I proof(s) past 30-day retention`);
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -1193,6 +1401,13 @@ export function startCron() {
 
       const clearedHf = await clearStaleHandsfreeReviewSweep();
       if (clearedHf > 0) console.log(`[cron] auto-cleared hands-free under_review for ${clearedHf} user(s)`);
+
+      // Task #494 — V&I review window auto-satisfy + 30-day media retention purge.
+      const autoSat = await autoSatisfyExpiredProofReviews();
+      if (autoSat > 0) console.log(`[cron] auto-satisfied ${autoSat} V&I proof(s) past review window`);
+
+      const purged = await purgeViProofMedia();
+      if (purged > 0) console.log(`[cron] purged media on ${purged} V&I proof(s) past 30-day retention`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }

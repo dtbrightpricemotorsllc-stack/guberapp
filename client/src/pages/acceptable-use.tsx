@@ -39,7 +39,7 @@ function AUPContent() {
 
         <Section title="Platform Rule">
           <p className="text-foreground font-semibold border border-primary/20 rounded-xl p-4 bg-primary/[0.04]">
-            GUBER allows visual verification, errands, inspections, documentation, and general task-based services. Jobs involving illegal activity, hazardous physical labor, or licensed professional services without proper credentials are prohibited.
+            GUBER allows visual proof (eyes on the ground — not inspections), errands, documentation, and general task-based services. Jobs involving illegal activity, hazardous physical labor, or licensed professional services without proper credentials are prohibited.
           </p>
         </Section>
 
@@ -47,7 +47,7 @@ function AUPContent() {
           <p>GUBER is designed for general task-based services including:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Errands, pickup/delivery, and general assistance</li>
-            <li>Visual documentation, presence verification, and inspection reports</li>
+            <li>Visual documentation, presence verification, and visual-proof reports (eyes on the ground — not licensed inspections)</li>
             <li>General labor: moving help, yard work, cleaning, assembly</li>
             <li>Skilled tasks by qualified and properly credentialed providers</li>
             <li>Barter exchanges of goods and services between users</li>
@@ -112,14 +112,14 @@ function AUPContent() {
         </Section>
 
         <Section title="6. Verify & Inspect Scope Limitations">
-          <p>All Verify & Inspect (V&I) jobs on GUBER are strictly limited to visual documentation. Providers performing V&I tasks:</p>
+          <p>Verify & Inspect (V&I) is visual proof — eyes on the ground, not inspectors. Helpers performing V&I tasks document what's there with photos and short video. They:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>May only report what is visually present or absent</li>
-            <li>May not provide mechanical diagnosis, fitment guarantees, or safety certifications</li>
-            <li>May not offer structural, engineering, legal, or habitability opinions</li>
+            <li>May not diagnose, repair, test-drive, take apart, appraise, certify, or vouch for safety, authenticity, or fitment</li>
+            <li>May not offer structural, engineering, legal, mechanical, or habitability opinions</li>
             <li>Must use the "not encountered" option when something cannot be visually confirmed</li>
           </ul>
-          <p>This scope limitation is a platform rule, not just a disclaimer. Providers who exceed this scope may be removed from the Platform.</p>
+          <p>This scope limitation is a platform rule, not just a disclaimer. Helpers who exceed this scope may be removed from the Platform.</p>
         </Section>
 
         <Section title="7. Enforcement">

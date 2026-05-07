@@ -57,6 +57,8 @@ import {
   getCategoryDisclaimer,
   type SafetyTriggerHit,
   type CategoryDisclaimer,
+  VI_COPY,
+  VI_RETAKE_LIMIT,
 } from "@shared/liability";
 import {
   Select,
@@ -165,6 +167,10 @@ export default function JobDetail() {
   const [posterCancelNote, setPosterCancelNote] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectFeedback, setRejectFeedback] = useState("");
+  // Task #494 — V&I Satisfied / Request-Retake controls.
+  const [showRetakeDialog, setShowRetakeDialog] = useState(false);
+  const [retakeReason, setRetakeReason] = useState("");
+  const [retakeProofId, setRetakeProofId] = useState<number | null>(null);
   // ── Dispute & Payout Protection (Task #317) ─────────────────────────
   const [showReportIssueModal, setShowReportIssueModal] = useState(false);
   const [reportIssueType, setReportIssueType] = useState<DisputeIssueType | "">("");
@@ -560,6 +566,37 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       toast({ title: "Proof Rejected", description: "The worker has been notified and can resubmit." });
     },
     onError: (err: any) => showError(err),
+  });
+
+  // Task #494 — V&I Satisfied / Request-Retake mutations.
+  const satisfyProofMutation = useMutation({
+    mutationFn: (proofId: number) => apiRequest("POST", `/api/proof/${proofId}/satisfy`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/proof`] });
+      toast({
+        title: "Marked Satisfied",
+        description: "Payment is being released to the helper.",
+      });
+    },
+    onError: (err: any) => showError(err, "Could not mark satisfied"),
+  });
+
+  const retakeProofMutation = useMutation({
+    mutationFn: ({ proofId, reason }: { proofId: number; reason: string }) =>
+      apiRequest("POST", `/api/proof/${proofId}/retake`, { reason }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/jobs/${jobId}/proof`] });
+      setShowRetakeDialog(false);
+      setRetakeReason("");
+      setRetakeProofId(null);
+      toast({
+        title: "Retake requested",
+        description: "The helper has been notified and has a fresh window to resubmit.",
+      });
+    },
+    onError: (err: any) => showError(err, "Could not request retake"),
   });
 
   const escalateMutation = useMutation({
@@ -1512,6 +1549,11 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <ImageIcon className="w-4 h-4 text-primary" /> Worker Proof Submitted
               </h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">Review the photos and info below. Approve if satisfied — or send it back with feedback.</p>
+              {isVIJob && (
+                <div className="mt-2 rounded-lg p-2.5 bg-primary/5 border border-primary/20" data-testid="banner-vi-review-positioning">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{VI_COPY.reviewBanner}</p>
+                </div>
+              )}
             </div>
             {proofs.map((proof) => {
               let images: string[] = [];
@@ -1779,28 +1821,121 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   {proof.notes && (
                     <p className="text-xs text-muted-foreground" data-testid={`text-notes-${proof.id}`}>{proof.notes}</p>
                   )}
+                  {/* Task #494 — purged-media notice. */}
+                  {proof.mediaPurgedAt && (
+                    <p className="text-[11px] text-muted-foreground italic border-t border-border/20 pt-2" data-testid={`text-media-purged-${proof.id}`}>
+                      {VI_COPY.mediaPurgedNotice}
+                    </p>
+                  )}
+                  {/* Task #494 — V&I retake history badges. */}
+                  {isVIJob && (proof.retakeCount ?? 0) > 0 && (
+                    <div className="text-[11px] text-muted-foreground" data-testid={`text-retake-history-${proof.id}`}>
+                      Retakes used: <strong>{proof.retakeCount}</strong> / {VI_RETAKE_LIMIT}
+                      {Array.isArray(proof.retakeReasons) && proof.retakeReasons.length > 0 && (
+                        <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                          {proof.retakeReasons.slice(-3).map((r: string, i: number) => (
+                            <li key={i} className="text-muted-foreground/80">{r}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
 
-            <div className="flex items-center gap-3 pt-1">
-              <Button
-                onClick={() => confirmMutation.mutate()}
-                disabled={confirmMutation.isPending}
-                className="flex-1 h-11 font-display tracking-wider rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
-                data-testid="button-approve-proof"
-              >
-                <ThumbsUp className="w-4 h-4 mr-2" /> WORK IS DONE ✓
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowRejectDialog(true)}
-                className="flex-1 h-11 font-display tracking-wider border-destructive/40 text-destructive rounded-xl hover:bg-destructive/10"
-                data-testid="button-not-satisfied"
-              >
-                <ThumbsDown className="w-4 h-4 mr-2" /> NOT SATISFIED
-              </Button>
-            </div>
+            {isVIJob ? (() => {
+              // Task #494 — V&I-specific Satisfied / Request-Retake controls.
+              const latestProof = [...proofs].filter(p => !p.notEncountered).sort(
+                (a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+              )[0];
+              const proofId = latestProof?.id;
+              const usedRetakes = (job.viRetakeCount ?? latestProof?.retakeCount ?? 0);
+              const retakesLeft = VI_RETAKE_LIMIT - usedRetakes;
+              const decided = !!latestProof?.reviewDecision &&
+                ["satisfied", "auto_satisfied"].includes(latestProof.reviewDecision);
+              // Lifecycle alignment with the server gate (gateViReview):
+              // only `pending` rows are reviewable. `retake_requested` means
+              // the ball is in the helper's court — neither button should be
+              // active until they resubmit (which creates a fresh `pending`
+              // proof row).
+              const awaitingHelper = latestProof?.reviewDecision === "retake_requested";
+              const expiresAt = latestProof?.reviewWindowExpiresAt
+                ? new Date(latestProof.reviewWindowExpiresAt).getTime()
+                : 0;
+              const windowExpired = !!latestProof && expiresAt > 0 && expiresAt <= Date.now();
+              return (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={() => proofId && satisfyProofMutation.mutate(proofId)}
+                      disabled={!proofId || satisfyProofMutation.isPending || decided || windowExpired || awaitingHelper}
+                      className="flex-1 h-11 font-display tracking-wider rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                      data-testid="button-vi-satisfy"
+                    >
+                      <ThumbsUp className="w-4 h-4 mr-2" /> {VI_COPY.satisfiedButton}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!proofId) return;
+                        setRetakeProofId(proofId);
+                        setRetakeReason("");
+                        setShowRetakeDialog(true);
+                      }}
+                      disabled={!proofId || retakesLeft <= 0 || decided || windowExpired || awaitingHelper}
+                      className="flex-1 h-11 font-display tracking-wider border-yellow-500/40 text-yellow-400 rounded-xl hover:bg-yellow-500/10"
+                      data-testid="button-vi-retake"
+                    >
+                      <ThumbsDown className="w-4 h-4 mr-2" /> {VI_COPY.retakeButton}
+                      {usedRetakes > 0 && ` (${retakesLeft} left)`}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{VI_COPY.satisfiedHint}</p>
+                  {!windowExpired && !decided && expiresAt > 0 && (() => {
+                    const msLeft = expiresAt - Date.now();
+                    const hoursLeft = Math.max(1, Math.round(msLeft / (60 * 60 * 1000)));
+                    return (
+                      <p className="text-[11px] text-muted-foreground" data-testid="text-vi-window-countdown">
+                        {hoursLeft === 1 ? "About 1 hour left" : `About ${hoursLeft} hours left`} to review before the proof is auto-accepted.
+                      </p>
+                    );
+                  })()}
+                  {windowExpired && (
+                    <p className="text-[11px] text-muted-foreground" data-testid="text-vi-window-expired">
+                      {VI_COPY.autoSatisfyBanner}
+                    </p>
+                  )}
+                  {retakesLeft <= 0 && !windowExpired && (
+                    <p className="text-[11px] text-yellow-400" data-testid="text-vi-retake-max">{VI_COPY.retakeMaxReached}</p>
+                  )}
+                  {awaitingHelper && !decided && !windowExpired && (
+                    <p className="text-[11px] text-yellow-400" data-testid="text-vi-awaiting-helper">
+                      Retake requested — waiting for the helper to resubmit. Buttons re-enable when fresh proof arrives.
+                    </p>
+                  )}
+                </div>
+              );
+            })() : (
+              <div className="flex items-center gap-3 pt-1">
+                <Button
+                  onClick={() => confirmMutation.mutate()}
+                  disabled={confirmMutation.isPending}
+                  className="flex-1 h-11 font-display tracking-wider rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                  data-testid="button-approve-proof"
+                >
+                  <ThumbsUp className="w-4 h-4 mr-2" /> WORK IS DONE ✓
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRejectDialog(true)}
+                  className="flex-1 h-11 font-display tracking-wider border-destructive/40 text-destructive rounded-xl hover:bg-destructive/10"
+                  data-testid="button-not-satisfied"
+                >
+                  <ThumbsDown className="w-4 h-4 mr-2" /> NOT SATISFIED
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1883,7 +2018,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 <p className="text-xs text-muted-foreground italic">"{(job as any).helperObservationNotes}"</p>
               )}
               <div className="mt-3 p-3 rounded-xl text-[10px] text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                Verification confirms visual presence only at time of inspection. GUBER does not guarantee ownership, pricing, fitment, compatibility, future availability, or mechanical condition.
+                Verification confirms visual presence only at the time of capture. GUBER does not guarantee ownership, pricing, fitment, compatibility, future availability, or mechanical condition. This is visual proof — eyes on the ground, not an inspection or appraisal.
               </div>
             </div>
           </div>
@@ -2664,7 +2799,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-display font-bold text-emerald-400 mb-0.5">Sell This Item in Marketplace</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Inspection completed. List it with your GUBER Verified badge — all photos &amp; details auto-attached.
+                  Visual proof captured. List it with your GUBER Verified badge — all photos &amp; details auto-attached.
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-emerald-400/50 shrink-0" />
@@ -3131,7 +3266,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             <div className="rounded-xl p-3 mb-4"
               style={{ background: "rgba(0,180,80,0.07)", border: "1px solid rgba(0,180,80,0.18)" }}>
               <p className="text-[11px] text-emerald-400/80 leading-relaxed">
-                All inspection photos, notes, and the verified inspector's details will be auto-attached to your listing. It will display the <strong>GUBER Verified</strong> badge instantly.
+                The V&I helper's on-site photos, short video, notes, and visit details will be auto-attached to your listing. It will display the <strong>GUBER Verified</strong> badge instantly.
               </p>
             </div>
 
@@ -3139,6 +3274,62 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               className="w-full premium-btn font-display" data-testid="button-confirm-sell">
               {fromVIMutation.isPending ? "Publishing..." : "PUBLISH TO MARKETPLACE — FREE"}
             </Button>
+          </div>
+        </div>
+      )}
+      {/* Task #494 — V&I retake reason dialog. */}
+      {showRetakeDialog && (
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center p-4" data-testid="modal-vi-retake">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRetakeDialog(false)} />
+          <div className="relative bg-card rounded-3xl border border-border/20 p-6 w-full max-w-lg space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-bold text-base">Request a retake</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{VI_COPY.retakeHint}</p>
+              </div>
+              <button
+                onClick={() => setShowRetakeDialog(false)}
+                className="p-2 rounded-full hover:bg-muted"
+                data-testid="button-close-retake-dialog"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            <Textarea
+              value={retakeReason}
+              onChange={(e) => setRetakeReason(e.target.value)}
+              placeholder='e.g. "Need a clearer photo of the VIN tag — current one is blurry"'
+              className="bg-background border-border/30 min-h-[100px] text-sm"
+              maxLength={600}
+              data-testid="input-retake-reason"
+            />
+
+            <p className="text-[11px] text-muted-foreground">{VI_COPY.retakeReasonRequired}</p>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowRetakeDialog(false)}
+                className="flex-1 h-11"
+                data-testid="button-cancel-retake"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (retakeProofId) {
+                    retakeProofMutation.mutate({ proofId: retakeProofId, reason: retakeReason.trim() });
+                  }
+                }}
+                disabled={retakeProofMutation.isPending}
+                className="flex-1 h-11 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30"
+                data-testid="button-submit-retake"
+              >
+                {retakeProofMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Send retake request
+              </Button>
+            </div>
           </div>
         </div>
       )}
