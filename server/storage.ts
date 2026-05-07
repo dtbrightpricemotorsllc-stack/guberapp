@@ -902,6 +902,7 @@ export class DatabaseStorage implements IStorage {
 
     const currentUser = await db.select().from(users).where(eq(users.id, userId));
     const existingConsecutive = currentUser[0]?.consecutiveOnTime || 0;
+    const handsfreeBlockedAttempts = currentUser[0]?.handsfreeBlockedAttempts ?? 0;
 
     let badgeTier = "standard";
     let badgeActive = true;
@@ -918,6 +919,14 @@ export class DatabaseStorage implements IStorage {
 
     if (badgeTier === "reliable" && !badgeActive && consecutiveOnTime >= 5) {
       badgeActive = true;
+    }
+
+    // task-485: any outstanding hands-free fraud blocks suppress the
+    // "reliable" badge until the counter decays (60-day cron sweep) or
+    // an admin clears it. The trust score itself is also penalized live
+    // via effectiveTrustScore() in pricing.ts.
+    if (badgeTier === "reliable" && handsfreeBlockedAttempts > 0) {
+      badgeActive = false;
     }
 
     await db.update(users).set({

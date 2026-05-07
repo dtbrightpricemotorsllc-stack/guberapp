@@ -121,7 +121,10 @@ export function getTrustInfo(
   user: Partial<User>,
   config: PlatformFeeConfig
 ): TrustInfo {
-  const score = user.trustScore ?? 50;
+  // task-485: factor the hands-free fraud counter into the live score.
+  // The stored trustScore is the long-term reputation; the counter is a
+  // short-term penalty that decays out of the cron sweep at 60 days idle.
+  const score = effectiveTrustScore(user);
   const level = getTrustLevel(score);
   const isOG = user.day1OG ?? false;
 
@@ -163,10 +166,33 @@ export const TRUST_ADJUSTMENTS = {
   PROOF_REJECTED: -20,
   LATE_COMPLETION: -5,
   OG_STARTING_BONUS: 10,
+  // task-485: per-attempt deduction applied live to the worker's effective
+  // trust score for each hard-blocked hands-free upload still on record.
+  // The counter itself decays to 0 after 60 idle days (server/cron.ts
+  // decayHandsfreeBlockedAttempts), which naturally tapers this penalty
+  // back to zero — no separate decay logic needed here.
+  HANDSFREE_BLOCKED_ATTEMPT: -4,
 };
 
 export function adjustTrustScore(currentScore: number, adjustment: number): number {
   return Math.max(0, Math.min(100, currentScore + adjustment));
+}
+
+// task-485: live deduction from the stored trust score based on the
+// rolling hands-free fraud counter. Capped so a runaway counter can't
+// drive the score arbitrarily negative before clamping.
+export function handsfreeBlockedPenalty(attempts: number | null | undefined): number {
+  const n = Math.max(0, attempts ?? 0);
+  if (n === 0) return 0;
+  // Cap the per-user penalty at -20 (5 attempts) so a single wave of
+  // bad uploads doesn't permanently bottom out the score before decay.
+  const raw = n * TRUST_ADJUSTMENTS.HANDSFREE_BLOCKED_ATTEMPT;
+  return Math.max(raw, -20);
+}
+
+export function effectiveTrustScore(user: Partial<User>): number {
+  const base = user.trustScore ?? 50;
+  return Math.max(0, Math.min(100, base + handsfreeBlockedPenalty(user.handsfreeBlockedAttempts ?? 0)));
 }
 
 export interface PayoutEligibility {

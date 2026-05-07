@@ -39,6 +39,7 @@ import {
   checkPayoutEligibility,
   loadFeeConfig,
   TRUST_ADJUSTMENTS,
+  handsfreeBlockedPenalty,
   DEFAULT_FEE_CONFIG,
   type PlatformFeeConfig,
   type TrustLevel,
@@ -189,7 +190,13 @@ function computeReliability(user: any): number {
   const completed = user.jobsCompleted || 0;
   const cancelled = user.canceledCount || 0;
   const disputed = user.jobsDisputed || 0;
-  const raw = ((completed) / accepted) * 100 - (cancelled * 3) - (disputed * 5);
+  // task-485: hands-free fraud blocks shave points off the persisted
+  // reliability score too (not just live trustScore in pricing.ts) so
+  // matching/visibility paths that read reliabilityScore directly
+  // also rank repeat offenders below clean workers. Penalty tapers
+  // automatically — the counter is reset to 0 by the 60-day cron decay.
+  const handsfreePenalty = handsfreeBlockedPenalty(user.handsfreeBlockedAttempts ?? 0);
+  const raw = ((completed) / accepted) * 100 - (cancelled * 3) - (disputed * 5) + handsfreePenalty;
   return Math.max(0, Math.min(Math.round(raw * 10) / 10, 100));
 }
 
