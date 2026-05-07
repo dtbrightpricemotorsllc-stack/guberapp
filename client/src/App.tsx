@@ -67,6 +67,7 @@ const AdminQa = lazy(() => import("@/pages/admin-qa"));
 const AdminQaInspect = lazy(() => import("@/pages/admin-qa-inspect"));
 const AdminQaCashdropDebug = lazy(() => import("@/pages/admin-qa-cashdrop-debug"));
 const AdminQaFlags = lazy(() => import("@/pages/admin-qa-flags"));
+const AdminQaPush = lazy(() => import("@/pages/admin-qa-push"));
 const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
@@ -238,6 +239,7 @@ function Router() {
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
       <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
+      <Route path="/admin/qa/push" component={() => <AdminRoute component={AdminQaPush} />} />
       <Route path="/admin/qa/cashdrops/:id/debug" component={() => <AdminRoute component={AdminQaCashdropDebug} />} />
       <Route path="/admin/qa/inspect/:type/:id" component={() => <AdminRoute component={AdminQaInspect} />} />
       <Route path="/admin/users/:id" component={() => <AdminRoute component={AdminUserProfile} />} />

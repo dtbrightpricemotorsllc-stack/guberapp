@@ -2,8 +2,34 @@ import webpush from "web-push";
 import apn from "@parse/node-apn";
 import admin from "firebase-admin";
 import { db } from "./db";
-import { pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens } from "@shared/schema";
+import { pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens, pushSendLog } from "@shared/schema";
 import { and, eq, sql } from "drizzle-orm";
+
+/**
+ * Append a row to push_send_log. Errors swallowed — logging must never
+ * break a push delivery. One row per (user, channel, attempt).
+ */
+async function logSend(
+  userId: number,
+  channel: "apns" | "fcm" | "webpush",
+  success: boolean,
+  errorCode: string | null,
+  title: string,
+  tag: string | undefined,
+): Promise<void> {
+  try {
+    await db.insert(pushSendLog).values({
+      userId,
+      channel,
+      success,
+      errorCode: errorCode || null,
+      title: title.slice(0, 200),
+      tag: tag ? tag.slice(0, 100) : null,
+    });
+  } catch {
+    /* swallow */
+  }
+}
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
@@ -174,7 +200,10 @@ async function sendToFcmTokens(
     sound?: string;
     url?: string;
     tag?: string;
-  }
+  },
+  // Optional per-token user IDs aligned with `tokens[]`, used to write
+  // per-attempt rows into push_send_log. Broadcast paths pass undefined.
+  userIds?: number[],
 ): Promise<number> {
   if (!firebaseApp || !tokens.length) return 0;
 
@@ -205,11 +234,16 @@ async function sendToFcmTokens(
 
   const result = await messaging.sendEachForMulticast(message);
 
-  // Clean up tokens that FCM no longer recognises.
+  // Clean up tokens that FCM no longer recognises + log every attempt.
   await Promise.all(
     result.responses.map(async (resp, idx) => {
-      if (resp.success) return;
+      const uid = userIds?.[idx];
+      if (resp.success) {
+        if (uid) await logSend(uid, "fcm", true, null, payload.title, payload.tag);
+        return;
+      }
       const code = (resp.error as any)?.code as string | undefined;
+      if (uid) await logSend(uid, "fcm", false, code || "unknown", payload.title, payload.tag);
       // Only delete on token-specific failure codes. messaging/invalid-argument
       // is intentionally NOT treated as a token-invalid signal because it can
       // also fire for malformed payloads, which would wrongly evict valid tokens.
@@ -239,7 +273,10 @@ async function sendToApnsTokens(
     url?: string;
     tag?: string;
     actions?: PushAction[];
-  }
+  },
+  // Optional map from device token -> user ID, used to write per-attempt
+  // rows into push_send_log. Broadcast paths pass undefined.
+  tokenToUser?: Map<string, number>,
 ): Promise<void> {
   if (!apnsProvider || !tokens.length) return;
 
@@ -256,8 +293,19 @@ async function sendToApnsTokens(
 
   const result = await apnsProvider.send(note, tokens);
 
+  if (tokenToUser) {
+    for (const ok of result.sent) {
+      const uid = tokenToUser.get(ok.device);
+      if (uid) await logSend(uid, "apns", true, null, payload.title, payload.tag);
+    }
+  }
+
   for (const failure of result.failed) {
     const reason = failure.response?.reason;
+    if (tokenToUser) {
+      const uid = tokenToUser.get(failure.device);
+      if (uid) await logSend(uid, "apns", false, reason || "unknown", payload.title, payload.tag);
+    }
     if (reason === "BadDeviceToken" || reason === "Unregistered") {
       await db
         .delete(apnsDeviceTokens)
@@ -292,6 +340,7 @@ export async function sendPushToUser(
     .where(eq(apnsDeviceTokens.userId, userId));
 
   if (nativeTokenRows.length) {
+    const tokenToUser = new Map(nativeTokenRows.map((r) => [r.deviceToken, r.userId] as const));
     await sendToApnsTokens(
       nativeTokenRows.map((r) => r.deviceToken),
       {
@@ -301,7 +350,8 @@ export async function sendPushToUser(
         url: payload.url,
         tag: payload.tag,
         actions: payload.actions,
-      }
+      },
+      tokenToUser,
     );
     apnsSent = nativeTokenRows.length;
   }
@@ -321,7 +371,8 @@ export async function sendPushToUser(
         sound: payload.sound || "guber_default.wav",
         url: payload.url,
         tag: payload.tag,
-      }
+      },
+      fcmTokenRows.map((r) => r.userId),
     );
   }
 
@@ -360,7 +411,10 @@ export async function sendPushToUser(
           pushPayload,
           { headers: apnsHeaders(sub.endpoint) }
         );
+        await logSend(userId, "webpush", true, null, payload.title, payload.tag);
       } catch (err: any) {
+        const code = err.statusCode ? `http_${err.statusCode}` : (err.message || "unknown").slice(0, 80);
+        await logSend(userId, "webpush", false, code, payload.title, payload.tag);
         if (err.statusCode === 410 || err.statusCode === 404) {
           await db
             .delete(pushSubscriptions)
@@ -463,7 +517,7 @@ export async function sendPushBroadcast(
   // ── 1. Native iOS APNs path ──────────────────────────────────────────────
   if (apnsProvider) {
     let apnsQuery = `
-      SELECT DISTINCT ON (adt.user_id) adt.device_token
+      SELECT DISTINCT ON (adt.user_id) adt.device_token, adt.user_id
       FROM apns_device_tokens adt
       JOIN users u ON u.id = adt.user_id
       WHERE u.role != 'admin'
@@ -473,7 +527,9 @@ export async function sendPushBroadcast(
     if (audience === "trustbox") apnsQuery += ` AND u.trust_box_purchased = TRUE`;
 
     const apnsResult = await db.execute(sql.raw(apnsQuery));
-    const apnsTokens = (apnsResult.rows as { device_token: string }[]).map((r) => r.device_token);
+    const apnsRows = apnsResult.rows as { device_token: string; user_id: number }[];
+    const apnsTokens = apnsRows.map((r) => r.device_token);
+    const apnsTokenToUser = new Map(apnsRows.map((r) => [r.device_token, r.user_id] as const));
 
     if (apnsTokens.length) {
       const note = new apn.Notification();
@@ -488,8 +544,14 @@ export async function sendPushBroadcast(
       sent += result.sent.length;
       failed += result.failed.length;
 
+      for (const ok of result.sent) {
+        const uid = apnsTokenToUser.get(ok.device);
+        if (uid) await logSend(uid, "apns", true, null, payload.title, "broadcast");
+      }
       for (const failure of result.failed) {
         const reason = failure.response?.reason;
+        const uid = apnsTokenToUser.get(failure.device);
+        if (uid) await logSend(uid, "apns", false, reason || "unknown", payload.title, "broadcast");
         if (reason === "BadDeviceToken" || reason === "Unregistered") {
           await db
             .delete(apnsDeviceTokens)
@@ -504,7 +566,7 @@ export async function sendPushBroadcast(
   // ── 2. Native Android FCM path ──────────────────────────────────────────
   if (firebaseApp) {
     let fcmQuery = `
-      SELECT DISTINCT ON (fdt.user_id) fdt.device_token
+      SELECT DISTINCT ON (fdt.user_id) fdt.device_token, fdt.user_id
       FROM fcm_device_tokens fdt
       JOIN users u ON u.id = fdt.user_id
       WHERE u.role != 'admin'
@@ -514,19 +576,24 @@ export async function sendPushBroadcast(
     if (audience === "trustbox") fcmQuery += ` AND u.trust_box_purchased = TRUE`;
 
     const fcmResult = await db.execute(sql.raw(fcmQuery));
-    const fcmTokens = (fcmResult.rows as { device_token: string }[]).map((r) => r.device_token);
+    const fcmRows = fcmResult.rows as { device_token: string; user_id: number }[];
 
-    if (fcmTokens.length) {
+    if (fcmRows.length) {
       // FCM multicast caps at 500 tokens per request.
       const CHUNK = 500;
-      for (let i = 0; i < fcmTokens.length; i += CHUNK) {
-        const slice = fcmTokens.slice(i, i + CHUNK);
-        const successCount = await sendToFcmTokens(slice, {
-          title: payload.title,
-          body: payload.body,
-          sound: "guber_default.wav",
-          url: payload.url,
-        });
+      for (let i = 0; i < fcmRows.length; i += CHUNK) {
+        const slice = fcmRows.slice(i, i + CHUNK);
+        const successCount = await sendToFcmTokens(
+          slice.map((r) => r.device_token),
+          {
+            title: payload.title,
+            body: payload.body,
+            sound: "guber_default.wav",
+            url: payload.url,
+            tag: "broadcast",
+          },
+          slice.map((r) => r.user_id),
+        );
         sent += successCount;
         failed += slice.length - successCount;
       }
@@ -537,7 +604,7 @@ export async function sendPushBroadcast(
   if (!vapidConfigured) return { sent, failed, total: sent + failed };
 
   let vapidQuery = `
-    SELECT DISTINCT ON (ps.user_id) ps.endpoint, ps.p256dh, ps.auth
+    SELECT DISTINCT ON (ps.user_id) ps.endpoint, ps.p256dh, ps.auth, ps.user_id
     FROM push_subscriptions ps
     JOIN users u ON u.id = ps.user_id
     WHERE u.role != 'admin'
@@ -547,7 +614,7 @@ export async function sendPushBroadcast(
   if (audience === "trustbox") vapidQuery += ` AND u.trust_box_purchased = TRUE`;
 
   const vapidResult = await db.execute(sql.raw(vapidQuery));
-  const subs = vapidResult.rows as { endpoint: string; p256dh: string; auth: string }[];
+  const subs = vapidResult.rows as { endpoint: string; p256dh: string; auth: string; user_id: number }[];
 
   const pushPayload = JSON.stringify({
     title: payload.title,
@@ -566,7 +633,10 @@ export async function sendPushBroadcast(
           { headers: apnsHeaders(sub.endpoint) }
         );
         sent++;
+        await logSend(sub.user_id, "webpush", true, null, payload.title, "broadcast");
       } catch (err: any) {
+        const code = err.statusCode ? `http_${err.statusCode}` : (err.message || "unknown").slice(0, 80);
+        await logSend(sub.user_id, "webpush", false, code, payload.title, "broadcast");
         if (err.statusCode === 410 || err.statusCode === 404) {
           await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, sub.endpoint));
         }

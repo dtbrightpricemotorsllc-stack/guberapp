@@ -16,6 +16,10 @@ import {
   walletTransactions,
   jobStatusLogs,
   featureFlags,
+  pushSendLog,
+  apnsDeviceTokens,
+  fcmDeviceTokens,
+  pushSubscriptions,
 } from "@shared/schema";
 import { storage } from "./storage";
 import { sanitizeJobForPublic } from "./sanitize-job";
@@ -571,6 +575,66 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       out[def.key] = await isFeatureEnabledFor(def.key, viewer ? { id: viewer.id, role: viewer.role } : null);
     }
     res.json(out);
+  });
+
+  // ── Push delivery log ──────────────────────────────────────────────────
+  // Per-attempt log of every server-initiated push (apns / fcm / webpush).
+  // Read-only. Used by /admin/qa/push to answer "did this user actually
+  // get notified?" when in-app behaviour is suspect.
+  app.get("/api/admin/qa/push-log", requireAdmin, async (req, res) => {
+    const userId = req.query.userId ? Number(req.query.userId) : null;
+    const channel = typeof req.query.channel === "string" ? req.query.channel : null;
+    const onlyFailed = req.query.onlyFailed === "true";
+    const limit = Math.min(Number(req.query.limit) || 200, 1000);
+
+    const where: any[] = [];
+    if (userId) where.push(eq(pushSendLog.userId, userId));
+    if (channel === "apns" || channel === "fcm" || channel === "webpush") {
+      where.push(eq(pushSendLog.channel, channel));
+    }
+    if (onlyFailed) where.push(eq(pushSendLog.success, false));
+
+    const rows = await db
+      .select()
+      .from(pushSendLog)
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(desc(pushSendLog.sentAt))
+      .limit(limit);
+
+    // Aggregate counts for the header strip — last 24h success / fail by channel.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const summaryRows = await db.execute(sql`
+      SELECT channel, success, COUNT(*)::int AS n
+      FROM push_send_log
+      WHERE sent_at > ${since}
+      GROUP BY channel, success
+    `);
+    const summary: Record<string, { success: number; failed: number }> = {
+      apns: { success: 0, failed: 0 },
+      fcm: { success: 0, failed: 0 },
+      webpush: { success: 0, failed: 0 },
+    };
+    for (const r of summaryRows.rows as any[]) {
+      const ch = r.channel as string;
+      if (!summary[ch]) summary[ch] = { success: 0, failed: 0 };
+      if (r.success) summary[ch].success += r.n;
+      else summary[ch].failed += r.n;
+    }
+
+    // Token registration totals so admins can see at a glance whether the
+    // native paths even have anyone subscribed.
+    const [apnsCount, fcmCount, webCount] = await Promise.all([
+      db.execute(sql`SELECT COUNT(*)::int AS n, COUNT(DISTINCT user_id)::int AS u FROM apns_device_tokens`),
+      db.execute(sql`SELECT COUNT(*)::int AS n, COUNT(DISTINCT user_id)::int AS u FROM fcm_device_tokens`),
+      db.execute(sql`SELECT COUNT(*)::int AS n, COUNT(DISTINCT user_id)::int AS u FROM push_subscriptions`),
+    ]);
+    const tokens = {
+      apns: apnsCount.rows[0] as any,
+      fcm: fcmCount.rows[0] as any,
+      webpush: webCount.rows[0] as any,
+    };
+
+    res.json({ rows, summary, tokens });
   });
 
   // Boot-time seed call so the table is populated before first admin visit.

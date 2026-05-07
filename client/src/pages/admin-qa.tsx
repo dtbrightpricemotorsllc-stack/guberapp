@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell } from "lucide-react";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -359,6 +359,7 @@ export default function AdminQa() {
           <TabsTrigger value="users" data-testid="tab-users"><UsersIcon className="mr-1 h-3 w-3" />Users</TabsTrigger>
           <TabsTrigger value="cashdrops" data-testid="tab-cashdrops"><Bug className="mr-1 h-3 w-3" />Cash Drop Debug</TabsTrigger>
           <TabsTrigger value="flags" data-testid="tab-flags"><Flag className="mr-1 h-3 w-3" />Feature Flags</TabsTrigger>
+          <TabsTrigger value="push" data-testid="tab-push"><Bell className="mr-1 h-3 w-3" />Push Log</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -371,6 +372,15 @@ export default function AdminQa() {
             <CardHeader><CardTitle>Feature Flags</CardTitle></CardHeader>
             <CardContent>
               <Button asChild><Link href="/admin/qa/flags">Open Feature Flag Console</Link></Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="push">
+          <Card>
+            <CardHeader><CardTitle>Push Delivery Log</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p className="text-muted-foreground">Per-attempt log of every server-initiated push (APNs / FCM / Web Push) with success/error codes. Use to verify "did this user actually get notified?" when something looks wrong.</p>
+              <Button asChild><Link href="/admin/qa/push">Open Push Log</Link></Button>
             </CardContent>
           </Card>
         </TabsContent>

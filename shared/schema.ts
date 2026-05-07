@@ -906,6 +906,22 @@ export const fcmDeviceTokens = pgTable("fcm_device_tokens", {
 
 export type FcmDeviceToken = typeof fcmDeviceTokens.$inferSelect;
 
+// Per-attempt log of every push delivery the server tries to send. Used by
+// the admin "Push Log" tab to answer "did this user actually get notified?"
+// when in-app behaviour is suspect. One row per (user, channel, attempt).
+export const pushSendLog = pgTable("push_send_log", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  channel: text("channel").notNull(), // 'apns' | 'fcm' | 'webpush'
+  success: boolean("success").notNull(),
+  errorCode: text("error_code"),
+  title: text("title"),
+  tag: text("tag"),
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
+export type PushSendLog = typeof pushSendLog.$inferSelect;
+
 export const businessAccounts = pgTable("business_accounts", {
   id: serial("id").primaryKey(),
   ownerUserId: integer("owner_user_id").notNull().unique(),

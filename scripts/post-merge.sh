@@ -132,6 +132,20 @@ CREATE TABLE IF NOT EXISTS apns_device_tokens (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- push_send_log: per-attempt push delivery log (admin Push Log tab)
+CREATE TABLE IF NOT EXISTS push_send_log (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  channel TEXT NOT NULL,
+  success BOOLEAN NOT NULL,
+  error_code TEXT,
+  title TEXT,
+  tag TEXT,
+  sent_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS push_send_log_user_idx ON push_send_log (user_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS push_send_log_sent_idx ON push_send_log (sent_at DESC);
+
 -- worker_qualifications: AI-extracted credential card fields (task-372)
 -- Read by /api/users/:id/certifications and /api/users/me/qualifications;
 -- production was missing these so both endpoints returned 500 with
