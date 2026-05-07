@@ -71,6 +71,22 @@ describe("evaluatePreflight - distance boundary", () => {
     expect(r.warnings.length).toBe(0);
     expect(r.distanceMeters).toBe(0);
   });
+  it("persists embedded clip GPS even when the job has no coords", () => {
+    const r = evaluatePreflight({ clipGps: { lat: 12.34, lng: -56.78 }, now: NOW });
+    expect(r.gpsSource).toBe("clip");
+    expect(r.clipGps).toEqual({ lat: 12.34, lng: -56.78 });
+    expect(r.distanceMeters).toBeUndefined();
+    expect(r.warnings.length).toBe(0);
+  });
+  it("persists embedded clip GPS alongside the distance check", () => {
+    const r = evaluatePreflight({
+      ...JOB,
+      clipGps: { lat: JOB.jobLat + 0.001, lng: JOB.jobLng },
+      now: NOW,
+    });
+    expect(r.clipGps).toEqual({ lat: JOB.jobLat + 0.001, lng: JOB.jobLng });
+    expect(r.distanceMeters).toBeGreaterThan(0);
+  });
   it("warns when clip GPS is more than 500m away", () => {
     const r = evaluatePreflight({
       ...JOB,

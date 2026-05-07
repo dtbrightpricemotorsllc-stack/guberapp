@@ -20,6 +20,10 @@ export interface PreflightResult {
   ageHours?: number;
   distanceMeters?: number;
   gpsSource?: "clip" | "none";
+  // Coordinates pulled from the file's container metadata (moov ISO-6709),
+  // when present. Surfaced so reviewers can see what the file itself claims,
+  // independent of the device's live GPS at upload time.
+  clipGps?: { lat: number; lng: number };
 }
 
 export function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -64,18 +68,17 @@ export function evaluatePreflight(input: PreflightInput): PreflightResult {
     }
   }
 
-  if (
-    input.clipGps &&
-    typeof input.jobLat === "number" &&
-    typeof input.jobLng === "number"
-  ) {
-    const dist = haversineMeters(input.clipGps, { lat: input.jobLat, lng: input.jobLng });
-    result.distanceMeters = Math.round(dist);
+  if (input.clipGps) {
+    result.clipGps = { lat: input.clipGps.lat, lng: input.clipGps.lng };
     result.gpsSource = "clip";
-    if (dist > PREFLIGHT_MAX_DISTANCE_M) {
-      warnings.push(
-        `Clip's embedded GPS is ${Math.round(dist)}m from the job site (further than ${PREFLIGHT_MAX_DISTANCE_M}m).`,
-      );
+    if (typeof input.jobLat === "number" && typeof input.jobLng === "number") {
+      const dist = haversineMeters(input.clipGps, { lat: input.jobLat, lng: input.jobLng });
+      result.distanceMeters = Math.round(dist);
+      if (dist > PREFLIGHT_MAX_DISTANCE_M) {
+        warnings.push(
+          `Clip's embedded GPS is ${Math.round(dist)}m from the job site (further than ${PREFLIGHT_MAX_DISTANCE_M}m).`,
+        );
+      }
     }
   }
 

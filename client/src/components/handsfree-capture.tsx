@@ -177,6 +177,7 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
           ageHours: preflight.ageHours,
           distanceMeters: preflight.distanceMeters,
           gpsSource: preflight.gpsSource,
+          clipGps: preflight.clipGps ?? null,
         },
       });
       toast({ title: "POV proof uploaded", description: "Imported clip recorded as Hands-Free proof." });

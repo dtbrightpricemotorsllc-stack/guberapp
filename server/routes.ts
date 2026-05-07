@@ -7317,10 +7317,22 @@ export async function registerRoutes(
       let gpsDistanceMeters: number | null = null;
 
       if (isPairedImport) {
+        // Prefer the timestamp embedded *inside the file's container metadata*
+        // (task-471) — moov mvhd creationTime is harder to fake than the file
+        // system's lastModified (which gets reset whenever a clip is re-saved
+        // or shared). Fall back to fileLastModified when the parser found
+        // nothing.
+        const embeddedCapturedAt = meta.preflight?.capturedAt
+          ? new Date(meta.preflight.capturedAt)
+          : null;
         const lastMod = meta.fileLastModified ? new Date(meta.fileLastModified) : null;
-        if (lastMod && !isNaN(lastMod.getTime())) {
-          recordedAtIso = lastMod.toISOString();
-          recordedAgeSec = Math.max(0, Math.round((receivedAtMs - lastMod.getTime()) / 1000));
+        const recordedAt =
+          embeddedCapturedAt && !isNaN(embeddedCapturedAt.getTime())
+            ? embeddedCapturedAt
+            : (lastMod && !isNaN(lastMod.getTime()) ? lastMod : null);
+        if (recordedAt) {
+          recordedAtIso = recordedAt.toISOString();
+          recordedAgeSec = Math.max(0, Math.round((receivedAtMs - recordedAt.getTime()) / 1000));
           // Anchor: the moment the job was locked in (worker accepted + funded).
           // Fall back to acceptedAt-style fields, then job.startTime, then now.
           const anchorMs =
@@ -7330,19 +7342,28 @@ export async function registerRoutes(
             receivedAtMs;
           // Older than 24h before the job started → almost certainly old footage.
           const STALE_BEFORE_MS = 24 * 60 * 60 * 1000;
-          if (lastMod.getTime() < anchorMs - STALE_BEFORE_MS) {
+          if (recordedAt.getTime() < anchorMs - STALE_BEFORE_MS) {
             freshnessFlags.push("recorded_before_job");
           }
           // Recorded after upload (clock skew or fabrication).
-          if (lastMod.getTime() > receivedAtMs + 5 * 60 * 1000) {
+          if (recordedAt.getTime() > receivedAtMs + 5 * 60 * 1000) {
             freshnessFlags.push("recorded_in_future");
           }
         } else {
           freshnessFlags.push("missing_recorded_at");
         }
 
-        // Distance check: GPS at upload vs. job location.
-        const gps = meta.gpsAtStart;
+        // Distance check: prefer the GPS embedded *inside the file's container
+        // metadata* (task-471) — it reflects where the camera actually shot the
+        // clip and is much harder to fake than the device's live GPS at upload.
+        // Fall back to gpsAtStart (live device GPS) when the file has no
+        // embedded coords.
+        const embeddedGps = meta.preflight?.clipGps ?? null;
+        const liveGps = meta.gpsAtStart ?? null;
+        const gps =
+          embeddedGps && typeof embeddedGps.lat === "number" && typeof embeddedGps.lng === "number"
+            ? embeddedGps
+            : liveGps;
         if (
           gps && typeof gps.lat === "number" && typeof gps.lng === "number" &&
           typeof job.lat === "number" && typeof job.lng === "number"

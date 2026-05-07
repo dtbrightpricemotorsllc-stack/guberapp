@@ -20,7 +20,7 @@ import {
   ShoppingBag, X, ChevronRight, Navigation, Car, MapPinned, Banknote,
   PhoneOff, Clock, Loader2, ShieldCheck, Search, Trophy, CameraOff,
   Camera, AlertCircle, ChevronDown, ChevronUp, TrendingUp, Handshake, Zap,
-  Download, FileText, Award, Zap as ZapIcon,
+  Download, FileText, Award, Zap as ZapIcon, FileVideo,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import type { Job, User as UserType, ProofSubmission, BountyAttempt } from "@shared/schema";
@@ -1590,6 +1590,42 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                           <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
                           Uploaded ~{gpsDistanceMeters >= 1000 ? `${(gpsDistanceMeters / 1000).toFixed(1)} km` : `${gpsDistanceMeters} m`} from the job address
                         </Badge>
+                      )}
+                    </div>
+                  )}
+                  {captureMeta?.preflight && (captureMeta.preflight.capturedAt || captureMeta.preflight.clipGps) && (
+                    <div
+                      className="bg-muted/30 border border-border/30 rounded-lg p-2.5 space-y-1"
+                      data-testid={`panel-embedded-meta-${proof.id}`}
+                    >
+                      <div className="flex items-center gap-1.5 text-[11px] font-display uppercase tracking-wider text-muted-foreground">
+                        <FileVideo className="w-3 h-3" /> File Says
+                      </div>
+                      {captureMeta.preflight.capturedAt && (
+                        <p
+                          className="text-[11px] text-muted-foreground flex items-center gap-1"
+                          title={new Date(captureMeta.preflight.capturedAt).toLocaleString()}
+                          data-testid={`text-embedded-capturedat-${proof.id}`}
+                        >
+                          <Clock className="w-3 h-3" />
+                          Shot at {new Date(captureMeta.preflight.capturedAt).toLocaleString()}
+                        </p>
+                      )}
+                      {captureMeta.preflight.clipGps && (
+                        <p
+                          className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono"
+                          data-testid={`text-embedded-clipgps-${proof.id}`}
+                        >
+                          <MapPin className="w-3 h-3" />
+                          {captureMeta.preflight.clipGps.lat.toFixed(5)}, {captureMeta.preflight.clipGps.lng.toFixed(5)}
+                          {typeof captureMeta.preflight.distanceMeters === "number" && (
+                            <span className="text-muted-foreground/70">
+                              {" "}· {captureMeta.preflight.distanceMeters >= 1000
+                                ? `${(captureMeta.preflight.distanceMeters / 1000).toFixed(1)} km`
+                                : `${captureMeta.preflight.distanceMeters} m`} from job
+                            </span>
+                          )}
+                        </p>
                       )}
                     </div>
                   )}

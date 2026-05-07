@@ -568,6 +568,12 @@ export const proofSubmissions = pgTable("proof_submissions", {
       ageHours?: number;
       distanceMeters?: number;
       gpsSource?: "clip" | "none";
+      // ── Container-embedded values (task-471) ──
+      // Coordinates parsed directly from the MP4/MOV moov atom (e.g. ©xyz
+      // ISO-6709 box) — i.e. what the camera/file claims, independent of the
+      // device's live GPS at upload time. Used so reviewers can see
+      // "the file said: shot at <capturedAt>, at <clipGps>".
+      clipGps?: { lat: number; lng: number } | null;
     };
   }>(),
   povSummary: json("pov_summary").$type<{
