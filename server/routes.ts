@@ -1092,6 +1092,41 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/places/ip-locate", async (req: Request, res: Response) => {
+    try {
+      const fwd = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+      const ip = fwd || req.ip || "";
+      const isPrivate =
+        !ip ||
+        ip === "::1" ||
+        ip.startsWith("127.") ||
+        ip.startsWith("10.") ||
+        ip.startsWith("192.168.") ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+      const lookupIp = isPrivate ? "" : ip;
+      const url = `http://ip-api.com/json/${lookupIp}?fields=status,message,lat,lon,city,regionName,country,zip`;
+      const r = await fetch(url);
+      const data: any = await r.json().catch(() => null);
+      if (!data || data.status !== "success" || typeof data.lat !== "number" || typeof data.lon !== "number") {
+        return res.status(502).json({ error: "ip-locate unavailable" });
+      }
+      res.set("Cache-Control", "private, max-age=300");
+      return res.json({
+        lat: data.lat,
+        lng: data.lon,
+        city: data.city || null,
+        region: data.regionName || null,
+        country: data.country || null,
+        zip: data.zip || null,
+        source: "ip",
+        approximate: true,
+      });
+    } catch (err: any) {
+      console.warn(`[ip-locate] ${err?.message || err}`);
+      return res.status(502).json({ error: "ip-locate failed" });
+    }
+  });
+
   app.get("/api/places/reverse-geocode", async (req: Request, res: Response) => {
     const lat = parseFloat(req.query.lat as string);
     const lng = parseFloat(req.query.lng as string);

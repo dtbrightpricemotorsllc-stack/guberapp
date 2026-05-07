@@ -197,14 +197,35 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         }
         reverseGeocodeZip(coords.lat, coords.lng);
       },
-      (err) => {
+      async (err) => {
         const labels: Record<number, string> = {
           1: "PERMISSION_DENIED",
           2: "POSITION_UNAVAILABLE",
           3: "TIMEOUT",
         };
-        console.warn(`[GUBER] Geolocation error: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}`);
+        console.warn(`[GUBER] Geolocation error: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}. Trying IP fallback…`);
         setLocating(false);
+        try {
+          const r = await fetch("/api/places/ip-locate");
+          if (r.ok) {
+            const data = await r.json();
+            if (typeof data?.lat === "number" && typeof data?.lng === "number") {
+              const coords = { lat: data.lat, lng: data.lng };
+              setUserPos(coords);
+              setLocationDenied(false);
+              onUserPos?.(coords);
+              if (mapRef.current && !center && !hasCenteredRef.current) {
+                mapRef.current.panTo(coords);
+                mapRef.current.setZoom(10);
+                hasCenteredRef.current = true;
+              }
+              if (data.zip) setZipInput(String(data.zip));
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("[GUBER] IP fallback failed:", e);
+        }
         setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
