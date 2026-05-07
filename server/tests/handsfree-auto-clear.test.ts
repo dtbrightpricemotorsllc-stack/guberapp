@@ -7,6 +7,9 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "test-session-secret-1234567890";
+process.env.STRIPE_CONNECT_SECRET_KEY = process.env.STRIPE_CONNECT_SECRET_KEY || "sk_test_dummy";
+process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_dummy";
+process.env.DISABLE_BACKGROUND_JOBS = "true";
 
 import { db } from "../db";
 import { auditLogs, users } from "@shared/schema";
@@ -17,6 +20,7 @@ import {
   clearStaleHandsfreeReviewSweep,
   tryAutoClearStreak,
 } from "../handsfree-auto-clear";
+import { __test__ as cronTest } from "../cron";
 
 const created: number[] = [];
 
@@ -24,14 +28,24 @@ function uniqueSuffix(): string {
   return `${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
 }
 
-async function makeUnderReviewUser(opts: { underReview: boolean } = { underReview: true }): Promise<number> {
+async function makeUnderReviewUser(
+  opts: {
+    underReview?: boolean;
+    handsfreeBlockedAttempts?: number;
+    handsfreeBlockedLastAt?: Date | null;
+    strikes30d?: number;
+  } = {},
+): Promise<number> {
   const tag = uniqueSuffix();
   const userValues: typeof users.$inferInsert = {
     email: `t484_${tag}@guber.test`,
     username: `t484_${tag}`,
     password: "x",
     fullName: "Task 484 Test User",
-    underReview: opts.underReview,
+    underReview: opts.underReview ?? true,
+    handsfreeBlockedAttempts: opts.handsfreeBlockedAttempts ?? 0,
+    handsfreeBlockedLastAt: opts.handsfreeBlockedLastAt ?? null,
+    strikes30d: opts.strikes30d ?? 0,
   };
   const [row] = await db.insert(users).values(userValues).returning({ id: users.id });
   created.push(row.id);
@@ -177,6 +191,107 @@ describe("handsfree-auto-clear (task-484) — time-based sweep", () => {
     }
     await clearStaleHandsfreeReviewSweep();
     const [after] = await db.select({ ur: users.underReview }).from(users).where(eq(users.id, uid));
+    expect(after.ur).toBe(true);
+  });
+});
+
+describe("decayHandsfreeBlockedAttempts (task-492) — auto-clear under_review on counter decay", () => {
+  it("clears under_review for auto-flagged users when their counter ages out", async () => {
+    const oldLast = new Date(Date.now() - 70 * 86_400_000);
+    const uid = await makeUnderReviewUser({
+      handsfreeBlockedAttempts: 5,
+      handsfreeBlockedLastAt: oldLast,
+    });
+    await seedAudit(uid, "handsfree_auto_flag_for_review", -65 * 86_400_000);
+
+    await cronTest.decayHandsfreeBlockedAttempts();
+
+    const [after] = await db
+      .select({
+        ur: users.underReview,
+        attempts: users.handsfreeBlockedAttempts,
+        lastAt: users.handsfreeBlockedLastAt,
+      })
+      .from(users)
+      .where(eq(users.id, uid));
+    expect(after.ur).toBe(false);
+    expect(after.attempts).toBe(0);
+    expect(after.lastAt).toBeNull();
+
+    const clearLogs = await db
+      .select({ details: auditLogs.details })
+      .from(auditLogs)
+      .where(and(eq(auditLogs.userId, uid), eq(auditLogs.action, "handsfree_auto_flag_cleared")));
+    expect(clearLogs).toHaveLength(1);
+    expect(clearLogs[0].details).toMatch(/counter_decayed/);
+  });
+
+  it("decays counter but leaves under_review alone for admin-set flags (no auto-flag audit)", async () => {
+    const oldLast = new Date(Date.now() - 70 * 86_400_000);
+    const uid = await makeUnderReviewUser({
+      handsfreeBlockedAttempts: 2,
+      handsfreeBlockedLastAt: oldLast,
+    });
+    // No handsfree_auto_flag_for_review audit row — represents an admin-set flag.
+
+    await cronTest.decayHandsfreeBlockedAttempts();
+
+    const [after] = await db
+      .select({ ur: users.underReview, attempts: users.handsfreeBlockedAttempts })
+      .from(users)
+      .where(eq(users.id, uid));
+    expect(after.attempts).toBe(0);
+    expect(after.ur).toBe(true);
+
+    const clearLogs = await db
+      .select({ id: auditLogs.id })
+      .from(auditLogs)
+      .where(and(eq(auditLogs.userId, uid), eq(auditLogs.action, "handsfree_auto_flag_cleared")));
+    expect(clearLogs).toHaveLength(0);
+  });
+
+  it("does NOT clear when the cancellation tripwire (strikes30d>=3) is also active", async () => {
+    const oldLast = new Date(Date.now() - 70 * 86_400_000);
+    const uid = await makeUnderReviewUser({
+      handsfreeBlockedAttempts: 5,
+      handsfreeBlockedLastAt: oldLast,
+      strikes30d: 4,
+    });
+    await seedAudit(uid, "handsfree_auto_flag_for_review", -65 * 86_400_000);
+
+    await cronTest.decayHandsfreeBlockedAttempts();
+
+    const [after] = await db
+      .select({ ur: users.underReview, attempts: users.handsfreeBlockedAttempts })
+      .from(users)
+      .where(eq(users.id, uid));
+    // Counter still decays (it's a separate concern), but under_review
+    // must remain because cancellation strikes are an independent reason.
+    expect(after.attempts).toBe(0);
+    expect(after.ur).toBe(true);
+
+    const clearLogs = await db
+      .select({ id: auditLogs.id })
+      .from(auditLogs)
+      .where(and(eq(auditLogs.userId, uid), eq(auditLogs.action, "handsfree_auto_flag_cleared")));
+    expect(clearLogs).toHaveLength(0);
+  });
+
+  it("does nothing when the counter is still within the 60-day window", async () => {
+    const recentLast = new Date(Date.now() - 10 * 86_400_000);
+    const uid = await makeUnderReviewUser({
+      handsfreeBlockedAttempts: 5,
+      handsfreeBlockedLastAt: recentLast,
+    });
+    await seedAudit(uid, "handsfree_auto_flag_for_review", -8 * 86_400_000);
+
+    await cronTest.decayHandsfreeBlockedAttempts();
+
+    const [after] = await db
+      .select({ ur: users.underReview, attempts: users.handsfreeBlockedAttempts })
+      .from(users)
+      .where(eq(users.id, uid));
+    expect(after.attempts).toBe(5);
     expect(after.ur).toBe(true);
   });
 });

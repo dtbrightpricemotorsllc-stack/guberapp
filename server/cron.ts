@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db, pool } from "./db";
-import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
+import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops, auditLogs } from "@shared/schema";
 import { and, eq, lt, lte, gte, isNull, isNotNull, inArray, desc, notInArray, or, sql } from "drizzle-orm";
 import { clearStaleHandsfreeReviewSweep } from "./handsfree-auto-clear";
 import { storage } from "./storage";
@@ -906,9 +906,15 @@ async function studioMonthlyDrip(): Promise<number> {
 
 // task-482: decay the hands-free fraud counter. A worker who hasn't tripped
 // the preflight in 60 days gets their counter reset to 0 — a one-time bad
-// upload from months ago shouldn't permanently haunt them. We do NOT clear
-// `under_review` here; once an admin has been pinged, only an admin can
-// clear that flag. Returns count of users decayed.
+// upload from months ago shouldn't permanently haunt them.
+//
+// task-492: when the counter resets, also auto-lift `under_review` for
+// users whose flag came from the hands-free auto-flag tripwire (anchored
+// by a `handsfree_auto_flag_for_review` audit entry). Admin-set flags have
+// no audit anchor and are deliberately left alone — only an admin can
+// clear those. Each auto-clear writes a `handsfree_auto_flag_cleared`
+// audit row with reason `counter_decayed` so the loop is closed in the
+// log. Returns count of users decayed.
 async function decayHandsfreeBlockedAttempts(): Promise<number> {
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60_000);
   const decayed = await db.update(users)
@@ -919,8 +925,61 @@ async function decayHandsfreeBlockedAttempts(): Promise<number> {
       lt(users.handsfreeBlockedLastAt!, cutoff),
     ))
     .returning({ id: users.id });
+
+  // For every user whose counter was just zeroed, attempt to also lift
+  // `under_review` if their flag was set by the auto-flag tripwire AND
+  // no other review reason is currently active. Eligibility:
+  //   * users.under_review = true
+  //   * a handsfree_auto_flag_for_review audit row exists (admin-set
+  //     flags don't write one and are deliberately left alone)
+  //   * users.strikes30d < 3 — the cancellation tripwire in
+  //     storage.maybeUnderReview() also flips under_review when a worker
+  //     hits 3 cancellations in 30 days. If it's currently tripped,
+  //     hands-free isn't the only reason and we must NOT auto-clear.
+  for (const d of decayed) {
+    try {
+      const [anchor] = await db
+        .select({ at: sql<Date | null>`max(${auditLogs.createdAt})` })
+        .from(auditLogs)
+        .where(and(
+          eq(auditLogs.userId, d.id),
+          eq(auditLogs.action, "handsfree_auto_flag_for_review"),
+        ));
+      if (!anchor?.at) continue;
+
+      await db.transaction(async (tx) => {
+        // The strikes30d gate is enforced in the same UPDATE so it cannot
+        // race with a cancellation tripwire that fires mid-sweep.
+        const [updated] = await tx
+          .update(users)
+          .set({ underReview: false })
+          .where(and(
+            eq(users.id, d.id),
+            eq(users.underReview, true),
+            lt(users.strikes30d!, 3),
+          ))
+          .returning({ id: users.id });
+        if (!updated) return;
+        await tx.insert(auditLogs).values({
+          userId: d.id,
+          action: "handsfree_auto_flag_cleared",
+          details: JSON.stringify({
+            reason: "counter_decayed",
+            windowDays: 60,
+            flaggedAt: anchor.at instanceof Date ? anchor.at.toISOString() : new Date(anchor.at).toISOString(),
+          }),
+        });
+      });
+    } catch (err) {
+      console.error(`[handsfree-decay] failed to clear under_review for user ${d.id}:`, err);
+    }
+  }
+
   return decayed.length;
 }
+
+// Exported for test coverage of the task-492 auto-clear-on-decay behavior.
+export const __test__ = { decayHandsfreeBlockedAttempts };
 
 // Day-1 OG monthly Studio credit drip — grants 2 free Studio credits per
 // 30-day window to OG members. Gated on studioCreditsLastDripAt so re-running
