@@ -134,6 +134,14 @@ async function setHandsfreeFlag(value: "true" | "false") {
     VALUES ('handsfree_capture_enabled', ${value})
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
   `);
+  // Mirror the kill-switch in the feature-flag console too — the route
+  // dual-gates on both. Defaults to disabled, so we always have to seed it.
+  const enabled = value === "true";
+  await db.execute(sql`
+    INSERT INTO feature_flags (key, enabled, rollout_scope, allowed_roles, allowed_user_ids, note)
+    VALUES ('handsfree_capture', ${enabled}, 'global', '{}', '{}', 'wearable.test')
+    ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled, rollout_scope = 'global'
+  `);
 }
 
 function makeCloudinaryUrl(): string {
@@ -215,6 +223,10 @@ describe("Hands-Free upload routes (registerRoutes)", () => {
     });
 
     await setHandsfreeFlag("true");
+    // The feature-flag resolver caches for 30s in-process; clear it so the
+    // kill-switch test can't poison subsequent tests.
+    const { invalidateFlagCache } = await import("../feature-flags");
+    invalidateFlagCache();
     currentUserId = HELPER_ID;
   });
 
@@ -387,6 +399,106 @@ describe("Hands-Free upload routes (registerRoutes)", () => {
         .send(uploadBody(token))
         .expect(401);
       expect(state.proofs).toHaveLength(0);
+    });
+
+    // ── task-470: hard-block fraudulent uploads ──
+    describe("hard preflight blockers (task-470)", () => {
+      const JOB_LAT = 39.5;
+      const JOB_LNG = -104.9;
+
+      beforeEach(() => {
+        // Anchor the job in physical space so distance checks have meaning.
+        const j = state.jobs.get(JOB_ID);
+        if (j) {
+          j.lat = JOB_LAT;
+          j.lng = JOB_LNG;
+        }
+      });
+
+      function expectBlocked(res: any, matcher: RegExp) {
+        expect(res.status).toBe(422);
+        expect(res.body.code).toBe("preflight_blocked");
+        expect(Array.isArray(res.body.reasons)).toBe(true);
+        expect(res.body.reasons.some((r: string) => matcher.test(r))).toBe(true);
+        expect(state.proofs).toHaveLength(0);
+        expect(state.audits.some((a) => a.action === "handsfree_proof_blocked")).toBe(true);
+      }
+
+      it("rejects clips whose embedded GPS is more than 5km from the job", async () => {
+        currentUserId = HELPER_ID;
+        const token = signWearableToken(JOB_ID, HELPER_ID);
+        const body = uploadBody(token);
+        body.captureMeta = {
+          ...body.captureMeta,
+          deviceKind: "paired-android",
+          // ~11 km north of job
+          gpsAtStart: undefined as any,
+          preflight: {
+            clipGps: { lat: JOB_LAT + 0.1, lng: JOB_LNG },
+          },
+        } as any;
+
+        const res = await agent.post("/api/proof/wearable-upload").send(body);
+        expectBlocked(res, /km from the job site/);
+      });
+
+      it("rejects clips older than 7 days (capturedAt)", async () => {
+        currentUserId = HELPER_ID;
+        const token = signWearableToken(JOB_ID, HELPER_ID);
+        const body = uploadBody(token);
+        const eightDaysAgo = new Date(Date.now() - 8 * 24 * 3_600_000).toISOString();
+        body.captureMeta = {
+          ...body.captureMeta,
+          deviceKind: "paired-ios",
+          preflight: { capturedAt: eightDaysAgo },
+        } as any;
+
+        const res = await agent.post("/api/proof/wearable-upload").send(body);
+        expectBlocked(res, /days old/);
+      });
+
+      it("rejects clips older than 7 days (paired fileLastModified fallback)", async () => {
+        currentUserId = HELPER_ID;
+        const token = signWearableToken(JOB_ID, HELPER_ID);
+        const body = uploadBody(token);
+        body.captureMeta = {
+          ...body.captureMeta,
+          deviceKind: "paired-android",
+          fileLastModified: new Date(Date.now() - 10 * 24 * 3_600_000).toISOString(),
+        } as any;
+
+        const res = await agent.post("/api/proof/wearable-upload").send(body);
+        expectBlocked(res, /days old/);
+      });
+
+      it("rejects clips shorter than 5s", async () => {
+        currentUserId = HELPER_ID;
+        const token = signWearableToken(JOB_ID, HELPER_ID);
+        const start = Date.now() - 2_000;
+        const body = uploadBody(token);
+        body.captureMeta.captureStartedAt = new Date(start).toISOString();
+        body.captureMeta.captureEndedAt = new Date(start + 2_000).toISOString();
+
+        const res = await agent.post("/api/proof/wearable-upload").send(body);
+        expectBlocked(res, /5s minimum/);
+      });
+
+      it("ignores phone-handsfree fileLastModified for the age block", async () => {
+        // phone-handsfree clips are recorded live; their file mtime is the
+        // upload moment, never the recording moment, so it must not trigger
+        // the 7-day age block.
+        currentUserId = HELPER_ID;
+        const token = signWearableToken(JOB_ID, HELPER_ID);
+        const body = uploadBody(token);
+        body.captureMeta = {
+          ...body.captureMeta,
+          deviceKind: "phone-handsfree",
+          fileLastModified: new Date(Date.now() - 365 * 24 * 3_600_000).toISOString(),
+        } as any;
+
+        await agent.post("/api/proof/wearable-upload").send(body).expect(200);
+        expect(state.proofs).toHaveLength(1);
+      });
     });
   });
 });

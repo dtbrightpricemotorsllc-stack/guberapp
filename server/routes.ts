@@ -7283,6 +7283,20 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Recording duration out of allowed range (0–16 min)" });
         }
       }
+
+      // ── Hard-block obvious fakes (task-470) ──
+      // Mirror the client preflight blockers so a tampered client can't bypass them.
+      // Client constants: 5s min duration, 7-day max age, 5km max distance.
+      const HARD_MIN_DURATION_SEC = 5;
+      const HARD_MAX_AGE_HOURS = 24 * 7;
+      const HARD_MAX_DISTANCE_M = 5_000;
+      const hardBlockReasons: string[] = [];
+      if (captureMeta.captureStartedAt && captureMeta.captureEndedAt) {
+        const dur = (new Date(captureMeta.captureEndedAt).getTime() - new Date(captureMeta.captureStartedAt).getTime()) / 1000;
+        if (isFinite(dur) && dur >= 0 && dur < HARD_MIN_DURATION_SEC) {
+          hardBlockReasons.push(`Clip is only ${Math.round(dur)}s long — shorter than the ${HARD_MIN_DURATION_SEC}s minimum.`);
+        }
+      }
       const { verifyWearableToken } = await import("./wearable-token.js");
       const payload = verifyWearableToken(token);
       if (!payload) return res.status(401).json({ message: "Invalid or expired upload token" });
@@ -7301,6 +7315,68 @@ export async function registerRoutes(
         new Set(["phone-handsfree", "paired-android", "paired-ios", "direct-api"] as const);
       if (!meta || !allowedKinds.has(meta.deviceKind)) {
         return res.status(400).json({ message: "Unknown deviceKind" });
+      }
+
+      // task-470: hard-block clearly fraudulent imports. Mirror the client
+      // preflight rules using metadata the client carries in captureMeta so
+      // a tampered client can't bypass them. Each candidate field is shape-
+      // checked before use.
+      const candidateGpsSources: Array<{ lat: number; lng: number } | null | undefined> = [];
+      const embeddedGps = meta.preflight?.clipGps;
+      if (embeddedGps && typeof embeddedGps.lat === "number" && typeof embeddedGps.lng === "number") {
+        candidateGpsSources.push({ lat: embeddedGps.lat, lng: embeddedGps.lng });
+      }
+      if (meta.gpsAtStart && typeof meta.gpsAtStart.lat === "number" && typeof meta.gpsAtStart.lng === "number") {
+        candidateGpsSources.push({ lat: meta.gpsAtStart.lat, lng: meta.gpsAtStart.lng });
+      }
+      if (typeof job.lat === "number" && typeof job.lng === "number") {
+        for (const gps of candidateGpsSources) {
+          if (!gps) continue;
+          const dist = haversineMeters(gps.lat, gps.lng, job.lat, job.lng);
+          if (dist > HARD_MAX_DISTANCE_M) {
+            hardBlockReasons.push(
+              `Clip's GPS is ${(dist / 1000).toFixed(1)} km from the job site — further than the ${HARD_MAX_DISTANCE_M / 1000} km limit.`,
+            );
+            break;
+          }
+        }
+      }
+      // Age: prefer the clip's embedded capture time, then file mtime.
+      // Embedded capturedAt applies to any deviceKind; fileLastModified is
+      // only meaningful for paired imports (recorded device clips can carry
+      // the original file mtime — phone-handsfree recordings carry the
+      // upload time and are uninteresting here).
+      const ageCandidates: string[] = [];
+      if (meta.preflight?.capturedAt) ageCandidates.push(meta.preflight.capturedAt);
+      if ((meta.deviceKind === "paired-android" || meta.deviceKind === "paired-ios") && meta.fileLastModified) {
+        ageCandidates.push(meta.fileLastModified);
+      }
+      for (const iso of ageCandidates) {
+        const t = new Date(iso);
+        if (isNaN(t.getTime())) continue;
+        const ageHours = (Date.now() - t.getTime()) / 3_600_000;
+        if (ageHours > HARD_MAX_AGE_HOURS) {
+          hardBlockReasons.push(
+            `Clip is ${Math.round(ageHours / 24)} days old — older than the ${Math.round(HARD_MAX_AGE_HOURS / 24)}-day limit.`,
+          );
+          break;
+        }
+      }
+      if (hardBlockReasons.length > 0) {
+        await storage.createAuditLog({
+          userId: req.session.userId,
+          action: "handsfree_proof_blocked",
+          details: JSON.stringify({
+            jobId: payload.jobId,
+            deviceKind: meta.deviceKind,
+            reasons: hardBlockReasons,
+          }),
+        });
+        return res.status(422).json({
+          message: "This clip cannot be submitted as proof.",
+          reasons: hardBlockReasons,
+          code: "preflight_blocked",
+        });
       }
 
       // ── Freshness / location heuristics for imported paired-wearable clips ──

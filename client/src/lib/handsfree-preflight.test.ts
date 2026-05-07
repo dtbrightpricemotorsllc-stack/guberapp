@@ -5,6 +5,9 @@ import {
   PREFLIGHT_MIN_DURATION_SEC,
   PREFLIGHT_MAX_AGE_HOURS,
   PREFLIGHT_MAX_DISTANCE_M,
+  PREFLIGHT_HARD_MIN_DURATION_SEC,
+  PREFLIGHT_HARD_MAX_AGE_HOURS,
+  PREFLIGHT_HARD_MAX_DISTANCE_M,
 } from "./handsfree-preflight";
 
 const NOW = new Date("2026-05-07T12:00:00Z");
@@ -95,6 +98,39 @@ describe("evaluatePreflight - distance boundary", () => {
     });
     expect(r.distanceMeters).toBeGreaterThan(PREFLIGHT_MAX_DISTANCE_M);
     expect(r.warnings.some((w) => /from the job site/.test(w))).toBe(true);
+    expect(r.blockers.length).toBe(0);
+  });
+});
+
+describe("evaluatePreflight - hard blockers (task-470)", () => {
+  it("blocks when clip GPS is more than 5km away", () => {
+    const r = evaluatePreflight({
+      ...JOB,
+      clipGps: { lat: JOB.jobLat + 0.1, lng: JOB.jobLng },
+      now: NOW,
+    });
+    expect(r.distanceMeters).toBeGreaterThan(PREFLIGHT_HARD_MAX_DISTANCE_M);
+    expect(r.blockers.some((b) => /km from the job site/.test(b))).toBe(true);
+    expect(r.warnings.length).toBe(0);
+  });
+
+  it("blocks when clip is older than 7 days", () => {
+    const fileLastModified = new Date(NOW.getTime() - (PREFLIGHT_HARD_MAX_AGE_HOURS + 1) * 3_600_000);
+    const r = evaluatePreflight({ fileLastModified, now: NOW });
+    expect(r.blockers.some((b) => /days old/.test(b))).toBe(true);
+    expect(r.warnings.length).toBe(0);
+  });
+
+  it("blocks when duration is shorter than 5s", () => {
+    const r = evaluatePreflight({ durationSec: PREFLIGHT_HARD_MIN_DURATION_SEC - 1, now: NOW });
+    expect(r.blockers.some((b) => /minimum/.test(b))).toBe(true);
+    expect(r.warnings.length).toBe(0);
+  });
+
+  it("emits warnings (not blockers) at the soft thresholds", () => {
+    const r = evaluatePreflight({ durationSec: 10, now: NOW });
+    expect(r.blockers.length).toBe(0);
+    expect(r.warnings.length).toBe(1);
   });
   it("does not warn just inside the 500m radius", () => {
     const r = evaluatePreflight({

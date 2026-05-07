@@ -2,6 +2,12 @@ export const PREFLIGHT_MIN_DURATION_SEC = 30;
 export const PREFLIGHT_MAX_AGE_HOURS = 24;
 export const PREFLIGHT_MAX_DISTANCE_M = 500;
 
+// Hard-block thresholds (task-470). Anything past these is treated as obvious
+// fraud and the upload is refused outright instead of just warned.
+export const PREFLIGHT_HARD_MIN_DURATION_SEC = 5;
+export const PREFLIGHT_HARD_MAX_AGE_HOURS = 24 * 7; // 7 days
+export const PREFLIGHT_HARD_MAX_DISTANCE_M = 5_000; // 5 km
+
 export interface PreflightInput {
   durationSec?: number;
   capturedAt?: Date;
@@ -14,6 +20,7 @@ export interface PreflightInput {
 
 export interface PreflightResult {
   warnings: string[];
+  blockers: string[];
   durationSec?: number;
   fileLastModified?: string;
   capturedAt?: string;
@@ -40,7 +47,8 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
 export function evaluatePreflight(input: PreflightInput): PreflightResult {
   const now = input.now ?? new Date();
   const warnings: string[] = [];
-  const result: PreflightResult = { warnings, gpsSource: "none" };
+  const blockers: string[] = [];
+  const result: PreflightResult = { warnings, blockers, gpsSource: "none" };
 
   const ageSource = input.capturedAt ?? input.fileLastModified;
   if (input.fileLastModified) {
@@ -52,7 +60,11 @@ export function evaluatePreflight(input: PreflightInput): PreflightResult {
   if (ageSource) {
     const ageHours = (now.getTime() - ageSource.getTime()) / 3_600_000;
     result.ageHours = Math.round(ageHours * 10) / 10;
-    if (ageHours > PREFLIGHT_MAX_AGE_HOURS) {
+    if (ageHours > PREFLIGHT_HARD_MAX_AGE_HOURS) {
+      blockers.push(
+        `Clip is ${Math.round(ageHours / 24)} days old — older than the ${Math.round(PREFLIGHT_HARD_MAX_AGE_HOURS / 24)}-day limit. Record a fresh clip at the job site.`,
+      );
+    } else if (ageHours > PREFLIGHT_MAX_AGE_HOURS) {
       warnings.push(
         `Clip looks ${Math.round(ageHours)}h old (older than the ${PREFLIGHT_MAX_AGE_HOURS}h cutoff).`,
       );
@@ -61,7 +73,11 @@ export function evaluatePreflight(input: PreflightInput): PreflightResult {
 
   if (typeof input.durationSec === "number" && Number.isFinite(input.durationSec)) {
     result.durationSec = Math.round(input.durationSec);
-    if (input.durationSec < PREFLIGHT_MIN_DURATION_SEC) {
+    if (input.durationSec < PREFLIGHT_HARD_MIN_DURATION_SEC) {
+      blockers.push(
+        `Clip is only ${Math.round(input.durationSec)}s long — shorter than the ${PREFLIGHT_HARD_MIN_DURATION_SEC}s minimum. Record a longer clip showing the work.`,
+      );
+    } else if (input.durationSec < PREFLIGHT_MIN_DURATION_SEC) {
       warnings.push(
         `Clip is only ${Math.round(input.durationSec)}s long (minimum ${PREFLIGHT_MIN_DURATION_SEC}s recommended).`,
       );
@@ -74,7 +90,11 @@ export function evaluatePreflight(input: PreflightInput): PreflightResult {
     if (typeof input.jobLat === "number" && typeof input.jobLng === "number") {
       const dist = haversineMeters(input.clipGps, { lat: input.jobLat, lng: input.jobLng });
       result.distanceMeters = Math.round(dist);
-      if (dist > PREFLIGHT_MAX_DISTANCE_M) {
+      if (dist > PREFLIGHT_HARD_MAX_DISTANCE_M) {
+        blockers.push(
+          `Clip's embedded GPS is ${(dist / 1000).toFixed(1)} km from the job site (further than the ${PREFLIGHT_HARD_MAX_DISTANCE_M / 1000} km limit). This clip cannot have been recorded at the job.`,
+        );
+      } else if (dist > PREFLIGHT_MAX_DISTANCE_M) {
         warnings.push(
           `Clip's embedded GPS is ${Math.round(dist)}m from the job site (further than ${PREFLIGHT_MAX_DISTANCE_M}m).`,
         );

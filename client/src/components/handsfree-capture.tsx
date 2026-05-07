@@ -150,7 +150,7 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
     }
     setError(null);
     const preflight = await runPreflight(file);
-    if (preflight.warnings.length > 0) {
+    if (preflight.blockers.length > 0 || preflight.warnings.length > 0) {
       pendingImportRef.current = { file, preflight };
       setPendingPreflight(preflight);
       setPhase("warning");
@@ -307,19 +307,38 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
 
         {phase === "warning" && pendingPreflight && (
           <div className="space-y-3" data-testid="panel-handsfree-warning">
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 space-y-2">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
-                <div className="text-xs leading-relaxed text-yellow-100">
-                  This clip looks off — upload anyway? These warnings will be saved with the proof so the hirer can review them.
+            {pendingPreflight.blockers.length > 0 && (
+              <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-4 space-y-2" data-testid="panel-handsfree-blockers">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                  <div className="text-xs leading-relaxed text-red-100">
+                    This clip can't be submitted. Pick a different clip or record a new one.
+                  </div>
                 </div>
+                <ul className="text-[11px] text-red-100/90 list-disc pl-5 space-y-1" data-testid="list-handsfree-blockers">
+                  {pendingPreflight.blockers.map((b, i) => (
+                    <li key={i} data-testid={`text-handsfree-blocker-${i}`}>{b}</li>
+                  ))}
+                </ul>
               </div>
-              <ul className="text-[11px] text-muted-foreground list-disc pl-5 space-y-1" data-testid="list-handsfree-warnings">
-                {pendingPreflight.warnings.map((w, i) => (
-                  <li key={i} data-testid={`text-handsfree-warning-${i}`}>{w}</li>
-                ))}
-              </ul>
-            </div>
+            )}
+            {pendingPreflight.warnings.length > 0 && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+                  <div className="text-xs leading-relaxed text-yellow-100">
+                    {pendingPreflight.blockers.length > 0
+                      ? "Other issues with this clip:"
+                      : "This clip looks off — upload anyway? These warnings will be saved with the proof so the hirer can review them."}
+                  </div>
+                </div>
+                <ul className="text-[11px] text-muted-foreground list-disc pl-5 space-y-1" data-testid="list-handsfree-warnings">
+                  {pendingPreflight.warnings.map((w, i) => (
+                    <li key={i} data-testid={`text-handsfree-warning-${i}`}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -335,9 +354,12 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
               </Button>
               <Button
                 className="flex-1"
+                disabled={pendingPreflight.blockers.length > 0}
+                title={pendingPreflight.blockers.length > 0 ? "This clip is blocked from upload." : undefined}
                 onClick={() => {
                   const pending = pendingImportRef.current;
-                  if (pending) void performImport(pending.file, pending.preflight);
+                  if (!pending || pending.preflight.blockers.length > 0) return;
+                  void performImport(pending.file, pending.preflight);
                 }}
                 data-testid="button-handsfree-warning-confirm"
               >
