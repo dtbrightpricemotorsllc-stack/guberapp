@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { isStoreBuild } from "@/lib/platform";
+import { useAuth } from "@/lib/auth-context";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -131,6 +132,8 @@ const TEMPLATES: Template[] = [
 
 export default function StudioPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [prompt, setPrompt] = useState("");
   const [vibeId, setVibeId] = useState<number | null>(null);
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
@@ -265,6 +268,27 @@ export default function StudioPage() {
     () => sortedHistory.find((v) => v.status === "succeeded" && v.videoUrl) || null,
     [sortedHistory],
   );
+
+  if (!isAdmin) {
+    return (
+      <GuberLayout>
+        <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white flex items-center justify-center px-6" data-testid="page-studio-locked">
+          <div className="max-w-md text-center space-y-5">
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h1 className="text-3xl font-bold">GUBER Studio</h1>
+            <p className="text-neutral-400">
+              Studio is in private beta and not yet available to the public. We're putting the finishing touches on it — check back soon.
+            </p>
+            <Link href="/" className="inline-block">
+              <Button variant="outline" data-testid="button-studio-back-home">Back to Home</Button>
+            </Link>
+          </div>
+        </div>
+      </GuberLayout>
+    );
+  }
 
   return (
     <GuberLayout>
