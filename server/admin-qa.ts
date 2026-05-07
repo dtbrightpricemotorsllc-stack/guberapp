@@ -16,7 +16,6 @@ import {
   walletTransactions,
   jobStatusLogs,
   featureFlags,
-  guberPayments,
 } from "@shared/schema";
 import { storage } from "./storage";
 import { sanitizeJobForPublic } from "./sanitize-job";
@@ -282,21 +281,13 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     } else if (itemType === "cash_drop") {
       [drop] = await db.select().from(cashDrops).where(eq(cashDrops.id, itemIdN)).limit(1);
       if (!drop) return res.status(404).json({ message: "cash drop not found" });
-      // Cash drops don't carry a payment intent on the row itself — funding
-      // flows through guberPayments / dropSponsors. Refund any guberPayments
-      // tied to this drop so any held charge is unwound before we cancel.
-      const payments = await db.select().from(guberPayments).where(eq(guberPayments.jobId, itemIdN));
-      if (stripe) {
-        for (const p of payments) {
-          if (!p.stripePaymentIntentId) continue;
-          try {
-            const r = await stripe.refunds.create({ payment_intent: p.stripePaymentIntentId, reason: "requested_by_customer" });
-            refunds.push({ provider: "stripe", id: r.id, amountCents: r.amount, ok: true });
-          } catch (e: any) {
-            refunds.push({ provider: "stripe", id: p.stripePaymentIntentId, ok: false, error: e.message });
-          }
-        }
-      }
+      // IMPORTANT: cash drops have no foreign key from payments back to the
+      // drop in this schema (cash_drops has no stripe_payment_intent_id, and
+      // guber_payments.job_id is keyed to jobs/offers — IDs across tables can
+      // collide). We deliberately do NOT auto-refund here to avoid touching
+      // unrelated job/offer payments. Operator must manually refund via the
+      // Stripe dashboard before / after end-test. Recorded for audit.
+      refunds.push({ provider: "stripe", ok: false, error: "manual_refund_required:cash_drop_has_no_payment_link" });
     } else {
       return res.status(400).json({ message: "itemType must be job|cash_drop" });
     }

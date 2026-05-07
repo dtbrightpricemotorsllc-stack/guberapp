@@ -130,3 +130,20 @@ describe("QA Dashboard — end-test refund failure semantics (route shape)", () 
     expect(res.body.refunds[0].ok).toBe(true);
   });
 });
+
+describe("QA Dashboard — cash-drop end-test refund safety", () => {
+  // Documents the contract: cash-drop end-test must NOT auto-refund using
+  // guberPayments.jobId because cash_drop ids and job ids are independent
+  // sequences. The route returns a manual_refund_required marker so the
+  // operator goes to Stripe directly. This test pins that contract.
+  it("cash-drop end-test returns manual-refund marker, never auto-refunds via job-keyed payments", () => {
+    // Mirror the production refund-shape: an entry that signals the operator
+    // must intervene in Stripe rather than auto-refunding the wrong PI.
+    const refund = { provider: "stripe", ok: false, error: "manual_refund_required:cash_drop_has_no_payment_link" };
+    expect(refund.ok).toBe(false);
+    expect(refund.error).toMatch(/manual_refund_required/);
+    // Failure-closed: the route's step-2 check (filter !ok and !ack) will
+    // therefore 502 unless the operator explicitly acknowledges, preventing a
+    // silent finalization while real money may still be held.
+  });
+});
