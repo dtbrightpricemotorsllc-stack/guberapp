@@ -559,7 +559,12 @@ export default function Profile() {
             {isOwnProfile && displayUser.fullName && (
               <p className="text-xs text-muted-foreground mb-0.5">{displayUser.fullName} <span className="text-[10px]">(private)</span></p>
             )}
-            <p className="text-[11px] font-mono text-primary/70 mb-2.5 tracking-wider" data-testid="text-guber-id">{(displayUser as any).guberId || ""}</p>
+            <p className="text-[11px] font-mono text-primary/70 mb-1 tracking-wider" data-testid="text-guber-id">{(displayUser as any).guberId || ""}</p>
+            {displayUser.createdAt && (
+              <p className="text-[10px] text-muted-foreground mb-2.5" data-testid="text-joined-date">
+                Joined {new Date(displayUser.createdAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+              </p>
+            )}
             <div className="flex items-center gap-2 mb-3 flex-wrap justify-center">
               <TrustBadge tier={displayUser.tier} />
               {displayUser.day1OG && <Day1OGBadge />}
