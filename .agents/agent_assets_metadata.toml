@@ -167,3 +167,27 @@ id = "bnv-AXtpHKA3D1s9VPDCA"
 uri = "file://attached_assets/appstore/final/04_ai_or_not.png"
 type = "image"
 title = "4. AI Or Not - Spot the Real Thing"
+
+[[outputs]]
+id = "qODuzL0aXTC2tt3QT0IaT"
+uri = "file://attached_assets/appstore/real/01_dashboard.png"
+type = "image"
+title = "1. Dashboard (real app)"
+
+[[outputs]]
+id = "ittni7wecG8v5FeWzCn9X"
+uri = "file://attached_assets/appstore/real/02_map.png"
+type = "image"
+title = "2. Full Map View (real app)"
+
+[[outputs]]
+id = "xFc2brtgyzJwvuiYK-3_e"
+uri = "file://attached_assets/appstore/real/03_verify_inspect.png"
+type = "image"
+title = "3. Verify & Inspect (real app)"
+
+[[outputs]]
+id = "thT5l44sNNhN-_CwjCeI_"
+uri = "file://attached_assets/appstore/real/04_ai_or_not.png"
+type = "image"
+title = "4. AI Or Not (real app)"
