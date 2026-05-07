@@ -7268,7 +7268,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Not assigned to this job" });
       }
 
-      const allowedKinds = new Set(["phone-handsfree", "paired-android", "direct-api"]);
+      const allowedKinds = new Set(["phone-handsfree", "paired-android", "paired-ios", "direct-api"]);
       if (!allowedKinds.has(captureMeta.deviceKind)) {
         return res.status(400).json({ message: "Unknown deviceKind" });
       }

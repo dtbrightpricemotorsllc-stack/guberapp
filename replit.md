@@ -38,7 +38,7 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Token:** `server/wearable-token.ts` — HMAC-SHA256 (key = `SESSION_SECRET`), 15-min TTL, payload `{jobId, helperId, exp, nonce}`.
 - **Routes:** `GET /api/jobs/:id/wearable-upload-token` (auth + assigned check) and `POST /api/proof/wearable-upload` (token + Cloudinary URL + `captureMeta`). Both gated by `platform_settings.handsfree_capture_enabled` (admin kill-switch, defaults `true`).
 - **Storage:** `proof_submissions.capture_meta jsonb` holds `{deviceKind, deviceModel, captureStartedAt, captureEndedAt, gpsAtStart, receivedAt, consentVersion}`. Hirer-side badge "POV · Hands-Free" rendered in `job-detail.tsx` proof card.
-- **Vendor neutrality:** product copy never names a glasses brand. Three paths documented in `docs/handsfree-vi-architecture.md` — phone-as-glasses (live), Capacitor paired-device import (v1.5), and the public `/api/proof/wearable-upload` contract for partner devices.
+- **Vendor neutrality:** product copy never names a glasses brand. Three paths documented in `docs/handsfree-vi-architecture.md` — phone-as-glasses (live), Capacitor paired-device import on Android + iOS (task-457 / task-460; iOS uses `<input type=file accept="video/*">` with no `capture` attr so the Photos picker shows; deviceKind `paired-ios`), and the public `/api/proof/wearable-upload` contract for partner devices. Allowed `captureMeta.deviceKind` values: `phone-handsfree`, `paired-android`, `paired-ios`, `direct-api`.
 
 ## Where things live
 - **Job Builder Config:** `client/src/lib/job-builder-config.ts`

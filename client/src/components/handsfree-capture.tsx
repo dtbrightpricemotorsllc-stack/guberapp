@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Upload, FileVideo } from "lucide-react";
-import { isAndroid, isNativeApp } from "@/lib/platform";
+import { isAndroid, isIOS, isNativeApp } from "@/lib/platform";
 
 const MAX_DURATION_MS = 15 * 60 * 1000;
 const CONSENT_VERSION = 1;
@@ -36,7 +36,8 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
   const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const canImportPairedClip = isNativeApp && isAndroid;
+  const canImportPairedClip = isNativeApp && (isAndroid || isIOS);
+  const importDeviceKind: "paired-android" | "paired-ios" = isIOS ? "paired-ios" : "paired-android";
 
   useEffect(() => {
     if (!open) {
@@ -130,7 +131,7 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
     try {
       const lastModified = file.lastModified ? new Date(file.lastModified) : new Date();
       startedAtRef.current = lastModified.getTime();
-      await uploadBlob(file, "paired-android", file.name, {
+      await uploadBlob(file, importDeviceKind, file.name, {
         fileName: file.name,
         fileType: file.type || "video/*",
         fileSizeBytes: file.size,
@@ -148,7 +149,7 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
 
   async function uploadBlob(
     blob: Blob,
-    deviceKind: "phone-handsfree" | "paired-android",
+    deviceKind: "phone-handsfree" | "paired-android" | "paired-ios",
     fileName?: string,
     extraMeta?: Record<string, unknown>,
   ) {
@@ -297,7 +298,7 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
                         ref={importInputRef}
                         type="file"
                         accept="video/*"
-                        capture="environment"
+                        {...(isIOS ? {} : { capture: "environment" as const })}
                         className="hidden"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
@@ -323,6 +324,11 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
               {phase === "ready" && !canImportPairedClip && (
                 <p className="text-[11px] text-muted-foreground basis-full" data-testid="text-handsfree-import-hint">
                   Importing a clip from a paired wearable is available in the GUBER mobile app.
+                </p>
+              )}
+              {phase === "ready" && canImportPairedClip && isIOS && (
+                <p className="text-[11px] text-muted-foreground basis-full" data-testid="text-handsfree-import-hint-ios">
+                  Pick the wearable clip from your Photos library or Files (AirDrop/USB import from your camera also works).
                 </p>
               )}
               {phase === "recording" && (

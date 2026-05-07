@@ -541,7 +541,7 @@ export const proofSubmissions = pgTable("proof_submissions", {
   notEncountered: boolean("not_encountered").default(false),
   notEncounteredReason: text("not_encountered_reason"),
   captureMeta: json("capture_meta").$type<{
-    deviceKind: "phone-handsfree" | "paired-android" | "direct-api";
+    deviceKind: "phone-handsfree" | "paired-android" | "paired-ios" | "direct-api";
     deviceModel?: string;
     captureStartedAt?: string;
     captureEndedAt?: string;

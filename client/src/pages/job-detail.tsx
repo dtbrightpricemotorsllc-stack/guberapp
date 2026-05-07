@@ -1483,7 +1483,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       title={captureMeta.deviceModel ? `Device: ${captureMeta.deviceModel}` : undefined}
                       data-testid={`badge-pov-${proof.id}`}
                     >
-                      POV · {captureMeta.deviceKind === "paired-android" ? "Imported Clip" : captureMeta.deviceKind === "phone-handsfree" ? "Phone" : "Wearable"}
+                      POV · {captureMeta.deviceKind === "paired-android" || captureMeta.deviceKind === "paired-ios" ? "Imported Clip" : captureMeta.deviceKind === "phone-handsfree" ? "Phone" : "Wearable"}
                     </Badge>
                   )}
                   {proof.videoUrl && (
