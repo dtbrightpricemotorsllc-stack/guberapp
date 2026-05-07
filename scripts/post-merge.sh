@@ -186,7 +186,7 @@ ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS capture_meta jsonb;
 
 -- platform_settings: hands-free capture kill-switch (task-454)
 INSERT INTO platform_settings (key, value, category, description)
-VALUES ('handsfree_capture_enabled', 'true', 'trust', 'Show the Hands-Free POV recorder on V&I jobs and accept wearable uploads.')
+VALUES ('handsfree_capture_enabled', 'false', 'trust', 'Show the Hands-Free POV recorder on V&I jobs and accept wearable uploads. Default OFF — dark launch; admin enables for staff/dev cohorts first.')
 ON CONFLICT (key) DO NOTHING;
 
 SQL

@@ -1477,8 +1477,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               return (
                 <div key={proof.id} className="bg-background rounded-xl p-4 space-y-3" data-testid={`card-proof-${proof.id}`}>
                   {captureMeta?.deviceKind && (
-                    <Badge variant="outline" className="bg-primary/15 text-primary border-primary/30 text-[10px]" data-testid={`badge-pov-${proof.id}`}>
-                      POV · Hands-Free
+                    <Badge
+                      variant="outline"
+                      className="bg-primary/15 text-primary border-primary/30 text-[10px]"
+                      title={captureMeta.deviceModel ? `Device: ${captureMeta.deviceModel}` : undefined}
+                      data-testid={`badge-pov-${proof.id}`}
+                    >
+                      POV · {captureMeta.deviceKind === "paired-android" ? "Imported Clip" : captureMeta.deviceKind === "phone-handsfree" ? "Phone" : "Wearable"}
                     </Badge>
                   )}
                   {proof.videoUrl && (

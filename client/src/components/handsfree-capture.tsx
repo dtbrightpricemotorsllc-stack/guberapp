@@ -29,10 +29,13 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
   const startedAtRef = useRef<number>(0);
   const gpsRef = useRef<{ lat: number; lng: number; accuracy?: number } | null>(null);
 
-  const [phase, setPhase] = useState<Phase>("consent");
+  const consentKey = `handsfree-consent-v${CONSENT_VERSION}-job-${jobId}`;
+  const alreadyConsented = typeof window !== "undefined" && window.localStorage.getItem(consentKey) === "1";
+  const [phase, setPhase] = useState<Phase>(alreadyConsented ? "ready" : "consent");
   const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   useEffect(() => {
     if (!open) {
@@ -230,6 +233,7 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
               onClick={async () => {
                 try {
                   await apiRequest("POST", "/api/handsfree/consent", { consentVersion: CONSENT_VERSION, jobId });
+                  window.localStorage.setItem(consentKey, "1");
                 } catch {}
                 setPhase("ready");
               }}
@@ -269,9 +273,11 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
                     variant="outline"
                     className="flex-1"
                     onClick={() => importInputRef.current?.click()}
+                    disabled={isIOS}
+                    title={isIOS ? "Clip import is not yet available on iOS — use Phone POV." : undefined}
                     data-testid="button-handsfree-import"
                   >
-                    <FileVideo className="w-4 h-4 mr-2" /> Import Clip
+                    <FileVideo className="w-4 h-4 mr-2" /> {isIOS ? "Import (iOS soon)" : "Import Clip"}
                   </Button>
                   <input
                     ref={importInputRef}
