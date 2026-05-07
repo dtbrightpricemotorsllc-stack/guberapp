@@ -102,6 +102,30 @@ uri = "file://client/public/loading-badger-aiming-up.png"
 type = "image"
 title = "badger aiming phone up"
 
+[[generated]]
+id = "rqU7CH9kz6yEUjNXSBiM6"
+uri = "file://attached_assets/appstore/01_dashboard.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "MB86vzPNIR2zOVsrDiMlD"
+uri = "file://attached_assets/appstore/02_map.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "H6hNnorZljKMlNKIdH9XA"
+uri = "file://attached_assets/appstore/03_verify_inspect.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "KzS18uEwoBOwkcLOaPD4I"
+uri = "file://attached_assets/appstore/04_ai_or_not.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
@@ -119,3 +143,27 @@ id = "PWcpqt85L0CQ25wfb_XzP"
 uri = "file://attached_assets/stock_images/quick_check.jpg"
 type = "image"
 title = "quick inspection checklist clipboard verification professional"
+
+[[outputs]]
+id = "xALiaQ5cCKLon0JsjXgTl"
+uri = "file://attached_assets/appstore/final/01_dashboard.png"
+type = "image"
+title = "1. Dashboard - Your Local Trust Network"
+
+[[outputs]]
+id = "-gw3YnVvJMttGIvM8u-NU"
+uri = "file://attached_assets/appstore/final/02_map.png"
+type = "image"
+title = "2. Full Map View - Find Help. See Jobs."
+
+[[outputs]]
+id = "_1L3AAHCtWmYhVLutgyuz"
+uri = "file://attached_assets/appstore/final/03_verify_inspect.png"
+type = "image"
+title = "3. Verify & Inspect - Proof You Can Trust"
+
+[[outputs]]
+id = "bnv-AXtpHKA3D1s9VPDCA"
+uri = "file://attached_assets/appstore/final/04_ai_or_not.png"
+type = "image"
+title = "4. AI Or Not - Spot the Real Thing"
