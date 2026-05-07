@@ -546,7 +546,7 @@ export default function Investors() {
                   className="h-14 px-7 rounded-xl num-font text-sm uppercase tracking-[0.2em] font-bold inline-flex items-center justify-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition"
                   data-testid="button-cta-call"
                 >
-                  <Phone className="w-4 h-4" /> Call directly
+                  <Phone className="w-4 h-4" /> Call / Text
                 </a>
                 <a
                   href={C.meta.publicUrl}
