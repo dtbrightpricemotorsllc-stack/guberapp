@@ -134,7 +134,7 @@ export default function AiOrNot() {
 
       if (e.data.type === "guber-checkout") {
         if (isStoreBuild || isDemoUser) {
-          iframeRef.current?.contentWindow?.postMessage({ type: "guber-checkout-error", message: "Visit guberapp.app to unlock premium features" }, "*");
+          iframeRef.current?.contentWindow?.postMessage({ type: "guber-checkout-error", message: "This feature is not available in the app." }, "*");
           return;
         }
         const product = e.data.product as string | undefined;
@@ -221,7 +221,7 @@ export default function AiOrNot() {
             Open AI or Not
           </button>
           <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, textAlign: "center" }}>
-            {(isStoreBuild || isDemoUser) ? "Opens in browser. Premium features available at guberapp.app." : "Opens in a new tab. Your credits and status sync automatically."}
+            {(isStoreBuild || isDemoUser) ? "Opens in browser." : "Opens in a new tab. Your credits and status sync automatically."}
           </p>
         </div>
       )}
