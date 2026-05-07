@@ -116,17 +116,6 @@ export const INVESTOR_CONFIG = {
     ],
   },
 
-  marketplace: {
-    headline: "Five sides. One platform.",
-    sides: [
-      { title: "Helpers", accent: "green", body: "Earn on local jobs, observations, Cash Drops, and Direct Offers. Build a portable, verified resume.", chips: ["Job earnings", "Observation income", "Trust Box"] },
-      { title: "Posters", accent: "green", body: "Anyone needing local help. Pay only when a verified helper locks in. 3.2% processing.", chips: ["Pay-on-lockin", "Auto-pay increase"] },
-      { title: "Businesses", accent: "green", body: "Scout verified talent, post bulk jobs, buy observations, sponsor Cash Drops. $99/mo recurring.", chips: ["Scout Plan", "Bulk post", "Talent unlocks"] },
-      { title: "Brand Sponsors", accent: "purple", body: "Run gamified, geo-targeted Cash Drops. Reach local users where they already are.", chips: ["Cash Drop sponsor", "Featured boost"] },
-      { title: "Data Buyers", accent: "purple", body: "License real-world observations submitted by verified helpers. Vehicle condition, property checks, marketplace authenticity.", chips: ["Observation API", "V&I reports"] },
-      { title: "Network effect", accent: "cyan", body: "Every new verified helper makes the marketplace more useful for posters AND more attractive to businesses AND more valuable to data buyers.", chips: [] as string[] },
-    ],
-  },
 
   traction: {
     headline: "Where we are today — honestly.",
@@ -160,55 +149,8 @@ export const INVESTOR_CONFIG = {
     ],
   },
 
-  cost: {
-    headline: "Operating cost ≈ $0/day idle.",
-    body: "In April 2026 we re-architected the production deployment from always-warm to true serverless autoscale.",
-    bullets: [
-      "Eliminated all in-process timers and background jobs.",
-      "Moved every periodic sweep behind a single secured external cron endpoint.",
-      "Replaced the always-warm pinger with a free 2-minute scheduled GET.",
-    ],
-    before: "~$50",
-    after: "~$0",
-    delta: "~99% reduction",
-    takeaway:
-      "Unit economics work from user #1. Infrastructure scales linearly with revenue, not with calendar time.",
-  },
 
-  market: {
-    headline: "The market is enormous and informal.",
-    cards: [
-      { title: "U.S. local services", body: "Roughly $600B+/yr in home services, gig labor, and on-demand help. Most of it is still cash, Craigslist, or word-of-mouth." },
-      { title: "Verified-data B2B", body: "Insurance, lending, marketplaces, and OEMs spend billions on third-party physical inspection — addressable with V&I and Observations." },
-      { title: "Local advertising", body: "U.S. local digital ad spend exceeds $170B/yr. Cash Drops give brands a measurable, gamified, geo-targeted alternative to display ads." },
-    ],
-    closer:
-      "GUBER doesn't need to win all of any of these markets to be a meaningful business — capturing a fraction of one returns the round.",
-  },
 
-  growth: {
-    headline: "How we grow.",
-    columns: [
-      {
-        title: "Demand-side levers",
-        bullets: [
-          "Cash Drops drive viral local downloads — every drop is a free acquisition event funded by the brand sponsor.",
-          "Day-1 OG tier creates evangelists. Lower fees plus retention perks in exchange for early adoption.",
-          "Performance Shares referral system: referrer earns a share of GUBER's platform fee on referred-user jobs for 30 days. Pure cash, no credits.",
-          "SEO: structured job pages indexed by Google with clean URLs and a /jobs sitemap.",
-        ],
-      },
-      {
-        title: "Supply-side levers",
-        bullets: [
-          "Verified-helper directory grows with every job — credentials, ratings, and proof history compound.",
-          "B2B Scout Plan drags businesses (and their bulk job volume) onto the platform. Recurring $99/mo.",
-          "Observation Marketplace turns passive walking-around into income — a unique on-ramp competitors can't match.",
-          "Native Android shipping today; Apple App Store + Sign in with Apple + Apple Pay queued for the next build.",
-        ],
-      },
-    ],
-  },
 
   whyNow: {
     headline: "Why this round, why now.",
