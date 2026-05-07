@@ -89,6 +89,13 @@ export const users = pgTable("users", {
   trustBoxPurchased: boolean("trust_box_purchased").default(false),
   trustBoxSubscriptionId: text("trust_box_subscription_id"),
   isTestUser: boolean("is_test_user").default(false),
+  // task-479: rolling count of hard-blocked hands-free upload attempts
+  // (clips rejected by the server preflight as obviously fraudulent —
+  // wrong place, wrong time, or too short). Surfaced to hirers on the
+  // job detail proof card and to admins on the user profile so support
+  // can spot repeat offenders. Never decremented client-side; admin
+  // tooling can reset it if needed.
+  handsfreeBlockedAttempts: integer("handsfree_blocked_attempts").default(0),
   monthlyImageUploads: integer("monthly_image_uploads").default(0),
   monthlyVideoUploads: integer("monthly_video_uploads").default(0),
   uploadMonthYear: text("upload_month_year"),

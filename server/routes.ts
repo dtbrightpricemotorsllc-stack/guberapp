@@ -4980,11 +4980,25 @@ export async function registerRoutes(
         sanitized.jobDetails = cleanDetails;
       }
 
+      // task-479: extras layered on top of the sanitized public job that
+      // are only meaningful to the participants/admin. Typed explicitly
+      // so we don't leak `any` through the response shape.
+      type JobExtras = {
+        assignment?: {
+          workerAvailableFrom: Date | string | null;
+          workerAvailableTo: Date | string | null;
+          confirmedStartTime: Date | string | null;
+          needMoreTimeSentAt: Date | string | null;
+        };
+        helperHandsfreeBlockedAttempts?: number;
+      };
+      const extras: JobExtras = {};
+
       if (isOwner || isHelper) {
         const jobAssignments = await storage.getAssignmentsByJob(job.id);
         const activeAssignment = jobAssignments.find(a => a.helperId === job.assignedHelperId);
         if (activeAssignment) {
-          (sanitized as any).assignment = {
+          extras.assignment = {
             workerAvailableFrom: activeAssignment.workerAvailableFrom,
             workerAvailableTo: activeAssignment.workerAvailableTo,
             confirmedStartTime: activeAssignment.confirmedStartTime,
@@ -4993,7 +5007,21 @@ export async function registerRoutes(
         }
       }
 
-      res.json(sanitized);
+      // Surface the assigned helper's hard-blocked hands-free upload count
+      // to the hirer (and admins) so a worker who keeps trying to push
+      // obviously fake clips becomes visible at review time. Helpers
+      // don't see their own counter — this is a hirer signal, not a
+      // worker-facing nag.
+      if ((isOwner || isAdmin) && job.assignedHelperId) {
+        try {
+          const helper: User | undefined = await storage.getUser(job.assignedHelperId);
+          if (helper) {
+            extras.helperHandsfreeBlockedAttempts = helper.handsfreeBlockedAttempts ?? 0;
+          }
+        } catch {}
+      }
+
+      res.json({ ...sanitized, ...extras });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -7363,6 +7391,18 @@ export async function registerRoutes(
         }
       }
       if (hardBlockReasons.length > 0) {
+        // task-479: bump a per-user counter so hirers + admins can spot
+        // workers who repeatedly try to upload obviously fake clips.
+        // Best-effort: never let a counter write break the rejection.
+        let newBlockedCount: number | null = null;
+        try {
+          const [row] = await db
+            .update(usersTable)
+            .set({ handsfreeBlockedAttempts: sql`COALESCE(${usersTable.handsfreeBlockedAttempts}, 0) + 1` })
+            .where(eq(usersTable.id, req.session.userId!))
+            .returning({ count: usersTable.handsfreeBlockedAttempts });
+          newBlockedCount = row?.count ?? null;
+        } catch {}
         await storage.createAuditLog({
           userId: req.session.userId,
           action: "handsfree_proof_blocked",
@@ -7370,6 +7410,7 @@ export async function registerRoutes(
             jobId: payload.jobId,
             deviceKind: meta.deviceKind,
             reasons: hardBlockReasons,
+            blockedAttemptsTotal: newBlockedCount,
           }),
         });
         return res.status(422).json({

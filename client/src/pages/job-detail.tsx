@@ -1480,6 +1480,31 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           </div>
         )}
 
+        {/* task-479: surface fraudulent-upload attempts to the hirer
+            regardless of whether a proof has been submitted yet. The
+            /api/jobs/:id endpoint attaches helperHandsfreeBlockedAttempts
+            to the response for owner/admin viewers only. */}
+        {isOwner && (() => {
+          const blocked = (job as Job & { helperHandsfreeBlockedAttempts?: number })
+            .helperHandsfreeBlockedAttempts;
+          if (typeof blocked !== "number" || blocked <= 0) return null;
+          return (
+            <div
+              className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-3 mb-4 flex items-start gap-2"
+              data-testid="warning-helper-blocked-uploads"
+            >
+              <AlertTriangle className="w-4 h-4 text-yellow-300 shrink-0 mt-0.5" />
+              <div className="text-xs text-yellow-100/90 leading-relaxed">
+                <strong className="font-display tracking-wide">
+                  Worker tried to upload an unusable clip {blocked} time
+                  {blocked === 1 ? "" : "s"}.
+                </strong>{" "}
+                GUBER blocked clips that were too short, too old, or too far from the job site. Take an extra look at any proof they submit.
+              </div>
+            </div>
+          );
+        })()}
+
         {showProofReview && proofs && proofs.length > 0 && (
           <div className="bg-card rounded-2xl border border-border/20 p-5 mb-4 space-y-4">
             <div>

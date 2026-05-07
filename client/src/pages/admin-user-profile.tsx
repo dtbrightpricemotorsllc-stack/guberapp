@@ -33,6 +33,17 @@ export default function AdminUserProfile() {
           <Button asChild variant="ghost" size="sm"><Link href="/admin/qa"><ChevronLeft className="h-4 w-4" />QA</Link></Button>
           <h1 className="text-2xl font-bold">{u.fullName} <span className="text-sm text-muted-foreground">#{u.id}</span></h1>
           <div className="text-sm text-muted-foreground">{u.email} · {u.role} · {u.tier}{u.day1OG && " · OG"}{u.isTestUser && " · TEST"}</div>
+          {(u.handsfreeBlockedAttempts ?? 0) > 0 && (
+            <div className="mt-1">
+              <Badge
+                variant="outline"
+                className="bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
+                data-testid="badge-handsfree-blocked-attempts"
+              >
+                {u.handsfreeBlockedAttempts} blocked hands-free upload{u.handsfreeBlockedAttempts === 1 ? "" : "s"}
+              </Badge>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {u.suspended ? (
