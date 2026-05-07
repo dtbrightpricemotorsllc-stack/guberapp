@@ -4,22 +4,48 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Upload, FileVideo } from "lucide-react";
+import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Upload, FileVideo, AlertTriangle } from "lucide-react";
 import { isAndroid, isIOS, isNativeApp } from "@/lib/platform";
+import { evaluatePreflight, type PreflightResult } from "@/lib/handsfree-preflight";
+import { readVideoFileMetadata } from "@/lib/video-metadata";
 
 const MAX_DURATION_MS = 15 * 60 * 1000;
 const CONSENT_VERSION = 1;
 
 interface Props {
   jobId: number | string;
+  jobLat?: number | null;
+  jobLng?: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUploaded?: () => void;
 }
 
-type Phase = "consent" | "ready" | "recording" | "uploading" | "done";
+type Phase = "consent" | "ready" | "recording" | "uploading" | "warning" | "done";
 
-export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Props) {
+function readVideoDurationSec(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
+      v.onloadedmetadata = () => {
+        const d = isFinite(v.duration) ? v.duration : undefined;
+        cleanup();
+        resolve(d);
+      };
+      v.onerror = () => { cleanup(); resolve(undefined); };
+      v.src = url;
+      window.setTimeout(() => { cleanup(); resolve(undefined); }, 8000);
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, onUploaded }: Props) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -38,6 +64,8 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
   const importInputRef = useRef<HTMLInputElement>(null);
   const canImportPairedClip = isNativeApp && (isAndroid || isIOS);
   const importDeviceKind: "paired-android" | "paired-ios" = isIOS ? "paired-ios" : "paired-android";
+  const pendingImportRef = useRef<{ file: File; preflight: PreflightResult } | null>(null);
+  const [pendingPreflight, setPendingPreflight] = useState<PreflightResult | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -121,12 +149,39 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
     try { recorderRef.current?.state === "recording" && recorderRef.current.stop(); } catch {}
   }
 
+  async function runPreflight(file: File): Promise<PreflightResult> {
+    const [durationSec, fileMeta] = await Promise.all([
+      readVideoDurationSec(file),
+      readVideoFileMetadata(file),
+    ]);
+    return evaluatePreflight({
+      durationSec,
+      capturedAt: fileMeta.capturedAt,
+      fileLastModified: file.lastModified ? new Date(file.lastModified) : undefined,
+      clipGps: fileMeta.gps,
+      jobLat: typeof jobLat === "number" ? jobLat : null,
+      jobLng: typeof jobLng === "number" ? jobLng : null,
+    });
+  }
+
   async function handleImport(file: File) {
     if (!file) return;
     if (file.size > 200 * 1024 * 1024) {
       setError("Clip too large (max 200 MB). Trim before importing.");
       return;
     }
+    setError(null);
+    const preflight = await runPreflight(file);
+    if (preflight.warnings.length > 0) {
+      pendingImportRef.current = { file, preflight };
+      setPendingPreflight(preflight);
+      setPhase("warning");
+      return;
+    }
+    await performImport(file, preflight);
+  }
+
+  async function performImport(file: File, preflight: PreflightResult) {
     setPhase("uploading");
     try {
       const lastModified = file.lastModified ? new Date(file.lastModified) : new Date();
@@ -136,6 +191,15 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
         fileType: file.type || "video/*",
         fileSizeBytes: file.size,
         fileLastModified: lastModified.toISOString(),
+        preflightWarnings: preflight.warnings,
+        preflight: {
+          durationSec: preflight.durationSec,
+          fileLastModified: preflight.fileLastModified,
+          capturedAt: preflight.capturedAt,
+          ageHours: preflight.ageHours,
+          distanceMeters: preflight.distanceMeters,
+          gpsSource: preflight.gpsSource,
+        },
       });
       toast({ title: "POV proof uploaded", description: "Imported clip recorded as Hands-Free proof." });
       setPhase("done");
@@ -144,6 +208,9 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
     } catch (e: any) {
       setError(e?.message || "Upload failed");
       setPhase("ready");
+    } finally {
+      pendingImportRef.current = null;
+      setPendingPreflight(null);
     }
   }
 
@@ -259,7 +326,49 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
           </div>
         )}
 
-        {phase !== "consent" && (
+        {phase === "warning" && pendingPreflight && (
+          <div className="space-y-3" data-testid="panel-handsfree-warning">
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 shrink-0" />
+                <div className="text-xs leading-relaxed text-yellow-100">
+                  This clip looks off — upload anyway? These warnings will be saved with the proof so the hirer can review them.
+                </div>
+              </div>
+              <ul className="text-[11px] text-muted-foreground list-disc pl-5 space-y-1" data-testid="list-handsfree-warnings">
+                {pendingPreflight.warnings.map((w, i) => (
+                  <li key={i} data-testid={`text-handsfree-warning-${i}`}>{w}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  pendingImportRef.current = null;
+                  setPendingPreflight(null);
+                  setPhase("ready");
+                }}
+                data-testid="button-handsfree-warning-cancel"
+              >
+                Pick a different clip
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  const pending = pendingImportRef.current;
+                  if (pending) void performImport(pending.file, pending.preflight);
+                }}
+                data-testid="button-handsfree-warning-confirm"
+              >
+                Upload anyway
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {phase !== "consent" && phase !== "warning" && (
           <div className="space-y-3">
             <div className="relative bg-black rounded-xl overflow-hidden aspect-video border border-border/30">
               <video ref={videoRef} muted playsInline className="w-full h-full object-cover" data-testid="video-handsfree-preview" />

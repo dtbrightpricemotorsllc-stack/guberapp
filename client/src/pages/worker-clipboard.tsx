@@ -420,6 +420,8 @@ export default function WorkerClipboard() {
 
         <HandsFreeCapture
           jobId={jobId!}
+          jobLat={job?.lat ?? null}
+          jobLng={job?.lng ?? null}
           open={handsFreeOpen}
           onOpenChange={setHandsFreeOpen}
           onUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] })}

@@ -559,6 +559,16 @@ export const proofSubmissions = pgTable("proof_submissions", {
     freshnessFlags?: Array<
       "recorded_before_job" | "recorded_in_future" | "missing_recorded_at" | "location_mismatch"
     >;
+    // ── Pre-upload preflight warnings (task-467) ──
+    preflightWarnings?: string[];
+    preflight?: {
+      durationSec?: number;
+      fileLastModified?: string;
+      capturedAt?: string;
+      ageHours?: number;
+      distanceMeters?: number;
+      gpsSource?: "clip" | "none";
+    };
   }>(),
   povSummary: json("pov_summary").$type<{
     status: "pending" | "ready" | "failed" | "skipped";

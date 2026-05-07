@@ -1593,6 +1593,21 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       )}
                     </div>
                   )}
+                  {captureMeta?.preflightWarnings && captureMeta.preflightWarnings.length > 0 && (
+                    <div
+                      className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2.5 space-y-1"
+                      data-testid={`panel-preflight-warnings-${proof.id}`}
+                    >
+                      <div className="flex items-center gap-1.5 text-[11px] font-display uppercase tracking-wider text-yellow-300">
+                        <AlertTriangle className="w-3 h-3" /> Worker Acknowledged Issues
+                      </div>
+                      <ul className="text-[11px] text-yellow-100/90 list-disc pl-4 space-y-0.5">
+                        {captureMeta.preflightWarnings.map((w: string, i: number) => (
+                          <li key={i} data-testid={`text-preflight-warning-${proof.id}-${i}`}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {proof.videoUrl && (
                     <video
                       ref={(el) => { proofVideoRefs.current[proof.id] = el; }}
