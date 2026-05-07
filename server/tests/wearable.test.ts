@@ -8,7 +8,7 @@
 //  - POST /api/proof/wearable-upload happy path writes proof + audit log
 //  - both routes return 403 when handsfree_capture_enabled = "false"
 
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "test-session-secret-1234567890";
 process.env.STRIPE_CONNECT_SECRET_KEY = process.env.STRIPE_CONNECT_SECRET_KEY || "sk_test_dummy";
@@ -525,6 +525,203 @@ describe("Hands-Free upload routes (registerRoutes)", () => {
         } finally {
           await db.execute(sql`DELETE FROM audit_logs WHERE user_id = ${TEST_USER_ID}`);
         }
+      });
+
+      describe("auto-flag tripwire (task-486)", () => {
+        const TRIP_USER_ID = 999_999_821;
+        const TRIP_ADMIN_ID = 999_999_822;
+        const TRIP_HIRER_ID = 999_999_823;
+        const TRIP_JOB_ID = 777_777_482;
+
+        let realCreateAuditLog: typeof mockStorage.createAuditLog;
+        let realCreateNotification: typeof mockStorage.createNotification;
+
+        async function cleanup() {
+          await db.execute(sql`DELETE FROM notifications WHERE user_id IN (${TRIP_USER_ID}, ${TRIP_ADMIN_ID}, ${TRIP_HIRER_ID})`);
+          await db.execute(sql`DELETE FROM audit_logs WHERE user_id IN (${TRIP_USER_ID}, ${TRIP_ADMIN_ID}, ${TRIP_HIRER_ID})`);
+          await db.execute(sql`DELETE FROM users WHERE id IN (${TRIP_USER_ID}, ${TRIP_ADMIN_ID}, ${TRIP_HIRER_ID})`);
+        }
+
+        beforeEach(async () => {
+          await cleanup();
+          // Seed real DB rows the route + tripwire query against.
+          await db.execute(sql`
+            INSERT INTO users (id, email, password, username, full_name, role, under_review, handsfree_blocked_attempts)
+            VALUES
+              (${TRIP_USER_ID}, ${`trip-${TRIP_USER_ID}@test.local`}, 'x', ${`tripuser${TRIP_USER_ID}`}, 'Trip Worker', 'buyer', false, 0),
+              (${TRIP_ADMIN_ID}, ${`trip-${TRIP_ADMIN_ID}@test.local`}, 'x', ${`tripadmin${TRIP_ADMIN_ID}`}, 'Trip Admin', 'admin', false, 0),
+              (${TRIP_HIRER_ID}, ${`trip-${TRIP_HIRER_ID}@test.local`}, 'x', ${`triphirer${TRIP_HIRER_ID}`}, 'Trip Hirer', 'buyer', false, 0)
+          `);
+          // In-memory mirrors so getUser/getJob (still mocked) return data.
+          state.users.set(TRIP_USER_ID, { id: TRIP_USER_ID, role: "buyer", deletedAt: null });
+          state.users.set(TRIP_HIRER_ID, { id: TRIP_HIRER_ID, role: "buyer", deletedAt: null });
+          state.jobs.set(TRIP_JOB_ID, {
+            id: TRIP_JOB_ID,
+            postedById: TRIP_HIRER_ID,
+            assignedHelperId: TRIP_USER_ID,
+            status: "active",
+            title: "Verify a vehicle",
+            // Anchored so we can fail the GPS preflight reliably.
+            lat: 39.5,
+            lng: -104.9,
+          });
+
+          // Override storage.createAuditLog / createNotification so writes
+          // hit the real DB the tripwire reads from. Save originals so
+          // sibling describes aren't affected.
+          realCreateAuditLog = mockStorage.createAuditLog;
+          realCreateNotification = mockStorage.createNotification;
+          mockStorage.createAuditLog.mockImplementation(async (data: any) => {
+            state.audits.push(data);
+            const [row] = await db
+              .insert((await import("@shared/schema")).auditLogs)
+              .values(data)
+              .returning();
+            return row;
+          });
+          mockStorage.createNotification.mockImplementation(async (data: any) => {
+            state.notifications.push(data);
+            const [row] = await db
+              .insert((await import("@shared/schema")).notifications)
+              .values(data)
+              .returning();
+            return row;
+          });
+        });
+
+        afterEach(() => {
+          // Restore the original in-memory-only behavior so sibling tests
+          // (and other describes) don't write to the real DB.
+          mockStorage.createAuditLog.mockImplementation(async (data: any) => {
+            state.audits.push(data);
+            return { id: state.audits.length, ...data } as any;
+          });
+          mockStorage.createNotification.mockImplementation(async (data: any) => {
+            state.notifications.push(data);
+            return { id: state.notifications.length, ...data } as any;
+          });
+        });
+
+        afterAll(async () => {
+          await cleanup();
+        });
+
+        function blockedUploadBody(token: string, jobId: number) {
+          return {
+            token,
+            videoUrl: makeCloudinaryUrl(),
+            captureMeta: {
+              deviceKind: "paired-android",
+              deviceModel: "TestPhone",
+              captureStartedAt: new Date(Date.now() - 60_000).toISOString(),
+              captureEndedAt: new Date().toISOString(),
+              consentVersion: 1,
+              // ~11 km north of the job — guarantees a hard block.
+              preflight: { clipGps: { lat: 39.6, lng: -104.9 } },
+            },
+          };
+        }
+
+        it("lifetime ≥5 blocked uploads (across distinct jobs) flips under_review + notifies admins", async () => {
+          // Spread blocks across 5 different jobs so the per-job tripwire
+          // (≥3 on the same job) never fires first — this isolates the
+          // lifetime tripwire (≥5 total).
+          currentUserId = TRIP_USER_ID;
+          const jobIds = [TRIP_JOB_ID, TRIP_JOB_ID + 1, TRIP_JOB_ID + 2, TRIP_JOB_ID + 3, TRIP_JOB_ID + 4];
+          for (const jid of jobIds) {
+            state.jobs.set(jid, {
+              id: jid,
+              postedById: TRIP_HIRER_ID,
+              assignedHelperId: TRIP_USER_ID,
+              status: "active",
+              title: `Job ${jid}`,
+              lat: 39.5,
+              lng: -104.9,
+            });
+          }
+
+          for (const jid of jobIds) {
+            const token = signWearableToken(jid, TRIP_USER_ID);
+            const res = await agent
+              .post("/api/proof/wearable-upload")
+              .send(blockedUploadBody(token, jid));
+            expect(res.status).toBe(422);
+            expect(res.body.code).toBe("preflight_blocked");
+          }
+
+          // Counter incremented to 5
+          const userRow = await db.execute(sql`
+            SELECT under_review, handsfree_blocked_attempts
+            FROM users WHERE id = ${TRIP_USER_ID}
+          `);
+          expect(Number(userRow.rows[0].handsfree_blocked_attempts)).toBe(5);
+          expect(userRow.rows[0].under_review).toBe(true);
+
+          // Auto-flag audit entry written exactly once, tripped on lifetime
+          const flagAudit = await db.execute(sql`
+            SELECT details FROM audit_logs
+            WHERE user_id = ${TRIP_USER_ID}
+              AND action = 'handsfree_auto_flag_for_review'
+          `);
+          expect(flagAudit.rows.length).toBe(1);
+          const details = JSON.parse(String(flagAudit.rows[0].details));
+          expect(details.blockedAttemptsTotal).toBe(5);
+          expect(details.tripped).toBe("total");
+          expect(details.thresholds).toEqual({ total: 5, perJob: 3 });
+
+          // Admin was notified
+          const adminNotif = await db.execute(sql`
+            SELECT title, body FROM notifications
+            WHERE user_id = ${TRIP_ADMIN_ID}
+              AND title = 'Worker auto-flagged for review'
+          `);
+          expect(adminNotif.rows.length).toBeGreaterThanOrEqual(1);
+          expect(String(adminNotif.rows[0].body)).toMatch(new RegExp(`User #${TRIP_USER_ID}`));
+
+          // 6th block must NOT re-flag (alreadyUnderReview short-circuit)
+          const token6 = signWearableToken(jobIds[0], TRIP_USER_ID);
+          await agent
+            .post("/api/proof/wearable-upload")
+            .send(blockedUploadBody(token6, jobIds[0]))
+            .expect(422);
+          const flagAuditAfter = await db.execute(sql`
+            SELECT id FROM audit_logs
+            WHERE user_id = ${TRIP_USER_ID}
+              AND action = 'handsfree_auto_flag_for_review'
+          `);
+          expect(flagAuditAfter.rows.length).toBe(1);
+        });
+
+        it("per-job ≥3 blocked uploads on same job trips before lifetime threshold", async () => {
+          currentUserId = TRIP_USER_ID;
+          const token = signWearableToken(TRIP_JOB_ID, TRIP_USER_ID);
+
+          for (let i = 0; i < 3; i++) {
+            await agent
+              .post("/api/proof/wearable-upload")
+              .send(blockedUploadBody(token, TRIP_JOB_ID))
+              .expect(422);
+          }
+
+          const userRow = await db.execute(sql`
+            SELECT under_review, handsfree_blocked_attempts
+            FROM users WHERE id = ${TRIP_USER_ID}
+          `);
+          // Only 3 lifetime blocks — below the lifetime threshold of 5,
+          // so the per-job tripwire is what fired.
+          expect(Number(userRow.rows[0].handsfree_blocked_attempts)).toBe(3);
+          expect(userRow.rows[0].under_review).toBe(true);
+
+          const flagAudit = await db.execute(sql`
+            SELECT details FROM audit_logs
+            WHERE user_id = ${TRIP_USER_ID}
+              AND action = 'handsfree_auto_flag_for_review'
+          `);
+          expect(flagAudit.rows.length).toBe(1);
+          const details = JSON.parse(String(flagAudit.rows[0].details));
+          expect(details.tripped).toBe("per_job");
+          expect(details.blockedAttemptsThisJob).toBe(3);
+        });
       });
 
       it("ignores phone-handsfree fileLastModified for the age block", async () => {
