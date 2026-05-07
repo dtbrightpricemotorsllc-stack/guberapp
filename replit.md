@@ -67,6 +67,13 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Server Tests:** `server/tests/`
 - **E2E Tests:** `e2e/`
 
+## Payment Routing Policy
+**Authoritative doc:** `docs/payment-routing.md`. Two rails, never mix:
+- **Stripe / Stripe Connect** for all real-world services (jobs, V&I, direct offers, barter, business verification, profile unlocks, marketplace boost, Cash Drops, worker payouts, platform fees, dispute refunds). Used on **every platform** including iOS/Android store builds — Apple IAP rules exempt person-to-person and physical services.
+- **Apple IAP / Google Play Billing** *may* be required for digital-only products on store builds (Studio credits, Studio subscriptions, Trust Box, Day-1 OG, AI Or Not credits, Business Scout plan). Not yet implemented. Until implemented, digital purchase UI must be hidden on store builds via `isStoreBuild` (`client/src/lib/platform.ts`).
+- **Apple Pay / Google Pay** are *wallet payment methods inside Stripe* — not a separate rail. Allowed on any Stripe flow.
+- Known store-build gating gaps (digital UI still visible in iOS/Android builds): `studio.tsx` (credits + subscriptions), Trust Box checkout, `business_scout_plan`. Must be resolved before App Store / Play submission — see `docs/payment-routing.md`.
+
 ## Architecture decisions
 - **Post-First Job Flow:** Job posting is free; payment occurs only upon worker lock-in.
 - **Mandatory ID Verification:** For both job posters and workers to ensure security and trust.
