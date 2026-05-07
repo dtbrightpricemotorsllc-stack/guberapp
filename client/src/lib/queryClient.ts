@@ -47,10 +47,12 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  extraHeaders?: Record<string, string>,
 ): Promise<Response> {
   const headers: Record<string, string> = {
     ...(await getBearerHeader()),
     ...(data ? { "Content-Type": "application/json" } : {}),
+    ...(extraHeaders || {}),
   };
   const res = await fetch(url, {
     method,

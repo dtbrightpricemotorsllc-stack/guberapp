@@ -1,33 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
-
-/**
- * The admin-qa router is too DB-heavy to import in a unit test, so we test the
- * two safety middlewares as standalone functions by reproducing them here from
- * server/admin-qa.ts. If you change them there, change them here too — these
- * tests exist to prove the rules survive future refactors.
- */
-function requireStripeTestMode(_req: any, res: any, next: any) {
-  const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_CONNECT_SECRET_KEY || "";
-  if (key.startsWith("sk_live_")) {
-    return res.status(403).json({ message: "Sandbox endpoints refuse to run while a live Stripe key is loaded." });
-  }
-  next();
-}
-
-function requireLiveConfirmation(req: any, res: any, next: any) {
-  if (process.env.NODE_ENV !== "production") {
-    return res.status(403).json({
-      message: "Live admin actions are only available in NODE_ENV=production builds.",
-    });
-  }
-  const conf = (req.headers["x-live-confirm"] || "") as string;
-  if (conf !== "LIVE") {
-    return res.status(412).json({ message: "Live action requires header x-live-confirm: LIVE" });
-  }
-  next();
-}
+// IMPORT the real production middleware so tests cover what actually runs.
+import { requireStripeTestMode, requireLiveConfirmation } from "../admin-qa-guards";
 
 function buildApp() {
   const app = express();
@@ -54,7 +29,7 @@ afterEach(() => {
   else process.env.STRIPE_CONNECT_SECRET_KEY = ORIGINAL_STRIPE_CONNECT;
 });
 
-describe("QA Dashboard — sandbox safety guard", () => {
+describe("QA Dashboard — sandbox safety guard (real middleware)", () => {
   it("refuses sandbox writes when a live Stripe key is loaded", async () => {
     process.env.STRIPE_SECRET_KEY = "sk_live_FAKE_LIVE_KEY";
     const res = await request(buildApp()).post("/sandbox").send({});
@@ -80,7 +55,7 @@ describe("QA Dashboard — sandbox safety guard", () => {
   });
 });
 
-describe("QA Dashboard — live-confirm guard (end-test refunds)", () => {
+describe("QA Dashboard — live-confirm guard (real middleware)", () => {
   it("refuses live actions in non-production NODE_ENV even with the magic header", async () => {
     process.env.NODE_ENV = "development";
     const res = await request(buildApp())

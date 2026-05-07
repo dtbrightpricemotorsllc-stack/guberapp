@@ -14,8 +14,14 @@ export default function AdminQaCashdropDebug() {
   const { data, isLoading } = useQuery<any>({ queryKey: [`/api/admin/qa/cashdrops/${idN}/debug`], refetchInterval: 5_000 });
 
   const replay = useMutation({
-    mutationFn: ({ tool, body }: { tool: string; body?: any }) =>
-      apiRequest("POST", `/api/admin/qa/cashdrops/${idN}/replay/${tool}`, body || {}).then((r) => r.json()),
+    mutationFn: ({ tool, body }: { tool: string; body?: any }) => {
+      // Destructive replay tools are server-gated by requireLiveConfirmation
+      // (NODE_ENV=production + x-live-confirm header). Always send the header
+      // for those two — admin already double-confirmed via window.confirm().
+      const destructive = tool === "force-expire" || tool === "cancel";
+      const headers = destructive ? { "x-live-confirm": "LIVE" } : undefined;
+      return apiRequest("POST", `/api/admin/qa/cashdrops/${idN}/replay/${tool}`, body || {}, headers).then((r) => r.json());
+    },
     onSuccess: (_d, vars) => { toast({ title: `Replay ${vars.tool} ok` }); queryClient.invalidateQueries({ queryKey: [`/api/admin/qa/cashdrops/${idN}/debug`] }); },
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });

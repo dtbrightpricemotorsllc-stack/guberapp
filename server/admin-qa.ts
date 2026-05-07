@@ -46,31 +46,8 @@ async function audit(req: Request, action: string, details: Record<string, any>)
   } catch {}
 }
 
-function requireStripeTestMode(_req: Request, res: Response, next: Function) {
-  const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_CONNECT_SECRET_KEY || "";
-  if (key.startsWith("sk_live_")) {
-    return res.status(403).json({ message: "Sandbox endpoints refuse to run while a live Stripe key is loaded." });
-  }
-  next();
-}
-
-function requireLiveConfirmation(req: Request, res: Response, next: Function) {
-  // Defense in depth: only allow live (real-money) admin actions in production
-  // builds AND only when the human typed the magic confirmation header. Either
-  // missing → 412 / 403, never silent.
-  if (process.env.NODE_ENV !== "production") {
-    return res.status(403).json({
-      message: "Live admin actions are only available in NODE_ENV=production builds. End-test refunds are gated.",
-    });
-  }
-  // Header-only — body fallback removed because real-money confirmations must
-  // be CSRF-resistant and impossible to trigger from a forged JSON form post.
-  const conf = (req.headers["x-live-confirm"] || "") as string;
-  if (conf !== "LIVE") {
-    return res.status(412).json({ message: "Live action requires header x-live-confirm: LIVE" });
-  }
-  next();
-}
+// Guards extracted to ./admin-qa-guards so tests cover the real implementation.
+import { requireStripeTestMode, requireLiveConfirmation } from "./admin-qa-guards.js";
 
 export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) {
   // ── System checklist ─────────────────────────────────────────────────────
@@ -222,7 +199,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json(rows.map((r) => ({ ...r, user: userMap[r.userId] || null })));
   });
 
-  app.post("/api/admin/qa/allowlist/:itemType/:itemId", requireAdmin, async (req, res) => {
+  app.post("/api/admin/qa/allowlist/:itemType/:itemId", requireAdmin, requireLiveConfirmation, async (req, res) => {
     const { itemType, itemId } = req.params;
     if (!["job", "cash_drop"].includes(itemType)) return res.status(400).json({ message: "itemType must be job|cash_drop" });
     const itemIdN = parseInt(itemId);
@@ -246,7 +223,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json({ ok: true, userId: target.id });
   });
 
-  app.delete("/api/admin/qa/allowlist/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/admin/qa/allowlist/:id", requireAdmin, requireLiveConfirmation, async (req, res) => {
     const id = parseInt(req.params.id);
     const [row] = await db.select().from(testerAllowlist).where(eq(testerAllowlist.id, id)).limit(1);
     if (!row) return res.status(404).json({ message: "not found" });
