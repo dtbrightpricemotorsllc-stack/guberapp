@@ -64,22 +64,26 @@ const NEON_PURPLE = "hsl(275 90% 65%)";
 const NEON_CYAN = "hsl(190 95% 55%)";
 
 export default function Investors() {
-  // SEO: set title + noindex + OG tags. Restore on unmount.
+  // SEO: set title + noindex + OG tags. Symmetric restore on unmount.
   useEffect(() => {
     const prevTitle = document.title;
     document.title = C.meta.title;
-    const tags: HTMLElement[] = [];
+    type Snap = { el: HTMLMetaElement; created: boolean; prev: string | null };
+    const snaps: Snap[] = [];
     const upsert = (attr: "name" | "property", key: string, value: string) => {
       let el = document.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null;
       let created = false;
+      let prev: string | null = null;
       if (!el) {
         el = document.createElement("meta");
         el.setAttribute(attr, key);
         document.head.appendChild(el);
         created = true;
+      } else {
+        prev = el.getAttribute("content");
       }
       el.setAttribute("content", value);
-      if (created) tags.push(el);
+      snaps.push({ el, created, prev });
     };
     upsert("name", "robots", "noindex,nofollow,noarchive");
     upsert("name", "description", C.meta.description);
@@ -88,7 +92,15 @@ export default function Investors() {
     upsert("property", "og:type", "website");
     return () => {
       document.title = prevTitle;
-      tags.forEach((t) => t.remove());
+      for (const s of snaps) {
+        if (s.created) {
+          s.el.remove();
+        } else if (s.prev === null) {
+          s.el.removeAttribute("content");
+        } else {
+          s.el.setAttribute("content", s.prev);
+        }
+      }
     };
   }, []);
 
@@ -217,7 +229,7 @@ export default function Investors() {
         </div>
       </section>
 
-      {/* PROBLEM */}
+      {/* 02 · PROBLEM */}
       <Section id="section-problem" eyebrow="01 · The problem" headline={C.problem.headline}>
         <div className="grid sm:grid-cols-2 gap-6">
           {C.problem.columns.map((col, i) => (
@@ -274,8 +286,8 @@ export default function Investors() {
         </Reveal>
       </Section>
 
-      {/* PRODUCT */}
-      <Section id="section-product" eyebrow="03 · Product" headline={C.product.headline} sub={C.product.sub}>
+      {/* 04 · CORE PLATFORM */}
+      <Section id="section-product" eyebrow="03 · Core platform" headline={C.product.headline} sub={C.product.sub}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {C.product.cards.map((c, i) => (
             <Reveal key={i} delay={(i % 4) * 60}>
@@ -288,8 +300,36 @@ export default function Investors() {
         </div>
       </Section>
 
-      {/* BUSINESS MODEL */}
-      <Section id="section-business" eyebrow="04 · Business model" headline={C.business.headline} sub={C.business.sub}>
+      {/* 05 · V&I HIGHLIGHT */}
+      <Section id="section-vi" eyebrow="04 · Verify & Inspect" headline={C.viHighlight.headline} sub={C.viHighlight.sub}>
+        <div className="inv-card p-7 sm:p-9" style={{ borderColor: `${NEON_PURPLE}55`, boxShadow: `0 0 40px hsl(275 90% 65% / .08)` }}>
+          <div className="grid lg:grid-cols-5 gap-8">
+            <div className="lg:col-span-3">
+              <ul className="space-y-4">
+                {C.viHighlight.bullets.map((b, i) => (
+                  <li key={i} className="flex gap-3 text-sm sm:text-base leading-relaxed text-muted-foreground" data-testid={`text-vi-bullet-${i}`}>
+                    <Check className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: NEON_PURPLE }} />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="lg:col-span-2 flex flex-col gap-4 lg:border-l lg:border-white/10 lg:pl-8">
+              <div className="num-font text-[11px] uppercase tracking-[0.18em]" style={{ color: NEON_PURPLE }}>Pricing</div>
+              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-vi-pricing">{C.viHighlight.pricing}</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="pill pill-purple num-font">Vehicles</span>
+                <span className="pill pill-purple num-font">Properties</span>
+                <span className="pill pill-purple num-font">Marketplace</span>
+                <span className="pill pill-purple num-font">Salvage</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* 06 · REVENUE STREAMS */}
+      <Section id="section-business" eyebrow="05 · Revenue streams" headline={C.business.headline} sub={C.business.sub}>
         <Reveal>
           <div className="inv-card overflow-hidden">
             {/* Desktop table */}
@@ -336,32 +376,22 @@ export default function Investors() {
         </Reveal>
       </Section>
 
-      {/* MARKETPLACE */}
-      <Section id="section-marketplace" eyebrow="05 · Marketplace" headline={C.marketplace.headline}>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {C.marketplace.sides.map((s, i) => {
-            const accent = s.accent === "purple" ? NEON_PURPLE : s.accent === "cyan" ? NEON_CYAN : NEON_GREEN;
-            return (
-              <Reveal key={i} delay={(i % 3) * 80}>
-                <div className="inv-card p-6 inv-card-hover h-full" style={{ borderColor: i === C.marketplace.sides.length - 1 ? `${accent}55` : undefined }} data-testid={`card-side-${i}`}>
-                  <h4 className="num-font text-base font-bold mb-2" style={{ color: accent }}>{s.title}</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{s.body}</p>
-                  {s.chips && (
-                    <div className="flex flex-wrap gap-2 mt-4">
-                      {s.chips.map((c, j) => (
-                        <span key={j} className="text-[11px] px-2.5 py-1 rounded-md border border-white/15 bg-white/5 text-muted-foreground">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Reveal>
-            );
-          })}
+      {/* 07 · WHY NOW */}
+      <Section id="section-why-now" eyebrow="06 · Why now" headline={C.whyNow.headline} sub={C.whyNow.sub}>
+        <div className="grid sm:grid-cols-2 gap-5">
+          {C.whyNow.cards.map((c, i) => (
+            <Reveal key={i} delay={(i % 2) * 80}>
+              <div className="inv-card p-6 inv-card-hover h-full" data-testid={`card-whynow-${i}`}>
+                <h4 className="num-font text-sm uppercase tracking-[0.12em] mb-3" style={{ color: i % 2 === 0 ? NEON_GREEN : NEON_PURPLE }}>{c.title}</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">{c.body}</p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </Section>
 
-      {/* TRACTION */}
-      <Section id="section-traction" eyebrow="06 · Traction" headline={C.traction.headline} sub={C.traction.note}>
+      {/* 08 · TRACTION */}
+      <Section id="section-traction" eyebrow="07 · Traction" headline={C.traction.headline} sub={C.traction.note}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
           {C.traction.stats.map((s, i) => (
             <Reveal key={i} delay={i * 80}>
@@ -374,6 +404,19 @@ export default function Investors() {
           ))}
         </div>
         <Reveal>
+          <div className="inv-card p-6 sm:p-8 mb-6" style={{ borderColor: `${NEON_GREEN}55` }}>
+            <h3 className="num-font text-sm uppercase tracking-[0.15em] mb-4" style={{ color: NEON_GREEN }}>Platform state today</h3>
+            <ul className="space-y-3">
+              {C.traction.state.map((b, i) => (
+                <li key={i} className="flex gap-3 text-sm leading-relaxed text-muted-foreground" data-testid={`text-state-${i}`}>
+                  <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: NEON_GREEN }} />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Reveal>
+        <Reveal delay={80}>
           <div className="inv-card p-6 sm:p-8">
             <h3 className="num-font text-sm uppercase tracking-[0.15em] mb-4" style={{ color: NEON_PURPLE }}>Infrastructure already in the ground</h3>
             <ul className="space-y-3">
@@ -397,85 +440,32 @@ export default function Investors() {
         </Reveal>
       </Section>
 
-      {/* COST */}
-      <Section id="section-cost" eyebrow="07 · Unit economics" headline={C.cost.headline}>
-        <div className="grid lg:grid-cols-2 gap-6 items-center">
-          <Reveal>
-            <div>
-              <p className="text-base sm:text-lg leading-relaxed mb-5">{C.cost.body}</p>
-              <ul className="space-y-3">
-                {C.cost.bullets.map((b, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-muted-foreground leading-relaxed">
-                    <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: NEON_GREEN }} />
-                    <span>{b}</span>
-                  </li>
+      {/* 09 · FOUNDER STORY */}
+      <Section id="section-founder" eyebrow="08 · Founder" headline={C.founder.headline}>
+        <Reveal>
+          <div className="inv-card p-7 sm:p-9" style={{ borderColor: `${NEON_GREEN}33` }}>
+            <div className="grid lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-1">
+                <div className="num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-2">Built by</div>
+                <div className="text-2xl font-bold text-white" data-testid="text-founder-name-section">{C.founder.name}</div>
+                <div className="text-sm text-muted-foreground mt-1">{C.founder.role}</div>
+                <div className="mt-5">
+                  <span className="pill pill-green num-font">Solo-built · ~18 months</span>
+                </div>
+              </div>
+              <div className="lg:col-span-2 space-y-4">
+                {C.founder.body.map((p, i) => (
+                  <p key={i} className="text-sm sm:text-base leading-relaxed text-muted-foreground" data-testid={`text-founder-body-${i}`}>{p}</p>
                 ))}
-              </ul>
-              <p className="mt-6 text-sm text-muted-foreground leading-relaxed">
-                <span style={{ color: NEON_GREEN }}>Investor takeaway:</span> {C.cost.takeaway}
-              </p>
+              </div>
             </div>
-          </Reveal>
-          <Reveal delay={120}>
-            <div className="inv-card p-8 flex flex-col items-center text-center gap-4">
-              <div>
-                <div className="num-font font-extrabold text-5xl sm:text-6xl text-white/40">{C.cost.before}</div>
-                <div className="num-font text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Per day · before</div>
-              </div>
-              <ArrowDown className="w-8 h-8" style={{ color: NEON_GREEN }} />
-              <div>
-                <div className="num-font font-extrabold text-6xl sm:text-7xl glow-text-green" style={{ color: NEON_GREEN }}>{C.cost.after}</div>
-                <div className="num-font text-[10px] uppercase tracking-[0.2em] mt-1" style={{ color: NEON_GREEN }}>Per day · idle now</div>
-              </div>
-              <span className="pill pill-green num-font mt-2">{C.cost.delta}</span>
-            </div>
-          </Reveal>
-        </div>
-      </Section>
-
-      {/* MARKET */}
-      <Section id="section-market" eyebrow="08 · Market" headline={C.market.headline}>
-        <div className="grid md:grid-cols-3 gap-5">
-          {C.market.cards.map((c, i) => (
-            <Reveal key={i} delay={i * 90}>
-              <div className="inv-card p-6 inv-card-hover h-full">
-                <h4 className="num-font text-sm uppercase tracking-[0.12em] mb-3" style={{ color: NEON_GREEN }}>{c.title}</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{c.body}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-        <Reveal delay={300}>
-          <p className="mt-8 text-base sm:text-lg max-w-3xl">
-            <span style={{ color: NEON_GREEN }}>Bottom line:</span> <span className="text-muted-foreground">{C.market.closer}</span>
-          </p>
+          </div>
         </Reveal>
       </Section>
 
-      {/* GROWTH */}
-      <Section id="section-growth" eyebrow="09 · Growth" headline={C.growth.headline}>
-        <div className="grid md:grid-cols-2 gap-6">
-          {C.growth.columns.map((col, i) => (
-            <Reveal key={i} delay={i * 100}>
-              <div className="inv-card p-6 sm:p-7 h-full">
-                <h3 className="num-font text-sm uppercase tracking-[0.15em] mb-4" style={{ color: i === 0 ? NEON_GREEN : NEON_PURPLE }}>{col.title}</h3>
-                <ul className="space-y-3">
-                  {col.bullets.map((b, j) => (
-                    <li key={j} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
-                      <span className="mt-2 h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ background: i === 0 ? NEON_GREEN : NEON_PURPLE }} />
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </Section>
-
-      {/* FUNDING ASK */}
-      <Section id="section-funding-ask" eyebrow="10 · The ask" headline={C.fundingAsk.headline}>
-        <div className="grid lg:grid-cols-3 gap-5">
+      {/* 10 · FUNDING ASK */}
+      <Section id="section-funding-ask" eyebrow="09 · The ask" headline={C.fundingAsk.headline}>
+        <div className="grid lg:grid-cols-2 gap-5">
           <Reveal>
             <div className="inv-card p-7 h-full" style={{ borderColor: `${NEON_GREEN}55`, boxShadow: `0 0 32px hsl(152 100% 44% / .08)` }}>
               <div className="num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-2">Raise</div>
@@ -498,24 +488,11 @@ export default function Investors() {
               </ul>
             </div>
           </Reveal>
-          <Reveal delay={200}>
-            <div className="inv-card p-7 h-full">
-              <div className="num-font text-xs uppercase tracking-[0.15em] mb-4" style={{ color: NEON_PURPLE }}>Why now</div>
-              <ul className="space-y-3">
-                {C.fundingAsk.whyNow.map((b, i) => (
-                  <li key={i} className="flex gap-3 text-sm leading-relaxed text-muted-foreground" data-testid={`text-whynow-${i}`}>
-                    <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: NEON_PURPLE }} />
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Reveal>
         </div>
       </Section>
 
-      {/* INVESTOR CTA */}
-      <Section id="section-investor-cta" eyebrow="11 · Let's talk" headline={C.cta.headline} sub={C.cta.sub}>
+      {/* 11 · INVESTOR CTA */}
+      <Section id="section-investor-cta" eyebrow="10 · Let's talk" headline={C.cta.headline} sub={C.cta.sub}>
         <Reveal>
           <div className="inv-card p-8 sm:p-10" style={{ borderColor: `${NEON_GREEN}55` }}>
             <div className="grid lg:grid-cols-2 gap-8 items-center">
@@ -559,6 +536,16 @@ export default function Investors() {
                   data-testid="button-cta-call"
                 >
                   <Phone className="w-4 h-4" /> Call directly
+                </a>
+                <a
+                  href={C.meta.publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-14 px-7 rounded-xl num-font text-sm uppercase tracking-[0.2em] font-bold inline-flex items-center justify-center gap-2 border transition"
+                  style={{ borderColor: `${NEON_PURPLE}55`, color: NEON_PURPLE, background: "hsl(275 90% 65% / 0.06)" }}
+                  data-testid="button-cta-visit"
+                >
+                  <Globe className="w-4 h-4" /> Visit guberapp.com
                 </a>
                 <div className="pt-2">
                   <div className="num-font text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-2">Follow our public traction</div>

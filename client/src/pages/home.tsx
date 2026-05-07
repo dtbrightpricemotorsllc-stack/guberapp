@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialLinks } from "@/components/social-links";
+import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, X,
   Briefcase, ShieldCheck, Zap, Users, Star, ArrowRight, Lock,
@@ -178,6 +179,7 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
 
 export default function Home() {
   const [gateOpen, setGateOpen] = useState(false);
+  const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
   const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
     queryKey: ["/api/public/jobs"],
@@ -483,6 +485,12 @@ export default function Home() {
               <Link href="/privacy" data-testid="link-footer-privacy">PRIVACY</Link>
               <span className="w-px h-3 bg-white/10" />
               <Link href="/" data-testid="link-footer-app">GUBER APP</Link>
+              {investorPitchPublic && (
+                <>
+                  <span className="w-px h-3 bg-white/10" />
+                  <Link href="/investors" data-testid="link-footer-investors">INVESTORS</Link>
+                </>
+              )}
             </div>
             <p className="text-[10px] font-display tracking-wider text-muted-foreground">
               GUBER GLOBAL LLC &mdash; GREENSBORO, NC

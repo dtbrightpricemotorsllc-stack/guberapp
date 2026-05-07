@@ -69,8 +69,20 @@ export const INVESTOR_CONFIG = {
       "A local marketplace where strangers can transact safely — because identity, money, and proof are all enforced by the platform, not the user.",
   },
 
+  viHighlight: {
+    headline: "Verify & Inspect — our wedge into a $billions market.",
+    sub: "A purpose-built vertical inside the marketplace where verified helpers act as on-the-ground eyes for buyers, insurers, lenders, and online marketplaces.",
+    bullets: [
+      "Helpers don't certify, diagnose, or appraise — they take clear photos, short video, and submit GPS-verified, timestamped evidence on a structured checklist.",
+      "Smart-form templates today cover vehicles, properties, marketplace listings, and salvage; new verticals plug in without code changes.",
+      "Every job ends with a structured, location-checked, timestamped evidence bundle the buyer can download, share, and audit.",
+      "Direct path to B2B revenue: insurance pre-binding photos, dealer condition reports, and lender collateral checks are all the same primitive.",
+    ],
+    pricing: "Helper payouts $40–$120+ per V&I job. Platform earns the standard 20% + 3.2% on every transaction, plus future per-API fees on aggregated B2B reports.",
+  },
+
   product: {
-    headline: "This is shipped software.",
+    headline: "The core platform.",
     sub: "Not a deck. Not a prototype. 50+ live product surfaces on web and Google Play today.",
     cards: [
       { title: "Jobs Marketplace", body: "Guided builder, V&I smart forms, time-based pricing, barter, milestones, GPS-verified proof, auto-pay-increase." },
@@ -117,13 +129,19 @@ export const INVESTOR_CONFIG = {
   },
 
   traction: {
-    headline: "Traction & infrastructure already live.",
-    note: "Live database snapshot. Pre-launch revenue stage — public marketing campaign begins next quarter.",
+    headline: "Where we are today — honestly.",
+    note: "Pre-launch / pre-marketing. The platform is shipped and live; paid acquisition has not started yet.",
     stats: [
-      { value: "294", label: "Total registered users", sub: "Pre-launch organic signups" },
-      { value: "Live", label: "On Google Play", sub: "Native Android build shipping today" },
-      { value: "~10", label: "Sponsored Cash Drops", sub: "Brand-funded acquisition events" },
-      { value: "Day-1 OG", label: "Active revenue stream", sub: "Founding-supporter purchases" },
+      { value: "294", label: "Registered users", sub: "Pre-launch organic signups, no paid acquisition" },
+      { value: "Live", label: "On Google Play", sub: "Native Android build available today" },
+      { value: "~10", label: "Sponsored Cash Drops", sub: "Brand-funded acquisition events live" },
+      { value: "0", label: "Paid jobs completed to date", sub: "Pre-launch — by design until the public push" },
+    ],
+    state: [
+      "Day-1 OG founding-supporter tier is live and generating one-time revenue.",
+      "Stripe Connect, escrow, and the money ledger are wired end-to-end and tested.",
+      "All 13 revenue streams are either Live or flag-gated — none rely on future engineering.",
+      "Apple App Store build is queued behind Sign in with Apple + Apple Pay polish.",
     ],
     infra: [
       "50+ live database tables — jobs, payments, money ledger, disputes, business accounts, sponsors, observations, credentials.",
@@ -182,6 +200,28 @@ export const INVESTOR_CONFIG = {
           "Native Android shipping today; Apple App Store + Sign in with Apple + Apple Pay queued for the next build.",
         ],
       },
+    ],
+  },
+
+  whyNow: {
+    headline: "Why this round, why now.",
+    sub: "The product risk is behind us. The capital risk is the only thing left.",
+    cards: [
+      { title: "Product is shipped", body: "50+ live surfaces on web and Google Play. Capital goes straight to growth, not engineering." },
+      { title: "Unit economics already work", body: "April 2026 re-architecture brought idle infrastructure cost from ~$50/day to ~$0/day. We can scale to 100,000 users without breaking the model." },
+      { title: "Multiple revenue streams hedge risk", body: "13 distinct streams across consumer, helper, and B2B. No single bet has to land." },
+      { title: "First-mover trust signal", body: "Live on Google Play; App Store imminent. Verified-identity local marketplaces are still rare — the window to anchor the category is open now." },
+    ],
+  },
+
+  founder: {
+    headline: "About the founder.",
+    name: "Dimetris Bowden",
+    role: "Founder & CEO, GUBER Global LLC",
+    body: [
+      "GUBER was built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand.",
+      "The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed under the core platform is in production code today.",
+      "I'm raising this round to do exactly one thing I can't do alone: turn 294 organic signups into a self-sustaining local marketplace through paid acquisition and B2B sales.",
     ],
   },
 
