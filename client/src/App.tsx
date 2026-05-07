@@ -60,6 +60,7 @@ const SubmitObservation = lazy(() => import("@/pages/submit-observation"));
 const ObservationMarketplace = lazy(() => import("@/pages/observation-marketplace"));
 const HostDropNew = lazy(() => import("@/pages/host-drop-new"));
 const Studio = lazy(() => import("@/pages/studio"));
+const Investors = lazy(() => import("@/pages/investors"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
@@ -286,6 +287,8 @@ function Router() {
       <Route path="/acceptable-use" component={AcceptableUse} />
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/loading-demo" component={LoadingDemo} />
+      <Route path="/investors" component={Investors} />
+      <Route path="/guber-investor-deck" component={Investors} />
       <Route component={NotFound} />
     </Switch>
     </>

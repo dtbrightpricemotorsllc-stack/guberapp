@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SocialLinks } from "@/components/social-links";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, X,
   Briefcase, ShieldCheck, Zap, Users, Star, ArrowRight, Lock,
@@ -473,18 +474,21 @@ export default function Home() {
 
       {/* ── Footer ── */}
       <footer className="relative z-10 border-t border-border py-8 px-5">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <img src={logoImg} alt="GUBER" className="h-8 object-contain" style={{ mixBlendMode: "screen" }} />
-          <div className="flex items-center gap-6 text-[10px] font-display tracking-wider text-muted-foreground">
-            <Link href="/terms" data-testid="link-footer-terms">TERMS</Link>
-            <span className="w-px h-3 bg-white/10" />
-            <Link href="/privacy" data-testid="link-footer-privacy">PRIVACY</Link>
-            <span className="w-px h-3 bg-white/10" />
-            <Link href="/" data-testid="link-footer-app">GUBER APP</Link>
+        <div className="max-w-6xl mx-auto flex flex-col items-center gap-5">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
+            <img src={logoImg} alt="GUBER" className="h-8 object-contain" style={{ mixBlendMode: "screen" }} />
+            <div className="flex items-center gap-6 text-[10px] font-display tracking-wider text-muted-foreground">
+              <Link href="/terms" data-testid="link-footer-terms">TERMS</Link>
+              <span className="w-px h-3 bg-white/10" />
+              <Link href="/privacy" data-testid="link-footer-privacy">PRIVACY</Link>
+              <span className="w-px h-3 bg-white/10" />
+              <Link href="/" data-testid="link-footer-app">GUBER APP</Link>
+            </div>
+            <p className="text-[10px] font-display tracking-wider text-muted-foreground">
+              GUBER GLOBAL LLC &mdash; GREENSBORO, NC
+            </p>
           </div>
-          <p className="text-[10px] font-display tracking-wider text-muted-foreground">
-            GUBER GLOBAL LLC &mdash; GREENSBORO, NC
-          </p>
+          <SocialLinks size="sm" testIdPrefix="link-home-social" />
         </div>
       </footer>
     </div>

@@ -113,5 +113,12 @@ I prefer a concise and direct communication style. I value iterative development
 - **Account Deletion:** Users are soft-deleted, anonymizing data while retaining records for legal/safety reasons. Public lookups for deleted users return 404.
 - **Google Play Compliance:** Digital purchase UI is hidden in Android/iOS store builds (`isStoreBuild`) to comply with store guidelines.
 
+## Investor Pitch (task-497)
+- **Page:** `client/src/pages/investors.tsx` at `/investors` and `/guber-investor-deck` (both public, lazy, registered before NotFound). 11 sections, dark theme with neon green/purple/cyan, IntersectionObserver scroll-reveal (gated by `prefers-reduced-motion`), print-to-PDF CSS, `noindex,nofollow,noarchive` set in `useEffect` and cleaned up on unmount.
+- **Single editable config:** `client/src/lib/investor-config.ts` — change copy, funding ask, contact info, social handles here only.
+- **Shared social icons:** `client/src/components/social-links.tsx` — 5 brand icons (LinkedIn / Facebook / TikTok / Instagram / X) from `react-icons/si`. Mounted on the investor page (Traction + CTA) AND on the marketing home footer (`client/src/pages/home.tsx`).
+- **Feature flag:** `investor_pitch_public` in `shared/feature-flags.ts` (default OFF). Reserved for a future public nav-link surface; the page itself is always reachable regardless of the flag.
+
 ## Pointers
 - **QA Dashboard:** see "QA Dashboard (task-462)" section. Plan: `.local/tasks/task-462.md`.
+- **Investor Pitch:** see "Investor Pitch (task-497)" section. Plan: `.local/tasks/task-497.md`.

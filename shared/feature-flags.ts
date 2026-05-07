@@ -14,7 +14,8 @@ export type FeatureFlagKey =
   | "pov_summary"
   | "business_promo"
   | "business_signup"
-  | "qa_dashboard";
+  | "qa_dashboard"
+  | "investor_pitch_public";
 
 export type RolloutScope = "off" | "global" | "role" | "allowlist";
 
@@ -109,6 +110,13 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     label: "QA Dashboard",
     description: "Master switch for the /admin/qa surface itself (admin-only regardless).",
     defaultEnabled: true,
+    defaultScope: "global",
+  },
+  {
+    key: "investor_pitch_public",
+    label: "Investor Pitch (Public Nav Link)",
+    description: "When ON, surfaces a public nav link to the hidden /investors page. The page itself is always reachable at /investors and /guber-investor-deck regardless of this flag.",
+    defaultEnabled: false,
     defaultScope: "global",
   },
 ];
