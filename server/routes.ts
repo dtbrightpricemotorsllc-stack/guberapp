@@ -5565,9 +5565,17 @@ export async function registerRoutes(
   app.get("/api/jobs", requireAuth, async (req: Request, res: Response) => {
     const jobsList = await storage.getJobs();
     const demoIds = await getDemoUserIds();
-    const callerIsDemoUser = req.session.userId ? demoIds.has(req.session.userId) : false;
     const isAdmin = await viewerIsAdmin(req);
-    const sanitized = jobsList
+    // Visibility filter (task-462): hide allowlist jobs from non-listed users.
+    const { listAllowlistedItemIds, filterVisibleItems } = await import("./visibility.js");
+    const allowlisted = await listAllowlistedItemIds("job", req.session.userId);
+    const visible = filterVisibleItems(jobsList, {
+      viewerId: req.session.userId,
+      isAdmin,
+      allowlistedIds: allowlisted,
+      ownerCheck: (j) => j.postedById === req.session.userId,
+    });
+    const sanitized = visible
       .filter(j => j.status !== "draft" && j.isPaid)
       .filter(j => viewerCanSeeJobSync(j, req.session.userId, isAdmin, demoIds))
       .map(j => sanitizeJobForPublic(j, req.session.userId, isAdmin));
@@ -12700,6 +12708,16 @@ OUTPUT STYLE:
       } else {
         drops = drops.map(d => d.sponsorName?.startsWith("DEMO_") ? { ...d, sponsorName: d.sponsorName.replace("DEMO_", "") } : d);
       }
+      // Visibility filter (task-462): hide allowlist drops from non-listed users.
+      const isAdmin = await viewerIsAdmin(req);
+      const { listAllowlistedItemIds, filterVisibleItems } = await import("./visibility.js");
+      const allowlisted = await listAllowlistedItemIds("cash_drop", req.session?.userId);
+      drops = filterVisibleItems(drops as any, {
+        viewerId: req.session?.userId,
+        isAdmin,
+        allowlistedIds: allowlisted,
+        ownerCheck: (d: any) => d.hostUserId === req.session?.userId,
+      }) as any;
       res.json(drops);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -12711,6 +12729,12 @@ OUTPUT STYLE:
       const userId = req.session.userId!;
       const drop = await storage.getCashDrop(parseInt(req.params.id));
       if (!drop) return res.status(404).json({ error: "Cash Drop not found" });
+      // Allowlist visibility (task-462): hide allowlist drops from non-listed viewers.
+      const { canViewItem } = await import("./visibility.js");
+      const isAdmin = await viewerIsAdmin(req);
+      if (!(await canViewItem("cash_drop", drop as any, { viewerId: userId, isAdmin, isOwner: drop.hostUserId === userId }))) {
+        return res.status(404).json({ error: "Cash Drop not found" });
+      }
 
       const attempt = await storage.getCashDropAttemptByUser(drop.id, userId);
       const clueVisible = attempt?.status === "arrived" || attempt?.status === "submitted" || attempt?.status === "won";
@@ -12730,6 +12754,12 @@ OUTPUT STYLE:
       const userId = req.session.userId!;
       const drop = await storage.getCashDrop(parseInt(req.params.id));
       if (!drop) return res.status(404).json({ error: "Cash Drop not found" });
+      // Allowlist visibility (task-462): block participation by non-listed users.
+      const { canViewItem } = await import("./visibility.js");
+      const isAdmin = await viewerIsAdmin(req);
+      if (!(await canViewItem("cash_drop", drop as any, { viewerId: userId, isAdmin, isOwner: drop.hostUserId === userId }))) {
+        return res.status(404).json({ error: "Cash Drop not found" });
+      }
       if (drop.status !== "active") return res.status(400).json({ error: "Cash Drop is not active" });
       if ((drop.winnersFound || 0) >= drop.winnerLimit) return res.status(400).json({ error: "All winner slots are filled for this Cash Drop" });
 
@@ -12781,6 +12811,17 @@ OUTPUT STYLE:
   }
 
   app.post("/api/cash-drops/:id/arrived", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    // Allowlist visibility (task-462): block participation by non-listed users.
+    {
+      const userId = req.session.userId!;
+      const dropForGate = await storage.getCashDrop(parseInt(req.params.id));
+      if (!dropForGate) return res.status(404).json({ error: "Cash Drop not found" });
+      const { canViewItem } = await import("./visibility.js");
+      const isAdmin = await viewerIsAdmin(req);
+      if (!(await canViewItem("cash_drop", dropForGate as any, { viewerId: userId, isAdmin, isOwner: dropForGate.hostUserId === userId }))) {
+        return res.status(404).json({ error: "Cash Drop not found" });
+      }
+    }
     try {
       const userId = req.session.userId!;
       const drop = await storage.getCashDrop(parseInt(req.params.id));
@@ -12814,6 +12855,17 @@ OUTPUT STYLE:
   });
 
   app.post("/api/cash-drops/:id/submit-proof", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    // Allowlist visibility (task-462): block participation by non-listed users.
+    {
+      const userId = req.session.userId!;
+      const dropForGate = await storage.getCashDrop(parseInt(req.params.id));
+      if (!dropForGate) return res.status(404).json({ error: "Cash Drop not found" });
+      const { canViewItem } = await import("./visibility.js");
+      const isAdmin = await viewerIsAdmin(req);
+      if (!(await canViewItem("cash_drop", dropForGate as any, { viewerId: userId, isAdmin, isOwner: dropForGate.hostUserId === userId }))) {
+        return res.status(404).json({ error: "Cash Drop not found" });
+      }
+    }
     try {
       const userId = req.session.userId!;
       const drop = await storage.getCashDrop(parseInt(req.params.id));
@@ -16879,6 +16931,10 @@ OUTPUT STYLE:
 
   app.post("/api/internal/cron/run", handleCronRun);
   app.get("/api/internal/cron/run", handleCronRun);
+
+  // ── QA Dashboard (task-462) ──────────────────────────────────────────────
+  const { registerAdminQaRoutes } = await import("./admin-qa.js");
+  registerAdminQaRoutes(app, requireAdmin);
 
   return httpServer;
 }

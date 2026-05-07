@@ -32,6 +32,17 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Vibe gating:** `v.tierRequired !== "standard" && tier === "standard"` — auto-unlocks for Creator/Business with no extra logic.
 - **"Use in…" handoff (task-453):** Studio dropdown links to `/resume?studioVideoId=N`, `/biz/dashboard?studioVideoId=N`, `/host-drop/new?studioVideoId=N`. Resume + biz-dashboard auto-call `POST /api/studio/attach` ({target: "resume"|"business_promo"}); host-drop fetches the clip URL and prefills it as a clue media item, passing `studioVideoId` to `/api/cash-drops/host/create`. Single-clip fetch lives at `GET /api/studio/videos/:id` (ownership-checked). `/api/resume/me` and `/api/resume/:userId` expose `studioPromo` for rendering.
 
+## QA Dashboard (task-462)
+- **Page:** `client/src/pages/admin-qa.tsx` at `/admin/qa` (admin-only). Sister pages: `admin-qa-inspect.tsx`, `admin-qa-cashdrop-debug.tsx`, `admin-qa-flags.tsx`, `admin-user-profile.tsx` at `/admin/users/:id`. Linked from `admin.tsx` header.
+- **Server module:** `server/admin-qa.ts` mounted at end of `registerRoutes()` via dynamic import. All `/api/admin/qa/*` + `/api/admin/users/:id/*` routes are gated by `requireAdmin` and write to `auditLog` (action prefix `qa.*`). Public hooks `/api/feature-flags` + `/api/feature-flags/:key` are unauthenticated and used by `useFeatureFlag` on the client.
+- **Sandbox safety:** `requireStripeTestMode` middleware refuses to run if `STRIPE_SECRET_KEY` starts with `sk_live_`. Test users carry `users.is_test_user=true`; test jobs carry `jobs.is_test_job=true`. Reset endpoint deletes only tagged rows + dependents (audit, proofs, attempts, etc).
+- **Live Allowlist:** `tester_allowlist (item_type, item_id, user_id)` table + `jobs.visibility` / `cash_drops.visibility` columns (`public` | `allowlist`). Public listings (`GET /api/jobs`, `GET /api/cash-drops/active`) hide allowlist items from non-listed viewers (filter in `server/visibility.ts`). Owner + admin always see their own. End-test endpoint requires `x-live-confirm: LIVE` header.
+- **Feature flags:** `shared/feature-flags.ts` (9-key registry: `studio_ai`, `cash_drops`, `barter`, `direct_offers`, `observation_marketplace`, `handsfree_capture`, `business_promo`, `qa_dashboard`, `studio_subscriptions`). Resolver in `server/feature-flags.ts` (30s in-process cache, scopes: `off|global|role|allowlist`, admin always passes). `feature_flags` table seeded on boot via `ensureFlagsSeeded()`.
+- **Cash Drop Debugger:** `cash_drop_events` table appends transitions (`auto_expired`, `force_expired`, `unexpired`, `extended`, `cancelled`); `server/cron.ts autoExpireCashDrops` records `auto_expired` events. Replay tools: extend-expiry, un-expire, force-expire, cancel — all audited.
+- **Media viewer:** `client/src/components/media-lightbox.tsx` opens any URL (image/video/audio/pdf/other) in a dialog with Open + Download buttons. Cloudinary URLs get `fl_attachment/` injected for forced download (`server/media-download.ts toCloudinaryAttachmentUrl`).
+- **User link:** `client/src/components/user-link.tsx` — drop-in clickable `<UserLink userId={id} label={name} />` jumps to `/admin/users/:id`.
+- **Tests:** `server/tests/admin-qa.test.ts` covers visibility filter (admin/owner/allowlisted/stranger), Cloudinary attachment-URL helper, media classifier, and feature-flag resolver scopes.
+
 ## Hands-Free V&I (task-454)
 - **Component:** `client/src/components/handsfree-capture.tsx` (dialog: consent → camera preview → MediaRecorder → upload).
 - **Entry point:** "Hands-Free POV Capture" card in `worker-clipboard.tsx` (only when `job.category === "Verify & Inspect"`).
@@ -96,4 +107,4 @@ I prefer a concise and direct communication style. I value iterative development
 - **Google Play Compliance:** Digital purchase UI is hidden in Android/iOS store builds (`isStoreBuild`) to comply with store guidelines.
 
 ## Pointers
-- _Populate as you build_
+- **QA Dashboard:** see "QA Dashboard (task-462)" section. Plan: `.local/tasks/task-462.md`.

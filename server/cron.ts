@@ -519,7 +519,13 @@ async function enforceDisputeSLA(): Promise<number> {
 async function autoExpireCashDrops(): Promise<number> {
   const now = new Date();
   const toExpire = await db
-    .select({ id: cashDrops.id, title: cashDrops.title })
+    .select({
+      id: cashDrops.id,
+      title: cashDrops.title,
+      endTime: cashDrops.endTime,
+      winnersFound: cashDrops.winnersFound,
+      winnerLimit: cashDrops.winnerLimit,
+    })
     .from(cashDrops)
     .where(
       and(
@@ -529,10 +535,28 @@ async function autoExpireCashDrops(): Promise<number> {
       )
     );
 
+  const { recordCashDropEvent } = await import("./cash-drop-events.js");
+
   for (const drop of toExpire) {
     await db.update(cashDrops)
       .set({ status: "expired", closedAt: now })
       .where(eq(cashDrops.id, drop.id));
+
+    // Persist a structured event so the Cash Drop Debugger can show exactly
+    // why each drop expired. Reason code surfaces in admin UI.
+    await recordCashDropEvent({
+      cashDropId: drop.id,
+      eventType: "expired",
+      reasonCode: "endtime_passed_without_winner",
+      source: "cron",
+      payload: {
+        endTime: drop.endTime ? new Date(drop.endTime).toISOString() : null,
+        now: now.toISOString(),
+        winnersFound: drop.winnersFound ?? 0,
+        winnerLimit: drop.winnerLimit ?? 0,
+        cronJob: "autoExpireCashDrops",
+      },
+    });
 
     notifyCashDropExpired(drop.id, drop.title || "Cash Drop").catch(() => {});
   }

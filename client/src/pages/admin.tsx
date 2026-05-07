@@ -24,7 +24,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronLeft, ChevronRight, 
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import {
@@ -6044,7 +6044,12 @@ return (
 <>
 <GuberLayout>
 <div className="max-w-3xl mx-auto px-4 py-6" data-testid="page-admin">
-<h1 className="text-xl font-display font-bold mb-4">Admin Panel</h1>
+<div className="flex items-center justify-between mb-4">
+<h1 className="text-xl font-display font-bold">Admin Panel</h1>
+<Button asChild variant="outline" size="sm" data-testid="link-admin-qa">
+<a href="/admin/qa"><Sparkles className="h-3 w-3 mr-1" />QA Dashboard</a>
+</Button>
+</div>
 
 <div className="grid grid-cols-4 gap-2 mb-6">
 {[

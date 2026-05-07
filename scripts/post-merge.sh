@@ -198,6 +198,54 @@ INSERT INTO platform_settings (key, value, category, description)
 VALUES ('handsfree_capture_enabled', 'false', 'trust', 'Show the Hands-Free POV recorder on V&I jobs and accept wearable uploads. Default OFF — dark launch; admin enables for staff/dev cohorts first.')
 ON CONFLICT (key) DO NOTHING;
 
+-- ── QA Dashboard (task-462) ─────────────────────────────────────────────
+ALTER TABLE users      ADD COLUMN IF NOT EXISTS is_test_user boolean DEFAULT false;
+ALTER TABLE jobs       ADD COLUMN IF NOT EXISTS is_test_job  boolean DEFAULT false;
+ALTER TABLE jobs       ADD COLUMN IF NOT EXISTS visibility   text    NOT NULL DEFAULT 'public';
+ALTER TABLE cash_drops ADD COLUMN IF NOT EXISTS is_test_drop boolean DEFAULT false;
+ALTER TABLE cash_drops ADD COLUMN IF NOT EXISTS visibility   text    NOT NULL DEFAULT 'public';
+CREATE INDEX IF NOT EXISTS jobs_visibility_idx       ON jobs(visibility);
+CREATE INDEX IF NOT EXISTS cash_drops_visibility_idx ON cash_drops(visibility);
+
+CREATE TABLE IF NOT EXISTS feature_flags (
+  id serial PRIMARY KEY,
+  key text NOT NULL UNIQUE,
+  enabled boolean NOT NULL DEFAULT true,
+  rollout_scope text NOT NULL DEFAULT 'global',
+  allowed_roles text[],
+  allowed_user_ids integer[],
+  note text,
+  updated_by integer,
+  updated_at timestamp DEFAULT now(),
+  created_at timestamp DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS tester_allowlist (
+  id serial PRIMARY KEY,
+  item_type text NOT NULL,
+  item_id integer NOT NULL,
+  user_id integer NOT NULL,
+  invited_by integer,
+  invited_at timestamp DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tester_allowlist_uniq
+  ON tester_allowlist (item_type, item_id, user_id);
+CREATE INDEX IF NOT EXISTS tester_allowlist_user_idx
+  ON tester_allowlist (user_id, item_type);
+
+CREATE TABLE IF NOT EXISTS cash_drop_events (
+  id serial PRIMARY KEY,
+  cash_drop_id integer NOT NULL,
+  event_type text NOT NULL,
+  reason_code text,
+  actor_user_id integer,
+  source text,
+  payload jsonb,
+  created_at timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS cash_drop_events_drop_idx
+  ON cash_drop_events (cash_drop_id, created_at DESC);
+
 SQL
 
 echo "[post-merge] Schema sync complete."

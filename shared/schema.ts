@@ -88,6 +88,7 @@ export const users = pgTable("users", {
   studioBusinessPromoVideoId: integer("studio_business_promo_video_id"),
   trustBoxPurchased: boolean("trust_box_purchased").default(false),
   trustBoxSubscriptionId: text("trust_box_subscription_id"),
+  isTestUser: boolean("is_test_user").default(false),
   monthlyImageUploads: integer("monthly_image_uploads").default(0),
   monthlyVideoUploads: integer("monthly_video_uploads").default(0),
   uploadMonthYear: text("upload_month_year"),
@@ -278,6 +279,8 @@ export const jobs = pgTable("jobs", {
   budget: real("budget"),
   location: text("location"),
   locationApprox: text("location_approx"),
+  isTestJob: boolean("is_test_job").default(false),
+  visibility: text("visibility").notNull().default("public"),
   zip: text("zip"),
   lat: real("lat"),
   lng: real("lng"),
@@ -1122,6 +1125,8 @@ export const cashDrops = pgTable("cash_drops", {
   hostUserId: integer("host_user_id").references(() => users.id),
   hostLogo: text("host_logo"),
   approvalStatus: text("approval_status").default("approved"),
+  isTestDrop: boolean("is_test_drop").default(false),
+  visibility: text("visibility").notNull().default("public"),
   // Studio clip attached to this drop (rendered alongside clue media).
   studioVideoId: integer("studio_video_id"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1636,3 +1641,43 @@ export const insertStudioVibeSchema = createInsertSchema(studioVibes).omit({
 });
 export type StudioVibe = typeof studioVibes.$inferSelect;
 export type InsertStudioVibe = z.infer<typeof insertStudioVibeSchema>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QA DASHBOARD (task-462) — feature flags, tester allowlist, cash-drop events
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const featureFlags = pgTable("feature_flags", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  enabled: boolean("enabled").notNull().default(true),
+  rolloutScope: text("rollout_scope").notNull().default("global"), // off | global | role | allowlist
+  allowedRoles: text("allowed_roles").array(),
+  allowedUserIds: integer("allowed_user_ids").array(),
+  note: text("note"),
+  updatedBy: integer("updated_by"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+
+export const testerAllowlist = pgTable("tester_allowlist", {
+  id: serial("id").primaryKey(),
+  itemType: text("item_type").notNull(), // job | cash_drop
+  itemId: integer("item_id").notNull(),
+  userId: integer("user_id").notNull(),
+  invitedBy: integer("invited_by"),
+  invitedAt: timestamp("invited_at").defaultNow(),
+});
+export type TesterAllowlist = typeof testerAllowlist.$inferSelect;
+
+export const cashDropEvents = pgTable("cash_drop_events", {
+  id: serial("id").primaryKey(),
+  cashDropId: integer("cash_drop_id").notNull(),
+  eventType: text("event_type").notNull(),
+  reasonCode: text("reason_code"),
+  actorUserId: integer("actor_user_id"),
+  source: text("source"), // route | cron | webhook
+  payload: json("payload").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type CashDropEvent = typeof cashDropEvents.$inferSelect;

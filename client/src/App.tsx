@@ -63,6 +63,11 @@ const Studio = lazy(() => import("@/pages/studio"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
+const AdminQa = lazy(() => import("@/pages/admin-qa"));
+const AdminQaInspect = lazy(() => import("@/pages/admin-qa-inspect"));
+const AdminQaCashdropDebug = lazy(() => import("@/pages/admin-qa-cashdrop-debug"));
+const AdminQaFlags = lazy(() => import("@/pages/admin-qa-flags"));
+const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
@@ -209,6 +214,11 @@ function Router() {
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
       <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
+      <Route path="/admin/qa" component={() => <ProtectedRoute component={AdminQa} />} />
+      <Route path="/admin/qa/flags" component={() => <ProtectedRoute component={AdminQaFlags} />} />
+      <Route path="/admin/qa/cashdrops/:id/debug" component={() => <ProtectedRoute component={AdminQaCashdropDebug} />} />
+      <Route path="/admin/qa/inspect/:type/:id" component={() => <ProtectedRoute component={AdminQaInspect} />} />
+      <Route path="/admin/users/:id" component={() => <ProtectedRoute component={AdminUserProfile} />} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />
       <Route path="/wallet" component={() => <ConsumerRoute component={WalletPage} />} />
