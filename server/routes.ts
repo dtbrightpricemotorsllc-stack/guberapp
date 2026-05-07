@@ -7640,6 +7640,13 @@ export async function registerRoutes(
         }),
       });
 
+      // task-484: auto-clear under_review when the worker proves themselves
+      // again. Logic lives in server/handsfree-auto-clear.ts so the route
+      // and the cron sweep share identical gating rules. Best-effort —
+      // never throws back to the caller.
+      const { tryAutoClearStreak } = await import("./handsfree-auto-clear.js");
+      await tryAutoClearStreak(req.session.userId!);
+
       await notify(job.postedById, {
         title: "POV Proof Submitted ✅",
         body: `Helper uploaded a hands-free video for "${job.title}". Tap to review.`,

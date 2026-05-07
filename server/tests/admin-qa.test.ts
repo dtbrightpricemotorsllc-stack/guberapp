@@ -192,4 +192,105 @@ describe("QA Dashboard — handsfree auto-flag + reset (task-482/483)", () => {
     expect(fromBody({ clearReview: true })).toBe(true);
     expect(fromBody({ clearReview: false })).toBe(false);
   });
+
+  // task-484: auto-clear under_review once a worker proves themselves again.
+  // Two reinforcing paths:
+  //   - Streak: HANDSFREE_AUTO_CLEAR_STREAK consecutive clean uploads since
+  //     the *latest adverse event* (block OR auto-flag). A new block resets
+  //     the streak so the worker has to genuinely prove themselves again.
+  //   - Time: latest adverse event is older than HANDSFREE_AUTO_CLEAR_DAYS,
+  //     i.e. "90 days with no new blocks". Old historical blocks don't
+  //     strand the user forever, but every fresh block restarts the window.
+  // Both paths require an auto-flag audit entry (`handsfree_auto_flag_for_review`)
+  // to exist — admin-set under_review flags have no anchor and are left alone.
+  it("auto-clear streak gate: anchor is the latest adverse event, threshold is consecutive clean uploads", () => {
+    const STREAK = 10;
+    // Mirrors the route's logic: caller sets `lastAdverseAt` = max(lastBlock, lastFlag).
+    // `cleanSinceAdverse` is the count of `handsfree_proof_uploaded` audit entries
+    // strictly after that anchor. The streak is implicitly "consecutive" because
+    // any subsequent block would have moved the anchor forward and zeroed the count.
+    function shouldClear(opts: {
+      underReview: boolean;
+      hasAutoFlag: boolean;
+      cleanSinceAdverse: number;
+    }) {
+      if (!opts.underReview) return false;
+      if (!opts.hasAutoFlag) return false;
+      return opts.cleanSinceAdverse >= STREAK;
+    }
+    // Happy path: 10 clean uploads after the last block/flag → cleared
+    expect(shouldClear({ underReview: true, hasAutoFlag: true, cleanSinceAdverse: 10 })).toBe(true);
+    expect(shouldClear({ underReview: true, hasAutoFlag: true, cleanSinceAdverse: 25 })).toBe(true);
+    // Below threshold
+    expect(shouldClear({ underReview: true, hasAutoFlag: true, cleanSinceAdverse: 9 })).toBe(false);
+    // Block resets the anchor → new streak count starts at 0 from that block forward.
+    // After the reset, the worker has 4 clean uploads → not yet at threshold.
+    expect(shouldClear({ underReview: true, hasAutoFlag: true, cleanSinceAdverse: 4 })).toBe(false);
+    // …and once they accumulate 10 clean since that latest block → cleared.
+    expect(shouldClear({ underReview: true, hasAutoFlag: true, cleanSinceAdverse: 10 })).toBe(true);
+    // Admin-set flag (no auto-flag audit anchor) is left alone
+    expect(shouldClear({ underReview: true, hasAutoFlag: false, cleanSinceAdverse: 100 })).toBe(false);
+    // Already clear — nothing to do
+    expect(shouldClear({ underReview: false, hasAutoFlag: true, cleanSinceAdverse: 100 })).toBe(false);
+  });
+
+  it("auto-clear time gate: clears when the latest adverse event is older than the window", () => {
+    const WINDOW_DAYS = 90;
+    const now = Date.UTC(2026, 4, 7);
+    const day = 24 * 60 * 60_000;
+    // Mirrors the cron sweep's filter: candidates have `lastAdverseAt` (latest
+    // of last block + last auto-flag) < now - WINDOW_DAYS, AND a non-null
+    // `lastFlagAt` (i.e. they were auto-flagged at some point — admin-set
+    // flags have no audit anchor and are skipped).
+    function shouldClear(opts: {
+      underReview: boolean;
+      lastFlagAt: number | null;
+      lastAdverseAt: number | null;
+    }) {
+      if (!opts.underReview) return false;
+      if (opts.lastFlagAt == null) return false;
+      if (opts.lastAdverseAt == null) return false;
+      return now - opts.lastAdverseAt >= WINDOW_DAYS * day;
+    }
+    // Flagged 200d ago, last block 100d ago → cleared (window elapsed since last block)
+    expect(shouldClear({ underReview: true, lastFlagAt: now - 200 * day, lastAdverseAt: now - 100 * day })).toBe(true);
+    // Flagged 200d ago, last block was YESTERDAY → not cleared (block reset window)
+    expect(shouldClear({ underReview: true, lastFlagAt: now - 200 * day, lastAdverseAt: now - 1 * day })).toBe(false);
+    // Boundary: exactly 90 days since last adverse → cleared
+    expect(shouldClear({ underReview: true, lastFlagAt: now - 90 * day, lastAdverseAt: now - 90 * day })).toBe(true);
+    // Too recent flag, no later blocks
+    expect(shouldClear({ underReview: true, lastFlagAt: now - 30 * day, lastAdverseAt: now - 30 * day })).toBe(false);
+    // Admin-set flag (no auto-flag audit) → never auto-clears
+    expect(shouldClear({ underReview: true, lastFlagAt: null, lastAdverseAt: now - 365 * day })).toBe(false);
+    // Already clear — no-op
+    expect(shouldClear({ underReview: false, lastFlagAt: now - 200 * day, lastAdverseAt: now - 200 * day })).toBe(false);
+  });
+
+  // The candidate-selection SQL feeds these helpers — make sure the
+  // adverse-event aggregation matches what the gates expect.
+  it("anchor aggregation: lastAdverseAt is max(lastBlock, lastFlag), gated on hasAutoFlag", () => {
+    function aggregate(events: Array<{ action: string; at: number }>) {
+      const flags = events.filter(e => e.action === "handsfree_auto_flag_for_review").map(e => e.at);
+      const blocks = events.filter(e => e.action === "handsfree_proof_blocked").map(e => e.at);
+      const lastFlagAt = flags.length ? Math.max(...flags) : null;
+      const adverse = [...flags, ...blocks];
+      const lastAdverseAt = adverse.length ? Math.max(...adverse) : null;
+      return { lastFlagAt, lastAdverseAt };
+    }
+    const t = (n: number) => n * 1_000;
+    // Pure auto-flag history → lastAdverse equals lastFlag
+    expect(aggregate([{ action: "handsfree_auto_flag_for_review", at: t(100) }]))
+      .toEqual({ lastFlagAt: t(100), lastAdverseAt: t(100) });
+    // Block after flag → adverse advances, flag stays put
+    expect(aggregate([
+      { action: "handsfree_auto_flag_for_review", at: t(100) },
+      { action: "handsfree_proof_blocked", at: t(150) },
+    ])).toEqual({ lastFlagAt: t(100), lastAdverseAt: t(150) });
+    // Only blocks (admin-set under_review hypothetically) → no flag, never clears
+    expect(aggregate([
+      { action: "handsfree_proof_blocked", at: t(150) },
+    ])).toEqual({ lastFlagAt: null, lastAdverseAt: t(150) });
+    // No adverse events at all → both null
+    expect(aggregate([])).toEqual({ lastFlagAt: null, lastAdverseAt: null });
+  });
 });

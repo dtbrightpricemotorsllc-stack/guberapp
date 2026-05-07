@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { db, pool } from "./db";
 import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
 import { and, eq, lt, lte, gte, isNull, isNotNull, inArray, desc, notInArray, or, sql } from "drizzle-orm";
+import { clearStaleHandsfreeReviewSweep } from "./handsfree-auto-clear";
 import { storage } from "./storage";
 import { notifyNearbyAvailableWorkers, notifyCashDropExpired } from "./notify-helpers";
 import { sendPushToUser } from "./push";
@@ -1038,6 +1039,9 @@ export async function runAllScheduledSweeps(): Promise<void> {
 
     const decayedHf = await decayHandsfreeBlockedAttempts();
     if (decayedHf > 0) console.log(`[cron] decayed hands-free block counter for ${decayedHf} user(s)`);
+
+    const clearedHf = await clearStaleHandsfreeReviewSweep();
+    if (clearedHf > 0) console.log(`[cron] auto-cleared hands-free under_review for ${clearedHf} user(s)`);
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -1121,6 +1125,9 @@ export function startCron() {
 
       const decayedHf = await decayHandsfreeBlockedAttempts();
       if (decayedHf > 0) console.log(`[cron] decayed hands-free block counter for ${decayedHf} user(s)`);
+
+      const clearedHf = await clearStaleHandsfreeReviewSweep();
+      if (clearedHf > 0) console.log(`[cron] auto-cleared hands-free under_review for ${clearedHf} user(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }
