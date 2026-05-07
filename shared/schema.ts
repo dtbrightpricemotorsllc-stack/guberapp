@@ -526,6 +526,15 @@ export const proofSubmissions = pgTable("proof_submissions", {
   verified: boolean("verified").default(false),
   notEncountered: boolean("not_encountered").default(false),
   notEncounteredReason: text("not_encountered_reason"),
+  captureMeta: json("capture_meta").$type<{
+    deviceKind: "phone-handsfree" | "paired-android" | "direct-api";
+    deviceModel?: string;
+    captureStartedAt?: string;
+    captureEndedAt?: string;
+    gpsAtStart?: { lat: number; lng: number; accuracy?: number } | null;
+    receivedAt?: string;
+    consentVersion?: number;
+  }>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

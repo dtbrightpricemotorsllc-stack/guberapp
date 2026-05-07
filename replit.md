@@ -29,6 +29,14 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Tiers:** `studio_tier` defaults to `standard`. `creator` and `business` are reserved — Studio page shows upgrade teaser.
 - **Webhook:** `metadata.type === "studio_credits"` branch in the main Stripe webhook (`server/routes.ts`) increments balance + creates audit log + notification.
 
+## Hands-Free V&I (task-454)
+- **Component:** `client/src/components/handsfree-capture.tsx` (dialog: consent → camera preview → MediaRecorder → upload).
+- **Entry point:** "Hands-Free POV Capture" card in `worker-clipboard.tsx` (only when `job.category === "Verify & Inspect"`).
+- **Token:** `server/wearable-token.ts` — HMAC-SHA256 (key = `SESSION_SECRET`), 15-min TTL, payload `{jobId, helperId, exp, nonce}`.
+- **Routes:** `GET /api/jobs/:id/wearable-upload-token` (auth + assigned check) and `POST /api/proof/wearable-upload` (token + Cloudinary URL + `captureMeta`). Both gated by `platform_settings.handsfree_capture_enabled` (admin kill-switch, defaults `true`).
+- **Storage:** `proof_submissions.capture_meta jsonb` holds `{deviceKind, deviceModel, captureStartedAt, captureEndedAt, gpsAtStart, receivedAt, consentVersion}`. Hirer-side badge "POV · Hands-Free" rendered in `job-detail.tsx` proof card.
+- **Vendor neutrality:** product copy never names a glasses brand. Three paths documented in `docs/handsfree-vi-architecture.md` — phone-as-glasses (live), Capacitor paired-device import (v1.5), and the public `/api/proof/wearable-upload` contract for partner devices.
+
 ## Where things live
 - **Job Builder Config:** `client/src/lib/job-builder-config.ts`
 - **Guided Job Builder Component:** `client/src/components/guided-job-builder.tsx`

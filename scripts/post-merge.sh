@@ -181,6 +181,14 @@ UPDATE jobs
       WHERE email IN ('demo.consumer@guberapp.internal', 'demo.business@guberapp.internal')
     );
 
+-- proof_submissions.capture_meta: POV / hands-free capture metadata (task-454)
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS capture_meta jsonb;
+
+-- platform_settings: hands-free capture kill-switch (task-454)
+INSERT INTO platform_settings (key, value, category, description)
+VALUES ('handsfree_capture_enabled', 'true', 'trust', 'Show the Hands-Free POV recorder on V&I jobs and accept wearable uploads.')
+ON CONFLICT (key) DO NOTHING;
+
 SQL
 
 echo "[post-merge] Schema sync complete."

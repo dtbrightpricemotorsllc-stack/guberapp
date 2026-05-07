@@ -34,6 +34,8 @@ import {
 import { useState, useRef, useCallback } from "react";
 import type { Job, ProofTemplate, ProofChecklistItem } from "@shared/schema";
 import { Link } from "wouter";
+import { HandsFreeCapture } from "@/components/handsfree-capture";
+import { Glasses } from "lucide-react";
 
 type TemplateWithItems = ProofTemplate & { checklistItems: ProofChecklistItem[] };
 
@@ -140,6 +142,12 @@ export default function WorkerClipboard() {
   const jobId = params?.id;
 
   const [activeItem, setActiveItem] = useState<number | null>(null);
+  const [handsFreeOpen, setHandsFreeOpen] = useState(false);
+  const { data: handsFreeFlag } = useQuery<{ value: string } | null>({
+    queryKey: ["/api/platform-settings/handsfree_capture_enabled"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const handsFreeEnabled = (handsFreeFlag?.value ?? "true") !== "false";
   const [itemStates, setItemStates] = useState<Record<number, ChecklistItemState>>({});
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
@@ -384,6 +392,38 @@ export default function WorkerClipboard() {
             </Badge>
           </div>
         </div>
+
+        {job.category === "Verify & Inspect" && handsFreeEnabled && (
+          <div className="glass-card rounded-2xl p-4 mb-4 border border-primary/30 bg-primary/5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                <Glasses className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-display font-bold">Hands-Free POV Capture</p>
+                <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5">
+                  Mount your phone facing forward and record continuous video evidence. Hirer sees a "POV" badge on review.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="shrink-0 h-9"
+                onClick={() => setHandsFreeOpen(true)}
+                data-testid="button-open-handsfree"
+              >
+                Open
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <HandsFreeCapture
+          jobId={jobId!}
+          open={handsFreeOpen}
+          onOpenChange={setHandsFreeOpen}
+          onUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] })}
+        />
 
         {totalCount > 0 && (
           <div className="glass-card rounded-2xl p-4 mb-4 border border-white/[0.06]">

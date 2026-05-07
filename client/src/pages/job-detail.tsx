@@ -1473,8 +1473,23 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               } catch {
                 if (proof.imageUrls) images = [proof.imageUrls];
               }
+              const captureMeta = (proof as any).captureMeta as { deviceKind?: string } | null;
               return (
                 <div key={proof.id} className="bg-background rounded-xl p-4 space-y-3" data-testid={`card-proof-${proof.id}`}>
+                  {captureMeta?.deviceKind && (
+                    <Badge variant="outline" className="bg-primary/15 text-primary border-primary/30 text-[10px]" data-testid={`badge-pov-${proof.id}`}>
+                      POV · Hands-Free
+                    </Badge>
+                  )}
+                  {(proof as any).videoUrl && (
+                    <video
+                      src={(proof as any).videoUrl}
+                      controls
+                      playsInline
+                      className="w-full rounded-xl border border-border/20 bg-black"
+                      data-testid={`video-proof-${proof.id}`}
+                    />
+                  )}
                   {proof.notEncountered && (
                     <Badge variant="outline" className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]">
                       <AlertTriangle className="w-2.5 h-2.5 mr-0.5" /> Not Encountered

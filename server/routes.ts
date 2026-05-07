@@ -7071,6 +7071,117 @@ export async function registerRoutes(
     res.json(proofs);
   });
 
+  // ── HANDS-FREE / WEARABLE POV CAPTURE (task-454) ─────────────────────────
+  app.get("/api/platform-settings/:key", async (req: Request, res: Response) => {
+    const allowedPublic = new Set(["handsfree_capture_enabled"]);
+    if (!allowedPublic.has(req.params.key)) return res.status(404).json({ message: "Not found" });
+    const row = await db.select().from(platformSettings).where(eq(platformSettings.key, req.params.key)).limit(1);
+    res.json(row[0] ? { value: row[0].value } : null);
+  });
+
+  app.get("/api/jobs/:id/wearable-upload-token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
+      if (flagRow[0]?.value === "false") {
+        return res.status(403).json({ message: "Hands-free capture is currently disabled by the admin." });
+      }
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Only the assigned helper can record POV proof." });
+      }
+      if (!["funded", "active", "in_progress"].includes(job.status as string)) {
+        return res.status(400).json({ message: "Job is not in a recordable state." });
+      }
+      const { signWearableToken } = await import("./wearable-token.js");
+      const token = signWearableToken(jobId, req.session.userId!);
+      res.json({ token, expiresInSec: 15 * 60 });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/proof/wearable-upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
+      if (flagRow[0]?.value === "false") {
+        return res.status(403).json({ message: "Hands-free capture is currently disabled by the admin." });
+      }
+      const { token, videoUrl, captureMeta } = req.body || {};
+      if (!token || !videoUrl || !captureMeta?.deviceKind) {
+        return res.status(400).json({ message: "token, videoUrl, and captureMeta.deviceKind are required" });
+      }
+      const { verifyWearableToken } = await import("./wearable-token.js");
+      const payload = verifyWearableToken(token);
+      if (!payload) return res.status(401).json({ message: "Invalid or expired upload token" });
+      if (payload.helperId !== req.session.userId) {
+        return res.status(403).json({ message: "Token does not belong to this session" });
+      }
+      const job = await storage.getJob(payload.jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Not assigned to this job" });
+      }
+
+      const allowedKinds = new Set(["phone-handsfree", "paired-android", "direct-api"]);
+      if (!allowedKinds.has(captureMeta.deviceKind)) {
+        return res.status(400).json({ message: "Unknown deviceKind" });
+      }
+
+      const enrichedMeta = {
+        ...captureMeta,
+        receivedAt: new Date().toISOString(),
+      };
+
+      const proof = await storage.createProofSubmission({
+        jobId: payload.jobId,
+        submittedBy: req.session.userId!,
+        checklistItemId: null,
+        imageUrls: null,
+        videoUrl,
+        notes: null,
+        gpsLat: captureMeta?.gpsAtStart?.lat ?? null,
+        gpsLng: captureMeta?.gpsAtStart?.lng ?? null,
+        gpsTimestamp: captureMeta?.captureStartedAt ? new Date(captureMeta.captureStartedAt) : null,
+        notEncountered: false,
+        notEncounteredReason: null,
+        captureMeta: enrichedMeta,
+      });
+
+      await storage.updateJob(payload.jobId, { proofStatus: "submitted", status: "proof_submitted" });
+
+      let durationSec = 0;
+      if (captureMeta.captureStartedAt && captureMeta.captureEndedAt) {
+        durationSec = Math.max(0, Math.round(
+          (new Date(captureMeta.captureEndedAt).getTime() - new Date(captureMeta.captureStartedAt).getTime()) / 1000,
+        ));
+      }
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "handsfree_proof_uploaded",
+        details: JSON.stringify({
+          jobId: payload.jobId,
+          deviceKind: captureMeta.deviceKind,
+          deviceModel: captureMeta.deviceModel?.slice(0, 120),
+          durationSec,
+          consentVersion: captureMeta.consentVersion ?? 1,
+        }),
+      });
+
+      await notify(job.postedById, {
+        title: "POV Proof Submitted ✅",
+        body: `Helper uploaded a hands-free video for "${job.title}". Tap to review.`,
+        jobId: payload.jobId,
+        priority: "high",
+      });
+
+      res.json({ id: proof.id, jobId: payload.jobId, videoUrl });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/jobs/:id/proof-template", requireAuth, async (req: Request, res: Response) => {
     const jobId = parseInt(req.params.id);
     const job = await storage.getJob(jobId);
