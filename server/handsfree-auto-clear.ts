@@ -20,6 +20,7 @@
 import { and, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { auditLogs, users } from "@shared/schema";
 import { db as defaultDb } from "./db";
+import { notifyHandsfreeAutoCleared } from "./notify-helpers";
 
 export const HANDSFREE_AUTO_CLEAR_STREAK = 10;
 export const HANDSFREE_AUTO_CLEAR_DAYS = 90;
@@ -94,6 +95,7 @@ export async function tryAutoClearStreak(
       });
       return true;
     });
+    if (ok) await notifyHandsfreeAutoCleared(userId, "clean_streak");
     return ok;
   } catch (err) {
     console.error("[handsfree-auto-clear] streak check failed:", err);
@@ -159,7 +161,10 @@ export async function clearStaleHandsfreeReviewSweep(
         });
         return true;
       });
-      if (ok) cleared++;
+      if (ok) {
+        cleared++;
+        await notifyHandsfreeAutoCleared(c.id, "stale_no_blocks");
+      }
     } catch (err) {
       console.error(`[handsfree-auto-clear] failed for user ${c.id}:`, err);
     }

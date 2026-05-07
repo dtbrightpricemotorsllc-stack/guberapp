@@ -48,6 +48,41 @@ export async function notifyNearbyAvailableWorkers(
   }
 }
 
+// task-493: tell a worker their auto-imposed hands-free fraud flag has
+// been auto-lifted (one of: counter_decayed, clean_streak, stale_no_blocks).
+// In-app notification + best-effort push. Errors are swallowed so the
+// auto-clear transaction is never affected by a notification failure.
+export async function notifyHandsfreeAutoCleared(
+  userId: number,
+  reason: "counter_decayed" | "clean_streak" | "stale_no_blocks",
+) {
+  try {
+    const title = "Account back in good standing";
+    const body =
+      reason === "clean_streak"
+        ? "Thanks for the clean uploads — your account is back in good standing and your hands-free hold has been lifted."
+        : reason === "counter_decayed"
+        ? "Your hands-free hold has been lifted automatically. Welcome back to good standing."
+        : "It's been a while since any issues — your hands-free hold has been lifted. Welcome back to good standing.";
+    await storage.createNotification({
+      userId,
+      title,
+      body,
+      type: "system",
+      ctaUrl: "/account-settings",
+      ctaLabel: "View account",
+    });
+    sendPushToUser(userId, {
+      title,
+      body,
+      url: "/account-settings",
+      tag: `handsfree-cleared-${userId}`,
+    }).catch(() => {});
+  } catch (e: any) {
+    console.error("[GUBER] notifyHandsfreeAutoCleared error:", e?.message);
+  }
+}
+
 export async function notifyCashDropExpired(dropId: number, dropTitle: string) {
   try {
     const allAttempts = await storage.getCashDropAttempts(dropId);

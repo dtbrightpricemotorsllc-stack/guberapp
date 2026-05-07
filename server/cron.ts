@@ -4,7 +4,7 @@ import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisp
 import { and, eq, lt, lte, gte, isNull, isNotNull, inArray, desc, notInArray, or, sql } from "drizzle-orm";
 import { clearStaleHandsfreeReviewSweep } from "./handsfree-auto-clear";
 import { storage } from "./storage";
-import { notifyNearbyAvailableWorkers, notifyCashDropExpired } from "./notify-helpers";
+import { notifyNearbyAvailableWorkers, notifyCashDropExpired, notifyHandsfreeAutoCleared } from "./notify-helpers";
 import { sendPushToUser } from "./push";
 import { claimReminder, isUserInQuietHours } from "./reminders";
 import { TRUST_ADJUSTMENTS } from "./pricing";
@@ -947,7 +947,7 @@ async function decayHandsfreeBlockedAttempts(): Promise<number> {
         ));
       if (!anchor?.at) continue;
 
-      await db.transaction(async (tx) => {
+      const cleared = await db.transaction(async (tx) => {
         // The strikes30d gate is enforced in the same UPDATE so it cannot
         // race with a cancellation tripwire that fires mid-sweep.
         const [updated] = await tx
@@ -959,7 +959,7 @@ async function decayHandsfreeBlockedAttempts(): Promise<number> {
             lt(users.strikes30d!, 3),
           ))
           .returning({ id: users.id });
-        if (!updated) return;
+        if (!updated) return false;
         await tx.insert(auditLogs).values({
           userId: d.id,
           action: "handsfree_auto_flag_cleared",
@@ -969,7 +969,13 @@ async function decayHandsfreeBlockedAttempts(): Promise<number> {
             flaggedAt: anchor.at instanceof Date ? anchor.at.toISOString() : new Date(anchor.at).toISOString(),
           }),
         });
+        return true;
       });
+      // task-493: notify the worker their flag has been auto-lifted. The
+      // UPDATE's WHERE-clause guarantees exactly one clear per user (the
+      // next sweep won't pick them up because under_review is now false),
+      // so this fires at most once per clear event.
+      if (cleared) await notifyHandsfreeAutoCleared(d.id, "counter_decayed");
     } catch (err) {
       console.error(`[handsfree-decay] failed to clear under_review for user ${d.id}:`, err);
     }

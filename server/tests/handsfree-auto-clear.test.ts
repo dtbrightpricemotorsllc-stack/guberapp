@@ -12,7 +12,7 @@ process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || "sk_test_dummy"
 process.env.DISABLE_BACKGROUND_JOBS = "true";
 
 import { db } from "../db";
-import { auditLogs, users } from "@shared/schema";
+import { auditLogs, notifications, users } from "@shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   HANDSFREE_AUTO_CLEAR_DAYS,
@@ -66,6 +66,7 @@ afterEach(async () => {
   while (created.length > 0) {
     const id = created.pop()!;
     try {
+      await db.delete(notifications).where(eq(notifications.userId, id));
       await db.delete(auditLogs).where(eq(auditLogs.userId, id));
       await db.delete(users).where(eq(users.id, id));
     } catch {}
@@ -192,6 +193,74 @@ describe("handsfree-auto-clear (task-484) — time-based sweep", () => {
     await clearStaleHandsfreeReviewSweep();
     const [after] = await db.select({ ur: users.underReview }).from(users).where(eq(users.id, uid));
     expect(after.ur).toBe(true);
+  });
+});
+
+describe("handsfree-auto-clear (task-493) — worker notifications on auto-lift", () => {
+  it("queues a notification when the streak path clears the flag", async () => {
+    const uid = await makeUnderReviewUser();
+    await seedAudit(uid, "handsfree_auto_flag_for_review", -7 * 86_400_000);
+    for (let i = 0; i < HANDSFREE_AUTO_CLEAR_STREAK; i++) {
+      await seedAudit(uid, "handsfree_proof_uploaded", -6 * 86_400_000 + i * 60_000);
+    }
+
+    const cleared = await tryAutoClearStreak(uid);
+    expect(cleared).toBe(true);
+
+    const notifs = await db
+      .select({ id: notifications.id, title: notifications.title, type: notifications.type })
+      .from(notifications)
+      .where(eq(notifications.userId, uid));
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0].title).toMatch(/good standing/i);
+    expect(notifs[0].type).toBe("system");
+  });
+
+  it("queues a notification when the stale-sweep path clears the flag", async () => {
+    const uid = await makeUnderReviewUser();
+    await seedAudit(uid, "handsfree_auto_flag_for_review", -(HANDSFREE_AUTO_CLEAR_DAYS + 5) * 86_400_000);
+
+    await clearStaleHandsfreeReviewSweep();
+
+    const notifs = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.userId, uid));
+    expect(notifs).toHaveLength(1);
+  });
+
+  it("queues a notification when the counter-decay path clears the flag", async () => {
+    const oldLast = new Date(Date.now() - 70 * 86_400_000);
+    const uid = await makeUnderReviewUser({
+      handsfreeBlockedAttempts: 5,
+      handsfreeBlockedLastAt: oldLast,
+    });
+    await seedAudit(uid, "handsfree_auto_flag_for_review", -65 * 86_400_000);
+
+    await cronTest.decayHandsfreeBlockedAttempts();
+
+    const notifs = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.userId, uid));
+    expect(notifs).toHaveLength(1);
+  });
+
+  it("does NOT notify when the counter decays but no clear happens (admin-set flag)", async () => {
+    const oldLast = new Date(Date.now() - 70 * 86_400_000);
+    const uid = await makeUnderReviewUser({
+      handsfreeBlockedAttempts: 2,
+      handsfreeBlockedLastAt: oldLast,
+    });
+    // No handsfree_auto_flag_for_review audit row → admin-set flag, no clear.
+
+    await cronTest.decayHandsfreeBlockedAttempts();
+
+    const notifs = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.userId, uid));
+    expect(notifs).toHaveLength(0);
   });
 });
 
