@@ -55,6 +55,14 @@ function requireStripeTestMode(_req: Request, res: Response, next: Function) {
 }
 
 function requireLiveConfirmation(req: Request, res: Response, next: Function) {
+  // Defense in depth: only allow live (real-money) admin actions in production
+  // builds AND only when the human typed the magic confirmation header. Either
+  // missing → 412 / 403, never silent.
+  if (process.env.NODE_ENV !== "production") {
+    return res.status(403).json({
+      message: "Live admin actions are only available in NODE_ENV=production builds. End-test refunds are gated.",
+    });
+  }
   const conf = (req.headers["x-live-confirm"] || req.body?.confirm || "") as string;
   if (conf !== "LIVE") {
     return res.status(412).json({ message: "Live action requires header x-live-confirm: LIVE" });
@@ -248,17 +256,57 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
   app.post("/api/admin/qa/allowlist/:itemType/:itemId/end-test", requireAdmin, requireLiveConfirmation, async (req, res) => {
     const { itemType, itemId } = req.params;
     const itemIdN = parseInt(itemId);
+    const refunds: { provider: string; id?: string; amountCents?: number; ok: boolean; error?: string }[] = [];
+
+    // Lazy-load Stripe so test paths and dev boots don't require it.
+    let stripe: any = null;
+    try {
+      const Stripe = (await import("stripe")).default;
+      const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_CONNECT_SECRET_KEY;
+      if (key) stripe = new Stripe(key, { apiVersion: "2024-06-20" as any });
+    } catch { /* stripe missing — skip refunds, still cancel */ }
+
     if (itemType === "job") {
+      const [j] = await db.select().from(jobs).where(eq(jobs.id, itemIdN)).limit(1);
+      if (!j) return res.status(404).json({ message: "job not found" });
+      // Real-money unwind: refund any held escrow on this job before cancelling.
+      if (stripe && j.stripePaymentIntentId) {
+        try {
+          const r = await stripe.refunds.create({ payment_intent: j.stripePaymentIntentId, reason: "requested_by_customer" });
+          refunds.push({ provider: "stripe", id: r.id, amountCents: r.amount, ok: true });
+        } catch (e: any) {
+          refunds.push({ provider: "stripe", id: j.stripePaymentIntentId, ok: false, error: e.message });
+        }
+      }
       await db.update(jobs).set({ visibility: "public", status: "cancelled" }).where(eq(jobs.id, itemIdN));
     } else if (itemType === "cash_drop") {
+      const [d] = await db.select().from(cashDrops).where(eq(cashDrops.id, itemIdN)).limit(1);
+      if (!d) return res.status(404).json({ message: "cash drop not found" });
+      // Real-money unwind: refund the host's funding charge before cancelling
+      // so testers' deposits aren't held indefinitely.
+      if (stripe && d.stripePaymentIntentId) {
+        try {
+          const r = await stripe.refunds.create({ payment_intent: d.stripePaymentIntentId, reason: "requested_by_customer" });
+          refunds.push({ provider: "stripe", id: r.id, amountCents: r.amount, ok: true });
+        } catch (e: any) {
+          refunds.push({ provider: "stripe", id: d.stripePaymentIntentId, ok: false, error: e.message });
+        }
+      }
       await db.update(cashDrops).set({ visibility: "public", status: "cancelled", closedAt: new Date() }).where(eq(cashDrops.id, itemIdN));
-      await recordCashDropEvent({ cashDropId: itemIdN, eventType: "cancelled", reasonCode: "qa_end_live_test", actorUserId: req.session?.userId ?? null, source: "route" });
+      await recordCashDropEvent({
+        cashDropId: itemIdN,
+        eventType: "cancelled",
+        reasonCode: "qa_end_live_test",
+        actorUserId: req.session?.userId ?? null,
+        source: "route",
+        payload: { refunds },
+      });
     } else {
       return res.status(400).json({ message: "itemType must be job|cash_drop" });
     }
     await db.delete(testerAllowlist).where(and(eq(testerAllowlist.itemType, itemType), eq(testerAllowlist.itemId, itemIdN)));
-    await audit(req, "qa_end_live_test", { itemType, itemId: itemIdN });
-    res.json({ ok: true });
+    await audit(req, "qa_end_live_test", { itemType, itemId: itemIdN, refunds });
+    res.json({ ok: true, refunds });
   });
 
   // ── Inspector ────────────────────────────────────────────────────────────
@@ -306,6 +354,26 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     const u = await storage.getUser(parseInt(req.params.id));
     if (!u) return res.status(404).json({ message: "user not found" });
     res.json({ user: u });
+  });
+
+  // Verification inspector: surfaces ID/selfie URLs + verification flags so an
+  // admin can sanity-check a single user's KYC at a glance without opening the
+  // full profile page.
+  app.get("/api/admin/qa/inspect/verification/:id", requireAdmin, async (req, res) => {
+    const u = await storage.getUser(parseInt(req.params.id));
+    if (!u) return res.status(404).json({ message: "user not found" });
+    res.json({
+      user: { id: u.id, fullName: u.fullName, email: u.email, role: u.role },
+      verification: {
+        idVerified: (u as any).idVerified,
+        selfieVerified: (u as any).selfieVerified,
+        idFrontUrl: (u as any).idFrontUrl,
+        idBackUrl: (u as any).idBackUrl,
+        selfieUrl: (u as any).selfieUrl,
+        suspended: (u as any).suspended,
+        banned: (u as any).banned,
+      },
+    });
   });
 
   app.get("/api/admin/qa/media-download", requireAdmin, async (req, res) => {

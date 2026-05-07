@@ -4934,6 +4934,12 @@ export async function registerRoutes(
       const isOwner = req.session.userId === job.postedById;
       const isHelper = req.session.userId === job.assignedHelperId;
       const isAdmin = await viewerIsAdmin(req);
+      // Allowlist visibility (task-462): hide allowlist jobs from non-listed
+      // viewers (helpers + owner + admin always pass).
+      const { canViewItem } = await import("./visibility.js");
+      if (!isHelper && !(await canViewItem("job", job as any, { viewerId: req.session.userId, isAdmin, isOwner }))) {
+        return res.status(404).json({ message: "Job not found" });
+      }
       // Strangers can't peek at unpublished/draft jobs by guessing IDs.
       // Admins are exempt so support can audit drafts/unpaid posts.
       if (!isOwner && !isHelper && !isAdmin && (job.status === "draft" || !job.isPaid)) {

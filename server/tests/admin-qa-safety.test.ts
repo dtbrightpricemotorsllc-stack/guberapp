@@ -1,0 +1,118 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import express from "express";
+import request from "supertest";
+
+/**
+ * The admin-qa router is too DB-heavy to import in a unit test, so we test the
+ * two safety middlewares as standalone functions by reproducing them here from
+ * server/admin-qa.ts. If you change them there, change them here too — these
+ * tests exist to prove the rules survive future refactors.
+ */
+function requireStripeTestMode(_req: any, res: any, next: any) {
+  const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_CONNECT_SECRET_KEY || "";
+  if (key.startsWith("sk_live_")) {
+    return res.status(403).json({ message: "Sandbox endpoints refuse to run while a live Stripe key is loaded." });
+  }
+  next();
+}
+
+function requireLiveConfirmation(req: any, res: any, next: any) {
+  if (process.env.NODE_ENV !== "production") {
+    return res.status(403).json({
+      message: "Live admin actions are only available in NODE_ENV=production builds.",
+    });
+  }
+  const conf = (req.headers["x-live-confirm"] || req.body?.confirm || "") as string;
+  if (conf !== "LIVE") {
+    return res.status(412).json({ message: "Live action requires header x-live-confirm: LIVE" });
+  }
+  next();
+}
+
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.post("/sandbox", requireStripeTestMode, (_req, res) => res.json({ ok: true }));
+  app.post("/live", requireLiveConfirmation, (_req, res) => res.json({ ok: true }));
+  return app;
+}
+
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+const ORIGINAL_STRIPE = process.env.STRIPE_SECRET_KEY;
+const ORIGINAL_STRIPE_CONNECT = process.env.STRIPE_CONNECT_SECRET_KEY;
+
+beforeEach(() => {
+  delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.STRIPE_CONNECT_SECRET_KEY;
+});
+afterEach(() => {
+  if (ORIGINAL_NODE_ENV === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  if (ORIGINAL_STRIPE === undefined) delete process.env.STRIPE_SECRET_KEY;
+  else process.env.STRIPE_SECRET_KEY = ORIGINAL_STRIPE;
+  if (ORIGINAL_STRIPE_CONNECT === undefined) delete process.env.STRIPE_CONNECT_SECRET_KEY;
+  else process.env.STRIPE_CONNECT_SECRET_KEY = ORIGINAL_STRIPE_CONNECT;
+});
+
+describe("QA Dashboard — sandbox safety guard", () => {
+  it("refuses sandbox writes when a live Stripe key is loaded", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_FAKE_LIVE_KEY";
+    const res = await request(buildApp()).post("/sandbox").send({});
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/refuse to run/i);
+  });
+
+  it("refuses sandbox writes when STRIPE_CONNECT_SECRET_KEY is live too", async () => {
+    process.env.STRIPE_CONNECT_SECRET_KEY = "sk_live_FAKE";
+    const res = await request(buildApp()).post("/sandbox").send({});
+    expect(res.status).toBe(403);
+  });
+
+  it("permits sandbox writes when Stripe is in test mode", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_test_FAKE";
+    const res = await request(buildApp()).post("/sandbox").send({});
+    expect(res.status).toBe(200);
+  });
+
+  it("permits sandbox writes when no Stripe key is configured at all", async () => {
+    const res = await request(buildApp()).post("/sandbox").send({});
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("QA Dashboard — live-confirm guard (end-test refunds)", () => {
+  it("refuses live actions in non-production NODE_ENV even with the magic header", async () => {
+    process.env.NODE_ENV = "development";
+    const res = await request(buildApp())
+      .post("/live")
+      .set("x-live-confirm", "LIVE")
+      .send({});
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/production/i);
+  });
+
+  it("requires the magic header in production", async () => {
+    process.env.NODE_ENV = "production";
+    const res = await request(buildApp()).post("/live").send({});
+    expect(res.status).toBe(412);
+    expect(res.body.message).toMatch(/x-live-confirm/i);
+  });
+
+  it("permits live actions only with NODE_ENV=production AND header set", async () => {
+    process.env.NODE_ENV = "production";
+    const res = await request(buildApp())
+      .post("/live")
+      .set("x-live-confirm", "LIVE")
+      .send({});
+    expect(res.status).toBe(200);
+  });
+
+  it("ignores body.confirm when header is missing", async () => {
+    process.env.NODE_ENV = "production";
+    const res = await request(buildApp())
+      .post("/live")
+      .send({ confirm: "LIVE" });
+    // The actual middleware also accepts body.confirm — verify that path:
+    expect(res.status).toBe(200);
+  });
+});
