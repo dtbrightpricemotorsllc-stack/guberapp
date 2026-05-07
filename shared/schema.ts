@@ -72,6 +72,16 @@ export const users = pgTable("users", {
   studioCredits: integer("studio_credits").default(0),
   studioTier: text("studio_tier").default("standard"),
   studioCreditsLastDripAt: timestamp("studio_credits_last_drip_at"),
+  // Stripe subscription that backs the current Creator/Business tier (null on
+  // standard). studioSubscriptionStatus mirrors Stripe's status string
+  // (active | trialing | past_due | canceled | unpaid | incomplete | null).
+  studioSubscriptionId: text("studio_subscription_id"),
+  studioSubscriptionStatus: text("studio_subscription_status"),
+  // Mirrors Stripe's `cancel_at_period_end`. While true, the user keeps
+  // tier access through the paid period; the actual downgrade happens
+  // when Stripe fires customer.subscription.deleted (which also clears
+  // studioSubscriptionId).
+  studioSubscriptionCancelAtPeriodEnd: boolean("studio_subscription_cancel_at_period_end").default(false),
   trustBoxPurchased: boolean("trust_box_purchased").default(false),
   trustBoxSubscriptionId: text("trust_box_subscription_id"),
   monthlyImageUploads: integer("monthly_image_uploads").default(0),

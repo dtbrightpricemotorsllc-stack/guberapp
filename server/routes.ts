@@ -3135,6 +3135,54 @@ export async function registerRoutes(
             console.log(`[GUBER][webhook/main] studio_credits: user ${userId} +${credits} (pack=${packId}, balance=${newBalance})`);
           }
 
+        } else if (metadata?.type === "studio_subscription" && metadata?.userId) {
+          // AI Video Studio tier subscription (task-452). Sets the user's
+          // studio_tier, records the Stripe sub id, and grants the first
+          // month's credit drip immediately. Subsequent monthly drips are
+          // handled by invoice.paid + the cron safety net.
+          const userId = parseInt(metadata.userId);
+          const tierName = String(metadata.tier || "creator");
+          const monthlyCredits = parseInt(metadata.monthlyCredits || "0") || 0;
+          const subscriptionId = (session.subscription as string) || null;
+          const subUser = await storage.getUser(userId);
+          if (subUser && (tierName === "creator" || tierName === "business")) {
+            const sessionTag = `[session:${session.id}]`;
+            const [existing] = await db
+              .select({ id: auditLogsTable.id })
+              .from(auditLogsTable)
+              .where(and(
+                eq(auditLogsTable.action, "studio_subscription_activated"),
+                ilike(auditLogsTable.details, `%${sessionTag}%`),
+              ))
+              .limit(1);
+            if (existing) {
+              console.log(`[GUBER][webhook/main] studio_subscription: session ${session.id} already processed (audit #${existing.id}) — skipping duplicate`);
+              return res.json({ received: true });
+            }
+            const newBalance = monthlyCredits > 0
+              ? await storage.incrementStudioCredits(userId, monthlyCredits)
+              : (subUser.studioCredits ?? 0);
+            await storage.updateUser(userId, {
+              studioTier: tierName,
+              studioSubscriptionId: subscriptionId,
+              studioSubscriptionStatus: "active",
+              studioSubscriptionCancelAtPeriodEnd: false,
+              studioCreditsLastDripAt: new Date(),
+            });
+            await storage.createAuditLog({
+              userId,
+              action: "studio_subscription_activated",
+              details: `${sessionTag} Studio "${tierName}" subscription activated. +${monthlyCredits} initial credits. Balance: ${newBalance}. Sub: ${subscriptionId || "n/a"}.`,
+            });
+            await storage.createNotification({
+              userId,
+              title: `Studio ${tierName === "business" ? "Business" : "Creator"} unlocked!`,
+              body: `Your subscription is live. +${monthlyCredits} credits added now and every month. Locked vibes are now yours.`,
+              type: "system",
+            });
+            console.log(`[GUBER][webhook/main] studio_subscription: user ${userId} → tier=${tierName}, sub=${subscriptionId}, +${monthlyCredits} credits`);
+          }
+
         } else if (metadata?.type === "marketplace_boost" && metadata?.itemId) {
           const itemId = parseInt(metadata.itemId);
           const boostedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -3329,6 +3377,13 @@ export async function registerRoutes(
             trustBoxSubscriptionId: isActive ? sub.id : null,
           });
           console.log(`[GUBER][webhook/main] subscription.updated: user ${userId} → trustBoxPurchased=${isActive}, status=${sub.status}`);
+        } else if (subMeta?.type === "studio_subscription" && subMeta?.userId) {
+          const userId = parseInt(subMeta.userId);
+          await storage.updateUser(userId, {
+            studioSubscriptionStatus: sub.status,
+            studioSubscriptionCancelAtPeriodEnd: !!sub.cancel_at_period_end,
+          });
+          console.log(`[GUBER][webhook/main] subscription.updated: user ${userId} studio status=${sub.status}, cancelAtPeriodEnd=${sub.cancel_at_period_end}`);
         } else {
           console.log(`[GUBER][webhook/main] subscription.updated: unhandled type "${subMeta?.type || "none"}" — ignored`);
         }
@@ -3351,6 +3406,26 @@ export async function registerRoutes(
             type: "system",
           });
           console.log(`[GUBER][webhook/main] subscription.deleted: user ${userId} → trustBoxPurchased=false`);
+        } else if (subMeta?.type === "studio_subscription" && subMeta?.userId) {
+          const userId = parseInt(subMeta.userId);
+          await storage.updateUser(userId, {
+            studioTier: "standard",
+            studioSubscriptionId: null,
+            studioSubscriptionStatus: "canceled",
+            studioSubscriptionCancelAtPeriodEnd: false,
+          });
+          await storage.createAuditLog({
+            userId,
+            action: "studio_subscription_ended",
+            details: `Studio subscription ended. Sub: ${sub.id}. Tier reverted to standard.`,
+          });
+          await storage.createNotification({
+            userId,
+            title: "Studio subscription ended",
+            body: "Your Creator/Business plan has ended. Existing credits stay. Resubscribe anytime to unlock advanced vibes again.",
+            type: "system",
+          });
+          console.log(`[GUBER][webhook/main] subscription.deleted: user ${userId} → studio tier=standard`);
         } else {
           console.log(`[GUBER][webhook/main] subscription.deleted: unhandled type "${subMeta?.type || "none"}" — ignored`);
         }
@@ -3358,6 +3433,7 @@ export async function registerRoutes(
       } else if (event.type === "invoice.paid") {
         const invoice = event.data.object as Stripe.Invoice;
         const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : (invoice.subscription as any)?.id;
+        const billingReason = invoice.billing_reason ?? undefined;
         if (subscriptionId) {
           try {
             const sub = await stripeMain.subscriptions.retrieve(subscriptionId);
@@ -3371,8 +3447,50 @@ export async function registerRoutes(
                 details: `Trust Box subscription renewed. Invoice: ${invoice.id}. Sub: ${sub.id}`,
               });
               console.log(`[GUBER][webhook/main] invoice.paid: user ${userId} Trust Box renewed — invoice ${invoice.id}`);
+            } else if (subMeta?.type === "studio_subscription" && subMeta?.userId) {
+              // Monthly drip: only on renewal cycles, not the initial checkout
+              // (the initial credits were already granted by checkout.session.completed
+              // above to avoid double-grant). billing_reason="subscription_create"
+              // marks the first invoice; everything else is a renewal.
+              if (billingReason && billingReason !== "subscription_cycle") {
+                console.log(`[GUBER][webhook/main] invoice.paid: studio sub ${sub.id} billing_reason=${billingReason} — not a renewal cycle, skipping drip`);
+              } else {
+                const userId = parseInt(subMeta.userId);
+                const monthlyCredits = parseInt(subMeta.monthlyCredits || "0") || 0;
+                const dripUser = await storage.getUser(userId);
+                const invoiceTag = `[invoice:${invoice.id}]`;
+                const [existingDrip] = await db
+                  .select({ id: auditLogsTable.id })
+                  .from(auditLogsTable)
+                  .where(and(
+                    eq(auditLogsTable.action, "studio_subscription_renewed"),
+                    ilike(auditLogsTable.details, `%${invoiceTag}%`),
+                  ))
+                  .limit(1);
+                if (existingDrip) {
+                  console.log(`[GUBER][webhook/main] invoice.paid: studio invoice ${invoice.id} already processed — skipping`);
+                } else if (dripUser && monthlyCredits > 0) {
+                  const newBalance = await storage.incrementStudioCredits(userId, monthlyCredits);
+                  await storage.updateUser(userId, {
+                    studioSubscriptionStatus: "active",
+                    studioCreditsLastDripAt: new Date(),
+                  });
+                  await storage.createAuditLog({
+                    userId,
+                    action: "studio_subscription_renewed",
+                    details: `${invoiceTag} Studio renewal: +${monthlyCredits} credits. Balance: ${newBalance}. Sub: ${sub.id}.`,
+                  });
+                  await storage.createNotification({
+                    userId,
+                    title: "Monthly Studio credits added",
+                    body: `+${monthlyCredits} credits dropped into your Studio balance.`,
+                    type: "system",
+                  });
+                  console.log(`[GUBER][webhook/main] invoice.paid: user ${userId} studio renewed +${monthlyCredits} credits`);
+                }
+              }
             } else {
-              console.log(`[GUBER][webhook/main] invoice.paid: sub ${subscriptionId} is not a trust_box — ignored`);
+              console.log(`[GUBER][webhook/main] invoice.paid: sub ${subscriptionId} type="${subMeta?.type || "none"}" — ignored`);
             }
           } catch (subErr: any) {
             console.error(`[GUBER][webhook/main] invoice.paid: failed to retrieve sub ${subscriptionId}:`, subErr.message);
@@ -8329,16 +8447,192 @@ export async function registerRoutes(
     }
   });
 
+  // ── Studio Subscription Tiers (task-452) ─────────────────────────────────
+  // Recurring subscriptions that upgrade `users.studio_tier` from "standard"
+  // to "creator" or "business". Each tier grants a monthly credit drip
+  // (handled in the webhook + cron) and unlocks the locked vibes / advanced
+  // features in the UI. Pricing is inline via `price_data` so no preconfigured
+  // Stripe Price IDs are required (mirrors the business_scout_plan checkout).
+  const STUDIO_TIER_PLANS = {
+    creator: {
+      label: "Creator",
+      priceCents: 1900,
+      monthlyCredits: 30,
+      productName: "GUBER Studio · Creator",
+      description:
+        "30 monthly credits, motion AI, reference clips, locked vibes unlocked.",
+      features: [
+        "30 credits every month",
+        "Motion AI on every clip",
+        "Reference clips & uploads",
+        "All locked vibes unlocked",
+      ],
+    },
+    business: {
+      label: "Business",
+      priceCents: 9900,
+      monthlyCredits: 150,
+      productName: "GUBER Studio · Business",
+      description:
+        "150 monthly credits, brand kits, ad templates, captions/music, multi-platform export.",
+      features: [
+        "150 credits every month",
+        "Brand kits (logo, colors, fonts)",
+        "Ad templates & captions/music",
+        "Multi-platform export (TikTok, Reels, Shorts)",
+        "Everything in Creator",
+      ],
+    },
+  } as const;
+  type StudioTierPlanId = keyof typeof STUDIO_TIER_PLANS;
+
+  app.get("/api/studio/tiers", (_req: Request, res: Response) => {
+    res.json(
+      Object.entries(STUDIO_TIER_PLANS).map(([id, p]) => ({
+        id,
+        label: p.label,
+        priceCents: p.priceCents,
+        monthlyCredits: p.monthlyCredits,
+        description: p.description,
+        features: p.features,
+      })),
+    );
+  });
+
+  app.post("/api/stripe/studio-subscription-checkout", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tierId = String(req.body?.tier || "") as StudioTierPlanId;
+      const plan = STUDIO_TIER_PLANS[tierId];
+      if (!plan) return res.status(400).json({ message: "Invalid tier" });
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      // Hard-block creating a parallel Studio subscription. We only allow a
+      // new checkout once the prior subscription has been fully ended by
+      // Stripe (customer.subscription.deleted clears studioSubscriptionId).
+      // Cancel-at-period-end alone is NOT enough — the user still has paid
+      // access to the prior plan until Stripe fires deletion.
+      if (user.studioSubscriptionId) {
+        if (user.studioTier === tierId && !user.studioSubscriptionCancelAtPeriodEnd) {
+          return res.status(400).json({ message: `You're already on the ${plan.label} plan.` });
+        }
+        return res.status(400).json({
+          message: `You already have a Studio subscription. Wait until your current billing period ends before starting a new one.`,
+        });
+      }
+
+      const host = req.get("host") || "localhost:5000";
+      const protocol = req.get("x-forwarded-proto") || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      const stripeSession = await stripeMain.checkout.sessions.create({
+        payment_method_types: ["card"],
+        customer_email: user.email,
+        mode: "subscription",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: plan.productName,
+              description: plan.description,
+            },
+            unit_amount: plan.priceCents,
+            recurring: { interval: "month" },
+          },
+          quantity: 1,
+        }],
+        success_url: `${baseUrl}/studio?subscription=success`,
+        cancel_url: `${baseUrl}/studio?subscription=cancel`,
+        subscription_data: {
+          metadata: {
+            userId: String(user.id),
+            userEmail: user.email,
+            type: "studio_subscription",
+            tier: tierId,
+            monthlyCredits: String(plan.monthlyCredits),
+          },
+        },
+        metadata: {
+          userId: String(user.id),
+          userEmail: user.email,
+          type: "studio_subscription",
+          tier: tierId,
+          monthlyCredits: String(plan.monthlyCredits),
+        },
+      });
+
+      res.json({ checkoutUrl: stripeSession.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/stripe/cancel-studio-subscription", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      if (!user.studioSubscriptionId) {
+        return res.status(400).json({ message: "No active Studio subscription." });
+      }
+
+      // Period-end cancellation: keep access through the paid period, then
+      // Stripe fires customer.subscription.deleted which downgrades the tier
+      // back to standard. Matches the UI copy ("reverts when the current
+      // period ends") and avoids refund disputes from immediate revocation.
+      try {
+        await stripeMain.subscriptions.update(user.studioSubscriptionId, {
+          cancel_at_period_end: true,
+        });
+      } catch (cancelErr: any) {
+        if (cancelErr?.statusCode === 404 || cancelErr?.raw?.code === "resource_missing") {
+          await stripe.subscriptions.update(user.studioSubscriptionId, {
+            cancel_at_period_end: true,
+          });
+        } else {
+          throw cancelErr;
+        }
+      }
+
+      // Flag the cancel-at-period-end so the UI can show the right banner.
+      // We deliberately do NOT change studioSubscriptionStatus or clear the
+      // subscription id — the user keeps full tier access until Stripe fires
+      // customer.subscription.deleted, which downgrades the tier and clears
+      // the id atomically. This also prevents parallel-subscription stacking.
+      await storage.updateUser(user.id, {
+        studioSubscriptionCancelAtPeriodEnd: true,
+      });
+      await storage.createAuditLog({
+        userId: user.id,
+        action: "studio_subscription_cancelled",
+        details: `Studio ${user.studioTier} subscription set to cancel at period end. Sub: ${user.studioSubscriptionId}`,
+      });
+      res.json({ message: "Studio subscription will end at the close of the current billing period." });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Studio API: balance, vibes, history, generate ────────────────────────
   app.get("/api/studio/me", requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "User not found" });
     const { isFalConfigured } = await import("./fal");
+    const tier = (user.studioTier ?? "standard") as StudioTierPlanId | "standard";
+    const plan = tier !== "standard" ? STUDIO_TIER_PLANS[tier as StudioTierPlanId] : null;
     res.json({
       credits: user.studioCredits ?? 0,
-      tier: user.studioTier ?? "standard",
+      tier,
       day1OG: !!user.day1OG,
       providerReady: isFalConfigured(),
+      subscription: user.studioSubscriptionId
+        ? {
+            status: user.studioSubscriptionStatus ?? "active",
+            monthlyCredits: plan?.monthlyCredits ?? 0,
+            label: plan?.label ?? null,
+            cancelAtPeriodEnd: !!user.studioSubscriptionCancelAtPeriodEnd,
+          }
+        : null,
     });
   });
 

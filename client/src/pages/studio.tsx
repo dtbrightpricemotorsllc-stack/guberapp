@@ -9,12 +9,43 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { StudioVideo, StudioVibe } from "@shared/schema";
-import { Sparkles, Image as ImageIcon, Coins, Lock, Zap, Loader2, Download, Wand2, Share2, FileText, Briefcase, Gift } from "lucide-react";
+import { Sparkles, Image as ImageIcon, Coins, Lock, Zap, Loader2, Download, Wand2, Share2, FileText, Briefcase, Gift, Crown, Check } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
-type StudioMe = { credits: number; tier: string; day1OG: boolean; providerReady: boolean };
+type StudioSubscription = {
+  status: string;
+  monthlyCredits: number;
+  label: string | null;
+  cancelAtPeriodEnd: boolean;
+};
+type StudioMe = {
+  credits: number;
+  tier: string;
+  day1OG: boolean;
+  providerReady: boolean;
+  subscription: StudioSubscription | null;
+};
 type Pack = { id: string; credits: number; priceCents: number; label: string };
+type StudioTier = {
+  id: "creator" | "business";
+  label: string;
+  priceCents: number;
+  monthlyCredits: number;
+  description: string;
+  features: string[];
+};
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -42,9 +73,39 @@ export default function StudioPage() {
   const { data: vibes } = useQuery<StudioVibe[]>({ queryKey: ["/api/studio/vibes"] });
   const { data: history } = useQuery<StudioVideo[]>({ queryKey: ["/api/studio/videos"] });
   const { data: packs } = useQuery<Pack[]>({ queryKey: ["/api/studio/packs"] });
+  const { data: tiers } = useQuery<StudioTier[]>({ queryKey: ["/api/studio/tiers"] });
 
   const credits = me?.credits ?? 0;
   const tier = me?.tier ?? "standard";
+  const subscription = me?.subscription ?? null;
+  // The subscription is "active" in our UI as long as Stripe still considers
+  // it backing the user's tier — that includes a cancel-at-period-end window.
+  const isSubscribed = !!subscription;
+  const isCancelPending = !!subscription?.cancelAtPeriodEnd;
+
+  const subscribeMutation = useMutation({
+    mutationFn: async (tierId: "creator" | "business") => {
+      const res = await apiRequest("POST", "/api/stripe/studio-subscription-checkout", { tier: tierId });
+      return res.json() as Promise<{ checkoutUrl?: string; message?: string }>;
+    },
+    onSuccess: (data) => {
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+      else toast({ title: "Checkout failed", description: data.message || "Try again.", variant: "destructive" });
+    },
+    onError: (err: any) => toast({ title: "Checkout failed", description: err.message, variant: "destructive" }),
+  });
+
+  const cancelSubMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/stripe/cancel-studio-subscription", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
+      toast({ title: "Subscription cancelled", description: "Your tier reverts to standard once the current period ends." });
+    },
+    onError: (err: any) => toast({ title: "Couldn't cancel", description: err.message, variant: "destructive" }),
+  });
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -99,11 +160,17 @@ export default function StudioPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("credits") === "success") {
       toast({ title: "Payment received!", description: "Your credits will appear momentarily." });
-      // Refresh balance after a small delay so the webhook lands
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] }), 2500);
       window.history.replaceState({}, "", "/studio");
     } else if (params.get("credits") === "cancel") {
       toast({ title: "Checkout canceled", description: "No charge was made." });
+      window.history.replaceState({}, "", "/studio");
+    } else if (params.get("subscription") === "success") {
+      toast({ title: "Subscription active!", description: "Welcome to your new Studio tier." });
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] }), 2500);
+      window.history.replaceState({}, "", "/studio");
+    } else if (params.get("subscription") === "cancel") {
+      toast({ title: "Checkout canceled", description: "No subscription was started." });
       window.history.replaceState({}, "", "/studio");
     }
   }, [toast]);
@@ -349,16 +416,78 @@ export default function StudioPage() {
           </div>
         </div>
 
-        {/* Tier upsell teaser */}
-        {tier === "standard" && (
-          <Card className="p-4 border-primary/20 bg-primary/[0.03]">
-            <p className="text-xs uppercase tracking-widest font-display text-primary">Coming soon</p>
-            <p className="text-sm font-semibold mt-1">Creator & Business tiers</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Reference clips, motion AI, brand kits, ad templates, captions, music, and multi-platform export. Standard users get a clean upgrade path when ready.
-            </p>
-          </Card>
-        )}
+        {/* Tier subscription cards (task-452) */}
+        <div id="upgrade">
+          <p className="text-xs uppercase tracking-widest font-display text-muted-foreground mb-2 flex items-center gap-1.5">
+            <Crown className="w-3.5 h-3.5" /> Upgrade your Studio
+          </p>
+
+          {isSubscribed && subscription ? (
+            <Card className="p-4 border-primary/40 bg-primary/[0.05]" data-testid="card-current-subscription">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-widest font-display text-primary">Current plan</p>
+                  <p className="text-lg font-bold mt-1" data-testid="text-current-tier">{subscription.label || tier.toUpperCase()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {isCancelPending ? (
+                      <>Plan ends at the close of the current billing period. Existing credits stay yours.</>
+                    ) : (
+                      <>{subscription.monthlyCredits} credits drop into your balance every month. Status: <span className="font-semibold">{subscription.status}</span>.</>
+                    )}
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-cancel-subscription" disabled={cancelSubMutation.isPending || isCancelPending}>
+                      {cancelSubMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : isCancelPending ? "Cancellation pending" : "Cancel"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel Studio subscription?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Your tier reverts to standard at the end of the current billing period. Existing credits stay in your balance, but you'll lose access to locked vibes and tier-only features.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="button-keep-subscription">Keep it</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => cancelSubMutation.mutate()} data-testid="button-confirm-cancel">Cancel anyway</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(tiers || []).map((t) => (
+                <Card key={t.id} className={`p-4 hover-elevate ${t.id === "creator" ? "border-primary/30" : "border-amber-500/30 bg-amber-500/[0.03]"}`} data-testid={`card-tier-${t.id}`}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="font-display text-sm uppercase tracking-widest font-bold">{t.label}</p>
+                    <p className="text-xl font-black font-display">${(t.priceCents / 100).toFixed(0)}<span className="text-[10px] text-muted-foreground font-normal">/mo</span></p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">{t.monthlyCredits} credits/month included</p>
+                  <ul className="mt-3 space-y-1.5">
+                    {t.features.map((f, i) => (
+                      <li key={i} className="text-xs flex items-start gap-1.5">
+                        <Check className="w-3 h-3 text-primary mt-0.5 shrink-0" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    className="w-full mt-3"
+                    size="sm"
+                    disabled={subscribeMutation.isPending}
+                    onClick={() => subscribeMutation.mutate(t.id)}
+                    data-testid={`button-subscribe-${t.id}`}
+                  >
+                    {subscribeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Upgrade to ${t.label}`}
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
 
         <p className="text-[10px] text-muted-foreground text-center pt-4">
           By generating you agree to the GUBER <Link href="/acceptable-use" className="underline">Acceptable Use Policy</Link>.

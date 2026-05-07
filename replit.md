@@ -20,14 +20,16 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Mapping:** Google Maps JS API
 - **Testing:** Vitest, Supertest, Playwright
 
-## AI Video Studio (task-439, v1 foundation)
+## AI Video Studio (task-439 + task-452)
 - **Page:** `client/src/pages/studio.tsx` (route `/studio`)
-- **Provider:** Fal.ai. Single integration point: `server/fal.ts`. Requires `FAL_KEY` secret. Until set, `/api/studio/generate` returns 503 and never charges credits.
-- **Credit packs:** Starter $5/8, Plus $20/50, Pro $50/150 (defined inline in `server/routes.ts` near the trust-box checkout).
-- **Free credits:** Every new signup gets 1 trial credit (`server/auth.ts` handleSignup). OG monthly drip is **deferred** to a follow-up task.
-- **Storage tables:** `studio_videos`, `studio_vibes`, plus `users.studio_credits`, `users.studio_tier`, `users.studio_credits_last_drip_at`. Schema in `shared/schema.ts`; raw SQL in `scripts/post-merge.sh`.
-- **Tiers:** `studio_tier` defaults to `standard`. `creator` and `business` are reserved — Studio page shows upgrade teaser.
-- **Webhook:** `metadata.type === "studio_credits"` branch in the main Stripe webhook (`server/routes.ts`) increments balance + creates audit log + notification.
+- **Provider:** Fal.ai. Single integration point: `server/fal.ts`. Requires `FAL_KEY`. Without it, `/api/studio/generate` returns 503 and never charges credits.
+- **Credit packs:** Starter $5/8, Plus $20/50, Pro $50/150 (`STUDIO_CREDIT_PACKS` in `server/routes.ts`).
+- **Tier subscriptions (task-452):** Creator $19/mo (+30 credits, motion AI, refs, locked vibes), Business $99/mo (+150 credits, brand kits, ad templates, multi-export). `STUDIO_TIER_PLANS` in `server/routes.ts`. Endpoints: `GET /api/studio/tiers`, `POST /api/stripe/studio-subscription-checkout`, `POST /api/stripe/cancel-studio-subscription`. Uses inline `price_data` w/ `recurring: { interval: "month" }` (no env price IDs).
+- **Free credits:** Every new signup gets 1 trial credit (`server/auth.ts`). OG monthly drip is deferred.
+- **Storage tables:** `studio_videos`, `studio_vibes`; `users.studio_credits/tier/credits_last_drip_at/subscription_id/subscription_status`. Schema: `shared/schema.ts`; raw SQL: `scripts/post-merge.sh`.
+- **Webhook (`server/routes.ts` main webhook):** `metadata.type === "studio_credits"` increments balance; `studio_subscription` on `checkout.session.completed` activates tier + grants first month + sets lastDripAt; `customer.subscription.updated/deleted` syncs status / downgrades to standard; `invoice.paid` w/ `billing_reason==="subscription_cycle"` grants monthly drip (dedup by `[invoice:<id>]` in audit log).
+- **Cron drip safety net:** `studioMonthlyDrip()` in `server/cron.ts` (5-min sweep) grants monthly credits to active Creator/Business users whose `studioCreditsLastDripAt` > 28 days ago.
+- **Vibe gating:** `v.tierRequired !== "standard" && tier === "standard"` — auto-unlocks for Creator/Business with no extra logic.
 
 ## Hands-Free V&I (task-454)
 - **Component:** `client/src/components/handsfree-capture.tsx` (dialog: consent → camera preview → MediaRecorder → upload).

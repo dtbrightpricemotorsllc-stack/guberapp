@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { db, pool } from "./db";
 import { jobs, jobStatusLogs, users, walletTransactions, observations, guberDisputes, cashDrops } from "@shared/schema";
-import { and, eq, lt, lte, gte, isNull, isNotNull, inArray, desc, notInArray } from "drizzle-orm";
+import { and, eq, lt, lte, gte, isNull, isNotNull, inArray, desc, notInArray, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { notifyNearbyAvailableWorkers, notifyCashDropExpired } from "./notify-helpers";
 import { sendPushToUser } from "./push";
@@ -829,6 +829,56 @@ async function helperResponseBufferSweep(): Promise<number> {
   return sent;
 }
 
+// Studio tier monthly credit drip safety net (task-452). The webhook
+// (invoice.paid) is the primary granter — this cron only catches users
+// whose webhook was missed/delayed. Gates on lastDripAt > 28 days ago and
+// active subscription status. Idempotent within a 28-day window.
+const STUDIO_TIER_MONTHLY_CREDITS: Record<string, number> = {
+  creator: 30,
+  business: 150,
+};
+async function studioMonthlyDrip(): Promise<number> {
+  const cutoff = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
+  const eligible = await db
+    .select({
+      id: users.id,
+      tier: users.studioTier,
+      lastDrip: users.studioCreditsLastDripAt,
+      subId: users.studioSubscriptionId,
+      subStatus: users.studioSubscriptionStatus,
+    })
+    .from(users)
+    .where(
+      and(
+        isNotNull(users.studioSubscriptionId),
+        inArray(users.studioTier, ["creator", "business"]),
+        inArray(users.studioSubscriptionStatus, ["active", "trialing"]),
+        or(isNull(users.studioCreditsLastDripAt), lte(users.studioCreditsLastDripAt, cutoff)),
+      ),
+    );
+
+  let dripped = 0;
+  for (const u of eligible) {
+    const credits = STUDIO_TIER_MONTHLY_CREDITS[u.tier || ""] || 0;
+    if (credits <= 0) continue;
+    const newBalance = await storage.incrementStudioCredits(u.id, credits);
+    await db.update(users).set({ studioCreditsLastDripAt: new Date() }).where(eq(users.id, u.id));
+    await storage.createAuditLog({
+      userId: u.id,
+      action: "studio_subscription_drip_cron",
+      details: `[cron-safety-net] +${credits} ${u.tier} credits (last drip was ${u.lastDrip?.toISOString() || "never"}). Balance: ${newBalance}.`,
+    });
+    await storage.createNotification({
+      userId: u.id,
+      title: "Monthly Studio credits added",
+      body: `+${credits} credits dropped into your Studio balance.`,
+      type: "system",
+    });
+    dripped++;
+  }
+  return dripped;
+}
+
 // Public single-shot runner used by /api/internal/cron/run when this app is
 // driven by a Replit Scheduled Deployment (DISABLE_BACKGROUND_JOBS=true).
 // Runs the union of every periodic sweep that used to live inside the two
@@ -892,6 +942,9 @@ export async function runAllScheduledSweeps(): Promise<void> {
 
     const hrBuf = await helperResponseBufferSweep();
     if (hrBuf > 0) console.log(`[cron] sent ${hrBuf} helper-response buffer reminder(s)`);
+
+    const studioDrip = await studioMonthlyDrip();
+    if (studioDrip > 0) console.log(`[cron] dripped studio credits to ${studioDrip} subscriber(s)`);
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -966,6 +1019,9 @@ export function startCron() {
 
       const hrBuf = await helperResponseBufferSweep();
       if (hrBuf > 0) console.log(`[cron] sent ${hrBuf} helper-response buffer reminder(s)`);
+
+      const studioDrip = await studioMonthlyDrip();
+      if (studioDrip > 0) console.log(`[cron] dripped studio credits to ${studioDrip} subscriber(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }
