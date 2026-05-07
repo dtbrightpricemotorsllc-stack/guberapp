@@ -10,7 +10,10 @@ export type FeatureFlagKey =
   | "direct_offers"
   | "observation_marketplace"
   | "handsfree_capture"
+  | "paired_wearable_import"
+  | "pov_summary"
   | "business_promo"
+  | "business_signup"
   | "qa_dashboard";
 
 export type RolloutScope = "off" | "global" | "role" | "allowlist";
@@ -74,9 +77,30 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     defaultScope: "global",
   },
   {
+    key: "paired_wearable_import",
+    label: "Paired Wearable Import",
+    description: "Allow workers to import clips from a paired Android/iOS device.",
+    defaultEnabled: true,
+    defaultScope: "global",
+  },
+  {
+    key: "pov_summary",
+    label: "POV Summary",
+    description: "Show POV / Hands-Free metadata summary on hirer proof cards.",
+    defaultEnabled: true,
+    defaultScope: "global",
+  },
+  {
     key: "business_promo",
     label: "Business Promo",
     description: "GUBER Business promo CTAs + business signup surfaces.",
+    defaultEnabled: true,
+    defaultScope: "global",
+  },
+  {
+    key: "business_signup",
+    label: "Business Signup",
+    description: "Allow new GUBER Business org accounts to sign up.",
     defaultEnabled: true,
     defaultScope: "global",
   },

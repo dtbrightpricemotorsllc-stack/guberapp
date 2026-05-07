@@ -22,7 +22,7 @@ function requireLiveConfirmation(req: any, res: any, next: any) {
       message: "Live admin actions are only available in NODE_ENV=production builds.",
     });
   }
-  const conf = (req.headers["x-live-confirm"] || req.body?.confirm || "") as string;
+  const conf = (req.headers["x-live-confirm"] || "") as string;
   if (conf !== "LIVE") {
     return res.status(412).json({ message: "Live action requires header x-live-confirm: LIVE" });
   }
@@ -107,12 +107,11 @@ describe("QA Dashboard — live-confirm guard (end-test refunds)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("ignores body.confirm when header is missing", async () => {
+  it("rejects body.confirm fallback — header is the only accepted signal", async () => {
     process.env.NODE_ENV = "production";
     const res = await request(buildApp())
       .post("/live")
       .send({ confirm: "LIVE" });
-    // The actual middleware also accepts body.confirm — verify that path:
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(412);
   });
 });

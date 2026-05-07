@@ -63,7 +63,9 @@ function requireLiveConfirmation(req: Request, res: Response, next: Function) {
       message: "Live admin actions are only available in NODE_ENV=production builds. End-test refunds are gated.",
     });
   }
-  const conf = (req.headers["x-live-confirm"] || req.body?.confirm || "") as string;
+  // Header-only — body fallback removed because real-money confirmations must
+  // be CSRF-resistant and impossible to trigger from a forged JSON form post.
+  const conf = (req.headers["x-live-confirm"] || "") as string;
   if (conf !== "LIVE") {
     return res.status(412).json({ message: "Live action requires header x-live-confirm: LIVE" });
   }
