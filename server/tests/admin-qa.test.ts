@@ -149,20 +149,28 @@ describe("QA Dashboard — cash-drop end-test refund safety", () => {
 });
 
 describe("QA Dashboard — handsfree auto-flag + reset (task-482/483)", () => {
-  // task-482: 3 hard-blocked uploads in a row flips the offender into the
-  // existing under_review queue. Once flagged, repeat blocks are idempotent
-  // (autoFlagged stays false) so admins who already triaged a worker don't
-  // get re-pinged on every new attempt.
-  it("auto-flag transitions only on the first crossing of the threshold", () => {
-    const THRESHOLD = 3;
-    function shouldFlip(count: number, alreadyUnderReview: boolean) {
-      return count >= THRESHOLD && !alreadyUnderReview;
+  // task-482: a worker is auto-flagged into the existing under_review queue
+  // when EITHER tripwire fires:
+  //   - lifetime ≥ 5 hard-blocked uploads, OR
+  //   - same job has ≥ 3 hard-blocked uploads.
+  // Once flagged, repeat blocks are idempotent (no second admin notification
+  // burst) so admins who already triaged a worker don't get re-pinged.
+  it("auto-flag transitions only on the first crossing of either tripwire", () => {
+    const TOTAL = 5;
+    const PER_JOB = 3;
+    function shouldFlip(lifetime: number, perJob: number, alreadyUnderReview: boolean) {
+      if (alreadyUnderReview) return false;
+      return lifetime >= TOTAL || perJob >= PER_JOB;
     }
-    expect(shouldFlip(1, false)).toBe(false);
-    expect(shouldFlip(2, false)).toBe(false);
-    expect(shouldFlip(3, false)).toBe(true);   // crossing
-    expect(shouldFlip(3, true)).toBe(false);    // idempotent
-    expect(shouldFlip(7, true)).toBe(false);    // still idempotent
+    // Lifetime tripwire
+    expect(shouldFlip(4, 1, false)).toBe(false);
+    expect(shouldFlip(5, 1, false)).toBe(true);    // crossing on lifetime
+    // Per-job tripwire
+    expect(shouldFlip(2, 2, false)).toBe(false);
+    expect(shouldFlip(2, 3, false)).toBe(true);    // crossing on per-job
+    // Idempotent once already flagged
+    expect(shouldFlip(5, 3, true)).toBe(false);
+    expect(shouldFlip(99, 99, true)).toBe(false);
   });
 
   // task-483: reset-handsfree-blocks zeroes the counter and (by default)

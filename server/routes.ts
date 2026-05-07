@@ -7395,52 +7395,22 @@ export async function registerRoutes(
         // workers who repeatedly try to upload obviously fake clips.
         // Best-effort: never let a counter write break the rejection.
         let newBlockedCount: number | null = null;
+        let alreadyUnderReview = false;
         try {
           const [row] = await db
             .update(usersTable)
-            .set({ handsfreeBlockedAttempts: sql`COALESCE(${usersTable.handsfreeBlockedAttempts}, 0) + 1` })
+            .set({
+              handsfreeBlockedAttempts: sql`COALESCE(${usersTable.handsfreeBlockedAttempts}, 0) + 1`,
+              handsfreeBlockedLastAt: new Date(),
+            })
             .where(eq(usersTable.id, req.session.userId!))
-            .returning({ count: usersTable.handsfreeBlockedAttempts });
+            .returning({
+              count: usersTable.handsfreeBlockedAttempts,
+              underReview: usersTable.underReview,
+            });
           newBlockedCount = row?.count ?? null;
+          alreadyUnderReview = !!row?.underReview;
         } catch {}
-        // task-482: once a worker hits the auto-flag threshold, route them
-        // into the existing admin under_review queue. Atomic single-statement
-        // transition — under_review is flipped only when it's currently false
-        // AND the counter has crossed the threshold, so two concurrent
-        // rejections can't both write the audit. The .returning() result
-        // tells us whether THIS request was the one that flipped the flag.
-        const HANDSFREE_AUTO_FLAG_THRESHOLD = 3;
-        let autoFlagged = false;
-        if (newBlockedCount !== null && newBlockedCount >= HANDSFREE_AUTO_FLAG_THRESHOLD) {
-          try {
-            const flipped = await db
-              .update(usersTable)
-              .set({ underReview: true })
-              .where(
-                and(
-                  eq(usersTable.id, req.session.userId!),
-                  eq(usersTable.underReview, false),
-                  gte(
-                    sql`COALESCE(${usersTable.handsfreeBlockedAttempts}, 0)`,
-                    HANDSFREE_AUTO_FLAG_THRESHOLD,
-                  ),
-                ),
-              )
-              .returning({ id: usersTable.id });
-            if (flipped.length > 0) {
-              autoFlagged = true;
-              await storage.createAuditLog({
-                userId: req.session.userId,
-                action: "handsfree_auto_flagged",
-                details: JSON.stringify({
-                  jobId: payload.jobId,
-                  blockedAttemptsTotal: newBlockedCount,
-                  threshold: HANDSFREE_AUTO_FLAG_THRESHOLD,
-                }),
-              });
-            }
-          } catch {}
-        }
         await storage.createAuditLog({
           userId: req.session.userId,
           action: "handsfree_proof_blocked",
@@ -7449,9 +7419,91 @@ export async function registerRoutes(
             deviceKind: meta.deviceKind,
             reasons: hardBlockReasons,
             blockedAttemptsTotal: newBlockedCount,
-            autoFlagged,
           }),
         });
+
+        // task-482: auto-flag repeat offenders for human review. Two
+        // tripwires:
+        //   - lifetime ≥ HANDSFREE_AUTO_FLAG_TOTAL (5) blocks, OR
+        //   - same job has ≥ HANDSFREE_AUTO_FLAG_PER_JOB (3) blocks
+        // Either one flips users.under_review = true and pings every admin
+        // so support doesn't have to stumble onto the user. Skip if already
+        // under review — we don't want to re-notify on every subsequent
+        // block. Best-effort: a failure here must not change the 422.
+        const HANDSFREE_AUTO_FLAG_TOTAL = 5;
+        const HANDSFREE_AUTO_FLAG_PER_JOB = 3;
+        if (!alreadyUnderReview && newBlockedCount !== null) {
+          try {
+            // Per-job count: this block was just written to the audit log
+            // above, so a count of all handsfree_proof_blocked entries for
+            // this user+job (including the one just written) is what we
+            // want to compare against the per-job threshold.
+            //
+            // Match `"jobId":N` followed by a JSON delimiter (`,` or `}`)
+            // via a Postgres POSIX regex so we don't false-match longer
+            // numeric prefixes — e.g. logs for job 123 must NOT count
+            // toward job 12. `details` is a text column holding JSON the
+            // route writes itself; the regex is anchored on JSON syntax,
+            // not field ordering.
+            const jobIdRegex = `"jobId":${payload.jobId}[,}]`;
+            const perJobRows = await db
+              .select({ id: auditLogsTable.id })
+              .from(auditLogsTable)
+              .where(and(
+                eq(auditLogsTable.userId, req.session.userId!),
+                eq(auditLogsTable.action, "handsfree_proof_blocked"),
+                sql`${auditLogsTable.details} ~ ${jobIdRegex}`,
+              ));
+            const perJobCount = perJobRows.length;
+
+            const tripTotal = newBlockedCount >= HANDSFREE_AUTO_FLAG_TOTAL;
+            const tripPerJob = perJobCount >= HANDSFREE_AUTO_FLAG_PER_JOB;
+            if (tripTotal || tripPerJob) {
+              const [flagged] = await db
+                .update(usersTable)
+                .set({ underReview: true })
+                .where(and(
+                  eq(usersTable.id, req.session.userId!),
+                  eq(usersTable.underReview, false),
+                ))
+                .returning({ id: usersTable.id });
+              if (flagged) {
+                await storage.createAuditLog({
+                  userId: req.session.userId,
+                  action: "handsfree_auto_flag_for_review",
+                  details: JSON.stringify({
+                    jobId: payload.jobId,
+                    blockedAttemptsTotal: newBlockedCount,
+                    blockedAttemptsThisJob: perJobCount,
+                    tripped: tripTotal && tripPerJob ? "both" : (tripTotal ? "total" : "per_job"),
+                    thresholds: {
+                      total: HANDSFREE_AUTO_FLAG_TOTAL,
+                      perJob: HANDSFREE_AUTO_FLAG_PER_JOB,
+                    },
+                  }),
+                });
+                const reason = tripPerJob
+                  ? `${perJobCount} blocked uploads on job #${payload.jobId}`
+                  : `${newBlockedCount} blocked uploads (lifetime)`;
+                const admins = await db
+                  .select({ id: usersTable.id })
+                  .from(usersTable)
+                  .where(sqlEq(usersTable.role, "admin"));
+                for (const a of admins) {
+                  await storage.createNotification({
+                    userId: a.id,
+                    title: "Worker auto-flagged for review",
+                    body: `User #${req.session.userId} hit the hands-free fraud tripwire (${reason}).`,
+                    type: "system",
+                  }).catch(() => {});
+                }
+              }
+            }
+          } catch (err) {
+            console.error("[handsfree-auto-flag] failed to evaluate tripwire:", err);
+          }
+        }
+
         return res.status(422).json({
           message: "This clip cannot be submitted as proof.",
           reasons: hardBlockReasons,

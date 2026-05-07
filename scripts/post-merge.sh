@@ -201,6 +201,7 @@ ON CONFLICT (key) DO NOTHING;
 -- ── QA Dashboard (task-462) ─────────────────────────────────────────────
 ALTER TABLE users      ADD COLUMN IF NOT EXISTS is_test_user boolean DEFAULT false;
 ALTER TABLE users      ADD COLUMN IF NOT EXISTS handsfree_blocked_attempts integer DEFAULT 0;
+ALTER TABLE users      ADD COLUMN IF NOT EXISTS handsfree_blocked_last_at  timestamp;
 ALTER TABLE jobs       ADD COLUMN IF NOT EXISTS is_test_job  boolean DEFAULT false;
 ALTER TABLE jobs       ADD COLUMN IF NOT EXISTS visibility   text    NOT NULL DEFAULT 'public';
 ALTER TABLE cash_drops ADD COLUMN IF NOT EXISTS is_test_drop boolean DEFAULT false;

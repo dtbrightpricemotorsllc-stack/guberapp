@@ -903,6 +903,24 @@ async function studioMonthlyDrip(): Promise<number> {
   return dripped;
 }
 
+// task-482: decay the hands-free fraud counter. A worker who hasn't tripped
+// the preflight in 60 days gets their counter reset to 0 — a one-time bad
+// upload from months ago shouldn't permanently haunt them. We do NOT clear
+// `under_review` here; once an admin has been pinged, only an admin can
+// clear that flag. Returns count of users decayed.
+async function decayHandsfreeBlockedAttempts(): Promise<number> {
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60_000);
+  const decayed = await db.update(users)
+    .set({ handsfreeBlockedAttempts: 0, handsfreeBlockedLastAt: null })
+    .where(and(
+      gte(users.handsfreeBlockedAttempts!, 1),
+      isNotNull(users.handsfreeBlockedLastAt),
+      lt(users.handsfreeBlockedLastAt!, cutoff),
+    ))
+    .returning({ id: users.id });
+  return decayed.length;
+}
+
 // Day-1 OG monthly Studio credit drip — grants 2 free Studio credits per
 // 30-day window to OG members. Gated on studioCreditsLastDripAt so re-running
 // the cron multiple times within a window is a no-op. Returns count granted.
@@ -1017,6 +1035,9 @@ export async function runAllScheduledSweeps(): Promise<void> {
 
     const ogDrip = await ogStudioCreditDripSweep();
     if (ogDrip > 0) console.log(`[cron] granted ${ogDrip} OG monthly Studio drip(s)`);
+
+    const decayedHf = await decayHandsfreeBlockedAttempts();
+    if (decayedHf > 0) console.log(`[cron] decayed hands-free block counter for ${decayedHf} user(s)`);
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -1097,6 +1118,9 @@ export function startCron() {
 
       const ogDrip = await ogStudioCreditDripSweep();
       if (ogDrip > 0) console.log(`[cron] granted ${ogDrip} OG monthly Studio drip(s)`);
+
+      const decayedHf = await decayHandsfreeBlockedAttempts();
+      if (decayedHf > 0) console.log(`[cron] decayed hands-free block counter for ${decayedHf} user(s)`);
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }

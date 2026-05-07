@@ -483,6 +483,50 @@ describe("Hands-Free upload routes (registerRoutes)", () => {
         expectBlocked(res, /5s minimum/);
       });
 
+      // task-482 regression: per-job tripwire counts blocks via a Postgres
+      // POSIX regex on audit_logs.details JSON. A previous version used
+      // ILIKE %"jobId":N% which false-matched longer numeric prefixes
+      // (e.g. logs for job 123 leaked into job 12's count). This test
+      // exercises the same regex against a real audit_logs row to make
+      // sure cross-job matches don't sneak back in.
+      it("per-job audit-log regex doesn't false-match longer job-id prefixes", async () => {
+        const TEST_USER_ID = 999_999_811;
+        // Ensure a referenced user exists so the FK (if any) is happy;
+        // otherwise the insert may still succeed since auditLogs has no FK
+        // here, but seed defensively.
+        await db.execute(sql`
+          INSERT INTO audit_logs (user_id, action, details)
+          VALUES (${TEST_USER_ID}, 'handsfree_proof_blocked',
+                  ${JSON.stringify({ jobId: 12, deviceKind: "paired-android", reasons: ["x"] })}),
+                 (${TEST_USER_ID}, 'handsfree_proof_blocked',
+                  ${JSON.stringify({ jobId: 123, deviceKind: "paired-android", reasons: ["x"] })}),
+                 (${TEST_USER_ID}, 'handsfree_proof_blocked',
+                  ${JSON.stringify({ jobId: 1234, deviceKind: "paired-android", reasons: ["x"] })})
+        `);
+        try {
+          const regex12 = `"jobId":12[,}]`;
+          const rows12 = await db.execute(sql`
+            SELECT id FROM audit_logs
+            WHERE user_id = ${TEST_USER_ID}
+              AND action = 'handsfree_proof_blocked'
+              AND details ~ ${regex12}
+          `);
+          // Must match exactly the jobId=12 row, not 123 or 1234.
+          expect(rows12.rows.length).toBe(1);
+
+          const regex123 = `"jobId":123[,}]`;
+          const rows123 = await db.execute(sql`
+            SELECT id FROM audit_logs
+            WHERE user_id = ${TEST_USER_ID}
+              AND action = 'handsfree_proof_blocked'
+              AND details ~ ${regex123}
+          `);
+          expect(rows123.rows.length).toBe(1);
+        } finally {
+          await db.execute(sql`DELETE FROM audit_logs WHERE user_id = ${TEST_USER_ID}`);
+        }
+      });
+
       it("ignores phone-handsfree fileLastModified for the age block", async () => {
         // phone-handsfree clips are recorded live; their file mtime is the
         // upload moment, never the recording moment, so it must not trigger

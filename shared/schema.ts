@@ -96,6 +96,12 @@ export const users = pgTable("users", {
   // can spot repeat offenders. Never decremented client-side; admin
   // tooling can reset it if needed.
   handsfreeBlockedAttempts: integer("handsfree_blocked_attempts").default(0),
+  // task-482: timestamp of the most recent hard-blocked hands-free upload.
+  // Used by the decay sweep in server/cron.ts — if a worker has gone 60 days
+  // without another block, the counter is reset to 0 so a single old mistake
+  // doesn't permanently haunt them. Also used to short-circuit re-flagging
+  // a worker who's already been auto-flagged once for review.
+  handsfreeBlockedLastAt: timestamp("handsfree_blocked_last_at"),
   monthlyImageUploads: integer("monthly_image_uploads").default(0),
   monthlyVideoUploads: integer("monthly_video_uploads").default(0),
   uploadMonthYear: text("upload_month_year"),
