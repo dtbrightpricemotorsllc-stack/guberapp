@@ -392,7 +392,7 @@ export default function Investors() {
 
       {/* 08 · TRACTION */}
       <Section id="section-traction" eyebrow="07 · Traction" headline={C.traction.headline} sub={C.traction.note}>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {C.traction.stats.map((s, i) => (
             <Reveal key={i} delay={i * 80}>
               <div className="inv-card p-5 inv-card-hover h-full" data-testid={`stat-${i}`}>
@@ -403,6 +403,17 @@ export default function Investors() {
             </Reveal>
           ))}
         </div>
+        <Reveal>
+          <div className="mb-8 inv-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid="row-googleplay-launch">
+            <div>
+              <div className="num-font text-[11px] uppercase tracking-[0.15em]" style={{ color: NEON_GREEN }}>Google Play public launch date</div>
+              <div className="text-xs text-muted-foreground mt-1">Editable by the founder in <code>investor-config.ts</code> — set when announced.</div>
+            </div>
+            <div className="num-font text-sm font-semibold text-white" data-testid="text-googleplay-launch-date">
+              {C.traction.googlePlayLaunchDate || C.traction.googlePlayLaunchPlaceholder}
+            </div>
+          </div>
+        </Reveal>
         <Reveal>
           <div className="inv-card p-6 sm:p-8 mb-6" style={{ borderColor: `${NEON_GREEN}55` }}>
             <h3 className="num-font text-sm uppercase tracking-[0.15em] mb-4" style={{ color: NEON_GREEN }}>Platform state today</h3>
@@ -468,9 +479,9 @@ export default function Investors() {
         <div className="grid lg:grid-cols-2 gap-5">
           <Reveal>
             <div className="inv-card p-7 h-full" style={{ borderColor: `${NEON_GREEN}55`, boxShadow: `0 0 32px hsl(152 100% 44% / .08)` }}>
-              <div className="num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-2">Raise</div>
+              <div className="num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-2">Target raise</div>
               <div className="num-font font-extrabold text-5xl glow-text-green" style={{ color: NEON_GREEN }} data-testid="text-funding-raise">{C.fundingAsk.raise}</div>
-              <div className="mt-6 num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">At</div>
+              <div className="mt-6 num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">Valuation</div>
               <div className="num-font font-bold text-2xl text-white" data-testid="text-funding-valuation">{C.fundingAsk.valuation}</div>
               <p className="mt-6 text-sm text-muted-foreground leading-relaxed">{C.fundingAsk.structure}</p>
             </div>

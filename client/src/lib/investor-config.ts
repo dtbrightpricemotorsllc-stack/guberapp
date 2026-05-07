@@ -131,6 +131,8 @@ export const INVESTOR_CONFIG = {
   traction: {
     headline: "Where we are today — honestly.",
     note: "Pre-launch / pre-marketing. The platform is shipped and live; paid acquisition has not started yet.",
+    googlePlayLaunchDate: "", // EDITABLE: founder fills exact public Google Play launch date here when ready.
+    googlePlayLaunchPlaceholder: "Date TBA — founder to confirm",
     stats: [
       { value: "294", label: "Registered users", sub: "Pre-launch organic signups, no paid acquisition" },
       { value: "Live", label: "On Google Play", sub: "Native Android build available today" },
@@ -138,10 +140,15 @@ export const INVESTOR_CONFIG = {
       { value: "0", label: "Paid jobs completed to date", sub: "Pre-launch — by design until the public push" },
     ],
     state: [
+      "Web PWA is live and serving users at guberapp.com today.",
+      "Domain GUBERAPP.COM is live, owned, and pointed at production.",
+      "Active social presence across LinkedIn, Facebook, TikTok, Instagram, and X — links shown below.",
+      "Active product development — shipping continuously, not in maintenance mode.",
+      "Founder-built end-to-end (product, full-stack engineering, payments, native Android, admin tooling).",
       "Day-1 OG founding-supporter tier is live and generating one-time revenue.",
       "Stripe Connect, escrow, and the money ledger are wired end-to-end and tested.",
       "All 13 revenue streams are either Live or flag-gated — none rely on future engineering.",
-      "Apple App Store build is queued behind Sign in with Apple + Apple Pay polish.",
+      "Google Play public launch date: not yet announced — founder to confirm.",
     ],
     infra: [
       "50+ live database tables — jobs, payments, money ledger, disputes, business accounts, sponsors, observations, credentials.",
