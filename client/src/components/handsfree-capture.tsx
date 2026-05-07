@@ -7,7 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Upload, FileVideo, AlertTriangle } from "lucide-react";
 import { isAndroid, isIOS, isNativeApp } from "@/lib/platform";
 import { evaluatePreflight, type PreflightResult } from "@/lib/handsfree-preflight";
-import { readVideoFileMetadata } from "@/lib/video-metadata";
+import { readVideoFileMetadata, readVideoDurationSec } from "@/lib/video-metadata";
 
 const MAX_DURATION_MS = 15 * 60 * 1000;
 const CONSENT_VERSION = 1;
@@ -22,28 +22,6 @@ interface Props {
 }
 
 type Phase = "consent" | "ready" | "recording" | "uploading" | "warning" | "done";
-
-function readVideoDurationSec(file: File): Promise<number | undefined> {
-  return new Promise((resolve) => {
-    try {
-      const url = URL.createObjectURL(file);
-      const v = document.createElement("video");
-      v.preload = "metadata";
-      v.muted = true;
-      const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
-      v.onloadedmetadata = () => {
-        const d = isFinite(v.duration) ? v.duration : undefined;
-        cleanup();
-        resolve(d);
-      };
-      v.onerror = () => { cleanup(); resolve(undefined); };
-      v.src = url;
-      window.setTimeout(() => { cleanup(); resolve(undefined); }, 8000);
-    } catch {
-      resolve(undefined);
-    }
-  });
-}
 
 export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, onUploaded }: Props) {
   const { toast } = useToast();

@@ -1,3 +1,25 @@
+export function readVideoDurationSec(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
+      v.onloadedmetadata = () => {
+        const d = isFinite(v.duration) ? v.duration : undefined;
+        cleanup();
+        resolve(d);
+      };
+      v.onerror = () => { cleanup(); resolve(undefined); };
+      v.src = url;
+      window.setTimeout(() => { cleanup(); resolve(undefined); }, 8000);
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
 export interface VideoFileMetadata {
   gps?: { lat: number; lng: number };
   capturedAt?: Date;
