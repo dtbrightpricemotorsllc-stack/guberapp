@@ -122,6 +122,27 @@ export default function AdminQaInspect() {
           </CardContent>
         </Card>
       )}
+
+      {type === "verification" && (
+        <Card>
+          <CardHeader><CardTitle>Verification · <UserLink userId={data.user.id} label={data.user.fullName} /></CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2 text-xs" data-testid="row-verification-flags">
+              <Badge variant={data.verification.idVerified ? "default" : "outline"}>ID {data.verification.idVerified ? "✓" : "—"}</Badge>
+              <Badge variant={data.verification.selfieVerified ? "default" : "outline"}>Selfie {data.verification.selfieVerified ? "✓" : "—"}</Badge>
+              {data.verification.suspended && <Badge variant="destructive">SUSPENDED</Badge>}
+              {data.verification.banned && <Badge variant="destructive">BANNED</Badge>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {data.verification.idFrontUrl && <MediaLightbox url={data.verification.idFrontUrl} label="ID front" />}
+              {data.verification.idBackUrl && <MediaLightbox url={data.verification.idBackUrl} label="ID back" />}
+              {data.verification.selfieUrl && <MediaLightbox url={data.verification.selfieUrl} label="Selfie" />}
+            </div>
+            <pre className="overflow-auto text-xs">{JSON.stringify(data.verification, null, 2)}</pre>
+            <Button asChild variant="outline" size="sm"><Link href={`/admin/users/${data.user.id}`}>Open full profile →</Link></Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

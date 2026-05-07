@@ -458,7 +458,17 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     });
   });
 
-  app.post("/api/admin/qa/cashdrops/:id/replay/:tool", requireAdmin, async (req, res) => {
+  // Replay tools: extend / unexpire are reversible time tweaks (no money
+  // burned), but force-expire and cancel can strand funded drops, so they get
+  // the full live-confirm + production gate.
+  function replayLiveGate(req: Request, res: Response, next: Function) {
+    const tool = req.params.tool;
+    if (tool === "force-expire" || tool === "cancel") {
+      return requireLiveConfirmation(req, res, next);
+    }
+    return next();
+  }
+  app.post("/api/admin/qa/cashdrops/:id/replay/:tool", requireAdmin, replayLiveGate, async (req, res) => {
     const id = parseInt(req.params.id);
     const tool = req.params.tool;
     const drop = await storage.getCashDrop(id);

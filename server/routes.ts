@@ -7213,8 +7213,15 @@ export async function registerRoutes(
 
   app.get("/api/jobs/:id/wearable-upload-token", requireAuth, async (req: Request, res: Response) => {
     try {
+      // task-462: dual gating — legacy platform_settings kill-switch AND the
+      // new feature-flag console (handsfree_capture). Either OFF disables.
       const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
       if (flagRow[0]?.value === "false") {
+        return res.status(403).json({ message: "Hands-free capture is currently disabled by the admin." });
+      }
+      const viewer = req.session.userId ? await storage.getUser(req.session.userId).catch(() => null) : null;
+      const { isFeatureEnabledFor } = await import("./feature-flags.js");
+      if (!(await isFeatureEnabledFor("handsfree_capture", viewer ? { id: viewer.id, role: viewer.role } : null))) {
         return res.status(403).json({ message: "Hands-free capture is currently disabled by the admin." });
       }
       const jobId = parseInt(req.params.id);
@@ -7251,8 +7258,14 @@ export async function registerRoutes(
 
   app.post("/api/proof/wearable-upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
+      // Dual-gate: legacy kill-switch + new feature-flag console.
       const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
       if (flagRow[0]?.value === "false") {
+        return res.status(403).json({ message: "Hands-free capture is currently disabled by the admin." });
+      }
+      const viewer = req.session.userId ? await storage.getUser(req.session.userId).catch(() => null) : null;
+      const { isFeatureEnabledFor } = await import("./feature-flags.js");
+      if (!(await isFeatureEnabledFor("handsfree_capture", viewer ? { id: viewer.id, role: viewer.role } : null))) {
         return res.status(403).json({ message: "Hands-free capture is currently disabled by the admin." });
       }
       const { token, videoUrl, captureMeta } = req.body || {};

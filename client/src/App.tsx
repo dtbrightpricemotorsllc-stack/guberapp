@@ -118,6 +118,28 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
+// Admin-only route wrapper (task-462). Backend already gates every
+// /api/admin/* route, but we also block the client surface so non-admins
+// don't see the dashboard load-and-flash empty data, and so navigation never
+// dead-ends a regular user.
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  const [currentPath] = useLocation();
+
+  if (isLoading) return <PageLoader />;
+  if (!user) {
+    const returnTo = encodeURIComponent(currentPath);
+    return <Redirect to={`/login?returnTo=${returnTo}`} />;
+  }
+  if (user.role !== "admin") return <Redirect to="/dashboard" />;
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Component />
+    </Suspense>
+  );
+}
+
 function BizRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
 
@@ -213,12 +235,12 @@ function Router() {
       <Route path="/profile/:id" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
-      <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
-      <Route path="/admin/qa" component={() => <ProtectedRoute component={AdminQa} />} />
-      <Route path="/admin/qa/flags" component={() => <ProtectedRoute component={AdminQaFlags} />} />
-      <Route path="/admin/qa/cashdrops/:id/debug" component={() => <ProtectedRoute component={AdminQaCashdropDebug} />} />
-      <Route path="/admin/qa/inspect/:type/:id" component={() => <ProtectedRoute component={AdminQaInspect} />} />
-      <Route path="/admin/users/:id" component={() => <ProtectedRoute component={AdminUserProfile} />} />
+      <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
+      <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
+      <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
+      <Route path="/admin/qa/cashdrops/:id/debug" component={() => <AdminRoute component={AdminQaCashdropDebug} />} />
+      <Route path="/admin/qa/inspect/:type/:id" component={() => <AdminRoute component={AdminQaInspect} />} />
+      <Route path="/admin/users/:id" component={() => <AdminRoute component={AdminUserProfile} />} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />
       <Route path="/wallet" component={() => <ConsumerRoute component={WalletPage} />} />
