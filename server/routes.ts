@@ -7320,6 +7320,24 @@ export async function registerRoutes(
         priority: "high",
       });
 
+      // task-458: kick off AI scene-card summarization. Mark "pending"
+      // synchronously BEFORE the response so the hirer's first proof fetch
+      // always sees a status (no race where the chip panel never appears).
+      // Gated by FAL_KEY presence inside summarizePovVideoAsync — never
+      // blocks the upload response and never throws to the caller.
+      if (durationSec > 0 && process.env.FAL_KEY) {
+        const { summarizePovVideoAsync, markPovSummaryPending } = await import("./pov-summarize.js");
+        await markPovSummaryPending(proof.id, durationSec);
+        summarizePovVideoAsync({
+          proofId: proof.id,
+          jobId: payload.jobId,
+          videoUrl,
+          durationSec,
+        }).catch((e: unknown) =>
+          console.error("[GUBER][pov-summary] dispatch error:", e instanceof Error ? e.message : e),
+        );
+      }
+
       res.json({ id: proof.id, jobId: payload.jobId, videoUrl });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

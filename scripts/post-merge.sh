@@ -190,6 +190,9 @@ UPDATE jobs
 -- proof_submissions.capture_meta: POV / hands-free capture metadata (task-454)
 ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS capture_meta jsonb;
 
+-- proof_submissions.pov_summary: AI-generated scene cards for POV proof videos (task-458)
+ALTER TABLE proof_submissions ADD COLUMN IF NOT EXISTS pov_summary jsonb;
+
 -- platform_settings: hands-free capture kill-switch (task-454)
 INSERT INTO platform_settings (key, value, category, description)
 VALUES ('handsfree_capture_enabled', 'false', 'trust', 'Show the Hands-Free POV recorder on V&I jobs and accept wearable uploads. Default OFF — dark launch; admin enables for staff/dev cohorts first.')

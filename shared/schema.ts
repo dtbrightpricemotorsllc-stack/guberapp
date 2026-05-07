@@ -549,6 +549,21 @@ export const proofSubmissions = pgTable("proof_submissions", {
     receivedAt?: string;
     consentVersion?: number;
   }>(),
+  povSummary: json("pov_summary").$type<{
+    status: "pending" | "ready" | "failed" | "skipped";
+    durationSec?: number;
+    generatedAt?: string;
+    modelVersion?: string;
+    items?: Array<{
+      label: string;
+      instruction?: string;
+      matched: boolean;
+      timestampSec?: number;
+      thumbnailUrl?: string;
+      note?: string;
+    }>;
+    error?: string;
+  }>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

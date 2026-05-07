@@ -131,6 +131,8 @@ export interface IStorage {
 
   createProofSubmission(data: any): Promise<ProofSubmission>;
   getProofsByJob(jobId: number): Promise<ProofSubmission[]>;
+  getProofSubmission(id: number): Promise<ProofSubmission | undefined>;
+  updateProofSubmission(id: number, data: Partial<typeof proofSubmissions.$inferInsert>): Promise<ProofSubmission | undefined>;
 
   createWalletTransaction(data: any): Promise<WalletTransaction>;
   getWalletByUser(userId: number): Promise<WalletTransaction[]>;
@@ -736,6 +738,16 @@ export class DatabaseStorage implements IStorage {
 
   async getProofsByJob(jobId: number): Promise<ProofSubmission[]> {
     return db.select().from(proofSubmissions).where(eq(proofSubmissions.jobId, jobId));
+  }
+
+  async getProofSubmission(id: number): Promise<ProofSubmission | undefined> {
+    const [p] = await db.select().from(proofSubmissions).where(eq(proofSubmissions.id, id)).limit(1);
+    return p;
+  }
+
+  async updateProofSubmission(id: number, data: Partial<typeof proofSubmissions.$inferInsert>): Promise<ProofSubmission | undefined> {
+    const [p] = await db.update(proofSubmissions).set(data).where(eq(proofSubmissions.id, id)).returning();
+    return p;
   }
 
   async createWalletTransaction(data: any): Promise<WalletTransaction> {

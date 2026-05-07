@@ -244,7 +244,31 @@ export default function JobDetail() {
   const { data: proofs } = useQuery<ProofSubmission[]>({
     queryKey: ["/api/jobs", jobId, "proof"],
     enabled: !!jobId && !!job && (job.status === "proof_submitted" || job.status === "completion_submitted" || job.status === "completed_paid" || job.status === "disputed" || job.proofStatus === "rejected"),
+    // task-458: while AI scene-card summarization is pending, poll so the
+    // chips appear without the hirer having to refresh.
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      const anyPending = data?.some((p) => p.povSummary?.status === "pending");
+      return anyPending ? 5000 : false;
+    },
   });
+
+  // task-458: refs so scene chips can scrub the embedded video.
+  const proofVideoRefs = useRef<Record<number, HTMLVideoElement | null>>({});
+  const seekProofVideo = (proofId: number, sec: number) => {
+    const v = proofVideoRefs.current[proofId];
+    if (!v) return;
+    try {
+      v.currentTime = Math.max(0, sec);
+      v.play().catch(() => {});
+      v.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch {}
+  };
+  const formatClipTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.max(0, Math.round(sec - m * 60));
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
 
   const isHelperForPayoutQuery = job?.assignedHelperId === user?.id;
   const isPayoutEligible = (job as any)?.payoutStatus === "payout_eligible" || job?.status === "completed_paid";
@@ -1474,6 +1498,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                 if (proof.imageUrls) images = [proof.imageUrls];
               }
               const captureMeta = proof.captureMeta;
+              const povSummary = proof.povSummary;
+              const matchedItems = povSummary?.items?.filter((i) => i.matched && typeof i.timestampSec === "number") || [];
+              const unmatchedItems = povSummary?.items?.filter((i) => !i.matched) || [];
               return (
                 <div key={proof.id} className="bg-background rounded-xl p-4 space-y-3" data-testid={`card-proof-${proof.id}`}>
                   {captureMeta?.deviceKind && (
@@ -1488,12 +1515,90 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   )}
                   {proof.videoUrl && (
                     <video
+                      ref={(el) => { proofVideoRefs.current[proof.id] = el; }}
                       src={proof.videoUrl}
                       controls
                       playsInline
                       className="w-full rounded-xl border border-border/20 bg-black"
                       data-testid={`video-proof-${proof.id}`}
                     />
+                  )}
+                  {povSummary && povSummary.status !== "skipped" && (
+                    <div className="rounded-xl border border-border/20 bg-muted/20 p-3 space-y-2" data-testid={`pov-summary-${proof.id}`}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-display tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                          <ZapIcon className="w-3 h-3 text-primary" />
+                          AI Scene Summary
+                        </p>
+                        {povSummary.status === "pending" && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1" data-testid={`pov-summary-status-${proof.id}`}>
+                            <Loader2 className="w-3 h-3 animate-spin" /> Analyzing footage…
+                          </span>
+                        )}
+                        {povSummary.status === "failed" && (
+                          <span className="text-[10px] text-yellow-400" data-testid={`pov-summary-status-${proof.id}`}>
+                            Summary unavailable
+                          </span>
+                        )}
+                      </div>
+                      {povSummary.status === "ready" && matchedItems.length === 0 && (
+                        <p className="text-[11px] text-muted-foreground">
+                          No checklist items could be auto-matched to scenes — please scrub manually.
+                        </p>
+                      )}
+                      {matchedItems.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {matchedItems.map((item, idx) => (
+                            <button
+                              key={`m-${idx}`}
+                              type="button"
+                              onClick={() => seekProofVideo(proof.id, item.timestampSec!)}
+                              className="group flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors p-1.5 pr-2 text-left max-w-[260px]"
+                              title={item.note || item.label}
+                              data-testid={`pov-chip-${proof.id}-${idx}`}
+                            >
+                              {item.thumbnailUrl ? (
+                                <img
+                                  src={item.thumbnailUrl}
+                                  alt=""
+                                  className="w-12 h-9 rounded object-cover border border-emerald-500/20"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="w-12 h-9 rounded bg-emerald-500/15 flex items-center justify-center">
+                                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-300 truncate">
+                                  <CheckCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                                  <span className="truncate">{item.label}</span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400/80">at {formatClipTime(item.timestampSec!)}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {unmatchedItems.length > 0 && povSummary.status === "ready" && (
+                        <div className="flex gap-1.5 flex-wrap pt-1">
+                          {unmatchedItems.map((item, idx) => (
+                            <Badge
+                              key={`u-${idx}`}
+                              variant="outline"
+                              className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30 text-[10px]"
+                              title={item.note || "Not detected in footage"}
+                              data-testid={`pov-chip-missing-${proof.id}-${idx}`}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 mr-1" /> {item.label} — not detected
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground/70 pt-0.5">
+                        Auto-generated from sampled frames — verify by tapping into the video.
+                      </p>
+                    </div>
                   )}
                   {proof.notEncountered && (
                     <Badge variant="outline" className="bg-yellow-500/15 text-yellow-400 border-yellow-500/30 text-[10px]">
