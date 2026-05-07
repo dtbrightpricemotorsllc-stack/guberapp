@@ -132,6 +132,15 @@ CREATE TABLE IF NOT EXISTS apns_device_tokens (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- worker_qualifications: AI-extracted credential card fields (task-372)
+-- Read by /api/users/:id/certifications and /api/users/me/qualifications;
+-- production was missing these so both endpoints returned 500 with
+-- "column issuing_authority does not exist".
+ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS issuing_authority TEXT;
+ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS expiration_date TIMESTAMP;
+ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS credential_type TEXT;
+ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS ai_extracted BOOLEAN DEFAULT false;
+
 -- AI Video Studio (task-439): credits balance, tier, OG drip tracker + tables.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_credits integer DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_tier text DEFAULT 'standard';
