@@ -405,14 +405,32 @@ export default function Dashboard() {
 
   const availabilityMutation = useMutation({
     mutationFn: async (v: boolean) => {
-      await apiRequest("PATCH", "/api/workers/clock-in", { isAvailable: v });
+      // Clock-in requires GPS server-side now (anti-spoof). Capture coords
+      // FIRST and send them with the clock-in call. Reject loudly on
+      // failure rather than silently flipping availability without GPS.
       if (v) {
-        gpsGetCurrentPosition().then(async (pos) => {
-          await apiRequest("POST", "/api/users/location", { lat: pos.coords.latitude, lng: pos.coords.longitude });
-        }).catch(() => {});
+        let pos: GeolocationPosition;
+        try {
+          pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+        } catch {
+          throw new Error("Enable location to clock in — your map presence depends on it.");
+        }
+        await apiRequest("POST", "/api/workers/clock-in", {
+          gpsLat: pos.coords.latitude,
+          gpsLng: pos.coords.longitude,
+          gpsAccuracy: pos.coords.accuracy,
+          gpsTimestamp: pos.timestamp,
+        });
+      } else {
+        await apiRequest("POST", "/api/workers/clock-out");
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] }),
+    onError: (err: any) => toast({
+      title: "Couldn't clock in",
+      description: err?.detail || err?.message || "Try again with location enabled.",
+      variant: "destructive",
+    }),
   });
 
   const { data: myJobs } = useQuery<Job[]>({

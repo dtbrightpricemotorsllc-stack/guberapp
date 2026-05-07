@@ -10,6 +10,7 @@ import { evaluatePreflight, type PreflightResult } from "@/lib/handsfree-preflig
 import { readVideoFileMetadata, readVideoDurationSec } from "@/lib/video-metadata";
 import { uploadToCloudinarySigned } from "@/lib/cloudinary-upload";
 import { Progress } from "@/components/ui/progress";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 
 const MAX_DURATION_MS = 15 * 60 * 1000;
 const CONSENT_VERSION = 1;
@@ -92,17 +93,26 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
         }
       } catch {}
 
-      navigator.geolocation?.getCurrentPosition(
-        (pos) => {
+      // Use the native-aware GPS wrapper so iOS/Android Capacitor builds get
+      // reliable foreground locations. Fire-and-forget so recording start
+      // isn't blocked, but surface failures via toast instead of silently
+      // swallowing them — Hands-Free proofs are heavily GPS-anchored on the
+      // server side.
+      gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+        .then((pos) => {
           gpsRef.current = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
             accuracy: pos.coords.accuracy,
           };
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 8000 },
-      );
+        })
+        .catch(() => {
+          toast({
+            title: "Location unavailable",
+            description: "We couldn't lock GPS for this clip. The hirer may flag the proof if it's V&I.",
+            variant: "destructive",
+          });
+        });
 
       const mime = pickMimeType();
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);

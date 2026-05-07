@@ -286,6 +286,15 @@ async function sendToApnsTokens(
   note.alert = { title: payload.title, body: payload.body };
   note.sound = payload.sound || "guber_default.wav";
   note.topic = APNS_BUNDLE_ID;
+  // Closed-app delivery hardening (push audit):
+  //   - pushType "alert" is required by APNs HTTP/2 for visible alerts to
+  //     wake a closed/backgrounded app reliably.
+  //   - priority 10 = immediate delivery (default for alerts but explicit).
+  //   - mutableContent lets the iOS Notification Service Extension
+  //     (if/when added) modify the payload (rich media, decryption).
+  (note as any).pushType = "alert";
+  note.priority = 10;
+  note.mutableContent = true;
   note.payload = {
     url: payload.url || "/",
     ...(payload.actions ? { actions: payload.actions } : {}),

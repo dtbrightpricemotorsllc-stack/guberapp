@@ -135,7 +135,13 @@ export default function JobNavigate() {
           gpsLng: pos.coords.longitude,
         }),
       )
-      .catch(() => milestoneMutation.mutate({ statusType: "on_the_way" }));
+      .catch(() =>
+        toast({
+          title: "Location required",
+          description: "Enable GPS so we can share your start location with the hirer, then tap On My Way again.",
+          variant: "destructive",
+        }),
+      );
   };
 
   const handleArrived = () => {

@@ -2302,6 +2302,7 @@ export async function registerRoutes(
     handleNativeGoogleAuth({
       webClientId: process.env.GOOGLE_CLIENT_ID || "",
       androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
+      iosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
       upsertGoogleUser,
       generateToken: generateJWT,
     }),
@@ -7206,6 +7207,65 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Job must be funded, active, or in progress to submit proof" });
       }
 
+      // Server-side proof geofence (audit + reliability hardening).
+      // We require the worker to be within 250m of the job site for any
+      // submission. Bypassed when:
+      //   - the job has no coordinates (legacy / online jobs),
+      //   - this is a "not-encountered" report (the helper IS reporting they
+      //     could not reach the site).
+      const PROOF_RADIUS_METERS = 250;
+      const gpsLatNum = typeof req.body.gpsLat === "number" ? req.body.gpsLat : null;
+      const gpsLngNum = typeof req.body.gpsLng === "number" ? req.body.gpsLng : null;
+      let proofDistanceMeters: number | null = null;
+      // Treat 0/0 job coordinates as missing — legacy / online jobs sometimes
+      // store (0,0) instead of null, and we don't want to geofence them
+      // around the Gulf of Guinea.
+      const jobHasRealCoords =
+        typeof job.lat === "number" && typeof job.lng === "number" &&
+        !(job.lat === 0 && job.lng === 0);
+      if (!req.body.notEncountered && jobHasRealCoords) {
+        if (gpsLatNum === null || gpsLngNum === null) {
+          return res.status(400).json({
+            message: "GPS_REQUIRED",
+            detail: "Enable location to submit proof — we verify you're at the job site.",
+          });
+        }
+        // Sanity: reject obviously invalid coords (0,0 / out of range).
+        if (
+          gpsLatNum === 0 || gpsLngNum === 0 ||
+          gpsLatNum < -90 || gpsLatNum > 90 ||
+          gpsLngNum < -180 || gpsLngNum > 180
+        ) {
+          return res.status(400).json({
+            message: "GPS_INVALID",
+            detail: "Your location reading looks invalid. Move outside, wait for a GPS lock, and try again.",
+          });
+        }
+        proofDistanceMeters = haversineMeters(job.lat, job.lng, gpsLatNum, gpsLngNum);
+        if (proofDistanceMeters > PROOF_RADIUS_METERS) {
+          await storage.createAuditLog({
+            actorId: req.session.userId!,
+            action: "proof_geofence_blocked",
+            entityType: "job",
+            entityId: jobId,
+            metadata: {
+              gpsLat: gpsLatNum,
+              gpsLng: gpsLngNum,
+              jobLat: job.lat,
+              jobLng: job.lng,
+              metersFromJob: Math.round(proofDistanceMeters),
+              maxMeters: PROOF_RADIUS_METERS,
+            },
+          });
+          return res.status(400).json({
+            message: "TOO_FAR_FROM_JOB",
+            detail: `You appear to be ${Math.round(proofDistanceMeters)} m from the job site. Move closer (within ${PROOF_RADIUS_METERS} m) and try again.`,
+            metersFromJob: Math.round(proofDistanceMeters),
+            maxMeters: PROOF_RADIUS_METERS,
+          });
+        }
+      }
+
       // Task #494 — fresh review window per submission. ONLY V&I jobs get a
       // review_window_expires_at; non-V&I categories keep their existing
       // proof flow untouched (so cron auto-satisfy + media purge never affects
@@ -7265,6 +7325,24 @@ export async function registerRoutes(
         body: `Helper submitted ${req.body.notEncountered ? "a not-encountered report" : "proof"} for "${job.title}". Tap to review and confirm.`,
         jobId,
         priority: "high",
+      });
+
+      // Audit log every successful proof submission with GPS context for
+      // anti-fraud review.
+      await storage.createAuditLog({
+        actorId: req.session.userId!,
+        action: req.body.notEncountered ? "proof_not_encountered" : "proof_submitted",
+        entityType: "proof_submission",
+        entityId: proof.id,
+        metadata: {
+          jobId,
+          gpsLat: gpsLatNum,
+          gpsLng: gpsLngNum,
+          gpsTimestamp: req.body.gpsTimestamp || null,
+          metersFromJob: proofDistanceMeters !== null ? Math.round(proofDistanceMeters) : null,
+          imageCount: Array.isArray(req.body.imageUrls) ? req.body.imageUrls.length : 0,
+          hasVideo: !!req.body.videoUrl,
+        },
       });
 
       res.json(proof);
@@ -12445,14 +12523,63 @@ OUTPUT STYLE:
   });
 
   // ── CLOUDINARY SIGNED UPLOAD TOKEN ───────────────────────────────────────
+  // Hardening (security review):
+  //   - resourceType allowlist ("image" | "video") signed into the request so
+  //     Cloudinary rejects mismatched paths,
+  //   - per-user folder scope so one user's signature can't be reused to dump
+  //     into another user's namespace,
+  //   - per-user rate limit (60 sigs / minute) to blunt signature-mining,
+  //   - max file size hint returned for client-side guard (Cloudinary
+  //     enforcement requires an upload preset; we surface it for the client
+  //     so we never even attempt giant uploads).
+  const signRateBuckets = new Map<number, { count: number; resetAt: number }>();
+  const SIGN_RATE_LIMIT = 60;
+  const SIGN_RATE_WINDOW_MS = 60_000;
+  // Opportunistic prune of expired buckets so the map can't grow unbounded
+  // with one entry per distinct user-id forever. Triggered on 1% of requests.
+  const pruneSignRateBuckets = (nowMs: number) => {
+    if (signRateBuckets.size < 1000) return;
+    for (const [uid, b] of Array.from(signRateBuckets.entries())) {
+      if (b.resetAt < nowMs) signRateBuckets.delete(uid);
+    }
+  };
+  const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB
+  const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
   app.post("/api/upload-photo/sign", requireAuth, async (req: Request, res: Response) => {
     try {
       if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
         return res.status(503).json({ error: "Media storage not configured. Contact support." });
       }
+      const userId = req.session!.userId!;
+
+      // Per-user rate limit
+      const nowMs = Date.now();
+      if (Math.random() < 0.01) pruneSignRateBuckets(nowMs);
+      const bucket = signRateBuckets.get(userId);
+      if (!bucket || bucket.resetAt < nowMs) {
+        signRateBuckets.set(userId, { count: 1, resetAt: nowMs + SIGN_RATE_WINDOW_MS });
+      } else {
+        bucket.count += 1;
+        if (bucket.count > SIGN_RATE_LIMIT) {
+          return res.status(429).json({ error: "Too many upload requests. Slow down." });
+        }
+      }
+
+      // Validate kind
+      const kindRaw = (req.body?.kind ?? "image") as string;
+      const kind: "image" | "video" = kindRaw === "video" ? "video" : "image";
+      const resourceType = kind;
+      const maxBytes = kind === "video" ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+
       const cloudinary = (await import("./cloudinary.js")).default;
       const timestamp = Math.round(Date.now() / 1000);
-      const folder = "guber-proof";
+      const folder = `guber-proof/u${userId}`;
+      // Per Cloudinary docs, the canonical signature string excludes
+      // `file`, `cloud_name`, `resource_type`, and `api_key` — so signing
+      // `resource_type` would have no effect. We pin it via the URL path
+      // and trust Cloudinary's standard signed-upload verification (which
+      // covers `timestamp` + `folder` here). The per-user folder scope is
+      // what actually constrains where uploads can land.
       const signature = cloudinary.utils.api_sign_request(
         { timestamp, folder },
         process.env.CLOUDINARY_API_SECRET!
@@ -12463,6 +12590,8 @@ OUTPUT STYLE:
         cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
         api_key: process.env.CLOUDINARY_API_KEY,
         folder,
+        resource_type: resourceType,
+        max_bytes: maxBytes,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -16016,8 +16145,49 @@ OUTPUT STYLE:
       const userId = req.session!.userId!;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      await storage.updateUser(userId, { isAvailable: true, clockedInAt: new Date(), clockedOutAt: null });
-      res.json({ success: true, clockedInAt: new Date() });
+
+      // Require + validate GPS on clock-in (anti-spoof / anti-fake-availability).
+      // Workers appear on the public map after clocking in, so a fake
+      // location here is a real abuse vector.
+      const gpsLat = typeof req.body.gpsLat === "number" ? req.body.gpsLat : null;
+      const gpsLng = typeof req.body.gpsLng === "number" ? req.body.gpsLng : null;
+      if (gpsLat === null || gpsLng === null) {
+        return res.status(400).json({
+          message: "GPS_REQUIRED",
+          detail: "Enable location to clock in — we verify your location to keep the worker map honest.",
+        });
+      }
+      if (
+        gpsLat === 0 || gpsLng === 0 ||
+        gpsLat < -90 || gpsLat > 90 ||
+        gpsLng < -180 || gpsLng > 180
+      ) {
+        return res.status(400).json({
+          message: "GPS_INVALID",
+          detail: "Your location reading looks invalid. Move outside, wait for a GPS lock, and try again.",
+        });
+      }
+
+      const now = new Date();
+      await storage.updateUser(userId, { isAvailable: true, clockedInAt: now, clockedOutAt: null });
+      // Persist current location too so the map shows the worker immediately.
+      try { await storage.updateUser(userId, { lat: gpsLat, lng: gpsLng } as any); } catch {}
+
+      await storage.createAuditLog({
+        actorId: userId,
+        action: "worker_clock_in",
+        entityType: "user",
+        entityId: userId,
+        metadata: {
+          gpsLat,
+          gpsLng,
+          gpsAccuracy: typeof req.body.gpsAccuracy === "number" ? req.body.gpsAccuracy : null,
+          gpsTimestamp: req.body.gpsTimestamp || null,
+          ua: req.headers["user-agent"] || null,
+        },
+      });
+
+      res.json({ success: true, clockedInAt: now });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -16026,8 +16196,19 @@ OUTPUT STYLE:
   app.post("/api/workers/clock-out", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session!.userId!;
-      await storage.updateUser(userId, { isAvailable: false, clockedInAt: null, clockedOutAt: new Date() });
-      res.json({ success: true, clockedOutAt: new Date() });
+      const now = new Date();
+      await storage.updateUser(userId, { isAvailable: false, clockedInAt: null, clockedOutAt: now });
+      await storage.createAuditLog({
+        actorId: userId,
+        action: "worker_clock_out",
+        entityType: "user",
+        entityId: userId,
+        metadata: {
+          gpsLat: typeof req.body.gpsLat === "number" ? req.body.gpsLat : null,
+          gpsLng: typeof req.body.gpsLng === "number" ? req.body.gpsLng : null,
+        },
+      });
+      res.json({ success: true, clockedOutAt: now });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

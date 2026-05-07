@@ -889,7 +889,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           });
         })
         .catch(() => {
-          milestoneMutation.mutate({ statusType: "on_the_way", safetyConfirmed: true });
+          // Don't silently fall through. The hirer needs an honest GPS
+          // breadcrumb when the helper marks "on the way".
+          toast({
+            title: "Location required",
+            description: "Enable GPS so we can share your start location with the hirer, then tap On My Way again.",
+            variant: "destructive",
+          });
         });
     }
   };

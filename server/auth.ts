@@ -532,6 +532,7 @@ export async function verifyGoogleIdToken(
 export interface NativeGoogleAuthDeps {
   webClientId: string;
   androidClientId?: string;
+  iosClientId?: string;
   upsertGoogleUser: (
     googleUser: { sub: string; email: string; name: string; picture: string | null },
     pendingReferralCode: string | null,
@@ -556,7 +557,10 @@ export function handleNativeGoogleAuth(deps: NativeGoogleAuthDeps) {
       return res.status(400).json({ message: "idToken is required" });
     }
 
-    const validAuds = [deps.webClientId, deps.androidClientId].filter(Boolean) as string[];
+    // Audit fix: native iOS Sign-In tokens carry the iOS OAuth client ID as
+    // their `aud` claim — without this, every iOS native sign-in was being
+    // rejected with "tokeninfo aud mismatch".
+    const validAuds = [deps.webClientId, deps.androidClientId, deps.iosClientId].filter(Boolean) as string[];
     const googleUser = await verifyGoogleIdToken(idToken, validAuds, deps.fetchFn);
 
     if (!googleUser) {

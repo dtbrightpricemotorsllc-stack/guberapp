@@ -21,10 +21,20 @@ interface SignResponse {
   cloud_name: string;
   api_key: string;
   folder: string;
+  // Hardened sign endpoint returns the server-decided resource_type and a
+  // max byte size for the kind being uploaded. Optional for backward-compat
+  // with any cached older client bundles.
+  resource_type?: "image" | "video";
+  max_bytes?: number;
 }
 
-async function getSignature(): Promise<SignResponse> {
-  const res = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
+async function getSignature(kind: "image" | "video"): Promise<SignResponse> {
+  const res = await fetch("/api/upload-photo/sign", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind }),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Could not get upload token" }));
     throw new Error(err.error || "Could not get upload token");
@@ -36,10 +46,11 @@ function uploadOnce(
   blob: Blob,
   sig: SignResponse,
   opts: UploadOptions,
+  effectiveResourceType: "image" | "video" | "auto",
 ): Promise<UploadResult> {
   return new Promise<UploadResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const url = `https://api.cloudinary.com/v1_1/${sig.cloud_name}/${opts.resourceType || "auto"}/upload`;
+    const url = `https://api.cloudinary.com/v1_1/${sig.cloud_name}/${effectiveResourceType}/upload`;
     const fd = new FormData();
     fd.append("file", blob, opts.fileName || `upload-${Date.now()}`);
     fd.append("api_key", sig.api_key);
@@ -105,13 +116,41 @@ export async function uploadToCloudinarySigned(
   blob: Blob,
   opts: UploadOptions = {},
 ): Promise<UploadResult> {
+  // Map the caller's resourceType ("image"|"video"|"auto") to the kind the
+  // sign endpoint understands. "auto" is treated as "image" for signing
+  // (Cloudinary "auto" uploads aren't compatible with our hardened
+  // resource-typed signing).
+  const requestedType = opts.resourceType || "auto";
+  const kind: "image" | "video" =
+    requestedType === "video"
+      ? "video"
+      : requestedType === "image"
+        ? "image"
+        : (blob.type?.startsWith("video/") ? "video" : "image");
+
   let lastErr: any = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (opts.signal?.aborted) throw new Error("Upload cancelled");
     try {
-      const sig = await getSignature();
+      const sig = await getSignature(kind);
+
+      // Enforce server-supplied max byte size client-side so we never even
+      // attempt a doomed upload. This is the practical complement to
+      // Cloudinary upload presets (which would also enforce server-side).
+      if (typeof sig.max_bytes === "number" && blob.size > sig.max_bytes) {
+        const mb = (sig.max_bytes / (1024 * 1024)).toFixed(0);
+        throw Object.assign(
+          new Error(`File too large — max ${mb} MB for this kind of upload.`),
+          { retriable: false },
+        );
+      }
+
+      // Trust the server's resource_type if it returned one; otherwise fall
+      // back to the caller's preference.
+      const effectiveResourceType = sig.resource_type || (requestedType === "auto" ? kind : requestedType);
+
       opts.onProgress?.(0);
-      return await uploadOnce(blob, sig, opts);
+      return await uploadOnce(blob, sig, opts, effectiveResourceType);
     } catch (err: any) {
       lastErr = err;
       const retriable = err?.retriable === true;

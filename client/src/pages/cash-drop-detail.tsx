@@ -312,16 +312,22 @@ export default function CashDropDetail() {
 
   const submitProofMutation = useMutation({
     mutationFn: async () => {
-      if (!gpsPos) {
+      // Require GPS for proof — surface an explicit error instead of silently
+      // sending undefined coords (the server now rejects fake/missing GPS).
+      let coords = gpsPos;
+      if (!coords) {
         try {
-          const pos = await gpsGetCurrentPosition();
-          setGpsPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        } catch {}
+          const pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+          coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setGpsPos(coords);
+        } catch {
+          throw new Error("Enable location so we can verify you're at the drop site, then try again.");
+        }
       }
       const res = await apiRequest("POST", `/api/cash-drops/${id}/submit-proof`, {
         proofUrls: capturedPhotos,
-        gpsLat: gpsPos?.lat,
-        gpsLng: gpsPos?.lng,
+        gpsLat: coords.lat,
+        gpsLng: coords.lng,
       });
       return res.json();
     },

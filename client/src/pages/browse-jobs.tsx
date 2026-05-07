@@ -13,6 +13,7 @@ import { useSearch, useLocation } from "wouter";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { formatJobTime } from "@/lib/job-time";
 import { shouldShowAlertPrompt } from "@/components/alert-prompt-modal";
 import { subscribeToPush } from "@/lib/push";
@@ -70,6 +71,7 @@ export default function BrowseJobs() {
   const initialCategory = params.get("category") || "All";
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const isFlagged = (user as any)?.backgroundCheckStatus === "flagged";
   const restrictions: string[] = (user as any)?.backgroundCheckRestrictions || [];
 
@@ -85,12 +87,27 @@ export default function BrowseJobs() {
 
   const availabilityMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("PATCH", `/api/users/${user!.id}`, { isAvailable: true });
-      gpsGetCurrentPosition().then(async (pos) => {
-        await apiRequest("POST", "/api/users/location", { lat: pos.coords.latitude, lng: pos.coords.longitude });
-      }).catch(() => {});
+      // Clock-in is GPS-gated server-side now. Capture FIRST and call the
+      // proper clock-in endpoint instead of just flipping isAvailable.
+      let pos: GeolocationPosition;
+      try {
+        pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+      } catch {
+        throw new Error("Enable location to go available — workers without GPS can't appear on the map.");
+      }
+      await apiRequest("POST", "/api/workers/clock-in", {
+        gpsLat: pos.coords.latitude,
+        gpsLng: pos.coords.longitude,
+        gpsAccuracy: pos.coords.accuracy,
+        gpsTimestamp: pos.timestamp,
+      });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] }),
+    onError: (err: any) => toast({
+      title: "Couldn't go available",
+      description: err?.detail || err?.message || "Try again with location enabled.",
+      variant: "destructive",
+    }),
   });
 
   const handleEnableAlerts = async () => {

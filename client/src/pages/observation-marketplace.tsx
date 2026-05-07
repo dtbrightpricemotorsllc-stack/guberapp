@@ -146,7 +146,14 @@ export default function ObservationMarketplace() {
         setGpsLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGpsLoading(false);
       })
-      .catch(() => setGpsLoading(false));
+      .catch(() => {
+        setGpsLoading(false);
+        toast({
+          title: "Location unavailable",
+          description: "Enable location to filter observations by distance from you.",
+          variant: "destructive",
+        });
+      });
   }
 
   const params = new URLSearchParams();

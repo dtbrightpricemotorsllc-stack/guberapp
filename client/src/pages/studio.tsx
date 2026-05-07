@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { StudioVideo, StudioVibe } from "@shared/schema";
 import { Sparkles, Image as ImageIcon, Coins, Lock, Zap, Loader2, Download, Wand2, Share2, FileText, Briefcase, Gift, Crown, Check } from "lucide-react";
 import { Link } from "wouter";
+import { isStoreBuild } from "@/lib/platform";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -391,7 +392,7 @@ export default function StudioPage() {
         </div>
 
         {/* Buy credits */}
-        <div id="buy">
+        <div id="buy" hidden={isStoreBuild}>
           <p className="text-xs uppercase tracking-widest font-display text-muted-foreground mb-2 flex items-center gap-1.5">
             <Coins className="w-3.5 h-3.5" /> Credit packs
           </p>
@@ -416,8 +417,10 @@ export default function StudioPage() {
           </div>
         </div>
 
-        {/* Tier subscription cards (task-452) */}
-        <div id="upgrade">
+        {/* Tier subscription cards (task-452). Hidden on iOS/Android store
+           builds — Studio credits & subscriptions are digital goods that
+           must use IAP/Play Billing on store builds (see docs/payment-routing.md). */}
+        <div id="upgrade" hidden={isStoreBuild}>
           <p className="text-xs uppercase tracking-widest font-display text-muted-foreground mb-2 flex items-center gap-1.5">
             <Crown className="w-3.5 h-3.5" /> Upgrade your Studio
           </p>
