@@ -209,12 +209,12 @@ function AllowlistTab() {
     queryFn: async () => (await fetch(`/api/admin/qa/allowlist/${itemType}/${itemId}`)).json(),
   });
   const invite = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/admin/qa/allowlist/${itemType}/${itemId}`, { userKey }).then((r) => r.json()),
+    mutationFn: () => apiRequest("POST", `/api/admin/qa/allowlist/${itemType}/${itemId}`, { userKey }, { "x-live-confirm": "LIVE" }).then((r) => r.json()),
     onSuccess: () => { setUserKey(""); list.refetch(); toast({ title: "Tester invited" }); },
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
   const remove = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/qa/allowlist/${id}`).then((r) => r.json()),
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/qa/allowlist/${id}`, undefined, { "x-live-confirm": "LIVE" }).then((r) => r.json()),
     onSuccess: () => list.refetch(),
   });
   const endTest = useMutation({
@@ -264,7 +264,7 @@ function AllowlistTab() {
 }
 
 function InspectorTab() {
-  const [type, setType] = useState<"job" | "proof" | "cashdrop" | "user">("job");
+  const [type, setType] = useState<"job" | "proof" | "cashdrop" | "user" | "verification">("job");
   const [id, setId] = useState("");
   const dest = id ? `/admin/qa/inspect/${type}/${id}` : null;
   return (
@@ -274,7 +274,7 @@ function InspectorTab() {
         <Select value={type} onValueChange={(v) => setType(v as any)}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {["job", "proof", "cashdrop", "user"].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            {["job", "proof", "cashdrop", "user", "verification"].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
         <Input placeholder="ID" value={id} onChange={(e) => setId(e.target.value)} className="w-32" data-testid="input-inspect-id" />
