@@ -218,8 +218,33 @@ function AllowlistTab() {
     onSuccess: () => list.refetch(),
   });
   const endTest = useMutation({
-    mutationFn: () => fetch(`/api/admin/qa/allowlist/${itemType}/${itemId}/end-test`, { method: "POST", headers: { "x-live-confirm": "LIVE", "Content-Type": "application/json" }, body: "{}" }).then((r) => r.json()),
+    mutationFn: async (acknowledgeRefundFailure: boolean) => {
+      const res = await fetch(`/api/admin/qa/allowlist/${itemType}/${itemId}/end-test`, {
+        method: "POST",
+        headers: { "x-live-confirm": "LIVE", "Content-Type": "application/json" },
+        body: JSON.stringify({ acknowledgeRefundFailure }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(body.message || `End-test failed (${res.status})`);
+        (err as Error & { refunds?: unknown; status?: number }).refunds = body.refunds;
+        (err as Error & { refunds?: unknown; status?: number }).status = res.status;
+        throw err;
+      }
+      return body;
+    },
     onSuccess: () => { toast({ title: "Live test ended" }); list.refetch(); },
+    onError: (e: Error & { refunds?: { ok: boolean; error?: string; id?: string }[]; status?: number }) => {
+      // 502 = refund failed; show the failure detail and let admin force-cancel.
+      if (e.status === 502 && e.refunds?.length) {
+        const failed = e.refunds.filter((r) => !r.ok).map((r) => `${r.id}: ${r.error}`).join("\n");
+        if (confirm(`Refund FAILED — money may still be held in Stripe:\n\n${failed}\n\nForce cancellation anyway? (real money may remain held)`)) {
+          endTest.mutate(true);
+          return;
+        }
+      }
+      toast({ title: "End-test failed", description: e.message, variant: "destructive" });
+    },
   });
 
   return (
@@ -233,7 +258,7 @@ function AllowlistTab() {
         <CardHeader><CardTitle>Manage allowlist</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-end gap-2">
-            <Select value={itemType} onValueChange={(v) => setItemType(v as any)}>
+            <Select value={itemType} onValueChange={(v) => setItemType(v === "cash_drop" ? "cash_drop" : "job")}>
               <SelectTrigger className="w-40" data-testid="select-item-type"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="job">job</SelectItem>
@@ -243,7 +268,7 @@ function AllowlistTab() {
             <Input placeholder="item id" value={itemId} onChange={(e) => setItemId(e.target.value)} className="w-32" data-testid="input-item-id" />
             <Input placeholder="tester email or user id" value={userKey} onChange={(e) => setUserKey(e.target.value)} className="w-72" data-testid="input-tester-key" />
             <Button onClick={() => invite.mutate()} disabled={!itemId || !userKey} data-testid="button-invite-tester">Invite tester</Button>
-            <Button variant="destructive" onClick={() => { if (confirm("End the live test? Removes allowlist + cancels item.")) endTest.mutate(); }} disabled={!itemId} data-testid="button-end-test">End test</Button>
+            <Button variant="destructive" onClick={() => { if (confirm("End the live test? Removes allowlist + cancels item.")) endTest.mutate(false); }} disabled={!itemId} data-testid="button-end-test">End test</Button>
           </div>
 
           <ul className="divide-y text-sm">
@@ -271,7 +296,9 @@ function InspectorTab() {
     <Card>
       <CardHeader><CardTitle>Inspector</CardTitle></CardHeader>
       <CardContent className="flex flex-wrap items-end gap-2">
-        <Select value={type} onValueChange={(v) => setType(v as any)}>
+        <Select value={type} onValueChange={(v) => {
+          if (v === "job" || v === "proof" || v === "cashdrop" || v === "user" || v === "verification") setType(v);
+        }}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             {["job", "proof", "cashdrop", "user", "verification"].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}

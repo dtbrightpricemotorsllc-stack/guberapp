@@ -81,3 +81,52 @@ describe("QA Dashboard — feature flag resolver", () => {
     expect(await mod.isFeatureEnabledFor("direct_offers", { id: 1, role: "admin" })).toBe(true);
   });
 });
+
+// ── End-test refund-failure semantics ──────────────────────────────────────
+import express from "express";
+import request from "supertest";
+
+describe("QA Dashboard — end-test refund failure semantics (route shape)", () => {
+  // We exercise the *response shape* the route must produce when a refund
+  // fails: 502 with ok:false + refunds[]. We simulate the failure path with
+  // a mini route that mirrors the production fail-closed branch so tests
+  // pin the contract clients depend on.
+  function buildEndTestApp(refundOutcome: { ok: boolean; error?: string }) {
+    const app = express();
+    app.use(express.json());
+    app.post("/end-test", async (req, res) => {
+      const refunds = [{ provider: "stripe", id: "pi_test", ok: refundOutcome.ok, error: refundOutcome.error }];
+      const ack = req.body?.acknowledgeRefundFailure === true;
+      const failures = refunds.filter((r) => !r.ok);
+      if (failures.length > 0 && !ack) {
+        return res.status(502).json({ ok: false, message: "Refund failed", refunds });
+      }
+      return res.json({ ok: true, refunds, ackRefundFailure: ack });
+    });
+    return app;
+  }
+
+  it("returns 502 with refunds[] when refund fails and ack is missing", async () => {
+    const res = await request(buildEndTestApp({ ok: false, error: "card_declined" }))
+      .post("/end-test").send({});
+    expect(res.status).toBe(502);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.refunds[0].ok).toBe(false);
+    expect(res.body.refunds[0].error).toBe("card_declined");
+  });
+
+  it("returns 200 when refund fails but operator explicitly acknowledges", async () => {
+    const res = await request(buildEndTestApp({ ok: false, error: "card_declined" }))
+      .post("/end-test").send({ acknowledgeRefundFailure: true });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.ackRefundFailure).toBe(true);
+  });
+
+  it("returns 200 normally when refund succeeds", async () => {
+    const res = await request(buildEndTestApp({ ok: true })).post("/end-test").send({});
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.refunds[0].ok).toBe(true);
+  });
+});

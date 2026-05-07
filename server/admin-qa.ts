@@ -16,6 +16,7 @@ import {
   walletTransactions,
   jobStatusLogs,
   featureFlags,
+  guberPayments,
 } from "@shared/schema";
 import { storage } from "./storage";
 import { sanitizeJobForPublic } from "./sanitize-job";
@@ -23,6 +24,7 @@ import { toCloudinaryAttachmentUrl, classifyMedia } from "./media-download";
 import { recordCashDropEvent, getCashDropEvents } from "./cash-drop-events";
 import { listAllFlags, updateFlag, ensureFlagsSeeded, invalidateFlagCache } from "./feature-flags";
 import { FEATURE_FLAGS, isKnownFlag, type FeatureFlagKey } from "@shared/feature-flags";
+import type { User } from "@shared/schema";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 
@@ -109,7 +111,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       day1OG: persona === "day1og",
       lat: 34.0522, lng: -118.2437, zipcode: "90210",
       termsAcceptedAt: new Date(),
-    } as any);
+    });
     await db.update(users).set({ isTestUser: true }).where(eq(users.id, u.id));
     await audit(req, "qa_create_persona", { persona, userId: u.id });
     res.json({ id: u.id, email, password: `Qa${persona}!2026` });
@@ -139,12 +141,21 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     const [j] = await db.insert(jobs).values({
       title: `QA test job — ${category} ${Date.now()}`,
       description: "Auto-created by /admin/qa sandbox.",
-      category, budget: 25, location: "QA Lab, CA", locationApprox: "QA Lab, CA", zip: "90210",
-      lat: 34.0522, lng: -118.2437,
-      status: "posted_public", postedById: posterId,
-      isPublished: true, isPaid: true, payType: "fixed",
-      isTestJob: true, visibility: "public",
-    } as any).returning();
+      category,
+      budget: 25,
+      location: "QA Lab, CA",
+      locationApprox: "QA Lab, CA",
+      zip: "90210",
+      lat: 34.0522,
+      lng: -118.2437,
+      status: "posted_public",
+      postedById: posterId,
+      isPublished: true,
+      isPaid: true,
+      payType: "fixed",
+      isTestJob: true,
+      visibility: "public",
+    }).returning();
     await audit(req, "qa_create_test_job", { jobId: j.id, category, posterId });
     res.json(j);
   });
@@ -238,39 +249,74 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     const refunds: { provider: string; id?: string; amountCents?: number; ok: boolean; error?: string }[] = [];
 
     // Lazy-load Stripe so test paths and dev boots don't require it.
-    let stripe: any = null;
+    // We let the SDK pick its bundled API version — no string cast needed.
+    type StripeClient = import("stripe").default;
+    let stripe: StripeClient | null = null;
     try {
-      const Stripe = (await import("stripe")).default;
+      const StripeMod = (await import("stripe")).default;
       const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_CONNECT_SECRET_KEY;
-      if (key) stripe = new Stripe(key, { apiVersion: "2024-06-20" as any });
+      if (key) stripe = new StripeMod(key);
     } catch { /* stripe missing — skip refunds, still cancel */ }
+    // Operator must explicitly acknowledge if they want to finalize cancellation
+    // even when a refund failed. Default is fail-closed so no real money is
+    // silently left held.
+    const ackRefundFailure = req.body?.acknowledgeRefundFailure === true;
 
+    // Step 1: refund any held funds. We deliberately do NOT mutate jobs /
+    // cash_drops / allowlist yet — if the refund fails we want to bail out
+    // before declaring the test "ended" so the operator doesn't lose track of
+    // real money still held by Stripe.
+    let job: typeof jobs.$inferSelect | undefined;
+    let drop: typeof cashDrops.$inferSelect | undefined;
     if (itemType === "job") {
-      const [j] = await db.select().from(jobs).where(eq(jobs.id, itemIdN)).limit(1);
-      if (!j) return res.status(404).json({ message: "job not found" });
-      // Real-money unwind: refund any held escrow on this job before cancelling.
-      if (stripe && j.stripePaymentIntentId) {
+      [job] = await db.select().from(jobs).where(eq(jobs.id, itemIdN)).limit(1);
+      if (!job) return res.status(404).json({ message: "job not found" });
+      if (stripe && job.stripePaymentIntentId) {
         try {
-          const r = await stripe.refunds.create({ payment_intent: j.stripePaymentIntentId, reason: "requested_by_customer" });
+          const r = await stripe.refunds.create({ payment_intent: job.stripePaymentIntentId, reason: "requested_by_customer" });
           refunds.push({ provider: "stripe", id: r.id, amountCents: r.amount, ok: true });
         } catch (e: any) {
-          refunds.push({ provider: "stripe", id: j.stripePaymentIntentId, ok: false, error: e.message });
+          refunds.push({ provider: "stripe", id: job.stripePaymentIntentId, ok: false, error: e.message });
         }
       }
-      await db.update(jobs).set({ visibility: "public", status: "cancelled" }).where(eq(jobs.id, itemIdN));
     } else if (itemType === "cash_drop") {
-      const [d] = await db.select().from(cashDrops).where(eq(cashDrops.id, itemIdN)).limit(1);
-      if (!d) return res.status(404).json({ message: "cash drop not found" });
-      // Real-money unwind: refund the host's funding charge before cancelling
-      // so testers' deposits aren't held indefinitely.
-      if (stripe && d.stripePaymentIntentId) {
-        try {
-          const r = await stripe.refunds.create({ payment_intent: d.stripePaymentIntentId, reason: "requested_by_customer" });
-          refunds.push({ provider: "stripe", id: r.id, amountCents: r.amount, ok: true });
-        } catch (e: any) {
-          refunds.push({ provider: "stripe", id: d.stripePaymentIntentId, ok: false, error: e.message });
+      [drop] = await db.select().from(cashDrops).where(eq(cashDrops.id, itemIdN)).limit(1);
+      if (!drop) return res.status(404).json({ message: "cash drop not found" });
+      // Cash drops don't carry a payment intent on the row itself — funding
+      // flows through guberPayments / dropSponsors. Refund any guberPayments
+      // tied to this drop so any held charge is unwound before we cancel.
+      const payments = await db.select().from(guberPayments).where(eq(guberPayments.jobId, itemIdN));
+      if (stripe) {
+        for (const p of payments) {
+          if (!p.stripePaymentIntentId) continue;
+          try {
+            const r = await stripe.refunds.create({ payment_intent: p.stripePaymentIntentId, reason: "requested_by_customer" });
+            refunds.push({ provider: "stripe", id: r.id, amountCents: r.amount, ok: true });
+          } catch (e: any) {
+            refunds.push({ provider: "stripe", id: p.stripePaymentIntentId, ok: false, error: e.message });
+          }
         }
       }
+    } else {
+      return res.status(400).json({ message: "itemType must be job|cash_drop" });
+    }
+
+    // Step 2: hard-stop on any refund failure unless the operator explicitly
+    // acknowledged it. Audit the failure either way so finance can chase it.
+    const refundFailures = refunds.filter((r) => !r.ok);
+    if (refundFailures.length > 0 && !ackRefundFailure) {
+      await audit(req, "qa_end_live_test_refund_failed", { itemType, itemId: itemIdN, refunds });
+      return res.status(502).json({
+        ok: false,
+        message: "Refund failed — item NOT cancelled. Resolve the refund in Stripe, or retry with { acknowledgeRefundFailure: true } to force cancellation.",
+        refunds,
+      });
+    }
+
+    // Step 3: only now finalize cancellation + clear the allowlist.
+    if (itemType === "job") {
+      await db.update(jobs).set({ visibility: "public", status: "cancelled" }).where(eq(jobs.id, itemIdN));
+    } else {
       await db.update(cashDrops).set({ visibility: "public", status: "cancelled", closedAt: new Date() }).where(eq(cashDrops.id, itemIdN));
       await recordCashDropEvent({
         cashDropId: itemIdN,
@@ -278,14 +324,12 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         reasonCode: "qa_end_live_test",
         actorUserId: req.session?.userId ?? null,
         source: "route",
-        payload: { refunds },
+        payload: { refunds, ackRefundFailure },
       });
-    } else {
-      return res.status(400).json({ message: "itemType must be job|cash_drop" });
     }
     await db.delete(testerAllowlist).where(and(eq(testerAllowlist.itemType, itemType), eq(testerAllowlist.itemId, itemIdN)));
-    await audit(req, "qa_end_live_test", { itemType, itemId: itemIdN, refunds });
-    res.json({ ok: true, refunds });
+    await audit(req, "qa_end_live_test", { itemType, itemId: itemIdN, refunds, ackRefundFailure });
+    res.json({ ok: true, refunds, ackRefundFailure });
   });
 
   // ── Inspector ────────────────────────────────────────────────────────────
@@ -295,7 +339,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
 
     // Render the same job through every viewer perspective using the real
     // sanitizer so admins see exactly what each role would receive.
-    const personas = [
+    const personas: { key: string; viewerId: number | undefined; isAdmin: boolean }[] = [
       { key: "loggedOut", viewerId: undefined, isAdmin: false },
       { key: "stranger", viewerId: -1, isAdmin: false },
       { key: "helperUnassigned", viewerId: -2, isAdmin: false },
@@ -303,9 +347,9 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       { key: "hirer", viewerId: job.postedById, isAdmin: false },
       { key: "admin", viewerId: req.session?.userId, isAdmin: true },
     ];
-    const renders: Record<string, any> = {};
+    const renders: Record<string, unknown> = {};
     for (const p of personas) {
-      renders[p.key] = sanitizeJobForPublic(job as any, p.viewerId as any, p.isAdmin);
+      renders[p.key] = sanitizeJobForPublic(job, p.viewerId, p.isAdmin);
     }
 
     const proofs = await storage.getProofsByJob(job.id);
@@ -339,18 +383,15 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
   // admin can sanity-check a single user's KYC at a glance without opening the
   // full profile page.
   app.get("/api/admin/qa/inspect/verification/:id", requireAdmin, async (req, res) => {
-    const u = await storage.getUser(parseInt(req.params.id));
+    const u: User | undefined = await storage.getUser(parseInt(req.params.id));
     if (!u) return res.status(404).json({ message: "user not found" });
     res.json({
       user: { id: u.id, fullName: u.fullName, email: u.email, role: u.role },
       verification: {
-        idVerified: (u as any).idVerified,
-        selfieVerified: (u as any).selfieVerified,
-        idFrontUrl: (u as any).idFrontUrl,
-        idBackUrl: (u as any).idBackUrl,
-        selfieUrl: (u as any).selfieUrl,
-        suspended: (u as any).suspended,
-        banned: (u as any).banned,
+        idVerified: u.idVerified,
+        selfieVerified: u.selfieVerified,
+        suspended: u.suspended,
+        banned: u.banned,
       },
     });
   });
