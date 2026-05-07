@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Upload } from "lucide-react";
+import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Upload, FileVideo } from "lucide-react";
 
 const MAX_DURATION_MS = 15 * 60 * 1000;
 const CONSENT_VERSION = 1;
@@ -32,6 +32,7 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
   const [phase, setPhase] = useState<Phase>("consent");
   const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -115,6 +116,59 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
     try { recorderRef.current?.state === "recording" && recorderRef.current.stop(); } catch {}
   }
 
+  async function handleImport(file: File) {
+    if (!file) return;
+    if (file.size > 200 * 1024 * 1024) {
+      setError("Clip too large (max 200 MB). Trim before importing.");
+      return;
+    }
+    setPhase("uploading");
+    try {
+      await uploadBlob(file, "paired-android", file.name);
+      toast({ title: "POV proof uploaded", description: "Imported clip recorded as Hands-Free proof." });
+      setPhase("done");
+      onUploaded?.();
+      setTimeout(() => onOpenChange(false), 800);
+    } catch (e: any) {
+      setError(e?.message || "Upload failed");
+      setPhase("ready");
+    }
+  }
+
+  async function uploadBlob(blob: Blob, deviceKind: "phone-handsfree" | "paired-android", fileName?: string) {
+    const tokenResp = await apiRequest("GET", `/api/jobs/${jobId}/wearable-upload-token`);
+    const { token } = await tokenResp.json();
+
+    const signResp = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
+    if (!signResp.ok) throw new Error("Could not get upload token");
+    const { signature, timestamp, cloud_name, api_key, folder } = await signResp.json();
+
+    const fd = new FormData();
+    fd.append("file", blob, fileName || `pov-${Date.now()}.webm`);
+    fd.append("api_key", api_key);
+    fd.append("timestamp", String(timestamp));
+    fd.append("signature", signature);
+    fd.append("folder", folder);
+    const upRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`, { method: "POST", body: fd });
+    if (!upRes.ok) throw new Error("Video upload failed");
+    const { secure_url } = await upRes.json();
+
+    const startedAt = startedAtRef.current || Date.now();
+    const endedAt = Date.now();
+    await apiRequest("POST", `/api/proof/wearable-upload`, {
+      token,
+      videoUrl: secure_url,
+      captureMeta: {
+        deviceKind,
+        deviceModel: navigator.userAgent.slice(0, 200),
+        captureStartedAt: new Date(startedAt).toISOString(),
+        captureEndedAt: new Date(endedAt).toISOString(),
+        gpsAtStart: gpsRef.current,
+        consentVersion: CONSENT_VERSION,
+      },
+    });
+  }
+
   async function handleStop() {
     if (stopTimerRef.current) {
       window.clearInterval(stopTimerRef.current);
@@ -136,36 +190,7 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
     }
     setPhase("uploading");
     try {
-      const tokenResp = await apiRequest("GET", `/api/jobs/${jobId}/wearable-upload-token`);
-      const { token } = await tokenResp.json();
-
-      const signResp = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
-      if (!signResp.ok) throw new Error("Could not get upload token");
-      const { signature, timestamp, cloud_name, api_key, folder } = await signResp.json();
-
-      const fd = new FormData();
-      fd.append("file", blob, `pov-${Date.now()}.webm`);
-      fd.append("api_key", api_key);
-      fd.append("timestamp", String(timestamp));
-      fd.append("signature", signature);
-      fd.append("folder", folder);
-      const upRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`, { method: "POST", body: fd });
-      if (!upRes.ok) throw new Error("Video upload failed");
-      const { secure_url } = await upRes.json();
-
-      await apiRequest("POST", `/api/proof/wearable-upload`, {
-        token,
-        videoUrl: secure_url,
-        captureMeta: {
-          deviceKind: "phone-handsfree",
-          deviceModel: navigator.userAgent.slice(0, 200),
-          captureStartedAt: new Date(startedAt).toISOString(),
-          captureEndedAt: new Date(endedAt).toISOString(),
-          gpsAtStart: gpsRef.current,
-          consentVersion: CONSENT_VERSION,
-        },
-      });
-
+      await uploadBlob(blob, "phone-handsfree");
       toast({ title: "POV proof uploaded", description: "Hirer will see the Hands-Free badge on review." });
       setPhase("done");
       onUploaded?.();
@@ -202,7 +227,12 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
             </div>
             <Button
               className="w-full font-display tracking-wider"
-              onClick={() => setPhase("ready")}
+              onClick={async () => {
+                try {
+                  await apiRequest("POST", "/api/handsfree/consent", { consentVersion: CONSENT_VERSION, jobId });
+                } catch {}
+                setPhase("ready");
+              }}
               data-testid="button-handsfree-consent"
             >
               I Understand — Continue
@@ -231,9 +261,31 @@ export function HandsFreeCapture({ jobId, open, onOpenChange, onUploaded }: Prop
 
             <div className="flex gap-2">
               {phase === "ready" && (
-                <Button className="flex-1" onClick={startCapture} data-testid="button-handsfree-start">
-                  <Camera className="w-4 h-4 mr-2" /> Start Recording
-                </Button>
+                <>
+                  <Button className="flex-1" onClick={startCapture} data-testid="button-handsfree-start">
+                    <Camera className="w-4 h-4 mr-2" /> Phone POV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => importInputRef.current?.click()}
+                    data-testid="button-handsfree-import"
+                  >
+                    <FileVideo className="w-4 h-4 mr-2" /> Import Clip
+                  </Button>
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleImport(f);
+                      e.target.value = "";
+                    }}
+                    data-testid="input-handsfree-import"
+                  />
+                </>
               )}
               {phase === "recording" && (
                 <Button variant="destructive" className="flex-1" onClick={stopRecording} data-testid="button-handsfree-stop">

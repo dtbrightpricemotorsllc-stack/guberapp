@@ -7102,6 +7102,21 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/handsfree/consent", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const consentVersion = Number(req.body?.consentVersion) || 1;
+      const jobId = req.body?.jobId ? Number(req.body.jobId) : null;
+      await storage.createAuditLog({
+        userId: req.session.userId,
+        action: "handsfree_consent",
+        details: JSON.stringify({ consentVersion, acceptedAt: new Date().toISOString(), jobId }),
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/proof/wearable-upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
@@ -7111,6 +7126,17 @@ export async function registerRoutes(
       const { token, videoUrl, captureMeta } = req.body || {};
       if (!token || !videoUrl || !captureMeta?.deviceKind) {
         return res.status(400).json({ message: "token, videoUrl, and captureMeta.deviceKind are required" });
+      }
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const allowedHost = cloudName ? `https://res.cloudinary.com/${cloudName}/` : null;
+      if (!allowedHost || !String(videoUrl).startsWith(allowedHost) || !String(videoUrl).includes("/guber-proof/")) {
+        return res.status(400).json({ message: "videoUrl must be a GUBER-signed Cloudinary upload" });
+      }
+      if (captureMeta.captureStartedAt && captureMeta.captureEndedAt) {
+        const dur = (new Date(captureMeta.captureEndedAt).getTime() - new Date(captureMeta.captureStartedAt).getTime()) / 1000;
+        if (!isFinite(dur) || dur < 0 || dur > 16 * 60) {
+          return res.status(400).json({ message: "Recording duration out of allowed range (0–16 min)" });
+        }
       }
       const { verifyWearableToken } = await import("./wearable-token.js");
       const payload = verifyWearableToken(token);

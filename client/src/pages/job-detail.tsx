@@ -1473,7 +1473,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               } catch {
                 if (proof.imageUrls) images = [proof.imageUrls];
               }
-              const captureMeta = (proof as any).captureMeta as { deviceKind?: string } | null;
+              const captureMeta = proof.captureMeta;
               return (
                 <div key={proof.id} className="bg-background rounded-xl p-4 space-y-3" data-testid={`card-proof-${proof.id}`}>
                   {captureMeta?.deviceKind && (
@@ -1481,9 +1481,9 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                       POV · Hands-Free
                     </Badge>
                   )}
-                  {(proof as any).videoUrl && (
+                  {proof.videoUrl && (
                     <video
-                      src={(proof as any).videoUrl}
+                      src={proof.videoUrl}
                       controls
                       playsInline
                       className="w-full rounded-xl border border-border/20 bg-black"
