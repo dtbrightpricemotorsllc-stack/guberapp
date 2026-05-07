@@ -147,7 +147,13 @@ export default function JobNavigate() {
           gpsLng: pos.coords.longitude,
         }),
       )
-      .catch(() => milestoneMutation.mutate({ statusType: "arrived" }));
+      .catch(() =>
+        toast({
+          title: "Location required",
+          description: "Enable GPS so we can verify you're at the job site, then tap Arrived again.",
+          variant: "destructive",
+        }),
+      );
   };
 
   // Live GPS watcher.

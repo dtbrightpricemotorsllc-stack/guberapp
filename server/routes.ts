@@ -7110,6 +7110,29 @@ export async function registerRoutes(
         res.json({ message: "On the way logged", navigationUrls: { google: mapsUrl, waze: wazeUrl } });
 
       } else if (statusType === "arrived") {
+        // Geofence: the worker must be physically near the job to mark
+        // arrival. We accept up to 250 m of GPS slop (typical urban GPS
+        // accuracy + worker-parking distance from the address point).
+        // If the job has no coordinates we skip the check (legacy / online jobs).
+        const ARRIVED_RADIUS_METERS = 250;
+        if (typeof job.lat === "number" && typeof job.lng === "number") {
+          if (typeof gpsLat !== "number" || typeof gpsLng !== "number") {
+            return res.status(400).json({
+              message: "GPS_REQUIRED",
+              detail: "Enable location to mark Arrived — we verify you're at the job site.",
+            });
+          }
+          const meters = haversineMeters(job.lat, job.lng, gpsLat, gpsLng);
+          if (meters > ARRIVED_RADIUS_METERS) {
+            return res.status(400).json({
+              message: "TOO_FAR_FROM_JOB",
+              detail: `You appear to be ${Math.round(meters)} m from the job site. Move closer (within ${ARRIVED_RADIUS_METERS} m) and try again.`,
+              metersFromJob: Math.round(meters),
+              maxMeters: ARRIVED_RADIUS_METERS,
+            });
+          }
+        }
+
         await storage.updateJob(jobId, {
           helperStage: "arrived",
           arrivedAt: now,

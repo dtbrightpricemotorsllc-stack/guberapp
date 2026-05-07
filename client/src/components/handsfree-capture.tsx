@@ -8,6 +8,8 @@ import { Camera, CircleDot, Square, MapPin, Glasses, ShieldCheck, Loader2, Uploa
 import { isAndroid, isIOS, isNativeApp } from "@/lib/platform";
 import { evaluatePreflight, type PreflightResult } from "@/lib/handsfree-preflight";
 import { readVideoFileMetadata, readVideoDurationSec } from "@/lib/video-metadata";
+import { uploadToCloudinarySigned } from "@/lib/cloudinary-upload";
+import { Progress } from "@/components/ui/progress";
 
 const MAX_DURATION_MS = 15 * 60 * 1000;
 const CONSENT_VERSION = 1;
@@ -44,6 +46,7 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
   const importDeviceKind: "paired-android" | "paired-ios" = isIOS ? "paired-ios" : "paired-android";
   const pendingImportRef = useRef<{ file: File; preflight: PreflightResult } | null>(null);
   const [pendingPreflight, setPendingPreflight] = useState<PreflightResult | null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
 
   useEffect(() => {
     if (!open) {
@@ -202,19 +205,12 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
     const tokenResp = await apiRequest("GET", `/api/jobs/${jobId}/wearable-upload-token`);
     const { token } = await tokenResp.json();
 
-    const signResp = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
-    if (!signResp.ok) throw new Error("Could not get upload token");
-    const { signature, timestamp, cloud_name, api_key, folder } = await signResp.json();
-
-    const fd = new FormData();
-    fd.append("file", blob, fileName || `pov-${Date.now()}.webm`);
-    fd.append("api_key", api_key);
-    fd.append("timestamp", String(timestamp));
-    fd.append("signature", signature);
-    fd.append("folder", folder);
-    const upRes = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`, { method: "POST", body: fd });
-    if (!upRes.ok) throw new Error("Video upload failed");
-    const { secure_url } = await upRes.json();
+    setUploadPct(0);
+    const { url: secure_url } = await uploadToCloudinarySigned(blob, {
+      fileName: fileName || `pov-${Date.now()}.webm`,
+      resourceType: "video",
+      onProgress: setUploadPct,
+    });
 
     const startedAt = startedAtRef.current || Date.now();
     const endedAt = Date.now();
@@ -447,9 +443,12 @@ export function HandsFreeCapture({ jobId, jobLat, jobLng, open, onOpenChange, on
                 </Button>
               )}
               {phase === "uploading" && (
-                <Button disabled className="flex-1" data-testid="button-handsfree-uploading">
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading…
-                </Button>
+                <div className="flex-1 space-y-2" data-testid="container-handsfree-uploading">
+                  <Button disabled className="w-full" data-testid="button-handsfree-uploading">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading… {uploadPct}%
+                  </Button>
+                  <Progress value={uploadPct} className="h-1.5" data-testid="progress-handsfree-upload" />
+                </div>
               )}
               {phase === "done" && (
                 <Button disabled className="flex-1" data-testid="button-handsfree-done">

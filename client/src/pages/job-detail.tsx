@@ -953,7 +953,14 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         });
       })
       .catch(() => {
-        milestoneMutation.mutate({ statusType: "arrived" });
+        // Server now requires GPS to verify the worker is at the job site
+        // (geofence). Don't fire the request without coords — surface a
+        // useful message so the user can fix the permission/signal issue.
+        toast({
+          title: "Location required",
+          description: "Enable GPS so we can verify you're at the job site, then tap Arrived again.",
+          variant: "destructive",
+        });
       });
   };
 

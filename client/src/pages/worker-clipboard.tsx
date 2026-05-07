@@ -36,6 +36,7 @@ import type { Job, ProofTemplate, ProofChecklistItem } from "@shared/schema";
 import { Link } from "wouter";
 import { HandsFreeCapture } from "@/components/handsfree-capture";
 import { Glasses } from "lucide-react";
+import { uploadToCloudinarySigned, base64ToBlob } from "@/lib/cloudinary-upload";
 
 type TemplateWithItems = ProofTemplate & { checklistItems: ProofChecklistItem[] };
 
@@ -95,44 +96,10 @@ function resizeImage(file: File, maxWidth: number): Promise<string> {
   });
 }
 
-function base64ToBlob(dataUrl: string): Blob {
-  const [header, data] = dataUrl.split(",");
-  const mime = header.match(/:(.*?);/)?.[1] || "image/jpeg";
-  const binary = atob(data);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
-}
-
-async function uploadToCloudinary(base64: string): Promise<string> {
-  const signRes = await fetch("/api/upload-photo/sign", {
-    method: "POST",
-    credentials: "include",
-  });
-  if (!signRes.ok) {
-    const err = await signRes.json().catch(() => ({ error: "Could not get upload token" }));
-    throw new Error(err.error || "Could not get upload token");
-  }
-  const { signature, timestamp, cloud_name, api_key, folder } = await signRes.json();
-
+async function uploadToCloudinary(base64: string, onProgress?: (pct: number) => void): Promise<string> {
   const blob = base64ToBlob(base64);
-  const formData = new FormData();
-  formData.append("file", blob);
-  formData.append("api_key", api_key);
-  formData.append("timestamp", String(timestamp));
-  formData.append("signature", signature);
-  formData.append("folder", folder);
-
-  const uploadRes = await fetch(
-    `https://api.cloudinary.com/v1_1/${cloud_name}/auto/upload`,
-    { method: "POST", body: formData }
-  );
-  if (!uploadRes.ok) {
-    const err = await uploadRes.json().catch(() => ({ error: { message: "Upload failed" } }));
-    throw new Error(err.error?.message || "Upload failed");
-  }
-  const data = await uploadRes.json();
-  return data.secure_url as string;
+  const result = await uploadToCloudinarySigned(blob, { onProgress });
+  return result.url;
 }
 
 export default function WorkerClipboard() {

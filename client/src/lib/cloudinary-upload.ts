@@ -1,0 +1,134 @@
+const PER_ATTEMPT_TIMEOUT_MS = 60_000;
+const MAX_ATTEMPTS = 3;
+const BASE_BACKOFF_MS = 800;
+
+export interface UploadOptions {
+  fileName?: string;
+  resourceType?: "image" | "video" | "auto";
+  onProgress?: (pct: number) => void;
+  signal?: AbortSignal;
+}
+
+export interface UploadResult {
+  url: string;
+  publicId?: string;
+  resourceType?: string;
+}
+
+interface SignResponse {
+  signature: string;
+  timestamp: number;
+  cloud_name: string;
+  api_key: string;
+  folder: string;
+}
+
+async function getSignature(): Promise<SignResponse> {
+  const res = await fetch("/api/upload-photo/sign", { method: "POST", credentials: "include" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Could not get upload token" }));
+    throw new Error(err.error || "Could not get upload token");
+  }
+  return res.json();
+}
+
+function uploadOnce(
+  blob: Blob,
+  sig: SignResponse,
+  opts: UploadOptions,
+): Promise<UploadResult> {
+  return new Promise<UploadResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = `https://api.cloudinary.com/v1_1/${sig.cloud_name}/${opts.resourceType || "auto"}/upload`;
+    const fd = new FormData();
+    fd.append("file", blob, opts.fileName || `upload-${Date.now()}`);
+    fd.append("api_key", sig.api_key);
+    fd.append("timestamp", String(sig.timestamp));
+    fd.append("signature", sig.signature);
+    fd.append("folder", sig.folder);
+
+    let timer: number | null = window.setTimeout(() => {
+      try { xhr.abort(); } catch {}
+      reject(Object.assign(new Error("Upload timed out"), { retriable: true }));
+    }, PER_ATTEMPT_TIMEOUT_MS);
+
+    const clearTimer = () => { if (timer !== null) { window.clearTimeout(timer); timer = null; } };
+    const onAbortExternal = () => { try { xhr.abort(); } catch {} };
+    if (opts.signal) {
+      if (opts.signal.aborted) { clearTimer(); reject(new Error("Upload cancelled")); return; }
+      opts.signal.addEventListener("abort", onAbortExternal, { once: true });
+    }
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && opts.onProgress) {
+        opts.onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+      }
+    };
+    xhr.onload = () => {
+      clearTimer();
+      opts.signal?.removeEventListener("abort", onAbortExternal);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          opts.onProgress?.(100);
+          resolve({ url: data.secure_url, publicId: data.public_id, resourceType: data.resource_type });
+        } catch {
+          reject(new Error("Upload returned invalid response"));
+        }
+      } else {
+        let msg = `Upload failed (${xhr.status})`;
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data?.error?.message) msg = data.error.message;
+        } catch {}
+        const retriable = xhr.status === 0 || xhr.status >= 500 || xhr.status === 408 || xhr.status === 429;
+        reject(Object.assign(new Error(msg), { retriable, status: xhr.status }));
+      }
+    };
+    xhr.onerror = () => {
+      clearTimer();
+      opts.signal?.removeEventListener("abort", onAbortExternal);
+      reject(Object.assign(new Error("Network error during upload"), { retriable: true }));
+    };
+    xhr.onabort = () => {
+      clearTimer();
+      opts.signal?.removeEventListener("abort", onAbortExternal);
+      reject(new Error("Upload cancelled"));
+    };
+
+    xhr.open("POST", url);
+    xhr.send(fd);
+  });
+}
+
+export async function uploadToCloudinarySigned(
+  blob: Blob,
+  opts: UploadOptions = {},
+): Promise<UploadResult> {
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (opts.signal?.aborted) throw new Error("Upload cancelled");
+    try {
+      const sig = await getSignature();
+      opts.onProgress?.(0);
+      return await uploadOnce(blob, sig, opts);
+    } catch (err: any) {
+      lastErr = err;
+      const retriable = err?.retriable === true;
+      const cancelled = err?.message === "Upload cancelled";
+      if (cancelled || !retriable || attempt === MAX_ATTEMPTS) break;
+      const wait = BASE_BACKOFF_MS * 2 ** (attempt - 1);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw lastErr || new Error("Upload failed");
+}
+
+export function base64ToBlob(dataUrl: string): Blob {
+  const [header, data] = dataUrl.split(",");
+  const mime = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
