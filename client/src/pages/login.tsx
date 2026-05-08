@@ -315,13 +315,23 @@ export default function Login() {
               </Button>
             </form>
 
-            {/* Reviewer hint — only on iOS, only before they tap the logo.
-                App Store reviewers should be able to find demo access without
-                relying solely on the App Store Connect notes. */}
+            {/* iOS-only helper notes. Google sign-in is hidden on iOS, so
+                existing Google web users need a path to email/password login —
+                the forgot-password flow already works for them, but they need
+                to know that. Reviewer hint also lives here. */}
             {isIOS && !demoVisible && (
-              <p className="mt-3 text-center text-[10px] text-muted-foreground/70 font-display tracking-wider" data-testid="text-reviewer-hint">
-                APP STORE REVIEWERS — TAP THE GUBER LOGO 5× FOR DEMO ACCESS
-              </p>
+              <div className="mt-3 space-y-2">
+                <p className="text-center text-[11px] text-muted-foreground/80 leading-relaxed" data-testid="text-google-user-hint">
+                  Signed up with Google on the web?{" "}
+                  <Link href="/forgot-password" className="text-primary/80 hover:text-primary underline" data-testid="link-google-set-password">
+                    Tap here to set a password
+                  </Link>{" "}
+                  for the app.
+                </p>
+                <p className="text-center text-[10px] text-muted-foreground/70 font-display tracking-wider" data-testid="text-reviewer-hint">
+                  APP STORE REVIEWERS — TAP THE GUBER LOGO 5× FOR DEMO ACCESS
+                </p>
+              </div>
             )}
 
             {/* Demo login — revealed after 5 taps on the GUBER logo */}
