@@ -17,6 +17,8 @@ import {
 import { Link } from "wouter";
 import { isStoreBuild } from "@/lib/platform";
 import { useAuth } from "@/lib/auth-context";
+import { useFeatureFlag } from "@/hooks/use-feature-flag";
+import NotFound from "@/pages/not-found";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -130,7 +132,18 @@ const TEMPLATES: Template[] = [
   },
 ];
 
-export default function StudioPage() {
+// Studio is gated behind the `studio_ai` feature flag (allowlist scope —
+// admin always passes, plus any user IDs added via /admin/qa/flags). When
+// the flag is off for the viewer, the page just 404s so the URL is
+// effectively hidden from non-allowlisted users (and App Store reviewers).
+export default function StudioPageGated() {
+  const { enabled, isLoading } = useFeatureFlag("studio_ai");
+  if (isLoading) return null;
+  if (!enabled) return <NotFound />;
+  return <StudioPage />;
+}
+
+function StudioPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
