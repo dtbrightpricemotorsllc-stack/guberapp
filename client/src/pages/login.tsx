@@ -322,11 +322,11 @@ export default function Login() {
             {isIOS && !demoVisible && (
               <div className="mt-3 space-y-2">
                 <p className="text-center text-[11px] text-muted-foreground/80 leading-relaxed" data-testid="text-google-user-hint">
-                  Signed up with Google on the web?{" "}
+                  Already use GUBER on the web with Google?{" "}
                   <Link href="/forgot-password" className="text-primary/80 hover:text-primary underline" data-testid="link-google-set-password">
-                    Tap here to set a password
+                    Set a password here
                   </Link>{" "}
-                  for the app.
+                  to use the app — don't sign up again or you'll create a duplicate account.
                 </p>
                 <p className="text-center text-[10px] text-muted-foreground/70 font-display tracking-wider" data-testid="text-reviewer-hint">
                   APP STORE REVIEWERS — TAP THE GUBER LOGO 5× FOR DEMO ACCESS

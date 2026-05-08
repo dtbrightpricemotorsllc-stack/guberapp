@@ -226,7 +226,17 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
       }
 
       const existingEmail = await storage.getUserByEmail(email);
-      if (existingEmail) return res.status(400).json({ message: "Email already in use" });
+      if (existingEmail) {
+        // Friendlier path for Google-auth users who don't realise they
+        // already have an account. Send them straight to Forgot Password
+        // (which doubles as a "set a password" flow for Google accounts).
+        if ((existingEmail as any).authProvider === "google") {
+          return res.status(400).json({
+            message: "You already have an account from signing in with Google on the web. Tap 'Forgot password?' on the login screen to set a password and use this app.",
+          });
+        }
+        return res.status(400).json({ message: "Email already in use" });
+      }
 
       const existingUsername = await storage.getUserByUsername(username);
       if (existingUsername) return res.status(400).json({ message: "Username already taken" });

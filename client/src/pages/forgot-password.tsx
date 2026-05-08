@@ -47,7 +47,7 @@ export default function ForgotPassword() {
 
         <div className="text-center space-y-3 mb-10 animate-fade-in">
           <GuberLogo size="lg" />
-          <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">RESET YOUR PASSWORD</p>
+          <p className="text-muted-foreground text-xs font-display tracking-[0.2em]">SET OR RESET YOUR PASSWORD</p>
         </div>
 
         {sent ? (
@@ -78,7 +78,7 @@ export default function ForgotPassword() {
             <div className="flex items-center gap-3 mb-6 p-4 rounded-xl bg-primary/5 border border-primary/10">
               <Mail className="w-5 h-5 text-primary flex-shrink-0" />
               <p className="text-xs text-muted-foreground/80 font-display">
-                Enter the email address linked to your account. We'll send you a link to reset your password.
+                Enter the email linked to your account. We'll email you a link to set or reset your password — works for accounts created with Google sign-in too.
               </p>
             </div>
 
