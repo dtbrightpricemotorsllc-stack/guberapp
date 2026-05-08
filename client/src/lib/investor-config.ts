@@ -173,14 +173,6 @@ export const INVESTOR_CONFIG = {
         { title: "Verify & Inspect — Hands-Free", caption: "POV hands-free capture for inspections — purpose-built for insurers, dealers, lenders.", asset: "creative-vi-handsfree" },
       ],
     },
-    sponsorships: {
-      headline: "In the community.",
-      sub: "Cash Drops aren't the only place GUBER shows up. The brand is already sponsoring real-world community events.",
-      items: [
-        { title: "Gulfport Dragway sponsorship", caption: "GUBER-branded sponsorship visible at race events — driver Jacob McNeal carrying the brand into a real audience.", asset: "sponsor-dragway" },
-        { title: "Sponsored driver — track record", caption: "Sponsored driver and Cash Drop ambassador — converting real-world attention into app installs.", asset: "sponsor-driver" },
-      ],
-    },
     appShots: {
       headline: "The product, live in market.",
       sub: "Real screens from the production app — not mockups.",
