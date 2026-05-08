@@ -48,15 +48,17 @@
         <key>UIViewControllerBasedStatusBarAppearance</key>
         <true/>
         <key>NSLocationWhenInUseUsageDescription</key>
-        <string>GUBER uses your location to show nearby jobs, Cash Drops, and workers in your area.</string>
+        <string>GUBER uses your location to show nearby jobs, Cash Drops, and workers, and to verify you are on-site when you clock in or submit proof of work.</string>
+        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+        <string>GUBER uses your location to show nearby jobs, Cash Drops, and workers, and to verify you are on-site when you clock in or submit proof of work.</string>
         <key>NSCameraUsageDescription</key>
-        <string>GUBER needs camera access to take proof photos when completing a job.</string>
+        <string>GUBER uses the camera to capture proof photos and videos for job completion, ID verification, and Verify &amp; Inspect tasks.</string>
         <key>NSPhotoLibraryUsageDescription</key>
-        <string>GUBER needs photo library access to attach proof images to job submissions.</string>
+        <string>GUBER reads from your photo library so you can attach existing photos and videos as proof of work, profile pictures, and ID verification.</string>
         <key>NSPhotoLibraryAddUsageDescription</key>
-        <string>GUBER saves job proof photos to your library.</string>
+        <string>GUBER saves proof photos and downloaded media you choose to keep to your photo library.</string>
         <key>NSMicrophoneUsageDescription</key>
-        <string>GUBER needs microphone access to record video proof for job completion.</string>
+        <string>GUBER uses the microphone to record audio with video proof submissions and hands-free Verify &amp; Inspect captures.</string>
         <key>ITSAppUsesNonExemptEncryption</key>
         <false/>
 </dict>

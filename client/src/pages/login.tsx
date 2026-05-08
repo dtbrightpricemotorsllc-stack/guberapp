@@ -315,6 +315,15 @@ export default function Login() {
               </Button>
             </form>
 
+            {/* Reviewer hint — only on iOS, only before they tap the logo.
+                App Store reviewers should be able to find demo access without
+                relying solely on the App Store Connect notes. */}
+            {isIOS && !demoVisible && (
+              <p className="mt-3 text-center text-[10px] text-muted-foreground/70 font-display tracking-wider" data-testid="text-reviewer-hint">
+                APP STORE REVIEWERS — TAP THE GUBER LOGO 5× FOR DEMO ACCESS
+              </p>
+            )}
+
             {/* Demo login — revealed after 5 taps on the GUBER logo */}
             {demoVisible && (
               <div className="mt-5 pt-5 border-t border-white/[0.06]" data-testid="demo-login-section">
