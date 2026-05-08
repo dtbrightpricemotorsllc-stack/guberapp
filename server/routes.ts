@@ -9373,7 +9373,34 @@ export async function registerRoutes(
     }
   });
 
-  // ── Studio API: balance, vibes, history, generate ────────────────────────
+  // ── GUBER Studio v2 — session-based generation ───────────────────────────
+  // Every visit opens a session. Uploaded references and generated outputs
+  // live for the lifetime of that session only — explicit exit, 30 min of
+  // inactivity, or 1 hour of total age all purge the rows AND the
+  // Cloudinary assets. Nothing pins to the user's profile.
+
+  // Helper: purge a session's files from Cloudinary, then mark the session ended.
+  async function purgeStudioSession(sessionId: number, reason: string) {
+    const files = await storage.deleteStudioSessionFiles(sessionId);
+    let cloudinary: any = null;
+    try {
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        cloudinary = (await import("./cloudinary.js")).default;
+      }
+    } catch {}
+    if (cloudinary) {
+      for (const f of files) {
+        if (!f.cloudinaryPublicId) continue;
+        try {
+          await cloudinary.uploader.destroy(f.cloudinaryPublicId, { resource_type: f.resourceType || "image" });
+        } catch (err: any) {
+          console.warn(`[GUBER][studio] cloudinary destroy failed for ${f.cloudinaryPublicId}: ${err.message}`);
+        }
+      }
+    }
+    await storage.endStudioSession(sessionId, reason);
+  }
+
   app.get("/api/studio/me", requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "User not found" });
@@ -9396,228 +9423,290 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/studio/vibes", requireAuth, async (_req: Request, res: Response) => {
-    const vibes = await storage.getStudioVibes({ activeOnly: true });
-    res.json(vibes);
+  app.get("/api/studio/tools", requireAuth, async (_req: Request, res: Response) => {
+    const tools = await storage.listStudioModelPricing();
+    res.json(tools.map((t) => ({
+      key: t.toolKey,
+      label: t.label,
+      description: t.description,
+      creditsCost: t.creditsCost,
+      durationSeconds: t.durationSeconds,
+    })));
   });
 
-  app.get("/api/studio/videos", requireAuth, async (req: Request, res: Response) => {
-    const videos = await storage.getStudioVideosByUser(req.session.userId!, 50);
-    res.json(videos);
+  app.post("/api/studio/session", requireAuth, async (req: Request, res: Response) => {
+    // If a prior active session exists, fully purge it (rows + Cloudinary
+    // assets) before opening a new one — never leave orphaned media behind.
+    const prior = await storage.getActiveStudioSession(req.session.userId!);
+    if (prior) {
+      await purgeStudioSession(prior.id, "superseded");
+    }
+    const session = await storage.createStudioSession(req.session.userId!);
+    res.json({ session, files: [] });
   });
 
-  // Single-clip fetch — used by host-drop-new and other "Use in…" surfaces to
-  // resolve a studioVideoId URL param into a renderable video URL. Ownership
-  // enforced: a worker can only inspect their own clips.
-  app.get("/api/studio/videos/:id", requireAuth, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
-    const v = await storage.getStudioVideo(id);
-    if (!v || v.userId !== req.session.userId!) return res.status(404).json({ message: "Clip not found" });
-    res.json(v);
+  app.get("/api/studio/session/current", requireAuth, async (req: Request, res: Response) => {
+    const session = await storage.getActiveStudioSession(req.session.userId!);
+    if (!session) return res.json({ session: null, files: [] });
+    const files = await storage.listStudioSessionFiles(session.id);
+    res.json({ session, files });
   });
 
-  // Pin a Studio clip onto the worker's resume or business promo slot.
-  // Body: { studioVideoId: number, target: "resume" | "business_promo" }
-  // Pass studioVideoId=null to clear. Ownership + completion checked.
-  app.post("/api/studio/attach", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/studio/session/touch", requireAuth, async (req: Request, res: Response) => {
+    const session = await storage.getActiveStudioSession(req.session.userId!);
+    if (!session) return res.status(404).json({ message: "No active session" });
+    await storage.touchStudioSession(session.id);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/studio/session/exit", requireAuth, async (req: Request, res: Response) => {
+    const session = await storage.getActiveStudioSession(req.session.userId!);
+    if (!session) return res.json({ ok: true });
+    await purgeStudioSession(session.id, "user_exit");
+    res.json({ ok: true });
+  });
+
+  // Resolve / open the user's active session, OR create a new one if missing.
+  // Used by the generate endpoints below.
+  async function ensureStudioSession(userId: number) {
+    const existing = await storage.getActiveStudioSession(userId);
+    if (existing) {
+      await storage.touchStudioSession(existing.id);
+      return existing;
+    }
+    return storage.createStudioSession(userId);
+  }
+
+  // Upload a reference media file into the current session. Returns the
+  // public Cloudinary URL we'll feed into Fal calls.
+  app.post("/api/studio/upload", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const target = String(req.body?.target || "");
-      if (target !== "resume" && target !== "business_promo") {
-        return res.status(400).json({ message: "Invalid target" });
+      const dataUrl = String(req.body?.dataUrl || "");
+      const kind = String(req.body?.kind || "image"); // image | video | audio
+      if (!dataUrl) return res.status(400).json({ message: "Missing file data" });
+      if (!process.env.CLOUDINARY_CLOUD_NAME) {
+        return res.status(503).json({ message: "Studio storage isn't configured yet." });
       }
-      const rawId = req.body?.studioVideoId;
-      let videoId: number | null = null;
-      if (rawId !== null && rawId !== undefined && rawId !== "") {
-        videoId = parseInt(String(rawId), 10);
-        if (!Number.isFinite(videoId)) return res.status(400).json({ message: "Invalid studioVideoId" });
-        const v = await storage.getStudioVideo(videoId);
-        if (!v || v.userId !== userId) return res.status(404).json({ message: "Clip not found" });
-        if (v.status !== "succeeded" || !v.videoUrl) {
-          return res.status(400).json({ message: "Clip isn't ready yet" });
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const resourceType = kind === "image" ? "image" : "video";
+      const up = await cloudinary.uploader.upload(dataUrl, {
+        resource_type: resourceType,
+        folder: "guber-studio-v2-uploads",
+      });
+
+      // Image-only moderation pre-check — fail-closed.
+      if (kind === "image") {
+        const { isModerationConfigured, moderateImage, ModerationUnavailableError } = await import("./fal");
+        if (isModerationConfigured()) {
+          try {
+            const mod = await moderateImage(up.secure_url);
+            if (mod.flagged) {
+              try { await cloudinary.uploader.destroy(up.public_id, { resource_type: "image" }); } catch {}
+              return res.status(400).json({ message: mod.reason || "Reference image blocked by content moderation." });
+            }
+          } catch (err: any) {
+            if (err instanceof ModerationUnavailableError) {
+              try { await cloudinary.uploader.destroy(up.public_id, { resource_type: "image" }); } catch {}
+              return res.status(503).json({ message: "Image moderation is temporarily offline. Try again shortly." });
+            }
+            throw err;
+          }
         }
       }
-      const updates: any = target === "resume"
-        ? { studioResumeVideoId: videoId }
-        : { studioBusinessPromoVideoId: videoId };
-      await storage.updateUser(userId, updates);
-      res.json({ ok: true, target, studioVideoId: videoId });
+
+      const session = await ensureStudioSession(userId);
+      const file = await storage.addStudioSessionFile({
+        sessionId: session.id,
+        userId,
+        fileType: kind === "image" ? "upload_image" : kind === "video" ? "upload_video" : "upload_audio",
+        providerUrl: up.secure_url,
+        cloudinaryPublicId: up.public_id,
+        resourceType,
+        meta: null,
+      });
+      res.json({ file });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: `Upload failed: ${err.message}` });
     }
   });
 
-  app.post("/api/studio/generate", requireAuth, async (req: Request, res: Response) => {
+  // Shared lifecycle for every generate endpoint:
+  //   1. Auth + session ensured.
+  //   2. Validate input.
+  //   3. Provider + moderation availability (503 if either is down).
+  //   4. Lookup pricing row → creditsCost.
+  //   5. Atomically deduct credits (402 if insufficient).
+  //   6. Call provider. On failure → refund + 502.
+  //   7. Re-host output on Cloudinary, attach to session, log success.
+  async function runStudioGeneration(opts: {
+    req: Request;
+    res: Response;
+    toolKey: string;
+    prompt?: string | null;
+    requireImage?: boolean;
+    runProvider: (input: { prompt: string; imageUrl?: string }) => Promise<{ url: string; jobId: string; resourceType: "video" | "image"; folder: string }>;
+  }) {
+    const { req, res, toolKey, runProvider, requireImage } = opts;
     const userId = req.session.userId!;
-    const promptRaw = String(req.body?.prompt || "").trim();
-    const vibeId = req.body?.vibeId ? parseInt(String(req.body.vibeId), 10) : null;
-    const sourceImageBase64: string | undefined = req.body?.sourceImageBase64;
 
-    // Zero-prompt is allowed IF the user provided either a reference image or
-    // a vibe preset (the vibe's promptModifier becomes the seed). Both empty =
-    // we have nothing to send to the model.
-    if (!promptRaw && !sourceImageBase64 && !vibeId) {
-      return res.status(400).json({ message: "Add a prompt, a reference image, or pick a vibe to start." });
-    }
-    if (promptRaw && promptRaw.length > 500) {
+    const promptRaw = (opts.prompt ?? "").toString().trim();
+    if (promptRaw.length > 500) {
       return res.status(400).json({ message: "Prompt is too long (max 500 characters)." });
     }
 
-    const user = await storage.getUser(userId);
-    if (!user) return res.status(401).json({ message: "User not found" });
+    const sourceFileId = req.body?.sourceFileId ? parseInt(String(req.body.sourceFileId), 10) : null;
+    const session = await ensureStudioSession(userId);
 
-    // Standard tier = 1 credit per 5s clip. Future Premium chained-10s = 2 credits.
-    const tier = user.studioTier ?? "standard";
-    const creditsCost = 1;
-    const durationSeconds = 5;
+    let imageUrl: string | undefined;
+    if (sourceFileId) {
+      const files = await storage.listStudioSessionFiles(session.id);
+      const f = files.find((x) => x.id === sourceFileId && x.userId === userId);
+      if (!f) return res.status(404).json({ message: "Reference file not found in your current session." });
+      imageUrl = f.providerUrl;
+    }
+    if (requireImage && !imageUrl) {
+      return res.status(400).json({ message: "This tool needs a reference image. Upload one and try again." });
+    }
+    if (!promptRaw && !imageUrl) {
+      return res.status(400).json({ message: "Add a prompt or upload a reference to start." });
+    }
 
-    // 1. Provider + moderation availability checks BEFORE charging. Both must
-    //    be configured — moderation is fail-closed (we refuse to generate if
-    //    we can't pre-screen content).
-    const { isFalConfigured, isModerationConfigured, generateVideo, moderatePrompt, moderateImage, ModerationUnavailableError } = await import("./fal");
+    const { isFalConfigured, isModerationConfigured, moderatePrompt, ModerationUnavailableError, FalNotConfiguredError } = await import("./fal");
     if (!isFalConfigured()) {
-      return res.status(503).json({
-        message: "GUBER Studio is launching soon — the AI video provider isn't connected yet. Your credits are safe and will work the moment we go live.",
-      });
+      return res.status(503).json({ message: "GUBER Studio is temporarily unavailable: AI provider not connected. Your credits are safe." });
     }
-    if (!isModerationConfigured()) {
-      console.warn("[GUBER][studio] moderation unavailable — refusing generation (fail-closed)");
-      return res.status(503).json({
-        message: "GUBER Studio is temporarily unavailable: content moderation is offline. Please try again shortly.",
-      });
-    }
-
-    // 2. Resolve vibe (if any) and ENFORCE TIER GATING server-side. The UI
-    //    disables locked vibes, but a malicious client could POST a premium
-    //    vibe id directly — refuse it here.
-    let vibe: import("@shared/schema").StudioVibe | undefined;
-    if (vibeId) {
-      const vibes = await storage.getStudioVibes({ activeOnly: true });
-      vibe = vibes.find((v) => v.id === vibeId);
-      if (!vibe) return res.status(400).json({ message: "Selected vibe not found." });
-      if (vibe.tierRequired !== "standard" && tier === "standard") {
-        return res.status(403).json({ message: `That vibe is for ${vibe.tierRequired} tier. Upgrade to unlock it.` });
+    if (promptRaw) {
+      if (!isModerationConfigured()) {
+        return res.status(503).json({ message: "Studio is paused: content moderation is offline. Your credits are safe." });
       }
-      if (vibe.tierRequired === "business" && tier !== "business") {
-        return res.status(403).json({ message: "That vibe is for Business tier only." });
-      }
-    }
-    const composedPrompt = [promptRaw, vibe?.promptModifier].filter(Boolean).join(", ") || "high quality cinematic short clip";
-
-    // 3a. Text moderation (fail-closed — throws ModerationUnavailableError if
-    //     the upstream is unhealthy, which we catch and surface as 503).
-    try {
-      const promptMod = await moderatePrompt(composedPrompt);
-      if (promptMod.flagged) {
-        return res.status(400).json({ message: promptMod.reason || "Prompt blocked by content moderation. Try a different idea." });
-      }
-    } catch (err: any) {
-      if (err instanceof ModerationUnavailableError) {
-        return res.status(503).json({ message: "Content moderation is temporarily offline. Your credits are safe — please try again shortly." });
-      }
-      throw err;
-    }
-
-    // 4. Upload reference image (if any) to Cloudinary so we get an https URL
-    //    we can both moderate AND hand to Fal. We do this BEFORE deducting
-    //    credits so an upload-failure or image-moderation block never charges
-    //    the user.
-    let sourceImageUrl: string | undefined;
-    if (sourceImageBase64 && typeof sourceImageBase64 === "string") {
       try {
-        if (!process.env.CLOUDINARY_CLOUD_NAME) throw new Error("Cloudinary not configured");
-        const cloudinary = (await import("./cloudinary.js")).default;
-        const up = await cloudinary.uploader.upload(sourceImageBase64, {
-          resource_type: "image",
-          folder: "guber-studio-sources",
-          allowed_formats: ["jpg", "jpeg", "png", "webp"],
-        });
-        sourceImageUrl = up.secure_url;
-      } catch (err: any) {
-        return res.status(500).json({ message: `Reference image upload failed: ${err.message}` });
-      }
-
-      // 3b. Image moderation — block prohibited content (CSAM, gore, etc.)
-      // BEFORE charging or calling Fal. Fail-closed: a moderation outage
-      // returns 503 instead of letting the image through.
-      try {
-        const imageMod = await moderateImage(sourceImageUrl);
-        if (imageMod.flagged) {
-          return res.status(400).json({ message: imageMod.reason || "Reference image blocked by content moderation." });
+        const mod = await moderatePrompt(promptRaw);
+        if (mod.flagged) {
+          return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation." });
         }
       } catch (err: any) {
         if (err instanceof ModerationUnavailableError) {
-          return res.status(503).json({ message: "Image moderation is temporarily offline. Your credits are safe — please try again shortly." });
+          return res.status(503).json({ message: "Content moderation is offline. Try again shortly." });
         }
         throw err;
       }
     }
 
-    // 5. Atomically deduct credits. Fail-fast if insufficient.
+    const pricing = await storage.getStudioModelPricing(toolKey);
+    if (!pricing) return res.status(400).json({ message: "Unknown tool." });
+    const creditsCost = pricing.creditsCost;
+
     const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
     if (newBalance === null) {
-      return res.status(402).json({ message: "You don't have enough Studio credits. Buy a credit pack to keep generating." });
+      return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
     }
 
-    // 6. Create the pending row so we have a paper trail even if the server
-    //    restarts mid-generation.
-    const videoRow = await storage.createStudioVideo({
-      userId,
-      tier,
-      sourceImageUrl: sourceImageUrl ?? null,
-      vibeId: vibe?.id ?? null,
-      prompt: composedPrompt,
-      durationSeconds,
-      creditsCost,
-      status: "pending",
-    });
-
-    // 7. Call Fal.ai. ANY failure → refund credit, mark row failed.
     try {
-      const result = await generateVideo({ prompt: composedPrompt, imageUrl: sourceImageUrl, durationSeconds: durationSeconds as 5 });
+      const provider = await runProvider({ prompt: promptRaw, imageUrl });
 
-      // 8. Re-host the resulting clip on Cloudinary so we control the URL.
-      let finalVideoUrl = result.videoUrl;
-      let thumbnailUrl: string | null = null;
+      // Re-host on Cloudinary so we control the URL + can purge it on session end.
+      let finalUrl = provider.url;
+      let cloudinaryPublicId: string | null = null;
       try {
-        const cloudinary = (await import("./cloudinary.js")).default;
-        const uploaded = await cloudinary.uploader.upload(result.videoUrl, {
-          resource_type: "video",
-          folder: "guber-studio-outputs",
-        });
-        finalVideoUrl = uploaded.secure_url;
-        // Cloudinary auto-generates a poster jpg by swapping the extension.
-        thumbnailUrl = finalVideoUrl.replace(/\.(mp4|mov|webm)$/i, ".jpg");
+        if (process.env.CLOUDINARY_CLOUD_NAME) {
+          const cloudinary = (await import("./cloudinary.js")).default;
+          const uploaded = await cloudinary.uploader.upload(provider.url, {
+            resource_type: provider.resourceType,
+            folder: provider.folder,
+          });
+          finalUrl = uploaded.secure_url;
+          cloudinaryPublicId = uploaded.public_id;
+        }
       } catch (err: any) {
-        console.warn(`[GUBER][studio] Cloudinary re-host failed, keeping Fal URL: ${err.message}`);
+        console.warn(`[GUBER][studio v2] cloudinary re-host failed for ${toolKey}: ${err.message}`);
       }
 
-      const updated = await storage.updateStudioVideo(videoRow.id, {
-        status: "succeeded",
-        videoUrl: finalVideoUrl,
-        thumbnailUrl,
-        falJobId: result.jobId,
-        completedAt: new Date(),
+      const file = await storage.addStudioSessionFile({
+        sessionId: session.id,
+        userId,
+        fileType: provider.resourceType === "video" ? "output_video" : "output_audio",
+        providerUrl: finalUrl,
+        cloudinaryPublicId,
+        resourceType: provider.resourceType,
+        meta: { toolKey, prompt: promptRaw, providerJobId: provider.jobId, creditsCost },
       });
 
-      res.json({ video: updated, balance: newBalance });
+      await storage.touchStudioSession(session.id);
+      await storage.logStudioGeneration({
+        userId,
+        sessionId: session.id,
+        toolKey,
+        prompt: promptRaw || null,
+        creditsCost,
+        durationSeconds: pricing.durationSeconds ?? null,
+        providerJobId: provider.jobId,
+        status: "succeeded",
+        errorReason: null,
+      });
+
+      res.json({ file, balance: newBalance });
     } catch (err: any) {
-      // Refund + mark failed
-      const refundedBalance = await storage.incrementStudioCredits(userId, creditsCost);
-      await storage.updateStudioVideo(videoRow.id, {
+      const refunded = await storage.incrementStudioCredits(userId, creditsCost);
+      await storage.logStudioGeneration({
+        userId,
+        sessionId: session.id,
+        toolKey,
+        prompt: promptRaw || null,
+        creditsCost,
+        durationSeconds: pricing.durationSeconds ?? null,
+        providerJobId: null,
         status: "refunded",
         errorReason: err?.message?.slice(0, 500) || "Unknown generation error",
-        completedAt: new Date(),
       });
       const isConfigErr = err?.name === "FalNotConfiguredError";
       res.status(isConfigErr ? 503 : 502).json({
         message: isConfigErr
-          ? "GUBER Studio is launching soon — the AI video provider isn't connected yet."
-          : `Generation failed and your credit was refunded: ${err.message}`,
-        balance: refundedBalance,
+          ? "AI provider not connected — your credit was returned."
+          : `Generation failed and your credit was returned: ${err.message}`,
+        balance: refunded,
       });
     }
+  }
+
+  app.post("/api/studio/generate/motion-control", requireAuth, async (req: Request, res: Response) => {
+    const { generateKlingMotionControl } = await import("./fal");
+    return runStudioGeneration({
+      req, res, toolKey: "kling_motion_control",
+      prompt: req.body?.prompt,
+      requireImage: true,
+      runProvider: async ({ prompt, imageUrl }) => {
+        const r = await generateKlingMotionControl({ prompt, imageUrl: imageUrl!, durationSeconds: 5 });
+        return { url: r.videoUrl, jobId: r.jobId, resourceType: "video", folder: "guber-studio-v2-motion" };
+      },
+    });
+  });
+
+  app.post("/api/studio/generate/wan-motion", requireAuth, async (req: Request, res: Response) => {
+    const { generateWanMotion } = await import("./fal");
+    const requestedDur = parseInt(String(req.body?.durationSeconds || "5"), 10);
+    const dur = (requestedDur === 10 ? 10 : 5) as 5 | 10;
+    const toolKey = dur === 10 ? "wan_motion_10s" : "wan_motion_5s";
+    return runStudioGeneration({
+      req, res, toolKey,
+      prompt: req.body?.prompt,
+      runProvider: async ({ prompt, imageUrl }) => {
+        const r = await generateWanMotion({ prompt, imageUrl, durationSeconds: dur });
+        return { url: r.videoUrl, jobId: r.jobId, resourceType: "video", folder: "guber-studio-v2-wan" };
+      },
+    });
+  });
+
+  app.post("/api/studio/generate/music", requireAuth, async (req: Request, res: Response) => {
+    const { generateMiniMaxMusic } = await import("./fal");
+    return runStudioGeneration({
+      req, res, toolKey: "minimax_music",
+      prompt: req.body?.prompt,
+      runProvider: async ({ prompt }) => {
+        const r = await generateMiniMaxMusic({ prompt });
+        return { url: r.audioUrl, jobId: r.jobId, resourceType: "video", folder: "guber-studio-v2-music" };
+      },
+    });
   });
 
   app.post("/api/stripe/trust-box-checkout", requireAuth, async (req: Request, res: Response) => {
@@ -14431,7 +14520,7 @@ OUTPUT STYLE:
       const {
         title, description, rewardPerWinner, winnerLimit, startTime, endTime,
         gpsLat, gpsLng, gpsRadius, clueText, clueMediaUrls, hostLogo,
-        physicalCashDrop, finalLocationMode, address, studioVideoId,
+        physicalCashDrop, finalLocationMode, address,
       } = req.body;
       if (!title) return res.status(400).json({ error: "Title is required" });
       if (!physicalCashDrop && !rewardPerWinner) return res.status(400).json({ error: "Reward amount is required" });
@@ -14445,18 +14534,6 @@ OUTPUT STYLE:
       const validLocationModes = ["none", "name_only", "destination"];
       const locMode = validLocationModes.includes(finalLocationMode) ? finalLocationMode : "name_only";
       const isPhysical = !!physicalCashDrop;
-
-      // Validate studioVideoId (if provided) — must belong to this user and be ready.
-      let resolvedStudioVideoId: number | null = null;
-      if (studioVideoId !== undefined && studioVideoId !== null && studioVideoId !== "") {
-        const sid = parseInt(String(studioVideoId), 10);
-        if (Number.isFinite(sid)) {
-          const v = await storage.getStudioVideo(sid);
-          if (v && v.userId === userId && v.status === "succeeded" && v.videoUrl) {
-            resolvedStudioVideoId = sid;
-          }
-        }
-      }
 
       const drop = await storage.createCashDrop({
         title,
@@ -14490,7 +14567,6 @@ OUTPUT STYLE:
         hostUserId: currentUser.id,
         hostLogo: resolvedLogo,
         approvalStatus: needsApproval ? "pending" : "approved",
-        studioVideoId: resolvedStudioVideoId,
       });
 
       await storage.createAuditLog({
@@ -15075,15 +15151,7 @@ OUTPUT STYLE:
       if (!user) return res.status(401).json({ message: "User not found" });
       const resume = buildResumeData(user);
       const qualifications = await storage.getWorkerQualifications(user.id);
-      const promoVideoId = (user as any).studioResumeVideoId as number | null | undefined;
-      let studioPromo: { id: number; videoUrl: string; thumbnailUrl: string | null } | null = null;
-      if (promoVideoId) {
-        const v = await storage.getStudioVideo(promoVideoId);
-        if (v && v.videoUrl && v.status === "succeeded") {
-          studioPromo = { id: v.id, videoUrl: v.videoUrl, thumbnailUrl: v.thumbnailUrl ?? null };
-        }
-      }
-      res.json({ ...resume, qualifications, studioPromo });
+      res.json({ ...resume, qualifications });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -15119,15 +15187,6 @@ OUTPUT STYLE:
       }
 
       const resume = buildResumeData(target);
-      const promoVideoId = (target as any).studioResumeVideoId as number | null | undefined;
-      let studioPromo: { id: number; videoUrl: string; thumbnailUrl: string | null } | null = null;
-      if (promoVideoId) {
-        const v = await storage.getStudioVideo(promoVideoId);
-        if (v && v.videoUrl && v.status === "succeeded") {
-          studioPromo = { id: v.id, videoUrl: v.videoUrl, thumbnailUrl: v.thumbnailUrl ?? null };
-        }
-      }
-      (resume as any).studioPromo = studioPromo;
       const allQuals = await storage.getWorkerQualifications(targetId);
       const qualifications = isAdmin
         ? allQuals

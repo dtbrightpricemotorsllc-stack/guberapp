@@ -125,49 +125,7 @@ export default function BizDashboard() {
     enabled: !!profile || !!account,
   });
 
-  // Studio promo clip pinned to this business. The id lives on the owner's
-  // user row (users.studioBusinessPromoVideoId) — sanitizeUser keeps it, so
-  // useAuth() exposes it directly. We refresh auth after attach/remove so
-  // the UI reflects the new value without a page reload.
   const { toast } = useToast();
-  const promoVideoId = (user as any)?.studioBusinessPromoVideoId ?? null;
-  const { data: promoClip } = useQuery<any>({
-    queryKey: ["/api/studio/videos", promoVideoId],
-    enabled: !!promoVideoId,
-  });
-
-  const attachedRef = useRef<string | null>(null);
-  const attachStudioMutation = useMutation({
-    mutationFn: async (studioVideoId: number | null) => {
-      const res = await apiRequest("POST", "/api/studio/attach", { studioVideoId, target: "business_promo" });
-      return res.json();
-    },
-    onSuccess: async (_data, vars) => {
-      // /api/auth/me is the source of truth for studioBusinessPromoVideoId
-      // (sanitizeUser keeps it). Invalidate to re-fetch the user row, then
-      // also bust the clip query so the new id resolves immediately.
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/studio/videos"] });
-      toast({ title: vars === null ? "Promo clip removed" : "Promo clip pinned to your business profile" });
-    },
-    onError: (e: any) => toast({ title: "Couldn't pin clip", description: e.message, variant: "destructive" }),
-  });
-
-  // Auto-attach when arriving from Studio's "Use in… Business Promo" link.
-  useEffect(() => {
-    const search = typeof window !== "undefined" ? window.location.search : "";
-    const sp = new URLSearchParams(search);
-    const sid = sp.get("studioVideoId");
-    if (!sid) return;
-    if (attachedRef.current === sid) return;
-    attachedRef.current = sid;
-    const n = parseInt(sid, 10);
-    if (Number.isFinite(n)) attachStudioMutation.mutate(n);
-    sp.delete("studioVideoId");
-    const newSearch = sp.toString();
-    navigate(location.split("?")[0] + (newSearch ? `?${newSearch}` : ""), { replace: true });
-  }, [location]);
-
   const isLoading = accountLoading || profileLoading;
 
   // Redirect to onboarding if the profile is a stub (no company name set yet).
@@ -388,35 +346,6 @@ export default function BizDashboard() {
             <QuickAction href="/biz/verification" icon={ShieldCheck} label="Business Verification" sub={isVerified ? "Verified" : "Required for full access"} iconColor={isVerified ? SUCCESS : "#A1A1A1"} />
           </div>
         </div>
-
-        {/* ── PROMO CLIP ─────────────────────────────── */}
-        {promoClip?.videoUrl && (
-          <div style={{ marginBottom: "2.75rem" }} data-testid="card-business-promo">
-            <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-4" style={{ color: TEXT_MUTED }}>Promo Clip</p>
-            <div className="rounded-2xl overflow-hidden relative" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-              <video
-                src={promoClip.videoUrl}
-                poster={promoClip.thumbnailUrl ?? undefined}
-                controls
-                playsInline
-                className="w-full aspect-video bg-black object-cover"
-                data-testid="video-business-promo"
-              />
-              <button
-                type="button"
-                onClick={() => attachStudioMutation.mutate(null)}
-                disabled={attachStudioMutation.isPending}
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors disabled:opacity-50"
-                aria-label="Remove promo clip"
-                data-testid="button-remove-business-promo"
-              >
-                {attachStudioMutation.isPending
-                  ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
-                  : <X className="w-3.5 h-3.5 text-white" />}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ── CAMPAIGNS ──────────────────────────────── */}
         <div style={{ marginBottom: "2.75rem" }}>

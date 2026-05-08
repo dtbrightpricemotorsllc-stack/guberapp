@@ -82,10 +82,6 @@ export const users = pgTable("users", {
   // when Stripe fires customer.subscription.deleted (which also clears
   // studioSubscriptionId).
   studioSubscriptionCancelAtPeriodEnd: boolean("studio_subscription_cancel_at_period_end").default(false),
-  // Studio clip pinned to the worker's GUBER Resume / shown on biz dashboard.
-  // Both reference studio_videos.id; null = no clip pinned.
-  studioResumeVideoId: integer("studio_resume_video_id"),
-  studioBusinessPromoVideoId: integer("studio_business_promo_video_id"),
   trustBoxPurchased: boolean("trust_box_purchased").default(false),
   trustBoxSubscriptionId: text("trust_box_subscription_id"),
   isTestUser: boolean("is_test_user").default(false),
@@ -1192,8 +1188,6 @@ export const cashDrops = pgTable("cash_drops", {
   approvalStatus: text("approval_status").default("approved"),
   isTestDrop: boolean("is_test_drop").default(false),
   visibility: text("visibility").notNull().default("public"),
-  // Studio clip attached to this drop (rendered alongside clue media).
-  studioVideoId: integer("studio_video_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1650,62 +1644,71 @@ export type PinnedFinding = typeof pinnedFindings.$inferSelect;
 export type InsertPinnedFinding = z.infer<typeof insertPinnedFindingSchema>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AI VIDEO STUDIO
+// GUBER STUDIO V2 — session-based AI generation (Phase 1)
 // ─────────────────────────────────────────────────────────────────────────────
-// studioVideos: every generation attempt. Stores the source image (if any),
-// chosen vibe, prompt, generated video URL (Cloudinary), credit cost, status,
-// and tier the user was on when generating. Soft-failures (moderation block,
-// provider error) record `status="failed"` with an `errorReason` and refund
-// the credit; hard-success records the resulting clip.
+// Generated media is TEMPORARY. Nothing is persisted to the user's profile,
+// resume, or any other surface. A studio_session is created on entry,
+// touched on each generation, and purged (rows + Cloudinary assets) on
+// explicit exit, 30 minutes of inactivity, or 1 hour of total session age.
 //
-// studioVibes: curated reference clips ("vibe presets") shown in the carousel.
-// active=false hides without deleting. order controls carousel order.
-// Seeded by an admin once FAL_KEY is configured (or via uploaded clips).
+// studio_sessions       — one active per user; tracks lifecycle.
+// studio_session_files  — every uploaded reference + every generated output;
+//                         deleted alongside the session.
+// studio_generation_log — lightweight history (prompt, cost, provider, ok)
+//                         that we KEEP for analytics/abuse review. No URLs.
+// studio_model_pricing  — admin-editable cost per generation.
 
-export const studioVideos = pgTable("studio_videos", {
+export const studioSessions = pgTable("studio_sessions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
-  tier: text("tier").notNull().default("standard"), // standard | creator | business
-  sourceImageUrl: text("source_image_url"),         // optional reference photo
-  vibeId: integer("vibe_id"),                       // optional vibe preset chosen
-  prompt: text("prompt").notNull(),
-  durationSeconds: integer("duration_seconds").notNull().default(5),
-  creditsCost: integer("credits_cost").notNull().default(1),
-  videoUrl: text("video_url"),                      // Cloudinary URL once generated
-  thumbnailUrl: text("thumbnail_url"),
-  status: text("status").notNull().default("pending"), // pending | succeeded | failed | refunded
-  errorReason: text("error_reason"),
-  falJobId: text("fal_job_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
+  status: text("status").notNull().default("active"), // active | ended | expired
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  lastActivityAt: timestamp("last_activity_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+  endReason: text("end_reason"), // user_exit | inactive_timeout | hard_timeout
 });
-export const insertStudioVideoSchema = createInsertSchema(studioVideos).omit({
-  id: true,
-  createdAt: true,
-  completedAt: true,
-});
-export type StudioVideo = typeof studioVideos.$inferSelect;
-export type InsertStudioVideo = z.infer<typeof insertStudioVideoSchema>;
+export type StudioSession = typeof studioSessions.$inferSelect;
 
-export const studioVibes = pgTable("studio_vibes", {
+export const studioSessionFiles = pgTable("studio_session_files", {
   id: serial("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
+  sessionId: integer("session_id").notNull(),
+  userId: integer("user_id").notNull(),
+  fileType: text("file_type").notNull(), // upload_image | upload_video | upload_audio | output_video | output_audio
+  providerUrl: text("provider_url").notNull(),
+  cloudinaryPublicId: text("cloudinary_public_id"),
+  resourceType: text("resource_type").notNull().default("image"), // image | video | raw
+  meta: json("meta").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type StudioSessionFile = typeof studioSessionFiles.$inferSelect;
+
+export const studioGenerationLog = pgTable("studio_generation_log", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  sessionId: integer("session_id"),
+  toolKey: text("tool_key").notNull(),       // kling_motion_control | wan_motion | minimax_music
+  prompt: text("prompt"),
+  creditsCost: integer("credits_cost").notNull().default(0),
+  durationSeconds: integer("duration_seconds"),
+  providerJobId: text("provider_job_id"),
+  status: text("status").notNull().default("succeeded"), // succeeded | refunded | failed
+  errorReason: text("error_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type StudioGenerationLog = typeof studioGenerationLog.$inferSelect;
+
+export const studioModelPricing = pgTable("studio_model_pricing", {
+  id: serial("id").primaryKey(),
+  toolKey: text("tool_key").notNull().unique(),
+  label: text("label").notNull(),
   description: text("description"),
-  previewVideoUrl: text("preview_video_url"),       // Cloudinary URL of the looping preview
-  thumbnailUrl: text("thumbnail_url"),
-  promptModifier: text("prompt_modifier").notNull(),// appended to the user's prompt at generation time
-  tierRequired: text("tier_required").notNull().default("standard"),
+  providerEndpoint: text("provider_endpoint").notNull(),
+  creditsCost: integer("credits_cost").notNull().default(1),
+  durationSeconds: integer("duration_seconds"),
   active: boolean("active").notNull().default(true),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
-export const insertStudioVibeSchema = createInsertSchema(studioVibes).omit({
-  id: true,
-  createdAt: true,
-});
-export type StudioVibe = typeof studioVibes.$inferSelect;
-export type InsertStudioVibe = z.infer<typeof insertStudioVibeSchema>;
+export type StudioModelPricing = typeof studioModelPricing.$inferSelect;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QA DASHBOARD (task-462) — feature flags, tester allowlist, cash-drop events

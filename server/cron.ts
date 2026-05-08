@@ -1303,6 +1303,11 @@ export async function runAllScheduledSweeps(): Promise<void> {
     const ogDrip = await ogStudioCreditDripSweep();
     if (ogDrip > 0) console.log(`[cron] granted ${ogDrip} OG monthly Studio drip(s)`);
 
+    const purgedStudioSessions = await purgeAbandonedStudioSessions();
+    if (purgedStudioSessions > 0) console.log(`[cron] purged ${purgedStudioSessions} abandoned studio session(s)`);
+
+    await purgeOrphanedEndedStudioSessionFiles();
+
     const decayedHf = await decayHandsfreeBlockedAttempts();
     if (decayedHf > 0) console.log(`[cron] decayed hands-free block counter for ${decayedHf} user(s)`);
 
@@ -1318,6 +1323,91 @@ export async function runAllScheduledSweeps(): Promise<void> {
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
+}
+
+// GUBER Studio v2 cleanup. Sessions are abandoned when:
+//   • No activity for 30 minutes (lastActivityAt < now - 30m), OR
+//   • Total session age > 1 hour (startedAt < now - 1h).
+// We delete the session_files rows AND destroy the Cloudinary assets so
+// the user's prompts/clips never persist beyond the live session.
+// One-time-per-sweep cleanup for any orphaned files attached to sessions
+// that are already marked ended (e.g. legacy "superseded" rows from before
+// the session-rollover purge fix). Belt-and-suspenders — the active code
+// path now purges on supersede, but this guarantees retention even if a
+// previous version of the code left orphans.
+export async function purgeOrphanedEndedStudioSessionFiles(): Promise<number> {
+  const { db } = await import("./db");
+  const { sql } = await import("drizzle-orm");
+  // Find any session_id that has files AND whose session is not active.
+  const rows = await db.execute(sql`
+    SELECT DISTINCT f.session_id
+      FROM studio_session_files f
+      JOIN studio_sessions s ON s.id = f.session_id
+     WHERE s.status <> 'active'
+     LIMIT 50
+  `);
+  const sessionIds: number[] = (rows as any).rows
+    ? (rows as any).rows.map((r: any) => Number(r.session_id))
+    : (rows as any).map?.((r: any) => Number(r.session_id)) ?? [];
+  let purged = 0;
+  for (const sid of sessionIds) {
+    try {
+      const files = await storage.deleteStudioSessionFiles(sid);
+      let cloudinary: any = null;
+      try {
+        if (process.env.CLOUDINARY_CLOUD_NAME) {
+          cloudinary = (await import("./cloudinary.js")).default;
+        }
+      } catch {}
+      if (cloudinary) {
+        for (const f of files) {
+          if (!f.cloudinaryPublicId) continue;
+          try {
+            await cloudinary.uploader.destroy(f.cloudinaryPublicId, { resource_type: f.resourceType || "image" });
+          } catch (err: any) {
+            console.warn(`[GUBER][studio] orphan cloudinary destroy failed for ${f.cloudinaryPublicId}: ${err.message}`);
+          }
+        }
+      }
+      purged += files.length;
+    } catch (err: any) {
+      console.warn(`[GUBER][studio] orphan purge failed for session ${sid}: ${err.message}`);
+    }
+  }
+  if (purged > 0) console.log(`[GUBER][studio] purged ${purged} orphaned files from ended sessions`);
+  return purged;
+}
+
+export async function purgeAbandonedStudioSessions(): Promise<number> {
+  const now = Date.now();
+  const inactiveCutoff = new Date(now - 30 * 60 * 1000);
+  const hardCutoff = new Date(now - 60 * 60 * 1000);
+  const sessions = await storage.listAbandonedStudioSessions(inactiveCutoff, hardCutoff);
+  if (!sessions.length) return 0;
+
+  let cloudinary: any = null;
+  try {
+    if (process.env.CLOUDINARY_CLOUD_NAME) {
+      cloudinary = (await import("./cloudinary.js")).default;
+    }
+  } catch {}
+
+  for (const s of sessions) {
+    const files = await storage.deleteStudioSessionFiles(s.id);
+    if (cloudinary) {
+      for (const f of files) {
+        if (!f.cloudinaryPublicId) continue;
+        try {
+          await cloudinary.uploader.destroy(f.cloudinaryPublicId, { resource_type: f.resourceType || "image" });
+        } catch (err: any) {
+          console.warn(`[cron][studio] cloudinary destroy failed for ${f.cloudinaryPublicId}: ${err.message}`);
+        }
+      }
+    }
+    const reason = s.startedAt < hardCutoff ? "hard_timeout" : "inactive_timeout";
+    await storage.endStudioSession(s.id, reason);
+  }
+  return sessions.length;
 }
 
 export function startCron() {
@@ -1395,6 +1485,11 @@ export function startCron() {
 
       const ogDrip = await ogStudioCreditDripSweep();
       if (ogDrip > 0) console.log(`[cron] granted ${ogDrip} OG monthly Studio drip(s)`);
+
+      const purgedStudioSessions = await purgeAbandonedStudioSessions();
+      if (purgedStudioSessions > 0) console.log(`[cron] purged ${purgedStudioSessions} abandoned studio session(s)`);
+
+      await purgeOrphanedEndedStudioSessionFiles();
 
       const decayedHf = await decayHandsfreeBlockedAttempts();
       if (decayedHf > 0) console.log(`[cron] decayed hands-free block counter for ${decayedHf} user(s)`);

@@ -315,6 +315,87 @@ CREATE INDEX IF NOT EXISTS task_history_summary_helper_idx
 CREATE INDEX IF NOT EXISTS task_history_summary_poster_idx
   ON task_history_summary (poster_id, completed_at DESC);
 
+-- ── GUBER Studio v2 cutover ─────────────────────────────────────────────
+-- Drop the v1 tables (studio_videos / studio_vibes) and the user/cash_drop
+-- columns that referenced them. Generated media is now session-scoped and
+-- never persisted to the user's profile.
+ALTER TABLE users      DROP COLUMN IF EXISTS studio_resume_video_id;
+ALTER TABLE users      DROP COLUMN IF EXISTS studio_business_promo_video_id;
+ALTER TABLE cash_drops DROP COLUMN IF EXISTS studio_video_id;
+DROP TABLE IF EXISTS studio_videos;
+DROP TABLE IF EXISTS studio_vibes;
+
+CREATE TABLE IF NOT EXISTS studio_sessions (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  started_at timestamp NOT NULL DEFAULT now(),
+  last_activity_at timestamp NOT NULL DEFAULT now(),
+  ended_at timestamp,
+  end_reason text
+);
+CREATE INDEX IF NOT EXISTS studio_sessions_user_active_idx
+  ON studio_sessions (user_id) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS studio_sessions_active_idx
+  ON studio_sessions (last_activity_at) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS studio_session_files (
+  id serial PRIMARY KEY,
+  session_id integer NOT NULL,
+  user_id integer NOT NULL,
+  file_type text NOT NULL,
+  provider_url text NOT NULL,
+  cloudinary_public_id text,
+  resource_type text NOT NULL DEFAULT 'image',
+  meta jsonb,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS studio_session_files_session_idx
+  ON studio_session_files (session_id);
+
+CREATE TABLE IF NOT EXISTS studio_generation_log (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  session_id integer,
+  tool_key text NOT NULL,
+  prompt text,
+  credits_cost integer NOT NULL DEFAULT 0,
+  duration_seconds integer,
+  provider_job_id text,
+  status text NOT NULL DEFAULT 'succeeded',
+  error_reason text,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS studio_generation_log_user_idx
+  ON studio_generation_log (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS studio_model_pricing (
+  id serial PRIMARY KEY,
+  tool_key text NOT NULL UNIQUE,
+  label text NOT NULL,
+  description text,
+  provider_endpoint text NOT NULL,
+  credits_cost integer NOT NULL DEFAULT 1,
+  duration_seconds integer,
+  active boolean NOT NULL DEFAULT true,
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+
+INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, duration_seconds, active) VALUES
+  ('kling_motion_control', 'Motion Control Video',
+   'Photo + prompt → cinematic 5s clip with controlled camera motion (Kling v3 Pro).',
+   'fal-ai/kling-video/v3/pro/motion-control', 2, 5, true),
+  ('wan_motion_5s',        'Quick Motion Clip · 5s',
+   'Text or image to a fast 5-second motion clip (Wan).',
+   'fal-ai/wan-motion', 1, 5, true),
+  ('wan_motion_10s',       'Quick Motion Clip · 10s',
+   'Text or image to a 10-second motion clip (Wan).',
+   'fal-ai/wan-motion', 2, 10, true),
+  ('minimax_music',        'AI Music Track',
+   'Prompt → ~30s instrumental track (MiniMax Music v2).',
+   'fal-ai/minimax-music/v2', 1, 30, true)
+ON CONFLICT (tool_key) DO NOTHING;
+
 SQL
 
 echo "[post-merge] Schema sync complete."

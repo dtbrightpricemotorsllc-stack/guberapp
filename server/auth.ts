@@ -288,9 +288,9 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
         createPayload.zipcode = zipcode || null;
       }
 
-      // AI Video Studio (task-439): grant 1 free trial credit to every new
-      // signup so first-touch users can try a generation without paying.
-      createPayload.studioCredits = 1;
+      // GUBER Studio v2: grant 2 free trial credits to every new signup
+      // (enough for one music gen + one motion clip, or two short clips).
+      createPayload.studioCredits = 2;
       createPayload.studioTier = "standard";
 
       const user = await storage.createUser(createPayload);

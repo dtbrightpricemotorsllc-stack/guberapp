@@ -95,50 +95,6 @@ export default function ResumePage() {
   const viewingOther = params?.userId && params.userId !== "me";
   const endpoint = viewingOther ? `/api/resume/${params.userId}` : "/api/resume/me";
 
-  // ── Studio "Use in… My Resume" handoff ───────────────────────────────
-  // The Studio page links here with ?studioVideoId=N. We auto-pin the clip
-  // as the worker's resume promo, toast, then strip the param so a refresh
-  // doesn't re-fire. Guarded with a ref so React's strict-mode double-render
-  // doesn't double-attach.
-  const attachedRef = useRef<string | null>(null);
-  const attachStudioMutation = useMutation({
-    mutationFn: async (studioVideoId: number) => {
-      const res = await apiRequest("POST", "/api/studio/attach", { studioVideoId, target: "resume" });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/resume"] });
-      toast({ title: "Promo clip pinned to your resume" });
-    },
-    onError: (e: any) => toast({ title: "Couldn't pin clip", description: e.message, variant: "destructive" }),
-  });
-  useEffect(() => {
-    if (viewingOther) return;
-    const search = typeof window !== "undefined" ? window.location.search : "";
-    const sp = new URLSearchParams(search);
-    const sid = sp.get("studioVideoId");
-    if (!sid) return;
-    if (attachedRef.current === sid) return;
-    attachedRef.current = sid;
-    const n = parseInt(sid, 10);
-    if (Number.isFinite(n)) attachStudioMutation.mutate(n);
-    sp.delete("studioVideoId");
-    const newSearch = sp.toString();
-    navigate(location.split("?")[0] + (newSearch ? `?${newSearch}` : ""), { replace: true });
-  }, [location, viewingOther]);
-
-  const removeStudioMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/studio/attach", { studioVideoId: null, target: "resume" });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/resume"] });
-      toast({ title: "Promo clip removed" });
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
   const { data: resume, isLoading, error } = useQuery<any>({
     queryKey: ["/api/resume", viewingOther ? params?.userId : "me"],
     queryFn: async () => {
@@ -547,40 +503,6 @@ export default function ResumePage() {
             </div>
           </CardContent>
         </Card>
-
-        {resume.studioPromo?.videoUrl && (
-          <Card className="border-border/20" data-testid="card-studio-promo">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" /> Promo Clip
-                </CardTitle>
-                {isOwn && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => removeStudioMutation.mutate()}
-                    disabled={removeStudioMutation.isPending}
-                    data-testid="button-remove-studio-promo"
-                  >
-                    {removeStudioMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Remove"}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <video
-                src={resume.studioPromo.videoUrl}
-                poster={resume.studioPromo.thumbnailUrl ?? undefined}
-                controls
-                playsInline
-                className="w-full rounded-xl bg-black aspect-video object-cover"
-                data-testid="video-studio-promo"
-              />
-            </CardContent>
-          </Card>
-        )}
 
         <Card className="border-border/20">
           <CardHeader className="pb-2 cursor-pointer" onClick={() => toggleSection("stats")}>

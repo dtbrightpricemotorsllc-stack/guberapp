@@ -10,11 +10,11 @@ import {
   workerBusinessProjections, backgroundCheckEligibility, billingEvents, legalAcceptances,
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
-  studioVideos, studioVibes,
+  studioSessions, studioSessionFiles, studioGenerationLog, studioModelPricing,
   taskHistorySummary,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
-  type StudioVideo, type InsertStudioVideo, type StudioVibe, type InsertStudioVibe,
+  type StudioSession, type StudioSessionFile, type StudioGenerationLog, type StudioModelPricing,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
@@ -50,18 +50,26 @@ export interface IStorage {
   softDeleteUser(id: number, opts?: { reason?: string; retentionDays?: number }): Promise<void>;
   getAllUsers(): Promise<User[]>;
 
-  // ── AI Video Studio (task-439) ──
-  // Atomic credit ops via SQL `studio_credits + n` so concurrent generations
-  // can't double-spend. decrement returns the new balance, or null if balance
-  // would go negative (caller treats as "insufficient credits").
+  // ── GUBER Studio v2 ──
+  // Atomic credit ops via SQL `studio_credits +/- n` so concurrent
+  // generations can't double-spend.
   incrementStudioCredits(userId: number, amount: number): Promise<number>;
   decrementStudioCredits(userId: number, amount: number): Promise<number | null>;
-  createStudioVideo(data: InsertStudioVideo): Promise<StudioVideo>;
-  updateStudioVideo(id: number, data: Partial<StudioVideo>): Promise<StudioVideo | undefined>;
-  getStudioVideosByUser(userId: number, limit?: number): Promise<StudioVideo[]>;
-  getStudioVideo(id: number): Promise<StudioVideo | undefined>;
-  getStudioVibes(opts?: { activeOnly?: boolean }): Promise<StudioVibe[]>;
-  createStudioVibe(data: InsertStudioVibe): Promise<StudioVibe>;
+  // Session-scoped temporary media storage.
+  createStudioSession(userId: number): Promise<StudioSession>;
+  getActiveStudioSession(userId: number): Promise<StudioSession | undefined>;
+  getStudioSession(id: number): Promise<StudioSession | undefined>;
+  touchStudioSession(id: number): Promise<void>;
+  endStudioSession(id: number, reason: string): Promise<void>;
+  listAbandonedStudioSessions(inactiveCutoff: Date, hardCutoff: Date): Promise<StudioSession[]>;
+  addStudioSessionFile(data: Omit<StudioSessionFile, "id" | "createdAt">): Promise<StudioSessionFile>;
+  listStudioSessionFiles(sessionId: number): Promise<StudioSessionFile[]>;
+  deleteStudioSessionFiles(sessionId: number): Promise<StudioSessionFile[]>;
+  // History (no URLs retained).
+  logStudioGeneration(data: Omit<StudioGenerationLog, "id" | "createdAt">): Promise<StudioGenerationLog>;
+  // Admin-editable pricing.
+  listStudioModelPricing(): Promise<StudioModelPricing[]>;
+  getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined>;
 
   getJobs(onlyPublished?: boolean): Promise<Job[]>;
   getJob(id: number): Promise<Job | undefined>;
@@ -404,7 +412,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(users).orderBy(desc(users.createdAt));
   }
 
-  // ── AI Video Studio (task-439) ──
+  // ── GUBER Studio v2 ──
   async incrementStudioCredits(userId: number, amount: number): Promise<number> {
     const [row] = await db
       .update(users)
@@ -425,39 +433,81 @@ export class DatabaseStorage implements IStorage {
     return row ? (row.balance ?? 0) : null;
   }
 
-  async createStudioVideo(data: InsertStudioVideo): Promise<StudioVideo> {
-    const [row] = await db.insert(studioVideos).values(data).returning();
+  async createStudioSession(userId: number): Promise<StudioSession> {
+    // End any prior active session for this user before opening a new one
+    // (we only ever keep one active session per user — easier UX + cleanup).
+    await db.update(studioSessions)
+      .set({ status: "ended", endedAt: new Date(), endReason: "superseded" })
+      .where(and(eq(studioSessions.userId, userId), eq(studioSessions.status, "active")));
+    const [row] = await db.insert(studioSessions).values({ userId }).returning();
     return row;
   }
 
-  async updateStudioVideo(id: number, data: Partial<StudioVideo>): Promise<StudioVideo | undefined> {
-    const [row] = await db.update(studioVideos).set(data).where(eq(studioVideos.id, id)).returning();
+  async getActiveStudioSession(userId: number): Promise<StudioSession | undefined> {
+    const [row] = await db.select().from(studioSessions)
+      .where(and(eq(studioSessions.userId, userId), eq(studioSessions.status, "active")))
+      .orderBy(desc(studioSessions.startedAt))
+      .limit(1);
     return row;
   }
 
-  async getStudioVideosByUser(userId: number, limit: number = 50): Promise<StudioVideo[]> {
-    return db.select().from(studioVideos)
-      .where(eq(studioVideos.userId, userId))
-      .orderBy(desc(studioVideos.createdAt))
-      .limit(limit);
-  }
-
-  async getStudioVideo(id: number): Promise<StudioVideo | undefined> {
-    const [row] = await db.select().from(studioVideos).where(eq(studioVideos.id, id)).limit(1);
+  async getStudioSession(id: number): Promise<StudioSession | undefined> {
+    const [row] = await db.select().from(studioSessions).where(eq(studioSessions.id, id)).limit(1);
     return row;
   }
 
-  async getStudioVibes(opts?: { activeOnly?: boolean }): Promise<StudioVibe[]> {
-    if (opts?.activeOnly) {
-      return db.select().from(studioVibes)
-        .where(eq(studioVibes.active, true))
-        .orderBy(studioVibes.sortOrder);
+  async touchStudioSession(id: number): Promise<void> {
+    await db.update(studioSessions).set({ lastActivityAt: new Date() }).where(eq(studioSessions.id, id));
+  }
+
+  async endStudioSession(id: number, reason: string): Promise<void> {
+    await db.update(studioSessions)
+      .set({ status: "ended", endedAt: new Date(), endReason: reason })
+      .where(eq(studioSessions.id, id));
+  }
+
+  async listAbandonedStudioSessions(inactiveCutoff: Date, hardCutoff: Date): Promise<StudioSession[]> {
+    return db.select().from(studioSessions).where(
+      and(
+        eq(studioSessions.status, "active"),
+        or(
+          lt(studioSessions.lastActivityAt, inactiveCutoff),
+          lt(studioSessions.startedAt, hardCutoff),
+        )!,
+      ),
+    );
+  }
+
+  async addStudioSessionFile(data: Omit<StudioSessionFile, "id" | "createdAt">): Promise<StudioSessionFile> {
+    const [row] = await db.insert(studioSessionFiles).values(data).returning();
+    return row;
+  }
+
+  async listStudioSessionFiles(sessionId: number): Promise<StudioSessionFile[]> {
+    return db.select().from(studioSessionFiles)
+      .where(eq(studioSessionFiles.sessionId, sessionId))
+      .orderBy(desc(studioSessionFiles.createdAt));
+  }
+
+  async deleteStudioSessionFiles(sessionId: number): Promise<StudioSessionFile[]> {
+    const rows = await db.select().from(studioSessionFiles).where(eq(studioSessionFiles.sessionId, sessionId));
+    if (rows.length > 0) {
+      await db.delete(studioSessionFiles).where(eq(studioSessionFiles.sessionId, sessionId));
     }
-    return db.select().from(studioVibes).orderBy(studioVibes.sortOrder);
+    return rows;
   }
 
-  async createStudioVibe(data: InsertStudioVibe): Promise<StudioVibe> {
-    const [row] = await db.insert(studioVibes).values(data).returning();
+  async logStudioGeneration(data: Omit<StudioGenerationLog, "id" | "createdAt">): Promise<StudioGenerationLog> {
+    const [row] = await db.insert(studioGenerationLog).values(data).returning();
+    return row;
+  }
+
+  async listStudioModelPricing(): Promise<StudioModelPricing[]> {
+    return db.select().from(studioModelPricing).where(eq(studioModelPricing.active, true));
+  }
+
+  async getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined> {
+    const [row] = await db.select().from(studioModelPricing).where(eq(studioModelPricing.toolKey, toolKey)).limit(1);
     return row;
   }
 

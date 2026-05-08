@@ -4,6 +4,7 @@
 
 export type FeatureFlagKey =
   | "studio_ai"
+  | "studio_v2"
   | "studio_subscriptions"
   | "cash_drops"
   | "barter"
@@ -32,6 +33,13 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     key: "studio_ai",
     label: "AI Video Studio",
     description: "Allow generation of AI clips at /studio.",
+    defaultEnabled: true,
+    defaultScope: "global",
+  },
+  {
+    key: "studio_v2",
+    label: "GUBER Studio v2 (session-based)",
+    description: "Phase 1 session-based Studio at /studio. Generated media is temporary; nothing persists.",
     defaultEnabled: true,
     defaultScope: "global",
   },
