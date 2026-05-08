@@ -323,29 +323,10 @@ export default function Dashboard() {
       }, 400);
       return () => clearTimeout(t);
     }
-    // status === "declined": check for missed notifications and show missed event banner
-    if (alertStatus === "declined") {
-      // Query notifications to detect if user missed anything
-      fetch("/api/notifications", { credentials: "include" })
-        .then(r => r.ok ? r.json() : [])
-        .then((notifs: any[]) => {
-          const unread = notifs.filter((n: any) => !n.read);
-          if (unread.length === 0) return;
-          // Persistent dismissal: only re-show the banner if a NEWER unread
-          // notification has arrived since the user dismissed last time.
-          const maxUnreadId = unread.reduce((m: number, n: any) => Math.max(m, Number(n.id) || 0), 0);
-          const dismissKey = `guber_missed_banner_dismissed_${user?.id ?? "anon"}`;
-          const lastDismissedId = Number(localStorage.getItem(dismissKey) || "0");
-          if (maxUnreadId <= lastDismissedId) return;
-          const hasCashDrop = unread.some((n: any) =>
-            (n.type === "cash_drop") || (n.title || "").toLowerCase().includes("cash drop") || (n.body || "").toLowerCase().includes("cash drop")
-          );
-          setMissedEventType(hasCashDrop ? "cash_drop" : "job");
-          setMissedMaxId(maxUnreadId);
-          setShowMissedBanner(true);
-        })
-        .catch(() => {});
-    }
+    // Missed-event banner is disabled for now — it was firing too aggressively
+    // (any unread notification triggered it on every launch). Re-enable once
+    // we have a tighter "actually missed" signal from the server.
+    // (status === "declined" branch intentionally left no-op.)
   }, [user]);
 
   // Track the highest unread-notification id at the moment the banner was
