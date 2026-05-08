@@ -330,17 +330,33 @@ export default function Dashboard() {
         .then(r => r.ok ? r.json() : [])
         .then((notifs: any[]) => {
           const unread = notifs.filter((n: any) => !n.read);
-          if (unread.length > 0) {
-            const hasCashDrop = unread.some((n: any) =>
-              (n.type === "cash_drop") || (n.title || "").toLowerCase().includes("cash drop") || (n.body || "").toLowerCase().includes("cash drop")
-            );
-            setMissedEventType(hasCashDrop ? "cash_drop" : "job");
-            setShowMissedBanner(true);
-          }
+          if (unread.length === 0) return;
+          // Persistent dismissal: only re-show the banner if a NEWER unread
+          // notification has arrived since the user dismissed last time.
+          const maxUnreadId = unread.reduce((m: number, n: any) => Math.max(m, Number(n.id) || 0), 0);
+          const dismissKey = `guber_missed_banner_dismissed_${user?.id ?? "anon"}`;
+          const lastDismissedId = Number(localStorage.getItem(dismissKey) || "0");
+          if (maxUnreadId <= lastDismissedId) return;
+          const hasCashDrop = unread.some((n: any) =>
+            (n.type === "cash_drop") || (n.title || "").toLowerCase().includes("cash drop") || (n.body || "").toLowerCase().includes("cash drop")
+          );
+          setMissedEventType(hasCashDrop ? "cash_drop" : "job");
+          setMissedMaxId(maxUnreadId);
+          setShowMissedBanner(true);
         })
         .catch(() => {});
     }
   }, [user]);
+
+  // Track the highest unread-notification id at the moment the banner was
+  // shown so dismissing can persist that watermark in localStorage.
+  const [missedMaxId, setMissedMaxId] = useState<number>(0);
+  const persistMissedDismissal = () => {
+    try {
+      const dismissKey = `guber_missed_banner_dismissed_${user?.id ?? "anon"}`;
+      if (missedMaxId > 0) localStorage.setItem(dismissKey, String(missedMaxId));
+    } catch {}
+  };
 
   // Re-usable: show inline action prompt (no auto-dismiss — stays until user acts)
   const triggerActionPrompt = (message?: string) => {
@@ -1284,8 +1300,8 @@ export default function Dashboard() {
       {!showAlertModal && !showActionPrompt && showMissedBanner && (
         <MissedEventBanner
           type={missedEventType}
-          onEnable={handleActionPromptEnable}
-          onDismiss={() => setShowMissedBanner(false)}
+          onEnable={() => { persistMissedDismissal(); handleActionPromptEnable(); }}
+          onDismiss={() => { persistMissedDismissal(); setShowMissedBanner(false); }}
         />
       )}
 

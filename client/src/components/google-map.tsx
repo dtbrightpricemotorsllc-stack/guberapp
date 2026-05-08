@@ -204,7 +204,9 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           3: "TIMEOUT",
         };
         console.warn(`[GUBER] Geolocation error: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}. Trying IP fallback…`);
-        setLocating(false);
+        // Keep `locating` true until the IP fallback resolves — otherwise
+        // the buildMap effect fires immediately with no userPos and the
+        // map is built at US_CENTER before the fallback coordinates land.
         try {
           const r = await fetch("/api/places/ip-locate");
           if (r.ok) {
@@ -220,6 +222,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
                 hasCenteredRef.current = true;
               }
               if (data.zip) setZipInput(String(data.zip));
+              setLocating(false);
               return;
             }
           }
@@ -227,6 +230,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           console.warn("[GUBER] IP fallback failed:", e);
         }
         setLocationDenied(true);
+        setLocating(false);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
     ).then((id) => {
