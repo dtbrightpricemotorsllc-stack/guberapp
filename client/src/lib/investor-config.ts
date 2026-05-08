@@ -177,8 +177,8 @@ export const INVESTOR_CONFIG = {
       headline: "GUBER out in the wild.",
       sub: "Branded gear showing up at real-world events, in real users' hands. Grassroots brand presence the team is already producing today.",
       items: [
-        { title: "GUBER glove at the track", caption: "Real attendee wearing GUBER-branded gear at Gulfport Dragway — organic brand visibility at live events.", asset: "wild-dragway" },
-        { title: "Community wearing the brand", caption: "GUBER apparel out in the field — early supporters carrying the logo into their own networks.", asset: "wild-driver" },
+        { title: "GUBER glove at the track", caption: "Spotted at Gulfport Dragway — GUBER-branded gear out in front of a real, live audience.", asset: "wild-dragway" },
+        { title: "Jacob McNeal — early supporter", caption: "Driver Jacob McNeal repping GUBER and putting the brand in front of his own following — organic, founder-driven word of mouth.", asset: "wild-driver" },
       ],
     },
     appShots: {
