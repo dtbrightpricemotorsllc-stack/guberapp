@@ -666,7 +666,10 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         </div>
       )}
 
-      {mapReady && locationDenied && !showZipInput && (
+      {/* "Location unavailable" pill hidden for now — was triggering even when
+          GPS eventually recovered. Re-enable once we have a confident
+          definitely-no-fix signal. */}
+      {false && mapReady && locationDenied && !showZipInput && (
         <div
           className="absolute bottom-12 left-3 right-3 z-30 flex items-center gap-2 px-3 py-2 rounded-xl"
           style={{ background: "rgba(20,20,20,0.92)", border: "1px solid rgba(239,68,68,0.35)", backdropFilter: "blur(8px)" }}
