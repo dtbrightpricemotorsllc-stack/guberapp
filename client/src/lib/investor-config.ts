@@ -173,6 +173,14 @@ export const INVESTOR_CONFIG = {
         { title: "Verify & Inspect — Hands-Free", caption: "POV hands-free capture for inspections — purpose-built for insurers, dealers, lenders.", asset: "creative-vi-handsfree" },
       ],
     },
+    inTheWild: {
+      headline: "GUBER out in the wild.",
+      sub: "Branded gear showing up at real-world events, in real users' hands. Grassroots brand presence the team is already producing today.",
+      items: [
+        { title: "GUBER glove at the track", caption: "Real attendee wearing GUBER-branded gear at Gulfport Dragway — organic brand visibility at live events.", asset: "wild-dragway" },
+        { title: "Community wearing the brand", caption: "GUBER apparel out in the field — early supporters carrying the logo into their own networks.", asset: "wild-driver" },
+      ],
+    },
     appShots: {
       headline: "The product, live in market.",
       sub: "Real screens from the production app — not mockups.",

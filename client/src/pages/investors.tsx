@@ -12,6 +12,8 @@ import engagementShot from "@assets/Screenshot_20260427_203110_Business_Suite_17
 import creativeLaunch from "@assets/Screenshot_20260426_064428_Facebook_1778199034069.jpg";
 import creativeViWheels from "@assets/Screenshot_20260507_013238_ChatGPT_1778199033938.jpg";
 import creativeViHandsfree from "@assets/Screenshot_20260506_221503_ChatGPT_1778199033949.jpg";
+import wildDragway from "@assets/Screenshot_20260503_172006_Facebook_1778199033959.jpg";
+import wildDriver from "@assets/Screenshot_20260504_141354_Messages_1778199033968.jpg";
 import appMap from "@assets/Screenshot_20260404_200228_Gallery_1778199034097.jpg";
 import appDashboard from "@assets/Screenshot_20260429_192406_Gallery_1778199033986.jpg";
 import appVi from "@assets/Screenshot_20260404_182235_Chrome_1778199034106.jpg";
@@ -27,6 +29,8 @@ const PROOF_ASSETS: Record<string, string> = {
   "creative-launch": creativeLaunch,
   "creative-vi-wheels": creativeViWheels,
   "creative-vi-handsfree": creativeViHandsfree,
+  "wild-dragway": wildDragway,
+  "wild-driver": wildDriver,
   "app-map": appMap,
   "app-dashboard": appDashboard,
   "app-vi": appVi,
@@ -528,6 +532,30 @@ export default function Investors() {
                 <div className="p-4">
                   <div className="num-font text-[11px] uppercase tracking-[0.12em] mb-1" style={{ color: NEON_PURPLE }}>{c.title}</div>
                   <div className="text-xs text-muted-foreground leading-relaxed">{c.caption}</div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* In the wild — grassroots brand presence */}
+        <Reveal>
+          <h3 className="num-font text-xl sm:text-2xl font-bold text-white mb-2" data-testid="text-wild-headline">{C.proof.inTheWild.headline}</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-3xl">{C.proof.inTheWild.sub}</p>
+        </Reveal>
+        <div className="grid sm:grid-cols-2 gap-4 mb-12">
+          {C.proof.inTheWild.items.map((s, i) => (
+            <Reveal key={s.asset} delay={i * 80}>
+              <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col sm:flex-row" data-testid={`card-wild-${i}`}>
+                <div className="relative sm:w-1/2 aspect-[4/3] sm:aspect-auto bg-black/40 overflow-hidden">
+                  <img src={PROOF_ASSETS[s.asset]} alt={s.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-wild-${i}`} />
+                  <div className="absolute top-2 left-2">
+                    <span className="pill pill-cyan num-font">In the wild</span>
+                  </div>
+                </div>
+                <div className="p-5 sm:w-1/2 flex flex-col justify-center">
+                  <div className="num-font text-[11px] uppercase tracking-[0.12em] mb-2" style={{ color: NEON_CYAN }}>{s.title}</div>
+                  <div className="text-sm text-muted-foreground leading-relaxed">{s.caption}</div>
                 </div>
               </div>
             </Reveal>
