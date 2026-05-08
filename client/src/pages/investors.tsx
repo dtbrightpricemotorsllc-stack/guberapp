@@ -3,6 +3,39 @@ import { Mail, Phone, Globe, ChevronRight, Check, Printer, ArrowDown } from "luc
 import { INVESTOR_CONFIG as C } from "@/lib/investor-config";
 import { SocialLinks } from "@/components/social-links";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
+import winnerJamie from "@assets/Screenshot_20260426_204611_Facebook_1778199034008.jpg";
+import winnerKyle from "@assets/Screenshot_20260426_064824_Facebook_1778199034038.jpg";
+import winnerKlin from "@assets/Screenshot_20260420_042305_Facebook_1778199034079.jpg";
+import winnerJames from "@assets/Screenshot_20260331_102503_Facebook_1778199034115.jpg";
+import winnerExtra from "@assets/Screenshot_20260414_205025_Facebook_1778199034088.jpg";
+import engagementShot from "@assets/Screenshot_20260427_203110_Business_Suite_1778199033998.jpg";
+import creativeLaunch from "@assets/Screenshot_20260426_064428_Facebook_1778199034069.jpg";
+import creativeViWheels from "@assets/Screenshot_20260507_013238_ChatGPT_1778199033938.jpg";
+import creativeViHandsfree from "@assets/Screenshot_20260506_221503_ChatGPT_1778199033949.jpg";
+import sponsorDragway from "@assets/Screenshot_20260503_172006_Facebook_1778199033959.jpg";
+import sponsorDriver from "@assets/Screenshot_20260504_141354_Messages_1778199033968.jpg";
+import appMap from "@assets/Screenshot_20260404_200228_Gallery_1778199034097.jpg";
+import appDashboard from "@assets/Screenshot_20260429_192406_Gallery_1778199033986.jpg";
+import appVi from "@assets/Screenshot_20260404_182235_Chrome_1778199034106.jpg";
+import appPostJob from "@assets/Screenshot_20260426_161934_GUBER_1778199034124.jpg";
+
+const PROOF_ASSETS: Record<string, string> = {
+  "winner-jamie": winnerJamie,
+  "winner-kyle": winnerKyle,
+  "winner-klin": winnerKlin,
+  "winner-james": winnerJames,
+  "winner-extra": winnerExtra,
+  "engagement": engagementShot,
+  "creative-launch": creativeLaunch,
+  "creative-vi-wheels": creativeViWheels,
+  "creative-vi-handsfree": creativeViHandsfree,
+  "sponsor-dragway": sponsorDragway,
+  "sponsor-driver": sponsorDriver,
+  "app-map": appMap,
+  "app-dashboard": appDashboard,
+  "app-vi": appVi,
+  "app-postjob": appPostJob,
+};
 
 function useReveal<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -406,8 +439,8 @@ export default function Investors() {
         <Reveal>
           <div className="mb-8 inv-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid="row-googleplay-launch">
             <div>
-              <div className="num-font text-[11px] uppercase tracking-[0.15em]" style={{ color: NEON_GREEN }}>Google Play public launch date</div>
-              <div className="text-xs text-muted-foreground mt-1">Editable by the founder in <code>investor-config.ts</code> — set when announced.</div>
+              <div className="num-font text-[11px] uppercase tracking-[0.15em]" style={{ color: NEON_GREEN }}>Public launch — Google Play</div>
+              <div className="text-xs text-muted-foreground mt-1">Native Android live in market. Apple App Store submission in progress.</div>
             </div>
             <div className="num-font text-sm font-semibold text-white" data-testid="text-googleplay-launch-date">
               {C.traction.googlePlayLaunchDate || C.traction.googlePlayLaunchPlaceholder}
@@ -451,8 +484,111 @@ export default function Investors() {
         </Reveal>
       </Section>
 
+      {/* 08 · PROOF — REAL USERS, REAL CASH, REAL MARKETING */}
+      <Section id="section-proof" eyebrow="08 · Proof in market" headline={C.proof.headline} sub={C.proof.sub}>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {C.proof.winners.map((w, i) => (
+            <Reveal key={w.asset} delay={(i % 3) * 80}>
+              <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col" data-testid={`card-winner-${i}`}>
+                <div className="relative aspect-[3/4] bg-black/40 overflow-hidden">
+                  <img
+                    src={PROOF_ASSETS[w.asset]}
+                    alt={`${w.name} — ${w.quote}`}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    data-testid={`img-winner-${i}`}
+                  />
+                  <div className="absolute top-2 left-2">
+                    <span className="pill pill-green num-font">Real user</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="text-sm text-white font-semibold leading-snug" data-testid={`text-winner-quote-${i}`}>"{w.quote}"</div>
+                  <div className="num-font text-[11px] uppercase tracking-[0.12em] mt-2" style={{ color: NEON_GREEN }} data-testid={`text-winner-name-${i}`}>{w.name}</div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+        <Reveal>
+          <div className="text-[11px] text-muted-foreground italic mb-12" data-testid="text-proof-consent">{C.proof.consentNote}</div>
+        </Reveal>
+
+        {/* Marketing creatives */}
+        <Reveal>
+          <h3 className="num-font text-xl sm:text-2xl font-bold text-white mb-2" data-testid="text-creatives-headline">{C.proof.creatives.headline}</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-3xl">{C.proof.creatives.sub}</p>
+        </Reveal>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
+          {C.proof.creatives.items.map((c, i) => (
+            <Reveal key={c.asset} delay={i * 80}>
+              <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col" data-testid={`card-creative-${i}`}>
+                <div className="relative aspect-[4/5] bg-black/40 overflow-hidden">
+                  <img src={PROOF_ASSETS[c.asset]} alt={c.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-creative-${i}`} />
+                  <div className="absolute top-2 left-2">
+                    <span className="pill pill-purple num-font">Marketing</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="num-font text-[11px] uppercase tracking-[0.12em] mb-1" style={{ color: NEON_PURPLE }}>{c.title}</div>
+                  <div className="text-xs text-muted-foreground leading-relaxed">{c.caption}</div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* Sponsorships / community presence */}
+        <Reveal>
+          <h3 className="num-font text-xl sm:text-2xl font-bold text-white mb-2" data-testid="text-sponsorships-headline">{C.proof.sponsorships.headline}</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-3xl">{C.proof.sponsorships.sub}</p>
+        </Reveal>
+        <div className="grid sm:grid-cols-2 gap-4 mb-12">
+          {C.proof.sponsorships.items.map((s, i) => (
+            <Reveal key={s.asset} delay={i * 80}>
+              <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col sm:flex-row" data-testid={`card-sponsor-${i}`}>
+                <div className="relative sm:w-1/2 aspect-[4/3] sm:aspect-auto bg-black/40 overflow-hidden">
+                  <img src={PROOF_ASSETS[s.asset]} alt={s.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-sponsor-${i}`} />
+                  <div className="absolute top-2 left-2">
+                    <span className="pill pill-cyan num-font">Sponsorship</span>
+                  </div>
+                </div>
+                <div className="p-5 sm:w-1/2 flex flex-col justify-center">
+                  <div className="num-font text-[11px] uppercase tracking-[0.12em] mb-2" style={{ color: NEON_CYAN }}>{s.title}</div>
+                  <div className="text-sm text-muted-foreground leading-relaxed">{s.caption}</div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* App shots */}
+        <Reveal>
+          <h3 className="num-font text-xl sm:text-2xl font-bold text-white mb-2" data-testid="text-appshots-headline">{C.proof.appShots.headline}</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-3xl">{C.proof.appShots.sub}</p>
+        </Reveal>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {C.proof.appShots.items.map((a, i) => (
+            <Reveal key={a.asset} delay={(i % 4) * 60}>
+              <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col" data-testid={`card-appshot-${i}`}>
+                <div className="relative aspect-[9/19] bg-black/40 overflow-hidden">
+                  <img src={PROOF_ASSETS[a.asset]} alt={a.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-appshot-${i}`} />
+                  <div className="absolute top-2 left-2">
+                    <span className="pill pill-green num-font">Live</span>
+                  </div>
+                </div>
+                <div className="p-3">
+                  <div className="num-font text-[10px] uppercase tracking-[0.12em] mb-1 text-white">{a.title}</div>
+                  <div className="text-[11px] text-muted-foreground leading-snug">{a.caption}</div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </Section>
+
       {/* 09 · FOUNDER STORY */}
-      <Section id="section-founder" eyebrow="08 · Founder" headline={C.founder.headline}>
+      <Section id="section-founder" eyebrow="09 · Founder" headline={C.founder.headline}>
         <Reveal>
           <div className="inv-card p-7 sm:p-9" style={{ borderColor: `${NEON_GREEN}33` }}>
             <div className="grid lg:grid-cols-3 gap-8">
@@ -475,7 +611,7 @@ export default function Investors() {
       </Section>
 
       {/* 10 · FUNDING ASK */}
-      <Section id="section-funding-ask" eyebrow="09 · The ask" headline={C.fundingAsk.headline}>
+      <Section id="section-funding-ask" eyebrow="10 · The ask" headline={C.fundingAsk.headline}>
         <div className="grid lg:grid-cols-2 gap-5">
           <Reveal>
             <div className="inv-card p-7 h-full" style={{ borderColor: `${NEON_GREEN}55`, boxShadow: `0 0 32px hsl(152 100% 44% / .08)` }}>
@@ -503,7 +639,7 @@ export default function Investors() {
       </Section>
 
       {/* 11 · INVESTOR CTA */}
-      <Section id="section-investor-cta" eyebrow="10 · Let's talk" headline={C.cta.headline} sub={C.cta.sub}>
+      <Section id="section-investor-cta" eyebrow="11 · Let's talk" headline={C.cta.headline} sub={C.cta.sub}>
         <Reveal>
           <div className="inv-card p-8 sm:p-10" style={{ borderColor: `${NEON_GREEN}55` }}>
             <div className="grid lg:grid-cols-2 gap-8 items-center">
@@ -556,7 +692,7 @@ export default function Investors() {
                   style={{ borderColor: `${NEON_PURPLE}55`, color: NEON_PURPLE, background: "hsl(275 90% 65% / 0.06)" }}
                   data-testid="button-cta-visit"
                 >
-                  <Globe className="w-4 h-4" /> Visit guberapp.com
+                  <Globe className="w-4 h-4" /> Visit {C.meta.publicUrl.replace(/^https?:\/\//, "")}
                 </a>
                 <div className="pt-2">
                   <div className="num-font text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-2">Follow our public traction</div>

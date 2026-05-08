@@ -9,7 +9,7 @@ export const INVESTOR_CONFIG = {
     contactEmail: "guberapp.global@gmail.com",
     contactPhone: "+13362579787",
     contactPhoneDisplay: "(336) 257-9787",
-    publicUrl: "https://guberapp.com",
+    publicUrl: "https://guberapp.app",
     confidentialNote: "Confidential — for invited investors only. Do not redistribute.",
   },
 
@@ -118,26 +118,26 @@ export const INVESTOR_CONFIG = {
 
 
   traction: {
-    headline: "Where we are today — honestly.",
-    note: "Pre-launch / pre-marketing. The platform is shipped and live; paid acquisition has not started yet.",
-    googlePlayLaunchDate: "", // EDITABLE: founder fills exact public Google Play launch date here when ready.
-    googlePlayLaunchPlaceholder: "Date TBA — founder to confirm",
+    headline: "Where we are today.",
+    note: "Live on Google Play since April 8, 2026. Apple App Store submission in progress. Organic, community-led marketing is already producing real cash-drop winners and double-digit reaction counts on every post — with zero paid acquisition spend to date.",
+    googlePlayLaunchDate: "April 8, 2026",
+    googlePlayLaunchPlaceholder: "April 8, 2026",
     stats: [
-      { value: "294", label: "Registered users", sub: "Pre-launch organic signups, no paid acquisition" },
-      { value: "Live", label: "On Google Play", sub: "Native Android build available today" },
-      { value: "~10", label: "Sponsored Cash Drops", sub: "Brand-funded acquisition events live" },
-      { value: "0", label: "Paid jobs completed to date", sub: "Pre-launch — by design until the public push" },
+      { value: "294+", label: "Registered users", sub: "100% organic — no paid acquisition spend yet" },
+      { value: "Live", label: "On Google Play", sub: "Public launch April 8, 2026" },
+      { value: "Sub.", label: "On Apple App Store", sub: "Submitted for review — go-live imminent" },
+      { value: "10+", label: "Sponsored Cash Drops in market", sub: "Real winners, real cash, real photos" },
     ],
     state: [
-      "Web PWA is live and serving users at guberapp.com today.",
-      "Domain GUBERAPP.COM is live, owned, and pointed at production.",
-      "Active social presence across LinkedIn, Facebook, TikTok, Instagram, and X — links shown below.",
+      "Web PWA is live at guberapp.app and serving real users today.",
+      "Native Android live on Google Play since April 8, 2026; iOS submission to Apple App Store in progress.",
+      "Brand-funded Cash Drops already paying out to real users (see the proof section below).",
+      "Active social presence across LinkedIn, Facebook, TikTok, Instagram, and X — organic engagement of 60–80+ reactions per post with zero paid promotion.",
       "Active product development — shipping continuously, not in maintenance mode.",
-      "Founder-built end-to-end (product, full-stack engineering, payments, native Android, admin tooling).",
+      "Founder-built end-to-end (product, full-stack engineering, payments, native Android/iOS, admin tooling).",
       "Day-1 OG founding-supporter tier is live and generating one-time revenue.",
       "Stripe Connect, escrow, and the money ledger are wired end-to-end and tested.",
       "All 13 revenue streams are either Live or flag-gated — none rely on future engineering.",
-      "Google Play public launch date: not yet announced — founder to confirm.",
     ],
     infra: [
       "50+ live database tables — jobs, payments, money ledger, disputes, business accounts, sponsors, observations, credentials.",
@@ -151,6 +151,47 @@ export const INVESTOR_CONFIG = {
 
 
 
+
+  proof: {
+    headline: "Real users. Real cash. Real photos.",
+    sub: "Every face below is a real GUBER user who found a sponsored Cash Drop in their city — photographed by them, posted by them, no actors, no staging. This is the kind of organic word-of-mouth paid ads cannot manufacture.",
+    consentNote: "All photos are from public posts where users tagged GUBER themselves. First names + last initial used out of respect.",
+    winners: [
+      { name: "Jamie K.", quote: "Going straight to my church!", asset: "winner-jamie" },
+      { name: "Kyle H.", quote: "Found it — took me about 30 minutes.", asset: "winner-kyle" },
+      { name: "Klin B.", quote: "Found in the steering wheel.", asset: "winner-klin" },
+      { name: "James E.", quote: "Cash Drop winner — early adopter.", asset: "winner-james" },
+      { name: "Community", quote: "Real winner. Real cash. No fakes.", asset: "winner-extra" },
+      { name: "Engagement", quote: "84 reactions · multiple shares — organic, no paid promo.", asset: "engagement" },
+    ],
+    creatives: {
+      headline: "Marketing already in motion.",
+      sub: "Founder-produced creatives running across Facebook, Instagram, TikTok, and X today. Verify & Inspect is the wedge story; the rest of the platform pulls behind it.",
+      items: [
+        { title: "Launch creative", caption: "\"The Movement Is Live\" — public launch announcement.", asset: "creative-launch" },
+        { title: "Verify & Inspect — Wheels, Wings & More", caption: "Vehicle / property / marketplace verification — the B2B wedge.", asset: "creative-vi-wheels" },
+        { title: "Verify & Inspect — Hands-Free", caption: "POV hands-free capture for inspections — purpose-built for insurers, dealers, lenders.", asset: "creative-vi-handsfree" },
+      ],
+    },
+    sponsorships: {
+      headline: "In the community.",
+      sub: "Cash Drops aren't the only place GUBER shows up. The brand is already sponsoring real-world community events.",
+      items: [
+        { title: "Gulfport Dragway sponsorship", caption: "GUBER-branded sponsorship visible at race events — driver Jacob McNeal carrying the brand into a real audience.", asset: "sponsor-dragway" },
+        { title: "Sponsored driver — track record", caption: "Sponsored driver and Cash Drop ambassador — converting real-world attention into app installs.", asset: "sponsor-driver" },
+      ],
+    },
+    appShots: {
+      headline: "The product, live in market.",
+      sub: "Real screens from the production app — not mockups.",
+      items: [
+        { title: "Sponsored Cash Drop map", caption: "Live Cash Drops across the U.S. — drives real installs, real foot traffic, real winners.", asset: "app-map" },
+        { title: "User dashboard", caption: "Verify & Inspect, Cash Drops, and Work Types in a single signed-in surface.", asset: "app-dashboard" },
+        { title: "Verify & Inspect categories", caption: "Smart-form templates: vehicles, properties, marketplace listings, salvage.", asset: "app-vi" },
+        { title: "Guided Job Builder", caption: "Dropdown-driven job posting — structured data, no free-form mistakes.", asset: "app-postjob" },
+      ],
+    },
+  },
 
   whyNow: {
     headline: "Why this round, why now.",
