@@ -109,9 +109,14 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   const watchIdRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
   const watchCancelledRef = useRef(false);
+  const lowAccuracyRetriedRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
+  // Mirror of userPos for use inside long-lived watchPosition callbacks where
+  // closures would otherwise see a stale value. Used so transient errors
+  // arriving AFTER a successful fix don't clobber a known-good position.
+  const userPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(true);
   const [locationDenied, setLocationDenied] = useState(false);
   const [zipInput, setZipInput] = useState("");
@@ -180,12 +185,13 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     } catch {}
   };
 
-  const startWatchPosition = () => {
+  const startWatchPosition = (highAccuracy: boolean = true) => {
     setLocating(true);
     setLocationDenied(false);
     gpsStartWatchPosition(
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        userPosRef.current = coords;
         setUserPos(coords);
         setLocating(false);
         setLocationDenied(false);
@@ -203,6 +209,25 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           2: "POSITION_UNAVAILABLE",
           3: "TIMEOUT",
         };
+        // If we already have a good fix from a prior success, IGNORE this
+        // transient error — watchPosition fires errors mid-stream when
+        // signal flickers and we shouldn't overwrite a known-good position.
+        if (userPosRef.current) {
+          console.warn(`[GUBER] Geolocation transient error after fix: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ignoring.`);
+          return;
+        }
+        // First-attempt timeout/unavailable on Android sometimes means the
+        // device can't get a high-accuracy GPS lock fast enough (esp. when
+        // Google Play Services is missing/old). Retry once with low accuracy
+        // before giving up to IP fallback.
+        if (highAccuracy && !lowAccuracyRetriedRef.current && (err.code === 2 || err.code === 3)) {
+          lowAccuracyRetriedRef.current = true;
+          console.warn(`[GUBER] Geolocation ${labels[err.code]} — retrying with low accuracy.`);
+          if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+          startWatchPosition(false);
+          return;
+        }
         console.warn(`[GUBER] Geolocation error: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}. Trying IP fallback…`);
         // Keep `locating` true until the IP fallback resolves — otherwise
         // the buildMap effect fires immediately with no userPos and the
@@ -213,6 +238,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
             const data = await r.json();
             if (typeof data?.lat === "number" && typeof data?.lng === "number") {
               const coords = { lat: data.lat, lng: data.lng };
+              userPosRef.current = coords;
               setUserPos(coords);
               setLocationDenied(false);
               onUserPos?.(coords);
@@ -232,21 +258,29 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         setLocationDenied(true);
         setLocating(false);
       },
-      { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
+      { enableHighAccuracy: highAccuracy, maximumAge: 30000, timeout: highAccuracy ? 10000 : 15000 }
     ).then((id) => {
       if (watchCancelledRef.current) {
         if (navigator.geolocation) navigator.geolocation.clearWatch(id);
         return;
       }
       watchIdRef.current = id;
-    }).catch(() => { setLocating(false); setLocationDenied(true); });
+    }).catch(() => {
+      // If we already have a fix from somewhere else, don't flip the UI to
+      // denied just because the watcher couldn't be installed.
+      if (userPosRef.current) { setLocating(false); return; }
+      setLocating(false);
+      setLocationDenied(true);
+    });
   };
 
   const handleRetryLocation = () => {
     if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
     watchIdRef.current = null;
     hasCenteredRef.current = false;
-    startWatchPosition();
+    lowAccuracyRetriedRef.current = false;
+    userPosRef.current = null;
+    startWatchPosition(true);
   };
 
   const handleZipFallback = async () => {
