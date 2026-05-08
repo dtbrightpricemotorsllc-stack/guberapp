@@ -19,7 +19,20 @@ export async function notifyNearbyAvailableWorkers(
 ) {
   try {
     if (!job.lat || !job.lng) return;
-    const rows = await db.execute(sql`SELECT id, full_name, lat, lng FROM users WHERE is_available = true AND lat IS NOT NULL AND lng IS NOT NULL AND id != ${job.postedById}`);
+    // Notify ANY user within 20 miles of the job — not just clocked-in
+    // workers. Hirers who aren't actively working still benefit from
+    // knowing what's going on around them, and a worker who isn't
+    // clocked in might want to clock in once they see a nearby job.
+    // Excluded: the poster, deleted accounts, banned/suspended users.
+    const rows = await db.execute(sql`
+      SELECT id, full_name, lat, lng FROM users
+      WHERE lat IS NOT NULL
+        AND lng IS NOT NULL
+        AND id != ${job.postedById}
+        AND deleted_at IS NULL
+        AND COALESCE(banned, false) = false
+        AND COALESCE(suspended, false) = false
+    `);
     for (const u of rows.rows as { id: number; full_name: string; lat: number; lng: number }[]) {
       const dist = haversineMeters(job.lat, job.lng, u.lat, u.lng);
       if (dist <= TWENTY_MILES_METERS) {
@@ -30,15 +43,17 @@ export async function notifyNearbyAvailableWorkers(
           userId: u.id,
           title,
           body,
-          type: "job",
+          type: "nearby",
           jobId: job.id,
         });
-        // Background push — fire and forget
+        // Background push — fire and forget. Users without a push
+        // subscription will simply no-op here; the in-app notification
+        // above still lands in their notifications list.
         sendPushToUser(u.id, {
           title,
           body,
           url: `/jobs/${job.id}`,
-          tag: `pay-increase-${job.id}`,
+          tag: `nearby-job-${job.id}`,
           sound: "guber_nearby.wav",
         }).catch(() => {});
       }
