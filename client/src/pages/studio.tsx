@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { isIOS } from "@/lib/platform";
 import {
   Sparkles, Loader2, Upload, Image as ImageIcon, Music, Video, Wand2, X, Download, Coins, ArrowLeft, ShoppingCart,
 } from "lucide-react";
@@ -366,12 +367,19 @@ export default function StudioPageV2() {
                 <><Sparkles className="w-5 h-5 mr-2" /> Generate</>
               )}
             </Button>
-            {insufficient && (
+            {insufficient && !isIOS && (
               <Link href="/studio/credits">
                 <Button variant="outline" className="w-full mt-2 border-amber-400 text-amber-300 hover:bg-amber-400/10 rounded-2xl" data-testid="button-buy-credits">
                   <ShoppingCart className="w-4 h-4 mr-2" /> Out of credits — buy a pack
                 </Button>
               </Link>
+            )}
+            {insufficient && isIOS && (
+              // iOS App Store compliance: digital credit purchases are not
+              // available in the iOS build until Apple IAP is wired up.
+              <p className="w-full mt-2 text-center text-[11px] text-white/60" data-testid="text-ios-credits-unavailable">
+                Out of credits. Top-ups aren't available in the iOS app yet — visit guberapp.app to buy more.
+              </p>
             )}
           </section>
         )}

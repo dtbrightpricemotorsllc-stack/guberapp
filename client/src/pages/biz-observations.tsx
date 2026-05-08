@@ -3,6 +3,7 @@ import { gpsGetCurrentPosition } from "@/lib/gps";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
+import { isIOS as iosBuild } from "@/lib/platform";
 import { BizLayout } from "@/components/biz-layout";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -224,7 +225,7 @@ export default function BizObservations() {
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold" style={{ color: GOLD }}>
-                        {isDemoUser ? "UNLOCK" : "FROM $5"}
+                        {iosBuild ? "VIEW" : isDemoUser ? "UNLOCK" : "FROM $5"}
                       </span>
                     )}
                   </div>
@@ -310,7 +311,17 @@ export default function BizObservations() {
               )}
             </div>
 
-            {!selectedObs._purchased && selectedObs.status === "open" ? (
+            {!selectedObs._purchased && selectedObs.status === "open" && iosBuild ? (
+              // iOS App Store compliance: digital observation purchases are
+              // not available in the iOS build until Apple IAP is wired up.
+              <div className="rounded-xl p-4 text-center" style={{ background: INPUT_BG, border: `1px solid ${BORDER}` }} data-testid="text-ios-observations-unavailable">
+                <Lock className="w-5 h-5 mx-auto mb-2" style={{ color: TEXT_SECONDARY }} />
+                <p className="text-xs font-bold mb-1" style={{ color: TEXT_PRIMARY }}>Unlock unavailable in the iOS app</p>
+                <p className="text-[11px]" style={{ color: TEXT_SECONDARY }}>
+                  Visit guberapp.app to unlock this observation.
+                </p>
+              </div>
+            ) : !selectedObs._purchased && selectedObs.status === "open" ? (
               <div className="space-y-4">
                 <div>
                   <p style={{ color: TEXT_SECONDARY, fontSize: "10px", letterSpacing: "0.14em", fontWeight: 700 }} className="uppercase mb-2">

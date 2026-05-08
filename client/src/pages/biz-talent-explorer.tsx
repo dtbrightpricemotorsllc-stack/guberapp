@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
+import { isIOS as iosBuild } from "@/lib/platform";
 import { BizLayout } from "@/components/biz-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -530,7 +531,7 @@ export default function BizTalentExplorer() {
           </div>
         )}
 
-        {data && !data.planActive && data.accountStatus !== "pending_business" && (
+        {data && !data.planActive && data.accountStatus !== "pending_business" && !iosBuild && (
           <div className="mt-8 rounded-2xl overflow-hidden" style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}` }}>
             <div className="h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${GOLD_DK}, transparent)` }} />
             <div className="p-8 text-center">
@@ -542,6 +543,17 @@ export default function BizTalentExplorer() {
                 {isDemoUser ? "Subscribe to the Scout Plan for full talent search, monthly profile unlocks, and direct outreach to proven workers." : "Subscribe to the Scout Plan ($99/mo) for full talent search, 20 monthly profile unlocks, and direct outreach to proven workers."}
               </p>
             </div>
+          </div>
+        )}
+        {data && !data.planActive && data.accountStatus !== "pending_business" && iosBuild && (
+          // iOS App Store compliance: subscription purchases are not available
+          // in the iOS build until Apple IAP is wired up.
+          <div className="mt-8 rounded-2xl p-6 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+            <Lock className="w-5 h-5 mx-auto mb-2" style={{ color: TEXT_SECONDARY }} />
+            <p className="text-sm font-bold text-foreground mb-1">Scout Plan unavailable in the iOS app</p>
+            <p className="text-xs leading-relaxed max-w-md mx-auto" style={{ color: TEXT_SECONDARY }}>
+              Manage your Scout Plan subscription at guberapp.app. Once active, all scouting features unlock here.
+            </p>
           </div>
         )}
       </div>
