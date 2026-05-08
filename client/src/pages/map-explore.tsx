@@ -646,8 +646,8 @@ export default function MapExplore() {
         </div>
       )}
 
-      {/* LOCATION DENIED BANNER */}
-      {locationDenied && mapReady && (
+      {/* LOCATION DENIED BANNER — hidden for now (was triggering even when GPS recovered) */}
+      {false && locationDenied && mapReady && (
         <div
           className="absolute z-25 bottom-20 left-3 right-3 flex items-center gap-2 px-3 py-2 rounded-xl pointer-events-auto"
           style={{ background: "rgba(14,15,22,0.92)", border: "1px solid rgba(245,158,11,0.35)", backdropFilter: "blur(10px)", zIndex: 25 }}
