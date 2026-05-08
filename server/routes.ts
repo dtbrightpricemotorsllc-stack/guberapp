@@ -2844,6 +2844,21 @@ export async function registerRoutes(
         });
       if (geocodePromises.length) await Promise.allSettled(geocodePromises);
 
+      // Optional server-side proximity filter — defence in depth so the client
+      // doesn't receive jobs from across the country just to throw them out.
+      // Backwards compatible: when ?lat / ?lng / ?radiusMiles are absent, the
+      // full visible set is returned (existing callers keep working).
+      const qLat = req.query.lat ? parseFloat(req.query.lat as string) : NaN;
+      const qLng = req.query.lng ? parseFloat(req.query.lng as string) : NaN;
+      const qRadius = req.query.radiusMiles ? parseFloat(req.query.radiusMiles as string) : NaN;
+      if (Number.isFinite(qLat) && Number.isFinite(qLng) && Number.isFinite(qRadius) && qRadius > 0) {
+        const radiusMeters = qRadius * 1609.34;
+        mapJobs = mapJobs.filter(j =>
+          j.lat != null && j.lng != null &&
+          haversineMeters(qLat, qLng, j.lat, j.lng) <= radiusMeters
+        );
+      }
+
       const pins = mapJobs
         .filter(j => j.lat && j.lng)
         .map(j => ({

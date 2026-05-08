@@ -436,7 +436,9 @@ export default function Dashboard() {
   });
 
   const { data: mapPins } = useQuery<JobPin[]>({
-    queryKey: ["/api/map-jobs"],
+    queryKey: mapCenter
+      ? [`/api/map-jobs?lat=${mapCenter.lat}&lng=${mapCenter.lng}&radiusMiles=100`]
+      : ["/api/map-jobs"],
     enabled: !!user,
   });
 
@@ -469,7 +471,15 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return;
     gpsGetCurrentPosition({ timeout: 5000, maximumAge: 60000 })
-      .then((pos) => setMapCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }))
+      .then((pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setMapCenter({ lat, lng });
+        // Persist current GPS to the server so "nearby" push notifications
+        // (notifyNearbyAvailableWorkers) use a fresh location instead of the
+        // stale signup-zip geocode. Fire-and-forget — UI does not depend on it.
+        apiRequest("POST", "/api/users/location", { lat, lng }).catch(() => {});
+      })
       .catch(() => fallbackMapCenter(user));
   }, [user?.id]);
 
@@ -591,16 +601,33 @@ export default function Dashboard() {
       hostLogoUrl: d.hostLogo || undefined,
     }));
 
+  // "Nearby" badge counts must NEVER lie. Two checks:
+  //  1. Map viewport (used to render pins) — only meaningful once Google Map
+  //     has reported bounds; before that we cannot tell what's on screen so
+  //     we render nothing rather than every pin in the country.
+  //  2. True proximity (used for the "X near you" badges) — haversine from
+  //     the user's actual GPS / fallback center, capped at NEARBY_RADIUS_MI.
+  //     If we don't yet have a center, the count is 0 (better than lying).
+  const NEARBY_RADIUS_MI = 50;
   const inViewport = (lat: number, lng: number) => {
-    if (!mapBounds) return true;
+    if (!mapBounds) return false;
     return lat >= mapBounds.south && lat <= mapBounds.north && lng >= mapBounds.west && lng <= mapBounds.east;
+  };
+  const isTrulyNearby = (lat: number, lng: number) => {
+    if (!mapCenter) return false;
+    return haversineDistance(mapCenter.lat, mapCenter.lng, lat, lng) <= NEARBY_RADIUS_MI;
   };
 
   const visibleJobPins = filteredPins.filter(p => inViewport(p.lat, p.lng));
   const visibleCashDropPins = activeCashDropPins.filter(d => inViewport(d.gpsLat, d.gpsLng));
   const visibleWorkerPins = (workerPins || []).filter(w => inViewport(w.lat, w.lng));
-  const nearbyCount = visibleJobPins.length + visibleCashDropPins.length;
-  const workerCount = visibleWorkerPins.length;
+  // Counts shown to the user reflect REAL distance, not whatever happens to
+  // be inside the current map viewport (which may be zoomed out across the
+  // whole country before the user pans).
+  const nearbyJobCount = filteredPins.filter(p => isTrulyNearby(p.lat, p.lng)).length;
+  const nearbyDropCount = activeCashDropPins.filter(d => isTrulyNearby(d.gpsLat, d.gpsLng)).length;
+  const nearbyCount = nearbyJobCount + nearbyDropCount;
+  const workerCount = (workerPins || []).filter(w => isTrulyNearby(w.lat, w.lng)).length;
 
   const isSharingRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
