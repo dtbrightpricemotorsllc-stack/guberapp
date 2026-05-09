@@ -1376,3 +1376,75 @@ export async function seedLiabilityColumns() {
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS liability_disclaimer_accepted_at TIMESTAMPTZ`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS helper_safety_confirmed_at TIMESTAMPTZ`);
 }
+
+export async function seedDroneCategory() {
+  try {
+    const existing = await db.select().from(viCategories).where(eq(viCategories.name, "Drone / Aerial Footage"));
+    if (existing.length > 0) {
+      console.log("[GUBER] Drone / Aerial Footage category already seeded.");
+      return;
+    }
+
+    const ptDroneAerial = await storage.createProofTemplate({
+      name: "Drone Aerial Footage Package",
+      requiredPhotoCount: 9,
+      requiredVideo: true,
+      videoDuration: "1min",
+      geoRequired: true,
+      minDistanceRadius: 500,
+      allowGalleryUpload: false,
+      notEncounteredReasons: [
+        "Airspace restricted (NOTAM / TFR in effect)",
+        "Weather conditions unsafe for flight",
+        "Location not accessible / private property denial",
+        "GPS/signal issues preventing safe operation",
+        "FAA waiver required — not obtained",
+        "Address incorrect",
+        "Other",
+      ],
+    });
+
+    await storage.createProofChecklistItem({ templateId: ptDroneAerial.id, label: "GPS-stamped aerial video", instruction: "Record a minimum 1-minute flyover video with GPS metadata confirming capture location", mediaType: "video", quantityRequired: 1, geoRequired: true, sortOrder: 1 });
+    await storage.createProofChecklistItem({ templateId: ptDroneAerial.id, label: "Wide aerial stills — overview", instruction: "2 wide-angle overhead photos showing the full area / subject from altitude", mediaType: "photo", quantityRequired: 2, geoRequired: true, sortOrder: 2 });
+    await storage.createProofChecklistItem({ templateId: ptDroneAerial.id, label: "Angled aerial stills — four sides", instruction: "One 45-degree angled photo from each cardinal direction", mediaType: "photo", quantityRequired: 4, geoRequired: false, sortOrder: 3 });
+    await storage.createProofChecklistItem({ templateId: ptDroneAerial.id, label: "Detail / focus shots", instruction: "Close-up aerial photos of the specific area or feature requested", mediaType: "photo", quantityRequired: 2, geoRequired: false, sortOrder: 4 });
+    await storage.createProofChecklistItem({ templateId: ptDroneAerial.id, label: "FAA compliance note", instruction: "Photograph your Part 107 certificate or attach a text note confirming legal airspace authorization (Class G / waiver number / B4UFLY clearance)", mediaType: "photo", quantityRequired: 1, geoRequired: false, sortOrder: 5 });
+
+    const catDrone = await storage.createVICategory({
+      name: "Drone / Aerial Footage",
+      description: "FAA-compliant aerial drone footage for real estate, insurance, construction, and events",
+      icon: "plane",
+      sortOrder: 6,
+    });
+
+    const ucRealEstate = await storage.createUseCase({ viCategoryId: catDrone.id, name: "Real Estate Listing Shots", description: "Aerial photos and video for residential or commercial property listings", minTier: "verified", sortOrder: 1 });
+    const ucInsurance = await storage.createUseCase({ viCategoryId: catDrone.id, name: "Insurance Damage Assessment", description: "Aerial documentation of storm, fire, or structural damage for insurance claims", minTier: "verified", sortOrder: 2 });
+    const ucConstruction = await storage.createUseCase({ viCategoryId: catDrone.id, name: "Construction Progress", description: "Periodic aerial documentation of construction or renovation site progress", minTier: "verified", sortOrder: 3 });
+    const ucEvent = await storage.createUseCase({ viCategoryId: catDrone.id, name: "Event Coverage (public/permitted areas only)", description: "Aerial footage of outdoor events in public or permitted airspace — no restricted venues", minTier: "verified", sortOrder: 4 });
+
+    const droneServiceTypes = [
+      { name: "Aerial Photo + Video Package", description: "Full package: GPS-stamped flyover video, wide stills, and angled detail shots. $50–$100 typical", proofTemplateId: ptDroneAerial.id, minTier: "verified", sortOrder: 1 },
+      { name: "Photo Stills Only", description: "Wide overview and angled aerial stills without video. $30–$60 typical", proofTemplateId: ptDroneAerial.id, minTier: "verified", sortOrder: 2 },
+      { name: "Video Flyover Only", description: "GPS-stamped video flyover of the subject area. $40–$75 typical", proofTemplateId: ptDroneAerial.id, minTier: "verified", sortOrder: 3 },
+    ];
+
+    for (const uc of [ucRealEstate, ucInsurance, ucConstruction, ucEvent]) {
+      for (const svc of droneServiceTypes) {
+        await storage.createCatalogServiceType({
+          useCaseId: uc.id,
+          name: svc.name,
+          description: svc.description,
+          proofTemplateId: svc.proofTemplateId,
+          minTier: svc.minTier,
+          titleTemplate: `Drone ${uc.name} — ${svc.name}`,
+          descriptionTemplate: `FAA-compliant aerial drone ${svc.name.toLowerCase()} for ${uc.name.toLowerCase()}. Operator confirms legal airspace and Part 107 or recreational certification.`,
+          sortOrder: svc.sortOrder,
+        });
+      }
+    }
+
+    console.log("[GUBER] Drone / Aerial Footage category seeded.");
+  } catch (e) {
+    console.error("[GUBER] seedDroneCategory error:", e);
+  }
+}

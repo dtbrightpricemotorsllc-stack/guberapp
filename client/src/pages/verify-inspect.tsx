@@ -164,6 +164,7 @@ type SmartFormConfig = {
   showSearchRadius?: boolean;
   showContactPermission?: boolean;
   showBountyToggle?: boolean;
+  showFaaCompliance?: boolean;
 };
 
 const EXTERIOR_USE_CASE_KEYWORDS = ["exterior", "drive-by", "drive by", "vacancy", "occupancy", "hoa", "neighborhood", "curbside", "quick"];
@@ -373,6 +374,18 @@ function getSmartFormConfig(categoryName: string | undefined): SmartFormConfig {
         showContactPermission: true,
         showBountyToggle: true,
       };
+    case "Drone / Aerial Footage":
+      return {
+        showAccess: true,
+        showPropertyType: false,
+        showVehicleType: false,
+        showOnlinePlatform: false,
+        showListingUrl: false,
+        showVinField: false,
+        showMakeModelFields: false,
+        accessLabel: "Shoot Location Access",
+        showFaaCompliance: true,
+      };
     default:
       return {
         showAccess: true,
@@ -389,7 +402,7 @@ function getSmartFormConfig(categoryName: string | undefined): SmartFormConfig {
 
 function locationModeForCategory(catName: string | undefined): "full" | "zip" | "none" {
   if (!catName) return "zip";
-  if (["Property & Site Check", "Wheels, Wings & Water", "Quick Check"].includes(catName)) return "full";
+  if (["Property & Site Check", "Wheels, Wings & Water", "Quick Check", "Drone / Aerial Footage"].includes(catName)) return "full";
   if (catName === "Online Items") return "none";
   return "zip";
 }
@@ -487,6 +500,7 @@ export default function VerifyInspect() {
   const [vizip, setViZip] = useState<string>("");
   const [viurgent, setViUrgent] = useState(false);
   const [isBounty, setIsBounty] = useState(false);
+  const [faaCompliance, setFaaCompliance] = useState(false);
 
   // Location — full address for property/vehicle/quick, zip-only for PAV, none for online
   const [viStreet, setViStreet] = useState<string>("");
@@ -662,6 +676,7 @@ export default function VerifyInspect() {
       smartFormValues["partDescription"] &&
       (!(selectedUseCase?.name.includes("Specific") || selectedUseCase?.name.includes("Search Known")) || smartFormValues["locationName"])
     )) &&
+    (selectedCategory?.name !== "Drone / Aerial Footage" || faaCompliance) &&
     budgetNum > 0 &&
     locationOk;
 
@@ -696,6 +711,7 @@ export default function VerifyInspect() {
     setViStreet("");
     setViCity("");
     setViState("");
+    setFaaCompliance(false);
   }
 
   function handleUseCaseChange(val: string) {
@@ -731,6 +747,7 @@ export default function VerifyInspect() {
       if (appointmentTime) allJobDetails["Appointment Time"] = appointmentTime;
       if (inspectionPhase) allJobDetails["Inspection Phase"] = inspectionPhase;
       if (referencePhotoUrl) allJobDetails["Reference Photo URL"] = referencePhotoUrl;
+      if (selectedCategory?.name === "Drone / Aerial Footage" && faaCompliance) allJobDetails["FAA Compliance"] = "Operator confirms legal airspace authorization and Part 107 or recreational certification";
 
       const locationStr =
         locationMode === "none"
@@ -785,8 +802,8 @@ export default function VerifyInspect() {
     { name: "Wheels, Wings & Water", img: wheelsWingsImg, wide: false },
     { name: "Quick Check", img: quickCheckImg, wide: false },
     { name: "Part Availability Verification", img: pavSalvageImg, wide: true },
+    { name: "Drone / Aerial Footage", img: verifyInspectImg, wide: true },
   ];
-  const DRONE_COMING_SOON = true;
 
   function handleLandingSelect(catName: string) {
     const cat = viCategories?.find((c) => c.name === catName);
@@ -880,13 +897,14 @@ export default function VerifyInspect() {
                 {GRID_CATEGORIES.map((lc) => {
                   const cat = viCategories?.find((c) => c.name === lc.name);
                   const isPAV = lc.name === "Part Availability Verification";
+                  const isDrone = lc.name === "Drone / Aerial Footage";
                   return (
                     <button
                       key={lc.name}
                       onClick={() => handleLandingSelect(lc.name)}
                       disabled={catsLoading && !cat}
                       className={`relative rounded-2xl overflow-hidden flex flex-col items-end justify-end transition-all active:scale-95 hover:scale-[1.02] ${lc.wide ? "col-span-2 h-36" : "aspect-square"}`}
-                      style={{ background: "#0d0d1a", border: "1.5px solid hsl(275 90% 65% / 0.75)", boxShadow: "0 0 12px hsl(275 90% 65% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" }}
+                      style={{ background: "#0d0d1a", border: isDrone ? "1.5px solid hsl(200 80% 55% / 0.75)" : "1.5px solid hsl(275 90% 65% / 0.75)", boxShadow: isDrone ? "0 0 12px hsl(200 80% 55% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" : "0 0 12px hsl(275 90% 65% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" }}
                       data-testid={`button-vi-category-${lc.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
                     >
                       <img
@@ -894,7 +912,7 @@ export default function VerifyInspect() {
                         alt={lc.name}
                         className="absolute inset-0 w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity"
                       />
-                      <div className={`absolute inset-0 bg-gradient-to-t ${isPAV ? "from-black/80 via-black/30 to-transparent" : "from-black/40 to-transparent"}`} />
+                      <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/40 to-transparent"}`} />
                       {isPAV && (
                         <div className="absolute bottom-0 left-0 p-3 w-full">
                           <div className="flex items-center gap-1.5 mb-0.5">
@@ -905,35 +923,19 @@ export default function VerifyInspect() {
                           <p className="text-white/80 text-[10px] mt-0.5">Salvage yards · Shops · Private sellers · Auction lots</p>
                         </div>
                       )}
+                      {isDrone && (
+                        <div className="absolute bottom-0 left-0 p-3 w-full">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <Camera className="w-3 h-3" style={{ color: "hsl(200 80% 65%)" }} />
+                            <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "hsl(200 80% 65%)" }}>FAA Part 107</span>
+                          </div>
+                          <p className="text-white font-display font-black text-sm tracking-tight">DRONE / AERIAL FOOTAGE</p>
+                          <p className="text-white/80 text-[10px] mt-0.5">Real estate · Insurance · Construction · Events</p>
+                        </div>
+                      )}
                     </button>
                   );
                 })}
-                {/* Drone Footage — coming soon */}
-                {DRONE_COMING_SOON && (
-                  <button
-                    disabled
-                    className="relative col-span-2 h-24 rounded-2xl overflow-hidden flex items-center justify-between px-5 cursor-not-allowed"
-                    style={{ background: "#0d0d1a", border: "1.5px solid hsl(200 80% 50% / 0.35)", boxShadow: "0 0 12px hsl(200 80% 50% / 0.08)" }}
-                    data-testid="button-vi-category-drone-coming-soon"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "hsl(200 80% 50% / 0.12)", border: "1px solid hsl(200 80% 50% / 0.3)" }}>
-                        <Camera className="w-5 h-5" style={{ color: "hsl(200 80% 60%)" }} />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-display font-black text-sm text-white/70 tracking-tight">DRONE / AERIAL FOOTAGE</p>
-                        <p className="text-[10px] text-white/40 mt-0.5">Real estate · Insurance · Construction · Events</p>
-                      </div>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="text-[9px] shrink-0"
-                      style={{ borderColor: "hsl(200 80% 50% / 0.4)", color: "hsl(200 80% 60%)" }}
-                    >
-                      COMING SOON
-                    </Badge>
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -984,6 +986,7 @@ export default function VerifyInspect() {
               "Wheels, Wings & Water": formWheelsImg,
               "Quick Check": formQuickImg,
               "Part Availability Verification": formPavImg,
+              "Drone / Aerial Footage": verifyInspectImg,
             };
             const catImg = selectedCategory?.name ? FORM_IMGS[selectedCategory.name] : undefined;
             return catImg ? (
@@ -1492,6 +1495,44 @@ export default function VerifyInspect() {
               )}
 
               {/* Property-specific: who is requesting, entry auth, appointment */}
+              {/* Drone / Aerial Footage — FAA compliance confirmation */}
+              {smartFormConfig.showFaaCompliance && selectedUseCaseId && (
+                <div className="mt-3 border-t border-white/5 pt-3">
+                  <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">FAA Compliance</p>
+                  <div
+                    className="rounded-xl p-3 mb-3"
+                    style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.25)" }}
+                  >
+                    <p className="text-[10px] text-amber-400/90 leading-relaxed font-display">
+                      Drone operators must hold a valid FAA Part 107 certificate (commercial) or be a registered recreational flyer. Flight must comply with all local airspace restrictions, NOTAMs, and TFRs. GUBER helpers are solely responsible for legal compliance.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFaaCompliance(!faaCompliance)}
+                    className={`w-full flex items-start gap-3 rounded-xl p-4 text-left transition-all border-2 ${faaCompliance ? "border-primary/60 bg-primary/10 shadow-[0_0_12px_hsl(152_100%_44%/0.15)]" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`}
+                    data-testid="button-faa-compliance-toggle"
+                  >
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${faaCompliance ? "border-primary bg-primary" : "border-white/30 bg-transparent"}`}>
+                      {faaCompliance && <CheckCircle className="w-3.5 h-3.5 text-primary-foreground" />}
+                    </div>
+                    <div>
+                      <p className={`text-sm font-display font-bold tracking-tight ${faaCompliance ? "text-primary" : "text-foreground"}`}>
+                        I confirm legal airspace authorization &amp; certification
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                        The drone operator holds valid FAA Part 107 or recreational registration, and will operate in unrestricted airspace or with appropriate waivers.
+                      </p>
+                    </div>
+                  </button>
+                  {!faaCompliance && (
+                    <p className="text-[10px] text-amber-400/80 mt-2 text-center" data-testid="text-faa-required">
+                      FAA compliance confirmation required to continue
+                    </p>
+                  )}
+                </div>
+              )}
+
               {selectedCategory?.name === "Property & Site Check" && selectedUseCaseId && (
                 <div className="mt-3 space-y-3 border-t border-white/5 pt-3">
                   <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest">Property Details</p>
