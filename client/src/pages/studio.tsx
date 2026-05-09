@@ -43,7 +43,10 @@ import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
   Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
+  Repeat,
 } from "lucide-react";
+import { MirrorMotionDialog } from "@/components/studio/mirror-motion-form";
+import { CommercialWizardDialog } from "@/components/studio/commercial-wizard";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type StudioMe = {
@@ -110,8 +113,23 @@ type Template = {
   gradient: string;
   icon: React.ComponentType<{ className?: string }>;
   kind: "video" | "audio";
+  wizard?: "mirror_motion" | "commercial_builder";  // task-521
 };
 const TEMPLATES: Template[] = [
+  {
+    slug: "build-commercial", label: "Build a Commercial", tag: "Ad Builder", kind: "video",
+    prompt: "Step-by-step ad: vertical → photo → business info → motion + music + voiceover.",
+    gradient: "from-emerald-400 via-cyan-500 to-violet-600",
+    icon: Megaphone,
+    wizard: "commercial_builder",
+  },
+  {
+    slug: "mirror-motion", label: "Mirror Motion", tag: "Clone Clip", kind: "video",
+    prompt: "Photo + reference clip URL → motion-cloned video. 16 cr per second.",
+    gradient: "from-violet-500 via-fuchsia-500 to-rose-500",
+    icon: Repeat,
+    wizard: "mirror_motion",
+  },
   {
     slug: "create-ad", label: "Create Ad", tag: "Brand", kind: "video",
     prompt: "Punchy 6-second product ad, bold typography reveal, energetic close-up, modern brand aesthetic, vibrant cinematic lighting.",
@@ -201,6 +219,7 @@ export default function StudioPageV2() {
   const [prompt, setPrompt] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [openWizard, setOpenWizard] = useState<null | "mirror_motion" | "commercial_builder">(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const lowCreditNoticeRef = useRef(false);
@@ -344,6 +363,11 @@ export default function StudioPageV2() {
   });
 
   function pickTemplate(t: Template) {
+    if (t.wizard) {
+      setActiveTemplate(t.slug);
+      setOpenWizard(t.wizard);
+      return;
+    }
     setActiveTemplate(t.slug);
     setOutputKind(t.kind);
     setPrompt(t.prompt);
@@ -352,6 +376,11 @@ export default function StudioPageV2() {
       promptRef.current?.focus();
     }, 60);
   }
+
+  // Shared upload handler the wizards reuse so they don't duplicate the
+  // moderation / dataUrl / 25 MB checks.
+  function uploadFile(f: File) { handleFile(f); }
+  const commercialCost = tools.find((t) => t.key === "commercial_builder")?.creditsCost ?? 200;
 
   function clearReference() {
     setSelectedSourceId(null);
@@ -589,7 +618,7 @@ export default function StudioPageV2() {
         {/* Session-temporary disclaimer */}
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
           <strong className="font-bold">Heads up:</strong> Everything you make here lives only for this session.
-          Closing this page, refreshing, or 30 minutes of idle wipes your uploads and clips.
+          Closing this page, refreshing, or 15 minutes of idle wipes your uploads and clips.
         </div>
 
         {/* Provider down warning */}
@@ -862,6 +891,24 @@ export default function StudioPageV2() {
           </span>
         </div>
       </div>
+
+      <MirrorMotionDialog
+        open={openWizard === "mirror_motion"}
+        onOpenChange={(v) => { if (!v) setOpenWizard(null); }}
+        uploadedImages={uploadedImages}
+        onUpload={uploadFile}
+        uploadPending={uploadMutation.isPending}
+        credits={credits}
+      />
+      <CommercialWizardDialog
+        open={openWizard === "commercial_builder"}
+        onOpenChange={(v) => { if (!v) setOpenWizard(null); }}
+        uploadedImages={uploadedImages}
+        onUpload={uploadFile}
+        uploadPending={uploadMutation.isPending}
+        credits={credits}
+        cost={commercialCost}
+      />
 
       {/* Exit confirm */}
       <Dialog open={confirmExit} onOpenChange={setConfirmExit}>

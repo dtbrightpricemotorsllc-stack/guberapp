@@ -1326,8 +1326,8 @@ export async function runAllScheduledSweeps(): Promise<void> {
 }
 
 // GUBER Studio v2 cleanup. Sessions are abandoned when:
-//   • No activity for 30 minutes (lastActivityAt < now - 30m), OR
-//   • Total session age > 1 hour (startedAt < now - 1h).
+//   • No activity for 15 minutes (lastActivityAt < now - 15m), OR     [task-521]
+//   • Total session age > 30 minutes (startedAt < now - 30m).         [task-521]
 // We delete the session_files rows AND destroy the Cloudinary assets so
 // the user's prompts/clips never persist beyond the live session.
 // One-time-per-sweep cleanup for any orphaned files attached to sessions
@@ -1380,8 +1380,10 @@ export async function purgeOrphanedEndedStudioSessionFiles(): Promise<number> {
 
 export async function purgeAbandonedStudioSessions(): Promise<number> {
   const now = Date.now();
-  const inactiveCutoff = new Date(now - 30 * 60 * 1000);
-  const hardCutoff = new Date(now - 60 * 60 * 1000);
+  // task-521: tightened from 30/60 min → 15/30 min to limit Cloudinary cost
+  // for the heavier composite Commercial Builder + Mirror Motion jobs.
+  const inactiveCutoff = new Date(now - 15 * 60 * 1000);
+  const hardCutoff = new Date(now - 30 * 60 * 1000);
   const sessions = await storage.listAbandonedStudioSessions(inactiveCutoff, hardCutoff);
   if (!sessions.length) return 0;
 

@@ -393,7 +393,24 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'fal-ai/wan-motion', 2, 10, true),
   ('minimax_music',        'AI Music Track',
    'Prompt → ~30s instrumental track (MiniMax Music v2).',
-   'fal-ai/minimax-music/v2', 1, 30, true)
+   'fal-ai/minimax-music/v2', 1, 30, true),
+  ('mirror_motion',        'Mirror Motion',
+   'Photo + reference clip → motion-cloned video. Server prices at 16 credits per second of duration.',
+   'fal-ai/kling-video/v3/pro/motion-control', 16, 5, true),
+  ('commercial_builder',   'Build a Commercial',
+   'End-to-end ad: product photo + business info → motion + music + optional voiceover across 25+ verticals.',
+   'composite:commercial', 200, 10, true)
+ON CONFLICT (tool_key) DO NOTHING;
+
+-- task-521: ensure pricing rows exist even if a prior post-merge already
+-- created the table without these entries.
+INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, duration_seconds, active) VALUES
+  ('mirror_motion',        'Mirror Motion',
+   'Photo + reference clip → motion-cloned video. Server prices at 16 credits per second of duration.',
+   'fal-ai/kling-video/v3/pro/motion-control', 16, 5, true),
+  ('commercial_builder',   'Build a Commercial',
+   'End-to-end ad: product photo + business info → motion + music + optional voiceover across 25+ verticals.',
+   'composite:commercial', 200, 10, true)
 ON CONFLICT (tool_key) DO NOTHING;
 
 -- task-506: drone_certified flag on worker_business_projections

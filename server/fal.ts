@@ -122,6 +122,70 @@ export async function generateKlingMotionControl(opts: KlingMotionControlOpts): 
   return { videoUrl, jobId };
 }
 
+export type MirrorMotionOpts = {
+  prompt: string;
+  imageUrl: string;
+  motionVideoUrl: string;
+  durationSeconds: 5 | 10;
+};
+
+export async function generateMirrorMotion(opts: MirrorMotionOpts): Promise<{ videoUrl: string; jobId: string }> {
+  const { output, jobId } = await submitToFal<{ video?: { url?: string }; url?: string }>(
+    "fal-ai/kling-video/v3/pro/motion-control",
+    {
+      prompt: opts.prompt,
+      image_url: opts.imageUrl,
+      motion_video_url: opts.motionVideoUrl,
+      duration: String(opts.durationSeconds),
+    },
+  );
+  const videoUrl = output.video?.url || output.url;
+  if (!videoUrl) throw new FalGenerationError(`Mirror Motion returned no video url (job ${jobId})`);
+  return { videoUrl, jobId };
+}
+
+export type OpenAITtsOpts = {
+  text: string;
+  voice: string;
+};
+
+export class OpenAITtsUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OpenAITtsUnavailableError";
+  }
+}
+
+export function isOpenAITtsConfigured(): boolean {
+  return !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+}
+
+/**
+ * OpenAI TTS bridge for the Commercial Builder voiceover step (task-521).
+ * Returns an mp3 buffer + a base64 dataUrl ready for Cloudinary upload.
+ */
+export async function generateOpenAITts(opts: OpenAITtsOpts): Promise<{ dataUrl: string; mimeType: string }> {
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || "https://api.openai.com/v1";
+  if (!apiKey) throw new OpenAITtsUnavailableError("OpenAI TTS not configured");
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/audio/speech`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: "tts-1", voice: opts.voice, input: opts.text, format: "mp3" }),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new FalGenerationError(`OpenAI TTS HTTP ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  const mimeType = "audio/mpeg";
+  const dataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+  return { dataUrl, mimeType };
+}
+
 export type WanMotionOpts = {
   prompt: string;
   imageUrl?: string;

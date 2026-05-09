@@ -9622,6 +9622,8 @@ export async function registerRoutes(
     toolKey: string;
     prompt?: string | null;
     requireImage?: boolean;
+    creditsCostOverride?: number;
+    extraMeta?: Record<string, any>;
     runProvider: (input: { prompt: string; imageUrl?: string }) => Promise<{ url: string; jobId: string; resourceType: "video" | "image"; folder: string }>;
   }) {
     const { req, res, toolKey, runProvider, requireImage } = opts;
@@ -9672,7 +9674,7 @@ export async function registerRoutes(
 
     const pricing = await storage.getStudioModelPricing(toolKey);
     if (!pricing) return res.status(400).json({ message: "Unknown tool." });
-    const creditsCost = pricing.creditsCost;
+    const creditsCost = opts.creditsCostOverride ?? pricing.creditsCost;
 
     const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
     if (newBalance === null) {
@@ -9706,7 +9708,7 @@ export async function registerRoutes(
         providerUrl: finalUrl,
         cloudinaryPublicId,
         resourceType: provider.resourceType,
-        meta: { toolKey, prompt: promptRaw, providerJobId: provider.jobId, creditsCost },
+        meta: { toolKey, prompt: promptRaw, providerJobId: provider.jobId, creditsCost, ...(opts.extraMeta || {}) },
       });
 
       await storage.touchStudioSession(session.id);
@@ -9784,6 +9786,316 @@ export async function registerRoutes(
         return { url: r.audioUrl, jobId: r.jobId, resourceType: "video", folder: "guber-studio-v2-music" };
       },
     });
+  });
+
+  // ── Mirror Motion (task-521) ─────────────────────────────────────────────
+  // Photo + reference-clip motion-clone via Kling motion-control. Server-priced
+  // at 16 cr × seconds (5 or 10 only). Reference clip MUST be a direct media
+  // URL (no yt-dlp dep yet — UI flags this explicitly).
+  app.post("/api/studio/generate/mirror-motion", requireAuth, async (req: Request, res: Response) => {
+    const motionVideoUrl = String(req.body?.motionVideoUrl || "").trim();
+    const requestedDur = parseInt(String(req.body?.durationSeconds || "5"), 10);
+    const dur = (requestedDur === 10 ? 10 : 5) as 5 | 10;
+    const audioRightsConfirmed = req.body?.audioRightsConfirmed === true;
+
+    if (!/^https:\/\//i.test(motionVideoUrl)) {
+      return res.status(400).json({ message: "Provide a direct https:// URL to the reference clip (.mp4 / .mov)." });
+    }
+    if (!/\.(mp4|mov|webm|m4v)(\?|$)/i.test(motionVideoUrl)) {
+      return res.status(400).json({ message: "Reference clip must be a direct video file (.mp4, .mov, .webm). YouTube / TikTok links aren't supported yet." });
+    }
+    if (!audioRightsConfirmed) {
+      return res.status(400).json({ message: "You must confirm you have the rights to clone the reference clip's audio/motion before continuing." });
+    }
+
+    // Audit the rights confirmation immediately (option-C posture).
+    try {
+      await storage.createAuditLog({
+        userId: req.session.userId!,
+        action: "studio.mirror_motion.rights_confirmed",
+        details: `Mirror Motion run authorized for ${motionVideoUrl} (${dur}s)`,
+      });
+    } catch {}
+
+    const { generateMirrorMotion } = await import("./fal");
+    return runStudioGeneration({
+      req, res,
+      toolKey: "mirror_motion",
+      prompt: req.body?.prompt,
+      requireImage: true,
+      creditsCostOverride: 16 * dur,
+      extraMeta: { motionVideoUrl, durationSeconds: dur, audioRightsConfirmed: true },
+      runProvider: async ({ prompt, imageUrl }) => {
+        const r = await generateMirrorMotion({
+          prompt: prompt || "Mirror the motion of the reference clip onto the supplied photo with cinematic fidelity.",
+          imageUrl: imageUrl!,
+          motionVideoUrl,
+          durationSeconds: dur,
+        });
+        return { url: r.videoUrl, jobId: r.jobId, resourceType: "video", folder: "guber-studio-v2-mirror" };
+      },
+    });
+  });
+
+  // ── Commercial Builder (task-521) ────────────────────────────────────────
+  // Composite ad pipeline: motion-control video → music (with one retry) →
+  // optional OpenAI TTS voiceover. Atomic credit spend up front; ANY hard
+  // failure refunds and aborts. Each artifact is attached to the session as
+  // its own studio_session_files row so the user can download them separately.
+  app.post("/api/studio/generate/commercial", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    let creditsDebited = 0;  // tracked so the outer catch can refund post-debit
+    let postDebitSessionId: number | null = null;
+    let postDebitMotionPrompt = "";
+    let postDebitMotionPublicId: string | null = null;
+    let postDebitCloudinary: any = null;
+    let postDebitDurationSeconds: number | null = null;
+    try {
+      const verticalSlug = String(req.body?.vertical || "").trim();
+      const customVertical = String(req.body?.customVertical || "").trim();
+      const businessName = String(req.body?.businessName || "").trim();
+      const businessDescription = String(req.body?.businessDescription || "").trim();
+      const ctaText = String(req.body?.ctaText || "").trim();
+      const sourceFileId = req.body?.productPhotoFileId
+        ? parseInt(String(req.body.productPhotoFileId), 10)
+        : null;
+      const voiceId = req.body?.voiceId ? String(req.body.voiceId) : null;
+
+      if (!businessName || businessName.length > 80) return res.status(400).json({ message: "Business name is required (≤80 chars)." });
+      if (!businessDescription || businessDescription.length > 400) return res.status(400).json({ message: "Business description is required (≤400 chars)." });
+      if (!ctaText || ctaText.length > 80) return res.status(400).json({ message: "CTA text is required (≤80 chars)." });
+      if (!sourceFileId) return res.status(400).json({ message: "Upload a product photo first." });
+
+      const verticalsMod = await import("../shared/commercial-verticals");
+      const vertical = verticalsMod.getVertical(verticalSlug);
+      if (!vertical) return res.status(400).json({ message: "Unknown vertical." });
+      if (vertical.slug === "custom" && !customVertical) {
+        return res.status(400).json({ message: "Describe your business vertical in 1–3 words." });
+      }
+      const customVerticalLabel = vertical.slug === "custom" ? customVertical : vertical.label;
+
+      if (voiceId) {
+        const ok = verticalsMod.OPENAI_TTS_VOICES.some((v) => v.id === voiceId);
+        if (!ok) return res.status(400).json({ message: "Unknown voice id." });
+      }
+
+      const session = await ensureStudioSession(userId);
+      const files = await storage.listStudioSessionFiles(session.id);
+      const photo = files.find((f) => f.id === sourceFileId && f.userId === userId && f.fileType === "upload_image");
+      if (!photo) return res.status(404).json({ message: "Product photo not found in your current session." });
+
+      const { isFalConfigured, isModerationConfigured, moderatePrompt, ModerationUnavailableError, isOpenAITtsConfigured } = await import("./fal");
+      if (!isFalConfigured()) {
+        return res.status(503).json({ message: "GUBER Studio is temporarily unavailable: AI provider not connected. Your credits are safe." });
+      }
+      if (!isModerationConfigured()) {
+        return res.status(503).json({ message: "Studio is paused: content moderation is offline. Your credits are safe." });
+      }
+      const motionPrompt = verticalsMod.renderTemplate(vertical.motionPromptTemplate, {
+        businessName, businessDescription, ctaText, customVertical: customVerticalLabel,
+      });
+      const musicPrompt = verticalsMod.renderTemplate(vertical.musicPromptTemplate, {
+        businessName, businessDescription, ctaText, customVertical: customVerticalLabel,
+      });
+      const voicePrompt = verticalsMod.renderTemplate(vertical.voicePromptTemplate, {
+        businessName, businessDescription, ctaText, customVertical: customVerticalLabel,
+      });
+      try {
+        const mod = await moderatePrompt(`${businessName}\n${businessDescription}\n${ctaText}\n${customVerticalLabel}`);
+        if (mod.flagged) return res.status(400).json({ message: mod.reason || "Commercial copy blocked by moderation." });
+      } catch (err: any) {
+        if (err instanceof ModerationUnavailableError) {
+          return res.status(503).json({ message: "Content moderation is offline. Try again shortly." });
+        }
+        throw err;
+      }
+
+      const pricing = await storage.getStudioModelPricing("commercial_builder");
+      if (!pricing) return res.status(400).json({ message: "Commercial Builder pricing missing — contact support." });
+      const creditsCost = pricing.creditsCost;
+
+      const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
+      if (newBalance === null) {
+        return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
+      }
+      creditsDebited = creditsCost;
+      postDebitSessionId = session.id;
+      postDebitMotionPrompt = motionPrompt;
+      postDebitDurationSeconds = pricing.durationSeconds ?? null;
+
+      let cloudinary: any = null;
+      try {
+        if (process.env.CLOUDINARY_CLOUD_NAME) {
+          cloudinary = (await import("./cloudinary.js")).default;
+        }
+      } catch {}
+      postDebitCloudinary = cloudinary;
+
+      const reHost = async (sourceUrlOrDataUrl: string, resourceType: "video" | "image" | "raw", folder: string): Promise<{ url: string; publicId: string | null }> => {
+        if (!cloudinary) return { url: sourceUrlOrDataUrl, publicId: null };
+        try {
+          const up = await cloudinary.uploader.upload(sourceUrlOrDataUrl, {
+            resource_type: resourceType === "image" ? "image" : "video",
+            folder,
+          });
+          return { url: up.secure_url, publicId: up.public_id };
+        } catch (err: any) {
+          console.warn(`[GUBER][studio][commercial] cloudinary re-host failed: ${err.message}`);
+          return { url: sourceUrlOrDataUrl, publicId: null };
+        }
+      };
+
+      const refundAndAbort = async (httpStatus: number, message: string, providerJobId: string | null = null) => {
+        const refunded = await storage.incrementStudioCredits(userId, creditsCost);
+        await storage.logStudioGeneration({
+          userId, sessionId: session.id, toolKey: "commercial_builder",
+          prompt: motionPrompt.slice(0, 500), creditsCost,
+          durationSeconds: pricing.durationSeconds ?? null,
+          providerJobId, status: "refunded",
+          errorReason: message.slice(0, 500),
+        });
+        return res.status(httpStatus).json({ message: `Generation failed and your credits were returned: ${message}`, balance: refunded });
+      };
+
+      // Step 1: motion-control video (Kling) — REQUIRED.
+      const { generateKlingMotionControl, generateMiniMaxMusic, generateOpenAITts, OpenAITtsUnavailableError } = await import("./fal");
+      let motionUrl = "", motionJobId = "", motionPublicId: string | null = null;
+      try {
+        const r = await generateKlingMotionControl({
+          prompt: motionPrompt, imageUrl: photo.providerUrl, durationSeconds: 10,
+        });
+        motionJobId = r.jobId;
+        const reh = await reHost(r.videoUrl, "video", "guber-studio-v2-commercial");
+        motionUrl = reh.url; motionPublicId = reh.publicId;
+        postDebitMotionPublicId = motionPublicId;
+      } catch (err: any) {
+        return refundAndAbort(502, `Motion render failed: ${err.message}`, null);
+      }
+
+      // Step 2: music (MiniMax) — one retry on failure, refund if both fail.
+      let musicUrl: string | null = null, musicJobId: string | null = null, musicPublicId: string | null = null;
+      let musicError: string | null = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const r = await generateMiniMaxMusic({ prompt: musicPrompt });
+          musicJobId = r.jobId;
+          const reh = await reHost(r.audioUrl, "video", "guber-studio-v2-commercial-music");
+          musicUrl = reh.url; musicPublicId = reh.publicId;
+          break;
+        } catch (err: any) {
+          musicError = err.message;
+          console.warn(`[GUBER][studio][commercial] music attempt ${attempt} failed: ${err.message}`);
+        }
+      }
+      if (!musicUrl) {
+        // Best-effort cleanup of the motion clip we already re-hosted.
+        if (cloudinary && motionPublicId) {
+          try { await cloudinary.uploader.destroy(motionPublicId, { resource_type: "video" }); } catch {}
+        }
+        return refundAndAbort(502, `Music render failed twice: ${musicError || "unknown"}`, motionJobId);
+      }
+
+      // Step 3 (optional): voiceover via OpenAI TTS — failure here does NOT
+      // abort the commercial; we just skip the voiceover and surface a note.
+      let voiceUrl: string | null = null, voicePublicId: string | null = null;
+      let voiceSkippedReason: string | null = null;
+      if (voiceId) {
+        if (!isOpenAITtsConfigured()) {
+          voiceSkippedReason = "TTS provider not configured";
+        } else {
+          try {
+            const tts = await generateOpenAITts({ text: voicePrompt, voice: voiceId });
+            const reh = await reHost(tts.dataUrl, "video", "guber-studio-v2-commercial-voice");
+            voiceUrl = reh.url; voicePublicId = reh.publicId;
+          } catch (err: any) {
+            console.warn(`[GUBER][studio][commercial] voiceover failed: ${err.message}`);
+            voiceSkippedReason = err.message?.slice(0, 200) || "voiceover failed";
+            if (err instanceof OpenAITtsUnavailableError) voiceSkippedReason = "TTS provider offline";
+          }
+        }
+      }
+
+      const baseMeta = {
+        toolKey: "commercial_builder",
+        creditsCost,
+        vertical: vertical.slug,
+        verticalLabel: customVerticalLabel,
+        businessName,
+        ctaText,
+      };
+
+      const motionFile = await storage.addStudioSessionFile({
+        sessionId: session.id, userId,
+        fileType: "output_video",
+        providerUrl: motionUrl,
+        cloudinaryPublicId: motionPublicId,
+        resourceType: "video",
+        meta: { ...baseMeta, kind: "commercial_motion", prompt: motionPrompt, providerJobId: motionJobId },
+      });
+      const musicFile = await storage.addStudioSessionFile({
+        sessionId: session.id, userId,
+        fileType: "output_audio",
+        providerUrl: musicUrl,
+        cloudinaryPublicId: musicPublicId,
+        resourceType: "video",
+        meta: { ...baseMeta, kind: "commercial_music", prompt: musicPrompt, providerJobId: musicJobId },
+      });
+      const voiceFile = voiceUrl ? await storage.addStudioSessionFile({
+        sessionId: session.id, userId,
+        fileType: "output_audio",
+        providerUrl: voiceUrl,
+        cloudinaryPublicId: voicePublicId,
+        resourceType: "video",
+        meta: { ...baseMeta, kind: "commercial_voice", prompt: voicePrompt },
+      }) : null;
+
+      await storage.touchStudioSession(session.id);
+      await storage.logStudioGeneration({
+        userId, sessionId: session.id, toolKey: "commercial_builder",
+        prompt: motionPrompt.slice(0, 500), creditsCost,
+        durationSeconds: pricing.durationSeconds ?? null,
+        providerJobId: motionJobId, status: "succeeded",
+        errorReason: voiceSkippedReason ? `voiceover_skipped: ${voiceSkippedReason}` : null,
+      });
+
+      res.json({
+        files: [motionFile, musicFile, ...(voiceFile ? [voiceFile] : [])],
+        balance: newBalance,
+        voiceSkippedReason,
+      });
+    } catch (err: any) {
+      console.error("[GUBER][studio][commercial] unexpected:", err);
+      // Defensive refund: if we already debited credits before the unexpected
+      // error, return them and clean up any motion clip we re-hosted.
+      let refundedBalance: number | null = null;
+      if (creditsDebited > 0) {
+        try {
+          refundedBalance = await storage.incrementStudioCredits(userId, creditsDebited);
+        } catch (refundErr) {
+          console.error("[GUBER][studio][commercial] refund failed:", refundErr);
+        }
+        if (postDebitCloudinary && postDebitMotionPublicId) {
+          try { await postDebitCloudinary.uploader.destroy(postDebitMotionPublicId, { resource_type: "video" }); } catch {}
+        }
+        try {
+          await storage.logStudioGeneration({
+            userId,
+            sessionId: postDebitSessionId ?? 0,
+            toolKey: "commercial_builder",
+            prompt: postDebitMotionPrompt.slice(0, 500),
+            creditsCost: creditsDebited,
+            durationSeconds: postDebitDurationSeconds,
+            providerJobId: null,
+            status: "refunded",
+            errorReason: `unexpected: ${(err.message || "unknown").slice(0, 480)}`,
+          });
+        } catch {}
+      }
+      const note = creditsDebited > 0
+        ? "Generation failed and your credits were returned."
+        : "Unexpected error";
+      res.status(500).json({ message: `${note} ${err.message || ""}`.trim(), balance: refundedBalance });
+    }
   });
 
   app.post("/api/stripe/trust-box-checkout", requireAuth, async (req: Request, res: Response) => {
