@@ -10102,8 +10102,10 @@ export async function registerRoutes(
         return refundAndAbort(502, `Music render failed twice: ${musicError || "unknown"}`, motionJobId);
       }
 
-      // Step 3 (optional): voiceover via OpenAI TTS — failure here does NOT
-      // abort the commercial; we just skip the voiceover and surface a note.
+      // Step 3 (optional): voiceover via OpenAI TTS. If the user requested a
+      // voice and the provider hard-fails, refund the full bundle (task-537)
+      // — the user paid for a 3-piece deliverable. If TTS is simply not
+      // configured we still skip with a note (no provider call attempted).
       let voiceUrl: string | null = null, voicePublicId: string | null = null;
       let voiceSkippedReason: string | null = null;
       if (voiceId) {
@@ -10116,8 +10118,17 @@ export async function registerRoutes(
             voiceUrl = reh.url; voicePublicId = reh.publicId;
           } catch (err: any) {
             console.warn(`[GUBER][studio][commercial] voiceover failed: ${err.message}`);
-            voiceSkippedReason = err.message?.slice(0, 200) || "voiceover failed";
-            if (err instanceof OpenAITtsUnavailableError) voiceSkippedReason = "TTS provider offline";
+            // Best-effort cleanup of the motion + music we already re-hosted.
+            if (cloudinary && motionPublicId) {
+              try { await cloudinary.uploader.destroy(motionPublicId, { resource_type: "video" }); } catch {}
+            }
+            if (cloudinary && musicPublicId) {
+              try { await cloudinary.uploader.destroy(musicPublicId, { resource_type: "video" }); } catch {}
+            }
+            const reason = err instanceof OpenAITtsUnavailableError
+              ? "TTS provider offline"
+              : (err.message?.slice(0, 200) || "voiceover failed");
+            return refundAndAbort(502, `Voiceover failed: ${reason}`, motionJobId);
           }
         }
       }

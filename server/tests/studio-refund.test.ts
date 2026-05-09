@@ -130,18 +130,26 @@ const generateWanMotion = vi.hoisted(() => vi.fn());
 const generateMiniMaxMusic = vi.hoisted(() => vi.fn());
 const generateKlingMotionControl = vi.hoisted(() => vi.fn());
 const generateMirrorMotion = vi.hoisted(() => vi.fn());
+const generateOpenAITts = vi.hoisted(() => vi.fn());
+
+class FakeOpenAITtsUnavailableError extends Error {
+  constructor(msg = "tts offline") { super(msg); this.name = "OpenAITtsUnavailableError"; }
+}
 
 vi.mock("../fal", () => ({
   isFalConfigured: () => true,
   isModerationConfigured: () => true,
+  isOpenAITtsConfigured: () => true,
   moderatePrompt: vi.fn(async () => ({ flagged: false, reason: null })),
   moderateImage: vi.fn(async () => ({ flagged: false, reason: null })),
   ModerationUnavailableError: FakeModerationUnavailableError,
   FalNotConfiguredError: FakeFalNotConfiguredError,
+  OpenAITtsUnavailableError: FakeOpenAITtsUnavailableError,
   generateWanMotion,
   generateMiniMaxMusic,
   generateKlingMotionControl,
   generateMirrorMotion,
+  generateOpenAITts,
   generateFluxQuickPic: vi.fn(),
 }));
 
@@ -207,6 +215,15 @@ describe("Studio refund path (task-533)", () => {
       durationSeconds: null,
       active: true,
     });
+    // task-537: Commercial Builder is a 3-step pipeline (motion + music +
+    // optional voiceover). It debits the bundle price (200 cr) up front and
+    // must refund the FULL amount if any required step fails.
+    state.pricing.set("commercial_builder", {
+      toolKey: "commercial_builder",
+      creditsCost: 200,
+      durationSeconds: 10,
+      active: true,
+    });
     agent = await buildAgent();
   });
 
@@ -222,6 +239,7 @@ describe("Studio refund path (task-533)", () => {
     generateMiniMaxMusic.mockReset();
     generateKlingMotionControl.mockReset();
     generateMirrorMotion.mockReset();
+    generateOpenAITts.mockReset();
     mockStorage.incrementStudioCredits.mockClear();
     mockStorage.decrementStudioCredits.mockClear();
   });
@@ -365,5 +383,153 @@ describe("Studio refund path (task-533)", () => {
       (l) => l.toolKey === "minimax_music" && l.status === "succeeded",
     );
     expect(okLog).toBeTruthy();
+  });
+
+  // task-537: /api/studio/generate/commercial debits the 200-cr bundle up
+  // front, then runs (1) Kling motion-control, (2) MiniMax music (1 retry),
+  // (3) optional OpenAI TTS voiceover. Any of the 3 steps failing must
+  // refund the FULL 200 cr — a regression that refunds only one step's
+  // price would silently drain users by ~120-195 cr per failed commercial.
+  describe("Commercial Builder refund (task-537)", () => {
+    const COMMERCIAL_BUNDLE = 200;
+
+    async function seedProductPhoto() {
+      const sessionRow = await mockStorage.createStudioSession(USER_ID);
+      const photo = await mockStorage.addStudioSessionFile({
+        sessionId: sessionRow.id,
+        userId: USER_ID,
+        fileType: "upload_image",
+        providerUrl: "https://example.com/product.jpg",
+        cloudinaryPublicId: "uploads/product",
+        resourceType: "image",
+        meta: {},
+      });
+      mockStorage.incrementStudioCredits.mockClear();
+      mockStorage.decrementStudioCredits.mockClear();
+      return photo;
+    }
+
+    function bodyFor(photoId: number, opts: { withVoice?: boolean } = {}) {
+      return {
+        vertical: "auto-repair",
+        businessName: "Acme Auto",
+        businessDescription: "Family-owned shop fixing cars since 1992.",
+        ctaText: "Call us today!",
+        productPhotoFileId: photoId,
+        ...(opts.withVoice ? { voiceId: "alloy" } : {}),
+      };
+    }
+
+    it("refunds the full 200-cr bundle when the motion-control step fails", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockRejectedValueOnce(new Error("Kling 503"));
+
+      const res = await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id))
+        .expect(502);
+
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(res.body.message).toMatch(/credits were returned/i);
+
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+
+      expect(generateMiniMaxMusic).not.toHaveBeenCalled();
+      expect(generateOpenAITts).not.toHaveBeenCalled();
+
+      const refundLog = state.generationLogs.find(
+        (l) => l.toolKey === "commercial_builder" && l.status === "refunded",
+      );
+      expect(refundLog).toBeTruthy();
+      expect(refundLog.creditsCost).toBe(COMMERCIAL_BUNDLE);
+      expect(refundLog.errorReason).toMatch(/Motion render failed.*Kling 503/);
+
+      // No output files attached to the session.
+      expect(state.files.find((f) => f.fileType === "output_video")).toBeUndefined();
+      expect(state.files.find((f) => f.fileType === "output_audio")).toBeUndefined();
+    });
+
+    it("refunds the full 200-cr bundle when the music step fails twice", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_1",
+      });
+      // The route retries music exactly once (attempts 1 + 2).
+      generateMiniMaxMusic
+        .mockRejectedValueOnce(new Error("Music boom A"))
+        .mockRejectedValueOnce(new Error("Music boom B"));
+
+      const res = await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id))
+        .expect(502);
+
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(res.body.message).toMatch(/credits were returned/i);
+
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+
+      expect(generateMiniMaxMusic).toHaveBeenCalledTimes(2);
+      expect(generateOpenAITts).not.toHaveBeenCalled();
+
+      const refundLog = state.generationLogs.find(
+        (l) => l.toolKey === "commercial_builder" && l.status === "refunded",
+      );
+      expect(refundLog).toBeTruthy();
+      expect(refundLog.creditsCost).toBe(COMMERCIAL_BUNDLE);
+      expect(refundLog.errorReason).toMatch(/Music render failed twice.*Music boom B/);
+
+      // No output rows committed (motion was generated but rolled back).
+      expect(state.files.find((f) => f.fileType === "output_video")).toBeUndefined();
+      expect(state.files.find((f) => f.fileType === "output_audio")).toBeUndefined();
+    });
+
+    it("refunds the full 200-cr bundle when the voiceover step fails", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_3",
+      });
+      generateMiniMaxMusic.mockResolvedValueOnce({
+        audioUrl: "https://example.com/music.mp3",
+        jobId: "minimax_ok_3",
+      });
+      generateOpenAITts.mockRejectedValueOnce(new Error("TTS exploded"));
+
+      const res = await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id, { withVoice: true }))
+        .expect(502);
+
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(res.body.message).toMatch(/credits were returned/i);
+
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+
+      const refundLog = state.generationLogs.find(
+        (l) => l.toolKey === "commercial_builder" && l.status === "refunded",
+      );
+      expect(refundLog).toBeTruthy();
+      expect(refundLog.creditsCost).toBe(COMMERCIAL_BUNDLE);
+      expect(refundLog.errorReason).toMatch(/Voiceover failed.*TTS exploded/);
+
+      // Motion + music were generated but rolled back — no output files
+      // attached to the session.
+      expect(state.files.find((f) => f.fileType === "output_video")).toBeUndefined();
+      expect(state.files.find((f) => f.fileType === "output_audio")).toBeUndefined();
+    });
   });
 });
