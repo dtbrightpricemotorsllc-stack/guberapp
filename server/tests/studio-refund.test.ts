@@ -129,6 +129,7 @@ class FakeModerationUnavailableError extends Error {
 const generateWanMotion = vi.hoisted(() => vi.fn());
 const generateMiniMaxMusic = vi.hoisted(() => vi.fn());
 const generateKlingMotionControl = vi.hoisted(() => vi.fn());
+const generateMirrorMotion = vi.hoisted(() => vi.fn());
 
 vi.mock("../fal", () => ({
   isFalConfigured: () => true,
@@ -140,7 +141,7 @@ vi.mock("../fal", () => ({
   generateWanMotion,
   generateMiniMaxMusic,
   generateKlingMotionControl,
-  generateMirrorMotion: vi.fn(),
+  generateMirrorMotion,
   generateFluxQuickPic: vi.fn(),
 }));
 
@@ -197,6 +198,15 @@ describe("Studio refund path (task-533)", () => {
       durationSeconds: null,
       active: true,
     });
+    // task-536: Mirror Motion uses creditsCostOverride: 16 * dur, so the
+    // base pricing.creditsCost is irrelevant — we just need the row to exist
+    // so runStudioGeneration() doesn't 400 on "Unknown tool.".
+    state.pricing.set("mirror_motion", {
+      toolKey: "mirror_motion",
+      creditsCost: 0,
+      durationSeconds: null,
+      active: true,
+    });
     agent = await buildAgent();
   });
 
@@ -211,6 +221,7 @@ describe("Studio refund path (task-533)", () => {
     generateWanMotion.mockReset();
     generateMiniMaxMusic.mockReset();
     generateKlingMotionControl.mockReset();
+    generateMirrorMotion.mockReset();
     mockStorage.incrementStudioCredits.mockClear();
     mockStorage.decrementStudioCredits.mockClear();
   });
@@ -266,6 +277,70 @@ describe("Studio refund path (task-533)", () => {
     expect(refundLog).toBeTruthy();
     expect(refundLog.creditsCost).toBe(5);
     expect(refundLog.errorReason).toMatch(/Music model exploded/);
+  });
+
+  // task-536: Mirror Motion is the only Studio tool with a per-call variable
+  // price (creditsCostOverride: 16 * dur). A regression that hardcodes the
+  // refund amount (e.g. always 80 cr) would short-change 10s callers by 80 cr.
+  // These tests assert decrement AND increment are each called with the
+  // duration-specific amount on a provider failure.
+  describe.each([
+    { dur: 5,  expectedCost: 80 },
+    { dur: 10, expectedCost: 160 },
+  ])("mirror_motion ($durs → $expectedCost cr) refund", ({ dur, expectedCost }) => {
+    it("refunds the exact duration-priced amount when Fal throws", async () => {
+      // Mirror Motion requires a reference image — seed one in the session.
+      const sessionRow = await mockStorage.createStudioSession(USER_ID);
+      const refImage = await mockStorage.addStudioSessionFile({
+        sessionId: sessionRow.id,
+        userId: USER_ID,
+        fileType: "reference_image",
+        providerUrl: "https://example.com/photo.jpg",
+        cloudinaryPublicId: "ref/photo",
+        resourceType: "image",
+        meta: {},
+      });
+      // Reset call history AFTER seeding so the seeding decrement/increment
+      // calls (there are none, but be defensive) don't pollute assertions.
+      mockStorage.incrementStudioCredits.mockClear();
+      mockStorage.decrementStudioCredits.mockClear();
+
+      generateMirrorMotion.mockRejectedValueOnce(new Error(`Mirror upstream boom @${dur}s`));
+
+      const res = await agent
+        .post("/api/studio/generate/mirror-motion")
+        .send({
+          prompt: "mirror the dance",
+          sourceFileId: refImage.id,
+          motionVideoUrl: "https://example.com/reference.mp4",
+          durationSeconds: dur,
+          audioRightsConfirmed: true,
+        })
+        .expect(502);
+
+      // Balance fully restored.
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(res.body.message).toMatch(/credit was returned/i);
+
+      // Both decrement and refund used the duration-specific amount. A
+      // regression that hardcodes either side to 80 would pass dur=5 but
+      // fail dur=10 (and vice versa).
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledWith(USER_ID, expectedCost);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, expectedCost);
+
+      const refundLog = state.generationLogs.find(
+        (l) => l.toolKey === "mirror_motion" && l.status === "refunded",
+      );
+      expect(refundLog).toBeTruthy();
+      expect(refundLog.creditsCost).toBe(expectedCost);
+      expect(refundLog.errorReason).toMatch(new RegExp(`Mirror upstream boom @${dur}s`));
+
+      // No output video was attached.
+      expect(state.files.find((f) => f.fileType === "output_video")).toBeUndefined();
+    });
   });
 
   // Sanity check: the success path does NOT refund. Without this companion
