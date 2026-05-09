@@ -5603,6 +5603,26 @@ export async function registerRoutes(
     res.json({ ...pt, checklistItems: items });
   });
 
+  // V&I reference photo upload — poster attaches a screenshot/photo to guide the helper
+  app.post("/api/vi/reference-upload", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dataUrl = String(req.body?.dataUrl || "");
+      if (!dataUrl) return res.status(400).json({ message: "Missing image data" });
+      if (!process.env.CLOUDINARY_CLOUD_NAME) {
+        return res.status(503).json({ message: "Reference photo storage isn't configured." });
+      }
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const up = await cloudinary.uploader.upload(dataUrl, {
+        resource_type: "image",
+        folder: "guber-vi-references",
+        transformation: [{ width: 1200, crop: "limit" }],
+      });
+      res.json({ url: up.secure_url });
+    } catch (err: any) {
+      res.status(500).json({ message: `Upload failed: ${err.message}` });
+    }
+  });
+
   app.get("/api/catalog/all", async (_req: Request, res: Response) => {
     const [cats, ucs, sts, dos, pts] = await Promise.all([
       storage.getVICategories(),

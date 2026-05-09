@@ -387,6 +387,62 @@ function getSmartFormConfig(categoryName: string | undefined): SmartFormConfig {
   }
 }
 
+function locationModeForCategory(catName: string | undefined): "full" | "zip" | "none" {
+  if (!catName) return "zip";
+  if (["Property & Site Check", "Wheels, Wings & Water", "Quick Check"].includes(catName)) return "full";
+  if (catName === "Online Items") return "none";
+  return "zip";
+}
+
+const POSTER_ROLES = [
+  "Property Owner / Landlord",
+  "Tenant Moving Out",
+  "Potential Renter / Buyer",
+  "Property Manager",
+  "Airbnb / Short-Term Host",
+  "Real Estate Agent",
+  "Insurance Adjuster",
+  "Other",
+];
+
+const ENTRY_INTERIOR_OPTIONS = [
+  "I am the owner — I authorize entry",
+  "Owner has approved entry (written confirmation)",
+  "Open house — public access",
+  "Key lockbox — code provided after lock",
+  "Meet at property — I will arrange access",
+  "Contact on arrival for access",
+];
+
+const ENTRY_EXTERIOR_OPTIONS = [
+  "Exterior / drive-by only — no entry needed",
+  "Public access — no special instructions",
+  "Open lot / yard — walk in",
+  "Gate code will be provided after lock",
+];
+
+const INSPECTION_PHASES = [
+  "Pre-Move-In (document initial condition)",
+  "Post-Move-Out (document final condition for deposit)",
+  "Single Inspection (not move-in/out related)",
+];
+
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"
+];
+
+function useCaseNeedsInteriorAccess(useCaseName: string | undefined): boolean {
+  if (!useCaseName) return false;
+  const lower = useCaseName.toLowerCase();
+  return ["move-in", "move-out", "move in", "move out", "airbnb", "turnover", "interior", "renovation", "work progress", "utilities", "door", "lock", "damage doc", "landlord routine"].some(kw => lower.includes(kw));
+}
+
+function useCaseIsMoveSituation(useCaseName: string | undefined): boolean {
+  if (!useCaseName) return false;
+  const lower = useCaseName.toLowerCase();
+  return lower.includes("move-in") || lower.includes("move-out") || lower.includes("move in") || lower.includes("move out");
+}
+
 function StepNumber({ num, active, completed }: { num: number; active: boolean; completed: boolean }) {
   return (
     <div
@@ -432,6 +488,23 @@ export default function VerifyInspect() {
   const [vizip, setViZip] = useState<string>("");
   const [viurgent, setViUrgent] = useState(false);
   const [isBounty, setIsBounty] = useState(false);
+
+  // Location — full address for property/vehicle/quick, zip-only for PAV, none for online
+  const [viStreet, setViStreet] = useState<string>("");
+  const [viCity, setViCity] = useState<string>("");
+  const [viState, setViState] = useState<string>("");
+  // Description — what the poster needs documented / verified
+  const [viDescription, setViDescription] = useState<string>("");
+  // Property-specific poster context
+  const [posterRole, setPosterRole] = useState<string>("");
+  const [entryAuthMode, setEntryAuthMode] = useState<string>("");
+  const [appointmentDate, setAppointmentDate] = useState<string>("");
+  const [appointmentTime, setAppointmentTime] = useState<string>("");
+  const [inspectionPhase, setInspectionPhase] = useState<string>("");
+  // Reference photo — poster attaches a screenshot/photo to guide the helper
+  const [referencePhotoUrl, setReferencePhotoUrl] = useState<string>("");
+  const [referencePhotoUploading, setReferencePhotoUploading] = useState(false);
+  const [referencePhotoPreview, setReferencePhotoPreview] = useState<string>("");
 
   const { data: viCategories, isLoading: catsLoading, isError: catsError, refetch: catsRefetch } = useQuery<VICategory[]>({
     queryKey: ["/api/catalog/vi-categories"],
@@ -574,6 +647,12 @@ export default function VerifyInspect() {
   const urgentFee = viurgent ? (isOG ? 0 : 10) : 0;
   const totalCharge = budgetNum + urgentFee;
 
+  const locationMode = locationModeForCategory(selectedCategory?.name);
+  const locationOk =
+    locationMode === "none" ? true :
+    locationMode === "zip" ? vizip.length >= 5 :
+    viStreet.trim().length >= 3 && vizip.length >= 5;
+
   const canProceed =
     selectedCategoryId &&
     selectedUseCaseId &&
@@ -585,9 +664,9 @@ export default function VerifyInspect() {
       (!(selectedUseCase?.name.includes("Specific") || selectedUseCase?.name.includes("Search Known")) || smartFormValues["locationName"])
     )) &&
     budgetNum > 0 &&
-    vizip.length >= 5;
+    locationOk;
 
-  const currentStep = !selectedUseCaseId ? 1 : !selectedServiceTypeId ? 2 : !allDetailsFilled ? 3 : (selectedCategory?.name !== "Online Items" && selectedCategory?.name !== "Part Availability Verification" && !timingWindow) ? 4 : !(budgetNum > 0 && vizip.length >= 5) ? 5 : 6;
+  const currentStep = !selectedUseCaseId ? 1 : !selectedServiceTypeId ? 2 : !allDetailsFilled ? 3 : (selectedCategory?.name !== "Online Items" && selectedCategory?.name !== "Part Availability Verification" && !timingWindow) ? 4 : !locationOk ? 5 : 6;
 
   const smartFormConfig = useMemo(
     () => getSmartFormConfig(selectedCategory?.name),
@@ -607,6 +686,17 @@ export default function VerifyInspect() {
     setTimingWindow("");
     setAccessInstruction("");
     setSmartFormValues({});
+    setViDescription("");
+    setPosterRole("");
+    setEntryAuthMode("");
+    setAppointmentDate("");
+    setAppointmentTime("");
+    setInspectionPhase("");
+    setReferencePhotoUrl("");
+    setReferencePhotoPreview("");
+    setViStreet("");
+    setViCity("");
+    setViState("");
   }
 
   function handleUseCaseChange(val: string) {
@@ -635,7 +725,22 @@ export default function VerifyInspect() {
       const allJobDetails = { ...detailValues, ...smartFormValues };
       if (accessInstruction) allJobDetails["Access"] = accessInstruction;
       if (timingWindow) allJobDetails["Timing"] = timingWindow;
-      if (focusNote.trim()) allJobDetails["Focus Note"] = focusNote.trim();
+      if (viDescription.trim()) allJobDetails["Description"] = viDescription.trim();
+      if (posterRole) allJobDetails["Requested By"] = posterRole;
+      if (entryAuthMode) allJobDetails["Entry Authorization"] = entryAuthMode;
+      if (appointmentDate) allJobDetails["Appointment Date"] = appointmentDate;
+      if (appointmentTime) allJobDetails["Appointment Time"] = appointmentTime;
+      if (inspectionPhase) allJobDetails["Inspection Phase"] = inspectionPhase;
+      if (referencePhotoUrl) allJobDetails["Reference Photo URL"] = referencePhotoUrl;
+
+      const locationStr =
+        locationMode === "none"
+          ? "Online / Remote"
+          : locationMode === "full"
+          ? [viStreet.trim(), [viCity.trim(), viState.trim()].filter(Boolean).join(", "), vizip].filter(Boolean).join(", ")
+          : `${vizip} area`;
+      const locationZip = vizip || "";
+
       const payload = {
         category: "Verify & Inspect",
         verifyInspectCategory: selectedCategory?.name || "",
@@ -643,9 +748,9 @@ export default function VerifyInspect() {
         catalogServiceTypeName: selectedServiceType?.name || "",
         jobDetails: Object.keys(allJobDetails).length > 0 ? allJobDetails : undefined,
         budget: budgetNum,
-        location: `${vizip} area`,
-        locationApprox: `${vizip} area`,
-        zip: vizip,
+        location: locationStr,
+        locationApprox: locationMode === "full" ? `${viCity.trim() || vizip} area` : `${vizip} area`,
+        zip: locationZip,
         urgentSwitch: viurgent,
         isBounty: isBounty,
         serviceType: selectedServiceType?.name || "",
@@ -682,6 +787,7 @@ export default function VerifyInspect() {
     { name: "Quick Check", img: quickCheckImg, wide: false },
     { name: "Part Availability Verification", img: pavSalvageImg, wide: true },
   ];
+  const DRONE_COMING_SOON = true;
 
   function handleLandingSelect(catName: string) {
     const cat = viCategories?.find((c) => c.name === catName);
@@ -803,6 +909,32 @@ export default function VerifyInspect() {
                     </button>
                   );
                 })}
+                {/* Drone Footage — coming soon */}
+                {DRONE_COMING_SOON && (
+                  <button
+                    disabled
+                    className="relative col-span-2 h-24 rounded-2xl overflow-hidden flex items-center justify-between px-5 cursor-not-allowed"
+                    style={{ background: "#0d0d1a", border: "1.5px solid hsl(200 80% 50% / 0.35)", boxShadow: "0 0 12px hsl(200 80% 50% / 0.08)" }}
+                    data-testid="button-vi-category-drone-coming-soon"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "hsl(200 80% 50% / 0.12)", border: "1px solid hsl(200 80% 50% / 0.3)" }}>
+                        <Camera className="w-5 h-5" style={{ color: "hsl(200 80% 60%)" }} />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-display font-black text-sm text-white/70 tracking-tight">DRONE / AERIAL FOOTAGE</p>
+                        <p className="text-[10px] text-white/40 mt-0.5">Real estate · Insurance · Construction · Events</p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] shrink-0"
+                      style={{ borderColor: "hsl(200 80% 50% / 0.4)", color: "hsl(200 80% 60%)" }}
+                    >
+                      COMING SOON
+                    </Badge>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1205,54 +1337,6 @@ export default function VerifyInspect() {
                       ) : null}
                     </div>
                   ))}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-medium text-muted-foreground block font-display tracking-wide">
-                        Anything specific to focus on? (optional)
-                      </label>
-                      {/* Liability protection (Task #318): persistent V&I label */}
-                      <VisualOnlyLabel />
-                    </div>
-                    {(() => {
-                      // Liability protection (Task #318): detect violations on
-                      // the RAW input first so the helper always sees the
-                      // warning at the moment of typing — only then offer the
-                      // sanitized rewrite. Storing the raw value also keeps
-                      // server-side detection authoritative.
-                      const rawHit = detectViLanguageHit(focusNote);
-                      return (
-                        <>
-                          <Textarea
-                            value={focusNote}
-                            onChange={(e) => setFocusNote(e.target.value)}
-                            placeholder="e.g. Check the back gate latch, look for water stains under the kitchen sink"
-                            rows={2}
-                            maxLength={500}
-                            className="premium-input rounded-md text-sm"
-                            data-testid="textarea-focus-note"
-                          />
-                          {rawHit && (
-                            <div className="mt-1 space-y-1">
-                              <p
-                                className="text-[10px] text-amber-400/90 leading-relaxed"
-                                data-testid="text-vi-language-warning"
-                              >
-                                {rawHit.message}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setFocusNote(replaceViLanguage(focusNote))}
-                                className="text-[10px] text-amber-300 underline underline-offset-2 hover:text-amber-200"
-                                data-testid="button-vi-rewrite"
-                              >
-                                Rewrite for me
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
                 </div>
               ) : visibleDetailOptions && visibleDetailOptions.length > 0 ? (
                 <div className="space-y-3">
@@ -1286,6 +1370,295 @@ export default function VerifyInspect() {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">No additional details needed.</p>
+              )}
+
+              {/* Description — show for ALL categories */}
+              {(
+                <div className="mt-3 border-t border-white/5 pt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-muted-foreground block font-display tracking-wide">
+                      Describe exactly what needs to be verified
+                      <span className="text-muted-foreground text-[10px] ml-1">(optional but recommended)</span>
+                    </label>
+                    <VisualOnlyLabel />
+                  </div>
+                  {(() => {
+                    const rawHit = detectViLanguageHit(viDescription);
+                    return (
+                      <>
+                        <Textarea
+                          value={viDescription}
+                          onChange={(e) => setViDescription(e.target.value)}
+                          placeholder={
+                            selectedCategory?.name === "Online Items"
+                              ? "e.g. Confirm the item is a 2020 model, check for any visible cracks, see if the charger is included"
+                              : selectedCategory?.name === "Wheels, Wings & Water"
+                              ? "e.g. Check for rust on the undercarriage, confirm the odometer matches the listing, look for accident damage on driver side"
+                              : selectedCategory?.name === "Quick Check"
+                              ? "e.g. Is the storefront open? Does the sign in the window match the listing? Is there a product display visible?"
+                              : selectedCategory?.name === "Part Availability Verification"
+                              ? "e.g. I need the left front fender for a 2016 Honda Civic — check it's intact with no cracks and still has the mounting brackets"
+                              : "e.g. Check the condition of the side gate latch, the back patio cover, and the AC unit outside"
+                          }
+                          rows={3}
+                          maxLength={600}
+                          className="premium-input rounded-md text-sm"
+                          data-testid="textarea-vi-description"
+                        />
+                        {rawHit && (
+                          <div className="mt-1 space-y-1">
+                            <p className="text-[10px] text-amber-400/90 leading-relaxed" data-testid="text-vi-language-warning">
+                              {rawHit.message}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setViDescription(replaceViLanguage(viDescription))}
+                              className="text-[10px] text-amber-300 underline underline-offset-2 hover:text-amber-200"
+                              data-testid="button-vi-rewrite"
+                            >
+                              Rewrite for me
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Reference photo upload — for Online Items & Quick Check */}
+              {(isOnlineItems || selectedCategory?.name === "Quick Check") && (
+                <div className="mt-3 border-t border-white/5 pt-3">
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                    Reference Photo <span className="text-muted-foreground text-[10px]">(optional — screenshot of item/listing)</span>
+                  </label>
+                  {referencePhotoPreview ? (
+                    <div className="relative w-full rounded-xl overflow-hidden border border-white/10" style={{ maxHeight: 160 }}>
+                      <img src={referencePhotoPreview} alt="Reference" className="w-full object-contain" style={{ maxHeight: 160 }} />
+                      <button
+                        type="button"
+                        onClick={() => { setReferencePhotoPreview(""); setReferencePhotoUrl(""); }}
+                        className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white/80 hover:text-white text-[10px] px-2"
+                        data-testid="button-remove-reference-photo"
+                      >
+                        Remove
+                      </button>
+                      {referencePhotoUrl && (
+                        <div className="absolute bottom-2 left-2">
+                          <Badge variant="outline" className="text-[9px] bg-black/60 border-primary/40 text-primary">Uploaded</Badge>
+                        </div>
+                      )}
+                      {referencePhotoUploading && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <span className="text-xs text-white">Uploading...</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <label
+                      className="flex items-center gap-2 w-full h-12 rounded-xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition-all px-4 text-xs text-muted-foreground"
+                      data-testid="label-reference-photo-upload"
+                    >
+                      <Camera className="w-4 h-4 shrink-0" />
+                      <span>Attach a screenshot or photo to guide the helper</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = async (ev) => {
+                            const dataUrl = ev.target?.result as string;
+                            setReferencePhotoPreview(dataUrl);
+                            setReferencePhotoUploading(true);
+                            try {
+                              const resp = await apiRequest("POST", "/api/vi/reference-upload", { dataUrl });
+                              const json = await resp.json();
+                              if (json.url) setReferencePhotoUrl(json.url);
+                            } catch {
+                              // Non-fatal: photo preview still shows
+                            } finally {
+                              setReferencePhotoUploading(false);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                        data-testid="input-reference-photo"
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Property-specific: who is requesting, entry auth, appointment */}
+              {selectedCategory?.name === "Property & Site Check" && selectedUseCaseId && (
+                <div className="mt-3 space-y-3 border-t border-white/5 pt-3">
+                  <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest">Property Details</p>
+
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                      Who is making this request?
+                    </label>
+                    <Select value={posterRole} onValueChange={setPosterRole}>
+                      <SelectTrigger className="premium-input rounded-md" data-testid="select-poster-role">
+                        <SelectValue placeholder="Select your role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {POSTER_ROLES.map((r) => (
+                          <SelectItem key={r} value={r} data-testid={`option-role-${r}`}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {useCaseIsMoveSituation(selectedUseCase?.name) && (
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                        Inspection phase
+                      </label>
+                      <Select value={inspectionPhase} onValueChange={setInspectionPhase}>
+                        <SelectTrigger className="premium-input rounded-md" data-testid="select-inspection-phase">
+                          <SelectValue placeholder="Select phase" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INSPECTION_PHASES.map((p) => (
+                            <SelectItem key={p} value={p} data-testid={`option-phase-${p}`}>{p}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-amber-400/80 mt-1.5 leading-relaxed">
+                        Pre-move-in and post-move-out documentation can be used to support or dispute security deposit claims.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                      Entry authorization
+                    </label>
+                    <Select value={entryAuthMode} onValueChange={setEntryAuthMode}>
+                      <SelectTrigger className="premium-input rounded-md" data-testid="select-entry-auth">
+                        <SelectValue placeholder="How can the helper access the property?" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {useCaseNeedsInteriorAccess(selectedUseCase?.name) ? (
+                          ENTRY_INTERIOR_OPTIONS.map((o) => (
+                            <SelectItem key={o} value={o} data-testid={`option-entry-${o}`}>{o}</SelectItem>
+                          ))
+                        ) : (
+                          ENTRY_EXTERIOR_OPTIONS.map((o) => (
+                            <SelectItem key={o} value={o} data-testid={`option-entry-${o}`}>{o}</SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {useCaseNeedsInteriorAccess(selectedUseCase?.name) && (
+                      <div className="mt-2 p-3 rounded-xl" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                        <p className="text-[10px] text-amber-400/90 leading-relaxed font-display">
+                          <strong>No unauthorized entry.</strong> By requesting interior access, you confirm the property owner or authorized party has approved this visit. GUBER helpers must never enter without explicit permission.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {useCaseNeedsInteriorAccess(selectedUseCase?.name) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                          Appointment date
+                        </label>
+                        <input
+                          type="date"
+                          className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
+                          value={appointmentDate}
+                          onChange={(e) => setAppointmentDate(e.target.value)}
+                          min={new Date().toISOString().split("T")[0]}
+                          data-testid="input-appointment-date"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                          Appointment time
+                        </label>
+                        <input
+                          type="time"
+                          className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
+                          value={appointmentTime}
+                          onChange={(e) => setAppointmentTime(e.target.value)}
+                          data-testid="input-appointment-time"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Reference photo for Property & Site Check + Wheels */}
+              {(selectedCategory?.name === "Property & Site Check" || selectedCategory?.name === "Wheels, Wings & Water") && selectedUseCaseId && (
+                <div className="mt-3 border-t border-white/5 pt-3">
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                    Reference Photo <span className="text-muted-foreground text-[10px]">(optional — helps the helper find and identify what to document)</span>
+                  </label>
+                  {referencePhotoPreview ? (
+                    <div className="relative w-full rounded-xl overflow-hidden border border-white/10" style={{ maxHeight: 160 }}>
+                      <img src={referencePhotoPreview} alt="Reference" className="w-full object-contain" style={{ maxHeight: 160 }} />
+                      <button
+                        type="button"
+                        onClick={() => { setReferencePhotoPreview(""); setReferencePhotoUrl(""); }}
+                        className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white/80 hover:text-white text-[10px] px-2"
+                        data-testid="button-remove-reference-photo-prop"
+                      >
+                        Remove
+                      </button>
+                      {referencePhotoUrl && (
+                        <div className="absolute bottom-2 left-2">
+                          <Badge variant="outline" className="text-[9px] bg-black/60 border-primary/40 text-primary">Uploaded</Badge>
+                        </div>
+                      )}
+                      {referencePhotoUploading && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <span className="text-xs text-white">Uploading...</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <label
+                      className="flex items-center gap-2 w-full h-12 rounded-xl border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition-all px-4 text-xs text-muted-foreground"
+                      data-testid="label-reference-photo-upload-prop"
+                    >
+                      <Camera className="w-4 h-4 shrink-0" />
+                      <span>Attach a photo to guide the helper (floor plan, exterior shot, vehicle photo, etc.)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = async (ev) => {
+                            const dataUrl = ev.target?.result as string;
+                            setReferencePhotoPreview(dataUrl);
+                            setReferencePhotoUploading(true);
+                            try {
+                              const resp = await apiRequest("POST", "/api/vi/reference-upload", { dataUrl });
+                              const json = await resp.json();
+                              if (json.url) setReferencePhotoUrl(json.url);
+                            } catch {
+                              // Non-fatal
+                            } finally {
+                              setReferencePhotoUploading(false);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                        data-testid="input-reference-photo-prop"
+                      />
+                    </label>
+                  )}
+                </div>
               )}
             </Card>
           )}
@@ -1753,22 +2126,101 @@ export default function VerifyInspect() {
                 <span className="font-display font-semibold text-sm tracking-wide">Payment & Location</span>
               </div>
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
-                    <MapPin className="w-3 h-3" /> ZIP Code (Request Location)
-                    <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={5}
-                    className="premium-input rounded-md w-full px-3 py-2.5 text-sm bg-background border border-input"
-                    placeholder="5-digit ZIP"
-                    value={vizip}
-                    onChange={(e) => setViZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    data-testid="input-vi-zip"
-                  />
-                </div>
+                {/* Smart location: full address for property/vehicle/quick, zip for PAV, none for online */}
+                {locationMode === "full" && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                      <MapPin className="w-3 h-3" /> Location <span className="text-destructive">*</span>
+                    </p>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                        Street Address <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="premium-input rounded-md w-full px-3 py-2.5 text-sm bg-background border border-input"
+                        placeholder="e.g. 123 Main St"
+                        value={viStreet}
+                        onChange={(e) => setViStreet(e.target.value)}
+                        data-testid="input-vi-street"
+                      />
+                    </div>
+                    <div className="grid grid-cols-5 gap-2">
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">City</label>
+                        <input
+                          type="text"
+                          className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
+                          placeholder="City"
+                          value={viCity}
+                          onChange={(e) => setViCity(e.target.value)}
+                          data-testid="input-vi-city"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">State</label>
+                        <Select value={viState} onValueChange={setViState}>
+                          <SelectTrigger className="premium-input rounded-md h-[38px]" data-testid="select-vi-state">
+                            <SelectValue placeholder="ST" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {US_STATES.map((s) => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
+                          ZIP <span className="text-destructive">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={5}
+                          className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
+                          placeholder="ZIP"
+                          value={vizip}
+                          onChange={(e) => setViZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                          data-testid="input-vi-zip"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+                      Full address is shared only with the helper assigned to your request. Your general area is shown publicly.
+                    </p>
+                  </div>
+                )}
+
+                {locationMode === "zip" && (
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
+                      <MapPin className="w-3 h-3" /> ZIP Code (Search Area)
+                      <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={5}
+                      className="premium-input rounded-md w-full px-3 py-2.5 text-sm bg-background border border-input"
+                      placeholder="5-digit ZIP"
+                      value={vizip}
+                      onChange={(e) => setViZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                      data-testid="input-vi-zip"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">Helpers in this area will see your request.</p>
+                  </div>
+                )}
+
+                {locationMode === "none" && (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)" }}>
+                    <MapPin className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div>
+                      <p className="text-xs font-display font-semibold text-foreground">Online / Remote</p>
+                      <p className="text-[10px] text-muted-foreground">No physical location required — the helper will check online.</p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
