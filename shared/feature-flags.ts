@@ -41,7 +41,7 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     label: "GUBER Studio v2 (session-based)",
     description: "Phase 1 session-based Studio at /studio. Generated media is temporary; nothing persists.",
     defaultEnabled: true,
-    defaultScope: "global",
+    defaultScope: "role",
   },
   {
     key: "studio_subscriptions",

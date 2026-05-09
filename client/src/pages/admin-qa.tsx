@@ -351,7 +351,7 @@ export default function AdminQa() {
       </div>
 
       <Tabs defaultValue="checklist">
-        <TabsList className="flex flex-wrap">
+        <TabsList className="overflow-x-auto w-full flex-nowrap justify-start h-auto">
           <TabsTrigger value="checklist" data-testid="tab-checklist"><CheckCircle className="mr-1 h-3 w-3" />Checklist</TabsTrigger>
           <TabsTrigger value="sandbox" data-testid="tab-sandbox"><Beaker className="mr-1 h-3 w-3" />Sandbox</TabsTrigger>
           <TabsTrigger value="allowlist" data-testid="tab-allowlist"><AlertTriangle className="mr-1 h-3 w-3" />Live Allowlist</TabsTrigger>

@@ -396,6 +396,14 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'fal-ai/minimax-music/v2', 1, 30, true)
 ON CONFLICT (tool_key) DO NOTHING;
 
+-- Studio v2 feature flag: restrict to admin-only by default so admins can
+-- preview and then flip to "global" in the Feature Flag Console when ready.
+UPDATE feature_flags
+SET rollout_scope = 'role',
+    allowed_roles = ARRAY['admin']
+WHERE key = 'studio_v2'
+  AND rollout_scope = 'global';
+
 SQL
 
 echo "[post-merge] Schema sync complete."
