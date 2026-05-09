@@ -15545,6 +15545,50 @@ OUTPUT STYLE:
       } as any);
       if (!updated) return res.status(404).json({ message: "Qualification not found" });
 
+      const isDroneQual = (q: any) =>
+        q?.credentialType === "FAA Part 107 / Drone Operator" ||
+        /part\s*107|drone operator/i.test(q?.qualificationName || "");
+
+      // Revoke "Drone Certified" badge + projection flag when a drone credential
+      // is rejected (e.g. FAA cert expired). Re-check for any other approved
+      // drone credentials before clearing. (Task #514)
+      if (verificationStatus === "rejected" && isDroneQual(updated)) {
+        try {
+          const target = await storage.getUser(updated.userId);
+          if (target) {
+            const approved = await storage.getApprovedQualifications(target.id);
+            const stillHasDrone = approved.some((q) => isDroneQual(q));
+            if (!stillHasDrone) {
+              const existing: string[] = (target as any).milestoneBadges || [];
+              const filtered = existing.filter((b) => b !== "Drone Certified");
+              const userUpdates: any = {};
+              if (filtered.length !== existing.length) {
+                userUpdates.milestoneBadges = filtered;
+              }
+              if (Object.keys(userUpdates).length > 0) {
+                await storage.updateUser(target.id, userUpdates);
+              }
+              try {
+                const proj = await storage.getWorkerProjection(target.id);
+                if (proj && (proj as any).droneCertified) {
+                  await storage.upsertWorkerProjection({ ...proj, droneCertified: false, updatedAt: new Date() });
+                }
+              } catch (pe: any) {
+                console.error("[GUBER] drone projection revoke failed:", pe?.message);
+              }
+              await storage.createNotification({
+                userId: target.id,
+                title: "Drone Certified badge revoked",
+                body: `Your "${updated.qualificationName}" credential was rejected, so the "Drone Certified" badge has been removed. Re-upload a current FAA Part 107 certificate to restore it.`,
+                type: "system",
+              } as any);
+            }
+          }
+        } catch (e: any) {
+          console.error("[GUBER] drone badge revoke failed:", e?.message);
+        }
+      }
+
       // Auto-promote the worker to the credentialed (Skilled) tier when any
       // qualification is verified. Never silently demote on rejection — admins
       // can always do that manually if a credential is later revoked. (Task #372)
