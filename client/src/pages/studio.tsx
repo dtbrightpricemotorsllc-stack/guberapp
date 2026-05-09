@@ -74,6 +74,25 @@ type SessionPayload = { session: StudioSession | null; files: StudioFile[] };
 
 type ToolKey = "kling_motion_control" | "wan_motion_5s" | "wan_motion_10s" | "minimax_music";
 
+// Force-download Cloudinary URLs by injecting `fl_attachment/` after `/upload/`.
+// Mirrors the helper in client/src/components/media-lightbox.tsx.
+function toAttachment(url: string): string {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (!u.hostname.endsWith("cloudinary.com")) return url;
+    const marker = "/upload/";
+    const idx = u.pathname.indexOf(marker);
+    if (idx < 0) return url;
+    const after = u.pathname.slice(idx + marker.length);
+    if (after.startsWith("fl_attachment")) return url;
+    u.pathname = u.pathname.slice(0, idx + marker.length) + "fl_attachment/" + after;
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 const TIER_LABEL: Record<string, string> = {
   standard: "STANDARD",
   creator:  "CREATOR",
@@ -490,7 +509,7 @@ export default function StudioPageV2() {
                 <RotateCcw className="w-3.5 h-3.5" /> Replay
               </button>
               <a
-                href={heroOutput.providerUrl}
+                href={toAttachment(heroOutput.providerUrl)}
                 download
                 target="_blank"
                 rel="noreferrer"
@@ -792,7 +811,7 @@ export default function StudioPageV2() {
                     )}
                     <div className="flex items-center justify-between gap-1 mt-2 px-1">
                       <span className="text-[10px] text-white/50 truncate">{o.meta?.toolKey || ""}</span>
-                      <a href={o.providerUrl} download target="_blank" rel="noreferrer" data-testid={`link-download-${o.id}`}>
+                      <a href={toAttachment(o.providerUrl)} download target="_blank" rel="noreferrer" data-testid={`link-download-${o.id}`}>
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-white/70 hover:text-white hover:bg-white/10">
                           <Download className="w-3 h-3 mr-1" /> Save
                         </Button>

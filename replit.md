@@ -21,7 +21,7 @@ GUBER is a local visibility network connecting individuals needing assistance wi
 - **Testing:** Vitest, Supertest, Playwright
 
 ## GUBER Studio v2 — session-based AI generation (Phase 1)
-- **Page:** `client/src/pages/studio.tsx` (route `/studio`). Cinematic CapCut-style shell on the v2 backend (task-516): hero with last clip as autoplay/muted/loop background (animated gradient + film grain when empty), GUBER STUDIO wordmark, Trending Templates carousel (8 vertical cards), glow Generate button, in-session library. Tool routing is derived from template kind + reference state — `audio` → `minimax_music`, `video + reference image` → `kling_motion_control`, otherwise → `wan_motion_5s`. Cost is read live from `/api/studio/tools` (no client-side hardcoding). Exit confirm purges immediately.
+- **Page:** `client/src/pages/studio.tsx` (route `/studio`). Cinematic CapCut-style shell on the v2 backend (task-516): hero with last clip as autoplay/muted/loop background (animated gradient + film grain when empty), GUBER STUDIO wordmark, Trending Templates carousel (9 vertical cards), glow Generate button, in-session library. Tool routing is derived from template kind + reference state — `audio` → `minimax_music`, `video + reference image` → `kling_motion_control`, otherwise → `wan_motion_5s`. Cost is read live from `/api/studio/tools` (no client-side hardcoding). Exit confirm purges immediately.
 - **Provider:** Fal.ai. Single integration point: `server/fal.ts`. Requires `FAL_KEY`. Without it, every `/api/studio/generate/*` returns 503 BEFORE charging credits.
 - **Phase 1 tools (server-priced via `studio_model_pricing`):**
     - `kling_motion_control` (2 cr, photo required) → `fal-ai/kling-video/v3/pro/motion-control`
