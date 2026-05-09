@@ -113,6 +113,12 @@ const TIER_LABEL: Record<string, string> = {
 // ── Cinematic templates (CapCut-style starter prompts) ────────────────────
 // Each template declares its preferred output kind. Final tool routing also
 // considers whether the user has uploaded a reference image.
+//
+// `videoUrl` (optional) — a short looping preview clip rendered behind the
+// gradient. Cards without a URL fall back to the gradient cleanly. The
+// initial seed uses public Cloudinary demo videos so the page feels alive
+// today; admins should swap these out for our own AI-generated cinematic
+// loops via the admin curation UI added in the Trends-rail follow-up.
 type Template = {
   slug: string;
   label: string;
@@ -122,6 +128,8 @@ type Template = {
   icon: React.ComponentType<{ className?: string }>;
   kind: "video" | "audio" | "image";
   wizard?: "mirror_motion" | "commercial_builder";  // task-521
+  videoUrl?: string;
+  posterUrl?: string;
 };
 const TEMPLATES: Template[] = [
   {
@@ -138,8 +146,8 @@ const TEMPLATES: Template[] = [
     wizard: "commercial_builder",
   },
   {
-    slug: "mirror-motion", label: "Mirror Motion", tag: "Clone Clip", kind: "video",
-    prompt: "Photo + reference clip URL → motion-cloned video. 16 cr per second.",
+    slug: "mirror-motion", label: "Mirror Motion", tag: "Your Clip → Motion", kind: "video",
+    prompt: "Drop a photo + paste any video URL → motion-cloned video. 16 cr per second.",
     gradient: "from-violet-500 via-fuchsia-500 to-rose-500",
     icon: Repeat,
     wizard: "mirror_motion",
@@ -149,12 +157,14 @@ const TEMPLATES: Template[] = [
     prompt: "Punchy 6-second product ad, bold typography reveal, energetic close-up, modern brand aesthetic, vibrant cinematic lighting.",
     gradient: "from-fuchsia-500 via-pink-500 to-orange-400",
     icon: Megaphone,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dance.mp4",
   },
   {
     slug: "movie-trailer", label: "Movie Trailer", tag: "Cinematic", kind: "video",
     prompt: "Epic movie trailer scene, anamorphic lens flares, slow push-in, dramatic orchestral mood, deep contrast cinematography.",
     gradient: "from-amber-500 via-rose-600 to-purple-700",
     icon: Film,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/elephants.mp4",
   },
   {
     slug: "luxury-promo", label: "Luxury Promo", tag: "Premium", kind: "video",
@@ -173,12 +183,14 @@ const TEMPLATES: Template[] = [
     prompt: "Vertical 9:16 reel, fast hook, hand-held camera energy, bold caption flash, trending color grade, scroll-stopping first frame.",
     gradient: "from-cyan-400 via-violet-500 to-fuchsia-600",
     icon: Flame,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dog.mp4",
   },
   {
     slug: "real-estate", label: "Real Estate", tag: "Listing", kind: "video",
     prompt: "Cinematic real estate walkthrough, golden-hour exterior, smooth dolly through entry, warm interior reveal, drone pull-back finale.",
     gradient: "from-emerald-400 via-teal-500 to-sky-600",
     icon: Building2,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sea_turtle.mp4",
   },
   {
     slug: "music-track", label: "Music Track", tag: "Audio", kind: "audio",
@@ -191,14 +203,57 @@ const TEMPLATES: Template[] = [
     prompt: "Neon-soaked Tokyo alley at night, rain reflections, slow cinematic dolly-in, cyberpunk color grade, atmospheric haze.",
     gradient: "from-sky-400 via-blue-600 to-violet-700",
     icon: Zap,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/snowboarding.mp4",
   },
   {
     slug: "game-highlight", label: "Game Highlight", tag: "Esports", kind: "video",
     prompt: "Esports-style highlight reel, fast zoom-in on the action, glitchy speedlines, neon overlay, high-energy 5-second hype clip.",
     gradient: "from-lime-400 via-emerald-500 to-cyan-600",
     icon: Gamepad2,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sample.mp4",
   },
 ];
+
+// Lazy looping preview behind a template card. Uses IntersectionObserver to
+// only load + play when in view; pauses when scrolled off. `preload="none"`
+// + `poster` keep first paint cheap. Errors silently fall through to the
+// gradient layer behind it.
+function TemplateVideoLoop({ src, poster }: { src: string; poster?: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            if (!el.src) el.src = src;
+            el.play().catch(() => {});
+          } else {
+            try { el.pause(); } catch {}
+          }
+        }
+      },
+      { threshold: 0.25 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [src]);
+  if (hidden) return null;
+  return (
+    <video
+      ref={ref}
+      poster={poster}
+      muted
+      loop
+      playsInline
+      preload="none"
+      onError={() => setHidden(true)}
+      className="absolute inset-0 w-full h-full object-cover opacity-90"
+    />
+  );
+}
 
 // ── Coming Soon gate (non-admin) ───────────────────────────────────────────
 function StudioComingSoon() {
@@ -713,8 +768,9 @@ export default function StudioPageV2() {
                   data-testid={`template-${t.slug}`}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${t.gradient}`} />
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_60%)]" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                  {t.videoUrl && <TemplateVideoLoop src={t.videoUrl} poster={t.posterUrl} />}
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_60%)] mix-blend-overlay" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
                   <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/15 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
                   <div className="absolute top-3 left-3">
                     <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
