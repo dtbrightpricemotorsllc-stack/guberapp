@@ -718,6 +718,61 @@
     .map-stat .ms-num { font-size: 18px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; line-height: 1; }
     .map-stat .ms-lbl { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; margin-top: 4px; }
 
+    /* — Empty-state mascot transformation: plain → Day-1 OG — */
+    .og-transform {
+      display: flex; align-items: center; justify-content: center; gap: 18px;
+      margin: 4px 0 8px;
+    }
+    .og-frame { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0; opacity: 0.85; }
+    .og-frame img {
+      width: 150px; height: 200px; object-fit: contain;
+      filter: drop-shadow(0 0 18px rgba(209,0,255,0.25)) drop-shadow(0 6px 18px rgba(0,0,0,0.5));
+    }
+    .og-frame figcaption {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--soft);
+    }
+    .og-frame-day1 { opacity: 1; }
+    .og-frame-day1 img {
+      filter: drop-shadow(0 0 22px rgba(255,200,60,0.45)) drop-shadow(0 0 16px rgba(57,255,20,0.30)) drop-shadow(0 8px 22px rgba(0,0,0,0.55));
+      animation: og-glow 3.6s ease-in-out infinite;
+    }
+    .og-frame-day1 figcaption { color: #ffcc44; }
+    .og-arrow {
+      font-size: 32px; font-weight: 300; color: var(--accent);
+      opacity: 0.7;
+      animation: og-arrow-pulse 2.4s ease-in-out infinite;
+      margin-bottom: 18px;
+    }
+    @keyframes og-glow {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-4px) scale(1.025); }
+    }
+    @keyframes og-arrow-pulse {
+      0%, 100% { transform: translateX(0); opacity: 0.55; }
+      50% { transform: translateX(4px); opacity: 0.95; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .og-frame-day1 img, .og-arrow { animation: none !important; }
+    }
+    .og-suggest {
+      margin-top: 14px; font-size: 12px; color: var(--soft); text-align: center;
+      max-width: 420px; line-height: 1.5;
+    }
+    .og-suggest .og-gold {
+      color: #ffcc44; font-weight: 800; letter-spacing: 0.02em;
+    }
+    .og-suggest a {
+      color: var(--accent); font-weight: 700; text-decoration: none;
+      border-bottom: 1px dashed rgba(57,255,20,0.4);
+    }
+    .og-suggest a:hover { border-bottom-color: var(--accent); }
+    @media (max-width: 520px) {
+      .og-frame img { width: 110px; height: 150px; }
+      .og-arrow { font-size: 24px; margin-bottom: 14px; }
+      .og-transform { gap: 10px; }
+    }
+
     /* — Testimonial card (Jacob McNeal) — */
     .testimonial-card {
       display: grid;
@@ -1300,7 +1355,7 @@
   </div>
 </section>
 
-<section class="og-sec">
+<section class="og-sec" id="day1og">
   <div class="wrap">
     <div class="og-compact gold-shine" style="position:relative;">
       <div class="og-limited-pill">⏳ LIMITED TIME · CLOSES AT FOUNDING CAP</div>
@@ -1496,11 +1551,16 @@ function renderJobs(jobs) {
   if (stat) stat.textContent = jobs.length ? jobs.length : '—';
   if (!jobs.length) {
     grid.innerHTML = '<div class="jobs-empty early-state">' +
-      '<img src="/mascot-rainbow.jpg" alt="GUBER Badger" class="early-mascot" />' +
+      '<div class="og-transform">' +
+        '<figure class="og-frame"><img src="/mascot-plain.png" alt="GUBER Badger" /><figcaption>You today</figcaption></figure>' +
+        '<div class="og-arrow" aria-hidden="true">→</div>' +
+        '<figure class="og-frame og-frame-day1"><img src="/mascot-day1og-hero.png" alt="GUBER Day-1 OG Badger" /><figcaption>Day&#8209;1&nbsp;OG</figcaption></figure>' +
+      '</div>' +
       '<div class="early-title"><span class="green">Looks like you&rsquo;re early</span> for your area!</div>' +
       '<div class="early-sub">Be one of the first to put your city on the GUBER map. Post a job, list a service, or sign up to work — and workers nearby get notified the moment something appears.</div>' +
       '<div class="early-cta">' +
         '<a href="#" onclick="event.preventDefault();showGetApp(\'https://guberapp.app/signup\')" class="btn btn-green">🚀 Be First in Your Area →</a>' +
+        '<div class="og-suggest">First 1,000 signups in your city get the <span class="og-gold">Day&#8209;1 OG</span> badge — free perks for life. <a href="#day1og" onclick="event.preventDefault();document.getElementById(\'day1og\')?.scrollIntoView({behavior:\'smooth\'});">See what you unlock →</a></div>' +
         '<div class="early-free">Always free to join · No credit card · No resume</div>' +
       '</div>' +
     '</div>';
@@ -1572,11 +1632,16 @@ fetch(API + '?limit=50')
   .then(renderJobs)
   .catch(function() {
     document.getElementById('jobsGrid').innerHTML = '<div class="jobs-empty early-state">' +
-      '<img src="/mascot-rainbow.jpg" alt="GUBER Badger" class="early-mascot" />' +
+      '<div class="og-transform">' +
+        '<figure class="og-frame"><img src="/mascot-plain.png" alt="GUBER Badger" /><figcaption>You today</figcaption></figure>' +
+        '<div class="og-arrow" aria-hidden="true">→</div>' +
+        '<figure class="og-frame og-frame-day1"><img src="/mascot-day1og-hero.png" alt="GUBER Day-1 OG Badger" /><figcaption>Day&#8209;1&nbsp;OG</figcaption></figure>' +
+      '</div>' +
       '<div class="early-title"><span class="green">Looks like you&rsquo;re early</span> for your area!</div>' +
       '<div class="early-sub">Be one of the first to put your city on the GUBER map. Sign up free and post a job — workers nearby get notified instantly.</div>' +
       '<div class="early-cta">' +
         '<a href="#" onclick="event.preventDefault();showGetApp(\'https://guberapp.app/signup\')" class="btn btn-green">🚀 Be First in Your Area →</a>' +
+        '<div class="og-suggest">First 1,000 signups in your city get the <span class="og-gold">Day&#8209;1 OG</span> badge — free perks for life. <a href="#day1og" onclick="event.preventDefault();document.getElementById(\'day1og\')?.scrollIntoView({behavior:\'smooth\'});">See what you unlock →</a></div>' +
         '<div class="early-free">Always free to join · No credit card · No resume</div>' +
       '</div>' +
     '</div>';
