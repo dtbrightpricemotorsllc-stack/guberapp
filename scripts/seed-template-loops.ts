@@ -35,10 +35,10 @@ const SEEDS: Seed[] = [
 const FOLDER = "guber-studio-templates";
 const CONCURRENCY = 3; // be polite to fal queue
 
-async function seedOne(s: Seed): Promise<{ slug: string; url: string | null; error?: string }> {
+async function seedOne(s: Seed, attempt = 1): Promise<{ slug: string; url: string | null; error?: string }> {
   const t0 = Date.now();
   try {
-    console.error(`[seed] ${s.slug}: submitting Wan motion…`);
+    console.error(`[seed] ${s.slug}: submitting Wan motion${attempt > 1 ? ` (retry ${attempt})` : ""}…`);
     const fal = await generateWanMotion({ prompt: s.loopPrompt, durationSeconds: 5 });
     console.error(`[seed] ${s.slug}: provider clip ready (${Math.round((Date.now() - t0) / 1000)}s) — uploading to Cloudinary…`);
     const up = await cloudinary.uploader.upload(fal.videoUrl, {
@@ -47,13 +47,18 @@ async function seedOne(s: Seed): Promise<{ slug: string; url: string | null; err
       public_id: s.slug,
       overwrite: true,
     });
-    // Use eco-quality 400px-wide derived URL for cards (matches cdn pattern in studio.tsx)
     const cdn = up.secure_url.replace("/video/upload/", "/video/upload/q_auto:eco,w_400/");
     console.error(`[seed] ${s.slug}: ✔ ${cdn}`);
     return { slug: s.slug, url: cdn };
   } catch (err: any) {
-    console.error(`[seed] ${s.slug}: ✘ ${err.message}`);
-    return { slug: s.slug, url: null, error: err.message };
+    const msg = err?.message || String(err);
+    console.error(`[seed] ${s.slug}: ✘ ${msg}`);
+    // Retry once on transient errors (403 stale rate-limit, 422 race on ready signal)
+    if (attempt < 2 && (msg.includes("403") || msg.includes("422"))) {
+      await new Promise((r) => setTimeout(r, 5000));
+      return seedOne(s, attempt + 1);
+    }
+    return { slug: s.slug, url: null, error: msg };
   }
 }
 
