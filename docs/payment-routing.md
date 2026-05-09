@@ -93,11 +93,13 @@ digital purchase UI in:
 - ✅ `client/src/pages/marketplace.tsx` — boost button hidden in store builds.
 - ✅ `client/src/pages/ai-or-not.tsx` — opens browser instead of in-app purchase.
 - ✅ `client/src/pages/profile.tsx` — Day-1 OG card hidden in store builds.
+- ✅ `client/src/pages/studio.tsx` — header "+ credits" CTA, "Out of credits —
+  buy a pack" button, and the low-credit top-up toast are all hidden on store
+  builds. The standalone `/studio/credits` page (which lists the 6 packs and 3
+  subscription tiers) renders a store-build notice instead of the pack grid.
 
 **Gaps (digital purchase UI currently visible in store builds):**
 
-- ❌ `client/src/pages/studio.tsx` — Studio credit packs *and* Studio
-  subscription tiers (Creator $19, Business $99) — both exposed.
 - ❌ Trust Box / Trust Toolbox checkout — purchase entry points not gated.
 - ❌ `business_scout_plan` ($99/mo) and `business_extra_unlocks` ($7) on
   business dashboard — not gated. Extra-unlocks is borderline-real-world
