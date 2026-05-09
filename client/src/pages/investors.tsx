@@ -18,6 +18,7 @@ import appMap from "@assets/Screenshot_20260404_200228_Gallery_1778199034097.jpg
 import appDashboard from "@assets/Screenshot_20260429_192406_Gallery_1778199033986.jpg";
 import appVi from "@assets/Screenshot_20260404_182235_Chrome_1778199034106.jpg";
 import appPostJob from "@assets/Screenshot_20260426_161934_GUBER_1778199034124.jpg";
+import appStudio from "@assets/app-screen-studio_investor.jpg";
 
 const PROOF_ASSETS: Record<string, string> = {
   "winner-jamie": winnerJamie,
@@ -35,6 +36,7 @@ const PROOF_ASSETS: Record<string, string> = {
   "app-dashboard": appDashboard,
   "app-vi": appVi,
   "app-postjob": appPostJob,
+  "app-studio": appStudio,
 };
 
 function useReveal<T extends HTMLElement>() {
@@ -288,10 +290,11 @@ export default function Investors() {
           </Reveal>
           <Reveal delay={80}>
             <h1
-              className="mt-7 font-extrabold leading-[0.95] glow-text-green"
+              className="mt-7 leading-[1] glow-text-green"
               style={{
-                fontSize: "clamp(4rem, 14vw, 10rem)",
-                letterSpacing: "-0.04em",
+                fontSize: "clamp(3.4rem, 11vw, 8.4rem)",
+                fontWeight: 700,
+                letterSpacing: "-0.015em",
                 color: "white",
                 background: `linear-gradient(180deg, #ffffff 0%, #ffffff 55%, ${NEON_GREEN} 100%)`,
                 WebkitBackgroundClip: "text",
@@ -444,8 +447,48 @@ export default function Investors() {
         </div>
       </Section>
 
+      {/* 05 · GUBER STUDIO */}
+      <Section id="section-studio" eyebrow={C.studio.eyebrow} headline={C.studio.headline} sub={C.studio.sub}>
+        <div className="grid lg:grid-cols-5 gap-6">
+          <Reveal className="lg:col-span-3">
+            <div className="inv-card p-7 sm:p-8 h-full" style={{ borderColor: `${NEON_PURPLE}55`, boxShadow: `0 0 36px rgba(209, 0, 255, 0.08)` }}>
+              <div className="flex items-center gap-2 mb-5">
+                <span className="pill pill-purple num-font">Live BETA</span>
+                <span className="pill pill-green num-font">Monetized</span>
+              </div>
+              <ul className="space-y-3.5 mb-6">
+                {C.studio.bullets.map((b, i) => (
+                  <li key={i} className="flex gap-3 text-sm sm:text-base leading-relaxed text-muted-foreground" data-testid={`text-studio-bullet-${i}`}>
+                    <Check className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: NEON_PURPLE }} />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-white/10 pt-5">
+                <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-2" style={{ color: NEON_PURPLE }}>The purpose</div>
+                <p className="text-sm sm:text-base leading-relaxed" style={{ color: "#d8d8de" }} data-testid="text-studio-purpose">{C.studio.purpose}</p>
+              </div>
+            </div>
+          </Reveal>
+          <Reveal className="lg:col-span-2" delay={120}>
+            <div className="inv-card overflow-hidden h-full flex flex-col" data-testid="card-studio-screenshot">
+              <div className="relative aspect-[9/16] bg-black/40 overflow-hidden">
+                <img src={appStudio} alt={C.studio.screenshot.title} loading="lazy" className="w-full h-full object-cover" data-testid="img-studio-screenshot" />
+                <div className="absolute top-2 left-2">
+                  <span className="pill pill-purple num-font">Live in production</span>
+                </div>
+              </div>
+              <div className="p-4">
+                <div className="num-font text-[11px] uppercase tracking-[0.12em] mb-1" style={{ color: NEON_PURPLE }}>{C.studio.screenshot.title}</div>
+                <div className="text-xs text-muted-foreground leading-relaxed">{C.studio.screenshot.caption}</div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </Section>
+
       {/* 06 · REVENUE STREAMS */}
-      <Section id="section-business" eyebrow="05 · Revenue streams" headline={C.business.headline} sub={C.business.sub}>
+      <Section id="section-business" eyebrow="06 · Revenue streams" headline={C.business.headline} sub={C.business.sub}>
         <Reveal>
           <div className="inv-card overflow-hidden">
             {/* Desktop table */}
@@ -493,7 +536,7 @@ export default function Investors() {
       </Section>
 
       {/* 07 · WHY NOW */}
-      <Section id="section-why-now" eyebrow="06 · Why now" headline={C.whyNow.headline} sub={C.whyNow.sub}>
+      <Section id="section-why-now" eyebrow="07 · Why now" headline={C.whyNow.headline} sub={C.whyNow.sub}>
         <div className="grid sm:grid-cols-2 gap-5">
           {C.whyNow.cards.map((c, i) => (
             <Reveal key={i} delay={(i % 2) * 80}>
@@ -507,7 +550,7 @@ export default function Investors() {
       </Section>
 
       {/* 08 · TRACTION */}
-      <Section id="section-traction" eyebrow="07 · Traction" headline={C.traction.headline} sub={C.traction.note}>
+      <Section id="section-traction" eyebrow="08 · Traction" headline={C.traction.headline} sub={C.traction.note}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {C.traction.stats.map((s, i) => (
             <Reveal key={i} delay={i * 80}>
@@ -567,8 +610,8 @@ export default function Investors() {
         </Reveal>
       </Section>
 
-      {/* 08 · PROOF — REAL USERS, REAL CASH, REAL MARKETING */}
-      <Section id="section-proof" eyebrow="08 · Proof in market" headline={C.proof.headline} sub={C.proof.sub}>
+      {/* 09 · PROOF — REAL USERS, REAL CASH, REAL MARKETING */}
+      <Section id="section-proof" eyebrow="09 · Proof in market" headline={C.proof.headline} sub={C.proof.sub}>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {C.proof.winners.map((w, i) => (
             <Reveal key={w.asset} delay={(i % 3) * 80}>
@@ -670,8 +713,8 @@ export default function Investors() {
         </div>
       </Section>
 
-      {/* 09 · FOUNDER STORY */}
-      <Section id="section-founder" eyebrow="09 · Founder" headline={C.founder.headline}>
+      {/* 10 · FOUNDER STORY */}
+      <Section id="section-founder" eyebrow="10 · Founder" headline={C.founder.headline}>
         <Reveal>
           <div className="inv-card p-7 sm:p-9" style={{ borderColor: `${NEON_GREEN}33` }}>
             <div className="grid lg:grid-cols-3 gap-8">
@@ -693,8 +736,22 @@ export default function Investors() {
         </Reveal>
       </Section>
 
-      {/* 10 · FUNDING ASK */}
-      <Section id="section-funding-ask" eyebrow="10 · The ask" headline={C.fundingAsk.headline}>
+      {/* 11 · LEGAL / CORPORATE STACK */}
+      <Section id="section-legal" eyebrow={C.legal.eyebrow} headline={C.legal.headline} sub={C.legal.sub}>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {C.legal.items.map((it, i) => (
+            <Reveal key={i} delay={(i % 4) * 70}>
+              <div className="inv-card p-6 inv-card-hover h-full" data-testid={`card-legal-${i}`}>
+                <div className="num-font text-[11px] uppercase tracking-[0.15em] mb-3" style={{ color: NEON_GREEN }} data-testid={`text-legal-label-${i}`}>{it.label}</div>
+                <p className="text-sm text-muted-foreground leading-relaxed" data-testid={`text-legal-body-${i}`}>{it.body}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </Section>
+
+      {/* 12 · FUNDING ASK */}
+      <Section id="section-funding-ask" eyebrow="12 · The ask" headline={C.fundingAsk.headline}>
         <div className="grid lg:grid-cols-2 gap-5">
           <Reveal>
             <div className="inv-card p-7 h-full" style={{ borderColor: `${NEON_GREEN}55`, boxShadow: `0 0 32px hsl(152 100% 44% / .08)` }}>
@@ -703,6 +760,10 @@ export default function Investors() {
               <div className="mt-6 num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">Valuation</div>
               <div className="num-font font-bold text-2xl text-white" data-testid="text-funding-valuation">{C.fundingAsk.valuation}</div>
               <p className="mt-6 text-sm text-muted-foreground leading-relaxed">{C.fundingAsk.structure}</p>
+              <div className="mt-6 pt-5 border-t border-white/10">
+                <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-2" style={{ color: NEON_GREEN }}>GUBER speed</div>
+                <p className="text-sm leading-relaxed" style={{ color: "#d8d8de" }} data-testid="text-funding-urgency">{C.fundingAsk.urgency}</p>
+              </div>
             </div>
           </Reveal>
           <Reveal delay={100}>
@@ -721,8 +782,8 @@ export default function Investors() {
         </div>
       </Section>
 
-      {/* 11 · INVESTOR CTA */}
-      <Section id="section-investor-cta" eyebrow="11 · Let's talk" headline={C.cta.headline} sub={C.cta.sub}>
+      {/* 13 · INVESTOR CTA */}
+      <Section id="section-investor-cta" eyebrow="13 · Less talk. Straight action." headline={C.cta.headline} sub={C.cta.sub}>
         <Reveal>
           <div className="inv-card p-8 sm:p-10" style={{ borderColor: `${NEON_GREEN}55` }}>
             <div className="grid lg:grid-cols-2 gap-8 items-center">
@@ -819,8 +880,8 @@ function Section({
         <Reveal>
           <div className="inv-eyebrow num-font mb-4" data-testid={`text-eyebrow-${id}`}>{eyebrow}</div>
           <h2
-            className="font-extrabold text-white mb-4"
-            style={{ fontSize: "clamp(2rem, 4.4vw, 3.2rem)", letterSpacing: "-0.035em", lineHeight: 1.05 }}
+            className="text-white mb-4"
+            style={{ fontSize: "clamp(1.9rem, 4vw, 3rem)", fontWeight: 700, letterSpacing: "-0.018em", lineHeight: 1.08 }}
             data-testid={`text-headline-${id}`}
           >
             {headline}

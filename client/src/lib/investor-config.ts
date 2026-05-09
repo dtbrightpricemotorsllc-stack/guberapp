@@ -70,7 +70,7 @@ export const INVESTOR_CONFIG = {
   },
 
   viHighlight: {
-    headline: "Verify & Inspect — our wedge into a $billions market.",
+    headline: "Verify & Inspect — our wedge into a multi-billion-dollar market.",
     sub: "A purpose-built vertical inside the marketplace where verified helpers act as on-the-ground eyes for buyers, insurers, lenders, and online marketplaces.",
     bullets: [
       "Helpers don't certify, diagnose, or appraise — they take clear photos, short video, and submit GPS-verified, timestamped evidence on a structured checklist.",
@@ -93,6 +93,7 @@ export const INVESTOR_CONFIG = {
       { title: "Observation Marketplace", body: "Workers submit real-world observations with GPS and photo. Businesses buy. 20% platform cut." },
       { title: "V&I Verification", body: "Verify-and-Inspect jobs for vehicles, properties, marketplace listings, and salvage." },
       { title: "GUBER Resume", body: "Auto-tracked work record plus AI-extracted credential cards (CPR, food handler, trade licenses)." },
+      { title: "GUBER Studio (BETA)", body: "Built-in AI media engine — cinematic clips, viral reels, business commercials, brand music. Credit-pack + monthly-tier monetization, live today." },
     ],
   },
 
@@ -112,6 +113,9 @@ export const INVESTOR_CONFIG = {
       { stream: "Cash Drop sponsorships", who: "Brand sponsor", price: "Sponsor + platform share", status: "Live" },
       { stream: "Observation marketplace", who: "Business buyer (helper gets 80%)", price: "20% platform fee", status: "Live" },
       { stream: "Direct Offers (Stripe Connect)", who: "Hirer (gross-up math)", price: "Application fee", status: "Live" },
+      { stream: "GUBER Studio — credit packs", who: "End user / creator / business", price: "$5 / $20 / $50 one-time", status: "Live" },
+      { stream: "GUBER Studio — Creator tier", who: "Creator", price: "$19 / mo", status: "Live" },
+      { stream: "GUBER Studio — Business tier", who: "Business", price: "$99 / mo", status: "Live" },
       { stream: "Sponsored visibility / content licensing", who: "Brand sponsor", price: "Per-impression / pack", status: "Emerging" },
     ],
   },
@@ -189,8 +193,36 @@ export const INVESTOR_CONFIG = {
         { title: "User dashboard", caption: "Verify & Inspect, Cash Drops, and Work Types in a single signed-in surface.", asset: "app-dashboard" },
         { title: "Verify & Inspect categories", caption: "Smart-form templates: vehicles, properties, marketplace listings, salvage.", asset: "app-vi" },
         { title: "Guided Job Builder", caption: "Dropdown-driven job posting — structured data, no free-form mistakes.", asset: "app-postjob" },
+        { title: "GUBER Studio (BETA)", caption: "AI media engine — cinematic clips, viral reels, business commercials. Live, monetized, baked into every account.", asset: "app-studio" },
       ],
     },
+  },
+
+  studio: {
+    eyebrow: "GUBER Studio · Live BETA",
+    headline: "An AI media engine baked into every account.",
+    sub: "Most marketplaces hand users to YouTube, Canva, or a freelancer to produce content. GUBER ships a full AI media studio inside the app — and monetizes it on day one.",
+    bullets: [
+      "Cinematic motion clips from a single reference photo, viral short-form motion videos, and brand music — all generated in-app.",
+      "Built for the exact users we already have: helpers needing a profile reel, hirers needing a job listing video, and small businesses needing a 5-second commercial they can run today.",
+      "Two monetization rails wired through Stripe: one-time credit packs ($5 / $20 / $50) for casual use and recurring monthly tiers (Creator $19/mo, Business $99/mo) for professional use.",
+      "Free 2-credit trial on signup converts users into paid generations on the same session.",
+      "Sessions are temporary by design — generated assets purge automatically — which keeps storage cost flat as usage scales.",
+    ],
+    purpose: "Studio is the second money rail. The marketplace prints transaction revenue; Studio prints high-margin digital revenue from the same audience — no extra acquisition cost.",
+    screenshot: { title: "GUBER Studio — generation flow", caption: "Tool picker → reference upload → prompt → cost preview → in-app preview → download. Live in production today." },
+  },
+
+  legal: {
+    eyebrow: "Built right · Investor-ready",
+    headline: "The corporate stack is already in place.",
+    sub: "No co-founders to negotiate with. No prior raise to clean up. No cap-table baggage. The legal scaffolding is done so capital can move on day one.",
+    items: [
+      { label: "Delaware LLC", body: "GUBER Global LLC — Delaware-formed, the structure investors already know how to underwrite." },
+      { label: "GUBER trademark", body: "U.S. trademark application filed — protecting the brand mark from day one." },
+      { label: "DUNS number", body: "Issued — required for Apple Developer enrollment, Google Play business verification, and B2B procurement." },
+      { label: "100% founder-owned", body: "No prior dilution. No SAFEs in the drawer. Whatever you write is the cap table." },
+    ],
   },
 
   whyNow: {
@@ -211,7 +243,9 @@ export const INVESTOR_CONFIG = {
     body: [
       "GUBER was built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand.",
       "The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed under the core platform is in production code today.",
-      "I'm raising this round to do exactly one thing I can't do alone: turn 294 organic signups into a self-sustaining local marketplace through paid acquisition and B2B sales.",
+      "Right now I'm growing the platform conservatively and organically — only accepting the volume of jobs the current infrastructure and a one-person operation can fully deliver on. That discipline protects the brand, but it also caps how fast we move.",
+      "I'm raising to remove that ceiling: real infrastructure, a real team, and the paid-acquisition and B2B sales motion that turn 294 organic signups into a self-sustaining local marketplace.",
+      "Investors, advisors, operators — anyone who can move quickly and meaningfully — I want to hear from you. The app is live. The window is open. Once GUBER hits scale, this entry point won't exist again.",
     ],
   },
 
@@ -219,26 +253,29 @@ export const INVESTOR_CONFIG = {
     headline: "The ask.",
     raise: "$150,000",
     valuation: "$1.3M pre-money",
-    structure: "Equity or structured profit-share against platform-fee revenue — open to either.",
+    structure: "Equity or structured profit-share against platform-fee revenue — open to either. Speed of close is weighted heavily.",
     use: [
-      "Paid acquisition in 2–3 anchor metros.",
-      "B2B sales motion for Scout Plan and Cash Drop sponsorships.",
-      "Apple App Store launch polish (Sign in with Apple, Apple Pay).",
-      "12 months of runway at sub-$5/day infrastructure cost.",
+      "Paid acquisition in 2–3 anchor metros to break the organic-only ceiling.",
+      "B2B sales motion for Scout Plan, Cash Drop sponsorships, and V&I enterprise pilots.",
+      "Apple App Store launch polish (Sign in with Apple, Apple Pay) — submission already in flight.",
+      "Hire the first 2–3 hands: ops, sales, and a partner engineer.",
+      "12 months of runway at sub-$5/day infrastructure cost — every dollar buys growth, not survival.",
     ],
     whyNow: [
       "Product is shipped — capital goes straight to growth, not engineering.",
-      "Unit economics already work at scale-to-zero infrastructure cost.",
+      "Pre-money reflects 294 organic signups and zero paid acquisition; the first paid push moves the number materially.",
       "Multiple revenue streams hedge against any single one not landing.",
       "Live on Google Play; App Store imminent — first-mover trust signal in a still-informal market.",
+      "Investors who close before the App Store launch and the first paid metro are getting in at the lowest price this company will ever have.",
     ],
+    urgency: "GUBER is built around action over talk. The terms reward investors who move at GUBER speed — same week, not same quarter.",
   },
 
   cta: {
-    headline: "Let's talk.",
-    sub: "This brief is intentionally private. If you're reading it, the founder wants to hear from you directly.",
+    headline: "Less talk. Straight action.",
+    sub: "This brief is intentionally private. If you're reading it, the founder believes you can move quickly. Email, call, or text — same hour, same day. Investors, advisors, operators with relevant CVs — every serious inbound gets a serious reply.",
     founderName: "Dimetris Bowden",
-    founderTitle: "Founder & CEO, GUBER Global LLC",
+    founderTitle: "Founder & CEO · 100% owner, GUBER Global LLC",
   },
 
   socials: [
