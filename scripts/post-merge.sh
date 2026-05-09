@@ -157,7 +157,8 @@ ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS ai_extracted BOOLEAN 
 
 -- AI Video Studio (task-439): credits balance, tier, OG drip tracker + tables.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_credits integer DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_tier text DEFAULT 'standard';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_tier text DEFAULT 'free';
+ALTER TABLE users ALTER COLUMN studio_tier SET DEFAULT 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_credits_last_drip_at timestamp;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_subscription_id text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_subscription_status text;
@@ -384,16 +385,16 @@ CREATE TABLE IF NOT EXISTS studio_model_pricing (
 INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, duration_seconds, active) VALUES
   ('kling_motion_control', 'Motion Control Video',
    'Photo + prompt → cinematic 5s clip with controlled camera motion (Kling v3 Pro).',
-   'fal-ai/kling-video/v3/pro/motion-control', 2, 5, true),
+   'fal-ai/kling-video/v3/pro/motion-control', 80, 5, true),
   ('wan_motion_5s',        'Quick Motion Clip · 5s',
    'Text or image to a fast 5-second motion clip (Wan).',
-   'fal-ai/wan-motion', 1, 5, true),
+   'fal-ai/wan-motion', 30, 5, true),
   ('wan_motion_10s',       'Quick Motion Clip · 10s',
    'Text or image to a 10-second motion clip (Wan).',
-   'fal-ai/wan-motion', 2, 10, true),
+   'fal-ai/wan-motion', 60, 10, true),
   ('minimax_music',        'AI Music Track',
    'Prompt → ~30s instrumental track (MiniMax Music v2).',
-   'fal-ai/minimax-music/v2', 1, 30, true),
+   'fal-ai/minimax-music/v2', 5, 30, true),
   ('mirror_motion',        'Mirror Motion',
    'Photo + reference clip → motion-cloned video. Server prices at 16 credits per second of duration.',
    'fal-ai/kling-video/v3/pro/motion-control', 16, 5, true),
@@ -428,6 +429,37 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'Free 3/day AI image generator (Flux Schnell). Prompt → square HD image in seconds.',
    'fal-ai/flux/schnell', 1, NULL, true)
 ON CONFLICT (tool_key) DO NOTHING;
+
+-- task-519: re-price the four Studio tools to the Kling-mirrored economy.
+-- Idempotent: UPDATEs every run so any drift from earlier deploys converges.
+UPDATE studio_model_pricing SET credits_cost = 80 WHERE tool_key = 'kling_motion_control';
+UPDATE studio_model_pricing SET credits_cost = 30 WHERE tool_key = 'wan_motion_5s';
+UPDATE studio_model_pricing SET credits_cost = 60 WHERE tool_key = 'wan_motion_10s';
+UPDATE studio_model_pricing SET credits_cost = 5  WHERE tool_key = 'minimax_music';
+
+-- task-519: tier rename. Existing "creator" subscribers map to the new
+-- "standard" subscription tier. Existing non-subscribers (default tier
+-- "standard" with no Stripe sub) become "free". Order matters — non-subs
+-- migrate FIRST so we don't sweep ex-creators back into "free".
+UPDATE users SET studio_tier = 'free'
+  WHERE studio_tier = 'standard' AND studio_subscription_id IS NULL;
+UPDATE users SET studio_tier = 'standard'
+  WHERE studio_tier = 'creator';
+
+-- task-519: one-shot 41.25× balance multiplier so existing users keep their
+-- purchasing power under the new credit-per-tool prices. Tracked in
+-- platform_settings so re-running post-merge never multiplies twice.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM platform_settings WHERE key = 'studio_credits_repriced_v519') THEN
+    UPDATE users
+       SET studio_credits = ROUND(COALESCE(studio_credits, 0) * 41.25)::int
+     WHERE COALESCE(studio_credits, 0) > 0;
+    INSERT INTO platform_settings (key, value, category, description)
+    VALUES ('studio_credits_repriced_v519', 'true', 'studio',
+            'task-519 one-shot 41.25x Studio credit balance migration applied');
+  END IF;
+END $$;
 
 -- task-506: drone_certified flag on worker_business_projections
 ALTER TABLE worker_business_projections ADD COLUMN IF NOT EXISTS drone_certified BOOLEAN DEFAULT false;

@@ -3241,11 +3241,11 @@ export async function registerRoutes(
           // month's credit drip immediately. Subsequent monthly drips are
           // handled by invoice.paid + the cron safety net.
           const userId = parseInt(metadata.userId);
-          const tierName = String(metadata.tier || "creator");
+          const tierName = String(metadata.tier || "standard");
           const monthlyCredits = parseInt(metadata.monthlyCredits || "0") || 0;
           const subscriptionId = (session.subscription as string) || null;
           const subUser = await storage.getUser(userId);
-          if (subUser && (tierName === "creator" || tierName === "business")) {
+          if (subUser && (tierName === "standard" || tierName === "business" || tierName === "enterprise")) {
             const sessionTag = `[session:${session.id}]`;
             const [existing] = await db
               .select({ id: auditLogsTable.id })
@@ -3274,9 +3274,10 @@ export async function registerRoutes(
               action: "studio_subscription_activated",
               details: `${sessionTag} Studio "${tierName}" subscription activated. +${monthlyCredits} initial credits. Balance: ${newBalance}. Sub: ${subscriptionId || "n/a"}.`,
             });
+            const tierLabel = tierName === "enterprise" ? "Enterprise" : tierName === "business" ? "Business" : "Standard";
             await storage.createNotification({
               userId,
-              title: `Studio ${tierName === "business" ? "Business" : "Creator"} unlocked!`,
+              title: `Studio ${tierLabel} unlocked!`,
               body: `Your subscription is live. +${monthlyCredits} credits added now and every month. Locked vibes are now yours.`,
               type: "system",
             });
@@ -3509,7 +3510,7 @@ export async function registerRoutes(
         } else if (subMeta?.type === "studio_subscription" && subMeta?.userId) {
           const userId = parseInt(subMeta.userId);
           await storage.updateUser(userId, {
-            studioTier: "standard",
+            studioTier: "free",
             studioSubscriptionId: null,
             studioSubscriptionStatus: "canceled",
             studioSubscriptionCancelAtPeriodEnd: false,
@@ -3517,15 +3518,15 @@ export async function registerRoutes(
           await storage.createAuditLog({
             userId,
             action: "studio_subscription_ended",
-            details: `Studio subscription ended. Sub: ${sub.id}. Tier reverted to standard.`,
+            details: `Studio subscription ended. Sub: ${sub.id}. Tier reverted to free.`,
           });
           await storage.createNotification({
             userId,
             title: "Studio subscription ended",
-            body: "Your Creator/Business plan has ended. Existing credits stay. Resubscribe anytime to unlock advanced vibes again.",
+            body: "Your Studio plan has ended. Existing credits stay (no expiry). Resubscribe anytime to unlock advanced vibes again.",
             type: "system",
           });
-          console.log(`[GUBER][webhook/main] subscription.deleted: user ${userId} → studio tier=standard`);
+          console.log(`[GUBER][webhook/main] subscription.deleted: user ${userId} → studio tier=free`);
         } else {
           console.log(`[GUBER][webhook/main] subscription.deleted: unhandled type "${subMeta?.type || "none"}" — ignored`);
         }
@@ -9221,15 +9222,20 @@ export async function registerRoutes(
 
   // TRUST BOX - $4.99 AI or Not premium access
   // ───────────────────────────────────────────────────────────────────────────
-  // AI VIDEO STUDIO (task-439)
-  // Credit packs: $5 / 8 credits, $20 / 50 credits, $50 / 150 credits.
-  // Mirrors the OG checkout pattern: create Stripe Checkout Session with
-  // metadata.type="studio_credits" + pack id; webhook increments balance.
+  // AI VIDEO STUDIO (task-439, repriced task-519)
+  // Six credit packs mirror the Kling economy (~$0.01515/cr cost basis):
+  // Spark $5/330, Boost $10/660, Power $20/1320, Mega $50/3500, Ultra $100/7500,
+  // Whale $200/16000.  Mirrors the OG checkout pattern: create Stripe Checkout
+  // Session with metadata.type="studio_credits" + pack id; webhook increments
+  // balance.
   // ───────────────────────────────────────────────────────────────────────────
   const STUDIO_CREDIT_PACKS = {
-    starter:  { credits: 8,   priceCents: 500,  label: "Starter Pack" },
-    plus:     { credits: 50,  priceCents: 2000, label: "Plus Pack" },
-    pro:      { credits: 150, priceCents: 5000, label: "Pro Pack" },
+    spark: { credits:   330, priceCents:   500, label: "Spark Pack" },
+    boost: { credits:   660, priceCents:  1000, label: "Boost Pack" },
+    power: { credits:  1320, priceCents:  2000, label: "Power Pack" },
+    mega:  { credits:  3500, priceCents:  5000, label: "Mega Pack" },
+    ultra: { credits:  7500, priceCents: 10000, label: "Ultra Pack" },
+    whale: { credits: 16000, priceCents: 20000, label: "Whale Pack" },
   } as const;
   type StudioPackId = keyof typeof STUDIO_CREDIT_PACKS;
 
@@ -9284,22 +9290,22 @@ export async function registerRoutes(
     }
   });
 
-  // ── Studio Subscription Tiers (task-452) ─────────────────────────────────
-  // Recurring subscriptions that upgrade `users.studio_tier` from "standard"
-  // to "creator" or "business". Each tier grants a monthly credit drip
-  // (handled in the webhook + cron) and unlocks the locked vibes / advanced
-  // features in the UI. Pricing is inline via `price_data` so no preconfigured
-  // Stripe Price IDs are required (mirrors the business_scout_plan checkout).
+  // ── Studio Subscription Tiers (task-452, repriced task-519) ──────────────
+  // Recurring subscriptions that upgrade `users.studio_tier` from "free"
+  // to "standard", "business", or "enterprise". Each tier grants a monthly
+  // credit drip (handled in the webhook + cron) and unlocks the locked vibes
+  // / advanced features in the UI. Pricing is inline via `price_data` so no
+  // preconfigured Stripe Price IDs are required.
   const STUDIO_TIER_PLANS = {
-    creator: {
-      label: "Creator",
-      priceCents: 1900,
-      monthlyCredits: 30,
-      productName: "GUBER Studio · Creator",
+    standard: {
+      label: "Standard",
+      priceCents: 1099,
+      monthlyCredits: 660,
+      productName: "GUBER Studio · Standard",
       description:
-        "30 monthly credits, motion AI, reference clips, locked vibes unlocked.",
+        "660 monthly credits, motion AI, reference clips, locked vibes unlocked.",
       features: [
-        "30 credits every month",
+        "660 credits every month",
         "Motion AI on every clip",
         "Reference clips & uploads",
         "All locked vibes unlocked",
@@ -9307,17 +9313,31 @@ export async function registerRoutes(
     },
     business: {
       label: "Business",
-      priceCents: 9900,
-      monthlyCredits: 150,
+      priceCents: 3799,
+      monthlyCredits: 3000,
       productName: "GUBER Studio · Business",
       description:
-        "150 monthly credits, brand kits, ad templates, captions/music, multi-platform export.",
+        "3,000 monthly credits, brand kits, ad templates, captions/music, multi-platform export.",
       features: [
-        "150 credits every month",
+        "3,000 credits every month",
         "Brand kits (logo, colors, fonts)",
         "Ad templates & captions/music",
         "Multi-platform export (TikTok, Reels, Shorts)",
-        "Everything in Creator",
+        "Everything in Standard",
+      ],
+    },
+    enterprise: {
+      label: "Enterprise",
+      priceCents: 9900,
+      monthlyCredits: 8000,
+      productName: "GUBER Studio · Enterprise",
+      description:
+        "8,000 monthly credits, priority generation queue, team-scale output for agencies and studios.",
+      features: [
+        "8,000 credits every month",
+        "Priority generation queue",
+        "Team-scale output for agencies & studios",
+        "Everything in Business",
       ],
     },
   } as const;
@@ -9482,8 +9502,8 @@ export async function registerRoutes(
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "User not found" });
     const { isFalConfigured } = await import("./fal");
-    const tier = (user.studioTier ?? "standard") as StudioTierPlanId | "standard";
-    const plan = tier !== "standard" ? STUDIO_TIER_PLANS[tier as StudioTierPlanId] : null;
+    const tier = (user.studioTier ?? "free") as StudioTierPlanId | "free";
+    const plan = tier !== "free" && tier in STUDIO_TIER_PLANS ? STUDIO_TIER_PLANS[tier as StudioTierPlanId] : null;
     res.json({
       credits: user.studioCredits ?? 0,
       tier,

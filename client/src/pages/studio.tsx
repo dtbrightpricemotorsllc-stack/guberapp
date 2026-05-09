@@ -51,7 +51,7 @@ import { CommercialWizardDialog } from "@/components/studio/commercial-wizard";
 // ── Types ──────────────────────────────────────────────────────────────────
 type StudioMe = {
   credits: number;
-  tier: "standard" | "creator" | "business";
+  tier: "free" | "standard" | "business" | "enterprise";
   day1OG: boolean;
   providerReady: boolean;
   subscription: { status: string; monthlyCredits: number; label: string | null; cancelAtPeriodEnd: boolean } | null;
@@ -104,9 +104,10 @@ function toAttachment(url: string): string {
 }
 
 const TIER_LABEL: Record<string, string> = {
-  standard: "STANDARD",
-  creator:  "CREATOR",
-  business: "BUSINESS",
+  free:       "FREE",
+  standard:   "STANDARD",
+  business:   "BUSINESS",
+  enterprise: "ENTERPRISE",
 };
 
 // ── Cinematic templates (CapCut-style starter prompts) ────────────────────

@@ -298,10 +298,11 @@ export function handleSignup(storage: AuthStorage, deps: SignupDeps = {}) {
         createPayload.zipcode = zipcode || null;
       }
 
-      // GUBER Studio v2: grant 2 free trial credits to every new signup
-      // (enough for one music gen + one motion clip, or two short clips).
+      // GUBER Studio (task-519): grant 2 free trial credits to every new
+      // signup. Credits never expire. Default tier is "free" — paid tiers
+      // (standard / business / enterprise) require a Stripe subscription.
       createPayload.studioCredits = 2;
-      createPayload.studioTier = "standard";
+      createPayload.studioTier = "free";
 
       const user = await storage.createUser(createPayload);
 

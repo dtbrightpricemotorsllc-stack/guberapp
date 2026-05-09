@@ -62,16 +62,18 @@ export const users = pgTable("users", {
   backgroundCheckRestrictions: json("background_check_restrictions").$type<string[]>(),
   aiOrNotCredits: integer("ai_or_not_credits").default(0),
   aiOrNotUnlimitedText: boolean("ai_or_not_unlimited_text").default(false),
-  // ── AI Video Studio ──
-  // studioCredits: balance of generations available. Each Standard 5s clip = 1 credit.
-  // Premium chained 10s = 2 credits (future tier). Granted via Stripe credit packs,
-  // 1 free trial credit at signup, and 1 free credit/month for Day-1 OG members.
-  // studioTier: which Studio experience the user has access to. "standard" is default
-  // (text-to-video + curated vibes). "creator" and "business" are reserved for
-  // future upgrade tiers (reference uploads, brand kits, ad templates, etc.).
+  // ── AI Video Studio (repriced task-519, Kling-mirrored economy) ──
+  // studioCredits: balance of generations. Per-tool cost lives in the
+  // studio_model_pricing table — currently kling_motion_control 80,
+  // wan_motion_5s 30, wan_motion_10s 60, minimax_music 5. Granted via Stripe
+  // credit packs (Spark→Whale, 330–16000 cr), 2 free trial credits at signup,
+  // and +20 cr/month for Day-1 OG members. Credits roll over (no expiry).
+  // studioTier: which Studio experience the user has access to. "free" is the
+  // default (no subscription). "standard" / "business" / "enterprise" are the
+  // paid monthly subscription tiers (660 / 3000 / 8000 monthly credits).
   // studioCreditsLastDripAt: tracks last OG monthly drip so cron doesn't double-grant.
   studioCredits: integer("studio_credits").default(0),
-  studioTier: text("studio_tier").default("standard"),
+  studioTier: text("studio_tier").default("free"),
   studioCreditsLastDripAt: timestamp("studio_credits_last_drip_at"),
   // Stripe subscription that backs the current Creator/Business tier (null on
   // standard). studioSubscriptionStatus mirrors Stripe's status string

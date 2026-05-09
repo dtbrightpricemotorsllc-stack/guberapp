@@ -60,6 +60,7 @@ const SubmitObservation = lazy(() => import("@/pages/submit-observation"));
 const ObservationMarketplace = lazy(() => import("@/pages/observation-marketplace"));
 const HostDropNew = lazy(() => import("@/pages/host-drop-new"));
 const Studio = lazy(() => import("@/pages/studio"));
+const StudioCredits = lazy(() => import("@/pages/studio-credits"));
 const Investors = lazy(() => import("@/pages/investors"));
 
 // Feature pages — lazy loaded
@@ -267,6 +268,7 @@ function Router() {
       <Route path="/host-drop/new" component={() => <ProtectedRoute component={HostDropNew} />} />
       <Route path="/host-drop/edit/:id" component={() => <ProtectedRoute component={HostDropNew} />} />
       <Route path="/studio" component={() => <ProtectedRoute component={Studio} />} />
+      <Route path="/studio/credits" component={() => <ProtectedRoute component={StudioCredits} />} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />

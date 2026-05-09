@@ -859,8 +859,9 @@ async function helperResponseBufferSweep(): Promise<number> {
 // whose webhook was missed/delayed. Gates on lastDripAt > 28 days ago and
 // active subscription status. Idempotent within a 28-day window.
 const STUDIO_TIER_MONTHLY_CREDITS: Record<string, number> = {
-  creator: 30,
-  business: 150,
+  standard: 660,
+  business: 3000,
+  enterprise: 8000,
 };
 async function studioMonthlyDrip(): Promise<number> {
   const cutoff = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
@@ -876,7 +877,7 @@ async function studioMonthlyDrip(): Promise<number> {
     .where(
       and(
         isNotNull(users.studioSubscriptionId),
-        inArray(users.studioTier, ["creator", "business"]),
+        inArray(users.studioTier, ["standard", "business", "enterprise"]),
         inArray(users.studioSubscriptionStatus, ["active", "trialing"]),
         or(isNull(users.studioCreditsLastDripAt), lte(users.studioCreditsLastDripAt, cutoff)),
       ),
@@ -987,9 +988,10 @@ async function decayHandsfreeBlockedAttempts(): Promise<number> {
 // Exported for test coverage of the task-492 auto-clear-on-decay behavior.
 export const __test__ = { decayHandsfreeBlockedAttempts };
 
-// Day-1 OG monthly Studio credit drip — grants 2 free Studio credits per
-// 30-day window to OG members. Gated on studioCreditsLastDripAt so re-running
-// the cron multiple times within a window is a no-op. Returns count granted.
+// Day-1 OG monthly Studio credit drip — grants 20 free Studio credits per
+// 30-day window to OG members. Credits roll over (no expiry). Gated on
+// studioCreditsLastDripAt so re-running the cron multiple times within a
+// window is a no-op. Returns count granted.
 async function ogStudioCreditDripSweep(): Promise<number> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60_000);
   const eligible = await db
@@ -1007,7 +1009,7 @@ async function ogStudioCreditDripSweep(): Promise<number> {
     // Conditional update so concurrent cron runs can't double-grant.
     const [row] = await db.update(users)
       .set({
-        studioCredits: sql`COALESCE(${users.studioCredits}, 0) + 2`,
+        studioCredits: sql`COALESCE(${users.studioCredits}, 0) + 20`,
         studioCreditsLastDripAt: new Date(),
       })
       .where(and(
@@ -1023,8 +1025,8 @@ async function ogStudioCreditDripSweep(): Promise<number> {
       granted++;
       await storage.createNotification({
         userId: u.id,
-        title: "+2 Studio credits",
-        body: "Your Day-1 OG monthly drip just landed. Make something.",
+        title: "+20 Studio credits",
+        body: "Your Day-1 OG monthly drip just landed. Credits never expire — make something.",
         type: "system",
       }).catch(() => {});
     }
