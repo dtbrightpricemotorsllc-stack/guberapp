@@ -494,20 +494,31 @@ export default function StudioPageV2() {
             </div>
           )}
 
-          {/* Hero post-gen action row — Replay / Download / Try another */}
+          {/* Hero post-gen action row — Replay / Download / Try another.
+              Replay is video-only; for audio outputs we hide it to avoid a no-op. */}
           {heroOutput && (
             <div className="mt-8 flex flex-wrap items-center gap-2" data-testid="hero-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  const v = document.querySelector<HTMLVideoElement>('[data-testid="video-hero"]');
-                  if (v) { v.currentTime = 0; v.play().catch(() => {}); }
-                }}
-                className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/15 transition"
-                data-testid="button-hero-replay"
-              >
-                <RotateCcw className="w-3.5 h-3.5" /> Replay
-              </button>
+              {heroOutput.fileType === "output_video" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = document.querySelector<HTMLVideoElement>('[data-testid="video-hero"]');
+                    if (v) { v.currentTime = 0; v.play().catch(() => {}); }
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/15 transition"
+                  data-testid="button-hero-replay"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Replay
+                </button>
+              )}
+              {heroOutput.fileType === "output_audio" && (
+                <audio
+                  src={heroOutput.providerUrl}
+                  controls
+                  className="h-9"
+                  data-testid="audio-hero-player"
+                />
+              )}
               <a
                 href={toAttachment(heroOutput.providerUrl)}
                 download
