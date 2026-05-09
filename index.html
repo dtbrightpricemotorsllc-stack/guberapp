@@ -312,6 +312,46 @@
     .platform-bar .pb-item.soon .soon-tag { color: var(--gold); margin-left: 4px; }
     .platform-bar .pb-sep { color: rgba(255,255,255,0.18); }
 
+    /* ─── Real Winners gallery ────────────────────────────────────── */
+    .winners-sec { padding: 56px 0; border-top: 1px solid var(--border); background: linear-gradient(180deg, rgba(255,204,51,0.02), transparent); }
+    .winners-head { text-align: center; margin-bottom: 28px; }
+    .winners-head .eyebrow { font-size: 12px; font-weight: 800; color: var(--gold); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 8px; }
+    .winners-head h2 { font-size: 30px; font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .winners-head p { font-size: 14px; color: var(--soft); max-width: 520px; margin: 0 auto; }
+    .winners-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+    .winner-card {
+      background: var(--card);
+      border: 1px solid var(--gold-border);
+      border-radius: var(--r);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .winner-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--gold);
+      box-shadow: 0 10px 30px rgba(255,204,51,0.12);
+    }
+    .winner-photo {
+      width: 100%;
+      aspect-ratio: 9 / 16;
+      object-fit: cover;
+      object-position: center;
+      background: #0a0a0a;
+      display: block;
+    }
+    .winner-cap {
+      padding: 12px 14px 14px;
+      border-top: 1px solid rgba(255,204,51,0.18);
+    }
+    .winner-name { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+    .winner-name::before { content: "🏆"; font-size: 13px; }
+    .winner-quote { font-size: 12px; color: var(--soft); line-height: 1.45; font-style: italic; }
+    .winners-foot { text-align: center; margin-top: 28px; }
+    .winners-foot .source { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+    .winners-foot .source a { color: var(--soft); text-decoration: underline; text-underline-offset: 3px; }
+
     @media (prefers-reduced-motion: reduce) {
       .neon-pulse, .search-btn, .gold-shine::after, .online-dot { animation: none; }
     }
@@ -324,6 +364,8 @@
       .vi-row { grid-template-columns: 1fr; gap: 24px; }
       .how-steps { grid-template-columns: 1fr; gap: 16px; }
       .more-items { grid-template-columns: 1fr; }
+      .winners-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .winners-head h2 { font-size: 24px; }
     }
     @media (max-width: 540px) {
       .hdr-nav .btn:first-child { display: none; }
@@ -332,6 +374,9 @@
       .cats-grid { grid-template-columns: repeat(2, 1fr); }
       .search-box { flex-direction: column; }
       .search-box input { min-width: 100%; }
+      .winners-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .winner-cap { padding: 10px 10px 12px; }
+      .winner-quote { font-size: 11px; }
     }
   </style>
 </head>
@@ -471,6 +516,75 @@
         </div>
         <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" class="btn btn-gold">See Active Drops →</a>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="winners-sec">
+  <div class="wrap">
+    <div class="winners-head">
+      <div class="eyebrow">💰 Real Winners · Real Cash</div>
+      <h2>People <span class="gold">Actually Find</span> &amp; <span class="gold">Cash These</span>.</h2>
+      <p>Not stock photos. Not testimonials we wrote. Real people from our Pensacola Cash Drop community holding the cash they found.</p>
+    </div>
+
+    <div class="winners-grid">
+      <div class="winner-card">
+        <img class="winner-photo" src="/winners/winner-james-ellis.jpg" alt="James Ellis holding the cash he found from a GUBER Cash Drop" loading="lazy" />
+        <div class="winner-cap">
+          <div class="winner-name">James Ellis</div>
+          <div class="winner-quote">&ldquo;Congrats winner!&rdquo; — fistful of cash + the drop card.</div>
+        </div>
+      </div>
+
+      <div class="winner-card">
+        <img class="winner-photo" src="/winners/winner-kyle-holley.jpg" alt="Kyle Holley with cash at sunset after finding a GUBER Cash Drop" loading="lazy" />
+        <div class="winner-cap">
+          <div class="winner-name">Kyle Holley</div>
+          <div class="winner-quote">&ldquo;Found it &mdash; took me about 30 minutes.&rdquo;</div>
+        </div>
+      </div>
+
+      <div class="winner-card">
+        <img class="winner-photo" src="/winners/winner-klin-brantley.jpg" alt="Klin Brantley holding a GUBER Cash Drop card on the steering wheel" loading="lazy" />
+        <div class="winner-cap">
+          <div class="winner-name">Klin Brantley</div>
+          <div class="winner-quote">&ldquo;It&rsquo;s been found,, BIG SHOUT OUT!! Exciting!! Thanks 🙏&rdquo;</div>
+        </div>
+      </div>
+
+      <div class="winner-card">
+        <img class="winner-photo" src="/winners/winner-jamie-knecht.jpg" alt="Jamie Knecht holding up a GUBER Cash Drop she found" loading="lazy" />
+        <div class="winner-cap">
+          <div class="winner-name">Jamie Knecht</div>
+          <div class="winner-quote">&ldquo;Thank you Jesus. This is going straight to my wonderful church!&rdquo; 💕</div>
+        </div>
+      </div>
+
+      <div class="winner-card">
+        <img class="winner-photo" src="/winners/winner-quandala-walker.jpg" alt="Quandala Denise Walker holding the GUBER Cash Drop card and the cash she won" loading="lazy" />
+        <div class="winner-cap">
+          <div class="winner-name">Quandala Denise Walker</div>
+          <div class="winner-quote">Card + cash, found same day the drop went live.</div>
+        </div>
+      </div>
+
+      <div class="winner-card">
+        <img class="winner-photo" src="/winners/drop-in-the-wild.jpg" alt="A GUBER Cash Drop hidden in pine straw waiting to be found" loading="lazy" />
+        <div class="winner-cap">
+          <div class="winner-name">A drop in the wild</div>
+          <div class="winner-quote">Real drops are placed at real GPS coordinates. First one there wins.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="winners-foot">
+      <div class="source">
+        Photos &amp; quotes from the public
+        <a href="https://www.facebook.com/Findcashpcola" target="_blank" rel="noopener">Findcashpcola</a>
+        Facebook page (Pensacola sponsored drops by Wayne Buys Junk Cars &amp; GUBER).
+      </div>
+      <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" class="btn btn-gold">👑 Hunt the Next Drop →</a>
     </div>
   </div>
 </section>
