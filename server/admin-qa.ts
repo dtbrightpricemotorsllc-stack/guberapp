@@ -676,6 +676,60 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json({ rows, summary, tokens });
   });
 
+  // ── Studio Trends rail (Phase-2) — admin CRUD for featured clips ────────
+  app.get("/api/admin/studio/featured", requireAdmin, async (_req, res) => {
+    const rows = await storage.listStudioFeaturedClips(false);
+    res.json(rows);
+  });
+
+  app.post("/api/admin/studio/featured", requireAdmin, async (req, res) => {
+    const { slug, label, caption, videoUrl, posterUrl, position, active } = req.body || {};
+    if (!slug || !label || !caption || !videoUrl) {
+      return res.status(400).json({ error: "slug, label, caption, videoUrl are required" });
+    }
+    try {
+      const row = await storage.createStudioFeaturedClip({
+        slug: String(slug).trim(),
+        label: String(label).trim(),
+        caption: String(caption).trim(),
+        videoUrl: String(videoUrl).trim(),
+        posterUrl: posterUrl ? String(posterUrl).trim() : null,
+        position: typeof position === "number" ? position : 100,
+        active: active !== false,
+      });
+      await audit(req, "qa.studio.featured.create", { id: row.id, slug: row.slug });
+      res.json(row);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (msg.includes("unique") || msg.includes("duplicate")) {
+        return res.status(409).json({ error: "slug already exists" });
+      }
+      res.status(500).json({ error: msg.slice(0, 300) });
+    }
+  });
+
+  app.patch("/api/admin/studio/featured/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "bad id" });
+    const patch: Record<string, any> = {};
+    for (const k of ["slug", "label", "caption", "videoUrl", "posterUrl", "position", "active"] as const) {
+      if (k in (req.body || {})) patch[k] = req.body[k];
+    }
+    const row = await storage.updateStudioFeaturedClip(id, patch);
+    if (!row) return res.status(404).json({ error: "not found" });
+    await audit(req, "qa.studio.featured.update", { id, fields: Object.keys(patch) });
+    res.json(row);
+  });
+
+  app.delete("/api/admin/studio/featured/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "bad id" });
+    const ok = await storage.deleteStudioFeaturedClip(id);
+    if (!ok) return res.status(404).json({ error: "not found" });
+    await audit(req, "qa.studio.featured.delete", { id });
+    res.json({ ok: true });
+  });
+
   // Boot-time seed call so the table is populated before first admin visit.
   ensureFlagsSeeded().catch(() => {});
   invalidateFlagCache();

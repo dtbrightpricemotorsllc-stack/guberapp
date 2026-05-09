@@ -1727,6 +1727,24 @@ export const studioFreeQuota = pgTable("studio_free_quota", {
 }));
 export type StudioFreeQuota = typeof studioFreeQuota.$inferSelect;
 
+// studio_featured_clips — admin-curated "Trending now" rail above the
+// Templates carousel on /studio. Each row is one looping cinematic card.
+// `caption` is the prompt that gets inserted into the Studio textarea when
+// the user taps "Use this prompt".
+export const studioFeaturedClips = pgTable("studio_featured_clips", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  caption: text("caption").notNull(),
+  videoUrl: text("video_url").notNull(),
+  posterUrl: text("poster_url"),
+  position: integer("position").notNull().default(100),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type StudioFeaturedClip = typeof studioFeaturedClips.$inferSelect;
+export type InsertStudioFeaturedClip = Omit<StudioFeaturedClip, "id" | "createdAt">;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // QA DASHBOARD (task-462) — feature flags, tester allowlist, cash-drop events
 // ─────────────────────────────────────────────────────────────────────────────

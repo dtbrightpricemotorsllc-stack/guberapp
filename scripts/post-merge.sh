@@ -437,6 +437,44 @@ UPDATE studio_model_pricing SET credits_cost = 30 WHERE tool_key = 'wan_motion_5
 UPDATE studio_model_pricing SET credits_cost = 60 WHERE tool_key = 'wan_motion_10s';
 UPDATE studio_model_pricing SET credits_cost = 5  WHERE tool_key = 'minimax_music';
 
+-- Phase-2 Trends rail: admin-curated "Trending now" featured clips that
+-- render above the Templates carousel on /studio. Seeded with the same
+-- known-working Cloudinary demo videos used by Phase-1 template loops so
+-- the rail has visible content immediately. Admins can edit/replace via
+-- /api/admin/studio/featured.
+CREATE TABLE IF NOT EXISTS studio_featured_clips (
+  id serial PRIMARY KEY,
+  slug text NOT NULL UNIQUE,
+  label text NOT NULL,
+  caption text NOT NULL,
+  video_url text NOT NULL,
+  poster_url text,
+  position integer NOT NULL DEFAULT 100,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+
+INSERT INTO studio_featured_clips (slug, label, caption, video_url, position, active) VALUES
+  ('trend-dance-floor',  'Dance Floor Energy',
+   'A vibrant dance crew on a neon-lit street, slow-motion confetti, cinematic lens flares, fast-cut viral hook.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dance.mp4',  10, true),
+  ('trend-cinematic-wild','Cinematic Wildlife',
+   'An elephant herd at golden hour on the savanna, slow dolly-in, anamorphic depth, National Geographic mood.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/elephants.mp4', 20, true),
+  ('trend-pet-portrait', 'Pet Portrait',
+   'A golden retriever in soft afternoon light, shallow depth of field, slow blink, warm cinematic color grade.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dog.mp4',    30, true),
+  ('trend-ocean-dream',  'Ocean Dream',
+   'A sea turtle gliding through sun-dappled blue water, slow underwater dolly, ambient cinematic score.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sea_turtle.mp4', 40, true),
+  ('trend-action-sport', 'Action Sport',
+   'A snowboarder carving fresh powder at sunrise, slow-mo spray, dynamic cinematic shot, brand-ad energy.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/snowboarding.mp4', 50, true),
+  ('trend-urban-night',  'Urban Night',
+   'A cinematic street sequence at night, neon reflections in puddles, slow camera push, vaporwave color grade.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sample.mp4', 60, true)
+ON CONFLICT (slug) DO NOTHING;
+
 -- task-519: tier rename. Existing "creator" subscribers map to the new
 -- "standard" subscription tier. Existing non-subscribers (default tier
 -- "standard" with no Stripe sub) become "free". Order matters — non-subs

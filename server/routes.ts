@@ -9456,6 +9456,20 @@ export async function registerRoutes(
     });
   });
 
+  // Public Trends rail — no auth so the cards animate even before login.
+  // Returns active featured clips ordered by `position` for the /studio page.
+  app.get("/api/studio/featured", async (_req: Request, res: Response) => {
+    const rows = await storage.listStudioFeaturedClips(true);
+    res.json(rows.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      label: r.label,
+      caption: r.caption,
+      videoUrl: r.videoUrl,
+      posterUrl: r.posterUrl,
+    })));
+  });
+
   app.get("/api/studio/tools", requireAuth, async (_req: Request, res: Response) => {
     const tools = await storage.listStudioModelPricing();
     res.json(tools.map((t) => ({

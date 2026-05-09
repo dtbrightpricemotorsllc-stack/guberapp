@@ -11,11 +11,12 @@ import {
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
   studioSessions, studioSessionFiles, studioGenerationLog, studioModelPricing, studioFreeQuota,
+  studioFeaturedClips,
   taskHistorySummary,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
   type StudioSession, type StudioSessionFile, type StudioGenerationLog, type StudioModelPricing,
-  type StudioFreeQuota,
+  type StudioFreeQuota, type StudioFeaturedClip, type InsertStudioFeaturedClip,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
@@ -75,6 +76,11 @@ export interface IStorage {
   getStudioFreeQuotaUsed(userId: number, day: string): Promise<number>;
   consumeStudioFreeQuota(userId: number, day: string, dailyLimit: number): Promise<number | null>;
   refundStudioFreeQuota(userId: number, day: string): Promise<void>;
+  // Trending now rail (admin-curated featured clips above the templates carousel).
+  listStudioFeaturedClips(activeOnly: boolean): Promise<StudioFeaturedClip[]>;
+  createStudioFeaturedClip(data: InsertStudioFeaturedClip): Promise<StudioFeaturedClip>;
+  updateStudioFeaturedClip(id: number, patch: Partial<InsertStudioFeaturedClip>): Promise<StudioFeaturedClip | undefined>;
+  deleteStudioFeaturedClip(id: number): Promise<boolean>;
 
   getJobs(onlyPublished?: boolean): Promise<Job[]>;
   getJob(id: number): Promise<Job | undefined>;
@@ -547,6 +553,38 @@ export class DatabaseStorage implements IStorage {
       SET used_count = GREATEST(used_count - 1, 0)
       WHERE user_id = ${userId} AND day = ${day}
     `);
+  }
+
+  async listStudioFeaturedClips(activeOnly: boolean): Promise<StudioFeaturedClip[]> {
+    const q = db.select().from(studioFeaturedClips);
+    const rows = activeOnly
+      ? await q.where(eq(studioFeaturedClips.active, true))
+      : await q;
+    return [...rows].sort((a, b) =>
+      a.position !== b.position ? a.position - b.position : a.id - b.id,
+    );
+  }
+
+  async createStudioFeaturedClip(data: InsertStudioFeaturedClip): Promise<StudioFeaturedClip> {
+    const [row] = await db.insert(studioFeaturedClips).values(data).returning();
+    return row;
+  }
+
+  async updateStudioFeaturedClip(
+    id: number,
+    patch: Partial<InsertStudioFeaturedClip>,
+  ): Promise<StudioFeaturedClip | undefined> {
+    if (Object.keys(patch).length === 0) {
+      const [row] = await db.select().from(studioFeaturedClips).where(eq(studioFeaturedClips.id, id)).limit(1);
+      return row;
+    }
+    const [row] = await db.update(studioFeaturedClips).set(patch).where(eq(studioFeaturedClips.id, id)).returning();
+    return row;
+  }
+
+  async deleteStudioFeaturedClip(id: number): Promise<boolean> {
+    const rows = await db.delete(studioFeaturedClips).where(eq(studioFeaturedClips.id, id)).returning();
+    return rows.length > 0;
   }
 
   async getJobs(onlyPublished: boolean = true): Promise<Job[]> {

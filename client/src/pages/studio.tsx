@@ -304,6 +304,12 @@ export default function StudioPageV2() {
     queryKey: ["/api/studio/free-quota"],
     refetchOnWindowFocus: false,
   });
+  // Phase-2 Trends rail. Public endpoint, fine to fail silently — if empty,
+  // the rail renders nothing and the templates carousel takes the top slot.
+  const featuredQuery = useQuery<Array<{ id: number; slug: string; label: string; caption: string; videoUrl: string; posterUrl: string | null }>>({
+    queryKey: ["/api/studio/featured"],
+    refetchOnWindowFocus: false,
+  });
 
   // ── Session lifecycle ─────────────────────────────────────────────────
   useEffect(() => {
@@ -742,6 +748,51 @@ export default function StudioPageV2() {
           <div className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-100" data-testid="banner-provider-down">
             The AI provider isn't connected yet. Generation is disabled until the key is set — your credits are safe.
           </div>
+        )}
+
+        {/* ─── TRENDING NOW (Phase-2 admin-curated featured clips) ─────── */}
+        {(featuredQuery.data?.length ?? 0) > 0 && (
+          <section data-testid="section-featured-clips">
+            <div className="flex items-baseline justify-between mb-4">
+              <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-400" />
+                Trending now
+              </h2>
+              <span className="text-[10px] uppercase tracking-widest text-white/40">tap to use prompt</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
+              {featuredQuery.data!.map((clip) => (
+                <button
+                  key={clip.id}
+                  type="button"
+                  onClick={() => {
+                    setPrompt(clip.caption);
+                    setActiveTemplate(null);
+                    requestAnimationFrame(() => {
+                      promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      promptRef.current?.focus();
+                    });
+                  }}
+                  className="shrink-0 w-56 h-72 rounded-3xl snap-start relative overflow-hidden text-left group transition-transform duration-200 hover:scale-[1.02] ring-1 ring-white/10"
+                  data-testid={`featured-clip-${clip.slug}`}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/30 via-violet-500/20 to-fuchsia-500/30" />
+                  <TemplateVideoLoop src={clip.videoUrl} poster={clip.posterUrl ?? undefined} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/15 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+                  <div className="absolute top-3 left-3">
+                    <span className="text-[9px] uppercase tracking-widest bg-emerald-400/90 text-black px-2 py-1 rounded-full font-bold">
+                      Trending
+                    </span>
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 p-4">
+                    <p className="font-black text-lg leading-tight">{clip.label}</p>
+                    <p className="text-[11px] text-white/75 line-clamp-3 mt-1.5 leading-snug">{clip.caption}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ─── TRENDING TEMPLATES (CapCut-style cinematic carousel) ───── */}
