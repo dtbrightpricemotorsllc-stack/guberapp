@@ -531,5 +531,77 @@ describe("Studio refund path (task-533)", () => {
       expect(state.files.find((f) => f.fileType === "output_video")).toBeUndefined();
       expect(state.files.find((f) => f.fileType === "output_audio")).toBeUndefined();
     });
+
+    // task-539: outer catch refund branch. All three provider steps succeed
+    // but an unexpected exception is thrown afterwards — e.g. a DB hiccup in
+    // addStudioSessionFile or logStudioGeneration. The route must still
+    // refund the full 200-cr bundle, return 500, and write a "refunded" log
+    // row with errorReason starting with "unexpected:". A regression here
+    // would silently keep the user's 200 cr while returning a 500.
+    it("refunds the full 200-cr bundle when an unexpected error fires AFTER all 3 steps succeed", async () => {
+      const photo = await seedProductPhoto();
+
+      // All three providers succeed.
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_outer",
+      });
+      generateMiniMaxMusic.mockResolvedValueOnce({
+        audioUrl: "https://example.com/music.mp3",
+        jobId: "minimax_ok_outer",
+      });
+      generateOpenAITts.mockResolvedValueOnce({
+        dataUrl: "data:audio/mp3;base64,AAAA",
+      });
+
+      // Make the very next addStudioSessionFile call (the motion output_video
+      // row write that happens AFTER all 3 provider calls succeed) throw,
+      // which lands in the outer catch.
+      const realAdd = mockStorage.addStudioSessionFile.getMockImplementation()!;
+      mockStorage.addStudioSessionFile.mockImplementationOnce(async () => {
+        throw new Error("DB hiccup writing motion file row");
+      });
+      // Restore the real impl for any subsequent calls (the outer catch
+      // doesn't write more session files, but be defensive).
+      mockStorage.addStudioSessionFile.mockImplementation(realAdd);
+
+      const res = await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id, { withVoice: true }))
+        .expect(500);
+
+      // Balance fully restored.
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(res.body.message).toMatch(/credits were returned/i);
+      expect(res.body.message).toMatch(/DB hiccup writing motion file row/);
+
+      // Exactly one debit + one refund, both for the full 200-cr bundle.
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledTimes(1);
+      expect(mockStorage.decrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+
+      // All three provider calls actually fired.
+      expect(generateKlingMotionControl).toHaveBeenCalledTimes(1);
+      expect(generateMiniMaxMusic).toHaveBeenCalledTimes(1);
+      expect(generateOpenAITts).toHaveBeenCalledTimes(1);
+
+      // A "refunded" log row was written with errorReason starting with
+      // "unexpected:" (this distinguishes the outer-catch branch from the
+      // per-step refundAndAbort calls).
+      const refundLog = state.generationLogs.find(
+        (l) => l.toolKey === "commercial_builder" && l.status === "refunded",
+      );
+      expect(refundLog).toBeTruthy();
+      expect(refundLog.creditsCost).toBe(COMMERCIAL_BUNDLE);
+      expect(refundLog.errorReason).toMatch(/^unexpected:/);
+      expect(refundLog.errorReason).toMatch(/DB hiccup writing motion file row/);
+
+      // No output rows were committed (the motion row write is what threw,
+      // and the catch never tries to commit anything).
+      expect(state.files.find((f) => f.fileType === "output_video")).toBeUndefined();
+      expect(state.files.find((f) => f.fileType === "output_audio")).toBeUndefined();
+    });
   });
 });
