@@ -38,11 +38,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { isIOS } from "@/lib/platform";
+import { isStoreBuild } from "@/lib/platform";
 import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
-  Building2, Megaphone, Zap, Crown, Check, ShoppingCart,
+  Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -136,10 +136,16 @@ const TEMPLATES: Template[] = [
     icon: Music,
   },
   {
-    slug: "neon-night", label: "Neon Night", tag: "Vibes", kind: "video",
+    slug: "neon-night", label: "Cyberpunk Night", tag: "Vibes", kind: "video",
     prompt: "Neon-soaked Tokyo alley at night, rain reflections, slow cinematic dolly-in, cyberpunk color grade, atmospheric haze.",
     gradient: "from-sky-400 via-blue-600 to-violet-700",
     icon: Zap,
+  },
+  {
+    slug: "game-highlight", label: "Game Highlight", tag: "Esports", kind: "video",
+    prompt: "Esports-style highlight reel, fast zoom-in on the action, glitchy speedlines, neon overlay, high-energy 5-second hype clip.",
+    gradient: "from-lime-400 via-emerald-500 to-cyan-600",
+    icon: Gamepad2,
   },
 ];
 
@@ -178,6 +184,7 @@ export default function StudioPageV2() {
   const [confirmExit, setConfirmExit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const lowCreditNoticeRef = useRef(false);
 
   // ── Server state ──────────────────────────────────────────────────────
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
@@ -227,6 +234,19 @@ export default function StudioPageV2() {
   const uploadedImages = files.filter((f) => f.fileType === "upload_image");
   const outputs = files.filter((f) => f.fileType === "output_video" || f.fileType === "output_audio");
   const heroOutput = outputs[outputs.length - 1] || null;
+
+  // Low-credit nudge — fire once per page-load when balance drops to ≤3.
+  useEffect(() => {
+    if (!me) return;
+    if (me.credits > 0 && me.credits <= 3 && !lowCreditNoticeRef.current && !isStoreBuild) {
+      lowCreditNoticeRef.current = true;
+      toast({
+        title: `${me.credits} credit${me.credits === 1 ? "" : "s"} left — top up?`,
+        description: "Grab a pack so your next generation doesn't stall.",
+      });
+    }
+    if (me.credits > 3) lowCreditNoticeRef.current = false;
+  }, [me, toast]);
 
   // Tool routing — derived from output kind + whether a reference photo is selected.
   //   audio                           → minimax_music
@@ -404,13 +424,28 @@ export default function StudioPageV2() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div
-                className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5"
-                data-testid="text-studio-credits"
-              >
-                <Coins className="w-3.5 h-3.5 text-amber-300" />
-                <span className="text-xs font-bold tabular-nums">{credits}</span>
-              </div>
+              {isStoreBuild ? (
+                <div
+                  className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5"
+                  data-testid="text-studio-credits"
+                >
+                  <Coins className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="text-xs font-bold tabular-nums">{credits}</span>
+                </div>
+              ) : (
+                <Link href="/studio/credits">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 hover:bg-white/15 transition"
+                    data-testid="text-studio-credits"
+                    aria-label="Open credit packs"
+                  >
+                    <Coins className="w-3.5 h-3.5 text-amber-300" />
+                    <span className="text-xs font-bold tabular-nums">{credits}</span>
+                    <Plus className="w-3 h-3 text-white/60" />
+                  </button>
+                </Link>
+              )}
               <Badge
                 variant="outline"
                 className="tracking-widest text-[9px] border-white/20 bg-white/5"
@@ -437,6 +472,49 @@ export default function StudioPageV2() {
             <div className="mt-8 flex items-center gap-2 text-[11px] text-white/50">
               <Play className="w-3.5 h-3.5" />
               <span>Your first clip will play right here.</span>
+            </div>
+          )}
+
+          {/* Hero post-gen action row — Replay / Download / Try another */}
+          {heroOutput && (
+            <div className="mt-8 flex flex-wrap items-center gap-2" data-testid="hero-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  const v = document.querySelector<HTMLVideoElement>('[data-testid="video-hero"]');
+                  if (v) { v.currentTime = 0; v.play().catch(() => {}); }
+                }}
+                className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/15 transition"
+                data-testid="button-hero-replay"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Replay
+              </button>
+              <a
+                href={heroOutput.providerUrl}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/15 transition"
+                data-testid="button-hero-download"
+              >
+                <Download className="w-3.5 h-3.5" /> Download
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTemplate(null);
+                  setPrompt("");
+                  setSelectedSourceId(null);
+                  setTimeout(() => {
+                    promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    promptRef.current?.focus();
+                  }, 60);
+                }}
+                className="flex items-center gap-1.5 rounded-full bg-emerald-400 text-black px-3 py-1.5 text-xs font-bold hover:bg-emerald-300 transition"
+                data-testid="button-hero-try-another"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Try another
+              </button>
             </div>
           )}
         </div>
@@ -644,7 +722,15 @@ export default function StudioPageV2() {
             </div>
           )}
 
-          {insufficient && !generateMutation.isPending && !isIOS && (
+          {/* Explicit cost-preview line — required UX contract. */}
+          {activeToolPricing && (
+            <p className="text-center text-[12px] text-white/70" data-testid="text-cost-preview">
+              This clip costs <span className="font-bold text-amber-300">{activeToolPricing.creditsCost}</span> credit{activeToolPricing.creditsCost === 1 ? "" : "s"}
+              {activeToolPricing.durationSeconds && <> · ~{activeToolPricing.durationSeconds}s</>}.
+            </p>
+          )}
+
+          {insufficient && !generateMutation.isPending && !isStoreBuild && (
             <Link href="/studio/credits">
               <Button
                 variant="outline"
@@ -655,9 +741,9 @@ export default function StudioPageV2() {
               </Button>
             </Link>
           )}
-          {insufficient && !generateMutation.isPending && isIOS && (
-            <p className="text-center text-[11px] text-white/60" data-testid="text-ios-credits-unavailable">
-              Out of credits. Top-ups aren't available in the iOS app yet — visit guberapp.app to buy more.
+          {insufficient && !generateMutation.isPending && isStoreBuild && (
+            <p className="text-center text-[11px] text-white/60" data-testid="text-store-credits-unavailable">
+              Out of credits. Top-ups aren't available in the app yet — visit guberapp.app to buy more.
             </p>
           )}
         </section>
@@ -718,6 +804,14 @@ export default function StudioPageV2() {
             </div>
           )}
         </section>
+
+        {/* Provider attribution footer — required UX contract. */}
+        <div className="text-center" data-testid="footer-provider-chip">
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-white/40 bg-white/[0.03] border border-white/10 rounded-full px-3 py-1.5">
+            <Sparkles className="w-3 h-3 text-emerald-400/70" />
+            Powered by Fal.ai · Kling · Wan · MiniMax
+          </span>
+        </div>
       </div>
 
       {/* Exit confirm */}
