@@ -19,6 +19,7 @@ import appDashboard from "@assets/Screenshot_20260429_192406_Gallery_17781990339
 import appVi from "@assets/Screenshot_20260404_182235_Chrome_1778199034106.jpg";
 import appPostJob from "@assets/Screenshot_20260426_161934_GUBER_1778199034124.jpg";
 import appStudio from "@assets/app-screen-studio_investor.jpg";
+import appAiNot from "@assets/ai_or_not_1242x2688_1778347842236.png";
 
 const PROOF_ASSETS: Record<string, string> = {
   "winner-jamie": winnerJamie,
@@ -37,6 +38,7 @@ const PROOF_ASSETS: Record<string, string> = {
   "app-vi": appVi,
   "app-postjob": appPostJob,
   "app-studio": appStudio,
+  "app-ainot": appAiNot,
 };
 
 function useReveal<T extends HTMLElement>() {
@@ -473,7 +475,7 @@ export default function Investors() {
           <Reveal className="lg:col-span-2" delay={120}>
             <div className="inv-card overflow-hidden h-full flex flex-col" data-testid="card-studio-screenshot">
               <div className="relative aspect-[9/16] bg-black/40 overflow-hidden">
-                <img src={appStudio} alt={C.studio.screenshot.title} loading="lazy" className="w-full h-full object-cover" data-testid="img-studio-screenshot" />
+                <img src={appStudio} alt={C.studio.screenshot.title} loading="lazy" className="w-full h-full object-contain" data-testid="img-studio-screenshot" />
                 <div className="absolute top-2 left-2">
                   <span className="pill pill-purple num-font">Live in production</span>
                 </div>
@@ -621,7 +623,7 @@ export default function Investors() {
                     src={PROOF_ASSETS[w.asset]}
                     alt={`${w.name} — ${w.quote}`}
                     loading="lazy"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                     data-testid={`img-winner-${i}`}
                   />
                   <div className="absolute top-2 left-2">
@@ -650,7 +652,7 @@ export default function Investors() {
             <Reveal key={c.asset} delay={i * 80}>
               <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col" data-testid={`card-creative-${i}`}>
                 <div className="relative aspect-[4/5] bg-black/40 overflow-hidden">
-                  <img src={PROOF_ASSETS[c.asset]} alt={c.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-creative-${i}`} />
+                  <img src={PROOF_ASSETS[c.asset]} alt={c.title} loading="lazy" className="w-full h-full object-contain" data-testid={`img-creative-${i}`} />
                   <div className="absolute top-2 left-2">
                     <span className="pill pill-purple num-font">Marketing</span>
                   </div>
@@ -674,7 +676,7 @@ export default function Investors() {
             <Reveal key={s.asset} delay={i * 80}>
               <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col sm:flex-row" data-testid={`card-wild-${i}`}>
                 <div className="relative sm:w-1/2 aspect-[4/3] sm:aspect-auto bg-black/40 overflow-hidden">
-                  <img src={PROOF_ASSETS[s.asset]} alt={s.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-wild-${i}`} />
+                  <img src={PROOF_ASSETS[s.asset]} alt={s.title} loading="lazy" className="w-full h-full object-contain" data-testid={`img-wild-${i}`} />
                   <div className="absolute top-2 left-2">
                     <span className="pill pill-cyan num-font">In the wild</span>
                   </div>
@@ -698,7 +700,7 @@ export default function Investors() {
             <Reveal key={a.asset} delay={(i % 4) * 60}>
               <div className="inv-card overflow-hidden inv-card-hover h-full flex flex-col" data-testid={`card-appshot-${i}`}>
                 <div className="relative aspect-[9/19] bg-black/40 overflow-hidden">
-                  <img src={PROOF_ASSETS[a.asset]} alt={a.title} loading="lazy" className="w-full h-full object-cover" data-testid={`img-appshot-${i}`} />
+                  <img src={PROOF_ASSETS[a.asset]} alt={a.title} loading="lazy" className="w-full h-full object-contain" data-testid={`img-appshot-${i}`} />
                   <div className="absolute top-2 left-2">
                     <span className="pill pill-green num-font">Live</span>
                   </div>

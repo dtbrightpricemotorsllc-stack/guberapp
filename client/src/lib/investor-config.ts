@@ -9,7 +9,7 @@ export const INVESTOR_CONFIG = {
     contactEmail: "guberapp.global@gmail.com",
     contactPhone: "+13362579787",
     contactPhoneDisplay: "(336) 257-9787",
-    publicUrl: "https://guberapp.app",
+    publicUrl: "https://guberapp.com",
     confidentialNote: "Confidential — for invited investors only. Do not redistribute.",
   },
 
@@ -133,7 +133,7 @@ export const INVESTOR_CONFIG = {
       { value: "10+", label: "Sponsored Cash Drops in market", sub: "Real winners, real cash, real photos" },
     ],
     state: [
-      "Web PWA is live at guberapp.app and serving real users today.",
+      "Web PWA is live at guberapp.com and serving real users today.",
       "Native Android live on Google Play since April 8, 2026; iOS submission to Apple App Store in progress.",
       "Brand-funded Cash Drops already paying out to real users (see the proof section below).",
       "Active social presence across LinkedIn, Facebook, TikTok, Instagram, and X — organic engagement of 60–80+ reactions per post with zero paid promotion.",
@@ -194,6 +194,7 @@ export const INVESTOR_CONFIG = {
         { title: "Verify & Inspect categories", caption: "Smart-form templates: vehicles, properties, marketplace listings, salvage.", asset: "app-vi" },
         { title: "Guided Job Builder", caption: "Dropdown-driven job posting — structured data, no free-form mistakes.", asset: "app-postjob" },
         { title: "GUBER Studio (BETA)", caption: "AI media engine — cinematic clips, viral reels, business commercials. Live, monetized, baked into every account.", asset: "app-studio" },
+        { title: "AI Or Not — Trust Box", caption: "$4.99/mo subscription — AI-content detection plus unlimited text verification. Live, paying users today.", asset: "app-ainot" },
       ],
     },
   },
