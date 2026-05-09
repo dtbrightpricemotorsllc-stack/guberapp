@@ -14,6 +14,8 @@ import { computeGraceEndsAt, computeExpiresAt } from "./rules";
 import {
   STUDIO_CREDIT_PACKS,
   STUDIO_TIER_PLANS,
+  studioPacksHandler,
+  studioTiersHandler,
   type StudioPackId,
   type StudioTierPlanId,
 } from "./studio-pricing";
@@ -9235,11 +9237,7 @@ export async function registerRoutes(
   // Session with metadata.type="studio_credits" + pack id; webhook increments
   // balance.
   // ───────────────────────────────────────────────────────────────────────────
-  app.get("/api/studio/packs", (_req: Request, res: Response) => {
-    res.json(Object.entries(STUDIO_CREDIT_PACKS).map(([id, p]) => ({
-      id, credits: p.credits, priceCents: p.priceCents, label: p.label,
-    })));
-  });
+  app.get("/api/studio/packs", studioPacksHandler);
 
   app.post("/api/stripe/studio-credits-checkout", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -9292,18 +9290,7 @@ export async function registerRoutes(
   // credit drip (handled in the webhook + cron) and unlocks the locked vibes
   // / advanced features in the UI. Pricing is inline via `price_data` so no
   // preconfigured Stripe Price IDs are required.
-  app.get("/api/studio/tiers", (_req: Request, res: Response) => {
-    res.json(
-      Object.entries(STUDIO_TIER_PLANS).map(([id, p]) => ({
-        id,
-        label: p.label,
-        priceCents: p.priceCents,
-        monthlyCredits: p.monthlyCredits,
-        description: p.description,
-        features: p.features,
-      })),
-    );
-  });
+  app.get("/api/studio/tiers", studioTiersHandler);
 
   app.post("/api/stripe/studio-subscription-checkout", requireAuth, async (req: Request, res: Response) => {
     try {

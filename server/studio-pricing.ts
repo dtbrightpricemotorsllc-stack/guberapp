@@ -77,3 +77,35 @@ export const STUDIO_TOOL_CREDIT_COSTS = {
 
 export const STUDIO_CREDIT_REPRICE_MULTIPLIER_V519 = 41.25;
 export const STUDIO_CREDIT_REPRICE_FLAG_V519 = "studio_credits_repriced_v519";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public list endpoints (task-532). Extracted as standalone handlers so the
+// supertest-level checks in studio-pricing.test.ts can mount the EXACT same
+// code path the production routes use — no duplicated mapping logic.
+// `server/routes.ts` mounts these on /api/studio/{packs,tiers}.
+// ─────────────────────────────────────────────────────────────────────────────
+import type { Request, Response } from "express";
+
+export function studioPacksHandler(_req: Request, res: Response) {
+  res.json(
+    Object.entries(STUDIO_CREDIT_PACKS).map(([id, p]) => ({
+      id,
+      credits: p.credits,
+      priceCents: p.priceCents,
+      label: p.label,
+    })),
+  );
+}
+
+export function studioTiersHandler(_req: Request, res: Response) {
+  res.json(
+    Object.entries(STUDIO_TIER_PLANS).map(([id, p]) => ({
+      id,
+      label: p.label,
+      priceCents: p.priceCents,
+      monthlyCredits: p.monthlyCredits,
+      description: p.description,
+      features: p.features,
+    })),
+  );
+}
