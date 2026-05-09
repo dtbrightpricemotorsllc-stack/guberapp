@@ -11,6 +11,12 @@ import { randomBytes, createHmac, timingSafeEqual } from "crypto";
 import Stripe from "stripe";
 import express from "express";
 import { computeGraceEndsAt, computeExpiresAt } from "./rules";
+import {
+  STUDIO_CREDIT_PACKS,
+  STUDIO_TIER_PLANS,
+  type StudioPackId,
+  type StudioTierPlanId,
+} from "./studio-pricing";
 import { sendPushToUser } from "./push";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
@@ -9229,16 +9235,6 @@ export async function registerRoutes(
   // Session with metadata.type="studio_credits" + pack id; webhook increments
   // balance.
   // ───────────────────────────────────────────────────────────────────────────
-  const STUDIO_CREDIT_PACKS = {
-    spark: { credits:   330, priceCents:   500, label: "Spark Pack" },
-    boost: { credits:   660, priceCents:  1000, label: "Boost Pack" },
-    power: { credits:  1320, priceCents:  2000, label: "Power Pack" },
-    mega:  { credits:  3500, priceCents:  5000, label: "Mega Pack" },
-    ultra: { credits:  7500, priceCents: 10000, label: "Ultra Pack" },
-    whale: { credits: 16000, priceCents: 20000, label: "Whale Pack" },
-  } as const;
-  type StudioPackId = keyof typeof STUDIO_CREDIT_PACKS;
-
   app.get("/api/studio/packs", (_req: Request, res: Response) => {
     res.json(Object.entries(STUDIO_CREDIT_PACKS).map(([id, p]) => ({
       id, credits: p.credits, priceCents: p.priceCents, label: p.label,
@@ -9296,53 +9292,6 @@ export async function registerRoutes(
   // credit drip (handled in the webhook + cron) and unlocks the locked vibes
   // / advanced features in the UI. Pricing is inline via `price_data` so no
   // preconfigured Stripe Price IDs are required.
-  const STUDIO_TIER_PLANS = {
-    standard: {
-      label: "Standard",
-      priceCents: 1099,
-      monthlyCredits: 660,
-      productName: "GUBER Studio · Standard",
-      description:
-        "660 monthly credits, motion AI, reference clips, locked vibes unlocked.",
-      features: [
-        "660 credits every month",
-        "Motion AI on every clip",
-        "Reference clips & uploads",
-        "All locked vibes unlocked",
-      ],
-    },
-    business: {
-      label: "Business",
-      priceCents: 3799,
-      monthlyCredits: 3000,
-      productName: "GUBER Studio · Business",
-      description:
-        "3,000 monthly credits, brand kits, ad templates, captions/music, multi-platform export.",
-      features: [
-        "3,000 credits every month",
-        "Brand kits (logo, colors, fonts)",
-        "Ad templates & captions/music",
-        "Multi-platform export (TikTok, Reels, Shorts)",
-        "Everything in Standard",
-      ],
-    },
-    enterprise: {
-      label: "Enterprise",
-      priceCents: 9900,
-      monthlyCredits: 8000,
-      productName: "GUBER Studio · Enterprise",
-      description:
-        "8,000 monthly credits, priority generation queue, team-scale output for agencies and studios.",
-      features: [
-        "8,000 credits every month",
-        "Priority generation queue",
-        "Team-scale output for agencies & studios",
-        "Everything in Business",
-      ],
-    },
-  } as const;
-  type StudioTierPlanId = keyof typeof STUDIO_TIER_PLANS;
-
   app.get("/api/studio/tiers", (_req: Request, res: Response) => {
     res.json(
       Object.entries(STUDIO_TIER_PLANS).map(([id, p]) => ({
