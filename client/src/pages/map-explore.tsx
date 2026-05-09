@@ -96,6 +96,28 @@ function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number) 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function makeWorkerDroneSvg(): string {
+  const size = 32;
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="16" cy="16" r="13" fill="rgba(0,0,0,0.18)"/>
+      <circle cx="16" cy="16" r="11" fill="#EC4899" stroke="#ffffff" stroke-width="2"/>
+      <g transform="translate(20.5,4.5)">
+        <circle cx="5.5" cy="5.5" r="5.5" fill="#0EA5E9" stroke="#ffffff" stroke-width="1.2"/>
+        <g stroke="#ffffff" stroke-width="0.9" stroke-linecap="round" fill="none">
+          <circle cx="2.6" cy="3.4" r="1"/>
+          <circle cx="8.4" cy="3.4" r="1"/>
+          <circle cx="2.6" cy="7.6" r="1"/>
+          <circle cx="8.4" cy="7.6" r="1"/>
+          <line x1="3.6" y1="4.4" x2="7.4" y2="6.6"/>
+          <line x1="7.4" y1="4.4" x2="3.6" y2="6.6"/>
+        </g>
+        <rect x="4.7" y="4.7" width="1.6" height="1.6" rx="0.3" fill="#ffffff"/>
+      </g>
+    </svg>`
+  );
+}
+
 function makeBubbleSvg(total: number, color: string, hasUrgent: boolean): string {
   const count = total > 999 ? "999+" : String(total);
   const size = Math.max(36, Math.min(64, 36 + Math.floor(Math.log2(total + 1)) * 7));
@@ -361,19 +383,26 @@ export default function MapExplore() {
 
     if (mapViewMode === "workers") {
       workerPins.forEach((worker) => {
+        const baseTitle = worker.displayName || worker.guberId || "GUBER Member";
         const marker = new g.Marker({
           position: { lat: worker.lat, lng: worker.lng },
           map: mapRef.current!,
-          title: worker.displayName || worker.guberId || "GUBER Member",
-          icon: {
-            path: g.SymbolPath.CIRCLE,
-            fillColor: "#EC4899",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-            scale: 10,
-          },
-          zIndex: 150,
+          title: worker.droneCertified ? `${baseTitle} · Drone Operator (FAA Part 107)` : baseTitle,
+          icon: worker.droneCertified
+            ? {
+                url: makeWorkerDroneSvg(),
+                scaledSize: new g.Size(32, 32),
+                anchor: new g.Point(16, 16),
+              }
+            : {
+                path: g.SymbolPath.CIRCLE,
+                fillColor: "#EC4899",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+                scale: 10,
+              },
+          zIndex: worker.droneCertified ? 200 : 150,
         });
 
         marker.addListener("click", () => {
@@ -946,6 +975,16 @@ export default function MapExplore() {
                       {label}
                     </span>
                   ))}
+                  <span className="flex items-center gap-1.5" style={{ fontFamily: "Inter, sans-serif", fontSize: 10, color: DARK_MUTED }} data-testid="legend-drone-operator">
+                    <span className="relative w-3 h-3 shrink-0">
+                      <span className="absolute inset-0 rounded-full" style={{ backgroundColor: "#EC4899" }} />
+                      <span
+                        className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
+                        style={{ backgroundColor: "#0EA5E9", boxShadow: "0 0 0 1px #ffffff" }}
+                      />
+                    </span>
+                    Drone Operator
+                  </span>
                 </div>
               )}
             </div>
@@ -978,11 +1017,22 @@ export default function MapExplore() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h3 className="text-lg font-bold" style={{ color: DARK_TEXT }}>{selectedWorker.displayName || "GUBER Member"}</h3>
                   <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/20 uppercase">
                     {selectedWorker.tier}
                   </Badge>
+                  {selectedWorker.droneCertified && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-bold px-1.5 py-0 h-4 uppercase border-0"
+                      style={{ background: "rgba(14,165,233,0.18)", color: "#7dd3fc" }}
+                      data-testid="badge-drone-operator"
+                      title="FAA Part 107 certified drone operator"
+                    >
+                      Drone Op · FAA 107
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 text-amber-400">
                   <Star className="w-3.5 h-3.5 fill-current" />

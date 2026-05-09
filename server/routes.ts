@@ -20,7 +20,7 @@ import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHi
 import { generateJWT, verifyJWT } from "./jwt";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
-import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
+import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
 import {
   DISPUTE_ISSUE_TYPES,
   ADMIN_DISPUTE_DECISIONS,
@@ -3012,9 +3012,23 @@ export async function registerRoutes(
       const demoIds = await getDemoUserIds();
       const callerIsDemoUser = demoIds.has(currentUserId);
 
-      const pins = workers
+      const visibleWorkers = workers
         .filter(w => w.lat && w.lng && w.id !== currentUserId && (w as any).role !== "admin")
-        .filter(w => callerIsDemoUser || !demoIds.has(w.id))
+        .filter(w => callerIsDemoUser || !demoIds.has(w.id));
+
+      const droneCertifiedIds = new Set<number>();
+      if (visibleWorkers.length > 0) {
+        const projRows = await db
+          .select({ userId: workerBusinessProjections.userId })
+          .from(workerBusinessProjections)
+          .where(and(
+            inArray(workerBusinessProjections.userId, visibleWorkers.map(w => w.id)),
+            eq(workerBusinessProjections.droneCertified, true),
+          ));
+        projRows.forEach(r => droneCertifiedIds.add(r.userId));
+      }
+
+      const pins = visibleWorkers
         .map(w => ({
           id: w.id,
           publicUsername: (w as any).publicUsername || null,
@@ -3029,6 +3043,7 @@ export async function registerRoutes(
           rating: w.rating,
           reviewCount: w.reviewCount,
           color: "#EC4899",
+          droneCertified: droneCertifiedIds.has(w.id),
         }));
       res.json(pins);
     } catch (err: any) {
