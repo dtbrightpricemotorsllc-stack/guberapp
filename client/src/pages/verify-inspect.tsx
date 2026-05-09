@@ -482,7 +482,6 @@ export default function VerifyInspect() {
   const [detailValues, setDetailValues] = useState<Record<string, string>>({});
   const [timingWindow, setTimingWindow] = useState<string>("");
   const [accessInstruction, setAccessInstruction] = useState<string>("");
-  const [focusNote, setFocusNote] = useState<string>("");
   const [smartFormValues, setSmartFormValues] = useState<Record<string, string>>({});
   const [vibudget, setViBudget] = useState<string>("");
   const [vizip, setViZip] = useState<string>("");
