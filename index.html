@@ -206,6 +206,116 @@
     .float-og img:hover { transform: scale(1.1); }
     .float-og span { font-size: 9px; font-weight: 800; color: var(--gold); letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0,0,0,0.85); padding: 2px 6px; border-radius: 4px; }
 
+    /* ─── GUBER Revolution effects ───────────────────────────────────── */
+    /* Neon-green text glow with pulse — for "No Resumes" / "Just Hustle". */
+    @keyframes neonTextPulse {
+      0%, 100% {
+        text-shadow:
+          0 0 4px rgba(0, 255, 130, 0.85),
+          0 0 12px rgba(0, 255, 106, 0.55),
+          0 0 22px rgba(0, 255, 106, 0.35);
+      }
+      50% {
+        text-shadow:
+          0 0 6px rgba(120, 255, 170, 1),
+          0 0 18px rgba(0, 255, 130, 0.75),
+          0 0 32px rgba(0, 255, 106, 0.55);
+      }
+    }
+    .neon-pulse {
+      color: #5cffa6;
+      font-weight: 900;
+      animation: neonTextPulse 2.4s ease-in-out infinite;
+    }
+
+    /* Breathing glow — wraps the SEE THE MAP CTA so it's the brightest
+       thing on the screen. Composites cleanly over dark backgrounds. */
+    @keyframes breatheGlow {
+      0%, 100% {
+        box-shadow: 0 0 18px rgba(0, 255, 106, 0.45), 0 0 36px rgba(0, 255, 106, 0.18);
+      }
+      50% {
+        box-shadow: 0 0 28px rgba(0, 255, 130, 0.7), 0 0 60px rgba(0, 255, 106, 0.32);
+      }
+    }
+    .search-btn {
+      animation: breatheGlow 2.2s ease-in-out infinite;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+    }
+    .search-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 36px rgba(0, 255, 130, 0.85), 0 0 80px rgba(0, 255, 106, 0.45);
+      opacity: 1;
+    }
+
+    /* Gold shine sweep — moving light reflection across the OG badge. */
+    @keyframes goldShine {
+      0% { transform: translateX(-120%) skewX(-20deg); }
+      60%, 100% { transform: translateX(260%) skewX(-20deg); }
+    }
+    .gold-shine {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .gold-shine::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 35%;
+      height: 100%;
+      background: linear-gradient(
+        100deg,
+        transparent 0%,
+        rgba(255, 235, 160, 0) 20%,
+        rgba(255, 235, 160, 0.55) 50%,
+        rgba(255, 235, 160, 0) 80%,
+        transparent 100%
+      );
+      pointer-events: none;
+      animation: goldShine 5s ease-in-out infinite;
+      z-index: 1;
+    }
+    .gold-shine > * { position: relative; z-index: 2; }
+
+    /* Tiny pulsing green dot for "Web App (Live)". */
+    @keyframes onlineDotPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 106, 0.7); }
+      70% { box-shadow: 0 0 0 6px rgba(0, 255, 106, 0); }
+    }
+    .online-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 9999px;
+      background: #00ff6a;
+      animation: onlineDotPulse 1.6s ease-in-out infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    .platform-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+    .platform-bar .pb-item { display: inline-flex; align-items: center; color: var(--soft); }
+    .platform-bar .pb-item.live { color: var(--text); font-weight: 700; }
+    .platform-bar .pb-item.live .live-tag { color: var(--accent); margin-left: 4px; }
+    .platform-bar .pb-item.soon { color: var(--muted); }
+    .platform-bar .pb-item.soon .soon-tag { color: var(--gold); margin-left: 4px; }
+    .platform-bar .pb-sep { color: rgba(255,255,255,0.18); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .neon-pulse, .search-btn, .gold-shine::after, .online-dot { animation: none; }
+    }
+
     @media (max-width: 820px) {
       .hero h1 { font-size: 32px; }
       .cats-grid { grid-template-columns: repeat(3, 1fr); }
@@ -243,21 +353,37 @@
 <section class="hero">
   <div class="wrap">
     <div class="hero-tag">Find Work · Post Jobs · Verify Anything</div>
-    <h1>Real Jobs Near You.<br><span class="green">Start Now.</span></h1>
-    <p class="hero-sub">Search local jobs, post tasks, or hire verified help. No resume needed — real people, real work, real pay.</p>
+    <h1>Glad you&rsquo;re here.<br><span class="green">Let&rsquo;s get started.</span></h1>
+    <p class="hero-sub">
+      Put your city on the map! 📍
+      <span class="neon-pulse">No Resumes</span>.
+      No Gatekeepers.
+      <span class="neon-pulse">Just Hustle</span>.
+    </p>
 
     <form class="search-box" id="searchForm" onsubmit="doSearch(event)">
-      <input type="text" id="searchQ" placeholder="What do you need done?" autocomplete="off" />
-      <input type="text" id="searchZip" placeholder="ZIP code or city" autocomplete="off" />
-      <button type="submit" class="search-btn">Find Tasks →</button>
+      <input type="text" id="searchQ" placeholder="What are you looking for?" aria-label="What are you looking for?" autocomplete="off" />
+      <input type="text" id="searchZip" placeholder="Enter ZIP or City" aria-label="ZIP code or city" autocomplete="postal-code" />
+      <button type="submit" class="search-btn">SEE THE MAP →</button>
     </form>
 
-    <div class="hero-apps">
-      <a href="https://play.google.com/store/apps/details?id=com.guber.app" target="_blank" rel="noopener">▶ Google Play</a>
-      <span>·</span>
-      <span style="color:var(--muted)">🍎 iOS Coming Soon</span>
-      <span>·</span>
-      <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')">Open in Browser →</a>
+    <div class="platform-bar" aria-label="Platform availability">
+      <span class="pb-item live">
+        <span class="online-dot" aria-hidden="true"></span>
+        <a href="#" onclick="event.preventDefault();showGetApp('https://guberapp.app/signup')" style="color:inherit;">
+          Web App <span class="live-tag">(Live)</span>
+        </a>
+      </span>
+      <span class="pb-sep">|</span>
+      <span class="pb-item live">
+        <a href="https://play.google.com/store/apps/details?id=com.guber.app" target="_blank" rel="noopener" style="color:inherit;">
+          ▶ Google Play <span class="live-tag">(Live)</span>
+        </a>
+      </span>
+      <span class="pb-sep">|</span>
+      <span class="pb-item soon">
+        🍎 iOS <span class="soon-tag">(Soon)</span>
+      </span>
     </div>
   </div>
 </section>
@@ -374,10 +500,11 @@
 
 <section class="og-sec">
   <div class="wrap">
-    <div class="og-compact" style="position:relative;overflow:visible;">
-      <img src="/day1og-badge.png" alt="Day-1 OG — Get 5% For Life" style="position:absolute;top:14px;left:14px;width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(245,165,0,0.35));z-index:2;transform:rotate(-12deg);" />
+    <div class="og-compact gold-shine" style="position:relative;">
+      <img src="/day1og-badge.png" alt="Day-1 OG — Get 5% For Life" style="position:absolute;top:14px;left:14px;width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(245,165,0,0.35));transform:rotate(-12deg);" />
       <img src="/Gubergoldday1.png" alt="GUBER" style="width:42px;height:42px;margin:0 auto 8px;object-fit:contain;" />
-      <h3>Day-1 OG Status</h3>
+      <h3>💎 DAY-1 OG</h3>
+      <p style="font-size:15px;font-weight:700;color:#fde68a;margin-bottom:14px;">Higher Pay &amp; Exclusive Rewards</p>
       <p>Be a founding member. Lock in the lowest rate GUBER will ever offer — permanently.</p>
       <ul class="og-perks-mini">
         <li>Founding rate locked forever</li>
