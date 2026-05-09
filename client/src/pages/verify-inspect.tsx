@@ -22,11 +22,6 @@ import {
 } from "lucide-react";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
-import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
-import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
-import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
-import quickCheckImg from "@assets/file_000000001e2471f586eaaf945485317c_1772458167013.png";
-import pavSalvageImg from "@assets/pav_salvage_yard.png";
 import formPropertyImg from "@assets/category-images/vi_property_site_check.png";
 import formOnlineImg from "@assets/category-images/vi_online_items.png";
 import formWheelsImg from "@assets/category-images/vi_wheels_wings_water.png";
@@ -814,11 +809,11 @@ export default function VerifyInspect() {
   });
 
   const GRID_CATEGORIES = [
-    { name: "Property & Site Check", img: propertySiteImg, wide: false },
-    { name: "Online Items", img: onlineItemsImg, wide: false },
-    { name: "Wheels, Wings & Water", img: wheelsWingsImg, wide: false },
-    { name: "Quick Check", img: quickCheckImg, wide: false },
-    { name: "Part Availability Verification", img: pavSalvageImg, wide: true },
+    { name: "Property & Site Check", img: formPropertyImg, wide: false },
+    { name: "Online Items", img: formOnlineImg, wide: false },
+    { name: "Wheels, Wings & Water", img: formWheelsImg, wide: false },
+    { name: "Quick Check", img: formQuickImg, wide: false },
+    { name: "Part Availability Verification", img: formPavImg, wide: true },
     { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true },
   ];
 
