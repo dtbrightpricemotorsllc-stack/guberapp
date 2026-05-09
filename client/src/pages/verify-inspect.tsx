@@ -32,6 +32,7 @@ import formOnlineImg from "@assets/category-images/vi_online_items.png";
 import formWheelsImg from "@assets/category-images/vi_wheels_wings_water.png";
 import formQuickImg from "@assets/category-images/vi_quick_check.png";
 import formPavImg from "@assets/category-images/vi_pav_salvage.png";
+import droneAerialImg from "@assets/category-images/vi_drone_aerial.png";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -802,7 +803,7 @@ export default function VerifyInspect() {
     { name: "Wheels, Wings & Water", img: wheelsWingsImg, wide: false },
     { name: "Quick Check", img: quickCheckImg, wide: false },
     { name: "Part Availability Verification", img: pavSalvageImg, wide: true },
-    { name: "Drone / Aerial Footage", img: verifyInspectImg, wide: true },
+    { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true },
   ];
 
   function handleLandingSelect(catName: string) {
@@ -986,7 +987,7 @@ export default function VerifyInspect() {
               "Wheels, Wings & Water": formWheelsImg,
               "Quick Check": formQuickImg,
               "Part Availability Verification": formPavImg,
-              "Drone / Aerial Footage": verifyInspectImg,
+              "Drone / Aerial Footage": droneAerialImg,
             };
             const catImg = selectedCategory?.name ? FORM_IMGS[selectedCategory.name] : undefined;
             return catImg ? (

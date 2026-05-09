@@ -126,6 +126,12 @@ uri = "file://attached_assets/appstore/04_ai_or_not.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "6Y6Dy-3QVAVye22CHhMbt"
+uri = "file://attached_assets/category-images/vi_drone_aerial.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
