@@ -92,8 +92,8 @@ function scrollToId(id: string) {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-const NEON_GREEN = "hsl(152 100% 44%)";
-const NEON_PURPLE = "hsl(275 90% 65%)";
+const NEON_GREEN = "#39FF14";
+const NEON_PURPLE = "#D100FF";
 const NEON_CYAN = "hsl(190 95% 55%)";
 
 export default function Investors() {
@@ -138,34 +138,102 @@ export default function Investors() {
   }, []);
 
   return (
-    <div className="dark min-h-screen bg-background text-foreground font-sans investor-root">
+    <div className="dark min-h-screen bg-background text-foreground investor-root">
       <style>{`
-        .investor-root { background:
-          radial-gradient(1200px 600px at 15% -10%, hsl(275 90% 25% / 0.35), transparent 60%),
-          radial-gradient(1000px 500px at 95% 10%, hsl(152 100% 30% / 0.18), transparent 60%),
-          radial-gradient(900px 500px at 50% 110%, hsl(190 95% 30% / 0.18), transparent 60%),
-          hsl(225 25% 3%);
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+        .investor-root {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          background:
+            radial-gradient(1100px 540px at 12% -8%, rgba(209, 0, 255, 0.10), transparent 60%),
+            radial-gradient(900px 460px at 92% 8%, rgba(57, 255, 20, 0.06), transparent 60%),
+            radial-gradient(800px 460px at 50% 110%, rgba(57, 255, 20, 0.04), transparent 60%),
+            #060606;
+          color: #f5f5f7;
+          letter-spacing: -0.005em;
+          -webkit-font-smoothing: antialiased;
         }
+        .investor-root * { font-family: inherit; }
+        .investor-root .text-muted-foreground { color: #a8a8b3; }
+
         .ink-grid {
           background-image:
-            linear-gradient(hsl(220 15% 20% / 0.18) 1px, transparent 1px),
-            linear-gradient(90deg, hsl(220 15% 20% / 0.18) 1px, transparent 1px);
-          background-size: 56px 56px;
-          mask-image: radial-gradient(ellipse at center, black 35%, transparent 75%);
-          -webkit-mask-image: radial-gradient(ellipse at center, black 35%, transparent 75%);
+            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+          background-size: 64px 64px;
+          mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+          -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
         }
-        .neon-rule { height: 1px; background: linear-gradient(90deg, transparent, ${NEON_GREEN} 30%, ${NEON_PURPLE} 70%, transparent); opacity:.55; }
-        .num-font { font-family: 'Oxanium', monospace; letter-spacing:.04em; }
-        .pill { display:inline-flex; align-items:center; gap:.4em; padding:.3em .8em; border-radius:999px; font-size:.72rem; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
-        .pill-green { background: hsl(152 100% 44% / .12); color: ${NEON_GREEN}; border:1px solid hsl(152 100% 44% / .3); }
-        .pill-purple { background: hsl(275 90% 65% / .12); color: ${NEON_PURPLE}; border:1px solid hsl(275 90% 65% / .3); }
-        .pill-cyan { background: hsl(190 95% 55% / .12); color: ${NEON_CYAN}; border:1px solid hsl(190 95% 55% / .3); }
-        .pill-amber { background: hsl(45 100% 55% / .12); color: hsl(45 100% 60%); border:1px solid hsl(45 100% 55% / .3); }
-        .inv-card { background: hsl(225 25% 6% / .8); backdrop-filter: blur(14px); border:1px solid hsl(220 15% 22% / .6); border-radius: 16px; }
-        .inv-card-hover { transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease; }
-        .inv-card-hover:hover { transform: translateY(-2px); border-color: hsl(152 100% 44% / .35); box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 24px hsl(152 100% 44% / .08); }
-        .glow-text-green { text-shadow: 0 0 18px hsl(152 100% 44% / .35); }
-        .glow-text-purple { text-shadow: 0 0 18px hsl(275 90% 65% / .35); }
+        .neon-rule {
+          height: 1px;
+          background: linear-gradient(90deg, transparent, ${NEON_GREEN} 30%, ${NEON_PURPLE} 70%, transparent);
+          opacity: .35;
+        }
+
+        /* Inter for everything; Oxanium replaced for cleaner premium look */
+        .num-font { font-family: 'Inter', sans-serif; letter-spacing: 0.02em; font-feature-settings: 'tnum' 1, 'cv11' 1; }
+
+        /* Refined pills — subtler chrome */
+        .pill {
+          display: inline-flex; align-items: center; gap: .4em;
+          padding: .35em .9em; border-radius: 999px;
+          font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+          backdrop-filter: blur(10px);
+        }
+        .pill-green { background: rgba(57, 255, 20, 0.08); color: ${NEON_GREEN}; border: 1px solid rgba(57, 255, 20, 0.22); }
+        .pill-purple { background: rgba(209, 0, 255, 0.08); color: ${NEON_PURPLE}; border: 1px solid rgba(209, 0, 255, 0.22); }
+        .pill-cyan { background: rgba(56, 220, 255, 0.07); color: ${NEON_CYAN}; border: 1px solid rgba(56, 220, 255, 0.22); }
+        .pill-amber { background: rgba(255, 200, 60, 0.08); color: #ffcc44; border: 1px solid rgba(255, 200, 60, 0.22); }
+
+        /* Glass cards — match home page restraint */
+        .inv-card {
+          background: rgba(20, 20, 22, 0.6);
+          backdrop-filter: blur(14px);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 18px;
+          box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+        }
+        .inv-card-hover { transition: transform .35s ease, border-color .35s ease, box-shadow .35s ease; }
+        .inv-card-hover:hover {
+          transform: translateY(-3px);
+          border-color: rgba(57, 255, 20, 0.25);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 0 24px rgba(57, 255, 20, 0.06);
+        }
+
+        /* Softer text glow — accent jewelry, not noise */
+        .glow-text-green { text-shadow: 0 0 24px rgba(57, 255, 20, 0.22); }
+        .glow-text-purple { text-shadow: 0 0 24px rgba(209, 0, 255, 0.22); }
+
+        /* Headline tightening to match home */
+        .investor-root h1, .investor-root h2, .investor-root h3, .investor-root h4 {
+          letter-spacing: -0.025em;
+        }
+
+        /* Single gradient CTA — purple → green, like home */
+        .inv-cta-primary {
+          background: linear-gradient(135deg, ${NEON_PURPLE}, ${NEON_GREEN}) !important;
+          color: #060606 !important;
+          font-weight: 800 !important;
+          letter-spacing: 0.16em !important;
+          box-shadow: 0 12px 32px rgba(209, 0, 255, 0.25), 0 8px 22px rgba(57, 255, 20, 0.18) !important;
+          border: none !important;
+        }
+        .inv-cta-primary:hover { filter: brightness(1.08); }
+
+        /* Section rhythm — generous like home (96px desktop / 64px mobile) */
+        .inv-section { padding-top: 64px; padding-bottom: 64px; border-top: 1px solid rgba(255,255,255,0.04); }
+        @media (min-width: 720px) {
+          .inv-section { padding-top: 96px; padding-bottom: 96px; }
+        }
+
+        /* Eyebrow refinement */
+        .inv-eyebrow {
+          font-size: 11px;
+          letter-spacing: 0.20em;
+          text-transform: uppercase;
+          color: #8a8a96;
+          font-weight: 600;
+        }
 
         @media print {
           @page { size: letter; margin: 0.4in; }
@@ -174,6 +242,7 @@ export default function Investors() {
           .investor-root, .investor-root * { color: black !important; text-shadow: none !important; }
           .inv-card { background: white !important; border: 1px solid #ccc !important; box-shadow: none !important; backdrop-filter: none !important; }
           .pill, .pill-green, .pill-purple, .pill-cyan, .pill-amber { background: #f3f3f3 !important; color: black !important; border-color: #ccc !important; }
+          .inv-cta-primary { background: #000 !important; color: white !important; }
           section { page-break-inside: avoid; break-inside: avoid; }
           .ink-grid, .neon-rule { display: none !important; }
         }
@@ -200,8 +269,7 @@ export default function Investors() {
             </button>
             <a
               href={`mailto:${C.meta.contactEmail}`}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-xs uppercase tracking-[0.15em] num-font font-bold text-black"
-              style={{ background: `linear-gradient(135deg, ${NEON_GREEN}, hsl(152 80% 36%))`, boxShadow: "0 4px 16px hsl(152 100% 44% / .3)" }}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inv-cta-primary"
               data-testid="button-header-contact"
             >
               <Mail className="w-3.5 h-3.5" /> Contact
@@ -214,26 +282,42 @@ export default function Investors() {
       {/* HERO */}
       <section className="relative overflow-hidden" id="section-hero">
         <div className="absolute inset-0 ink-grid pointer-events-none" />
-        <div className="relative max-w-7xl mx-auto px-5 pt-16 pb-20 sm:pt-24 sm:pb-28">
+        <div className="relative max-w-7xl mx-auto px-5 pt-20 pb-24 sm:pt-28 sm:pb-32">
           <Reveal>
             <span className="pill pill-green num-font" data-testid="text-hero-eyebrow">{C.hero.eyebrow}</span>
           </Reveal>
           <Reveal delay={80}>
             <h1
-              className="mt-6 num-font font-extrabold leading-[0.95] tracking-tight glow-text-green"
-              style={{ fontSize: "clamp(3.5rem, 12vw, 9rem)", color: "white" }}
+              className="mt-7 font-extrabold leading-[0.95] glow-text-green"
+              style={{
+                fontSize: "clamp(4rem, 14vw, 10rem)",
+                letterSpacing: "-0.04em",
+                color: "white",
+                background: `linear-gradient(180deg, #ffffff 0%, #ffffff 55%, ${NEON_GREEN} 100%)`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
               data-testid="text-hero-headline"
             >
               {C.hero.headline}
             </h1>
           </Reveal>
           <Reveal delay={160}>
-            <p className="mt-4 text-2xl sm:text-3xl font-semibold max-w-3xl" style={{ color: NEON_GREEN }} data-testid="text-hero-tagline">
+            <p
+              className="mt-5 font-bold max-w-3xl"
+              style={{
+                fontSize: "clamp(1.4rem, 3.2vw, 2rem)",
+                letterSpacing: "-0.02em",
+                color: NEON_GREEN,
+              }}
+              data-testid="text-hero-tagline"
+            >
               {C.hero.tagline}
             </p>
           </Reveal>
           <Reveal delay={220}>
-            <p className="mt-6 text-base sm:text-lg text-muted-foreground max-w-2xl leading-relaxed" data-testid="text-hero-sub">
+            <p className="mt-5 text-base sm:text-lg max-w-2xl leading-relaxed" style={{ color: "#a8a8b3" }} data-testid="text-hero-sub">
               {C.hero.sub}
             </p>
           </Reveal>
@@ -241,15 +325,14 @@ export default function Investors() {
             <div className="mt-10 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => scrollToId(C.hero.primaryCta.target)}
-                className="h-12 px-7 rounded-xl num-font text-sm uppercase tracking-[0.18em] font-bold text-black inline-flex items-center justify-center gap-2"
-                style={{ background: `linear-gradient(135deg, ${NEON_GREEN}, hsl(152 80% 36%))`, boxShadow: "0 8px 32px hsl(152 100% 44% / .35)" }}
+                className="h-12 px-8 rounded-full num-font text-sm uppercase font-bold inline-flex items-center justify-center gap-2 inv-cta-primary"
                 data-testid="button-hero-primary"
               >
                 {C.hero.primaryCta.label} <ArrowDown className="w-4 h-4" />
               </button>
               <button
                 onClick={() => scrollToId(C.hero.secondaryCta.target)}
-                className="h-12 px-7 rounded-xl num-font text-sm uppercase tracking-[0.18em] font-bold inline-flex items-center justify-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/40 transition"
+                className="h-12 px-8 rounded-full num-font text-sm uppercase tracking-[0.18em] font-bold inline-flex items-center justify-center gap-2 border border-white/15 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/30 transition"
                 data-testid="button-hero-secondary"
               >
                 {C.hero.secondaryCta.label} <ChevronRight className="w-4 h-4" />
@@ -257,7 +340,7 @@ export default function Investors() {
             </div>
           </Reveal>
           <Reveal delay={340}>
-            <p className="mt-10 text-[10px] uppercase tracking-[0.2em] text-muted-foreground num-font">{C.meta.confidentialNote}</p>
+            <p className="mt-12 text-[10px] uppercase tracking-[0.22em] num-font" style={{ color: "#6a6a76" }}>{C.meta.confidentialNote}</p>
           </Reveal>
         </div>
       </section>
@@ -671,8 +754,7 @@ export default function Investors() {
               <div className="flex flex-col gap-5">
                 <a
                   href={`mailto:${C.meta.contactEmail}?subject=GUBER%20Investor%20Inquiry`}
-                  className="h-14 px-7 rounded-xl num-font text-sm uppercase tracking-[0.2em] font-bold text-black inline-flex items-center justify-center gap-2"
-                  style={{ background: `linear-gradient(135deg, ${NEON_GREEN}, hsl(152 80% 36%))`, boxShadow: "0 8px 32px hsl(152 100% 44% / .35)" }}
+                  className="h-14 px-7 rounded-full num-font text-sm uppercase font-bold inline-flex items-center justify-center gap-2 inv-cta-primary"
                   data-testid="button-cta-email"
                 >
                   <Mail className="w-4 h-4" /> Email the founder
@@ -732,13 +814,19 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="relative px-5 py-16 sm:py-20 border-t border-white/5">
+    <section id={id} className="relative px-5 inv-section">
       <div className="max-w-7xl mx-auto">
         <Reveal>
-          <div className="num-font text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-3" data-testid={`text-eyebrow-${id}`}>{eyebrow}</div>
-          <h2 className="num-font font-extrabold text-3xl sm:text-5xl tracking-tight text-white mb-3" data-testid={`text-headline-${id}`}>{headline}</h2>
-          {sub && <p className="text-base sm:text-lg text-muted-foreground max-w-3xl mb-8" data-testid={`text-sub-${id}`}>{sub}</p>}
-          {!sub && <div className="mb-8" />}
+          <div className="inv-eyebrow num-font mb-4" data-testid={`text-eyebrow-${id}`}>{eyebrow}</div>
+          <h2
+            className="font-extrabold text-white mb-4"
+            style={{ fontSize: "clamp(2rem, 4.4vw, 3.2rem)", letterSpacing: "-0.035em", lineHeight: 1.05 }}
+            data-testid={`text-headline-${id}`}
+          >
+            {headline}
+          </h2>
+          {sub && <p className="text-base sm:text-lg max-w-3xl mb-10 leading-relaxed" style={{ color: "#a8a8b3" }} data-testid={`text-sub-${id}`}>{sub}</p>}
+          {!sub && <div className="mb-10" />}
         </Reveal>
         {children}
       </div>
