@@ -487,10 +487,29 @@ export default function StudioPageV2() {
             ready for a reel, an ad, or a listing.
           </p>
 
-          {!heroOutput && (
+          {!heroOutput && !generateMutation.isPending && (
             <div className="mt-8 flex items-center gap-2 text-[11px] text-white/50">
               <Play className="w-3.5 h-3.5" />
               <span>Your first clip will play right here.</span>
+            </div>
+          )}
+
+          {/* Shimmer skeleton in the hero while a clip is rendering. */}
+          {generateMutation.isPending && (
+            <div
+              className="mt-8 relative h-44 sm:h-56 w-full rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03]"
+              data-testid="hero-shimmer"
+              aria-busy="true"
+            >
+              <div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                style={{ animation: "studioShimmer 1.6s linear infinite", backgroundSize: "200% 100%" }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center gap-2 text-xs text-white/70">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-300" />
+                <span>Rendering your clip…</span>
+              </div>
+              <style>{`@keyframes studioShimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
             </div>
           )}
 
