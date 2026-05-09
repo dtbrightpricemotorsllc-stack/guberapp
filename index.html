@@ -833,8 +833,14 @@
     /* — Inside-the-app screen strip — */
     .screens-strip {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 14px;
+    }
+    .beta-pill {
+      display: inline-block; font-size: 8px; font-weight: 800; letter-spacing: 0.14em;
+      padding: 2px 6px; border-radius: 999px; margin-left: 4px; vertical-align: middle;
+      background: linear-gradient(135deg, rgba(209,0,255,0.18), rgba(57,255,20,0.18));
+      color: var(--accent); border: 1px solid rgba(57,255,20,0.35);
     }
     .screen-frame {
       display: flex; flex-direction: column; gap: 10px; margin: 0;
@@ -862,8 +868,8 @@
     .info-card:hover { transform: translateY(-3px); border-color: rgba(57,255,20,0.30); box-shadow: 0 16px 40px rgba(0,0,0,0.4); }
     .info-card img { width: 100%; height: auto; display: block; }
     @media (max-width: 900px) {
-      .screens-strip { grid-template-columns: repeat(3, 1fr); }
-      .screens-strip > :nth-child(n+4) { display: none; }
+      .screens-strip { grid-template-columns: repeat(4, 1fr); }
+      .screens-strip > :nth-child(n+5) { display: none; }
       .info-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 720px) {
@@ -1312,6 +1318,7 @@
       <figure class="screen-frame"><img src="/app-screen-home.jpg" alt="GUBER home screen" loading="lazy" /><figcaption>Home · Hire or Work</figcaption></figure>
       <figure class="screen-frame"><img src="/app-screen-map.jpg" alt="GUBER live job map" loading="lazy" /><figcaption>Live Map · Jobs near you</figcaption></figure>
       <figure class="screen-frame"><img src="/app-screen-cashdrops.jpg" alt="GUBER Cash Drops screen" loading="lazy" /><figcaption>Cash Drops · Hunt &amp; claim</figcaption></figure>
+      <figure class="screen-frame"><img src="/app-screen-studio.jpg" alt="GUBER Studio AI cinematic clip generator" loading="lazy" /><figcaption>Studio · AI clips <span class="beta-pill">BETA</span></figcaption></figure>
       <figure class="screen-frame"><img src="/app-screen-wallet.jpg" alt="GUBER wallet and trust level screen" loading="lazy" /><figcaption>Wallet · Trust &amp; payouts</figcaption></figure>
       <figure class="screen-frame"><img src="/app-screen-ainot.jpg" alt="GUBER AI or Not detection screen" loading="lazy" /><figcaption>AI or Not · Spot fakes</figcaption></figure>
     </div>
@@ -1409,7 +1416,15 @@
         </div>
         <div class="more-item">
           <div class="more-icon">🔗</div>
-          <div><span class="more-label">Referral Program</span>Share your referral link and earn rewards. Invite 25 friends to unlock Cash Drop eligibility.</div>
+          <div><span class="more-label">Referrals That Give Back</span>Every <strong>100 new users in your city unlocks a Cash Drop</strong> right where you live. Referral rewards rotate constantly — gear, credits, free Studio clips, mystery prizes. Always different, always real.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">🎬</div>
+          <div><span class="more-label">GUBER Studio <span class="beta-pill">BETA</span></span>Spin up viral-ready short-form content or full business commercials in seconds. AI cinematic clips, brand reels, listing videos — built for creators, hustlers, and small business owners.</div>
+        </div>
+        <div class="more-item">
+          <div class="more-icon">🗺️</div>
+          <div><span class="more-label">Online Treasure Hunts</span>Real prizes hidden across the GUBER map. Solve clues, scan locations, claim drops. GUBER is all about <span class="green" style="font-weight:800;">giving back</span> — to the people, to the cities, to the day-ones.</div>
         </div>
         <div class="more-item">
           <div class="more-icon">💰</div>
