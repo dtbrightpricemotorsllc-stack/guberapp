@@ -8,7 +8,9 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, X,
   Briefcase, ShieldCheck, Zap, Users, Star, ArrowRight, Lock,
+  Search, Globe,
 } from "lucide-react";
+import { SiGoogleplay, SiApple } from "react-icons/si";
 
 import logoImg   from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
@@ -179,7 +181,21 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
 
 export default function Home() {
   const [gateOpen, setGateOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchZip, setSearchZip] = useState("");
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
+
+  // The marketing hero search routes into /browse-jobs with the user's
+  // intent + location pre-filled as query params. Both fields are
+  // optional — empty submit just opens the map view.
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (searchZip.trim()) params.set("zip", searchZip.trim());
+    const qs = params.toString();
+    window.location.href = qs ? `/browse-jobs?${qs}` : "/browse-jobs";
+  };
 
   const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
     queryKey: ["/api/public/jobs"],
@@ -224,58 +240,133 @@ export default function Home() {
           LOCAL WORK · REAL CASH · TRUSTED PEOPLE
         </div>
 
-        <h1 className="text-4xl sm:text-5xl font-display font-black tracking-tight leading-[1.1] mb-5">
-          YOUR NEIGHBORHOOD.<br />
-          <span style={{ color: "hsl(152 100% 44%)" }}>YOUR INCOME.</span>
+        {/* Headline — kept tight so it never breaks past 2 lines on phones.
+            "Glad you're here." sits on one line with the CTA on the next. */}
+        <h1 className="font-display font-black tracking-tight leading-[1.05] mb-4 text-[clamp(1.85rem,7vw,3.25rem)]">
+          Glad you&rsquo;re here.<br />
+          <span style={{ color: "hsl(152 100% 44%)" }}>Let&rsquo;s get started.</span>
         </h1>
 
-        <p className="text-muted-foreground text-base max-w-lg leading-relaxed mb-8">
-          GUBER turns your time and presence into real money. Connect with paid local work,
-          get hired for your skills, or post jobs that get done — fast.
+        <p className="text-base sm:text-lg max-w-lg leading-relaxed mb-8 text-foreground/85">
+          Put your city on the map! 📍{" "}
+          <span className="neon-pulse font-display font-black">No Resumes</span>.{" "}
+          No Gatekeepers.{" "}
+          <span className="neon-pulse font-display font-black">Just Hustle</span>.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm mx-auto mb-8">
+        {/* Interactive Search Bar — two inputs + glowing CTA. */}
+        <form
+          onSubmit={handleSearchSubmit}
+          className="w-full max-w-xl mx-auto mb-6"
+          data-testid="form-hero-search"
+        >
+          <div className="flex flex-col gap-2 p-2 rounded-2xl"
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              backdropFilter: "blur(8px)",
+            }}>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="What are you looking for?"
+                  aria-label="What are you looking for?"
+                  autoComplete="off"
+                  className="w-full h-12 pl-10 pr-3 rounded-xl bg-black/40 border border-white/10 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-emerald-400/50 transition-colors"
+                  data-testid="input-hero-search-query"
+                />
+              </div>
+              <div className="relative flex-1">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchZip}
+                  onChange={(e) => setSearchZip(e.target.value)}
+                  placeholder="Enter ZIP or City"
+                  aria-label="ZIP code or city"
+                  autoComplete="postal-code"
+                  inputMode="text"
+                  className="w-full h-12 pl-10 pr-3 rounded-xl bg-black/40 border border-white/10 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-emerald-400/50 transition-colors"
+                  data-testid="input-hero-search-zip"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="w-full h-12 rounded-xl font-display tracking-[0.2em] text-sm premium-btn btn-breathe-glow flex items-center justify-center gap-2"
+              data-testid="button-hero-see-map"
+            >
+              SEE THE MAP
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
+
+        {/* Secondary CTA row — kept lean now that the search bar is the
+            primary action. Sign-up still reachable in one tap. */}
+        <div className="flex items-center gap-3 mb-8">
           <Link
             href="/signup"
-            className="w-full sm:w-auto flex-1 h-13 px-7 rounded-xl font-display tracking-[0.2em] text-sm premium-btn flex items-center justify-center gap-2"
+            className="text-[11px] font-display tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors"
             data-testid="link-hero-getstarted"
           >
-            GET STARTED FREE
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-          <Link
-            href="/browse-jobs"
-            className="w-full sm:w-auto flex-1 h-13 px-7 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center gap-2"
-            data-testid="link-hero-browsejobs"
-          >
-            BROWSE JOBS
+            GET STARTED FREE →
           </Link>
         </div>
 
-        {/* Day-1 OG badge */}
+        {/* Day-1 OG badge — gold shine sweep + new high-contrast label. */}
         <a
           href="/day1og.html"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 rounded-xl px-5 py-3 w-full max-w-sm mx-auto group transition-all"
+          className="gold-shine-wrap flex items-center gap-3 rounded-xl px-5 py-3 w-full max-w-md mx-auto group transition-all hover:scale-[1.015]"
           style={{
-            background: "linear-gradient(135deg, rgba(180,120,0,0.15) 0%, rgba(245,165,0,0.10) 100%)",
-            border: "1.5px solid rgba(245,175,0,0.35)",
-            boxShadow: "0 0 20px rgba(245,165,0,0.07)",
+            background: "linear-gradient(135deg, rgba(180,120,0,0.22) 0%, rgba(245,165,0,0.14) 100%)",
+            border: "1.5px solid rgba(245,175,0,0.55)",
+            boxShadow: "0 0 24px rgba(245,165,0,0.18), inset 0 1px 0 rgba(255,235,160,0.18)",
+            transitionDuration: "0.3s",
           }}
           data-testid="link-hero-day1og"
         >
-          <img src={day1OGImg} alt="Day-1 OG" className="w-10 h-10 object-contain rounded-lg shrink-0" />
-          <div className="flex-1 min-w-0 text-left">
+          <img src={day1OGImg} alt="Day-1 OG" className="w-11 h-11 object-contain rounded-lg shrink-0 relative z-[2]" />
+          <div className="flex-1 min-w-0 text-left relative z-[2]">
             <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-[11px] font-display font-black tracking-widest text-amber-400">DAY-1 OG STATUS</span>
+              <span className="text-[12px] font-display font-black tracking-widest text-amber-300 drop-shadow-[0_0_6px_rgba(245,165,0,0.4)]">
+                💎 DAY-1 OG
+              </span>
               <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}>LIMITED</span>
+                style={{ background: "rgba(245,158,11,0.2)", color: "#fbbf24" }}>LIMITED</span>
             </div>
-            <p className="text-[10px] text-amber-200/70 font-display">Founding status · Limited spots</p>
+            <p className="text-[11px] text-amber-100/85 font-display font-semibold">
+              Higher Pay &amp; Exclusive Rewards
+            </p>
           </div>
-          <Crown className="w-4 h-4 text-amber-400/60 shrink-0" />
+          <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </a>
+
+        {/* Frictionless Platform Bar */}
+        <div className="flex items-center justify-center gap-4 sm:gap-6 mt-6 flex-wrap text-[11px] font-display tracking-wider"
+          data-testid="row-platform-availability">
+          <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-web">
+            <span className="online-dot" aria-hidden />
+            <Globe className="w-3.5 h-3.5" />
+            Web App <span className="text-emerald-400 font-bold">(Live)</span>
+          </span>
+          <span className="text-muted-foreground/40">|</span>
+          <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-android">
+            <SiGoogleplay className="w-3.5 h-3.5" />
+            Google Play <span className="text-emerald-400 font-bold">(Live)</span>
+          </span>
+          <span className="text-muted-foreground/40">|</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-platform-ios">
+            <SiApple className="w-3.5 h-3.5" />
+            iOS <span className="text-amber-400/80 font-bold">(Soon)</span>
+          </span>
+        </div>
 
         {/* Stats row */}
         <div className="flex items-center justify-center gap-8 mt-10 flex-wrap">

@@ -539,6 +539,113 @@
   animation: shimmer 2s ease-in-out infinite;
 }
 
+/* ─── GUBER Revolution hero effects ────────────────────────────────────── */
+/* Neon-green text glow with a subtle pulse — for "No Resumes" / "Just Hustle"
+   in the hero subtitle. Color matches the brand emerald (hsl 152 100% 44%). */
+@keyframes neonTextPulse {
+  0%, 100% {
+    text-shadow:
+      0 0 4px hsl(152 100% 60% / 0.85),
+      0 0 12px hsl(152 100% 50% / 0.55),
+      0 0 22px hsl(152 100% 44% / 0.35);
+  }
+  50% {
+    text-shadow:
+      0 0 6px hsl(152 100% 70% / 1),
+      0 0 18px hsl(152 100% 55% / 0.75),
+      0 0 32px hsl(152 100% 44% / 0.55);
+  }
+}
+.neon-pulse {
+  color: hsl(152 100% 60%);
+  animation: neonTextPulse 2.4s ease-in-out infinite;
+}
+
+/* Breathing glow for the primary "SEE THE MAP" CTA — brightest thing on
+   screen. Uses outer box-shadow rather than a filter so it composites
+   cleanly over the dark hero background. */
+@keyframes breatheGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 18px hsl(152 100% 44% / 0.45),
+      0 0 36px hsl(152 100% 44% / 0.2),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 28px hsl(152 100% 50% / 0.7),
+      0 0 60px hsl(152 100% 44% / 0.35),
+      inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+}
+.btn-breathe-glow {
+  animation: breatheGlow 2.2s ease-in-out infinite;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.btn-breathe-glow:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 36px hsl(152 100% 55% / 0.85),
+    0 0 80px hsl(152 100% 44% / 0.45),
+    inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+/* Gold shine sweep — a moving light reflection across the Day-1 OG badge
+   so it reads as a premium / collectable asset. Slow loop (every ~5s) so
+   it catches the eye without being noisy. */
+@keyframes goldShine {
+  0% { transform: translateX(-120%) skewX(-20deg); }
+  60%, 100% { transform: translateX(220%) skewX(-20deg); }
+}
+.gold-shine-wrap {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.gold-shine-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 235, 160, 0.0) 20%,
+    rgba(255, 235, 160, 0.55) 50%,
+    rgba(255, 235, 160, 0.0) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+  animation: goldShine 5s ease-in-out infinite;
+  z-index: 1;
+}
+
+/* Tiny "Online" status pulse — a green dot that breathes next to a label.
+   Used in the platform availability row ("Web App (Live)"). */
+@keyframes onlineDotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(152 100% 44% / 0.7); }
+  70% { box-shadow: 0 0 0 6px hsl(152 100% 44% / 0); }
+}
+.online-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: hsl(152 100% 50%);
+  animation: onlineDotPulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neon-pulse,
+  .btn-breathe-glow,
+  .gold-shine-wrap::after,
+  .online-dot {
+    animation: none;
+  }
+}
+
 .stagger-1 { animation-delay: 0.05s; }
 .stagger-2 { animation-delay: 0.1s; }
 .stagger-3 { animation-delay: 0.15s; }
