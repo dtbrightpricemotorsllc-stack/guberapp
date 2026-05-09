@@ -12,7 +12,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Search, Filter, MapPin, Star, CheckCircle2, Shield, Clock,
   Zap, Lock, Eye, Bookmark, Send, ChevronDown, X, TrendingUp,
-  User, Award, ShieldCheck
+  User, Award, ShieldCheck, PlaneTakeoff
 } from "lucide-react";
 import { CredentialCard } from "@/components/credential-card";
 
@@ -62,6 +62,7 @@ const QUICK_FILTERS = [
   { key: "high_volume", label: "50+ Jobs", icon: TrendingUp, apply: { minJobs: "50" } },
   { key: "active_now", label: "Recently Active", icon: Zap, apply: { recentActivity: true } },
   { key: "elite", label: "Elite Workers", icon: Award, apply: { minRating: "4.8", minCompletionRate: "95" } },
+  { key: "drone_certified", label: "Drone Certified", icon: PlaneTakeoff, apply: { droneCertified: true } },
 ];
 
 function BadgeChip({ label, color }: { label: string; color: string }) {
@@ -248,12 +249,13 @@ export default function BizTalentExplorer() {
     backgroundVerified: false,
     availability: "",
     recentActivity: false,
+    droneCertified: false,
   });
 
   const applyQuickFilter = (key: string) => {
     if (activeQuickFilter === key) {
       setActiveQuickFilter(null);
-      setFilters(f => ({ ...f, minRating: "", minJobs: "", minCompletionRate: "", idVerified: false, recentActivity: false }));
+      setFilters(f => ({ ...f, minRating: "", minJobs: "", minCompletionRate: "", idVerified: false, recentActivity: false, droneCertified: false }));
       return;
     }
     const qf = QUICK_FILTERS.find(q => q.key === key);
@@ -273,6 +275,7 @@ export default function BizTalentExplorer() {
   if (filters.backgroundVerified) queryParams.set("backgroundVerified", "true");
   if (filters.availability) queryParams.set("availability", filters.availability);
   if (filters.recentActivity) queryParams.set("recentActivity", "true");
+  if (filters.droneCertified) queryParams.set("droneCertified", "true");
 
   const queryString = queryParams.toString();
   const fetchUrl = queryString ? `/api/business/talent-explorer?${queryString}` : "/api/business/talent-explorer";
@@ -306,7 +309,7 @@ export default function BizTalentExplorer() {
   };
 
   const activeCount = [filters.category, filters.mobilityType, filters.availability, filters.minJobs, filters.minRating].filter(Boolean).length +
-    (filters.idVerified ? 1 : 0) + (filters.recentActivity ? 1 : 0) + (filters.backgroundVerified ? 1 : 0);
+    (filters.idVerified ? 1 : 0) + (filters.recentActivity ? 1 : 0) + (filters.backgroundVerified ? 1 : 0) + (filters.droneCertified ? 1 : 0);
 
   return (
     <BizLayout>
@@ -479,6 +482,19 @@ export default function BizTalentExplorer() {
               >
                 <Zap className="w-3 h-3" /> Recent Activity
               </button>
+
+              <button
+                className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-xl transition-all h-9"
+                style={{
+                  background: filters.droneCertified ? "rgba(99,179,237,0.12)" : SURFACE2,
+                  color: filters.droneCertified ? "#63B3ED" : TEXT_MUTED,
+                  border: `1px solid ${filters.droneCertified ? "rgba(99,179,237,0.25)" : BORDER}`,
+                }}
+                onClick={() => setFilters(f => ({ ...f, droneCertified: !f.droneCertified }))}
+                data-testid="filter-drone-certified"
+              >
+                <PlaneTakeoff className="w-3 h-3" /> Drone Certified
+              </button>
             </div>
           )}
         </div>
@@ -508,7 +524,7 @@ export default function BizTalentExplorer() {
                 EXPAND SEARCH RADIUS
               </button>
               <button
-                onClick={() => { setFilters({ category: "", radius: "50", minJobs: "", minRating: "", minCompletionRate: "", mobilityType: "", idVerified: false, backgroundVerified: false, availability: "", recentActivity: false }); setActiveQuickFilter(null); }}
+                onClick={() => { setFilters({ category: "", radius: "50", minJobs: "", minRating: "", minCompletionRate: "", mobilityType: "", idVerified: false, backgroundVerified: false, availability: "", recentActivity: false, droneCertified: false }); setActiveQuickFilter(null); }}
                 className="text-[10px] font-bold tracking-[0.1em] px-4 py-2 rounded-xl transition-all"
                 style={{ background: "transparent", color: TEXT_MUTED, border: `1px solid ${BORDER}` }}
                 data-testid="button-clear-filters"

@@ -162,7 +162,7 @@ Return ONLY valid JSON (no markdown fences) with this exact shape:
   "credentialName": string,        // Short title shown on the card, e.g. "Food Handler Certified", "Journeyman Plumbing License", "Adult & Pediatric First Aid/CPR/AED". If unsure, use a sensible label based on the document.
   "issuingAuthority": string,      // Issuing body or jurisdiction printed on the card, e.g. "Mobile County Health Department", "Texas Department of Licensing and Regulation", "American Red Cross". Empty string if you cannot tell.
   "expirationDate": string | null, // ISO date yyyy-mm-dd if an expiration / valid-through date is visible. null if not present or unreadable.
-  "credentialType": string,        // Short category label: one of "Food Handler", "Food Manager", "CPR / First Aid", "OSHA", "Plumbing License", "Electrical License", "HVAC License", "Driver License Endorsement", "Business License", "Other Certification".
+  "credentialType": string,        // Short category label: one of "Food Handler", "Food Manager", "CPR / First Aid", "OSHA", "Plumbing License", "Electrical License", "HVAC License", "Driver License Endorsement", "Business License", "FAA Part 107 / Drone Operator", "Other Certification".
   "confidence": number,            // 0.0 to 1.0 — overall confidence in extracted fields.
   "isCredentialDocument": boolean, // false if the image is clearly NOT a credential (selfie, blank page, random photo, ID-only with no certification).
   "reasoning": string              // One short sentence explaining what you saw.

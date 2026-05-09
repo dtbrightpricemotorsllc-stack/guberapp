@@ -1590,6 +1590,7 @@ export async function registerRoutes(
     if (req.query.backgroundVerified === "true") filters.backgroundVerified = true;
     if (req.query.availability) filters.availability = req.query.availability as string;
     if (req.query.recentActivity === "true") filters.recentActivity = true;
+    if (req.query.droneCertified === "true") filters.droneCertified = true;
     if (req.query.limit) filters.limit = parseInt(req.query.limit as string);
     if (req.query.offset) filters.offset = parseInt(req.query.offset as string);
 
@@ -15171,6 +15172,7 @@ OUTPUT STYLE:
     else if (jc >= 10) badges.push("10 Jobs Completed");
     if ((user.reliabilityScore ?? 0) >= 95) badges.push("High Reliability");
     if ((user.proofConfidenceLevel || "") === "VERIFIED") badges.push("Proof Strong");
+    if ((user.milestoneBadges || []).includes("Drone Certified")) badges.push("Drone Certified");
 
     return {
       userId: user.id,
@@ -15546,11 +15548,35 @@ OUTPUT STYLE:
             if (currentRank < credentialedRank) {
               updates.tier = "credentialed";
             }
+
+            // Grant "Drone Certified" milestone badge for FAA Part 107 credentials.
+            const isDroneCredential =
+              (updated as any).credentialType === "FAA Part 107 / Drone Operator" ||
+              /part\s*107|drone operator/i.test((updated as any).qualificationName || "");
+            if (isDroneCredential) {
+              const existing: string[] = (target as any).milestoneBadges || [];
+              if (!existing.includes("Drone Certified")) {
+                updates.milestoneBadges = [...existing, "Drone Certified"];
+              }
+              // Mark the worker projection so it can be filtered in talent explorer.
+              try {
+                const proj = await storage.getWorkerProjection(target.id);
+                if (proj) {
+                  await storage.upsertWorkerProjection({ ...proj, droneCertified: true, updatedAt: new Date() });
+                }
+              } catch (pe: any) {
+                console.error("[GUBER] drone projection update failed:", pe?.message);
+              }
+            }
+
             await storage.updateUser(target.id, updates);
+            const notifBody = isDroneCredential
+              ? `Your "${updated.qualificationName}" credential is verified. You've earned the "Drone Certified" badge.`
+              : `Your "${updated.qualificationName}" credential is verified. You're now in the Skilled (credentialed) tier.`;
             await storage.createNotification({
               userId: target.id,
               title: "Credential approved",
-              body: `Your "${updated.qualificationName}" credential is verified. You're now in the Skilled (credentialed) tier.`,
+              body: notifBody,
               type: "system",
             } as any);
           }

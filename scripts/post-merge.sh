@@ -396,6 +396,9 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'fal-ai/minimax-music/v2', 1, 30, true)
 ON CONFLICT (tool_key) DO NOTHING;
 
+-- task-506: drone_certified flag on worker_business_projections
+ALTER TABLE worker_business_projections ADD COLUMN IF NOT EXISTS drone_certified BOOLEAN DEFAULT false;
+
 -- Studio v2 feature flag: restrict to admin-only by default so admins can
 -- preview and then flip to "global" in the Feature Flag Console when ready.
 UPDATE feature_flags

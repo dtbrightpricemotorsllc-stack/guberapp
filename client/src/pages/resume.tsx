@@ -16,7 +16,7 @@ import {
   ArrowLeft, Shield, Star, Award, Briefcase, Camera, MapPin,
   FileText, CheckCircle, XCircle, Clock, TrendingUp, Eye, EyeOff,
   Plus, Upload, ChevronDown, ChevronUp, User, Building2, Loader2,
-  Sparkles, Target, ScanLine, ShieldCheck,
+  Sparkles, Target, ScanLine, ShieldCheck, PlaneTakeoff,
 } from "lucide-react";
 import { CredentialCard } from "@/components/credential-card";
 
@@ -273,9 +273,21 @@ export default function ResumePage() {
                   <p className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5">Badges</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <ConfidenceBadge level={resume.proofConfidenceLevel} />
-                    {resume.badges?.map((b: string) => (
-                      <Badge key={b} variant="secondary" className="text-xs font-medium">{b}</Badge>
-                    ))}
+                    {resume.badges?.map((b: string) =>
+                      b === "Drone Certified" ? (
+                        <span
+                          key={b}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
+                          style={{ background: "rgba(99,179,237,0.15)", color: "#63B3ED", border: "1px solid rgba(99,179,237,0.3)" }}
+                          data-testid="badge-drone-certified"
+                        >
+                          <PlaneTakeoff className="w-3 h-3" />
+                          Drone Certified
+                        </span>
+                      ) : (
+                        <Badge key={b} variant="secondary" className="text-xs font-medium">{b}</Badge>
+                      )
+                    )}
                   </div>
                 </div>
               )}

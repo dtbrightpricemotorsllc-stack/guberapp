@@ -247,6 +247,7 @@ export interface IStorage {
     minCompletionRate?: number; mobilityType?: string;
     idVerified?: boolean; backgroundVerified?: boolean;
     availability?: string; recentActivity?: boolean;
+    droneCertified?: boolean;
     limit?: number; offset?: number;
   }): Promise<WorkerBusinessProjection[]>;
 
@@ -1483,6 +1484,7 @@ export class DatabaseStorage implements IStorage {
     minCompletionRate?: number; mobilityType?: string;
     idVerified?: boolean; backgroundVerified?: boolean;
     availability?: string; recentActivity?: boolean;
+    droneCertified?: boolean;
     limit?: number; offset?: number;
   }): Promise<WorkerBusinessProjection[]> {
     const conditions: any[] = [eq(workerBusinessProjections.businessVisibilityStatus, "visible")];
@@ -1510,6 +1512,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters.availability) {
       conditions.push(eq(workerBusinessProjections.availabilityStatus, filters.availability));
+    }
+    if (filters.droneCertified === true) {
+      conditions.push(eq(workerBusinessProjections.droneCertified, true));
     }
     if (filters.lat !== undefined && filters.lng !== undefined && filters.radiusMiles !== undefined) {
       conditions.push(sql`(
