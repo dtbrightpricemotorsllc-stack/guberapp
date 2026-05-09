@@ -2827,6 +2827,19 @@ export async function registerRoutes(
       const isAdmin = await viewerIsAdmin(req);
       mapJobs = mapJobs.filter(j => viewerCanSeeJobSync(j, req.session?.userId, isAdmin, demoIds));
 
+      // Drone / Aerial Footage jobs are hidden until the scheduled flight window
+      // is within 24 hours. Jobs without a confirmed window are never shown.
+      mapJobs = mapJobs.filter(j => {
+        if (j.verifyInspectCategory !== "Drone / Aerial Footage") return true;
+        const details = j.jobDetails as Record<string, string> | null;
+        const flightWindow = details?.["Scheduled Flight Window"];
+        if (!flightWindow) return false;
+        const flightDate = new Date(flightWindow);
+        if (isNaN(flightDate.getTime())) return false;
+        const hoursUntilFlight = (flightDate.getTime() - Date.now()) / (1000 * 60 * 60);
+        return hoursUntilFlight >= 0 && hoursUntilFlight <= 24;
+      });
+
       // Geocode any jobs missing lat/lng — prefer zip over vague location strings.
       // A real address contains digits (e.g. "123 Main St"). Descriptions like
       // "Front/back yard" are not geocodable so fall back to zip.
@@ -2891,6 +2904,19 @@ export async function registerRoutes(
       const demoIds = await getDemoUserIds();
       const isAdmin = await viewerIsAdmin(req);
       mapJobs = mapJobs.filter(j => viewerCanSeeJobSync(j, req.session?.userId, isAdmin, demoIds));
+
+      // Drone / Aerial Footage jobs are hidden until the scheduled flight window
+      // is within 24 hours. Jobs without a confirmed window are never shown.
+      mapJobs = mapJobs.filter(j => {
+        if (j.verifyInspectCategory !== "Drone / Aerial Footage") return true;
+        const details = j.jobDetails as Record<string, string> | null;
+        const flightWindow = details?.["Scheduled Flight Window"];
+        if (!flightWindow) return false;
+        const flightDate = new Date(flightWindow);
+        if (isNaN(flightDate.getTime())) return false;
+        const hoursUntilFlight = (flightDate.getTime() - Date.now()) / (1000 * 60 * 60);
+        return hoursUntilFlight >= 0 && hoursUntilFlight <= 24;
+      });
 
       // Geocode missing lat/lng — prefer zip over vague location strings
       const geocodePromises = mapJobs

@@ -502,6 +502,8 @@ export default function VerifyInspect() {
   const [viurgent, setViUrgent] = useState(false);
   const [isBounty, setIsBounty] = useState(false);
   const [faaCompliance, setFaaCompliance] = useState(false);
+  const [droneFlightDate, setDroneFlightDate] = useState<string>("");
+  const [droneFlightTime, setDroneFlightTime] = useState<string>("");
 
   // Location — full address for property/vehicle/quick, zip-only for PAV, none for online
   const [viStreet, setViStreet] = useState<string>("");
@@ -667,12 +669,15 @@ export default function VerifyInspect() {
     locationMode === "zip" ? vizip.length >= 5 :
     viStreet.trim().length >= 3 && vizip.length >= 5;
 
+  const isDrone = selectedCategory?.name === "Drone / Aerial Footage";
+  const droneFlightWindowOk = isDrone ? !!(droneFlightDate && droneFlightTime) : true;
+
   const canProceed =
     selectedCategoryId &&
     selectedUseCaseId &&
     selectedServiceTypeId &&
     allDetailsFilled &&
-    (selectedCategory?.name === "Online Items" || selectedCategory?.name === "Part Availability Verification" || !!timingWindow) &&
+    (selectedCategory?.name === "Online Items" || selectedCategory?.name === "Part Availability Verification" || isDrone ? droneFlightWindowOk : !!timingWindow) &&
     (selectedCategory?.name !== "Part Availability Verification" || (
       smartFormValues["partDescription"] &&
       (!(selectedUseCase?.name.includes("Specific") || selectedUseCase?.name.includes("Search Known")) || smartFormValues["locationName"])
@@ -681,7 +686,13 @@ export default function VerifyInspect() {
     budgetNum > 0 &&
     locationOk;
 
-  const currentStep = !selectedUseCaseId ? 1 : !selectedServiceTypeId ? 2 : !allDetailsFilled ? 3 : (selectedCategory?.name !== "Online Items" && selectedCategory?.name !== "Part Availability Verification" && !timingWindow) ? 4 : !locationOk ? 5 : 6;
+  const timingStepDone = selectedCategory?.name === "Online Items" || selectedCategory?.name === "Part Availability Verification"
+    ? true
+    : isDrone
+    ? droneFlightWindowOk
+    : !!timingWindow;
+
+  const currentStep = !selectedUseCaseId ? 1 : !selectedServiceTypeId ? 2 : !allDetailsFilled ? 3 : !timingStepDone ? 4 : !locationOk ? 5 : 6;
 
   const smartFormConfig = useMemo(
     () => getSmartFormConfig(selectedCategory?.name),
@@ -713,6 +724,8 @@ export default function VerifyInspect() {
     setViCity("");
     setViState("");
     setFaaCompliance(false);
+    setDroneFlightDate("");
+    setDroneFlightTime("");
   }
 
   function handleUseCaseChange(val: string) {
@@ -741,6 +754,9 @@ export default function VerifyInspect() {
       const allJobDetails = { ...detailValues, ...smartFormValues };
       if (accessInstruction) allJobDetails["Access"] = accessInstruction;
       if (timingWindow) allJobDetails["Timing"] = timingWindow;
+      if (isDrone && droneFlightDate && droneFlightTime) {
+        allJobDetails["Scheduled Flight Window"] = `${droneFlightDate}T${droneFlightTime}`;
+      }
       if (viDescription.trim()) allJobDetails["Description"] = viDescription.trim();
       if (posterRole) allJobDetails["Requested By"] = posterRole;
       if (entryAuthMode) allJobDetails["Entry Authorization"] = entryAuthMode;
@@ -1711,7 +1727,7 @@ export default function VerifyInspect() {
                 <span className="font-display font-semibold text-sm tracking-wide">Constraints</span>
               </div>
               <div className="space-y-3">
-                {selectedCategory?.name !== "Online Items" && (
+                {selectedCategory?.name !== "Online Items" && !isDrone && (
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
                       <Clock className="w-3 h-3" /> Timing Window
@@ -1729,6 +1745,59 @@ export default function VerifyInspect() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {isDrone && (
+                  <div className="space-y-3">
+                    <div
+                      className="rounded-xl p-3"
+                      style={{ background: "rgba(56,189,248,0.07)", border: "1px solid rgba(56,189,248,0.25)" }}
+                    >
+                      <p className="text-[10px] text-sky-400/90 leading-relaxed font-display">
+                        <span className="font-bold">Scheduled Flight Window required.</span> Drone jobs are hidden from the worker map until the window is within 24 hours. Set your planned fly date and start time, then check NOTAMs and TFRs before launch.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
+                        <Clock className="w-3 h-3" /> Flight Date
+                        <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
+                        value={droneFlightDate}
+                        min={(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })()}
+                        onChange={(e) => setDroneFlightDate(e.target.value)}
+                        data-testid="input-drone-flight-date"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
+                        <Clock className="w-3 h-3" /> Flight Start Time
+                        <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
+                        value={droneFlightTime}
+                        onChange={(e) => setDroneFlightTime(e.target.value)}
+                        data-testid="input-drone-flight-time"
+                      />
+                    </div>
+                    {droneFlightDate && droneFlightTime && (
+                      <div className="flex items-start gap-2 rounded-lg px-3 py-2.5 bg-amber-500/5 border border-amber-500/20">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-400/80 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-400/80 leading-relaxed font-display">
+                          Remember to check NOTAMs and TFRs before your scheduled flight window.
+                        </p>
+                      </div>
+                    )}
+                    {!(droneFlightDate && droneFlightTime) && (
+                      <p className="text-[10px] text-amber-400/80 text-center" data-testid="text-flight-window-required">
+                        Flight date and time required to continue
+                      </p>
+                    )}
                   </div>
                 )}
 
