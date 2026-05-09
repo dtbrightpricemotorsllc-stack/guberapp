@@ -1,15 +1,29 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// GUBER Studio v2 — session-based AI generation tool (Phase 1).
-//
-// Access: admin-only by default. Admins can launch to all users by flipping
-// the "studio_v2" feature flag to "global" in the Feature Flag Console.
+// GUBER Studio v2 — cinematic CapCut-style shell on the session-based v2 backend.
 //
 // What this page is:
-//   • Tool picker (3 Fal.ai endpoints), upload-as-needed, prompt templates,
-//     cost preview, generate, in-page preview, download.
-//   • Generated media is TEMPORARY. Leaving the page, refreshing, or sitting
-//     idle for 30 minutes triggers a server-side purge of every clip and file
-//     produced this session. Nothing is saved to the user's profile.
+//   • Hero: last generated clip plays muted as a cinematic background, or an
+//     animated gradient + film grain when the session is empty.
+//   • Trending Templates: tap-to-start preset carousel that auto-selects the
+//     right Fal tool (music → MiniMax, with reference → Kling motion-control,
+//     otherwise → Wan motion 5s).
+//   • Prompt + glow Generate button. Cost preview pulled from server pricing
+//     (`/api/studio/tools`) — never hardcoded client-side.
+//   • Session library underneath: in-session outputs only. Nothing pinned to
+//     profile / resume / business / cash-drop in v2.
+//
+// Server contract (unchanged from v2):
+//   • `/api/studio/me`            credits + tier + providerReady
+//   • `/api/studio/tools`         pricing per tool key
+//   • `/api/studio/session`       open
+//   • `/api/studio/session/current` read
+//   • `/api/studio/session/touch` heartbeat
+//   • `/api/studio/session/exit`  purge
+//   • `/api/studio/upload`        reference upload
+//   • `/api/studio/generate/{motion-control|wan-motion|music}`
+//
+// Access: admin-only by default (gated by user.role === "admin"). Admins flip
+// the `studio_v2` feature flag to "global" when ready to launch broadly.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -18,14 +32,17 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isIOS } from "@/lib/platform";
 import {
-  Sparkles, Loader2, Upload, Image as ImageIcon, Music, Video, Wand2, X,
-  Download, Coins, ArrowLeft, ShoppingCart, Lock, ExternalLink, ChevronRight,
+  Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
+  Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
+  Building2, Megaphone, Zap, Crown, Check, ShoppingCart,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -55,42 +72,76 @@ type StudioFile = {
 type StudioSession = { id: number; status: string; startedAt: string };
 type SessionPayload = { session: StudioSession | null; files: StudioFile[] };
 
-// ── Tool metadata ──────────────────────────────────────────────────────────
 type ToolKey = "kling_motion_control" | "wan_motion_5s" | "wan_motion_10s" | "minimax_music";
-const TOOL_META: Record<ToolKey, { icon: any; needsImage: boolean; outputKind: "video" | "audio" }> = {
-  kling_motion_control: { icon: Video,  needsImage: true,  outputKind: "video" },
-  wan_motion_5s:        { icon: Wand2,  needsImage: false, outputKind: "video" },
-  wan_motion_10s:       { icon: Wand2,  needsImage: false, outputKind: "video" },
-  minimax_music:        { icon: Music,  needsImage: false, outputKind: "audio" },
+
+const TIER_LABEL: Record<string, string> = {
+  standard: "STANDARD",
+  creator:  "CREATOR",
+  business: "BUSINESS",
 };
 
-// ── Prompt templates ───────────────────────────────────────────────────────
-const STUDIO_TEMPLATES: Record<ToolKey, Array<{ label: string; prompt: string }>> = {
-  kling_motion_control: [
-    { label: "Golden hour push-in",   prompt: "Slow push-in toward the subject, bokeh background gradually sharpens, warm golden-hour glow, cinematic" },
-    { label: "360° orbit",            prompt: "Camera orbits the subject in a smooth 180° arc, natural window light, cinematic color grade" },
-    { label: "Upward reveal",         prompt: "Gentle upward tilt reveal from foreground to subject, wide angle, documentary style, soft diffused light" },
-    { label: "Dramatic zoom out",     prompt: "Start extreme close-up then slowly pull back to reveal the full environment, atmospheric haze, wide shot" },
-  ],
-  wan_motion_5s: [
-    { label: "City skyline timelapse", prompt: "Timelapse of clouds rolling over a city skyline at dusk, cinematic color grade, wide angle, 5 seconds" },
-    { label: "Product rotation",       prompt: "Close-up product shot rotating slowly on a clean white surface, soft studio lighting, sharp focus" },
-    { label: "Rainy night street",     prompt: "Person walking down a rainy street at night, neon reflections on wet pavement, slow motion, cinematic" },
-    { label: "Nature reveal",          prompt: "Camera pushes through tall grass to reveal a sunlit meadow, morning golden light, cinematic 5s" },
-  ],
-  wan_motion_10s: [
-    { label: "Aerial forest drift",   prompt: "Aerial shot drifting slowly over a forest canopy at sunrise, mist in the valleys, golden light piercing the trees, 10s" },
-    { label: "Urban commute blur",    prompt: "Busy intersection at rush hour, slow-motion, people and traffic blurring past a still camera, street-level, 10s" },
-    { label: "Ocean sunrise",         prompt: "Waves rolling onto an empty beach at sunrise, wide angle, warm colors, peaceful 10-second motion" },
-    { label: "Skyscraper rising",     prompt: "Low-angle shot looking up at a glass skyscraper, clouds drifting past, dramatic perspective, 10s" },
-  ],
-  minimax_music: [
-    { label: "Hopeful morning",     prompt: "Uplifting acoustic guitar and strings, slow build, hopeful morning feeling, 30 seconds instrumental" },
-    { label: "Cinematic tension",   prompt: "Dark ambient electronic, tension-building, cinematic suspense, sparse piano hits, deep bass pulse" },
-    { label: "Lo-fi late night",    prompt: "Lo-fi hip-hop with muted trumpet, nostalgic, late night study vibes, soft vinyl crackle, mellow" },
-    { label: "Epic adventure",      prompt: "Orchestral epic adventure theme, swelling strings, driving percussion, heroic brass, builds to climax" },
-  ],
+// ── Cinematic templates (CapCut-style starter prompts) ────────────────────
+// Each template declares its preferred output kind. Final tool routing also
+// considers whether the user has uploaded a reference image.
+type Template = {
+  slug: string;
+  label: string;
+  tag: string;
+  prompt: string;
+  gradient: string;
+  icon: React.ComponentType<{ className?: string }>;
+  kind: "video" | "audio";
 };
+const TEMPLATES: Template[] = [
+  {
+    slug: "create-ad", label: "Create Ad", tag: "Brand", kind: "video",
+    prompt: "Punchy 6-second product ad, bold typography reveal, energetic close-up, modern brand aesthetic, vibrant cinematic lighting.",
+    gradient: "from-fuchsia-500 via-pink-500 to-orange-400",
+    icon: Megaphone,
+  },
+  {
+    slug: "movie-trailer", label: "Movie Trailer", tag: "Cinematic", kind: "video",
+    prompt: "Epic movie trailer scene, anamorphic lens flares, slow push-in, dramatic orchestral mood, deep contrast cinematography.",
+    gradient: "from-amber-500 via-rose-600 to-purple-700",
+    icon: Film,
+  },
+  {
+    slug: "luxury-promo", label: "Luxury Promo", tag: "Premium", kind: "video",
+    prompt: "Luxury product reveal, glossy black surfaces, gold accents, slow rotation, soft rim light, ultra-high-end commercial feel.",
+    gradient: "from-yellow-400 via-amber-600 to-neutral-900",
+    icon: Crown,
+  },
+  {
+    slug: "anime-intro", label: "Anime Intro", tag: "Stylized", kind: "video",
+    prompt: "Anime-style intro, dynamic pan, vivid cel-shading, cherry blossoms swirling, motion-blur action lines, J-pop energy.",
+    gradient: "from-pink-400 via-rose-400 to-indigo-500",
+    icon: Sparkles,
+  },
+  {
+    slug: "tiktok-reel", label: "TikTok Reel", tag: "Viral", kind: "video",
+    prompt: "Vertical 9:16 reel, fast hook, hand-held camera energy, bold caption flash, trending color grade, scroll-stopping first frame.",
+    gradient: "from-cyan-400 via-violet-500 to-fuchsia-600",
+    icon: Flame,
+  },
+  {
+    slug: "real-estate", label: "Real Estate", tag: "Listing", kind: "video",
+    prompt: "Cinematic real estate walkthrough, golden-hour exterior, smooth dolly through entry, warm interior reveal, drone pull-back finale.",
+    gradient: "from-emerald-400 via-teal-500 to-sky-600",
+    icon: Building2,
+  },
+  {
+    slug: "music-track", label: "Music Track", tag: "Audio", kind: "audio",
+    prompt: "Uplifting cinematic strings with hopeful melody, slow build, instrumental, 30 seconds, broadcast quality.",
+    gradient: "from-violet-500 via-purple-600 to-rose-500",
+    icon: Music,
+  },
+  {
+    slug: "neon-night", label: "Neon Night", tag: "Vibes", kind: "video",
+    prompt: "Neon-soaked Tokyo alley at night, rain reflections, slow cinematic dolly-in, cyberpunk color grade, atmospheric haze.",
+    gradient: "from-sky-400 via-blue-600 to-violet-700",
+    icon: Zap,
+  },
+];
 
 // ── Coming Soon gate (non-admin) ───────────────────────────────────────────
 function StudioComingSoon() {
@@ -120,12 +171,13 @@ export default function StudioPageV2() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
-  const [activeTool, setActiveTool] = useState<ToolKey | null>(null);
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [outputKind, setOutputKind] = useState<"video" | "audio">("video");
   const [prompt, setPrompt] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewKind, setPreviewKind] = useState<"video" | "audio" | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Server state ──────────────────────────────────────────────────────
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
@@ -137,7 +189,7 @@ export default function StudioPageV2() {
 
   // ── Session lifecycle ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!isAdmin) return; // don't open sessions for non-admins hitting the gate
+    if (!isAdmin) return;
     let cancelled = false;
     (async () => {
       try {
@@ -147,7 +199,6 @@ export default function StudioPageV2() {
         }
       } catch {}
     })();
-
     const beforeUnload = () => {
       try {
         if (navigator.sendBeacon) navigator.sendBeacon("/api/studio/session/exit");
@@ -155,11 +206,9 @@ export default function StudioPageV2() {
       } catch {}
     };
     window.addEventListener("beforeunload", beforeUnload);
-
     const touchTimer = window.setInterval(() => {
       fetch("/api/studio/session/touch", { method: "POST", credentials: "include" }).catch(() => {});
     }, 4 * 60 * 1000);
-
     return () => {
       cancelled = true;
       window.removeEventListener("beforeunload", beforeUnload);
@@ -177,13 +226,22 @@ export default function StudioPageV2() {
   const files = sessionQuery.data?.files ?? [];
   const uploadedImages = files.filter((f) => f.fileType === "upload_image");
   const outputs = files.filter((f) => f.fileType === "output_video" || f.fileType === "output_audio");
+  const heroOutput = outputs[outputs.length - 1] || null;
 
-  const activeToolMeta = activeTool ? TOOL_META[activeTool] : null;
+  // Tool routing — derived from output kind + whether a reference photo is selected.
+  //   audio                           → minimax_music
+  //   video + reference image         → kling_motion_control (photo-driven motion)
+  //   video, no reference image       → wan_motion_5s        (default)
+  const activeToolKey = useMemo<ToolKey>(() => {
+    if (outputKind === "audio") return "minimax_music";
+    if (selectedSourceId) return "kling_motion_control";
+    return "wan_motion_5s";
+  }, [outputKind, selectedSourceId]);
+
   const activeToolPricing = useMemo(
-    () => tools.find((t) => t.key === activeTool) || null,
-    [tools, activeTool],
+    () => tools.find((t) => t.key === activeToolKey) || null,
+    [tools, activeToolKey],
   );
-  const templates = activeTool ? STUDIO_TEMPLATES[activeTool] : [];
 
   // ── Mutations ──────────────────────────────────────────────────────────
   const uploadMutation = useMutation({
@@ -194,13 +252,17 @@ export default function StudioPageV2() {
     onSuccess: (data: { file: StudioFile }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/studio/session/current"] });
       setSelectedSourceId(data.file.id);
-      toast({ title: "Reference uploaded" });
+      toast({ title: "Reference uploaded", description: "Your photo is ready — Generate now uses Kling motion-control." });
     },
     onError: (e: any) => toast({ title: "Upload failed", description: e.message, variant: "destructive" }),
   });
 
-  async function handleFile(file: File, kind: "image" | "video" | "audio") {
+  async function handleFile(file: File | undefined) {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Image only", description: "Pick a JPG / PNG / WebP.", variant: "destructive" });
+      return;
+    }
     if (file.size > 25 * 1024 * 1024) {
       toast({ title: "File too big", description: "Keep references under 25 MB.", variant: "destructive" });
       return;
@@ -211,34 +273,50 @@ export default function StudioPageV2() {
       r.onerror = () => rej(new Error("read failed"));
       r.readAsDataURL(file);
     });
-    uploadMutation.mutate({ dataUrl, kind });
+    uploadMutation.mutate({ dataUrl, kind: "image" });
   }
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      if (!activeTool) throw new Error("Pick a tool first");
       const endpoint =
-        activeTool === "kling_motion_control" ? "/api/studio/generate/motion-control" :
-        activeTool === "minimax_music"        ? "/api/studio/generate/music" :
-                                                "/api/studio/generate/wan-motion";
-      const body: any = { prompt };
-      if (activeToolMeta?.needsImage || (activeTool.startsWith("wan_motion") && selectedSourceId)) {
-        body.sourceFileId = selectedSourceId;
-      }
-      if (activeTool === "wan_motion_10s") body.durationSeconds = 10;
-      if (activeTool === "wan_motion_5s")  body.durationSeconds = 5;
+        activeToolKey === "kling_motion_control" ? "/api/studio/generate/motion-control" :
+        activeToolKey === "minimax_music"        ? "/api/studio/generate/music" :
+                                                   "/api/studio/generate/wan-motion";
+      const body: any = { prompt: prompt.trim() };
+      if (activeToolKey === "kling_motion_control") body.sourceFileId = selectedSourceId;
+      if (activeToolKey === "wan_motion_5s")  body.durationSeconds = 5;
+      if (activeToolKey === "wan_motion_10s") body.durationSeconds = 10;
       const res = await apiRequest("POST", endpoint, body);
       return res.json() as Promise<{ file: StudioFile; balance: number }>;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/studio/session/current"] });
       queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
-      setPreviewUrl(data.file.providerUrl);
-      setPreviewKind(activeToolMeta?.outputKind ?? "video");
-      toast({ title: "Generated", description: "Your clip is ready below." });
+      setActiveTemplate(null);
+      toast({ title: "Your clip is ready", description: "Scroll down to your library." });
     },
-    onError: (e: any) => toast({ title: "Generation failed", description: e.message, variant: "destructive" }),
+    onError: async (err: any) => {
+      let msg = err?.message || "Generation failed";
+      const m = /^\d+:\s*(.+)$/.exec(msg);
+      if (m) { try { const p = JSON.parse(m[1]); if (p?.message) msg = p.message; } catch {} }
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
+      toast({ title: "Couldn't generate", description: msg, variant: "destructive" });
+    },
   });
+
+  function pickTemplate(t: Template) {
+    setActiveTemplate(t.slug);
+    setOutputKind(t.kind);
+    setPrompt(t.prompt);
+    setTimeout(() => {
+      promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      promptRef.current?.focus();
+    }, 60);
+  }
+
+  function clearReference() {
+    setSelectedSourceId(null);
+  }
 
   // ── Loading / auth states ──────────────────────────────────────────────
   if (meQuery.isLoading || toolsQuery.isLoading) {
@@ -256,44 +334,115 @@ export default function StudioPageV2() {
       </div>
     );
   }
-
-  // Non-admins see the coming soon gate
   if (!isAdmin) return <StudioComingSoon />;
 
-  const insufficient = activeToolPricing ? me.credits < activeToolPricing.creditsCost : false;
-  const needsImageButMissing = !!activeToolMeta?.needsImage && !selectedSourceId;
+  const credits = me.credits;
+  const tier = me.tier;
+  const cost = activeToolPricing?.creditsCost ?? 0;
+  const insufficient = cost > 0 && credits < cost;
+  const hasInput = prompt.trim().length > 0 || selectedSourceId !== null;
   const canGenerate =
-    !!activeTool &&
+    !!activeToolPricing &&
     !generateMutation.isPending &&
     !insufficient &&
-    !needsImageButMissing &&
-    (prompt.trim().length > 0 || selectedSourceId !== null);
+    hasInput &&
+    me.providerReady;
+
+  const selectedRefImage = uploadedImages.find((i) => i.id === selectedSourceId) || null;
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32">
-      {/* Header */}
-      <header className="sticky top-0 z-30 backdrop-blur bg-black/80 border-b border-white/10">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setConfirmExit(true)}
-            className="flex items-center gap-2 text-sm text-white/80"
-            data-testid="button-studio-exit"
-          >
-            <ArrowLeft className="w-4 h-4" /> Exit
-          </button>
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold tracking-wide">GUBER STUDIO</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm" data-testid="text-studio-credits">
-            <Coins className="w-4 h-4 text-amber-400" />
-            <span className="font-semibold">{me.credits}</span>
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-32" data-testid="page-studio">
+      {/* ─── HERO ─────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden">
+        {/* Cinematic background — last clip if available, otherwise animated gradient + grain */}
+        <div className="absolute inset-0 z-0">
+          {heroOutput?.fileType === "output_video" ? (
+            <>
+              <video
+                src={heroOutput.providerUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover opacity-50"
+                data-testid="video-hero"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/60 to-black" />
+            </>
+          ) : (
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(34,197,94,0.22),_transparent_60%),_radial-gradient(ellipse_at_bottom_right,_rgba(168,85,247,0.18),_transparent_50%),_radial-gradient(ellipse_at_bottom_left,_rgba(56,189,248,0.18),_transparent_55%)]" />
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.85))]" />
+              <div
+                className="absolute inset-0 opacity-[0.06] mix-blend-overlay pointer-events-none"
+                style={{
+                  backgroundImage:
+                    "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+                }}
+              />
+            </>
+          )}
         </div>
-      </header>
 
-      <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
+        <div className="relative z-10 max-w-2xl mx-auto px-5 pt-6 pb-12">
+          <div className="flex items-center justify-between gap-3 mb-8">
+            <button
+              type="button"
+              onClick={() => setConfirmExit(true)}
+              className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
+              data-testid="button-studio-exit"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Exit
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_0_24px_rgba(34,197,94,0.5)]">
+                <Wand2 className="w-5 h-5 text-black" />
+              </div>
+              <div className="leading-tight">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-white/60">GUBER</p>
+                <p className="text-sm font-black tracking-tight">STUDIO</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5"
+                data-testid="text-studio-credits"
+              >
+                <Coins className="w-3.5 h-3.5 text-amber-300" />
+                <span className="text-xs font-bold tabular-nums">{credits}</span>
+              </div>
+              <Badge
+                variant="outline"
+                className="tracking-widest text-[9px] border-white/20 bg-white/5"
+                data-testid="badge-studio-tier"
+              >
+                {TIER_LABEL[tier] || tier.toUpperCase()}
+              </Badge>
+            </div>
+          </div>
+
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-[1.05]">
+            Create something
+            <br />
+            <span className="bg-gradient-to-r from-emerald-300 via-cyan-300 to-violet-300 bg-clip-text text-transparent">
+              cinematic.
+            </span>
+          </h1>
+          <p className="text-sm text-white/70 mt-4 max-w-md">
+            Pick a template, type a moment, hit generate. Your AI clip lands in seconds —
+            ready for a reel, an ad, or a listing.
+          </p>
+
+          {!heroOutput && (
+            <div className="mt-8 flex items-center gap-2 text-[11px] text-white/50">
+              <Play className="w-3.5 h-3.5" />
+              <span>Your first clip will play right here.</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <div className="max-w-2xl mx-auto px-5 space-y-10">
         {/* Admin-only banner */}
         <div className="rounded-xl border border-violet-500/40 bg-violet-950/40 px-4 py-3 text-xs text-violet-200 flex items-start gap-3">
           <Lock className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
@@ -319,258 +468,257 @@ export default function StudioPageV2() {
         {/* Provider down warning */}
         {!me.providerReady && (
           <div className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-100" data-testid="banner-provider-down">
-            The AI provider isn't connected yet (FAL_KEY missing). Generation is disabled until the key is set.
+            The AI provider isn't connected yet. Generation is disabled until the key is set — your credits are safe.
           </div>
         )}
 
-        {/* Tool picker */}
+        {/* ─── TRENDING TEMPLATES (CapCut-style cinematic carousel) ───── */}
         <section>
-          <h2 className="text-xs font-bold tracking-[0.22em] uppercase text-white/60 mb-3">Pick a tool</h2>
-          <div className="grid grid-cols-1 gap-2">
-            {tools.map((t) => {
-              const meta = TOOL_META[t.key as ToolKey];
-              const Icon = meta?.icon ?? Wand2;
-              const selected = activeTool === t.key;
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+              <Flame className="w-5 h-5 text-orange-400" />
+              Trending templates
+            </h2>
+            <span className="text-[10px] uppercase tracking-widest text-white/40">tap to start</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
+            {TEMPLATES.map((t) => {
+              const Icon = t.icon;
+              const active = activeTemplate === t.slug;
               return (
                 <button
-                  key={t.key}
+                  key={t.slug}
                   type="button"
-                  onClick={() => {
-                    setActiveTool(t.key as ToolKey);
-                    setSelectedSourceId(null);
-                    setPreviewUrl(null);
-                    setPrompt("");
-                  }}
-                  className={`text-left rounded-2xl border px-4 py-3 flex items-center gap-3 transition-colors ${
-                    selected
-                      ? "border-emerald-400 bg-emerald-400/10"
-                      : "border-white/10 bg-white/5 hover:bg-white/10"
+                  onClick={() => pickTemplate(t)}
+                  className={`shrink-0 w-40 h-56 rounded-2xl snap-start relative overflow-hidden text-left group transition-transform duration-200 ${
+                    active ? "ring-2 ring-emerald-400 scale-[1.02]" : "hover:scale-[1.02]"
                   }`}
-                  data-testid={`button-tool-${t.key}`}
+                  data-testid={`template-${t.slug}`}
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-emerald-400 text-black" : "bg-white/10 text-white"}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm">{t.label}</p>
-                      {meta?.needsImage && (
-                        <Badge variant="outline" className="text-[10px] border-white/20 text-white/70">photo required</Badge>
-                      )}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${t.gradient}`} />
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_60%)]" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/15 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+                  <div className="absolute top-3 left-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
+                      <Icon className="w-4 h-4 text-white" />
                     </div>
-                    {t.description && (
-                      <p className="text-[11px] text-white/60 leading-snug mt-0.5 line-clamp-2">{t.description}</p>
-                    )}
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs font-bold text-amber-400">{t.creditsCost} cr</p>
-                    {t.durationSeconds && <p className="text-[10px] text-white/50">{t.durationSeconds}s</p>}
+                  <div className="absolute top-3 right-3">
+                    <span className="text-[9px] uppercase tracking-widest bg-black/40 backdrop-blur px-2 py-1 rounded-full border border-white/10">
+                      {t.tag}
+                    </span>
                   </div>
+                  <div className="absolute inset-x-0 bottom-0 p-3">
+                    <p className="font-black text-base leading-tight">{t.label}</p>
+                    <p className="text-[10px] text-white/70 line-clamp-2 mt-1">{t.prompt}</p>
+                  </div>
+                  {active && (
+                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-emerald-400 flex items-center justify-center shadow-lg">
+                      <Check className="w-3.5 h-3.5 text-black" />
+                    </div>
+                  )}
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* Prompt templates */}
-        {activeTool && templates.length > 0 && (
-          <section data-testid="section-templates">
-            <h2 className="text-xs font-bold tracking-[0.22em] uppercase text-white/60 mb-3">Templates</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {templates.map((tpl) => (
-                <button
-                  key={tpl.label}
-                  type="button"
-                  onClick={() => setPrompt(tpl.prompt)}
-                  className={`text-left rounded-xl border px-3 py-2.5 text-xs transition-colors ${
-                    prompt === tpl.prompt
-                      ? "border-emerald-400 bg-emerald-400/10 text-emerald-200"
-                      : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
-                  }`}
-                  data-testid={`button-template-${tpl.label.toLowerCase().replace(/\s+/g, "-")}`}
-                >
-                  <span className="font-semibold block mb-0.5">{tpl.label}</span>
-                  <span className="text-white/50 line-clamp-2 text-[10px] leading-relaxed">{tpl.prompt}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Reference uploader */}
-        {activeTool && (activeToolMeta?.needsImage || activeTool.startsWith("wan_motion")) && (
-          <section data-testid="section-reference">
-            <h2 className="text-xs font-bold tracking-[0.22em] uppercase text-white/60 mb-3">
-              Reference photo {activeToolMeta?.needsImage ? "" : "(optional)"}
-            </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              <label className="shrink-0 w-24 h-24 rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center text-white/60 cursor-pointer hover:border-emerald-400 hover:text-emerald-400 transition-colors">
-                {uploadMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                <span className="text-[10px] mt-1 font-semibold">Upload</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0], "image")}
-                  data-testid="input-upload-image"
-                />
-              </label>
-              {uploadedImages.map((img) => (
-                <button
-                  key={img.id}
-                  type="button"
-                  onClick={() => setSelectedSourceId(img.id)}
-                  className={`relative shrink-0 w-24 h-24 rounded-2xl overflow-hidden border-2 ${
-                    selectedSourceId === img.id ? "border-emerald-400" : "border-white/10"
-                  }`}
-                  data-testid={`button-pick-image-${img.id}`}
-                >
-                  <img src={img.providerUrl} alt="reference" className="w-full h-full object-cover" />
-                  {selectedSourceId === img.id && (
-                    <span className="absolute inset-0 bg-emerald-400/20 flex items-center justify-center">
-                      <ImageIcon className="w-5 h-5 text-emerald-300" />
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-            {needsImageButMissing && (
-              <p className="text-[11px] text-amber-300 mt-1">This tool needs a reference photo to generate.</p>
-            )}
-          </section>
-        )}
-
-        {/* Prompt */}
-        {activeTool && (
-          <section>
-            <h2 className="text-xs font-bold tracking-[0.22em] uppercase text-white/60 mb-3">Prompt</h2>
+        {/* ─── PROMPT + REFERENCE + GENERATE ──────────────────────────── */}
+        <section className="space-y-4">
+          <div className="relative rounded-3xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] border border-white/10 backdrop-blur-md p-1 shadow-[0_0_60px_-15px_rgba(34,197,94,0.4)]">
+            <div className="absolute -inset-px rounded-3xl bg-gradient-to-r from-emerald-500/0 via-emerald-500/30 to-violet-500/0 opacity-0 focus-within:opacity-100 transition-opacity blur-xl pointer-events-none" />
             <Textarea
+              ref={promptRef}
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => { setPrompt(e.target.value); if (activeTemplate) setActiveTemplate(null); }}
+              placeholder={
+                outputKind === "audio"
+                  ? "Describe a track… uplifting cinematic strings, slow build, hopeful 30 seconds instrumental."
+                  : "Describe a moment… A neon-lit panda DJ in Tokyo, slow cinematic dolly-in, vaporwave colors."
+              }
               maxLength={500}
               rows={4}
-              placeholder={
-                activeTool === "minimax_music"
-                  ? "e.g. uplifting cinematic strings, slow build, hopeful"
-                  : "e.g. slow dolly-in on a busy diner at golden hour, cinematic"
-              }
-              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 resize-none"
+              className="relative bg-transparent border-0 text-base placeholder:text-white/40 focus-visible:ring-0 resize-none rounded-3xl px-5 py-4"
               data-testid="textarea-prompt"
             />
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-[10px] text-white/50">{prompt.length}/500</span>
-              {activeToolPricing && (
-                <span className="text-[11px] text-white/70">
-                  Cost: <span className="font-bold text-amber-400">{activeToolPricing.creditsCost} cr</span>
-                  {activeToolPricing.durationSeconds && <> · ~{activeToolPricing.durationSeconds}s</>}
-                </span>
+            <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
+              <div className="flex items-center gap-2 min-w-0">
+                {selectedRefImage ? (
+                  <div className="relative">
+                    <img
+                      src={selectedRefImage.providerUrl}
+                      alt="reference"
+                      className="w-10 h-10 rounded-lg object-cover ring-1 ring-emerald-400/50"
+                      data-testid="img-active-reference"
+                    />
+                    <button
+                      type="button"
+                      onClick={clearReference}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center"
+                      data-testid="button-remove-reference"
+                      aria-label="Remove reference image"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ) : (
+                  outputKind === "video" && (
+                    <>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFile(e.target.files?.[0])}
+                        data-testid="input-source-image"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadMutation.isPending}
+                        className="flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white px-2.5 py-1.5 rounded-full hover:bg-white/5 transition disabled:opacity-50"
+                        data-testid="button-pick-source"
+                      >
+                        {uploadMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        Reference
+                      </button>
+                    </>
+                  )
+                )}
+                {activeToolPricing && (
+                  <span className="text-[11px] text-white/60 truncate">
+                    {activeToolPricing.label} · <span className="text-amber-300 font-semibold">{activeToolPricing.creditsCost} cr</span>
+                    {activeToolPricing.durationSeconds && <> · {activeToolPricing.durationSeconds}s</>}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-white/40 tabular-nums">{prompt.length}/500</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={!canGenerate}
+            onClick={() => generateMutation.mutate()}
+            className="group relative w-full h-16 rounded-2xl overflow-hidden font-black tracking-wider text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid="button-generate"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-cyan-400 to-violet-500" />
+            {!generateMutation.isPending && (
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-cyan-400 to-violet-500 blur-xl opacity-50 group-hover:opacity-80 transition-opacity" />
+            )}
+            <div className="absolute -inset-x-20 top-0 h-full bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700" />
+            <div className="relative flex items-center justify-center gap-2 text-black">
+              {generateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Rendering…</span>
+                  <span className="text-black/70 text-xs font-normal">30–90s</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-5 h-5" />
+                  <span>GENERATE</span>
+                  {activeToolPricing && (
+                    <span className="text-black/80 text-xs font-normal">· {activeToolPricing.creditsCost} cr</span>
+                  )}
+                </>
               )}
             </div>
-          </section>
-        )}
+          </button>
 
-        {/* Generate */}
-        {activeTool && (
-          <section>
-            <Button
-              size="lg"
-              onClick={() => generateMutation.mutate()}
-              disabled={!canGenerate || !me.providerReady}
-              className="w-full bg-emerald-400 hover:bg-emerald-300 text-black font-bold rounded-2xl h-14"
-              data-testid="button-generate"
-            >
-              {generateMutation.isPending ? (
-                <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Generating…</>
-              ) : (
-                <><Sparkles className="w-5 h-5 mr-2" /> Generate</>
-              )}
-            </Button>
-            {insufficient && !isIOS && (
-              <Link href="/studio/credits">
-                <Button
-                  variant="outline"
-                  className="w-full mt-2 border-amber-400 text-amber-300 hover:bg-amber-400/10 rounded-2xl"
-                  data-testid="button-buy-credits"
-                >
-                  <ShoppingCart className="w-4 h-4 mr-2" /> Out of credits — buy a pack
-                </Button>
-              </Link>
-            )}
-            {insufficient && isIOS && (
-              <p className="w-full mt-2 text-center text-[11px] text-white/60" data-testid="text-ios-credits-unavailable">
-                Out of credits. Top-ups aren't available in the iOS app yet — visit guberapp.app to buy more.
-              </p>
-            )}
-          </section>
-        )}
-
-        {/* Latest preview */}
-        {previewUrl && previewKind && (
-          <section data-testid="section-preview">
-            <h2 className="text-xs font-bold tracking-[0.22em] uppercase text-white/60 mb-3">Result</h2>
-            <Card className="bg-white/5 border-white/10">
-              <CardContent className="p-3">
-                {previewKind === "video" ? (
-                  <video
-                    src={previewUrl}
-                    controls
-                    playsInline
-                    className="w-full rounded-xl bg-black aspect-video object-cover"
-                    data-testid="video-preview"
-                  />
-                ) : (
-                  <audio src={previewUrl} controls className="w-full" data-testid="audio-preview" />
-                )}
-                <div className="flex gap-2 mt-3">
-                  <a href={previewUrl} download target="_blank" rel="noreferrer" className="flex-1">
-                    <Button
-                      variant="outline"
-                      className="w-full border-white/20 text-white hover:bg-white/10 rounded-xl"
-                      data-testid="button-download-preview"
-                    >
-                      <Download className="w-4 h-4 mr-2" /> Download
-                    </Button>
-                  </a>
+          {generateMutation.isPending && (
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex items-center gap-3" data-testid="status-rendering">
+              <div className="relative w-10 h-10 shrink-0">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-r from-emerald-400 to-violet-400 animate-pulse" />
+                <div className="absolute inset-1 rounded-full bg-black flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-300" />
                 </div>
-              </CardContent>
-            </Card>
-          </section>
-        )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold">Rendering your clip</p>
+                <p className="text-[11px] text-white/60 truncate">Pixels in motion. Hang tight — leaving this page wipes the result.</p>
+              </div>
+            </div>
+          )}
 
-        {/* Session history */}
-        {outputs.length > 0 && (
-          <section>
-            <h2 className="text-xs font-bold tracking-[0.22em] uppercase text-white/60 mb-3">
-              This session ({outputs.length})
-            </h2>
+          {insufficient && !generateMutation.isPending && !isIOS && (
+            <Link href="/studio/credits">
+              <Button
+                variant="outline"
+                className="w-full border-amber-400 text-amber-300 hover:bg-amber-400/10 rounded-2xl"
+                data-testid="button-buy-credits"
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" /> Out of credits — buy a pack
+              </Button>
+            </Link>
+          )}
+          {insufficient && !generateMutation.isPending && isIOS && (
+            <p className="text-center text-[11px] text-white/60" data-testid="text-ios-credits-unavailable">
+              Out of credits. Top-ups aren't available in the iOS app yet — visit guberapp.app to buy more.
+            </p>
+          )}
+        </section>
+
+        {/* ─── LIBRARY (this session) ─────────────────────────────────── */}
+        <section>
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="text-xl font-black tracking-tight">Your library</h2>
+            {outputs.length > 0 && (
+              <span className="text-[10px] uppercase tracking-widest text-white/40">
+                {outputs.length} clip{outputs.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {outputs.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-10 text-center" data-testid="text-library-empty">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400/30 to-violet-600/30 mx-auto mb-3 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-emerald-300" />
+              </div>
+              <p className="text-sm font-semibold">Your first clip lives here</p>
+              <p className="text-xs text-white/50 mt-1">Pick a template or write a prompt — your library fills up fast.</p>
+            </div>
+          ) : (
             <div className="grid grid-cols-2 gap-3">
               {outputs.map((o) => (
-                <Card key={o.id} className="bg-white/5 border-white/10 overflow-hidden">
+                <Card
+                  key={o.id}
+                  className="overflow-hidden bg-white/[0.03] border-white/10 hover:border-white/20 transition group"
+                  data-testid={`card-clip-${o.id}`}
+                >
                   <CardContent className="p-2">
                     {o.fileType === "output_video" ? (
                       <video
                         src={o.providerUrl}
                         controls
                         playsInline
-                        muted
-                        className="w-full rounded-lg bg-black aspect-video object-cover"
+                        className="w-full rounded-lg bg-black aspect-square object-cover"
                       />
                     ) : (
-                      <audio src={o.providerUrl} controls className="w-full" />
+                      <div className="w-full aspect-square rounded-lg bg-gradient-to-br from-violet-500/30 to-emerald-500/20 flex items-center justify-center">
+                        <Music className="w-8 h-8 text-white/70" />
+                      </div>
                     )}
-                    <div className="flex items-center justify-between mt-2 px-1">
+                    {o.fileType === "output_audio" && (
+                      <audio src={o.providerUrl} controls className="w-full mt-2" />
+                    )}
+                    <div className="flex items-center justify-between gap-1 mt-2 px-1">
                       <span className="text-[10px] text-white/50 truncate">{o.meta?.toolKey || ""}</span>
-                      <a href={o.providerUrl} download target="_blank" rel="noreferrer">
-                        <Download className="w-3.5 h-3.5 text-white/70 hover:text-emerald-400" />
+                      <a href={o.providerUrl} download target="_blank" rel="noreferrer" data-testid={`link-download-${o.id}`}>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-white/70 hover:text-white hover:bg-white/10">
+                          <Download className="w-3 h-3 mr-1" /> Save
+                        </Button>
                       </a>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </section>
-        )}
-      </main>
+          )}
+        </section>
+      </div>
 
       {/* Exit confirm */}
       <Dialog open={confirmExit} onOpenChange={setConfirmExit}>
