@@ -16,7 +16,8 @@ export type FeatureFlagKey =
   | "business_promo"
   | "business_signup"
   | "qa_dashboard"
-  | "investor_pitch_public";
+  | "investor_pitch_public"
+  | "free_quickpic_enabled";
 
 export type RolloutScope = "off" | "global" | "role" | "allowlist";
 
@@ -117,6 +118,13 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     key: "qa_dashboard",
     label: "QA Dashboard",
     description: "Master switch for the /admin/qa surface itself (admin-only regardless).",
+    defaultEnabled: true,
+    defaultScope: "global",
+  },
+  {
+    key: "free_quickpic_enabled",
+    label: "Free Quick Pic Generator",
+    description: "Allow logged-in users 3 free AI image generations per UTC day at /studio (no credits required). Kill-switch only — credit-based generation is unaffected.",
     defaultEnabled: true,
     defaultScope: "global",
   },

@@ -10,11 +10,12 @@ import {
   workerBusinessProjections, backgroundCheckEligibility, billingEvents, legalAcceptances,
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
-  studioSessions, studioSessionFiles, studioGenerationLog, studioModelPricing,
+  studioSessions, studioSessionFiles, studioGenerationLog, studioModelPricing, studioFreeQuota,
   taskHistorySummary,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
   type StudioSession, type StudioSessionFile, type StudioGenerationLog, type StudioModelPricing,
+  type StudioFreeQuota,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
@@ -70,6 +71,10 @@ export interface IStorage {
   // Admin-editable pricing.
   listStudioModelPricing(): Promise<StudioModelPricing[]>;
   getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined>;
+  // Free Quick Pic quota (task-520).
+  getStudioFreeQuotaUsed(userId: number, day: string): Promise<number>;
+  consumeStudioFreeQuota(userId: number, day: string, dailyLimit: number): Promise<number | null>;
+  refundStudioFreeQuota(userId: number, day: string): Promise<void>;
 
   getJobs(onlyPublished?: boolean): Promise<Job[]>;
   getJob(id: number): Promise<Job | undefined>;
@@ -510,6 +515,38 @@ export class DatabaseStorage implements IStorage {
   async getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined> {
     const [row] = await db.select().from(studioModelPricing).where(eq(studioModelPricing.toolKey, toolKey)).limit(1);
     return row;
+  }
+
+  async getStudioFreeQuotaUsed(userId: number, day: string): Promise<number> {
+    const [row] = await db.select().from(studioFreeQuota)
+      .where(and(eq(studioFreeQuota.userId, userId), eq(studioFreeQuota.day, day)))
+      .limit(1);
+    return row?.usedCount ?? 0;
+  }
+
+  // Atomic consume: insert (used_count=1) on first call of the day, otherwise
+  // increment IFF current used_count < dailyLimit. Returns the new used_count
+  // when consumed, or null when the daily limit is already reached.
+  async consumeStudioFreeQuota(userId: number, day: string, dailyLimit: number): Promise<number | null> {
+    const result: any = await db.execute(sql`
+      INSERT INTO studio_free_quota (user_id, day, used_count)
+      VALUES (${userId}, ${day}, 1)
+      ON CONFLICT (user_id, day)
+      DO UPDATE SET used_count = studio_free_quota.used_count + 1
+      WHERE studio_free_quota.used_count < ${dailyLimit}
+      RETURNING used_count
+    `);
+    const rows = (result?.rows ?? result) as Array<{ used_count: number }>;
+    if (!rows || rows.length === 0) return null;
+    return rows[0].used_count;
+  }
+
+  async refundStudioFreeQuota(userId: number, day: string): Promise<void> {
+    await db.execute(sql`
+      UPDATE studio_free_quota
+      SET used_count = GREATEST(used_count - 1, 0)
+      WHERE user_id = ${userId} AND day = ${day}
+    `);
   }
 
   async getJobs(onlyPublished: boolean = true): Promise<Job[]> {

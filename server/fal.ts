@@ -224,6 +224,26 @@ export async function generateMiniMaxMusic(opts: MiniMaxMusicOpts): Promise<{ au
   return { audioUrl, jobId };
 }
 
+export type FluxQuickPicOpts = {
+  prompt: string;
+};
+
+export async function generateFluxQuickPic(opts: FluxQuickPicOpts): Promise<{ imageUrl: string; jobId: string }> {
+  const { output, jobId } = await submitToFal<{ images?: Array<{ url?: string }>; image?: { url?: string }; url?: string }>(
+    "fal-ai/flux/schnell",
+    {
+      prompt: opts.prompt,
+      image_size: "square_hd",
+      num_inference_steps: 4,
+      num_images: 1,
+      enable_safety_checker: true,
+    },
+  );
+  const imageUrl = output.images?.[0]?.url || output.image?.url || output.url;
+  if (!imageUrl) throw new FalGenerationError(`Flux Quick Pic returned no image url (job ${jobId})`);
+  return { imageUrl, jobId };
+}
+
 // ── Moderation (kept from v1) ─────────────────────────────────────────────
 
 export class ModerationUnavailableError extends Error {

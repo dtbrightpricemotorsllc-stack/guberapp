@@ -10,6 +10,7 @@ import {
   serial,
   json,
   uniqueIndex,
+  date,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -1710,6 +1711,19 @@ export const studioModelPricing = pgTable("studio_model_pricing", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 export type StudioModelPricing = typeof studioModelPricing.$inferSelect;
+
+// studio_free_quota — free Quick Pic counter per user per UTC day (task-520).
+// Increment atomically before each free Quick Pic; decrement on provider
+// failure (mirrors the credit refund flow).
+export const studioFreeQuota = pgTable("studio_free_quota", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  day: date("day").notNull(),
+  usedCount: integer("used_count").notNull().default(0),
+}, (t) => ({
+  userDayUniq: uniqueIndex("studio_free_quota_user_day_uniq").on(t.userId, t.day),
+}));
+export type StudioFreeQuota = typeof studioFreeQuota.$inferSelect;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QA DASHBOARD (task-462) — feature flags, tester allowlist, cash-drop events

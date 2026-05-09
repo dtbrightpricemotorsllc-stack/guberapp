@@ -413,6 +413,22 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'composite:commercial', 200, 10, true)
 ON CONFLICT (tool_key) DO NOTHING;
 
+-- task-520: free Quick Pic generator (3/day per logged-in user, no credits)
+CREATE TABLE IF NOT EXISTS studio_free_quota (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  day date NOT NULL,
+  used_count integer NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS studio_free_quota_user_day_uniq
+  ON studio_free_quota (user_id, day);
+
+INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, duration_seconds, active) VALUES
+  ('flux_quick_pic', 'Quick Pic',
+   'Free 3/day AI image generator (Flux Schnell). Prompt → square HD image in seconds.',
+   'fal-ai/flux/schnell', 1, NULL, true)
+ON CONFLICT (tool_key) DO NOTHING;
+
 -- task-506: drone_certified flag on worker_business_projections
 ALTER TABLE worker_business_projections ADD COLUMN IF NOT EXISTS drone_certified BOOLEAN DEFAULT false;
 

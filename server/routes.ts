@@ -9776,6 +9776,157 @@ export async function registerRoutes(
     });
   });
 
+  // Free Quick Pic — 3 per UTC day per logged-in user. No credits deducted on
+  // free path. Returns 429 when daily quota exhausted. Provider failure
+  // refunds the quota (decrement used_count).
+  const FREE_QUICKPIC_DAILY_LIMIT = 3;
+  function utcDayString(d = new Date()): string {
+    return d.toISOString().slice(0, 10);
+  }
+
+  app.get("/api/studio/free-quota", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const day = utcDayString();
+    const { isFeatureEnabledFor } = await import("./feature-flags.js");
+    const user = await storage.getUser(userId);
+    const enabled = await isFeatureEnabledFor("free_quickpic_enabled", user ? { id: user.id, role: user.role } : null);
+    const used = await storage.getStudioFreeQuotaUsed(userId, day);
+    const remaining = Math.max(FREE_QUICKPIC_DAILY_LIMIT - used, 0);
+    res.json({
+      enabled,
+      day,
+      dailyLimit: FREE_QUICKPIC_DAILY_LIMIT,
+      used,
+      remaining,
+    });
+  });
+
+  app.post("/api/studio/generate/quick-pic", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const promptRaw = String(req.body?.prompt ?? "").trim();
+    if (!promptRaw) return res.status(400).json({ message: "Add a prompt to generate a Quick Pic." });
+    if (promptRaw.length > 500) return res.status(400).json({ message: "Prompt is too long (max 500 characters)." });
+
+    const { isFeatureEnabledFor } = await import("./feature-flags.js");
+    const user = await storage.getUser(userId);
+    const enabled = await isFeatureEnabledFor("free_quickpic_enabled", user ? { id: user.id, role: user.role } : null);
+    if (!enabled) {
+      return res.status(403).json({ message: "Free Quick Pic is currently disabled." });
+    }
+
+    const {
+      isFalConfigured, isModerationConfigured, moderatePrompt,
+      ModerationUnavailableError, generateFluxQuickPic,
+    } = await import("./fal");
+    if (!isFalConfigured()) {
+      return res.status(503).json({ message: "GUBER Studio is temporarily unavailable: AI provider not connected. Your free quota is safe." });
+    }
+    if (!isModerationConfigured()) {
+      return res.status(503).json({ message: "Studio is paused: content moderation is offline. Your free quota is safe." });
+    }
+    try {
+      const mod = await moderatePrompt(promptRaw);
+      if (mod.flagged) {
+        return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation." });
+      }
+    } catch (err: any) {
+      if (err instanceof ModerationUnavailableError) {
+        return res.status(503).json({ message: "Content moderation is offline. Try again shortly." });
+      }
+      throw err;
+    }
+
+    const day = utcDayString();
+    const newUsed = await storage.consumeStudioFreeQuota(userId, day, FREE_QUICKPIC_DAILY_LIMIT);
+    if (newUsed === null) {
+      return res.status(429).json({
+        message: `You've used your ${FREE_QUICKPIC_DAILY_LIMIT} free Quick Pics for today. Come back tomorrow (UTC) for more.`,
+        dailyLimit: FREE_QUICKPIC_DAILY_LIMIT,
+        used: FREE_QUICKPIC_DAILY_LIMIT,
+        remaining: 0,
+      });
+    }
+    const remaining = Math.max(FREE_QUICKPIC_DAILY_LIMIT - newUsed, 0);
+
+    const session = await ensureStudioSession(userId);
+    const pricing = await storage.getStudioModelPricing("flux_quick_pic");
+
+    try {
+      const provider = await generateFluxQuickPic({ prompt: promptRaw });
+
+      let finalUrl = provider.imageUrl;
+      let cloudinaryPublicId: string | null = null;
+      try {
+        if (process.env.CLOUDINARY_CLOUD_NAME) {
+          const cloudinary = (await import("./cloudinary.js")).default;
+          const uploaded = await cloudinary.uploader.upload(provider.imageUrl, {
+            resource_type: "image",
+            folder: "guber-studio-v2-quickpic",
+          });
+          finalUrl = uploaded.secure_url;
+          cloudinaryPublicId = uploaded.public_id;
+        }
+      } catch (err: any) {
+        console.warn(`[GUBER][studio v2] cloudinary re-host failed for flux_quick_pic: ${err.message}`);
+      }
+
+      const file = await storage.addStudioSessionFile({
+        sessionId: session.id,
+        userId,
+        fileType: "output_image",
+        providerUrl: finalUrl,
+        cloudinaryPublicId,
+        resourceType: "image",
+        meta: { toolKey: "flux_quick_pic", prompt: promptRaw, providerJobId: provider.jobId, billing: "free", freeUsed: newUsed },
+      });
+
+      await storage.touchStudioSession(session.id);
+      await storage.logStudioGeneration({
+        userId,
+        sessionId: session.id,
+        toolKey: "flux_quick_pic",
+        prompt: promptRaw,
+        creditsCost: 0,
+        durationSeconds: pricing?.durationSeconds ?? null,
+        providerJobId: provider.jobId,
+        status: "succeeded",
+        errorReason: null,
+      });
+
+      res.json({
+        file,
+        billing: "free",
+        dailyLimit: FREE_QUICKPIC_DAILY_LIMIT,
+        used: newUsed,
+        remaining,
+      });
+    } catch (err: any) {
+      // Refund the free-quota slot exactly the way credits are refunded.
+      await storage.refundStudioFreeQuota(userId, day);
+      await storage.logStudioGeneration({
+        userId,
+        sessionId: session.id,
+        toolKey: "flux_quick_pic",
+        prompt: promptRaw,
+        creditsCost: 0,
+        durationSeconds: pricing?.durationSeconds ?? null,
+        providerJobId: null,
+        status: "refunded",
+        errorReason: err?.message?.slice(0, 500) || "Unknown generation error",
+      });
+      const isConfigErr = err?.name === "FalNotConfiguredError";
+      const refundedUsed = Math.max(newUsed - 1, 0);
+      res.status(isConfigErr ? 503 : 502).json({
+        message: isConfigErr
+          ? "AI provider not connected — your free Quick Pic was returned."
+          : `Quick Pic failed and your free generation was returned: ${err.message}`,
+        dailyLimit: FREE_QUICKPIC_DAILY_LIMIT,
+        used: refundedUsed,
+        remaining: Math.max(FREE_QUICKPIC_DAILY_LIMIT - refundedUsed, 0),
+      });
+    }
+  });
+
   app.post("/api/studio/generate/music", requireAuth, async (req: Request, res: Response) => {
     const { generateMiniMaxMusic } = await import("./fal");
     return runStudioGeneration({

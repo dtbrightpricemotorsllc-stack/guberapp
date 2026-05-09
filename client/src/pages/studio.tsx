@@ -66,7 +66,7 @@ type StudioTool = {
 type StudioFile = {
   id: number;
   sessionId: number;
-  fileType: "upload_image" | "upload_video" | "upload_audio" | "output_video" | "output_audio";
+  fileType: "upload_image" | "upload_video" | "upload_audio" | "output_video" | "output_audio" | "output_image";
   providerUrl: string;
   resourceType: "image" | "video" | "raw";
   meta: any;
@@ -74,8 +74,15 @@ type StudioFile = {
 };
 type StudioSession = { id: number; status: string; startedAt: string };
 type SessionPayload = { session: StudioSession | null; files: StudioFile[] };
+type FreeQuota = {
+  enabled: boolean;
+  day: string;
+  dailyLimit: number;
+  used: number;
+  remaining: number;
+};
 
-type ToolKey = "kling_motion_control" | "wan_motion_5s" | "wan_motion_10s" | "minimax_music";
+type ToolKey = "kling_motion_control" | "wan_motion_5s" | "wan_motion_10s" | "minimax_music" | "flux_quick_pic";
 
 // Force-download Cloudinary URLs by injecting `fl_attachment/` after `/upload/`.
 // Mirrors the helper in client/src/components/media-lightbox.tsx.
@@ -112,10 +119,16 @@ type Template = {
   prompt: string;
   gradient: string;
   icon: React.ComponentType<{ className?: string }>;
-  kind: "video" | "audio";
+  kind: "video" | "audio" | "image";
   wizard?: "mirror_motion" | "commercial_builder";  // task-521
 };
 const TEMPLATES: Template[] = [
+  {
+    slug: "quick-pic", label: "Quick Pic", tag: "Free · 3/day", kind: "image",
+    prompt: "A cinematic portrait of a golden retriever wearing aviator sunglasses, dramatic studio lighting, hyper-detailed.",
+    gradient: "from-emerald-400 via-teal-500 to-cyan-500",
+    icon: ImageIcon,
+  },
   {
     slug: "build-commercial", label: "Build a Commercial", tag: "Ad Builder", kind: "video",
     prompt: "Step-by-step ad: vertical → photo → business info → motion + music + voiceover.",
@@ -215,7 +228,7 @@ export default function StudioPageV2() {
   const isAdmin = user?.role === "admin";
 
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
-  const [outputKind, setOutputKind] = useState<"video" | "audio">("video");
+  const [outputKind, setOutputKind] = useState<"video" | "audio" | "image">("video");
   const [prompt, setPrompt] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -229,6 +242,10 @@ export default function StudioPageV2() {
   const toolsQuery = useQuery<StudioTool[]>({ queryKey: ["/api/studio/tools"] });
   const sessionQuery = useQuery<SessionPayload>({
     queryKey: ["/api/studio/session/current"],
+    refetchOnWindowFocus: false,
+  });
+  const freeQuotaQuery = useQuery<FreeQuota>({
+    queryKey: ["/api/studio/free-quota"],
     refetchOnWindowFocus: false,
   });
 
@@ -270,8 +287,14 @@ export default function StudioPageV2() {
   const me = meQuery.data;
   const files = sessionQuery.data?.files ?? [];
   const uploadedImages = files.filter((f) => f.fileType === "upload_image");
-  const outputs = files.filter((f) => f.fileType === "output_video" || f.fileType === "output_audio");
+  const outputs = files.filter((f) => f.fileType === "output_video" || f.fileType === "output_audio" || f.fileType === "output_image");
   const heroOutput = outputs[outputs.length - 1] || null;
+  const freeQuota = freeQuotaQuery.data;
+  const freeQuickPicEnabled = freeQuota?.enabled ?? true;
+  const visibleTemplates = useMemo(
+    () => TEMPLATES.filter((t) => t.slug !== "quick-pic" || freeQuickPicEnabled),
+    [freeQuickPicEnabled],
+  );
 
   // Low-credit nudge — fire once per page-load when balance drops to ≤3.
   useEffect(() => {
@@ -291,6 +314,7 @@ export default function StudioPageV2() {
   //   video + reference image         → kling_motion_control (photo-driven motion)
   //   video, no reference image       → wan_motion_5s        (default)
   const activeToolKey = useMemo<ToolKey>(() => {
+    if (outputKind === "image") return "flux_quick_pic";
     if (outputKind === "audio") return "minimax_music";
     if (selectedSourceId) return "kling_motion_control";
     return "wan_motion_5s";
@@ -337,6 +361,7 @@ export default function StudioPageV2() {
   const generateMutation = useMutation({
     mutationFn: async () => {
       const endpoint =
+        activeToolKey === "flux_quick_pic"       ? "/api/studio/generate/quick-pic" :
         activeToolKey === "kling_motion_control" ? "/api/studio/generate/motion-control" :
         activeToolKey === "minimax_music"        ? "/api/studio/generate/music" :
                                                    "/api/studio/generate/wan-motion";
@@ -345,19 +370,24 @@ export default function StudioPageV2() {
       if (activeToolKey === "wan_motion_5s")  body.durationSeconds = 5;
       if (activeToolKey === "wan_motion_10s") body.durationSeconds = 10;
       const res = await apiRequest("POST", endpoint, body);
-      return res.json() as Promise<{ file: StudioFile; balance: number }>;
+      return res.json() as Promise<{ file: StudioFile; balance?: number }>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/studio/session/current"] });
       queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/free-quota"] });
       setActiveTemplate(null);
-      toast({ title: "Your clip is ready", description: "Scroll down to your library." });
+      toast({
+        title: activeToolKey === "flux_quick_pic" ? "Your Quick Pic is ready" : "Your clip is ready",
+        description: "Scroll down to your library.",
+      });
     },
     onError: async (err: any) => {
       let msg = err?.message || "Generation failed";
       const m = /^\d+:\s*(.+)$/.exec(msg);
       if (m) { try { const p = JSON.parse(m[1]); if (p?.message) msg = p.message; } catch {} }
       queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/free-quota"] });
       toast({ title: "Couldn't generate", description: msg, variant: "destructive" });
     },
   });
@@ -407,12 +437,19 @@ export default function StudioPageV2() {
   const credits = me.credits;
   const tier = me.tier;
   const cost = activeToolPricing?.creditsCost ?? 0;
-  const insufficient = cost > 0 && credits < cost;
-  const hasInput = prompt.trim().length > 0 || selectedSourceId !== null;
+  const isFreeTool = activeToolKey === "flux_quick_pic";
+  const freeRemaining = freeQuota?.remaining ?? 0;
+  const freeQuotaActive = isFreeTool && (freeQuota?.enabled ?? true);
+  const freeExhausted = freeQuotaActive && freeRemaining <= 0;
+  const insufficient = !isFreeTool && cost > 0 && credits < cost;
+  const hasInput = isFreeTool
+    ? prompt.trim().length > 0
+    : prompt.trim().length > 0 || selectedSourceId !== null;
   const canGenerate =
     !!activeToolPricing &&
     !generateMutation.isPending &&
     !insufficient &&
+    !freeExhausted &&
     hasInput &&
     me.providerReady;
 
@@ -434,6 +471,16 @@ export default function StudioPageV2() {
                 playsInline
                 className="absolute inset-0 w-full h-full object-cover opacity-50"
                 data-testid="video-hero"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/60 to-black" />
+            </>
+          ) : heroOutput?.fileType === "output_image" ? (
+            <>
+              <img
+                src={heroOutput.providerUrl}
+                alt="latest Quick Pic"
+                className="absolute inset-0 w-full h-full object-cover opacity-50"
+                data-testid="img-hero"
               />
               <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/60 to-black" />
             </>
@@ -493,6 +540,19 @@ export default function StudioPageV2() {
                     <Plus className="w-3 h-3 text-white/60" />
                   </button>
                 </Link>
+              )}
+              {(freeQuota?.enabled ?? true) && (
+                <div
+                  className="flex items-center gap-1.5 rounded-full bg-emerald-400/15 backdrop-blur-md border border-emerald-400/30 px-3 py-1.5"
+                  data-testid="text-studio-free-quota"
+                  title={`Free Quick Pics reset daily at 00:00 UTC`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                  <span className="text-xs font-bold tabular-nums text-emerald-100">
+                    {freeQuota?.remaining ?? 3}
+                  </span>
+                  <span className="text-[10px] text-emerald-200/80 hidden sm:inline">free</span>
+                </div>
               )}
               <Badge
                 variant="outline"
@@ -638,7 +698,7 @@ export default function StudioPageV2() {
             <span className="text-[10px] uppercase tracking-widest text-white/40">tap to start</span>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
-            {TEMPLATES.map((t) => {
+            {visibleTemplates.map((t) => {
               const Icon = t.icon;
               const active = activeTemplate === t.slug;
               return (
@@ -691,6 +751,8 @@ export default function StudioPageV2() {
               placeholder={
                 outputKind === "audio"
                   ? "Describe a track… uplifting cinematic strings, slow build, hopeful 30 seconds instrumental."
+                  : outputKind === "image"
+                  ? "Describe a picture… a neon-lit panda DJ in Tokyo at night, vaporwave colors, hyper-detailed."
                   : "Describe a moment… A neon-lit panda DJ in Tokyo, slow cinematic dolly-in, vaporwave colors."
               }
               maxLength={500}
@@ -719,7 +781,7 @@ export default function StudioPageV2() {
                     </button>
                   </div>
                 ) : (
-                  outputKind === "video" && (
+                  outputKind === "video" && !isFreeTool && (
                     <>
                       <input
                         ref={fileInputRef}
@@ -745,7 +807,12 @@ export default function StudioPageV2() {
                 )}
                 {activeToolPricing && (
                   <span className="text-[11px] text-white/60 truncate">
-                    {activeToolPricing.label} · <span className="text-amber-300 font-semibold">{activeToolPricing.creditsCost} cr</span>
+                    {activeToolPricing.label} ·{" "}
+                    {isFreeTool && freeQuotaActive ? (
+                      <span className="text-emerald-300 font-semibold">FREE · {freeRemaining} left</span>
+                    ) : (
+                      <span className="text-amber-300 font-semibold">{activeToolPricing.creditsCost} cr</span>
+                    )}
                     {activeToolPricing.durationSeconds && <> · {activeToolPricing.durationSeconds}s</>}
                   </span>
                 )}
@@ -778,7 +845,9 @@ export default function StudioPageV2() {
                   <Wand2 className="w-5 h-5" />
                   <span>GENERATE</span>
                   {activeToolPricing && (
-                    <span className="text-black/80 text-xs font-normal">· {activeToolPricing.creditsCost} cr</span>
+                    <span className="text-black/80 text-xs font-normal">
+                      · {isFreeTool && freeQuotaActive ? "FREE" : `${activeToolPricing.creditsCost} cr`}
+                    </span>
                   )}
                 </>
               )}
@@ -803,8 +872,22 @@ export default function StudioPageV2() {
           {/* Explicit cost-preview line — required UX contract. */}
           {activeToolPricing && (
             <p className="text-center text-[12px] text-white/70" data-testid="text-cost-preview">
-              This clip costs <span className="font-bold text-amber-300">{activeToolPricing.creditsCost}</span> credit{activeToolPricing.creditsCost === 1 ? "" : "s"}
-              {activeToolPricing.durationSeconds && <> · ~{activeToolPricing.durationSeconds}s</>}.
+              {isFreeTool && freeQuotaActive ? (
+                <>
+                  Quick Pics are <span className="font-bold text-emerald-300">FREE</span> · {freeRemaining} of {freeQuota?.dailyLimit ?? 3} left today (UTC).
+                </>
+              ) : (
+                <>
+                  This clip costs <span className="font-bold text-amber-300">{activeToolPricing.creditsCost}</span> credit{activeToolPricing.creditsCost === 1 ? "" : "s"}
+                  {activeToolPricing.durationSeconds && <> · ~{activeToolPricing.durationSeconds}s</>}.
+                </>
+              )}
+            </p>
+          )}
+
+          {freeExhausted && !generateMutation.isPending && (
+            <p className="text-center text-[12px] text-amber-200" data-testid="text-free-quota-exhausted">
+              You've used your {freeQuota?.dailyLimit ?? 3} free Quick Pics for today. Resets at 00:00 UTC.
             </p>
           )}
 
@@ -858,6 +941,12 @@ export default function StudioPageV2() {
                         src={o.providerUrl}
                         controls
                         playsInline
+                        className="w-full rounded-lg bg-black aspect-square object-cover"
+                      />
+                    ) : o.fileType === "output_image" ? (
+                      <img
+                        src={o.providerUrl}
+                        alt="Quick Pic"
                         className="w-full rounded-lg bg-black aspect-square object-cover"
                       />
                     ) : (
