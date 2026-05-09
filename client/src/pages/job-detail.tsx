@@ -20,7 +20,8 @@ import {
   ShoppingBag, X, ChevronRight, Navigation, Car, MapPinned, Banknote,
   PhoneOff, Clock, Loader2, ShieldCheck, Search, Trophy, CameraOff,
   Camera, AlertCircle, ChevronDown, ChevronUp, TrendingUp, Handshake, Zap,
-  Download, FileText, Award, Zap as ZapIcon, FileVideo,
+  Download, FileText, Award, Zap as ZapIcon, FileVideo, Calendar, KeyRound,
+  Layers,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import type { Job, User as UserType, ProofSubmission, BountyAttempt } from "@shared/schema";
@@ -109,6 +110,32 @@ const POSTER_CANCEL_REASONS = [
   "Emergency / personal issue",
   "Other",
 ];
+
+function RefPhotoBlock({ url }: { url: string }) {
+  const [errored, setErrored] = useState(false);
+  return (
+    <div className="bg-muted/30 rounded-xl p-4 border border-border/10" data-testid="detail-item-reference-photo">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2 flex items-center gap-1">
+        <ImageIcon className="w-3 h-3" /> Reference Photo
+      </p>
+      {errored ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-3" data-testid="ref-photo-unavailable">
+          <CameraOff className="w-4 h-4 shrink-0" />
+          <span className="text-xs">Photo unavailable</span>
+        </div>
+      ) : (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <img
+            src={url}
+            alt="Reference"
+            className="w-full max-h-64 object-cover rounded-lg border border-border/20 cursor-pointer hover:opacity-90 transition-opacity"
+            onError={() => setErrored(true)}
+          />
+        </a>
+      )}
+    </div>
+  );
+}
 
 export default function JobDetail() {
   const [, params] = useRoute("/jobs/:id");
@@ -1145,46 +1172,103 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             )}
           </div>
 
-          {job.jobDetails && Object.keys(job.jobDetails).length > 0 && (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3 mb-4 bg-muted/30 rounded-xl p-4 border border-border/10" data-testid="section-job-details">
-              {Object.entries(job.jobDetails).map(([key, value]) => {
-                let displayValue: any = value;
-                let isArray = false;
-                try {
-                  if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
-                    const parsed = JSON.parse(value);
-                    if (Array.isArray(parsed)) {
-                      displayValue = parsed;
-                      isArray = true;
-                    }
-                  } else if (Array.isArray(value)) {
-                    isArray = true;
-                  }
-                } catch (e) {
-                  // Not JSON, use as is
-                }
-
-                return (
-                  <div key={key} className="flex flex-col min-w-0" data-testid={`detail-item-${key.toLowerCase().replace(/\s+/g, '-')}`}>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{key.replace(/_/g, ' ')}</span>
-                    <div className="text-sm font-medium text-foreground truncate">
-                      {isArray && Array.isArray(displayValue) ? (
-                        <div className="flex flex-wrap gap-1 mt-0.5">
-                          {displayValue.map((v, i) => (
-                            <Badge key={i} variant="secondary" className="text-[9px] px-1.5 py-0 h-4 font-normal bg-secondary/50 border-secondary/20">
-                              {v}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        String(displayValue)
-                      )}
-                    </div>
+          {job.jobDetails && Object.keys(job.jobDetails).length > 0 && (() => {
+            const details = job.jobDetails as Record<string, any>;
+            const viDescription = details["Description"];
+            const refPhotoUrl = details["Reference Photo URL"];
+            const entryAuth = details["Entry Authorization"];
+            const apptDate = details["Appointment Date"];
+            const apptTime = details["Appointment Time"];
+            const inspPhase = details["Inspection Phase"];
+            const ELEVATED_KEYS = new Set(["Description", "Reference Photo URL", "Entry Authorization", "Appointment Date", "Appointment Time", "Inspection Phase"]);
+            const gridEntries = Object.entries(details).filter(([k]) => !ELEVATED_KEYS.has(k));
+            const showRefPhoto = (isOwner || isHelper) && !!refPhotoUrl;
+            const hasCallouts = !!(entryAuth || apptDate || apptTime || inspPhase);
+            const hasGrid = gridEntries.length > 0;
+            return (
+              <div className="mb-4 space-y-3" data-testid="section-job-details">
+                {viDescription && (
+                  <div className="bg-muted/30 rounded-xl p-4 border border-border/10" data-testid="detail-item-description">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5">Description</p>
+                    <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{String(viDescription)}</p>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+
+                {showRefPhoto && (
+                  <RefPhotoBlock url={String(refPhotoUrl)} />
+                )}
+
+                {hasCallouts && (
+                  <div className="bg-muted/30 rounded-xl p-4 border border-border/10 space-y-2.5" data-testid="detail-callouts">
+                    {entryAuth && (
+                      <div className="flex items-start gap-2" data-testid="detail-item-entry-authorization">
+                        <KeyRound className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Entry Authorization</p>
+                          <p className="text-sm text-foreground/90 leading-snug">{String(entryAuth)}</p>
+                        </div>
+                      </div>
+                    )}
+                    {(apptDate || apptTime) && (
+                      <div className="flex items-start gap-2" data-testid="detail-item-appointment">
+                        <Calendar className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Appointment</p>
+                          <p className="text-sm text-foreground/90 leading-snug">
+                            {[apptDate, apptTime].filter(Boolean).map(String).join(" · ")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {inspPhase && (
+                      <div className="flex items-start gap-2" data-testid="detail-item-inspection-phase">
+                        <Layers className="w-3.5 h-3.5 text-secondary shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Inspection Phase</p>
+                          <p className="text-sm text-foreground/90 leading-snug">{String(inspPhase)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {hasGrid && (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3 bg-muted/30 rounded-xl p-4 border border-border/10">
+                    {gridEntries.map(([key, value]) => {
+                      let displayValue: any = value;
+                      let isArray = false;
+                      try {
+                        if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
+                          const parsed = JSON.parse(value);
+                          if (Array.isArray(parsed)) { displayValue = parsed; isArray = true; }
+                        } else if (Array.isArray(value)) {
+                          isArray = true;
+                        }
+                      } catch {}
+                      return (
+                        <div key={key} className="flex flex-col min-w-0" data-testid={`detail-item-${key.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{key.replace(/_/g, ' ')}</span>
+                          <div className="text-sm font-medium text-foreground truncate">
+                            {isArray && Array.isArray(displayValue) ? (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {displayValue.map((v: any, i: number) => (
+                                  <Badge key={i} variant="secondary" className="text-[9px] px-1.5 py-0 h-4 font-normal bg-secondary/50 border-secondary/20">
+                                    {v}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              String(displayValue)
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {job.description && (
             <div className="mb-4">
