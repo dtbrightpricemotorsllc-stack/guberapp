@@ -136,6 +136,26 @@ class FakeOpenAITtsUnavailableError extends Error {
   constructor(msg = "tts offline") { super(msg); this.name = "OpenAITtsUnavailableError"; }
 }
 
+// Cloudinary mock — task-538: every reHost should funnel through these
+// upload/destroy stubs so the test can assert that failed commercials
+// destroy ALL re-hosted assets (not just the motion clip).
+const cloudinaryUpload = vi.hoisted(() => vi.fn(async (_url: string, opts: any) => ({
+  secure_url: `https://cloudinary.test/${opts.folder}/asset.mp4`,
+  public_id: `${opts.folder}/asset_${Math.random().toString(36).slice(2, 8)}`,
+})));
+const cloudinaryDestroy = vi.hoisted(() => vi.fn(async () => ({ result: "ok" })));
+
+vi.mock("../cloudinary.js", () => ({
+  default: {
+    uploader: { upload: cloudinaryUpload, destroy: cloudinaryDestroy },
+  },
+}));
+vi.mock("../cloudinary", () => ({
+  default: {
+    uploader: { upload: cloudinaryUpload, destroy: cloudinaryDestroy },
+  },
+}));
+
 vi.mock("../fal", () => ({
   isFalConfigured: () => true,
   isModerationConfigured: () => true,
@@ -242,6 +262,8 @@ describe("Studio refund path (task-533)", () => {
     generateOpenAITts.mockReset();
     mockStorage.incrementStudioCredits.mockClear();
     mockStorage.decrementStudioCredits.mockClear();
+    cloudinaryUpload.mockClear();
+    cloudinaryDestroy.mockClear();
   });
 
   it("refunds wan_motion_5s (30 cr) when the Fal provider throws", async () => {
@@ -532,12 +554,143 @@ describe("Studio refund path (task-533)", () => {
       expect(state.files.find((f) => f.fileType === "output_audio")).toBeUndefined();
     });
 
+    // task-538: every Cloudinary asset re-hosted during a failed commercial
+    // run must be destroyed on the way out — not just the motion clip.
+    // Previously the music-fail path destroyed motion only, and the outer
+    // catch path destroyed motion only, both of which silently leaked paid
+    // storage on every failed commercial.
+    it("destroys the motion clip when the music step fails", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_cleanup_1",
+      });
+      generateMiniMaxMusic
+        .mockRejectedValueOnce(new Error("Music boom A"))
+        .mockRejectedValueOnce(new Error("Music boom B"));
+
+      await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id))
+        .expect(502);
+
+      // Motion was uploaded to Cloudinary; music never made it past Fal.
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(1);
+      // The motion clip must be destroyed — best-effort, video resource type.
+      expect(cloudinaryDestroy).toHaveBeenCalledTimes(1);
+      const [destroyedId, destroyOpts] = cloudinaryDestroy.mock.calls[0];
+      expect(destroyedId).toMatch(/^guber-studio-v2-commercial\//);
+      expect(destroyOpts).toEqual({ resource_type: "video" });
+    });
+
+    it("destroys BOTH motion and music when the voiceover step fails", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_cleanup_2",
+      });
+      generateMiniMaxMusic.mockResolvedValueOnce({
+        audioUrl: "https://example.com/music.mp3",
+        jobId: "minimax_ok_cleanup_2",
+      });
+      generateOpenAITts.mockRejectedValueOnce(new Error("TTS boom"));
+
+      await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id, { withVoice: true }))
+        .expect(502);
+
+      // Motion + music were both uploaded.
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(2);
+      // BOTH must be destroyed — the previous code only destroyed motion.
+      expect(cloudinaryDestroy).toHaveBeenCalledTimes(2);
+      const destroyedIds = cloudinaryDestroy.mock.calls.map((c: any[]) => String(c[0]));
+      expect(destroyedIds.some((id) => id.startsWith("guber-studio-v2-commercial/"))).toBe(true);
+      expect(destroyedIds.some((id) => id.startsWith("guber-studio-v2-commercial-music/"))).toBe(true);
+      cloudinaryDestroy.mock.calls.forEach((c: any[]) => {
+        expect(c[1]).toEqual({ resource_type: "video" });
+      });
+    });
+
+    // task-538 outer-catch path: if an unexpected error blows up AFTER
+    // motion + music were re-hosted (e.g. a database write throws on the
+    // very first session-file insert), the outer catch must still destroy
+    // every asset we created. Without this guarantee, any post-step-2
+    // crash silently leaks paid storage.
+    it("destroys all re-hosted assets when an unexpected error fires after re-hosting", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_outer",
+      });
+      generateMiniMaxMusic.mockResolvedValueOnce({
+        audioUrl: "https://example.com/music.mp3",
+        jobId: "minimax_ok_outer",
+      });
+      // Force the first session-file insert to throw — this lands in the
+      // outer catch with creditsDebited > 0 and 2 assets re-hosted.
+      mockStorage.addStudioSessionFile.mockRejectedValueOnce(new Error("DB write exploded"));
+
+      const res = await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id))
+        .expect(500);
+
+      // Credits fully refunded by the outer catch.
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, COMMERCIAL_BUNDLE);
+
+      // Both motion + music assets must be destroyed by the outer catch.
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(2);
+      expect(cloudinaryDestroy).toHaveBeenCalledTimes(2);
+      const destroyedIds = cloudinaryDestroy.mock.calls.map((c: any[]) => String(c[0]));
+      expect(destroyedIds.some((id) => id.startsWith("guber-studio-v2-commercial/"))).toBe(true);
+      expect(destroyedIds.some((id) => id.startsWith("guber-studio-v2-commercial-music/"))).toBe(true);
+
+      // Restore the mock so subsequent tests aren't affected.
+      mockStorage.addStudioSessionFile.mockReset();
+      mockStorage.addStudioSessionFile.mockImplementation(async (data: any) => {
+        const row = { id: state.nextFileId++, createdAt: new Date(), ...data };
+        state.files.push(row);
+        return row;
+      });
+    });
+
+    // Sanity: the success path must NOT destroy anything — those assets are
+    // now owned by the user via studio_session_files.
+    it("does NOT destroy assets when the full pipeline succeeds", async () => {
+      const photo = await seedProductPhoto();
+      generateKlingMotionControl.mockResolvedValueOnce({
+        videoUrl: "https://example.com/motion.mp4",
+        jobId: "kling_ok_success",
+      });
+      generateMiniMaxMusic.mockResolvedValueOnce({
+        audioUrl: "https://example.com/music.mp3",
+        jobId: "minimax_ok_success",
+      });
+      generateOpenAITts.mockResolvedValueOnce({
+        dataUrl: "data:audio/mp3;base64,AAAA",
+      });
+
+      await agent
+        .post("/api/studio/generate/commercial")
+        .send(bodyFor(photo.id, { withVoice: true }))
+        .expect(200);
+
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(3);
+      expect(cloudinaryDestroy).not.toHaveBeenCalled();
+    });
+
     // task-539: outer catch refund branch. All three provider steps succeed
     // but an unexpected exception is thrown afterwards — e.g. a DB hiccup in
     // addStudioSessionFile or logStudioGeneration. The route must still
     // refund the full 200-cr bundle, return 500, and write a "refunded" log
     // row with errorReason starting with "unexpected:". A regression here
     // would silently keep the user's 200 cr while returning a 500.
+    // task-538: it must ALSO destroy every Cloudinary asset created during
+    // the run (motion + music + voice) — the outer catch is the last line
+    // of defence against orphan storage.
     it("refunds the full 200-cr bundle when an unexpected error fires AFTER all 3 steps succeed", async () => {
       const photo = await seedProductPhoto();
 
@@ -586,6 +739,11 @@ describe("Studio refund path (task-533)", () => {
       expect(generateKlingMotionControl).toHaveBeenCalledTimes(1);
       expect(generateMiniMaxMusic).toHaveBeenCalledTimes(1);
       expect(generateOpenAITts).toHaveBeenCalledTimes(1);
+
+      // task-538: the outer catch must clean up all 3 re-hosted assets so
+      // we don't leak paid Cloudinary storage on the unexpected-error path.
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(3);
+      expect(cloudinaryDestroy).toHaveBeenCalledTimes(3);
 
       // A "refunded" log row was written with errorReason starting with
       // "unexpected:" (this distinguishes the outer-catch branch from the

@@ -9968,9 +9968,25 @@ export async function registerRoutes(
     let creditsDebited = 0;  // tracked so the outer catch can refund post-debit
     let postDebitSessionId: number | null = null;
     let postDebitMotionPrompt = "";
-    let postDebitMotionPublicId: string | null = null;
     let postDebitCloudinary: any = null;
     let postDebitDurationSeconds: number | null = null;
+    // Track every Cloudinary asset re-hosted during this run so any
+    // refund/abort path can best-effort destroy ALL of them and never
+    // leave orphans in paid storage (task-538).
+    const createdAssets: { publicId: string; resourceType: "video" | "image" | "raw" }[] = [];
+    const cleanupCloudinaryAssets = async () => {
+      if (!postDebitCloudinary || createdAssets.length === 0) return;
+      for (const asset of createdAssets) {
+        try {
+          await postDebitCloudinary.uploader.destroy(asset.publicId, { resource_type: asset.resourceType });
+        } catch (destroyErr: any) {
+          console.warn(
+            `[GUBER][studio][commercial] cloudinary cleanup failed for ${asset.publicId} (${asset.resourceType}): ${destroyErr?.message || destroyErr}`
+          );
+        }
+      }
+      createdAssets.length = 0;
+    };
     try {
       const verticalSlug = String(req.body?.vertical || "").trim();
       const customVertical = String(req.body?.customVertical || "").trim();
@@ -10055,10 +10071,14 @@ export async function registerRoutes(
       const reHost = async (sourceUrlOrDataUrl: string, resourceType: "video" | "image" | "raw", folder: string): Promise<{ url: string; publicId: string | null }> => {
         if (!cloudinary) return { url: sourceUrlOrDataUrl, publicId: null };
         try {
+          const effectiveResourceType = resourceType === "image" ? "image" : "video";
           const up = await cloudinary.uploader.upload(sourceUrlOrDataUrl, {
-            resource_type: resourceType === "image" ? "image" : "video",
+            resource_type: effectiveResourceType,
             folder,
           });
+          if (up.public_id) {
+            createdAssets.push({ publicId: up.public_id, resourceType: effectiveResourceType });
+          }
           return { url: up.secure_url, publicId: up.public_id };
         } catch (err: any) {
           console.warn(`[GUBER][studio][commercial] cloudinary re-host failed: ${err.message}`);
@@ -10067,6 +10087,7 @@ export async function registerRoutes(
       };
 
       const refundAndAbort = async (httpStatus: number, message: string, providerJobId: string | null = null) => {
+        await cleanupCloudinaryAssets();
         const refunded = await storage.incrementStudioCredits(userId, creditsCost);
         await storage.logStudioGeneration({
           userId, sessionId: session.id, toolKey: "commercial_builder",
@@ -10088,7 +10109,6 @@ export async function registerRoutes(
         motionJobId = r.jobId;
         const reh = await reHost(r.videoUrl, "video", "guber-studio-v2-commercial");
         motionUrl = reh.url; motionPublicId = reh.publicId;
-        postDebitMotionPublicId = motionPublicId;
       } catch (err: any) {
         return refundAndAbort(502, `Motion render failed: ${err.message}`, null);
       }
@@ -10109,10 +10129,6 @@ export async function registerRoutes(
         }
       }
       if (!musicUrl) {
-        // Best-effort cleanup of the motion clip we already re-hosted.
-        if (cloudinary && motionPublicId) {
-          try { await cloudinary.uploader.destroy(motionPublicId, { resource_type: "video" }); } catch {}
-        }
         return refundAndAbort(502, `Music render failed twice: ${musicError || "unknown"}`, motionJobId);
       }
 
@@ -10132,13 +10148,6 @@ export async function registerRoutes(
             voiceUrl = reh.url; voicePublicId = reh.publicId;
           } catch (err: any) {
             console.warn(`[GUBER][studio][commercial] voiceover failed: ${err.message}`);
-            // Best-effort cleanup of the motion + music we already re-hosted.
-            if (cloudinary && motionPublicId) {
-              try { await cloudinary.uploader.destroy(motionPublicId, { resource_type: "video" }); } catch {}
-            }
-            if (cloudinary && musicPublicId) {
-              try { await cloudinary.uploader.destroy(musicPublicId, { resource_type: "video" }); } catch {}
-            }
             const reason = err instanceof OpenAITtsUnavailableError
               ? "TTS provider offline"
               : (err.message?.slice(0, 200) || "voiceover failed");
@@ -10181,6 +10190,11 @@ export async function registerRoutes(
         meta: { ...baseMeta, kind: "commercial_voice", prompt: voicePrompt },
       }) : null;
 
+      // Assets are now persisted to studio_session_files and belong to the
+      // user — drop them from the cleanup list so any late failure on the
+      // bookkeeping below doesn't destroy files we just handed over.
+      createdAssets.length = 0;
+
       await storage.touchStudioSession(session.id);
       await storage.logStudioGeneration({
         userId, sessionId: session.id, toolKey: "commercial_builder",
@@ -10198,7 +10212,9 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[GUBER][studio][commercial] unexpected:", err);
       // Defensive refund: if we already debited credits before the unexpected
-      // error, return them and clean up any motion clip we re-hosted.
+      // error, return them and best-effort destroy every Cloudinary asset
+      // we re-hosted during this run (motion + music + voice) so we never
+      // leave orphans in paid storage (task-538).
       let refundedBalance: number | null = null;
       if (creditsDebited > 0) {
         try {
@@ -10206,9 +10222,7 @@ export async function registerRoutes(
         } catch (refundErr) {
           console.error("[GUBER][studio][commercial] refund failed:", refundErr);
         }
-        if (postDebitCloudinary && postDebitMotionPublicId) {
-          try { await postDebitCloudinary.uploader.destroy(postDebitMotionPublicId, { resource_type: "video" }); } catch {}
-        }
+        await cleanupCloudinaryAssets();
         try {
           await storage.logStudioGeneration({
             userId,
