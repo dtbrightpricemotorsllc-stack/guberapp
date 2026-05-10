@@ -872,6 +872,62 @@ describe("Tile-image admin endpoint — PATCH /api/admin/studio/tools/:toolKey/t
   });
 });
 
+// ── POST /api/admin/studio/featured — DuplicateSlugError → 409 ──────────────
+//
+// Pins the contract: when storage.createStudioFeaturedClip throws a
+// DuplicateSlugError the route must respond 409 { error: "slug already exists" }
+// rather than leaking an unhandled 500.
+
+describe("POST /api/admin/studio/featured — DuplicateSlugError yields 409", () => {
+  const allowAdmin = (_req: any, _res: any, next: () => void) => next();
+
+  let app: ReturnType<typeof express>;
+
+  beforeAll(() => {
+    app = express();
+    app.use(express.json());
+    registerAdminQaRoutes(app, allowAdmin);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const validPayload = {
+    slug: "existing-slug",
+    label: "Test Label",
+    caption: "Test caption text",
+    videoUrl: "https://example.com/video.mp4",
+    position: 1,
+    active: true,
+  };
+
+  it("responds 409 with slug-conflict error when storage throws DuplicateSlugError", async () => {
+    vi.spyOn(storage, "createStudioFeaturedClip").mockRejectedValueOnce(
+      new DuplicateSlugError("existing-slug"),
+    );
+
+    const res = await request(app)
+      .post("/api/admin/studio/featured")
+      .send(validPayload);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("slug already exists");
+  });
+
+  it("responds 500 for unexpected storage errors (not DuplicateSlugError)", async () => {
+    vi.spyOn(storage, "createStudioFeaturedClip").mockRejectedValueOnce(
+      new Error("connection timeout"),
+    );
+
+    const res = await request(app)
+      .post("/api/admin/studio/featured")
+      .send(validPayload);
+
+    expect(res.status).toBe(500);
+  });
+});
+
 // ── PATCH /api/admin/studio/featured/:id — DuplicateSlugError → 409 ─────────
 //
 // Pins the contract: when storage.updateStudioFeaturedClip throws a
