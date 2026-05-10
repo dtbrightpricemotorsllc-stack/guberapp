@@ -454,6 +454,25 @@ CREATE TABLE IF NOT EXISTS studio_featured_clips (
   created_at timestamp NOT NULL DEFAULT now()
 );
 
+-- task-618: ensure the unique constraint exists even on databases that were
+-- created before the UNIQUE keyword was added to the CREATE TABLE statement.
+-- Checks for ANY unique constraint covering the slug column (not just a specific
+-- name) to avoid creating a redundant constraint when one already exists under a
+-- different name.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+    WHERE c.conrelid = 'studio_featured_clips'::regclass
+      AND c.contype = 'u'
+      AND a.attname = 'slug'
+  ) THEN
+    ALTER TABLE studio_featured_clips ADD CONSTRAINT studio_featured_clips_slug_key UNIQUE (slug);
+  END IF;
+END$$;
+
 -- task-549: refresh seed clips with sharper, more cinematic captions and
 -- swap the worst-performing demo videos. Renderers fall back gracefully
 -- if any URL 404s (onError handler hides the <video>).
