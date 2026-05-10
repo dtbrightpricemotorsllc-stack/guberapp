@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isStoreBuild } from "@/lib/platform";
-import ExternalPurchaseSheet from "@/components/external-purchase-sheet";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import {
   Building2, Upload, FileText, ShoppingBag, ChevronRight, Eye, Search,
   ShieldCheck, Send, TrendingUp, Zap, CreditCard, CheckCircle2,

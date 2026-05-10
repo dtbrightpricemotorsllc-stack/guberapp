@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
 import shieldLogo from "@assets/__favicon_1773034423924.png";
-import ExternalPurchaseSheet from "@/components/external-purchase-sheet";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 
 const MIN_SPLASH_MS = 3000;
 const MAX_SPLASH_MS = 20000;
