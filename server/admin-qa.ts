@@ -731,22 +731,40 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json({ ok: true });
   });
 
-  // ── Studio orphan-asset sweep (task-542 / task-544) ──────────────────────
-  // GET — returns the most recent `studio_orphan_sweep` audit_log row plus
-  // the current destroy-toggle + last-run stamp from platform_settings.
-  // Read-only; never re-runs the sweep on page load (task-544).
+  // ── Studio orphan-asset sweep (task-542 / task-544 / task-547) ───────────
+  // GET — returns the last 12 `studio_orphan_sweep` audit_log rows (parsed
+  // into a `history` array for the trend chart), the most recent run as
+  // `lastResult`, and the current destroy-toggle + last-run stamp from
+  // platform_settings. Read-only; never re-runs the sweep on page load.
   app.get("/api/admin/qa/studio/orphan-sweep", requireAdmin, async (_req: Request, res: Response) => {
     try {
-      const lastRows = await db
+      const historyRows = await db
         .select()
         .from(auditLogs)
         .where(eq(auditLogs.action, "studio_orphan_sweep"))
         .orderBy(desc(auditLogs.id))
-        .limit(1);
+        .limit(12);
+      const lastRows = historyRows.slice(0, 1);
       let lastResult: any = null;
       if (lastRows.length) {
         try { lastResult = JSON.parse(lastRows[0].details || "{}"); } catch { lastResult = null; }
       }
+      const history = historyRows.map((row) => {
+        let parsed: any = null;
+        try { parsed = JSON.parse(row.details || "{}"); } catch { parsed = null; }
+        return {
+          id: row.id,
+          createdAt: row.createdAt,
+          mode: parsed?.mode ?? null,
+          trigger: parsed?.trigger ?? null,
+          totalListed: Number(parsed?.totalListed ?? 0),
+          totalOrphans: Number(parsed?.totalOrphans ?? 0),
+          totalOrphanBytes: Number(parsed?.totalOrphanBytes ?? 0),
+          totalDestroyed: Number(parsed?.totalDestroyed ?? 0),
+          totalDestroyFailed: Number(parsed?.totalDestroyFailed ?? 0),
+          durationMs: Number(parsed?.durationMs ?? 0),
+        };
+      });
       const settingRows = await db
         .select()
         .from(platformSettings)
@@ -758,6 +776,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         lastRunAt: settingsMap.studio_orphan_sweep_last_run_at || null,
         lastResult,
         lastAuditAt: lastRows[0]?.createdAt ?? null,
+        history,
       });
     } catch (err: any) {
       res.status(500).json({ error: String(err?.message || err).slice(0, 300) });

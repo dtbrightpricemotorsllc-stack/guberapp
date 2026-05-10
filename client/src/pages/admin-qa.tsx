@@ -353,12 +353,48 @@ type SweepResult = {
   perFolder: SweepFolder[];
   trigger?: string;
 };
+type SweepHistoryEntry = {
+  id: number;
+  createdAt: string | null;
+  mode: "dry-run" | "delete" | null;
+  trigger: string | null;
+  totalListed: number;
+  totalOrphans: number;
+  totalOrphanBytes: number;
+  totalDestroyed: number;
+  totalDestroyFailed: number;
+  durationMs: number;
+};
 type OrphanSweepStatus = {
   destroyEnabled: boolean;
   lastRunAt: string | null;
   lastResult: SweepResult | null;
   lastAuditAt: string | null;
+  history: SweepHistoryEntry[];
 };
+
+function Sparkline({ values, width = 240, height = 40 }: { values: number[]; width?: number; height?: number }) {
+  if (!values.length) return null;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+  const stepX = values.length > 1 ? width / (values.length - 1) : 0;
+  const points = values.map((v, i) => {
+    const x = i * stepX;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const path = `M ${points.join(" L ")}`;
+  return (
+    <svg width={width} height={height} className="overflow-visible" data-testid="svg-sparkline-orphan-bytes">
+      <path d={path} fill="none" stroke="currentColor" strokeWidth={1.5} className="text-primary" />
+      {values.map((v, i) => {
+        const [x, y] = points[i].split(",").map(Number);
+        return <circle key={i} cx={x} cy={y} r={2} className="fill-primary" />;
+      })}
+    </svg>
+  );
+}
 
 function fmtBytes(n: number): string {
   if (!n) return "0 B";
@@ -522,6 +558,54 @@ function OrphanSweepTab() {
                         <td className="py-1 pr-2 text-right">{f.destroyFailed}</td>
                         <td className="py-1 pr-2 text-right">{f.skippedTooNew}</td>
                         <td className="py-1 pr-2 text-red-600">{f.error || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Sweep history (last {s?.history?.length ?? 0})</CardTitle></CardHeader>
+        <CardContent>
+          {status.isLoading && <div className="text-sm">Loading…</div>}
+          {status.isError && <div className="text-sm text-red-600">Failed to load sweep history.</div>}
+          {!status.isLoading && !status.isError && !s?.history?.length && (
+            <div className="text-sm text-muted-foreground">No prior sweeps logged.</div>
+          )}
+          {!status.isError && s?.history && s.history.length > 0 && (
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">Orphan bytes over time (oldest → newest)</div>
+                <Sparkline values={[...s.history].reverse().map((h) => h.totalOrphanBytes)} />
+              </div>
+              <div className="text-xs text-muted-foreground">Table is sorted newest first.</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-left text-muted-foreground">
+                    <tr>
+                      <th className="py-1 pr-2">When</th>
+                      <th className="py-1 pr-2">Mode</th>
+                      <th className="py-1 pr-2">Trigger</th>
+                      <th className="py-1 pr-2 text-right">Orphans</th>
+                      <th className="py-1 pr-2 text-right">Bytes</th>
+                      <th className="py-1 pr-2 text-right">Destroyed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {s.history.map((h) => (
+                      <tr key={h.id} data-testid={`row-sweep-history-${h.id}`}>
+                        <td className="py-1 pr-2">{h.createdAt ? new Date(h.createdAt).toLocaleString() : "—"}</td>
+                        <td className="py-1 pr-2">
+                          <Badge variant={h.mode === "delete" ? "destructive" : "outline"}>{h.mode || "—"}</Badge>
+                        </td>
+                        <td className="py-1 pr-2">{h.trigger || "—"}</td>
+                        <td className="py-1 pr-2 text-right">{h.totalOrphans}</td>
+                        <td className="py-1 pr-2 text-right">{fmtBytes(h.totalOrphanBytes)}</td>
+                        <td className="py-1 pr-2 text-right">{h.totalDestroyed}{h.totalDestroyFailed ? ` (${h.totalDestroyFailed} failed)` : ""}</td>
                       </tr>
                     ))}
                   </tbody>
