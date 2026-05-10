@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
 import { filterVisibleItems } from "../visibility";
 import { toCloudinaryAttachmentUrl, classifyMedia } from "../media-download";
 import express from "express";
@@ -7,6 +7,8 @@ import { db } from "../db";
 import { studioGenerationLog, studioModelPricing } from "@shared/schema";
 import { inArray, eq } from "drizzle-orm";
 import { registerAdminQaRoutes } from "../admin-qa";
+import { storage } from "../storage";
+import { DuplicateSlugError } from "../errors";
 
 describe("QA Dashboard — visibility filter", () => {
   const items = [
@@ -867,5 +869,52 @@ describe("Tile-image admin endpoint — PATCH /api/admin/studio/tools/:toolKey/t
       .patch(`/api/admin/studio/tools/${TILE_TEST_TOOL_KEY}/tile-image`)
       .send({ imageUrl: "not-a-url" });
     expect(res.status).toBe(400);
+  });
+});
+
+// ── PATCH /api/admin/studio/featured/:id — DuplicateSlugError → 409 ─────────
+//
+// Pins the contract: when storage.updateStudioFeaturedClip throws a
+// DuplicateSlugError the route must respond 409 { error: "Slug already in use" }
+// rather than leaking an unhandled 500.
+
+describe("PATCH /api/admin/studio/featured/:id — DuplicateSlugError yields 409", () => {
+  const allowAdmin = (_req: any, _res: any, next: () => void) => next();
+
+  let app: ReturnType<typeof express>;
+
+  beforeAll(() => {
+    app = express();
+    app.use(express.json());
+    registerAdminQaRoutes(app, allowAdmin);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("responds 409 with slug-conflict error when storage throws DuplicateSlugError", async () => {
+    vi.spyOn(storage, "updateStudioFeaturedClip").mockRejectedValueOnce(
+      new DuplicateSlugError("existing-slug"),
+    );
+
+    const res = await request(app)
+      .patch("/api/admin/studio/featured/1")
+      .send({ slug: "existing-slug" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("Slug already in use");
+  });
+
+  it("responds 500 for unexpected storage errors (not DuplicateSlugError)", async () => {
+    vi.spyOn(storage, "updateStudioFeaturedClip").mockRejectedValueOnce(
+      new Error("connection timeout"),
+    );
+
+    const res = await request(app)
+      .patch("/api/admin/studio/featured/1")
+      .send({ slug: "any-slug" });
+
+    expect(res.status).toBe(500);
   });
 });

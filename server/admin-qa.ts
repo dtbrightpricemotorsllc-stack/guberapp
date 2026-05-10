@@ -741,7 +741,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       row = await storage.updateStudioFeaturedClip(id, patch);
     } catch (e: any) {
       if (e instanceof DuplicateSlugError) {
-        return res.status(409).json({ error: "slug already exists" });
+        return res.status(409).json({ error: "Slug already in use" });
       }
       return res.status(500).json({ error: String(e?.message || e).slice(0, 300) });
     }
