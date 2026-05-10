@@ -34,6 +34,7 @@ export function ExternalPurchaseSheet({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchUrl = async (): Promise<string> => {
     const res = await apiRequest("POST", "/api/mobile/checkout-link", {
@@ -51,6 +52,7 @@ export function ExternalPurchaseSheet({
 
   const handlePress = async () => {
     setLoading(true);
+    setError(null);
     try {
       const url = await fetchUrl();
       if (isIOS) {
@@ -59,7 +61,8 @@ export function ExternalPurchaseSheet({
       } else {
         window.location.href = url;
       }
-    } catch {
+    } catch (err: any) {
+      setError(err?.message || "Unable to open checkout. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -80,6 +83,11 @@ export function ExternalPurchaseSheet({
   return (
     <>
       {children({ onPress: handlePress, loading })}
+      {error && (
+        <p className="text-[11px] text-destructive mt-1.5 text-center" data-testid="text-purchase-error">
+          {error}
+        </p>
+      )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-sm">
