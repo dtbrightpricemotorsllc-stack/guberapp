@@ -78,8 +78,9 @@ to the web.
 | `studio_credits` | AI Video Studio credit packs ($5–$200) | `ExternalPurchaseSheet` on `/studio/credits` |
 | `studio_subscription` | Studio Standard/Business/Enterprise $10–$99/mo | `ExternalPurchaseSheet` on `/studio/credits` |
 | `business_scout_plan` | $99/mo Talent Explorer subscription | `ExternalPurchaseSheet` on `/biz/talent-explorer` |
-| `trust_box` | Trust Toolbox subscription | `ExternalPurchaseSheet` (iframe postMessage gated by `hideCheckout=1`; direct entry via `/ai-or-not` uses disclosure) |
-| `day1og` | Day-1 OG digital perks/badge — $1.99 | `ExternalPurchaseSheet` on `/profile` |
+| `business_extra_unlocks` | $7/unlock extra profile unlock packs (5-pack default) | `ExternalPurchaseSheet` on `/biz/dashboard` (Scout Plan holders only) |
+| `trust_box` | Trust Toolbox subscription $9.99/mo | `ExternalPurchaseSheet` floating panel on `/ai-or-not` (shown when not yet subscribed); iframe `hideCheckout=1` blocks in-iframe checkout |
+| `day1og` | Day-1 OG digital perks/badge — $1.99 | `ExternalPurchaseSheet` on `/profile` and floating panel on `/ai-or-not` |
 
 ---
 
@@ -124,7 +125,8 @@ Accepts `product` + optional `options` props and a render-prop `children({ onPre
 | `/studio/credits` packs + tiers | ✅ ExternalPurchaseSheet | task-561 |
 | `/profile` Day-1 OG card | ✅ ExternalPurchaseSheet | task-561 |
 | `/biz/talent-explorer` Scout Plan | ✅ ExternalPurchaseSheet | task-561 |
-| `/ai-or-not` Trust Box (iframe postMessage) | ✅ blocked (`isStoreBuild` guard in message handler) | task-561 |
+| `/biz/dashboard` extra unlock packs | ✅ ExternalPurchaseSheet (Scout Plan holders) | task-561 |
+| `/ai-or-not` Trust Box + Day-1 OG | ✅ ExternalPurchaseSheet floating panel; iframe `hideCheckout=1` blocks in-iframe checkout | task-561 |
 | `marketplace.tsx` boost button | ✅ hidden (`isStoreBuild`) | Existing |
 | `biz-verification.tsx` $49 fee | ✅ hidden (`isStoreBuild`) — real-world fee, safe to revisit | Existing |
 

@@ -9577,6 +9577,37 @@ export async function registerRoutes(
           cancel_url: `${APP_BASE}/biz/talent-explorer`,
         });
         sessionUrl = stripeSession.url;
+
+      } else if (product === "business_unlock") {
+        const acct = await storage.getBusinessAccount(userId);
+        if (!acct) return res.redirect(`${APP_BASE}/biz/dashboard?error=no_account`);
+        const qty = Math.max(1, Math.min(50, parseInt(String(options?.quantity || "5")) || 5));
+        let customerId = acct.stripeCustomerId;
+        if (!customerId) {
+          const customer = await stripeMain.customers.create({
+            email: acct.workEmail,
+            name: acct.businessName,
+            metadata: { businessAccountId: String(acct.id), userId: String(userId) },
+          });
+          customerId = customer.id;
+          await storage.updateBusinessAccount(acct.id, { stripeCustomerId: customerId });
+        }
+        const stripeSession = await stripeMain.checkout.sessions.create({
+          customer: customerId,
+          mode: "payment",
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: { name: "Additional Profile Unlocks", description: `${qty} additional profile unlock(s) for Talent Explorer` },
+              unit_amount: 700,
+            },
+            quantity: qty,
+          }],
+          metadata: { type: "business_extra_unlocks", businessAccountId: String(acct.id), quantity: String(qty) },
+          success_url: `${APP_BASE}/biz/dashboard?unlocks_purchased=true`,
+          cancel_url: `${APP_BASE}/biz/dashboard`,
+        });
+        sessionUrl = stripeSession.url;
       }
 
       if (!sessionUrl) return res.redirect(`${APP_BASE}/?error=unknown_product`);
