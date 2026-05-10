@@ -464,12 +464,24 @@ export default function StudioPageV2() {
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || "Failed"); }
       return res.json();
     },
+    onMutate: async ({ toolDbKey, imageUrl }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/studio/tools"] });
+      const prev = queryClient.getQueryData<Array<{ key: string; tileImageUrl?: string | null }>>(["/api/studio/tools"]);
+      queryClient.setQueryData<Array<{ key: string; tileImageUrl?: string | null }>>(
+        ["/api/studio/tools"],
+        (old) => old?.map((t) => t.key === toolDbKey ? { ...t, tileImageUrl: imageUrl } : t) ?? old,
+      );
+      return { prev };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/studio/tools"] });
       setTilePickerOpenId(null);
       toast({ title: "Tile background updated" });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e?.message, variant: "destructive" }),
+    onError: (e: Error, _vars, ctx: any) => {
+      if (ctx?.prev) queryClient.setQueryData(["/api/studio/tools"], ctx.prev);
+      toast({ title: "Error", description: e?.message, variant: "destructive" });
+    },
   });
   const files = sessionQuery.data?.files ?? [];
   const uploadedImages = files.filter((f) => f.fileType === "upload_image");
@@ -1371,17 +1383,28 @@ export default function StudioPageV2() {
                             <p className="text-[9px] uppercase tracking-widest text-white/40 px-1 pb-1">Set as tile background</p>
                             {TOOL_TILES.map((tile) => {
                               const hasThisImg = tileImgMap[tile.dbKey] === o.providerUrl;
+                              const currentBg = tileImgMap[tile.dbKey];
                               return (
                                 <button
                                   key={tile.dbKey}
                                   type="button"
                                   disabled={setTileImageMutation.isPending}
                                   onClick={() => setTileImageMutation.mutate({ toolDbKey: tile.dbKey, imageUrl: o.providerUrl })}
-                                  className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold transition hover:bg-white/10"
+                                  className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold transition hover:bg-white/10 flex items-center gap-2"
                                   style={{ color: tile.accent }}
                                   data-testid={`btn-set-tile-${tile.dbKey}`}
                                 >
-                                  {tile.label}{hasThisImg ? " ✓" : ""}
+                                  {currentBg ? (
+                                    <img
+                                      src={currentBg}
+                                      alt=""
+                                      className="w-7 h-7 rounded object-cover flex-shrink-0 ring-1 ring-white/20"
+                                      data-testid={`thumb-tile-${tile.dbKey}`}
+                                    />
+                                  ) : (
+                                    <span className="w-7 h-7 rounded flex-shrink-0 bg-white/10 ring-1 ring-white/10" data-testid={`thumb-tile-${tile.dbKey}-empty`} />
+                                  )}
+                                  <span className="flex-1">{tile.label}{hasThisImg ? " ✓" : ""}</span>
                                 </button>
                               );
                             })}
