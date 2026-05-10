@@ -1051,10 +1051,10 @@ export default function VerifyInspect() {
         <div className="mb-6 animate-fade-in">
           {(() => {
             const FORM_IMGS: Record<string, string> = {
-              "Property & Site Check": formPropertyImg,
-              "Online Items": formOnlineImg,
-              "Wheels, Wings & Water": formWheelsImg,
-              "Quick Check": formQuickImg,
+              "Property & Site Check": propertySiteImg,
+              "Online Items": onlineItemsImg,
+              "Wheels, Wings & Water": wheelsWingsImg,
+              "Quick Check": quickCheckImg,
               "Part Availability Verification": formPavImg,
               "Drone / Aerial Footage": droneAerialImg,
             };
