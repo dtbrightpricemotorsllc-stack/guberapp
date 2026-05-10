@@ -23,7 +23,7 @@ import { sendPushToUser } from "./push";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
-import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth } from "./auth";
+import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth, handleNativeAppleAuth } from "./auth";
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
@@ -2130,6 +2130,94 @@ export async function registerRoutes(
     return user;
   }
 
+  async function upsertAppleUser(
+    appleUser: { sub: string; email?: string; fullName?: string },
+    pendingReferralCode: string | null,
+  ) {
+    let user = await storage.getUserByAppleSub(appleUser.sub);
+    if (!user && appleUser.email) {
+      user = await storage.getUserByEmail(appleUser.email);
+      if (user) {
+        if ((user as any).deletedAt) throw new Error("This account has been deleted.");
+        console.log(`[GUBER auth] Apple upsert — linking existing email account (userId=${user.id})`);
+        await storage.updateUser(user.id, { appleSub: appleUser.sub, authProvider: "apple" });
+        user = (await storage.getUser(user.id))!;
+      }
+    } else if (user) {
+      if ((user as any).deletedAt) throw new Error("This account has been deleted.");
+      console.log(`[GUBER auth] Apple upsert — returning user (userId=${user.id})`);
+    }
+
+    if (!user) {
+      console.log(`[GUBER auth] Apple upsert — creating new account`);
+      const emailBase = appleUser.email || `apple_${appleUser.sub.slice(0, 12)}`;
+      const baseUsername = (emailBase.split("@")[0] || "user").replace(/[^a-z0-9_]/gi, "").toLowerCase() || "user";
+      let username = baseUsername;
+      let suffix = 1;
+      while (await storage.getUserByUsername(username)) { username = `${baseUsername}${suffix++}`; }
+
+      let newGuberId = generateGuberId();
+      while (await storage.getUserByGuberId(newGuberId)) { newGuberId = generateGuberId(); }
+
+      let newRefCode = generateReferralCode();
+      while ((await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${newRefCode} LIMIT 1`)).rows.length) {
+        newRefCode = generateReferralCode();
+      }
+
+      let referrerId: number | null = null;
+      if (pendingReferralCode) {
+        const ro = await db.execute(sql`SELECT id FROM users WHERE referral_code = ${pendingReferralCode} LIMIT 1`);
+        if (ro.rows.length) referrerId = (ro.rows[0] as any).id;
+      }
+
+      const psNow = new Date();
+      const psWindowEnd = referrerId ? new Date(psNow.getTime() + 30 * 24 * 60 * 60 * 1000) : null;
+
+      // Apple may not provide email (privacy relay) — generate a placeholder
+      const email = appleUser.email || `${appleUser.sub.replace(/\./g, "")}@privaterelay.appleid.com`;
+      const fullName = appleUser.fullName || username;
+
+      user = await storage.createUser({
+        email,
+        username,
+        fullName,
+        password: await hashPassword(randomBytes(32).toString("hex")),
+        appleSub: appleUser.sub,
+        authProvider: "apple",
+        emailVerified: !!appleUser.email,
+        role: "buyer",
+        tier: "community",
+        day1OG: false,
+        guberId: newGuberId,
+        referralCode: newRefCode,
+        referredBy: referrerId,
+        referredAt: referrerId ? psNow : null,
+        performanceShareWindowEndsAt: psWindowEnd,
+        performanceShareEligible: !!referrerId,
+      } as any);
+
+      if (referrerId) {
+        await db.insert(referrals).values({ referrerId, referredId: user.id, status: "pending" }).onConflictDoNothing();
+      }
+
+      if (appleUser.email) {
+        const ogCheck = await db.execute(sql`SELECT 1 FROM og_preapproved_emails WHERE email = ${appleUser.email.toLowerCase()} LIMIT 1`);
+        const tbCheck = await db.execute(sql`SELECT 1 FROM trust_box_preapproved_emails WHERE LOWER(email) = ${appleUser.email.toLowerCase()} LIMIT 1`);
+        const stripe = await checkStripeForOGStatus(appleUser.email);
+        const isOG = ogCheck.rows.length > 0 || stripe.isOG;
+        const hasTB = tbCheck.rows.length > 0 || stripe.hasTrustBox;
+        const updates: Record<string, any> = {};
+        if (isOG) { updates.day1OG = true; updates.aiOrNotCredits = 5; }
+        if (hasTB) { updates.trustBoxPurchased = true; updates.aiOrNotUnlimitedText = true; if ((user.aiOrNotCredits || 0) < 5) updates.aiOrNotCredits = (user.aiOrNotCredits || 0) + 5; }
+        if (Object.keys(updates).length > 0) await storage.updateUser(user.id, updates);
+      }
+
+      await storage.createNotification({ userId: user.id, title: "Welcome to GUBER!", body: "Your account has been created via Apple. Complete your profile to get started.", type: "system" });
+    }
+
+    return user;
+  }
+
   app.post("/api/auth/store-ref", (req: Request, res: Response) => {
     const { ref } = req.body;
     if (ref && typeof ref === "string") (req.session as any).pendingReferralCode = ref.toUpperCase();
@@ -2349,6 +2437,17 @@ export async function registerRoutes(
       androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
       iosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
       upsertGoogleUser,
+      generateToken: generateJWT,
+    }),
+  );
+
+  // Native Apple Sign-In — receives an identity token from the iOS app
+  // (no browser, no redirect — direct JWT verification via Apple JWKS)
+  app.post(
+    "/api/auth/apple/native",
+    handleNativeAppleAuth({
+      bundleId: "com.guber.app",
+      upsertAppleUser,
       generateToken: generateJWT,
     }),
   );

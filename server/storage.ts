@@ -173,6 +173,7 @@ export interface IStorage {
   getAvailableWorkers(): Promise<User[]>;
 
   getUserByGoogleSub(googleSub: string): Promise<User | undefined>;
+  getUserByAppleSub(appleSub: string): Promise<User | undefined>;
   createPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void>;
   getPasswordResetToken(token: string): Promise<{ userId: number; expiresAt: Date; used: boolean } | undefined>;
   invalidatePasswordResetToken(token: string): Promise<void>;
@@ -1048,6 +1049,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByGoogleSub(googleSub: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.googleSub, googleSub));
+    return user;
+  }
+
+  async getUserByAppleSub(appleSub: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.appleSub, appleSub));
     return user;
   }
 

@@ -48,6 +48,7 @@ export const users = pgTable("users", {
   credentialUploadPending: boolean("credential_upload_pending").default(false),
   authProvider: text("auth_provider").default("email"),
   googleSub: text("google_sub"),
+  appleSub: text("apple_sub"),
   cancellationRate: real("cancellation_rate").default(0),
   canceledCount: integer("canceled_count").default(0),
   onTimePct: real("on_time_pct").default(100),

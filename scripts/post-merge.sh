@@ -516,6 +516,9 @@ END $$;
 -- task-506: drone_certified flag on worker_business_projections
 ALTER TABLE worker_business_projections ADD COLUMN IF NOT EXISTS drone_certified BOOLEAN DEFAULT false;
 
+-- Apple Sign-In (store launch): apple_sub for native iOS Sign in with Apple
+ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_sub TEXT;
+
 -- Studio v2 feature flag: restrict to admin-only by default so admins can
 -- preview and then flip to "global" in the Feature Flag Console when ready.
 UPDATE feature_flags

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, createPublicKey } from "crypto";
 import { promisify } from "util";
+import jwt from "jsonwebtoken";
 import type { z } from "zod";
 import { signupSchema, loginSchema, businessSignupSchema } from "../shared/schema";
 import { OFF_PLATFORM_PATTERNS } from "../shared/liability";
@@ -599,6 +600,96 @@ export function handleNativeGoogleAuth(deps: NativeGoogleAuthDeps) {
       return res.json({ token, user: sanitizeUser(user) });
     } catch (err: any) {
       console.error("[GUBER auth] native Google error:", err?.message || err);
+      return res.status(500).json({ message: "Sign-in failed. Please try again." });
+    }
+  };
+}
+
+// ── Apple Sign-In (native iOS) ─────────────────────────────────────────────
+
+let _appleJwksCache: { keys: any[]; fetchedAt: number } | null = null;
+const APPLE_JWKS_TTL_MS = 3600_000; // 1 hour
+
+async function fetchApplePublicKeys(): Promise<any[]> {
+  const now = Date.now();
+  if (_appleJwksCache && now - _appleJwksCache.fetchedAt < APPLE_JWKS_TTL_MS) {
+    return _appleJwksCache.keys;
+  }
+  const res = await fetch("https://appleid.apple.com/auth/keys");
+  if (!res.ok) throw new Error(`Failed to fetch Apple JWKS: ${res.status}`);
+  const { keys } = await res.json() as { keys: any[] };
+  _appleJwksCache = { keys, fetchedAt: now };
+  return keys;
+}
+
+export async function verifyAppleIdToken(
+  idToken: string,
+  bundleId: string,
+): Promise<{ sub: string; email?: string } | null> {
+  try {
+    const decoded = jwt.decode(idToken, { complete: true });
+    if (!decoded || typeof decoded === "string") return null;
+    const { kid, alg } = decoded.header as { kid: string; alg: string };
+
+    const keys = await fetchApplePublicKeys();
+    const jwk = keys.find((k: any) => k.kid === kid);
+    if (!jwk) {
+      console.warn("[apple-auth] no matching kid in Apple JWKS");
+      return null;
+    }
+
+    const publicKey = createPublicKey({ key: jwk, format: "jwk" });
+    const payload = jwt.verify(idToken, publicKey, {
+      algorithms: [alg as jwt.Algorithm || "RS256"],
+      audience: bundleId,
+      issuer: "https://appleid.apple.com",
+    }) as { sub: string; email?: string };
+
+    return { sub: payload.sub, email: payload.email };
+  } catch (err: any) {
+    console.warn("[apple-auth] token verification failed:", err?.message || err);
+    return null;
+  }
+}
+
+export interface NativeAppleAuthDeps {
+  bundleId: string;
+  upsertAppleUser: (
+    appleUser: { sub: string; email?: string; fullName?: string },
+    pendingReferralCode: string | null,
+  ) => Promise<any>;
+  generateToken: (user: any) => string;
+}
+
+export function handleNativeAppleAuth(deps: NativeAppleAuthDeps) {
+  return async (req: Request, res: Response) => {
+    const { identityToken, fullName } = req.body;
+    if (!identityToken || typeof identityToken !== "string") {
+      return res.status(400).json({ message: "identityToken is required" });
+    }
+
+    const appleUser = await verifyAppleIdToken(identityToken, deps.bundleId);
+    if (!appleUser) {
+      console.warn("[GUBER auth] /api/auth/apple/native — token verification failed");
+      return res.status(401).json({ message: "Invalid Apple ID token" });
+    }
+
+    console.log(`[GUBER auth] native Apple — token verified for sub=${appleUser.sub.slice(0, 8)}…`);
+
+    try {
+      const user = await deps.upsertAppleUser(
+        { ...appleUser, fullName: fullName || undefined },
+        (req.session as any)?.pendingReferralCode ?? null,
+      );
+
+      if (user.banned) return res.status(403).json({ message: "Account permanently banned" });
+      if (user.suspended) return res.status(403).json({ message: "Account suspended" });
+
+      const token = deps.generateToken(user);
+      console.log(`[GUBER auth] native Apple — auth complete (userId=${user.id})`);
+      return res.json({ token, user: sanitizeUser(user) });
+    } catch (err: any) {
+      console.error("[GUBER auth] native Apple error:", err?.message || err);
       return res.status(500).json({ message: "Sign-in failed. Please try again." });
     }
   };
