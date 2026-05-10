@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2 } from "lucide-react";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -327,6 +327,214 @@ function UsersTab() {
   );
 }
 
+type SweepFolder = {
+  folder: string;
+  resourceType: string;
+  listed: number;
+  orphans: number;
+  orphanBytes: number;
+  destroyed: number;
+  destroyFailed: number;
+  skippedTooNew: number;
+  error?: string;
+};
+type SweepResult = {
+  mode: "dry-run" | "delete";
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  totalListed: number;
+  totalOrphans: number;
+  totalOrphanBytes: number;
+  totalDestroyed: number;
+  totalDestroyFailed: number;
+  totalSkippedTooNew: number;
+  capped: boolean;
+  perFolder: SweepFolder[];
+  trigger?: string;
+};
+type OrphanSweepStatus = {
+  destroyEnabled: boolean;
+  lastRunAt: string | null;
+  lastResult: SweepResult | null;
+  lastAuditAt: string | null;
+};
+
+function fmtBytes(n: number): string {
+  if (!n) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function OrphanSweepTab() {
+  const { toast } = useToast();
+  const status = useQuery<OrphanSweepStatus>({ queryKey: ["/api/admin/qa/studio/orphan-sweep"] });
+
+  const toggleDestroy = useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiRequest("PATCH", "/api/admin/qa/studio/orphan-sweep/destroy", { enabled }).then((r) => r.json()),
+    onSuccess: (d) => {
+      toast({ title: d.enabled ? "Destroy ENABLED" : "Destroy disabled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/qa/studio/orphan-sweep"] });
+    },
+    onError: (e: any) => toast({ title: "Toggle failed", description: e.message, variant: "destructive" }),
+  });
+
+  const runSweep = useMutation({
+    mutationFn: (mode: "dry-run" | "delete") => {
+      const qs = mode === "delete" ? "?delete=1&force=1" : "";
+      return apiRequest("POST", `/api/admin/qa/studio/orphan-sweep${qs}`).then((r) => r.json());
+    },
+    onSuccess: (d: SweepResult) => {
+      toast({
+        title: `Sweep complete (${d.mode})`,
+        description: `${d.totalOrphans} orphans · ${fmtBytes(d.totalOrphanBytes)} · destroyed ${d.totalDestroyed}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/qa/studio/orphan-sweep"] });
+    },
+    onError: (e: any) => toast({ title: "Sweep failed", description: e.message, variant: "destructive" }),
+  });
+
+  const s = status.data;
+  const last = s?.lastResult;
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle>Studio orphan-asset sweep</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Weekly Cloudinary janitor for Studio folders. Anything not referenced by <code>studio_session_files</code> or <code>studio_featured_clips</code> is an orphan. Default mode is dry-run; flip the destroy toggle below to actually delete.
+          </p>
+          <div className="flex flex-wrap items-center gap-3 rounded border p-3">
+            <div className="text-sm">
+              <div>Destroy mode: <Badge variant={s?.destroyEnabled ? "destructive" : "outline"} data-testid="badge-destroy-mode">{status.isLoading ? "loading…" : s?.destroyEnabled ? "ON (will delete)" : "OFF (dry-run)"}</Badge></div>
+              <div className="mt-1 text-xs text-muted-foreground">Toggles <code>platform_settings.studio_orphan_sweep_destroy</code>. Cron sweeps obey this flag.</div>
+            </div>
+            <div className="ml-auto flex gap-2">
+              <Button
+                size="sm"
+                variant={s?.destroyEnabled ? "outline" : "default"}
+                onClick={() => {
+                  if (!s) return;
+                  if (!s.destroyEnabled && !confirm("Enable destruction? Cron sweeps will permanently delete orphan Cloudinary assets.")) return;
+                  toggleDestroy.mutate(!s.destroyEnabled);
+                }}
+                disabled={!s || toggleDestroy.isPending}
+                data-testid="button-toggle-destroy"
+              >
+                {s?.destroyEnabled ? "Switch to dry-run" : "Enable destroy"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => runSweep.mutate("dry-run")} disabled={runSweep.isPending} data-testid="button-run-sweep-dryrun">
+              <Search className="mr-1 h-3 w-3" /> Run sweep now (dry-run)
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => { if (confirm("Run sweep AND destroy orphans now? This permanently deletes Cloudinary assets.")) runSweep.mutate("delete"); }}
+              disabled={runSweep.isPending}
+              data-testid="button-run-sweep-destroy"
+            >
+              <Trash2 className="mr-1 h-3 w-3" /> Run + destroy now
+            </Button>
+            {runSweep.isPending && <span className="self-center text-xs text-muted-foreground">Sweeping… can take a minute.</span>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Last sweep result</CardTitle></CardHeader>
+        <CardContent>
+          {status.isLoading && <div className="text-sm">Loading…</div>}
+          {status.isError && <div className="text-sm text-red-600">Failed to load sweep status.</div>}
+          {!status.isLoading && !status.isError && (
+            <div className="mb-3 text-sm">
+              <span className="text-xs text-muted-foreground">Last run: </span>
+              <span data-testid="text-last-run-at">{s?.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : "never"}</span>
+            </div>
+          )}
+          {!status.isLoading && !last && <div className="text-sm text-muted-foreground">No sweep summary on file yet.</div>}
+          {last && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Started</div>
+                  <div>{last.startedAt ? new Date(last.startedAt).toLocaleString() : "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Mode</div>
+                  <div><Badge variant={last.mode === "delete" ? "destructive" : "outline"}>{last.mode}</Badge></div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Trigger</div>
+                  <div>{last.trigger || "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Duration</div>
+                  <div>{(last.durationMs / 1000).toFixed(1)}s</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Listed</div>
+                  <div>{last.totalListed}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Orphans</div>
+                  <div data-testid="text-total-orphans">{last.totalOrphans} ({fmtBytes(last.totalOrphanBytes)})</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Destroyed</div>
+                  <div data-testid="text-total-destroyed">{last.totalDestroyed}{last.totalDestroyFailed ? ` (${last.totalDestroyFailed} failed)` : ""}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Skipped (too new)</div>
+                  <div>{last.totalSkippedTooNew}{last.capped ? " · capped" : ""}</div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-left text-muted-foreground">
+                    <tr>
+                      <th className="py-1 pr-2">Folder</th>
+                      <th className="py-1 pr-2">Type</th>
+                      <th className="py-1 pr-2 text-right">Listed</th>
+                      <th className="py-1 pr-2 text-right">Orphans</th>
+                      <th className="py-1 pr-2 text-right">Bytes</th>
+                      <th className="py-1 pr-2 text-right">Destroyed</th>
+                      <th className="py-1 pr-2 text-right">Failed</th>
+                      <th className="py-1 pr-2 text-right">Too new</th>
+                      <th className="py-1 pr-2">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {last.perFolder.map((f, i) => (
+                      <tr key={`${f.folder}-${f.resourceType}-${i}`} data-testid={`row-folder-${f.folder}-${f.resourceType}`}>
+                        <td className="py-1 pr-2 font-mono">{f.folder}</td>
+                        <td className="py-1 pr-2">{f.resourceType}</td>
+                        <td className="py-1 pr-2 text-right">{f.listed}</td>
+                        <td className="py-1 pr-2 text-right">{f.orphans}</td>
+                        <td className="py-1 pr-2 text-right">{fmtBytes(f.orphanBytes)}</td>
+                        <td className="py-1 pr-2 text-right">{f.destroyed}</td>
+                        <td className="py-1 pr-2 text-right">{f.destroyFailed}</td>
+                        <td className="py-1 pr-2 text-right">{f.skippedTooNew}</td>
+                        <td className="py-1 pr-2 text-red-600">{f.error || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function CashDropDebuggerTab() {
   const [id, setId] = useState("");
   return (
@@ -360,6 +568,7 @@ export default function AdminQa() {
           <TabsTrigger value="cashdrops" data-testid="tab-cashdrops"><Bug className="mr-1 h-3 w-3" />Cash Drop Debug</TabsTrigger>
           <TabsTrigger value="flags" data-testid="tab-flags"><Flag className="mr-1 h-3 w-3" />Feature Flags</TabsTrigger>
           <TabsTrigger value="push" data-testid="tab-push"><Bell className="mr-1 h-3 w-3" />Push Log</TabsTrigger>
+          <TabsTrigger value="orphan-sweep" data-testid="tab-orphan-sweep"><Trash2 className="mr-1 h-3 w-3" />Orphan Sweep</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -384,6 +593,7 @@ export default function AdminQa() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="orphan-sweep"><OrphanSweepTab /></TabsContent>
       </Tabs>
     </div>
   );

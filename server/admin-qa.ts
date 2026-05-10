@@ -16,6 +16,7 @@ import {
   walletTransactions,
   jobStatusLogs,
   featureFlags,
+  platformSettings,
   pushSendLog,
   apnsDeviceTokens,
   fcmDeviceTokens,
@@ -730,8 +731,63 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json({ ok: true });
   });
 
-  // ── Studio orphan-asset sweep (task-542) ─────────────────────────────────
-  // Manual "run now" trigger for the Cloudinary orphan janitor that
+  // ── Studio orphan-asset sweep (task-542 / task-544) ──────────────────────
+  // GET — returns the most recent `studio_orphan_sweep` audit_log row plus
+  // the current destroy-toggle + last-run stamp from platform_settings.
+  // Read-only; never re-runs the sweep on page load (task-544).
+  app.get("/api/admin/qa/studio/orphan-sweep", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const lastRows = await db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.action, "studio_orphan_sweep"))
+        .orderBy(desc(auditLogs.id))
+        .limit(1);
+      let lastResult: any = null;
+      if (lastRows.length) {
+        try { lastResult = JSON.parse(lastRows[0].details || "{}"); } catch { lastResult = null; }
+      }
+      const settingRows = await db
+        .select()
+        .from(platformSettings)
+        .where(inArray(platformSettings.key, ["studio_orphan_sweep_destroy", "studio_orphan_sweep_last_run_at"]));
+      const settingsMap: Record<string, string> = {};
+      for (const r of settingRows) settingsMap[r.key] = String(r.value);
+      res.json({
+        destroyEnabled: (settingsMap.studio_orphan_sweep_destroy || "").toLowerCase() === "true",
+        lastRunAt: settingsMap.studio_orphan_sweep_last_run_at || null,
+        lastResult,
+        lastAuditAt: lastRows[0]?.createdAt ?? null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
+    }
+  });
+
+  // PATCH — flip the `studio_orphan_sweep_destroy` platform_settings flag.
+  app.patch("/api/admin/qa/studio/orphan-sweep/destroy", requireAdmin, async (req: Request, res: Response) => {
+    const enabled = req.body?.enabled === true;
+    try {
+      await db
+        .insert(platformSettings)
+        .values({
+          key: "studio_orphan_sweep_destroy",
+          value: enabled ? "true" : "false",
+          category: "studio",
+          description: "If true, the orphan sweep destroys unreferenced Cloudinary assets.",
+        })
+        .onConflictDoUpdate({
+          target: platformSettings.key,
+          set: { value: enabled ? "true" : "false", updatedAt: new Date() },
+        });
+      await audit(req, "qa.studio.orphan_sweep.destroy_toggle", { enabled });
+      res.json({ ok: true, enabled });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
+    }
+  });
+
+  // POST — manual "run now" trigger for the Cloudinary orphan janitor that
   // otherwise runs weekly from cron. Default dry-run; pass `?delete=1` plus
   // `?force=1` (or set `platform_settings.studio_orphan_sweep_destroy=true`)
   // to actually destroy. Returns the full per-folder sweep summary.
