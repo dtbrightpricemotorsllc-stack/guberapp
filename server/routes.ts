@@ -9811,7 +9811,7 @@ export async function registerRoutes(
     })));
   });
 
-  app.get("/api/studio/tools", requireAuth, async (_req: Request, res: Response) => {
+  app.get("/api/studio/tools", async (_req: Request, res: Response) => {
     const tools = await storage.listStudioModelPricing();
     res.json(tools.map((t) => ({
       key: t.toolKey,
