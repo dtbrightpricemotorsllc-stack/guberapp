@@ -114,7 +114,7 @@ Accepts `product` + optional `options` props and a render-prop `children({ onPre
 
 **Non-iOS flow:** `onPress` calls the link endpoint and navigates with `window.location.href` (no disclosure required).
 
-**Route contract:** The canonical token-bridge URL is `GET /api/mobile/checkout-redirect` (a server route in `server/routes.ts`). There is no `/mobile-checkout` client-side route in `App.tsx` — the redirect flows entirely server-to-Stripe without a client route hop.
+**Route contract:** `POST /api/mobile/checkout-link` returns a URL pointing to the client route `/mobile-checkout?token=…` (`client/src/pages/mobile-checkout.tsx`, registered in `App.tsx`). That page shows a GUBER-branded loading screen and immediately calls `window.location.replace("/api/mobile/checkout-redirect?token=…")`. The server route `GET /api/mobile/checkout-redirect` validates the HMAC token and 302-redirects to Stripe. The two-step design gives SFSafariViewController a GUBER-branded origin page before the Stripe redirect.
 
 ---
 

@@ -67,6 +67,7 @@ const StudioCommercial = lazy(() => import("@/pages/studio-commercial"));
 const StudioTextToVideo = lazy(() => import("@/pages/studio-text-to-video"));
 const StudioMusic = lazy(() => import("@/pages/studio-music"));
 const Investors = lazy(() => import("@/pages/investors"));
+const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
@@ -301,6 +302,7 @@ function Router() {
       <Route path="/loading-demo" component={LoadingDemo} />
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
+      <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
       <Route component={NotFound} />
     </Switch>
     </>

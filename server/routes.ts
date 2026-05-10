@@ -9432,7 +9432,7 @@ export async function registerRoutes(
       const userId = req.session.userId!;
       const token = signMobileCheckoutToken(userId, product, options as Record<string, string>);
       const appUrl = process.env.APP_URL || "https://guberapp.app";
-      const url = `${appUrl}/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`;
+      const url = `${appUrl}/mobile-checkout?token=${encodeURIComponent(token)}`;
       res.json({ url });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
