@@ -10,6 +10,7 @@ import {
 import { isStoreBuild } from "@/lib/platform";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
+import { useFeatureFlag } from "@/hooks/use-feature-flag";
 
 type StudioMe = {
   credits: number;
@@ -35,22 +36,23 @@ export function StudioToolPageShell({
   iconAccent?: string;
   children: ReactNode;
 }) {
-  // Mirror the rollout gate from /studio: tool pages are admin-only until
-  // the studio_v2 feature flag is opened up. Bouncing non-admins back to
-  // /studio shows them the StudioComingSoon screen there in one place.
+  // task-550: Studio is open to all signed-in users. The studio_v2 flag
+  // in shared/feature-flags.ts is the single source of truth for the
+  // rollout — flipping it off in /admin/qa/flags is the kill switch.
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const studioFlag = useFeatureFlag("studio_v2");
   const [, navigate] = useLocation();
   const [confirmExit, setConfirmExit] = useState(false);
 
-  const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"], enabled: isAdmin });
+  const studioReady = !!user && studioFlag.enabled;
+  const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"], enabled: studioReady });
   const me = meQuery.data;
 
   // Session bootstrap: open + heartbeat. NO exit-on-unmount — sessions
   // now live 24h after last activity (handled by cron). We never warn
   // the user that leaving discards their work because it doesn't.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!studioReady) return;
     let cancelled = false;
     (async () => {
       try {
@@ -67,9 +69,11 @@ export function StudioToolPageShell({
       cancelled = true;
       window.clearInterval(touchTimer);
     };
-  }, [isAdmin]);
+  }, [studioReady]);
 
-  if (!isAdmin) return <Redirect to="/studio" />;
+  if (studioFlag.isLoading) return null;
+  if (!user) return <Redirect to="/login" />;
+  if (!studioFlag.enabled) return <Redirect to="/studio" />;
 
   const credits = me?.credits ?? 0;
   const tier = me?.tier ?? "free";

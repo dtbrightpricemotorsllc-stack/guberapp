@@ -39,6 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
+import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
@@ -318,17 +319,17 @@ function TemplateVideoLoop({
   );
 }
 
-// ── Coming Soon gate (non-admin) ───────────────────────────────────────────
-function StudioComingSoon() {
+// ── Studio-disabled fallback (studio_v2 flag is OFF) ───────────────────────
+function StudioDisabled() {
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-6 px-6">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-6 px-6" data-testid="page-studio-disabled">
       <div className="w-16 h-16 rounded-2xl bg-emerald-400/10 border border-emerald-400/30 flex items-center justify-center">
         <Lock className="w-8 h-8 text-emerald-400" />
       </div>
       <div className="text-center">
         <h1 className="text-2xl font-bold tracking-tight mb-2">GUBER Studio</h1>
         <p className="text-white/60 text-sm max-w-xs leading-relaxed">
-          AI-powered content creation is coming soon. Admins are currently testing — we'll open it up shortly.
+          Studio is temporarily unavailable. Please check back soon.
         </p>
       </div>
       <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/10 rounded-xl">
@@ -344,7 +345,10 @@ function StudioComingSoon() {
 export default function StudioPageV2() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  // task-550: studio_v2 in shared/feature-flags.ts is the single source of
+  // truth for the rollout. Flag default is global ON; flipping it off in
+  // /admin/qa/flags is the kill switch that hides Studio for everyone.
+  const studioFlag = useFeatureFlag("studio_v2");
 
   const [, navigate] = useLocation();
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
@@ -403,8 +407,9 @@ export default function StudioPageV2() {
   }, [searchString]);
 
   // ── Session lifecycle ─────────────────────────────────────────────────
+  const studioReady = !!user && studioFlag.enabled;
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!studioReady) return;
     let cancelled = false;
     (async () => {
       try {
@@ -426,7 +431,7 @@ export default function StudioPageV2() {
       cancelled = true;
       window.clearInterval(touchTimer);
     };
-  }, [isAdmin]);
+  }, [studioReady]);
 
   // ── Derived state ──────────────────────────────────────────────────────
   const tools = toolsQuery.data ?? [];
@@ -586,24 +591,23 @@ export default function StudioPageV2() {
     setSelectedSourceId(null);
   }
 
-  // ── Loading / auth states ──────────────────────────────────────────────
-  if (meQuery.isLoading || toolsQuery.isLoading) {
+  // ── Loading / auth / flag states ───────────────────────────────────────
+  if (studioFlag.isLoading || meQuery.isLoading || toolsQuery.isLoading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin" />
       </div>
     );
   }
+  if (!studioFlag.enabled) return <StudioDisabled />;
   if (!me) {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4 p-6">
         <p>You need to be signed in to use the Studio.</p>
-        <Button asChild><Link href="/auth">Sign in</Link></Button>
+        <Button asChild><Link href="/login">Sign in</Link></Button>
       </div>
     );
   }
-  if (!isAdmin) return <StudioComingSoon />;
-
   const credits = me.credits;
   const tier = me.tier;
   const cost = activeToolPricing?.creditsCost ?? 0;
