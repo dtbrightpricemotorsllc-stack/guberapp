@@ -1322,6 +1322,22 @@ export async function runAllScheduledSweeps(): Promise<void> {
 
     const purged = await purgeViProofMedia();
     if (purged > 0) console.log(`[cron] purged media on ${purged} V&I proof(s) past 30-day retention`);
+
+    // task-542 — weekly Cloudinary orphan-asset sweep across all Studio
+    // folders. The helper is internally rate-limited (runs at most once per
+    // week) so calling it on every 5-min cadence is safe.
+    try {
+      const { maybeRunStudioOrphanSweep } = await import("./studio-orphan-sweep.js");
+      const sweep = await maybeRunStudioOrphanSweep();
+      if (sweep) {
+        console.log(
+          `[cron] studio orphan sweep (${sweep.mode}): ${sweep.totalOrphans} orphan(s), ` +
+            `${(sweep.totalOrphanBytes / 1024 / 1024).toFixed(2)} MB, destroyed=${sweep.totalDestroyed}`,
+        );
+      }
+    } catch (err: any) {
+      console.error("[cron] studio orphan sweep failed:", err?.message || err);
+    }
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }

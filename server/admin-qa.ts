@@ -730,6 +730,34 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json({ ok: true });
   });
 
+  // ── Studio orphan-asset sweep (task-542) ─────────────────────────────────
+  // Manual "run now" trigger for the Cloudinary orphan janitor that
+  // otherwise runs weekly from cron. Default dry-run; pass `?delete=1` plus
+  // `?force=1` (or set `platform_settings.studio_orphan_sweep_destroy=true`)
+  // to actually destroy. Returns the full per-folder sweep summary.
+  app.post("/api/admin/qa/studio/orphan-sweep", requireAdmin, async (req: Request, res: Response) => {
+    const dryRun = String(req.query.delete || "").toLowerCase() !== "1";
+    const force = String(req.query.force || "").toLowerCase() === "1";
+    try {
+      const { runStudioOrphanSweep } = await import("./studio-orphan-sweep.js");
+      const result = await runStudioOrphanSweep({
+        forceDryRun: dryRun && !force,
+        forceDelete: !dryRun && force,
+        trigger: "admin",
+        triggeredByUserId: req.session?.userId ?? null,
+      });
+      await audit(req, "qa.studio.orphan_sweep", {
+        mode: result.mode,
+        totalOrphans: result.totalOrphans,
+        totalOrphanBytes: result.totalOrphanBytes,
+        totalDestroyed: result.totalDestroyed,
+      });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
+    }
+  });
+
   // Boot-time seed call so the table is populated before first admin visit.
   ensureFlagsSeeded().catch(() => {});
   invalidateFlagCache();
