@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon } from "lucide-react";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -702,6 +702,91 @@ function StudioUsageTotalsCard({ title, totals }: { title: string; totals: Studi
   );
 }
 
+type StudioTool = {
+  key: string;
+  label: string;
+  description: string | null;
+  creditsCost: number;
+  durationSeconds: number | null;
+  tileImageUrl: string | null;
+};
+
+function StudioTilesTab() {
+  const { toast } = useToast();
+  const { data: tools, isLoading, isError, refetch } = useQuery<StudioTool[]>({
+    queryKey: ["/api/studio/tools"],
+  });
+
+  const clearMutation = useMutation({
+    mutationFn: (toolKey: string) =>
+      apiRequest("PATCH", `/api/admin/studio/tools/${toolKey}/tile-image`, { imageUrl: null }),
+    onSuccess: (_data, toolKey) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/tools"] });
+      toast({ title: "Tile image cleared", description: `Background removed for "${toolKey}".` });
+    },
+    onError: (_err, toolKey) => {
+      toast({ title: "Failed to clear", description: `Could not clear tile image for "${toolKey}".`, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <div className="p-4 text-sm">Loading…</div>;
+  if (isError || !tools) {
+    return (
+      <Card><CardContent className="p-4 text-sm text-red-600">Failed to load Studio tools.</CardContent></Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Tile backgrounds are assigned from inside the Studio. Images must be generated there first, then assigned via the Studio session.{" "}
+          <a href="/studio" className="underline">Open Studio →</a>
+        </p>
+        <Button size="sm" variant="outline" onClick={() => refetch()} data-testid="button-tiles-refresh">Refresh</Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {tools.map((tool) => (
+          <Card key={tool.key} data-testid={`card-tile-${tool.key}`}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{tool.label}</CardTitle>
+              <p className="text-xs text-muted-foreground font-mono">{tool.key}</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="relative h-36 w-full overflow-hidden rounded-md border bg-muted">
+                {tool.tileImageUrl ? (
+                  <img
+                    src={tool.tileImageUrl}
+                    alt={`${tool.label} tile background`}
+                    className="h-full w-full object-cover"
+                    data-testid={`img-tile-${tool.key}`}
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground" data-testid={`placeholder-tile-${tool.key}`}>
+                    <ImageOff className="h-8 w-8 opacity-40" />
+                    <span className="text-xs">No background</span>
+                  </div>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                disabled={!tool.tileImageUrl || clearMutation.isPending}
+                onClick={() => clearMutation.mutate(tool.key)}
+                data-testid={`button-clear-tile-${tool.key}`}
+              >
+                {clearMutation.isPending && clearMutation.variables === tool.key ? "Clearing…" : "Clear Background"}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StudioUsageTab() {
   const { data, isLoading, isError, refetch, isFetching } = useQuery<StudioUsageResponse>({
     queryKey: ["/api/admin/qa/studio/usage"],
@@ -1110,6 +1195,7 @@ export default function AdminQa() {
           <TabsTrigger value="push" data-testid="tab-push"><Bell className="mr-1 h-3 w-3" />Push Log</TabsTrigger>
           <TabsTrigger value="orphan-sweep" data-testid="tab-orphan-sweep"><Trash2 className="mr-1 h-3 w-3" />Orphan Sweep</TabsTrigger>
           <TabsTrigger value="studio-usage" data-testid="tab-studio-usage"><Activity className="mr-1 h-3 w-3" />Studio Usage</TabsTrigger>
+          <TabsTrigger value="studio-tiles" data-testid="tab-studio-tiles"><ImageIcon className="mr-1 h-3 w-3" />Studio Tiles</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -1136,6 +1222,7 @@ export default function AdminQa() {
         </TabsContent>
         <TabsContent value="orphan-sweep"><OrphanSweepTab /></TabsContent>
         <TabsContent value="studio-usage"><StudioUsageTab /></TabsContent>
+        <TabsContent value="studio-tiles"><StudioTilesTab /></TabsContent>
       </Tabs>
     </div>
   );
