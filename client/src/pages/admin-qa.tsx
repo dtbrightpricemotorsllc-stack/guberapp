@@ -713,6 +713,9 @@ type StudioTool = {
 
 function StudioTilesTab() {
   const { toast } = useToast();
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [urlInputs, setUrlInputs] = useState<Record<string, string>>({});
+
   const { data: tools, isLoading, isError, refetch } = useQuery<StudioTool[]>({
     queryKey: ["/api/studio/tools"],
   });
@@ -729,6 +732,20 @@ function StudioTilesTab() {
     },
   });
 
+  const setMutation = useMutation({
+    mutationFn: ({ toolKey, imageUrl }: { toolKey: string; imageUrl: string }) =>
+      apiRequest("PATCH", `/api/admin/studio/tools/${toolKey}/tile-image`, { imageUrl }),
+    onSuccess: (_data, { toolKey }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/tools"] });
+      setExpandedKey(null);
+      setUrlInputs((prev) => ({ ...prev, [toolKey]: "" }));
+      toast({ title: "Tile image set", description: `Background updated for "${toolKey}".` });
+    },
+    onError: (_err, { toolKey }) => {
+      toast({ title: "Failed to set image", description: `Could not set tile image for "${toolKey}". Check that the URL is valid.`, variant: "destructive" });
+    },
+  });
+
   if (isLoading) return <div className="p-4 text-sm">Loading…</div>;
   if (isError || !tools) {
     return (
@@ -740,48 +757,99 @@ function StudioTilesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Tile backgrounds are assigned from inside the Studio. Images must be generated there first, then assigned via the Studio session.{" "}
-          <a href="/studio" className="underline">Open Studio →</a>
+          Paste a Cloudinary or CDN image URL to set a tile background directly, or clear an existing one.
         </p>
         <Button size="sm" variant="outline" onClick={() => refetch()} data-testid="button-tiles-refresh">Refresh</Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {tools.map((tool) => (
-          <Card key={tool.key} data-testid={`card-tile-${tool.key}`}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">{tool.label}</CardTitle>
-              <p className="text-xs text-muted-foreground font-mono">{tool.key}</p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="relative h-36 w-full overflow-hidden rounded-md border bg-muted">
-                {tool.tileImageUrl ? (
-                  <img
-                    src={tool.tileImageUrl}
-                    alt={`${tool.label} tile background`}
-                    className="h-full w-full object-cover"
-                    data-testid={`img-tile-${tool.key}`}
-                  />
+        {tools.map((tool) => {
+          const isExpanded = expandedKey === tool.key;
+          const urlValue = urlInputs[tool.key] ?? "";
+          const isSaving = setMutation.isPending && setMutation.variables?.toolKey === tool.key;
+          const isClearing = clearMutation.isPending && clearMutation.variables === tool.key;
+
+          return (
+            <Card key={tool.key} data-testid={`card-tile-${tool.key}`}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">{tool.label}</CardTitle>
+                <p className="text-xs text-muted-foreground font-mono">{tool.key}</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="relative h-36 w-full overflow-hidden rounded-md border bg-muted">
+                  {tool.tileImageUrl ? (
+                    <img
+                      src={tool.tileImageUrl}
+                      alt={`${tool.label} tile background`}
+                      className="h-full w-full object-cover"
+                      data-testid={`img-tile-${tool.key}`}
+                    />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground" data-testid={`placeholder-tile-${tool.key}`}>
+                      <ImageOff className="h-8 w-8 opacity-40" />
+                      <span className="text-xs">No background</span>
+                    </div>
+                  )}
+                </div>
+
+                {isExpanded ? (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="https://res.cloudinary.com/…"
+                      value={urlValue}
+                      onChange={(e) => setUrlInputs((prev) => ({ ...prev, [tool.key]: e.target.value }))}
+                      disabled={isSaving}
+                      data-testid={`input-tile-url-${tool.key}`}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        disabled={!urlValue.trim() || isSaving}
+                        onClick={() => setMutation.mutate({ toolKey: tool.key, imageUrl: urlValue.trim() })}
+                        data-testid={`button-save-tile-${tool.key}`}
+                      >
+                        {isSaving ? "Saving…" : "Save"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isSaving}
+                        onClick={() => { setExpandedKey(null); setUrlInputs((prev) => ({ ...prev, [tool.key]: "" })); }}
+                        data-testid={`button-cancel-tile-${tool.key}`}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground" data-testid={`placeholder-tile-${tool.key}`}>
-                    <ImageOff className="h-8 w-8 opacity-40" />
-                    <span className="text-xs">No background</span>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      disabled={isSaving || isClearing}
+                      onClick={() => setExpandedKey(tool.key)}
+                      data-testid={`button-set-url-tile-${tool.key}`}
+                    >
+                      <ImageIcon className="mr-1 h-3 w-3" /> Set URL
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      disabled={!tool.tileImageUrl || isClearing || isSaving}
+                      onClick={() => clearMutation.mutate(tool.key)}
+                      data-testid={`button-clear-tile-${tool.key}`}
+                    >
+                      {isClearing ? "Clearing…" : "Clear"}
+                    </Button>
                   </div>
                 )}
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full"
-                disabled={!tool.tileImageUrl || clearMutation.isPending}
-                onClick={() => clearMutation.mutate(tool.key)}
-                data-testid={`button-clear-tile-${tool.key}`}
-              >
-                {clearMutation.isPending && clearMutation.variables === tool.key ? "Clearing…" : "Clear Background"}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
