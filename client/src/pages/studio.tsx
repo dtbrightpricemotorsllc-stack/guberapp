@@ -41,6 +41,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
 import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import { StudioWelcomeTour } from "@/components/studio/studio-welcome-tour";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
@@ -630,8 +631,14 @@ export default function StudioPageV2() {
 
   const selectedRefImage = uploadedImages.find((i) => i.id === selectedSourceId) || null;
 
+  const studioSearchParams = new URLSearchParams(searchString);
+  const studioPurchaseSuccess =
+    studioSearchParams.get("credits") === "success" ||
+    studioSearchParams.get("subscription") === "success";
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-32" data-testid="page-studio">
+      <MobileReturnBanner show={studioPurchaseSuccess} />
       {/* ─── HERO ─────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
         {/* Cinematic background — last clip if available, otherwise animated gradient + grain */}

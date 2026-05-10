@@ -179,6 +179,88 @@ If any test case fails, check the following before raising a bug:
 
 ---
 
+## TC-11 — Return-to-app banner appears after Studio credit pack purchase
+
+**Surface:** `/studio` (redirect target after a successful mobile credit purchase)
+
+**Prerequisite:** Run TC-03 and TC-04 first to establish that the purchase itself completes. This test focuses only on the banner.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Complete a studio credit pack purchase via the `ExternalPurchaseSheet` flow (TC-03 + TC-04 up to popover close). | Stripe confirms. Popover closes. |
+| 2 | Observe the screen the app returns to. | The app is on `/studio` (Studio home page) because the `success_url` configured by `GET /api/mobile/checkout-redirect` for `studio_credits` is `{base}/studio?credits=success`. |
+| 3 | Confirm the green return-to-app banner is visible at the bottom of the screen. | A green bar reads **"Purchase complete"** with a "Tap here to return to the GUBER app" link (`data-testid="banner-mobile-return"`). |
+| 4 | Tap the **"Tap here to return to the GUBER app"** link. | The system opens the GUBER app via the `guber://` deep link scheme. (On a TestFlight build the app should already be in the foreground; the link may focus it or trigger no-op — confirm no crash or error alert.) |
+| 5 | Tap the **✕** dismiss button on the banner. | Banner disappears. Studio page remains intact. |
+
+Pass criteria: ✅ Green banner visible on `/studio` after credit purchase; `guber://` link present; dismiss works.
+
+---
+
+## TC-12 — Return-to-app banner appears after Studio subscription purchase
+
+**Surface:** `/studio` (redirect target after a successful mobile subscription purchase)
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Complete a studio subscription tier purchase via `ExternalPurchaseSheet` (TC-05). | Stripe confirms. Popover closes. |
+| 2 | Confirm the app returns to `/studio?subscription=success`. | App is on the Studio home page. |
+| 3 | Confirm the green return-to-app banner is visible. | Banner text and `guber://` link match TC-11. |
+| 4 | Tap the `guber://` link. | No crash. |
+| 5 | Dismiss the banner. | Banner disappears. |
+
+Pass criteria: ✅ Green banner visible on `/studio` after subscription purchase.
+
+---
+
+## TC-13 — Return-to-app banner appears after Day-1 OG purchase
+
+**Surface:** `/og-success` (redirect target after a successful Day-1 OG purchase)
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Complete a Day-1 OG purchase via `ExternalPurchaseSheet` on `/profile` (TC-06). | Stripe confirms. Popover closes. |
+| 2 | Confirm the app navigates to `/og-success?session_id=...`. | The OG Success page is shown. |
+| 3 | Confirm the green return-to-app banner is visible at the bottom. | Banner reads **"Purchase complete"** with `guber://` link. |
+| 4 | Tap the `guber://` link. | No crash. |
+| 5 | Dismiss the banner. | Banner disappears. |
+
+Pass criteria: ✅ Green banner visible on `/og-success` after Day-1 OG purchase.
+
+---
+
+## TC-14 — Return-to-app banner appears after Trust Box purchase
+
+**Surface:** `/ai-or-not?trustbox=success` (redirect target after a Trust Box mobile purchase)
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Complete a Trust Box purchase via `ExternalPurchaseSheet` on `/ai-or-not` (TC-07). | Stripe confirms. Popover closes. |
+| 2 | Confirm the app navigates to `/ai-or-not?trustbox=success`. | The AI-or-Not page is shown with Trust Box activated. |
+| 3 | Confirm the green return-to-app banner is visible at the bottom. | Banner reads **"Purchase complete"** with `guber://` link. |
+| 4 | Tap the `guber://` link. | No crash. |
+| 5 | Dismiss the banner. | Banner disappears. |
+
+Pass criteria: ✅ Green banner visible on `/ai-or-not` after Trust Box purchase.
+
+---
+
+## TC-15 — Banner deep link opens the app (integration check)
+
+**Purpose:** Confirm that the `guber://` URI scheme is registered and handled by the iOS app so tapping the banner link in the SFSafariViewController or external browser brings the user back into the app.
+
+**Prerequisite:** Install the app via TestFlight on a physical iPhone (not Simulator — URI scheme open does not work in Simulator).
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | After any successful purchase that shows the banner (TC-11 through TC-14), tap the **"Tap here to return to the GUBER app"** link. | iOS intercepts the `guber://` scheme and opens the GUBER app (or brings it to foreground if already running). |
+| 2 | If the app is already in the foreground (SFSafariViewController scenario), observe whether the popover dismisses or focuses. | No crash, no error dialog. The app remains functional. |
+| 3 | Force-quit the GUBER app. Open Safari and manually navigate to a URL that contains the banner (e.g., `https://guberapp.app/studio?credits=success` on an iOS device with a mobile user-agent). Tap the banner link. | The OS prompts to open GUBER or opens it directly, landing on the app home screen. |
+
+Pass criteria: ✅ `guber://` URI scheme registered; tapping the link opens the app without error.
+
+---
+
 ## Sign-off record
 
 Before each App Store submission, a team member must run TC-01 through TC-05 on a
@@ -201,6 +283,13 @@ TC-07 Trust Box on /ai-or-not      [ ] Pass  [ ] Fail  Notes: ___
 TC-08 Scout Plan on /biz           [ ] Pass  [ ] Fail  Notes: ___
 TC-09 Token expiry (negative)      [ ] Pass  [ ] Fail  Notes: ___
 TC-10 Non-iOS fallback             [ ] Pass  [ ] Fail  Notes: ___
+
+Return-to-app banner (TC-11–TC-15)
+TC-11 Banner on /studio after credits purchase      [ ] Pass  [ ] Fail  Notes: ___
+TC-12 Banner on /studio after subscription purchase [ ] Pass  [ ] Fail  Notes: ___
+TC-13 Banner on /og-success after Day-1 OG purchase [ ] Pass  [ ] Fail  Notes: ___
+TC-14 Banner on /ai-or-not after Trust Box purchase [ ] Pass  [ ] Fail  Notes: ___
+TC-15 guber:// deep link opens the app              [ ] Pass  [ ] Fail  Notes: ___
 
 Overall: [ ] APPROVED  [ ] BLOCKED — do not submit
 ```
