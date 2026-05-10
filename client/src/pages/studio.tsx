@@ -268,7 +268,18 @@ const TEMPLATES: Template[] = [
 // only load + play when in view; pauses when scrolled off. `preload="none"`
 // + `poster` keep first paint cheap. Errors silently fall through to the
 // gradient layer behind it.
-function TemplateVideoLoop({ src, poster }: { src: string; poster?: string }) {
+function TemplateVideoLoop({
+  src,
+  poster,
+  onUnavailable,
+}: {
+  src: string;
+  poster?: string;
+  // Round-4 review: when a video fails to load, the parent rail should
+  // remove the entire card — not just hide the <video>. Parent passes a
+  // callback that adds the slug to a failedSlugs Set.
+  onUnavailable?: () => void;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   const [hidden, setHidden] = useState(false);
   useEffect(() => {
@@ -299,7 +310,7 @@ function TemplateVideoLoop({ src, poster }: { src: string; poster?: string }) {
       loop
       playsInline
       preload="none"
-      onError={() => setHidden(true)}
+      onError={() => { setHidden(true); onUnavailable?.(); }}
       className="absolute inset-0 w-full h-full object-cover opacity-90"
     />
   );
@@ -424,9 +435,17 @@ export default function StudioPageV2() {
   const heroOutput = outputs[outputs.length - 1] || null;
   const freeQuota = freeQuotaQuery.data;
   const freeQuickPicEnabled = freeQuota?.enabled ?? true;
+  // Round-4 review: track failed video URLs so we drop dead cards out
+  // of the rails entirely instead of leaving a card-shaped hole. Both
+  // sets are populated by TemplateVideoLoop's onUnavailable callback.
+  const [failedTemplateSlugs, setFailedTemplateSlugs] = useState<Set<string>>(new Set());
+  const [failedFeaturedIds, setFailedFeaturedIds] = useState<Set<number>>(new Set());
   const visibleTemplates = useMemo(
-    () => TEMPLATES.filter((t) => t.slug !== "quick-pic" || freeQuickPicEnabled),
-    [freeQuickPicEnabled],
+    () => TEMPLATES.filter((t) =>
+      (t.slug !== "quick-pic" || freeQuickPicEnabled) &&
+      !failedTemplateSlugs.has(t.slug),
+    ),
+    [freeQuickPicEnabled, failedTemplateSlugs],
   );
 
   // Low-credit nudge — fire once per page-load when balance drops to ≤3.
@@ -947,7 +966,7 @@ export default function StudioPageV2() {
               </Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
-              {featuredQuery.data!.map((clip) => (
+              {featuredQuery.data!.filter((c) => !failedFeaturedIds.has(c.id)).map((clip) => (
                 <button
                   key={clip.id}
                   type="button"
@@ -963,7 +982,11 @@ export default function StudioPageV2() {
                   data-testid={`featured-clip-${clip.slug}`}
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/30 via-violet-500/20 to-fuchsia-500/30" />
-                  <TemplateVideoLoop src={clip.videoUrl} poster={clip.posterUrl ?? undefined} />
+                  <TemplateVideoLoop
+                    src={clip.videoUrl}
+                    poster={clip.posterUrl ?? undefined}
+                    onUnavailable={() => setFailedFeaturedIds((s) => new Set(s).add(clip.id))}
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
                   <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/15 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
                   <div className="absolute top-3 left-3">
@@ -1005,7 +1028,13 @@ export default function StudioPageV2() {
                   data-testid={`template-${t.slug}`}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${t.gradient}`} />
-                  {t.videoUrl && <TemplateVideoLoop src={t.videoUrl} poster={t.posterUrl} />}
+                  {t.videoUrl && (
+                    <TemplateVideoLoop
+                      src={t.videoUrl}
+                      poster={t.posterUrl}
+                      onUnavailable={() => setFailedTemplateSlugs((s) => new Set(s).add(t.slug))}
+                    />
+                  )}
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.25),transparent_60%)] mix-blend-overlay" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
                   <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/15 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
