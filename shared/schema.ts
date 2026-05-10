@@ -1711,6 +1711,7 @@ export const studioModelPricing = pgTable("studio_model_pricing", {
   creditsCost: integer("credits_cost").notNull().default(1),
   durationSeconds: integer("duration_seconds"),
   active: boolean("active").notNull().default(true),
+  tileImageUrl: text("tile_image_url"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 export type StudioModelPricing = typeof studioModelPricing.$inferSelect;

@@ -9819,7 +9819,23 @@ export async function registerRoutes(
       description: t.description,
       creditsCost: t.creditsCost,
       durationSeconds: t.durationSeconds,
+      tileImageUrl: t.tileImageUrl ?? null,
     })));
+  });
+
+  // Admin: set or clear the background image for a Studio tool tile.
+  app.patch("/api/admin/studio/tools/:toolKey/tile-image", requireAdmin, async (req: Request, res: Response) => {
+    const { toolKey } = req.params;
+    const { imageUrl } = req.body as { imageUrl?: string | null };
+    const pricing = await storage.getStudioModelPricing(toolKey);
+    if (!pricing) return res.status(404).json({ message: "Unknown tool key." });
+    await storage.setStudioTileImage(toolKey, imageUrl ?? null);
+    await storage.createAuditLog({
+      userId: req.session.userId!,
+      action: "qa.studio_tile_image_set",
+      details: { toolKey, imageUrl: imageUrl ?? null },
+    });
+    res.json({ ok: true, toolKey, tileImageUrl: imageUrl ?? null });
   });
 
   app.post("/api/studio/session", requireAuth, async (req: Request, res: Response) => {

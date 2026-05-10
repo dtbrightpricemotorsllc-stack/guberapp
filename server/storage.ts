@@ -72,6 +72,7 @@ export interface IStorage {
   // Admin-editable pricing.
   listStudioModelPricing(): Promise<StudioModelPricing[]>;
   getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined>;
+  setStudioTileImage(toolKey: string, imageUrl: string | null): Promise<void>;
   // Free Quick Pic quota (task-520).
   getStudioFreeQuotaUsed(userId: number, day: string): Promise<number>;
   consumeStudioFreeQuota(userId: number, day: string, dailyLimit: number): Promise<number | null>;
@@ -522,6 +523,13 @@ export class DatabaseStorage implements IStorage {
   async getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined> {
     const [row] = await db.select().from(studioModelPricing).where(eq(studioModelPricing.toolKey, toolKey)).limit(1);
     return row;
+  }
+
+  async setStudioTileImage(toolKey: string, imageUrl: string | null): Promise<void> {
+    await db
+      .update(studioModelPricing)
+      .set({ tileImageUrl: imageUrl, updatedAt: new Date() })
+      .where(eq(studioModelPricing.toolKey, toolKey));
   }
 
   async getStudioFreeQuotaUsed(userId: number, day: string): Promise<number> {

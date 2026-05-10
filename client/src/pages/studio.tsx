@@ -63,6 +63,7 @@ type StudioTool = {
   description: string | null;
   creditsCost: number;
   durationSeconds: number | null;
+  tileImageUrl?: string | null;
 };
 type StudioFile = {
   id: number;
@@ -116,6 +117,8 @@ const TIER_LABEL: Record<string, string> = {
 // pricing from /api/studio/tools so the chip updates if admins reprice.
 // `kind` controls the prompt placeholder + tool routing in the prompt box.
 // `wizard` opens the Mirror Motion / Commercial Builder dialogs directly.
+// `dbKey` is the studio_model_pricing.tool_key used to fetch + set the tile
+// background image — may differ from the frontend `key`.
 type ToolTile = {
   key: string;
   label: string;
@@ -123,6 +126,7 @@ type ToolTile = {
   kind: "video" | "audio" | "image";
   icon: React.ComponentType<{ className?: string }>;
   costToolKey: string | null;
+  dbKey: string;
   starterPrompt?: string;
   href: string;
   badge?: string;
@@ -131,38 +135,38 @@ type ToolTile = {
 const TOOL_TILES: ToolTile[] = [
   {
     key: "quick-pic", label: "Quick Pic", blurb: "AI image",
-    kind: "image", icon: ImageIcon, costToolKey: null, badge: "Free",
+    kind: "image", icon: ImageIcon, costToolKey: null, dbKey: "flux_quick_pic", badge: "Free",
     accent: "#00e676",
     href: "/studio",
   },
   {
     key: "text-to-video", label: "Text → Video", blurb: "Motion clip",
-    kind: "video", icon: Film, costToolKey: "wan_motion_5s",
+    kind: "video", icon: Film, costToolKey: "wan_motion_5s", dbKey: "wan_motion_5s",
     accent: "#a78bfa",
     href: "/studio/text-to-video",
   },
   {
     key: "mirror-motion-tile", label: "Mirror Motion", blurb: "Photo + video",
-    kind: "video", icon: Repeat, costToolKey: "mirror_motion",
+    kind: "video", icon: Repeat, costToolKey: "mirror_motion", dbKey: "mirror_motion",
     accent: "#f472b6",
     href: "/studio/mirror-motion",
   },
   {
     key: "build-commercial-tile", label: "Build Ad", blurb: "Full commercial",
-    kind: "video", icon: Megaphone, costToolKey: "commercial_builder",
+    kind: "video", icon: Megaphone, costToolKey: "commercial_builder", dbKey: "commercial_builder",
     badge: "New",
     accent: "#fbbf24",
     href: "/studio/commercial",
   },
   {
     key: "music", label: "Music", blurb: "Instrumental track",
-    kind: "audio", icon: Music, costToolKey: "minimax_music",
+    kind: "audio", icon: Music, costToolKey: "minimax_music", dbKey: "minimax_music",
     accent: "#818cf8",
     href: "/studio/music",
   },
   {
     key: "avatar", label: "Avatar", blurb: "AI portrait",
-    kind: "image", icon: UserRound, costToolKey: null,
+    kind: "image", icon: UserRound, costToolKey: null, dbKey: "avatar",
     badge: "New",
     accent: "#38bdf8",
     href: "/studio/avatar",
@@ -372,9 +376,11 @@ export default function StudioPageV2() {
   // and scroll/focus into the prompt textarea.
   const searchString = useSearch();
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
+  const [tilePickerOpenId, setTilePickerOpenId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const lowCreditNoticeRef = useRef(false);
+  const isAdmin = (user as any)?.role === "admin";
 
   // ── Server state ──────────────────────────────────────────────────────
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
@@ -444,6 +450,27 @@ export default function StudioPageV2() {
   // ── Derived state ──────────────────────────────────────────────────────
   const tools = toolsQuery.data ?? [];
   const me = meQuery.data;
+  // Map dbKey → tileImageUrl for fast lookup in the tile grid.
+  const tileImgMap = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const t of tools) { if (t.tileImageUrl) m[t.key] = t.tileImageUrl; }
+    return m;
+  }, [tools]);
+
+  // Admin mutation: assign a generated image as a tool tile background.
+  const setTileImageMutation = useMutation({
+    mutationFn: async ({ toolDbKey, imageUrl }: { toolDbKey: string; imageUrl: string | null }) => {
+      const res = await apiRequest("PATCH", `/api/admin/studio/tools/${toolDbKey}/tile-image`, { imageUrl });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/tools"] });
+      setTilePickerOpenId(null);
+      toast({ title: "Tile background updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e?.message, variant: "destructive" }),
+  });
   const files = sessionQuery.data?.files ?? [];
   const uploadedImages = files.filter((f) => f.fileType === "upload_image");
   const outputs = files.filter((f) => f.fileType === "output_video" || f.fileType === "output_audio" || f.fileType === "output_image");
@@ -934,6 +961,7 @@ export default function StudioPageV2() {
           <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-5 gap-2.5 sm:gap-3">
             {TOOL_TILES.map((tile) => {
               const TileIcon = tile.icon;
+              const tileBg = tileImgMap[tile.dbKey];
               return (
                 <button
                   key={tile.key}
@@ -947,13 +975,23 @@ export default function StudioPageV2() {
                   }}
                   data-testid={`tool-tile-${tile.key}`}
                 >
+                  {/* full-bleed background image when admin has set one */}
+                  {tileBg && (
+                    <img
+                      src={tileBg}
+                      alt=""
+                      aria-hidden
+                      className="absolute inset-0 w-full h-full object-cover object-center opacity-60"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
                   {/* radial color bloom behind icon */}
                   <div
                     className="absolute inset-0"
-                    style={{ background: `radial-gradient(ellipse at 50% 55%, ${tile.accent}30 0%, transparent 68%)` }}
+                    style={{ background: `radial-gradient(ellipse at 50% 55%, ${tile.accent}${tileBg ? "22" : "30"} 0%, transparent 68%)` }}
                   />
                   {/* bottom fade for text legibility */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                   {/* shimmer sweep on hover */}
                   <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 pointer-events-none" />
                   {/* badge */}
@@ -1325,6 +1363,46 @@ export default function StudioPageV2() {
                         </Button>
                       </a>
                     </div>
+                    {/* Admin: set this image as a tool tile background */}
+                    {isAdmin && o.fileType === "output_image" && (
+                      <div className="mt-1.5 px-1">
+                        {tilePickerOpenId === o.id ? (
+                          <div className="rounded-xl border border-white/10 bg-black/60 backdrop-blur-md p-2 space-y-1">
+                            <p className="text-[9px] uppercase tracking-widest text-white/40 px-1 pb-1">Set as tile background</p>
+                            {TOOL_TILES.map((tile) => (
+                              <button
+                                key={tile.dbKey}
+                                type="button"
+                                disabled={setTileImageMutation.isPending}
+                                onClick={() => setTileImageMutation.mutate({ toolDbKey: tile.dbKey, imageUrl: o.providerUrl })}
+                                className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold transition hover:bg-white/10"
+                                style={{ color: tile.accent }}
+                                data-testid={`btn-set-tile-${tile.dbKey}`}
+                              >
+                                {tile.label}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setTilePickerOpenId(null)}
+                              className="w-full text-left px-2 py-1 text-[10px] text-white/30 hover:text-white/60 transition"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="w-full h-7 text-[10px] text-white/50 hover:text-white hover:bg-white/10"
+                            onClick={() => setTilePickerOpenId(o.id)}
+                            data-testid={`btn-open-tile-picker-${o.id}`}
+                          >
+                            📌 Set as tile
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

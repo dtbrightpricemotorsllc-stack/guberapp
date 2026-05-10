@@ -519,6 +519,14 @@ ALTER TABLE worker_business_projections ADD COLUMN IF NOT EXISTS drone_certified
 -- Apple Sign-In (store launch): apple_sub for native iOS Sign in with Apple
 ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_sub TEXT;
 
+-- task-597: admin-assignable tile image backgrounds for Studio tool tiles
+ALTER TABLE studio_model_pricing ADD COLUMN IF NOT EXISTS tile_image_url text;
+
+-- Ensure the avatar tool key exists so admins can assign a tile background to it
+INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active)
+VALUES ('avatar', 'Avatar Creator', 'Photo → stylized AI portrait.', 'fal-ai/flux/schnell', 0, true)
+ON CONFLICT (tool_key) DO NOTHING;
+
 -- Studio v2 feature flag: restrict to admin-only by default so admins can
 -- preview and then flip to "global" in the Feature Flag Console when ready.
 UPDATE feature_flags
