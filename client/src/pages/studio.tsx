@@ -380,7 +380,7 @@ export default function StudioPageV2() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const lowCreditNoticeRef = useRef(false);
-  const isAdmin = (user as any)?.role === "admin";
+  const isAdmin = user?.role === "admin";
 
   // ── Server state ──────────────────────────────────────────────────────
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
@@ -469,7 +469,7 @@ export default function StudioPageV2() {
       setTilePickerOpenId(null);
       toast({ title: "Tile background updated" });
     },
-    onError: (e: any) => toast({ title: "Error", description: e?.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Error", description: e?.message, variant: "destructive" }),
   });
   const files = sessionQuery.data?.files ?? [];
   const uploadedImages = files.filter((f) => f.fileType === "upload_image");
@@ -1369,17 +1369,33 @@ export default function StudioPageV2() {
                         {tilePickerOpenId === o.id ? (
                           <div className="rounded-xl border border-white/10 bg-black/60 backdrop-blur-md p-2 space-y-1">
                             <p className="text-[9px] uppercase tracking-widest text-white/40 px-1 pb-1">Set as tile background</p>
-                            {TOOL_TILES.map((tile) => (
+                            {TOOL_TILES.map((tile) => {
+                              const hasThisImg = tileImgMap[tile.dbKey] === o.providerUrl;
+                              return (
+                                <button
+                                  key={tile.dbKey}
+                                  type="button"
+                                  disabled={setTileImageMutation.isPending}
+                                  onClick={() => setTileImageMutation.mutate({ toolDbKey: tile.dbKey, imageUrl: o.providerUrl })}
+                                  className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold transition hover:bg-white/10"
+                                  style={{ color: tile.accent }}
+                                  data-testid={`btn-set-tile-${tile.dbKey}`}
+                                >
+                                  {tile.label}{hasThisImg ? " ✓" : ""}
+                                </button>
+                              );
+                            })}
+                            {/* Remove background — only shown for tiles that already have any background set */}
+                            {TOOL_TILES.filter((tile) => tileImgMap[tile.dbKey]).map((tile) => (
                               <button
-                                key={tile.dbKey}
+                                key={`remove-${tile.dbKey}`}
                                 type="button"
                                 disabled={setTileImageMutation.isPending}
-                                onClick={() => setTileImageMutation.mutate({ toolDbKey: tile.dbKey, imageUrl: o.providerUrl })}
-                                className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold transition hover:bg-white/10"
-                                style={{ color: tile.accent }}
-                                data-testid={`btn-set-tile-${tile.dbKey}`}
+                                onClick={() => setTileImageMutation.mutate({ toolDbKey: tile.dbKey, imageUrl: null })}
+                                className="w-full text-left px-2 py-1 rounded-lg text-[10px] text-red-400/70 hover:text-red-400 hover:bg-white/5 transition"
+                                data-testid={`btn-remove-tile-${tile.dbKey}`}
                               >
-                                {tile.label}
+                                ✕ Remove: {tile.label}
                               </button>
                             ))}
                             <button
