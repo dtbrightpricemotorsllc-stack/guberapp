@@ -731,6 +731,140 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json({ ok: true });
   });
 
+  // ── Studio usage / refunds dashboard (task-553) ─────────────────────────
+  // Aggregate read-only view over `studio_generation_log`. Powers the
+  // "Studio Usage" admin tab so launch-day spikes, provider outages, and
+  // runaway refund loops are visible at a glance. Returns:
+  //   - totals over the last 24h and 7d (counts + credits, by status)
+  //   - per-tool breakdown over both windows
+  //   - hourly time-series for the last 24h (per-tool counts + credits)
+  //   - daily time-series for the last 7d
+  //   - last 25 `failed` rows for quick triage
+  app.get("/api/admin/qa/studio/usage", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const totalsByWindow = async (sinceSql: any) => {
+        const r = await db.execute(sql`
+          SELECT
+            status,
+            COUNT(*)::int AS n,
+            COALESCE(SUM(credits_cost), 0)::int AS credits
+          FROM studio_generation_log
+          WHERE created_at >= ${sinceSql}
+          GROUP BY status
+        `);
+        const out = { succeeded: { n: 0, credits: 0 }, refunded: { n: 0, credits: 0 }, failed: { n: 0, credits: 0 } } as Record<string, { n: number; credits: number }>;
+        for (const row of r.rows as any[]) {
+          const k = String(row.status || "");
+          if (!out[k]) out[k] = { n: 0, credits: 0 };
+          out[k].n = Number(row.n) || 0;
+          out[k].credits = Number(row.credits) || 0;
+        }
+        return out;
+      };
+
+      const perToolByWindow = async (sinceSql: any) => {
+        const r = await db.execute(sql`
+          SELECT
+            tool_key,
+            status,
+            COUNT(*)::int AS n,
+            COALESCE(SUM(credits_cost), 0)::int AS credits
+          FROM studio_generation_log
+          WHERE created_at >= ${sinceSql}
+          GROUP BY tool_key, status
+          ORDER BY tool_key
+        `);
+        const map: Record<string, { tool: string; succeeded: number; refunded: number; failed: number; credits: number }> = {};
+        for (const row of r.rows as any[]) {
+          const tool = String(row.tool_key || "unknown");
+          const status = String(row.status || "");
+          const n = Number(row.n) || 0;
+          const credits = Number(row.credits) || 0;
+          if (!map[tool]) map[tool] = { tool, succeeded: 0, refunded: 0, failed: 0, credits: 0 };
+          if (status === "succeeded") map[tool].succeeded = n;
+          else if (status === "refunded") map[tool].refunded = n;
+          else if (status === "failed") map[tool].failed = n;
+          map[tool].credits += credits;
+        }
+        return Object.values(map).sort((a, b) => (b.succeeded + b.refunded + b.failed) - (a.succeeded + a.refunded + a.failed));
+      };
+
+      const hourly24 = await db.execute(sql`
+        SELECT
+          date_trunc('hour', created_at) AS bucket,
+          tool_key,
+          status,
+          COUNT(*)::int AS n,
+          COALESCE(SUM(credits_cost), 0)::int AS credits
+        FROM studio_generation_log
+        WHERE created_at >= NOW() - INTERVAL '24 hours'
+        GROUP BY bucket, tool_key, status
+        ORDER BY bucket
+      `);
+
+      const daily7 = await db.execute(sql`
+        SELECT
+          date_trunc('day', created_at) AS bucket,
+          status,
+          COUNT(*)::int AS n,
+          COALESCE(SUM(credits_cost), 0)::int AS credits
+        FROM studio_generation_log
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY bucket, status
+        ORDER BY bucket
+      `);
+
+      const recentFailures = await db.execute(sql`
+        SELECT id, user_id, tool_key, status, error_reason, credits_cost, created_at
+        FROM studio_generation_log
+        WHERE status IN ('failed', 'refunded')
+        ORDER BY id DESC
+        LIMIT 25
+      `);
+
+      const sinceDay = sql`NOW() - INTERVAL '24 hours'`;
+      const sinceWeek = sql`NOW() - INTERVAL '7 days'`;
+      const [totals24h, totals7d, perTool24h, perTool7d] = await Promise.all([
+        totalsByWindow(sinceDay),
+        totalsByWindow(sinceWeek),
+        perToolByWindow(sinceDay),
+        perToolByWindow(sinceWeek),
+      ]);
+
+      res.json({
+        generatedAt: new Date().toISOString(),
+        totals24h,
+        totals7d,
+        perTool24h,
+        perTool7d,
+        hourly24: (hourly24.rows as any[]).map((r) => ({
+          bucket: r.bucket,
+          toolKey: String(r.tool_key || ""),
+          status: String(r.status || ""),
+          n: Number(r.n) || 0,
+          credits: Number(r.credits) || 0,
+        })),
+        daily7: (daily7.rows as any[]).map((r) => ({
+          bucket: r.bucket,
+          status: String(r.status || ""),
+          n: Number(r.n) || 0,
+          credits: Number(r.credits) || 0,
+        })),
+        recentFailures: (recentFailures.rows as any[]).map((r) => ({
+          id: Number(r.id),
+          userId: Number(r.user_id),
+          toolKey: String(r.tool_key || ""),
+          status: String(r.status || ""),
+          errorReason: r.error_reason ? String(r.error_reason) : null,
+          creditsCost: Number(r.credits_cost) || 0,
+          createdAt: r.created_at,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
+    }
+  });
+
   // ── Studio orphan-asset sweep (task-542 / task-544 / task-547) ───────────
   // GET — returns the last 12 `studio_orphan_sweep` audit_log rows (parsed
   // into a `history` array for the trend chart), the most recent run as

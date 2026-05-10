@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity } from "lucide-react";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -619,6 +619,374 @@ function OrphanSweepTab() {
   );
 }
 
+type StudioUsageTotals = { succeeded: { n: number; credits: number }; refunded: { n: number; credits: number }; failed: { n: number; credits: number } };
+type StudioUsagePerTool = { tool: string; succeeded: number; refunded: number; failed: number; credits: number };
+type StudioUsageHourly = { bucket: string; toolKey: string; status: string; n: number; credits: number };
+type StudioUsageDaily = { bucket: string; status: string; n: number; credits: number };
+type StudioUsageFailure = { id: number; userId: number; toolKey: string; status: string; errorReason: string | null; creditsCost: number; createdAt: string };
+type StudioUsageResponse = {
+  generatedAt: string;
+  totals24h: StudioUsageTotals;
+  totals7d: StudioUsageTotals;
+  perTool24h: StudioUsagePerTool[];
+  perTool7d: StudioUsagePerTool[];
+  hourly24: StudioUsageHourly[];
+  daily7: StudioUsageDaily[];
+  recentFailures: StudioUsageFailure[];
+};
+
+function pct(num: number, denom: number): string {
+  if (!denom) return "0.0%";
+  return `${((num / denom) * 100).toFixed(1)}%`;
+}
+
+function StudioUsageTotalsCard({ title, totals }: { title: string; totals: StudioUsageTotals }) {
+  // Status semantics in studio_generation_log (set by runStudioGeneration):
+  //   succeeded — provider returned, credits stay deducted.
+  //   refunded  — provider failed, credits already refunded back to user.
+  //   failed    — bookkeeping fallback (rare); treated as a non-success.
+  // Provider error rate counts both refunded + failed since both indicate
+  // the user did NOT get the output they paid for. Refund rate is the
+  // narrower "we already returned credits" subset.
+  const total = totals.succeeded.n + totals.refunded.n + totals.failed.n;
+  const creditsCharged = totals.succeeded.credits + totals.refunded.credits + totals.failed.credits;
+  const creditsRefunded = totals.refunded.credits + totals.failed.credits;
+  const creditsNet = creditsCharged - creditsRefunded;
+  const providerErrorRate = pct(totals.refunded.n + totals.failed.n, total);
+  const refundRate = pct(totals.refunded.n, total);
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Generations</div>
+            <div className="text-lg font-semibold" data-testid={`text-usage-total-${title}`}>{total}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Succeeded</div>
+            <div className="text-lg font-semibold text-green-600">{totals.succeeded.n}</div>
+          </div>
+          <div title="Provider failed AFTER charge — credits already refunded back to user.">
+            <div className="text-xs text-muted-foreground">Refunded</div>
+            <div className="text-lg font-semibold text-yellow-600" data-testid={`text-usage-refunded-${title}`}>{totals.refunded.n} <span className="text-xs font-normal text-muted-foreground">({refundRate})</span></div>
+          </div>
+          <div title="Bookkeeping failure — counted as a non-success.">
+            <div className="text-xs text-muted-foreground">Failed</div>
+            <div className="text-lg font-semibold text-red-600">{totals.failed.n}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Credits charged (gross)</div>
+            <div className="text-lg font-semibold">{creditsCharged}</div>
+          </div>
+          <div title="Refunded + failed credits returned to users.">
+            <div className="text-xs text-muted-foreground">Credits refunded</div>
+            <div className="text-lg font-semibold text-yellow-600">{creditsRefunded}</div>
+          </div>
+          <div title="Gross charged minus credits refunded — what users actually spent.">
+            <div className="text-xs text-muted-foreground">Net credits spent</div>
+            <div className="text-lg font-semibold" data-testid={`text-usage-net-${title}`}>{creditsNet}</div>
+          </div>
+          <div title="Refunded + failed as a share of all generations.">
+            <div className="text-xs text-muted-foreground">Provider error rate</div>
+            <div className={`text-lg font-semibold ${(totals.refunded.n + totals.failed.n) / Math.max(total, 1) > 0.1 ? "text-red-600" : ""}`}>{providerErrorRate}</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StudioUsageTab() {
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<StudioUsageResponse>({
+    queryKey: ["/api/admin/qa/studio/usage"],
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading) return <div className="p-4 text-sm">Loading…</div>;
+  if (isError || !data) {
+    return (
+      <Card><CardContent className="p-4 text-sm text-red-600">Failed to load Studio usage.</CardContent></Card>
+    );
+  }
+
+  // Roll the hourly rows up into one bucket-per-hour series for the sparkline.
+  const hourlyMap = new Map<string, { total: number; refunded: number; failed: number }>();
+  for (const row of data.hourly24) {
+    const key = String(row.bucket);
+    const cur = hourlyMap.get(key) || { total: 0, refunded: 0, failed: 0 };
+    cur.total += row.n;
+    if (row.status === "refunded") cur.refunded += row.n;
+    if (row.status === "failed") cur.failed += row.n;
+    hourlyMap.set(key, cur);
+  }
+  const hourlyKeys = Array.from(hourlyMap.keys()).sort();
+  const hourlyTotals = hourlyKeys.map((k) => hourlyMap.get(k)!.total);
+  const hourlyErrors = hourlyKeys.map((k) => (hourlyMap.get(k)!.refunded + hourlyMap.get(k)!.failed));
+
+  const dailyMap = new Map<string, { total: number; refunded: number; failed: number; credits: number }>();
+  for (const row of data.daily7) {
+    const key = String(row.bucket);
+    const cur = dailyMap.get(key) || { total: 0, refunded: 0, failed: 0, credits: 0 };
+    cur.total += row.n;
+    cur.credits += row.credits;
+    if (row.status === "refunded") cur.refunded += row.n;
+    if (row.status === "failed") cur.failed += row.n;
+    dailyMap.set(key, cur);
+  }
+  const dailyRows = Array.from(dailyMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground" data-testid="text-usage-generated-at">
+          Generated {new Date(data.generatedAt).toLocaleTimeString()} · auto-refreshes every minute
+        </div>
+        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} data-testid="button-usage-refresh">
+          {isFetching ? "Refreshing…" : "Refresh"}
+        </Button>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <StudioUsageTotalsCard title="Last 24h" totals={data.totals24h} />
+        <StudioUsageTotalsCard title="Last 7d" totals={data.totals7d} />
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Hourly volume — last 24h</CardTitle></CardHeader>
+        <CardContent>
+          {hourlyKeys.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No generations in the last 24h.</div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">Total generations per hour (all tools)</div>
+                <Sparkline values={hourlyTotals} />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">Refunded + failed per hour (all tools)</div>
+                <Sparkline values={hourlyErrors} />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {(() => {
+        // Per-tool hourly series — keep tool dimension so admins can pinpoint
+        // which provider/tool drove a spike or outage in the last 24h.
+        const toolHourly = new Map<string, Map<string, { total: number; errors: number }>>();
+        const allBuckets = new Set<string>();
+        for (const row of data.hourly24) {
+          const bucketKey = String(row.bucket);
+          allBuckets.add(bucketKey);
+          let toolMap = toolHourly.get(row.toolKey);
+          if (!toolMap) { toolMap = new Map(); toolHourly.set(row.toolKey, toolMap); }
+          const cur = toolMap.get(bucketKey) || { total: 0, errors: 0 };
+          cur.total += row.n;
+          if (row.status === "refunded" || row.status === "failed") cur.errors += row.n;
+          toolMap.set(bucketKey, cur);
+        }
+        const buckets = Array.from(allBuckets).sort();
+        const tools = Array.from(toolHourly.keys()).sort();
+        return (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Per-tool hourly — last 24h</CardTitle></CardHeader>
+            <CardContent>
+              {tools.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No generations in the last 24h.</div>
+              ) : (
+                <div className="space-y-4">
+                  {tools.map((tool) => {
+                    const toolMap = toolHourly.get(tool)!;
+                    const totals = buckets.map((b) => toolMap.get(b)?.total ?? 0);
+                    const errors = buckets.map((b) => toolMap.get(b)?.errors ?? 0);
+                    const sumTotal = totals.reduce((a, b) => a + b, 0);
+                    const sumErrors = errors.reduce((a, b) => a + b, 0);
+                    const peakHour = buckets[totals.indexOf(Math.max(...totals))];
+                    return (
+                      <div key={tool} className="rounded border p-3" data-testid={`row-usage-tool-hourly-${tool}`}>
+                        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                          <div className="font-mono">{tool}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {sumTotal} runs · {sumErrors} refunded/failed ({pct(sumErrors, sumTotal)}) · peak hour {peakHour ? new Date(peakHour).toLocaleTimeString([], { hour: "numeric" }) : "—"}
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Generations / hour</div>
+                            <Sparkline values={totals} />
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">Refunded + failed / hour</div>
+                            <Sparkline values={errors} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Per-tool — last 24h</CardTitle></CardHeader>
+        <CardContent>
+          {data.perTool24h.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No generations in the last 24h.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-2">Tool</th>
+                    <th className="py-1 pr-2 text-right">Succeeded</th>
+                    <th className="py-1 pr-2 text-right">Refunded</th>
+                    <th className="py-1 pr-2 text-right">Failed</th>
+                    <th className="py-1 pr-2 text-right">Refund rate</th>
+                    <th className="py-1 pr-2 text-right">Credits charged</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.perTool24h.map((t) => {
+                    const total = t.succeeded + t.refunded + t.failed;
+                    const refundRate = pct(t.refunded + t.failed, total);
+                    const hot = (t.refunded + t.failed) / Math.max(total, 1) > 0.15 && total >= 5;
+                    return (
+                      <tr key={t.tool} data-testid={`row-usage-tool-${t.tool}`}>
+                        <td className="py-1 pr-2 font-mono">{t.tool}</td>
+                        <td className="py-1 pr-2 text-right text-green-600">{t.succeeded}</td>
+                        <td className="py-1 pr-2 text-right text-yellow-600">{t.refunded}</td>
+                        <td className="py-1 pr-2 text-right text-red-600">{t.failed}</td>
+                        <td className={`py-1 pr-2 text-right ${hot ? "font-bold text-red-600" : ""}`}>{refundRate}</td>
+                        <td className="py-1 pr-2 text-right">{t.credits}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Per-tool — last 7d</CardTitle></CardHeader>
+        <CardContent>
+          {data.perTool7d.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No generations in the last 7d.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-2">Tool</th>
+                    <th className="py-1 pr-2 text-right">Succeeded</th>
+                    <th className="py-1 pr-2 text-right">Refunded</th>
+                    <th className="py-1 pr-2 text-right">Failed</th>
+                    <th className="py-1 pr-2 text-right">Refund rate</th>
+                    <th className="py-1 pr-2 text-right">Credits charged</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.perTool7d.map((t) => {
+                    const total = t.succeeded + t.refunded + t.failed;
+                    return (
+                      <tr key={t.tool}>
+                        <td className="py-1 pr-2 font-mono">{t.tool}</td>
+                        <td className="py-1 pr-2 text-right text-green-600">{t.succeeded}</td>
+                        <td className="py-1 pr-2 text-right text-yellow-600">{t.refunded}</td>
+                        <td className="py-1 pr-2 text-right text-red-600">{t.failed}</td>
+                        <td className="py-1 pr-2 text-right">{pct(t.refunded + t.failed, total)}</td>
+                        <td className="py-1 pr-2 text-right">{t.credits}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Daily — last 7d</CardTitle></CardHeader>
+        <CardContent>
+          {dailyRows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No generations in the last 7d.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-2">Day</th>
+                    <th className="py-1 pr-2 text-right">Total</th>
+                    <th className="py-1 pr-2 text-right">Refunded</th>
+                    <th className="py-1 pr-2 text-right">Failed</th>
+                    <th className="py-1 pr-2 text-right">Credits charged</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {dailyRows.map(([day, v]) => (
+                    <tr key={day}>
+                      <td className="py-1 pr-2">{new Date(day).toLocaleDateString()}</td>
+                      <td className="py-1 pr-2 text-right">{v.total}</td>
+                      <td className="py-1 pr-2 text-right text-yellow-600">{v.refunded}</td>
+                      <td className="py-1 pr-2 text-right text-red-600">{v.failed}</td>
+                      <td className="py-1 pr-2 text-right">{v.credits}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Recent failures &amp; refunds</CardTitle></CardHeader>
+        <CardContent>
+          {data.recentFailures.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No failures or refunds on file.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-2">When</th>
+                    <th className="py-1 pr-2">User</th>
+                    <th className="py-1 pr-2">Tool</th>
+                    <th className="py-1 pr-2">Status</th>
+                    <th className="py-1 pr-2 text-right">Credits</th>
+                    <th className="py-1 pr-2">Error</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.recentFailures.map((f) => (
+                    <tr key={f.id} data-testid={`row-usage-failure-${f.id}`}>
+                      <td className="py-1 pr-2 whitespace-nowrap">{f.createdAt ? new Date(f.createdAt).toLocaleString() : "—"}</td>
+                      <td className="py-1 pr-2"><UserLink userId={f.userId} label={`#${f.userId}`} /></td>
+                      <td className="py-1 pr-2 font-mono">{f.toolKey}</td>
+                      <td className="py-1 pr-2">
+                        <Badge variant={f.status === "refunded" ? "outline" : "destructive"}>{f.status}</Badge>
+                      </td>
+                      <td className="py-1 pr-2 text-right">{f.creditsCost}</td>
+                      <td className="py-1 pr-2 text-red-600">{f.errorReason || ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function CashDropDebuggerTab() {
   const [id, setId] = useState("");
   return (
@@ -653,6 +1021,7 @@ export default function AdminQa() {
           <TabsTrigger value="flags" data-testid="tab-flags"><Flag className="mr-1 h-3 w-3" />Feature Flags</TabsTrigger>
           <TabsTrigger value="push" data-testid="tab-push"><Bell className="mr-1 h-3 w-3" />Push Log</TabsTrigger>
           <TabsTrigger value="orphan-sweep" data-testid="tab-orphan-sweep"><Trash2 className="mr-1 h-3 w-3" />Orphan Sweep</TabsTrigger>
+          <TabsTrigger value="studio-usage" data-testid="tab-studio-usage"><Activity className="mr-1 h-3 w-3" />Studio Usage</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -678,6 +1047,7 @@ export default function AdminQa() {
           </Card>
         </TabsContent>
         <TabsContent value="orphan-sweep"><OrphanSweepTab /></TabsContent>
+        <TabsContent value="studio-usage"><StudioUsageTab /></TabsContent>
       </Tabs>
     </div>
   );
