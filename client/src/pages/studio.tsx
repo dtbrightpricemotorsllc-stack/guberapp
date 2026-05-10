@@ -32,7 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -47,7 +46,7 @@ import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
   Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
-  Repeat, ChevronRight,
+  Repeat, ChevronRight, UserRound,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -160,6 +159,13 @@ const TOOL_TILES: ToolTile[] = [
     kind: "audio", icon: Music, costToolKey: "minimax_music",
     accent: "#818cf8",
     href: "/studio/music",
+  },
+  {
+    key: "avatar", label: "Avatar", blurb: "AI portrait",
+    kind: "image", icon: UserRound, costToolKey: null,
+    badge: "New",
+    accent: "#38bdf8",
+    href: "/studio/avatar",
   },
 ];
 
@@ -683,27 +689,14 @@ export default function StudioPageV2() {
 
         <div className="relative z-10 max-w-2xl mx-auto px-5 pt-6 pb-12">
           <div className="flex items-center justify-between gap-3 mb-8">
-            <div className="flex items-center gap-2">
-              <Link href="/profile" data-testid="link-studio-avatar">
-                <Avatar className="w-8 h-8 ring-2 ring-emerald-400/40 hover:ring-emerald-400/70 transition-all shadow-[0_0_10px_rgba(0,230,118,0.25)]">
-                  {user?.profilePhoto ? (
-                    <AvatarImage src={user.profilePhoto} alt={(user as any).fullName || "Profile"} className="object-cover" />
-                  ) : null}
-                  <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-cyan-600 text-black text-[11px] font-black">
-                    {((user as any)?.fullName || (user as any)?.username || "?")
-                      .split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setConfirmExit(true)}
-                className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
-                data-testid="button-studio-exit"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" /> Exit
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setConfirmExit(true)}
+              className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
+              data-testid="button-studio-exit"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Exit
+            </button>
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_0_24px_rgba(34,197,94,0.5)]">
                 <Wand2 className="w-5 h-5 text-black" />

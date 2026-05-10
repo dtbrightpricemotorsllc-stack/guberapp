@@ -68,6 +68,7 @@ const StudioMirrorMotion = lazy(() => import("@/pages/studio-mirror-motion"));
 const StudioCommercial = lazy(() => import("@/pages/studio-commercial"));
 const StudioTextToVideo = lazy(() => import("@/pages/studio-text-to-video"));
 const StudioMusic = lazy(() => import("@/pages/studio-music"));
+const StudioAvatar = lazy(() => import("@/pages/studio-avatar"));
 const Investors = lazy(() => import("@/pages/investors"));
 const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
 
@@ -282,6 +283,7 @@ function Router() {
       <Route path="/studio/commercial" component={() => <ProtectedRoute component={StudioCommercial} />} />
       <Route path="/studio/text-to-video" component={() => <ProtectedRoute component={StudioTextToVideo} />} />
       <Route path="/studio/music" component={() => <ProtectedRoute component={StudioMusic} />} />
+      <Route path="/studio/avatar" component={() => <ProtectedRoute component={StudioAvatar} />} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />
