@@ -570,7 +570,7 @@ export default function BizDashboard() {
         </div>
 
       </div>
-      <MobileReturnBanner show={purchaseSuccess} />
+      <MobileReturnBanner show={purchaseSuccess} paramsToStrip={["subscribed"]} />
     </BizLayout>
   );
 }

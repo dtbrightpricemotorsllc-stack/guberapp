@@ -90,7 +90,7 @@ export default function StudioCreditsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-white px-4 sm:px-6 py-8">
-      <MobileReturnBanner show={purchaseSuccess} />
+      <MobileReturnBanner show={purchaseSuccess} paramsToStrip={["credits", "subscription"]} />
       <div className="max-w-5xl mx-auto">
         <Link href="/studio">
           <button className="text-white/70 text-sm flex items-center gap-1 mb-6" data-testid="link-back-studio">

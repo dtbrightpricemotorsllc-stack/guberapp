@@ -638,7 +638,7 @@ export default function StudioPageV2() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-32" data-testid="page-studio">
-      <MobileReturnBanner show={studioPurchaseSuccess} />
+      <MobileReturnBanner show={studioPurchaseSuccess} paramsToStrip={["credits", "subscription"]} />
       {/* ─── HERO ─────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
         {/* Cinematic background — last clip if available, otherwise animated gradient + grain */}

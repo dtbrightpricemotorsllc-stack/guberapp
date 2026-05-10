@@ -198,6 +198,55 @@ test("MobileReturnBanner: visible on /og-success with session_id param (Day-1 OG
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TC-15 (task-583): purchase param is stripped from URL after banner mounts
+// ─────────────────────────────────────────────────────────────────────────────
+test("MobileReturnBanner: credits=success param is stripped from URL after banner appears", async ({
+  browser,
+}) => {
+  const iphone = devices["iPhone 12"];
+  const context = await browser.newContext({ ...iphone });
+  const page = await context.newPage();
+
+  try {
+    await loginAs(page, DEMO_EMAIL, DEMO_PASSWORD);
+    await page.goto("/studio/credits?credits=success");
+
+    // Wait for banner to appear — this is when the effect runs
+    await expect(
+      page.getByTestId("banner-mobile-return")
+    ).toBeVisible({ timeout: 8_000 });
+
+    // After banner mounts the param must be gone from the address bar
+    const search = await page.evaluate(() => window.location.search);
+    expect(search).not.toContain("credits=success");
+  } finally {
+    await context.close();
+  }
+});
+
+test("MobileReturnBanner: credits=success param stripped on /studio after banner appears", async ({
+  browser,
+}) => {
+  const iphone = devices["iPhone 12"];
+  const context = await browser.newContext({ ...iphone });
+  const page = await context.newPage();
+
+  try {
+    await loginAs(page, DEMO_EMAIL, DEMO_PASSWORD);
+    await page.goto("/studio?credits=success");
+
+    await expect(
+      page.getByTestId("banner-mobile-return")
+    ).toBeVisible({ timeout: 10_000 });
+
+    const search = await page.evaluate(() => window.location.search);
+    expect(search).not.toContain("credits=success");
+  } finally {
+    await context.close();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TC-14 (task-576): banner visible on /ai-or-not?trustbox=success (Trust Box)
 // success_url for trust_box product is /ai-or-not?trustbox=success
 // ─────────────────────────────────────────────────────────────────────────────

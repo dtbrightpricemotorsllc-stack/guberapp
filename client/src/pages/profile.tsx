@@ -526,7 +526,7 @@ export default function Profile() {
 
   return (
     <GuberLayout>
-      <MobileReturnBanner show={showReturnBanner} />
+      <MobileReturnBanner show={showReturnBanner} paramsToStrip={["day1og", "trustbox"]} />
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-profile">
         <Card className="glass-card rounded-xl p-6 mb-4 animate-fade-in">
           <div className="flex flex-col items-center text-center">
