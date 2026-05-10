@@ -9535,7 +9535,7 @@ export async function registerRoutes(
             quantity: 1,
           }],
           mode: "payment",
-          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/og-success?session_id={CHECKOUT_SESSION_ID}&purchased=1`),
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/profile?day1og=success`),
           cancel_url: `${APP_BASE}/profile`,
           metadata: { userId: String(user.id), userEmail: user.email, type: "day1og" },
         });
@@ -9553,7 +9553,7 @@ export async function registerRoutes(
           customer_email: user.email,
           line_items: [{ price: TRUST_BOX_PAYROLL_PRICE_ID, quantity: 1 }],
           mode: "subscription",
-          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/ai-or-not?trustbox=success&purchased=1`),
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/profile?trustbox=success`),
           cancel_url: `${APP_BASE}/ai-or-not`,
           subscription_data: {
             metadata: { userId: String(user.id), userEmail: user.email, type: "trust_box" },

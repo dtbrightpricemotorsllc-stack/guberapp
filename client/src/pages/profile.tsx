@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { buildReferralShareText } from "@/lib/referral";
 import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
@@ -385,6 +386,13 @@ export default function Profile() {
   }
 
   const [location] = useLocation();
+
+  const showReturnBanner = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const p = new URLSearchParams(window.location.search);
+    return p.get("day1og") === "success" || p.get("trustbox") === "success";
+  }, [location]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connectParam = params.get("connect");
@@ -395,6 +403,10 @@ export default function Profile() {
     } else if (connectParam === "refresh") {
       toast({ title: "Let's try again", description: "Your onboarding session expired. Click 'Set Up Payouts' to restart.", variant: "destructive" });
       window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("day1og") === "success" || params.get("trustbox") === "success") {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
     }
   }, [location]);
 
@@ -514,6 +526,7 @@ export default function Profile() {
 
   return (
     <GuberLayout>
+      <MobileReturnBanner show={showReturnBanner} />
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-profile">
         <Card className="glass-card rounded-xl p-6 mb-4 animate-fade-in">
           <div className="flex flex-col items-center text-center">
