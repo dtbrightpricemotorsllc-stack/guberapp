@@ -599,11 +599,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(studioFeaturedClips.slug, data.slug))
       .limit(1);
     if (existing) throw new DuplicateSlugError(data.slug);
+    // Wrap in try/catch to handle the TOCTOU race window: two simultaneous POSTs
+    // can both pass the SELECT guard above; the one that loses the INSERT race will
+    // hit the DB unique constraint (code 23505) and must surface as DuplicateSlugError
+    // so the route handler can return 409 without inspecting raw Postgres error strings.
     try {
       const [row] = await db.insert(studioFeaturedClips).values(data).returning();
       return row;
-    } catch (e: any) {
-      if (e?.code === "23505") throw new DuplicateSlugError(data.slug);
+    } catch (e: unknown) {
+      if (typeof e === "object" && e !== null && (e as { code?: string }).code === "23505") {
+        throw new DuplicateSlugError(data.slug);
+      }
       throw e;
     }
   }

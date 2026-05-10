@@ -282,6 +282,15 @@ describe("Admin featured-clips POST — duplicate-slug handling (task-613)", () 
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/slug already exists/i);
   });
+
+  // task-626: race-condition path — the storage layer catches the DB 23505 error
+  // and surfaces it as DuplicateSlugError; the route must still return 409.
+  it("returns 409 on the race-condition path (storage converts 23505 → DuplicateSlugError)", async () => {
+    mockCreateFeaturedClip.mockRejectedValueOnce(new DuplicateSlugError(VALID.slug));
+    const res = await adminAgent.post("/api/admin/studio/featured").send(VALID);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/slug already exists/i);
+  });
 });
 
 // ── PATCH — validation (task-613) ─────────────────────────────────────────────
