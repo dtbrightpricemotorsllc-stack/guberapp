@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
 import { lookupZip, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -9812,7 +9813,11 @@ export async function registerRoutes(
   });
 
   app.get("/api/studio/tools", async (_req: Request, res: Response) => {
-    const tools = await storage.listStudioModelPricing();
+    let tools = getStudioToolsCache();
+    if (!tools) {
+      tools = await storage.listStudioModelPricing();
+      setStudioToolsCache(tools);
+    }
     res.json(tools.map((t) => ({
       key: t.toolKey,
       label: t.label,
