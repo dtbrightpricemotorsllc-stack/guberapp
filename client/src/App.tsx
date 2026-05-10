@@ -310,7 +310,7 @@ function Router() {
   );
 }
 
-function NativeDeepLinkHandler() {
+export function NativeDeepLinkHandler() {
   const [, setLocation] = useLocation();
   const { logout } = useAuth();
   const { toast } = useToast();
