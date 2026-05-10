@@ -329,11 +329,11 @@ function StudioComingSoon() {
           AI-powered content creation is coming soon. Admins are currently testing — we'll open it up shortly.
         </p>
       </div>
-      <Link href="/">
-        <Button variant="outline" className="border-white/20 text-white hover:bg-white/10 rounded-xl">
+      <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/10 rounded-xl">
+        <Link href="/">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back home
-        </Button>
-      </Link>
+        </Link>
+      </Button>
     </div>
   );
 }
@@ -596,7 +596,7 @@ export default function StudioPageV2() {
     return (
       <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center gap-4 p-6">
         <p>You need to be signed in to use the Studio.</p>
-        <Link href="/auth"><Button>Sign in</Button></Link>
+        <Button asChild><Link href="/auth">Sign in</Link></Button>
       </div>
     );
   }
@@ -696,17 +696,15 @@ export default function StudioPageV2() {
                   <span className="text-xs font-bold tabular-nums">{credits}</span>
                 </div>
               ) : (
-                <Link href="/studio/credits">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 hover:bg-white/15 transition"
-                    data-testid="text-studio-credits"
-                    aria-label="Open credit packs"
-                  >
-                    <Coins className="w-3.5 h-3.5 text-amber-300" />
-                    <span className="text-xs font-bold tabular-nums">{credits}</span>
-                    <Plus className="w-3 h-3 text-white/60" />
-                  </button>
+                <Link
+                  href="/studio/credits"
+                  className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5 hover:bg-white/15 transition"
+                  data-testid="text-studio-credits"
+                  aria-label="Open credit packs"
+                >
+                  <Coins className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="text-xs font-bold tabular-nums">{credits}</span>
+                  <Plus className="w-3 h-3 text-white/60" />
                 </Link>
               )}
               {(freeQuota?.enabled ?? true) && (
@@ -731,20 +729,18 @@ export default function StudioPageV2() {
                   {TIER_LABEL[tier] || tier}
                 </Badge>
               ) : (
-                <Link href="/studio/credits">
-                  <button
-                    type="button"
-                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition border backdrop-blur-md ${
-                      tier === "free"
-                        ? "bg-emerald-400/15 border-emerald-400/40 text-emerald-100 hover:bg-emerald-400/25"
-                        : "bg-gradient-to-r from-emerald-400/30 via-violet-400/30 to-fuchsia-400/30 border-white/20 text-white hover:from-emerald-400/40 hover:via-violet-400/40 hover:to-fuchsia-400/40"
-                    }`}
-                    data-testid="badge-studio-tier"
-                    aria-label="Manage subscription plan"
-                  >
-                    {tier === "free" ? <Sparkles className="w-3 h-3" /> : <Crown className="w-3 h-3" />}
-                    <span>{TIER_LABEL[tier] || tier}</span>
-                  </button>
+                <Link
+                  href="/studio/credits"
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition border backdrop-blur-md ${
+                    tier === "free"
+                      ? "bg-emerald-400/15 border-emerald-400/40 text-emerald-100 hover:bg-emerald-400/25"
+                      : "bg-gradient-to-r from-emerald-400/30 via-violet-400/30 to-fuchsia-400/30 border-white/20 text-white hover:from-emerald-400/40 hover:via-violet-400/40 hover:to-fuchsia-400/40"
+                  }`}
+                  data-testid="badge-studio-tier"
+                  aria-label="Manage subscription plan"
+                >
+                  {tier === "free" ? <Sparkles className="w-3 h-3" /> : <Crown className="w-3 h-3" />}
+                  <span>{TIER_LABEL[tier] || tier}</span>
                 </Link>
               )}
             </div>
@@ -886,11 +882,11 @@ export default function StudioPageV2() {
               Flip the <strong>GUBER Studio v2</strong> feature flag to <strong>Global</strong> when ready to launch.
             </p>
           </div>
-          <Link href="/admin/qa/flags" className="shrink-0">
-            <Button size="sm" variant="outline" className="border-violet-500/50 text-violet-300 hover:bg-violet-900/40 text-[11px] h-7 px-2 rounded-lg">
+          <Button asChild size="sm" variant="outline" className="border-violet-500/50 text-violet-300 hover:bg-violet-900/40 text-[11px] h-7 px-2 rounded-lg shrink-0">
+            <Link href="/admin/qa/flags">
               Flags <ExternalLink className="w-3 h-3 ml-1" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
         {/* Provider down warning */}
@@ -955,14 +951,12 @@ export default function StudioPageV2() {
                 <Sparkles className="w-5 h-5 text-emerald-400" />
                 Trending now
               </h2>
-              <Link href="/studio/explore">
-                <button
-                  type="button"
-                  className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 transition"
-                  data-testid="link-studio-explore"
-                >
-                  For You feed <ChevronRight className="w-3 h-3" />
-                </button>
+              <Link
+                href="/studio/explore"
+                className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 transition"
+                data-testid="link-studio-explore"
+              >
+                For You feed <ChevronRight className="w-3 h-3" />
               </Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
@@ -1215,15 +1209,16 @@ export default function StudioPageV2() {
           )}
 
           {insufficient && !generateMutation.isPending && !isStoreBuild && (
-            <Link href="/studio/credits">
-              <Button
-                variant="outline"
-                className="w-full border-amber-400 text-amber-300 hover:bg-amber-400/10 rounded-2xl"
-                data-testid="button-buy-credits"
-              >
+            <Button
+              asChild
+              variant="outline"
+              className="w-full border-amber-400 text-amber-300 hover:bg-amber-400/10 rounded-2xl"
+              data-testid="button-buy-credits"
+            >
+              <Link href="/studio/credits">
                 <ShoppingCart className="w-4 h-4 mr-2" /> Out of credits — buy a pack
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           )}
           {insufficient && !generateMutation.isPending && isStoreBuild && (
             <p className="text-center text-[11px] text-white/60" data-testid="text-store-credits-unavailable">
