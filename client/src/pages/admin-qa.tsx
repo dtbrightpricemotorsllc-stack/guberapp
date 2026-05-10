@@ -624,12 +624,17 @@ type StudioUsagePerTool = { tool: string; succeeded: number; refunded: number; f
 type StudioUsageHourly = { bucket: string; toolKey: string; status: string; n: number; credits: number };
 type StudioUsageDaily = { bucket: string; status: string; n: number; credits: number };
 type StudioUsageFailure = { id: number; userId: number; toolKey: string; status: string; errorReason: string | null; creditsCost: number; createdAt: string };
+type StudioUsageTopUser = { userId: number; total: number; succeeded: number; refunded: number; failed: number; creditsSpent: number; creditsRefunded: number };
 type StudioUsageResponse = {
   generatedAt: string;
   totals24h: StudioUsageTotals;
   totals7d: StudioUsageTotals;
   perTool24h: StudioUsagePerTool[];
   perTool7d: StudioUsagePerTool[];
+  topSpenders24h: StudioUsageTopUser[];
+  topSpenders7d: StudioUsageTopUser[];
+  topRefunders24h: StudioUsageTopUser[];
+  topRefunders7d: StudioUsageTopUser[];
   hourly24: StudioUsageHourly[];
   daily7: StudioUsageDaily[];
   recentFailures: StudioUsageFailure[];
@@ -945,6 +950,89 @@ function StudioUsageTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Top users (task-557) ─────────────────────────────────────────── */}
+      {(() => {
+        // Both lists come pre-ranked from independent server-side queries so
+        // a high-refund / low-spend user is never missing from topRefunders.
+        const topSpenders24h = data.topSpenders24h;
+        const topRefunders24h = data.topRefunders24h;
+        const topSpenders7d = data.topSpenders7d;
+        const topRefunders7d = data.topRefunders7d;
+
+        const UserTable = ({ rows, sortedBy }: { rows: StudioUsageTopUser[]; sortedBy: "spent" | "refunded" }) => (
+          rows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No activity in this window.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-3">User</th>
+                    <th className="py-1 pr-3 text-right">Runs</th>
+                    <th className="py-1 pr-3 text-right">OK</th>
+                    <th className="py-1 pr-3 text-right">Refunded</th>
+                    <th className="py-1 pr-3 text-right">Failed</th>
+                    <th className={`py-1 pr-3 text-right ${sortedBy === "spent" ? "font-semibold text-foreground" : ""}`}>Cr spent</th>
+                    <th className={`py-1 pr-3 text-right ${sortedBy === "refunded" ? "font-semibold text-foreground" : ""}`}>Cr refunded</th>
+                    <th className="py-1 text-right">Refund rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {rows.map((u) => {
+                    const refundRate = pct(u.refunded + u.failed, u.total);
+                    const hotRefunder = (u.refunded + u.failed) / Math.max(u.total, 1) > 0.3 && u.total >= 3;
+                    return (
+                      <tr key={u.userId} data-testid={`row-top-user-${u.userId}`}>
+                        <td className="py-1 pr-3"><UserLink userId={u.userId} label={`#${u.userId}`} /></td>
+                        <td className="py-1 pr-3 text-right">{u.total}</td>
+                        <td className="py-1 pr-3 text-right text-green-600">{u.succeeded}</td>
+                        <td className="py-1 pr-3 text-right text-yellow-600">{u.refunded}</td>
+                        <td className="py-1 pr-3 text-right text-red-600">{u.failed}</td>
+                        <td className="py-1 pr-3 text-right font-medium">{u.creditsSpent}</td>
+                        <td className="py-1 pr-3 text-right text-yellow-600">{u.creditsRefunded}</td>
+                        <td className={`py-1 text-right ${hotRefunder ? "font-bold text-red-600" : ""}`}>{refundRate}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        );
+
+        return (
+          <>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Top users — last 24h</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Top spenders (by credits spent)</div>
+                  <UserTable rows={topSpenders24h} sortedBy="spent" />
+                </div>
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Top refund recipients (by refunded + failed count)</div>
+                  <UserTable rows={topRefunders24h} sortedBy="refunded" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Top users — last 7d</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Top spenders (by credits spent)</div>
+                  <UserTable rows={topSpenders7d} sortedBy="spent" />
+                </div>
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Top refund recipients (by refunded + failed count)</div>
+                  <UserTable rows={topRefunders7d} sortedBy="refunded" />
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        );
+      })()}
 
       <Card>
         <CardHeader><CardTitle className="text-base">Recent failures &amp; refunds</CardTitle></CardHeader>

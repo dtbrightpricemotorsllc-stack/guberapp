@@ -822,13 +822,77 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         LIMIT 25
       `);
 
+      // Two independent per-user rankings per time window so each list is
+      // globally correct rather than derived from a truncated subset:
+      //   topSpenders  — ranked by net credits spent (succeeded only), LIMIT 10
+      //   topRefunders — ranked by refunded+failed count, LIMIT 10
+      // Using two separate queries with independent ORDER BY / LIMIT ensures a
+      // high-refund / low-spend user is never absent from the refunders list.
+      const mapUserRows = (rows: any[]) =>
+        rows.map((row: any) => ({
+          userId: Number(row.user_id),
+          total: Number(row.total) || 0,
+          succeeded: Number(row.succeeded) || 0,
+          refunded: Number(row.refunded) || 0,
+          failed: Number(row.failed) || 0,
+          creditsSpent: Number(row.credits_spent) || 0,
+          creditsRefunded: Number(row.credits_refunded) || 0,
+        }));
+
+      const topSpendersByWindow = async (sinceSql: any) => {
+        const r = await db.execute(sql`
+          SELECT
+            user_id,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE status = 'succeeded')::int AS succeeded,
+            COUNT(*) FILTER (WHERE status = 'refunded')::int AS refunded,
+            COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+            COALESCE(SUM(credits_cost) FILTER (WHERE status = 'succeeded'), 0)::int AS credits_spent,
+            COALESCE(SUM(credits_cost) FILTER (WHERE status IN ('refunded', 'failed')), 0)::int AS credits_refunded
+          FROM studio_generation_log
+          WHERE created_at >= ${sinceSql}
+          GROUP BY user_id
+          ORDER BY credits_spent DESC
+          LIMIT 10
+        `);
+        return mapUserRows(r.rows as any[]);
+      };
+
+      const topRefundersByWindow = async (sinceSql: any) => {
+        // Aggregate ALL statuses so succeeded/total/refund-rate are meaningful.
+        // HAVING filters to users with ≥1 refund or failure; ORDER BY ranks by
+        // that same count so the worst offenders float to the top.
+        // Tie-breaker user_id ASC gives stable ordering across refreshes.
+        const r = await db.execute(sql`
+          SELECT
+            user_id,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE status = 'succeeded')::int AS succeeded,
+            COUNT(*) FILTER (WHERE status = 'refunded')::int AS refunded,
+            COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+            COALESCE(SUM(credits_cost) FILTER (WHERE status = 'succeeded'), 0)::int AS credits_spent,
+            COALESCE(SUM(credits_cost) FILTER (WHERE status IN ('refunded', 'failed')), 0)::int AS credits_refunded
+          FROM studio_generation_log
+          WHERE created_at >= ${sinceSql}
+          GROUP BY user_id
+          HAVING COUNT(*) FILTER (WHERE status IN ('refunded', 'failed')) > 0
+          ORDER BY COUNT(*) FILTER (WHERE status IN ('refunded', 'failed')) DESC, user_id ASC
+          LIMIT 10
+        `);
+        return mapUserRows(r.rows as any[]);
+      };
+
       const sinceDay = sql`NOW() - INTERVAL '24 hours'`;
       const sinceWeek = sql`NOW() - INTERVAL '7 days'`;
-      const [totals24h, totals7d, perTool24h, perTool7d] = await Promise.all([
+      const [totals24h, totals7d, perTool24h, perTool7d, topSpenders24h, topSpenders7d, topRefunders24h, topRefunders7d] = await Promise.all([
         totalsByWindow(sinceDay),
         totalsByWindow(sinceWeek),
         perToolByWindow(sinceDay),
         perToolByWindow(sinceWeek),
+        topSpendersByWindow(sinceDay),
+        topSpendersByWindow(sinceWeek),
+        topRefundersByWindow(sinceDay),
+        topRefundersByWindow(sinceWeek),
       ]);
 
       res.json({
@@ -837,6 +901,10 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         totals7d,
         perTool24h,
         perTool7d,
+        topSpenders24h,
+        topSpenders7d,
+        topRefunders24h,
+        topRefunders7d,
         hourly24: (hourly24.rows as any[]).map((r) => ({
           bucket: r.bucket,
           toolKey: String(r.tool_key || ""),
