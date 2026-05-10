@@ -9,6 +9,7 @@ import { seedDemoAccounts } from "./seed-demo";
 import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
 import { setNonceStore, PgNonceStore } from "./oauth";
+import { startStudioToolsListener } from "./studio-tools-notify";
 
 const app = express();
 const httpServer = createServer(app);
@@ -334,6 +335,7 @@ app.use((req, res, next) => {
   `).catch(e => console.error("[migration] business tables error:", e));
 
   await registerRoutes(httpServer, app);
+  startStudioToolsListener();
   startCron();
   await seedReferralExpiry().catch(e => console.error("[seed] Referral expiry column error:", e));
   await seedCatalog().catch(e => console.error("[seed] catalog seed error:", e));
