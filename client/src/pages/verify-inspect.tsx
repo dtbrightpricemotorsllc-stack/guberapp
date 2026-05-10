@@ -867,12 +867,12 @@ export default function VerifyInspect() {
   });
 
   const GRID_CATEGORIES = [
-    { name: "Property & Site Check", img: formPropertyImg, wide: false },
-    { name: "Online Items", img: formOnlineImg, wide: false },
-    { name: "Wheels, Wings & Water", img: formWheelsImg, wide: false },
-    { name: "Quick Check", img: formQuickImg, wide: false },
-    { name: "Part Availability Verification", img: formPavImg, wide: true },
-    { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true },
+    { name: "Property & Site Check", img: formPropertyImg, wide: false, label: "PROPERTY &\nSITE CHECK", labelColor: "hsl(190 90% 62%)" },
+    { name: "Online Items", img: formOnlineImg, wide: false, label: "ONLINE ITEMS", labelColor: "hsl(52 95% 58%)" },
+    { name: "Wheels, Wings & Water", img: formWheelsImg, wide: false, label: "WINGS, WHEELS\n& WATER", labelColor: "hsl(200 85% 65%)" },
+    { name: "Quick Check", img: formQuickImg, wide: false, label: "QUICK CHECK", labelColor: "hsl(142 72% 55%)" },
+    { name: "Part Availability Verification", img: formPavImg, wide: true, label: "", labelColor: "#fff" },
+    { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true, label: "", labelColor: "#fff" },
   ];
 
   function handleLandingSelect(catName: string) {
@@ -974,7 +974,15 @@ export default function VerifyInspect() {
                       onClick={() => handleLandingSelect(lc.name)}
                       disabled={catsLoading && !cat}
                       className={`relative rounded-2xl overflow-hidden flex flex-col items-end justify-end transition-all active:scale-95 hover:scale-[1.02] ${lc.wide ? "col-span-2 h-36" : "aspect-square"}`}
-                      style={{ background: "#0d0d1a", border: isDrone ? "1.5px solid hsl(200 80% 55% / 0.75)" : "1.5px solid hsl(275 90% 65% / 0.75)", boxShadow: isDrone ? "0 0 12px hsl(200 80% 55% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" : "0 0 12px hsl(275 90% 65% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" }}
+                      style={{
+                        background: "#0d0d1a",
+                        border: isDrone
+                          ? "1.5px solid hsl(200 80% 55% / 0.75)"
+                          : `1.5px solid ${lc.labelColor}44`,
+                        boxShadow: isDrone
+                          ? "0 0 12px hsl(200 80% 55% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)"
+                          : `0 0 14px ${lc.labelColor}22, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                      }}
                       data-testid={`button-vi-category-${lc.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
                     >
                       <img
@@ -982,7 +990,7 @@ export default function VerifyInspect() {
                         alt={lc.name}
                         className="absolute inset-0 w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity"
                       />
-                      <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/40 to-transparent"}`} />
+                      <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/60 via-black/20 to-transparent"}`} />
                       {isPAV && (
                         <div className="absolute bottom-0 left-0 p-3 w-full">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -1001,6 +1009,16 @@ export default function VerifyInspect() {
                           </div>
                           <p className="text-white font-display font-black text-xl tracking-tight leading-tight">DRONE / AERIAL<br/>FOOTAGE</p>
                           <p className="text-white/80 text-[11px] mt-1">Real estate · Insurance · Construction · Events</p>
+                        </div>
+                      )}
+                      {!isPAV && !isDrone && lc.label && (
+                        <div className="absolute bottom-0 left-0 p-3 w-full">
+                          <p
+                            className="font-display font-black text-lg tracking-tight leading-tight whitespace-pre-line"
+                            style={{ color: lc.labelColor, textShadow: `0 0 12px ${lc.labelColor}88` }}
+                          >
+                            {lc.label}
+                          </p>
                         </div>
                       )}
                     </button>
@@ -2282,7 +2300,7 @@ export default function VerifyInspect() {
             </Card>
           )}
 
-          {(selectedCategory?.name === "Online Items" || !!timingWindow) && (
+          {timingStepDone && (
             <Card className="glass-card rounded-xl p-5 animate-slide-up" data-testid="step-payment-details">
               <div className="flex items-center gap-2.5 mb-4">
                 <StepNumber num={5} active={currentStep === 5} completed={currentStep > 5} />
