@@ -109,10 +109,12 @@ Accepts `product` + optional `options` props and a render-prop `children({ onPre
 1. `onPress` → calls `POST /api/mobile/checkout-link` → receives signed URL
 2. Shows Apple's mandated disclosure `<Dialog>`
 3. On "Continue" → `Browser.open({ url, presentationStyle: "popover" })` (SFSafariViewController)
-4. Server validates HMAC token, creates Stripe Checkout, 302-redirects to Stripe
+4. `GET /api/mobile/checkout-redirect?token=…` validates HMAC token, creates Stripe Checkout Session server-side, 302-redirects to Stripe
 5. On return → app polls `/api/auth/me` and updates credit/tier state automatically
 
 **Non-iOS flow:** `onPress` calls the link endpoint and navigates with `window.location.href` (no disclosure required).
+
+**Route contract:** The canonical token-bridge URL is `GET /api/mobile/checkout-redirect` (a server route in `server/routes.ts`). There is no `/mobile-checkout` client-side route in `App.tsx` — the redirect flows entirely server-to-Stripe without a client route hop.
 
 ---
 
