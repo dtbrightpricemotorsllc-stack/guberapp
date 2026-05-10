@@ -86,16 +86,50 @@ to the web.
 
 ## iOS entitlement required
 
-`ios/App/App/App.entitlements` must include:
+`ios/App/App/App.entitlements` already includes:
 
 ```xml
 <key>com.apple.developer.storekit.external-purchase-link</key>
 <string>external-purchase</string>
 ```
 
-This key must be provisioned in the Apple Developer portal under the app's
-App ID before submission. Without it, the entitlement is silently ignored and
-Apple may reject the build.
+The entitlement key is present in code, but it **must also be enabled in the
+Apple Developer portal** under the app's App ID before the next App Store
+submission. Without portal provisioning the entitlement is silently ignored
+and Apple will reject the build.
+
+### Pre-submission checklist (manual — requires Apple Developer account access)
+
+**Step 1 — Enable the capability on the App ID**
+
+1. Sign in to [developer.apple.com](https://developer.apple.com) → Certificates, IDs & Profiles → Identifiers.
+2. Select the GUBER App ID (bundle ID: matches `ios/App/App.xcodeproj`).
+3. Scroll to the **Capabilities** list and tick **External Purchase Link**.
+4. Click **Save** and confirm the change.
+
+**Step 2 — Regenerate the provisioning profile**
+
+1. In the same portal, go to Profiles.
+2. Find the App Store Distribution profile for GUBER and click **Edit**.
+3. Click **Generate** (the profile must be regenerated after any App ID capability change).
+4. Download the updated `.mobileprovision` file.
+
+**Step 3 — Install the profile in Xcode**
+
+1. Double-click the downloaded `.mobileprovision` to register it with Xcode, or drag it onto the Xcode icon.
+2. Open the GUBER project in Xcode → Signing & Capabilities tab.
+3. Confirm the active provisioning profile shows **External Purchase Link** in the entitlements list (Xcode renders this automatically when the profile is present).
+
+**Step 4 — Verify the disclosure sheet is not blocked by the OS**
+
+1. Build and run a TestFlight or local device build.
+2. Open `/studio/credits` and tap a credit pack or subscription.
+3. Confirm Apple's standard disclosure sheet appears:
+   > *"This link will take you to an external website. Apple is not responsible for the privacy or security of purchases made on the web."*
+4. Tap **Continue** and verify Stripe checkout loads inside SFSafariViewController (popover, not a full browser redirect).
+5. Complete a test purchase and confirm credits are applied on return to the app.
+
+> **Note:** The `ExternalPurchaseSheet` component (`client/src/components/external-purchase-sheet.tsx`) and the token bridge (`POST /api/mobile/checkout-link` → `GET /api/mobile/checkout-redirect`) are fully wired. The only remaining gate is the portal provisioning above.
 
 ---
 
