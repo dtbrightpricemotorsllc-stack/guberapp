@@ -247,6 +247,54 @@ test("MobileReturnBanner: credits=success param stripped on /studio after banner
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TC-16 (task-582): banner visible on /biz/dashboard?subscribed=true
+// success_url for business_scout product (mobile redirect) is
+// /biz/dashboard?subscribed=true&purchased=1
+// ─────────────────────────────────────────────────────────────────────────────
+test("MobileReturnBanner: visible on /biz/dashboard with subscribed=true param (Business Scout plan redirect)", async ({
+  browser,
+}) => {
+  const iphone = devices["iPhone 12"];
+  const context = await browser.newContext({ ...iphone });
+  const page = await context.newPage();
+
+  try {
+    await loginAs(page, DEMO_EMAIL, DEMO_PASSWORD);
+    await page.goto("/biz/dashboard?subscribed=true");
+
+    await expect(
+      page.getByTestId("banner-mobile-return")
+    ).toBeVisible({ timeout: 10_000 });
+  } finally {
+    await context.close();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TC-17 (task-582): banner visible on /biz/dashboard?unlocks_purchased=true
+// success_url for business_unlock product (mobile redirect) is
+// /biz/dashboard?unlocks_purchased=true&purchased=1
+// ─────────────────────────────────────────────────────────────────────────────
+test("MobileReturnBanner: visible on /biz/dashboard with unlocks_purchased=true param (Business extra unlocks redirect)", async ({
+  browser,
+}) => {
+  const iphone = devices["iPhone 12"];
+  const context = await browser.newContext({ ...iphone });
+  const page = await context.newPage();
+
+  try {
+    await loginAs(page, DEMO_EMAIL, DEMO_PASSWORD);
+    await page.goto("/biz/dashboard?unlocks_purchased=true");
+
+    await expect(
+      page.getByTestId("banner-mobile-return")
+    ).toBeVisible({ timeout: 10_000 });
+  } finally {
+    await context.close();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TC-14 (task-576): banner visible on /ai-or-not?trustbox=success (Trust Box)
 // success_url for trust_box product is /ai-or-not?trustbox=success
 // ─────────────────────────────────────────────────────────────────────────────

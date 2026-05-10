@@ -113,7 +113,10 @@ export default function BizDashboard() {
   const searchStr = useSearch();
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
-  const purchaseSuccess = new URLSearchParams(searchStr).get("subscribed") === "true";
+  const params = new URLSearchParams(searchStr);
+  const purchaseSuccess =
+    params.get("subscribed") === "true" ||
+    params.get("unlocks_purchased") === "true";
 
   const { data: account, isLoading: accountLoading } = useQuery<any>({
     queryKey: ["/api/business/account"],

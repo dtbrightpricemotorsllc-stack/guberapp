@@ -261,6 +261,42 @@ Pass criteria: ✅ `guber://` URI scheme registered; tapping the link opens the 
 
 ---
 
+## TC-16 — Return-to-app banner appears after Business Scout plan purchase
+
+**Surface:** `/biz/dashboard` (redirect target after a successful mobile Business Scout plan purchase)
+
+**Prerequisite:** Run TC-08 first to establish that the Scout Plan purchase itself completes. This test focuses only on the banner.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Complete a Business Scout plan purchase via the `ExternalPurchaseSheet` flow on `/biz/talent-explorer` (TC-08). | Stripe confirms. Popover closes. |
+| 2 | Observe the screen the app returns to. | The app is on `/biz/dashboard` because the `success_url` configured by `GET /api/mobile/checkout-redirect` for `business_scout` is `{base}/biz/dashboard?subscribed=true&purchased=1`. |
+| 3 | Confirm the green return-to-app banner is visible at the bottom of the screen. | A green bar reads **"Purchase complete"** with a "Tap here to return to the GUBER app" link (`data-testid="banner-mobile-return"`). |
+| 4 | Tap the **"Tap here to return to the GUBER app"** link. | The system opens the GUBER app via the `guber://` deep link scheme. No crash or error alert. |
+| 5 | Tap the **✕** dismiss button on the banner. | Banner disappears. Business Dashboard page remains intact. |
+
+Pass criteria: ✅ Green banner visible on `/biz/dashboard` after Scout Plan purchase; `guber://` link present; dismiss works.
+
+---
+
+## TC-17 — Return-to-app banner appears after Business extra unlocks purchase
+
+**Surface:** `/biz/dashboard` (redirect target after a successful mobile Business extra unlocks purchase)
+
+**Prerequisite:** User must be an active Scout Plan subscriber (TC-08 or TC-16 completed first). Extra unlock packs are only purchasable by Scout Plan holders.
+
+| # | Step | Expected result |
+|---|------|-----------------|
+| 1 | Navigate to `/biz/dashboard` as a Scout Plan subscriber. Tap the extra unlock pack purchase button. | Disclosure dialog appears (same as TC-01). |
+| 2 | Tap **Continue** → complete the Stripe test purchase. | Stripe confirms. Popover closes. |
+| 3 | Observe the screen the app returns to. | The app is on `/biz/dashboard` because the `success_url` for `business_unlock` is `{base}/biz/dashboard?unlocks_purchased=true&purchased=1`. |
+| 4 | Confirm the green return-to-app banner is visible at the bottom of the screen. | Green bar reads **"Purchase complete"** with `guber://` link (`data-testid="banner-mobile-return"`). |
+| 5 | Tap the **✕** dismiss button on the banner. | Banner disappears. Dashboard remains intact. Unlock count updated. |
+
+Pass criteria: ✅ Green banner visible on `/biz/dashboard` after extra unlocks purchase; `guber://` link present; dismiss works.
+
+---
+
 ## Sign-off record
 
 Before each App Store submission, a team member must run TC-01 through TC-05 on a
@@ -284,12 +320,14 @@ TC-08 Scout Plan on /biz           [ ] Pass  [ ] Fail  Notes: ___
 TC-09 Token expiry (negative)      [ ] Pass  [ ] Fail  Notes: ___
 TC-10 Non-iOS fallback             [ ] Pass  [ ] Fail  Notes: ___
 
-Return-to-app banner (TC-11–TC-15)
-TC-11 Banner on /studio after credits purchase      [ ] Pass  [ ] Fail  Notes: ___
-TC-12 Banner on /studio after subscription purchase [ ] Pass  [ ] Fail  Notes: ___
-TC-13 Banner on /og-success after Day-1 OG purchase [ ] Pass  [ ] Fail  Notes: ___
-TC-14 Banner on /ai-or-not after Trust Box purchase [ ] Pass  [ ] Fail  Notes: ___
-TC-15 guber:// deep link opens the app              [ ] Pass  [ ] Fail  Notes: ___
+Return-to-app banner (TC-11–TC-17)
+TC-11 Banner on /studio after credits purchase           [ ] Pass  [ ] Fail  Notes: ___
+TC-12 Banner on /studio after subscription purchase      [ ] Pass  [ ] Fail  Notes: ___
+TC-13 Banner on /og-success after Day-1 OG purchase      [ ] Pass  [ ] Fail  Notes: ___
+TC-14 Banner on /ai-or-not after Trust Box purchase      [ ] Pass  [ ] Fail  Notes: ___
+TC-15 guber:// deep link opens the app                   [ ] Pass  [ ] Fail  Notes: ___
+TC-16 Banner on /biz/dashboard after Scout Plan purchase [ ] Pass  [ ] Fail  Notes: ___
+TC-17 Banner on /biz/dashboard after extra unlocks buy   [ ] Pass  [ ] Fail  Notes: ___
 
 Overall: [ ] APPROVED  [ ] BLOCKED — do not submit
 ```
