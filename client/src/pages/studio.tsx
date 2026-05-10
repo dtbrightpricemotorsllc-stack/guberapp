@@ -27,7 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -338,6 +338,11 @@ export default function StudioPageV2() {
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [outputKind, setOutputKind] = useState<"video" | "audio" | "image">("video");
   const [prompt, setPrompt] = useState("");
+  // Phase 3 — `/studio?prompt=...&kind=video` prefills from the For You
+  // feed's "Recreate this" button. We consume the value once on mount,
+  // strip the query string so a refresh doesn't re-trigger the focus,
+  // and scroll/focus into the prompt textarea.
+  const searchString = useSearch();
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
   const [openWizard, setOpenWizard] = useState<null | "mirror_motion" | "commercial_builder">(null);
@@ -362,6 +367,26 @@ export default function StudioPageV2() {
     queryKey: ["/api/studio/featured"],
     refetchOnWindowFocus: false,
   });
+
+  // Phase-3 prefill from /studio/explore "Recreate this" — runs once.
+  const prefillConsumedRef = useRef(false);
+  useEffect(() => {
+    if (prefillConsumedRef.current) return;
+    if (!searchString) return;
+    const params = new URLSearchParams(searchString);
+    const incoming = params.get("prompt");
+    const kind = params.get("kind");
+    if (!incoming) return;
+    prefillConsumedRef.current = true;
+    setPrompt(incoming);
+    if (kind === "video" || kind === "audio" || kind === "image") setOutputKind(kind);
+    // Strip the query string so refresh doesn't retrigger.
+    window.history.replaceState({}, "", "/studio");
+    setTimeout(() => {
+      promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      promptRef.current?.focus();
+    }, 120);
+  }, [searchString]);
 
   // ── Session lifecycle ─────────────────────────────────────────────────
   useEffect(() => {
@@ -932,7 +957,15 @@ export default function StudioPageV2() {
                 <Sparkles className="w-5 h-5 text-emerald-400" />
                 Trending now
               </h2>
-              <span className="text-[10px] uppercase tracking-widest text-white/40">tap to use prompt</span>
+              <Link href="/studio/explore">
+                <button
+                  type="button"
+                  className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 transition"
+                  data-testid="link-studio-explore"
+                >
+                  For You feed <ChevronRight className="w-3 h-3" />
+                </button>
+              </Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
               {featuredQuery.data!.map((clip) => (
