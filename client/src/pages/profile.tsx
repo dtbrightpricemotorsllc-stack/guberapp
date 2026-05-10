@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { buildReferralShareText } from "@/lib/referral";
 import { isStoreBuild } from "@/lib/platform";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
@@ -723,7 +724,7 @@ export default function Profile() {
           )}
         </Card>
 
-        {isOwnProfile && !displayUser.day1OG && !isStoreBuild && !isDemoUser && !ogCardHidden && (() => {
+        {isOwnProfile && !displayUser.day1OG && !isDemoUser && !ogCardHidden && (() => {
           const profileIncomplete = !displayUser.userBio || !displayUser.profilePhoto || !displayUser.publicUsername || !displayUser.zipcode;
           const accountAgeMs = displayUser.createdAt ? Date.now() - new Date(displayUser.createdAt).getTime() : 0;
           const isOnboardingWindow = accountAgeMs > 0 && accountAgeMs < 14 * 24 * 60 * 60 * 1000;
@@ -741,16 +742,33 @@ export default function Profile() {
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => ogMutation.mutate()}
-              disabled={ogMutation.isPending}
-              size="sm"
-              className="w-full font-display bg-gradient-to-r from-amber-600 to-yellow-600 text-white border border-amber-500/30 hover:from-amber-500 hover:to-yellow-500"
-              data-testid="button-buy-og"
-            >
-              {ogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Day1OGLogo size="sm" />}
-              <span className="ml-1">Activate Day-1 OG — $1.99</span>
-            </Button>
+            {isStoreBuild ? (
+              <ExternalPurchaseSheet product="day1og">
+                {({ onPress, loading: btnLoading }) => (
+                  <Button
+                    onClick={onPress}
+                    disabled={btnLoading}
+                    size="sm"
+                    className="w-full font-display bg-gradient-to-r from-amber-600 to-yellow-600 text-white border border-amber-500/30 hover:from-amber-500 hover:to-yellow-500"
+                    data-testid="button-buy-og"
+                  >
+                    {btnLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Day1OGLogo size="sm" />}
+                    <span className="ml-1">Activate Day-1 OG — $1.99</span>
+                  </Button>
+                )}
+              </ExternalPurchaseSheet>
+            ) : (
+              <Button
+                onClick={() => ogMutation.mutate()}
+                disabled={ogMutation.isPending}
+                size="sm"
+                className="w-full font-display bg-gradient-to-r from-amber-600 to-yellow-600 text-white border border-amber-500/30 hover:from-amber-500 hover:to-yellow-500"
+                data-testid="button-buy-og"
+              >
+                {ogMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Day1OGLogo size="sm" />}
+                <span className="ml-1">Activate Day-1 OG — $1.99</span>
+              </Button>
+            )}
             <button
               onClick={() => { localStorage.setItem("guber_og_card_hidden", "true"); setOgCardHidden(true); }}
               className="mt-2 w-full text-[10px] text-muted-foreground hover:text-foreground transition"

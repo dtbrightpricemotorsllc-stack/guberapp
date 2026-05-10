@@ -26,6 +26,7 @@ import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./de
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth } from "./auth";
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
+import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
@@ -9403,6 +9404,186 @@ export async function registerRoutes(
       res.json({ message: "Studio subscription will end at the close of the current billing period." });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Apple External Purchase Link — mobile checkout bridge ─────────────────
+  // On iOS builds, all digital purchases must either use Apple IAP or go
+  // through Apple's External Purchase Link entitlement (EU / reader-app path).
+  // These two endpoints implement the signed-token bridge:
+  //
+  //   1. POST /api/mobile/checkout-link  (requires session auth)
+  //      Authenticated in-app call. Signs a 15-min HMAC token containing
+  //      {userId, product, options} and returns a guberapp.app redirect URL.
+  //      The app opens this URL via SFSafariViewController / Browser.open
+  //      AFTER showing Apple's mandated external-purchase disclosure sheet.
+  //
+  //   2. GET  /api/mobile/checkout-redirect  (token-authenticated, no session)
+  //      Validates the token, creates the correct Stripe Checkout Session on
+  //      behalf of the identified user, then 302-redirects to the Stripe URL.
+  //      The user never has to log in to the web — the JWT carries the auth.
+
+  app.post("/api/mobile/checkout-link", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { product, options = {} } = req.body;
+      if (!product || !isValidProduct(product)) {
+        return res.status(400).json({ message: "Invalid product" });
+      }
+      const userId = req.session.userId!;
+      const token = signMobileCheckoutToken(userId, product, options as Record<string, string>);
+      const appUrl = process.env.APP_URL || "https://guberapp.app";
+      const url = `${appUrl}/api/mobile/checkout-redirect?token=${encodeURIComponent(token)}`;
+      res.json({ url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/mobile/checkout-redirect", async (req: Request, res: Response) => {
+    const APP_BASE = process.env.APP_URL || "https://guberapp.app";
+    const raw = String(req.query.token || "");
+    const payload = verifyMobileCheckoutToken(raw);
+    if (!payload) {
+      return res.redirect(`${APP_BASE}/login?error=link_expired`);
+    }
+    const { userId, product, options } = payload;
+    try {
+      const user = await storage.getUser(userId);
+      if (!user || (user as any).deletedAt) {
+        return res.redirect(`${APP_BASE}/login?error=account_not_found`);
+      }
+
+      let sessionUrl: string | null = null;
+
+      if (product === "studio_credits") {
+        const packId = String(options.packId || "") as StudioPackId;
+        const pack = STUDIO_CREDIT_PACKS[packId];
+        if (!pack) return res.redirect(`${APP_BASE}/studio/credits?error=invalid_pack`);
+        const stripeSession = await stripeMain.checkout.sessions.create({
+          payment_method_types: ["card"],
+          customer_email: user.email,
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: { name: `GUBER Studio · ${pack.label}`, description: `${pack.credits} AI video credits for GUBER Studio.` },
+              unit_amount: pack.priceCents,
+            },
+            quantity: 1,
+          }],
+          mode: "payment",
+          success_url: `${APP_BASE}/studio?credits=success`,
+          cancel_url: `${APP_BASE}/studio/credits`,
+          metadata: { userId: String(user.id), userEmail: user.email, type: "studio_credits", packId, credits: String(pack.credits) },
+        });
+        sessionUrl = stripeSession.url;
+
+      } else if (product === "studio_subscription") {
+        const tierId = String(options.tier || "") as StudioTierPlanId;
+        const plan = STUDIO_TIER_PLANS[tierId];
+        if (!plan) return res.redirect(`${APP_BASE}/studio/credits?error=invalid_tier`);
+        if (user.studioSubscriptionId) {
+          return res.redirect(`${APP_BASE}/studio/credits?error=already_subscribed`);
+        }
+        const stripeSession = await stripeMain.checkout.sessions.create({
+          payment_method_types: ["card"],
+          customer_email: user.email,
+          mode: "subscription",
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: { name: plan.productName, description: plan.description },
+              unit_amount: plan.priceCents,
+              recurring: { interval: "month" },
+            },
+            quantity: 1,
+          }],
+          success_url: `${APP_BASE}/studio?subscription=success`,
+          cancel_url: `${APP_BASE}/studio/credits`,
+          subscription_data: {
+            metadata: { userId: String(user.id), userEmail: user.email, type: "studio_subscription", tier: tierId, monthlyCredits: String(plan.monthlyCredits) },
+          },
+          metadata: { userId: String(user.id), userEmail: user.email, type: "studio_subscription", tier: tierId, monthlyCredits: String(plan.monthlyCredits) },
+        });
+        sessionUrl = stripeSession.url;
+
+      } else if (product === "day1og") {
+        if (user.day1OG) return res.redirect(`${APP_BASE}/profile?error=already_og`);
+        const stripeSession = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          customer_email: user.email,
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: { name: "GUBER Day-1 OG Lifetime Pass", description: "Permanent Day-1 OG status. Perk: free urgent toggle on all jobs." },
+              unit_amount: 199,
+            },
+            quantity: 1,
+          }],
+          mode: "payment",
+          success_url: `${APP_BASE}/og-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${APP_BASE}/profile`,
+          metadata: { userId: String(user.id), userEmail: user.email, type: "day1og" },
+        });
+        sessionUrl = stripeSession.url;
+
+      } else if (product === "trust_box") {
+        if ((user as any).trustBoxPurchased && (user as any).trustBoxSubscriptionId) {
+          return res.redirect(`${APP_BASE}/ai-or-not?error=already_subscribed`);
+        }
+        if (!TRUST_BOX_PAYROLL_PRICE_ID) {
+          return res.redirect(`${APP_BASE}/ai-or-not?error=not_configured`);
+        }
+        const stripeSession = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          customer_email: user.email,
+          line_items: [{ price: TRUST_BOX_PAYROLL_PRICE_ID, quantity: 1 }],
+          mode: "subscription",
+          success_url: `${APP_BASE}/ai-or-not?trustbox=success`,
+          cancel_url: `${APP_BASE}/ai-or-not`,
+          subscription_data: {
+            metadata: { userId: String(user.id), userEmail: user.email, type: "trust_box" },
+          },
+          metadata: { userId: String(user.id), userEmail: user.email, type: "trust_box" },
+        });
+        sessionUrl = stripeSession.url;
+
+      } else if (product === "business_scout") {
+        const acct = await storage.getBusinessAccount(userId);
+        if (!acct) return res.redirect(`${APP_BASE}/biz/dashboard?error=no_account`);
+        let customerId = acct.stripeCustomerId;
+        if (!customerId) {
+          const customer = await stripeMain.customers.create({
+            email: acct.workEmail,
+            name: acct.businessName,
+            metadata: { businessAccountId: String(acct.id), userId: String(userId) },
+          });
+          customerId = customer.id;
+          await storage.updateBusinessAccount(acct.id, { stripeCustomerId: customerId });
+        }
+        const stripeSession = await stripeMain.checkout.sessions.create({
+          customer: customerId,
+          mode: "subscription",
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: { name: "GUBER Business Scout Plan", description: "Full Talent Explorer access, 20 profile unlocks/month, offer sending" },
+              unit_amount: 9900,
+              recurring: { interval: "month" },
+            },
+            quantity: 1,
+          }],
+          metadata: { type: "business_scout_plan", businessAccountId: String(acct.id) },
+          success_url: `${APP_BASE}/biz/dashboard?subscribed=true`,
+          cancel_url: `${APP_BASE}/biz/talent-explorer`,
+        });
+        sessionUrl = stripeSession.url;
+      }
+
+      if (!sessionUrl) return res.redirect(`${APP_BASE}/?error=unknown_product`);
+      res.redirect(sessionUrl);
+    } catch (err: any) {
+      console.error("[GUBER][mobile-checkout-redirect] error:", err.message);
+      res.redirect(`${APP_BASE}/?error=checkout_failed`);
     }
   });
 

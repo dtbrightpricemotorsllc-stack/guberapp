@@ -12,9 +12,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Search, Filter, MapPin, Star, CheckCircle2, Shield, Clock,
   Zap, Lock, Eye, Bookmark, Send, ChevronDown, X, TrendingUp,
-  User, Award, ShieldCheck, PlaneTakeoff
+  User, Award, ShieldCheck, PlaneTakeoff, Loader2
 } from "lucide-react";
 import { CredentialCard } from "@/components/credential-card";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 
 const GOLD = "#C6A85C";
 const GOLD_DK = "#A88A43";
@@ -562,14 +563,32 @@ export default function BizTalentExplorer() {
           </div>
         )}
         {data && !data.planActive && data.accountStatus !== "pending_business" && iosBuild && (
-          // iOS App Store compliance: subscription purchases are not available
-          // in the iOS build until Apple IAP is wired up.
-          <div className="mt-8 rounded-2xl p-6 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-            <Lock className="w-5 h-5 mx-auto mb-2" style={{ color: TEXT_SECONDARY }} />
-            <p className="text-sm font-bold text-foreground mb-1">Scout Plan unavailable in the iOS app</p>
-            <p className="text-xs leading-relaxed max-w-md mx-auto" style={{ color: TEXT_SECONDARY }}>
-              Manage your Scout Plan subscription at guberapp.app. Once active, all scouting features unlock here.
-            </p>
+          <div className="mt-8 rounded-2xl overflow-hidden" style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}` }}>
+            <div className="h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${GOLD_DK}, transparent)` }} />
+            <div className="p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: GOLD_GLOW, border: `1px solid ${GOLD_BORDER}`, boxShadow: `0 4px 16px ${GOLD_GLOW}` }}>
+                <Lock className="w-6 h-6" style={{ color: GOLD }} />
+              </div>
+              <p className="text-sm font-black text-foreground mb-2">Unlock Full Scouting Access</p>
+              <p className="text-xs mb-4 leading-relaxed max-w-md mx-auto" style={{ color: TEXT_SECONDARY }}>
+                Subscribe to the Scout Plan ($99/mo) for full talent search, 20 monthly profile unlocks, and direct outreach to proven workers.
+              </p>
+              <ExternalPurchaseSheet product="business_scout">
+                {({ onPress, loading: btnLoading }) => (
+                  <button
+                    onClick={onPress}
+                    disabled={btnLoading}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition"
+                    style={{ background: GOLD_GLOW, border: `1px solid ${GOLD_BORDER}`, color: GOLD, opacity: btnLoading ? 0.6 : 1 }}
+                    data-testid="button-subscribe-scout-ios"
+                  >
+                    {btnLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Subscribe — $99/mo
+                  </button>
+                )}
+              </ExternalPurchaseSheet>
+              <p className="text-[10px] mt-3" style={{ color: TEXT_SECONDARY }}>Opens in Safari. Once active, all scouting features unlock here.</p>
+            </div>
           </div>
         )}
       </div>

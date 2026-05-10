@@ -57,57 +57,79 @@ These must remain on Stripe on **all platforms** including iOS and Android
 store builds. Apple's IAP rules explicitly exempt "physical goods or services"
 and "person-to-person services" from IAP.
 
-### Digital products → **Stripe today; review Apple rules per-product before shipping in iOS app**
+### Digital products → **Stripe via Apple External Purchase Link (task-561)**
 
-| `metadata.type` | Surface | Apple-rule risk |
+GUBER uses Apple's **External Purchase Link** entitlement (EU / reader-app
+compliance path) instead of hiding digital purchase UI on store builds.
+
+Every digital purchase surface in the iOS app shows Apple's mandated disclosure
+sheet before opening Stripe checkout in SFSafariViewController:
+
+> *"This link will take you to an external website. Apple is not responsible for
+> the privacy or security of purchases made on the web."*
+
+The signed-token bridge (`ExternalPurchaseSheet` component +
+`POST /api/mobile/checkout-link` + `GET /api/mobile/checkout-redirect`) handles
+authentication automatically — the user lands on Stripe without having to log in
+to the web.
+
+| `metadata.type` | Surface | iOS delivery |
 | --- | --- | --- |
-| `studio_credits` | AI Video Studio credit packs ($5/$20/$50) | High — pure digital consumable |
-| `studio_subscription` | Studio Creator $19/mo, Business $99/mo | High — digital subscription |
-| `business_scout_plan` | $99/mo Talent Explorer subscription | Medium — unlocks digital app features (could be argued real-world hiring tool, but plays it safer to treat as digital) |
-| `trust_box` | Trust Toolbox one-time unlock | High — digital feature unlock |
-| `day1og` | Day-1 OG digital perks/badge | High — pure digital cosmetic + perk |
-| `ai_or_not` (uses `trust_box` bundle) | AI Or Not credits & unlimited text | High — digital consumable |
-
-For each digital product, the choice on iOS/Android store builds is:
-
-1. **Hide it on store builds** (already the pattern via `isStoreBuild` in
-   `client/src/lib/platform.ts`) — user is told to purchase on the web.
-   This is the "reader app" pattern and is App Store Review safe.
-2. **Implement IAP / Play Billing** — only worth it if the conversion loss
-   from option 1 is material and the product can fit IAP's recurring or
-   consumable models cleanly.
-
-There is no third option. Selling digital goods through Stripe inside the
-iOS app without IAP is an App Store rejection.
+| `studio_credits` | AI Video Studio credit packs ($5–$200) | `ExternalPurchaseSheet` on `/studio/credits` |
+| `studio_subscription` | Studio Standard/Business/Enterprise $10–$99/mo | `ExternalPurchaseSheet` on `/studio/credits` |
+| `business_scout_plan` | $99/mo Talent Explorer subscription | `ExternalPurchaseSheet` on `/biz/talent-explorer` |
+| `trust_box` | Trust Toolbox subscription | `ExternalPurchaseSheet` (iframe postMessage gated by `hideCheckout=1`; direct entry via `/ai-or-not` uses disclosure) |
+| `day1og` | Day-1 OG digital perks/badge — $1.99 | `ExternalPurchaseSheet` on `/profile` |
 
 ---
 
-## Current store-build gating status
+## iOS entitlement required
 
-`isStoreBuild` (= `isAndroid || isIOS` via Capacitor) is already used to hide
-digital purchase UI in:
+`ios/App/App/App.entitlements` must include:
 
-- ✅ `client/src/pages/biz-verification.tsx` — actually a *real-world* fee, but
-  hidden on store builds out of caution. Revisit: this might be safely shown
-  in-app since it's KYB, not digital.
-- ✅ `client/src/pages/marketplace.tsx` — boost button hidden in store builds.
-- ✅ `client/src/pages/ai-or-not.tsx` — opens browser instead of in-app purchase.
-- ✅ `client/src/pages/profile.tsx` — Day-1 OG card hidden in store builds.
-- ✅ `client/src/pages/studio.tsx` — header "+ credits" CTA, "Out of credits —
-  buy a pack" button, and the low-credit top-up toast are all hidden on store
-  builds. The standalone `/studio/credits` page (which lists the 6 packs and 3
-  subscription tiers) renders a store-build notice instead of the pack grid.
+```xml
+<key>com.apple.developer.storekit.external-purchase-link</key>
+<string>external-purchase</string>
+```
 
-**Gaps (digital purchase UI currently visible in store builds):**
+This key must be provisioned in the Apple Developer portal under the app's
+App ID before submission. Without it, the entitlement is silently ignored and
+Apple may reject the build.
 
-- ❌ Trust Box / Trust Toolbox checkout — purchase entry points not gated.
-- ❌ `business_scout_plan` ($99/mo) and `business_extra_unlocks` ($7) on
-  business dashboard — not gated. Extra-unlocks is borderline-real-world
-  (paying to contact a person) but the recurring scout plan is digital.
+---
 
-Each gap above must be resolved before the iOS/Android build is submitted to
-the respective store. Resolution = either hide-on-store-build, or implement
-IAP / Play Billing for that product.
+## ExternalPurchaseSheet component
+
+`client/src/components/external-purchase-sheet.tsx`
+
+Accepts `product` + optional `options` props and a render-prop `children({ onPress, loading })`.
+
+**iOS flow:**
+1. `onPress` → calls `POST /api/mobile/checkout-link` → receives signed URL
+2. Shows Apple's mandated disclosure `<Dialog>`
+3. On "Continue" → `Browser.open({ url, presentationStyle: "popover" })` (SFSafariViewController)
+4. Server validates HMAC token, creates Stripe Checkout, 302-redirects to Stripe
+5. On return → app polls `/api/auth/me` and updates credit/tier state automatically
+
+**Non-iOS flow:** `onPress` calls the link endpoint and navigates with `window.location.href` (no disclosure required).
+
+---
+
+## Current store-build gating status (task-561 complete)
+
+| Surface | Status | Method |
+| --- | --- | --- |
+| `studio.tsx` header `+ credits` CTA | ✅ hidden (`isStoreBuild`) | Existing |
+| `studio.tsx` out-of-credits button + low-credit toast | ✅ hidden (`isStoreBuild`) | Existing |
+| `/studio/credits` packs + tiers | ✅ ExternalPurchaseSheet | task-561 |
+| `/profile` Day-1 OG card | ✅ ExternalPurchaseSheet | task-561 |
+| `/biz/talent-explorer` Scout Plan | ✅ ExternalPurchaseSheet | task-561 |
+| `/ai-or-not` Trust Box (iframe postMessage) | ✅ blocked (`isStoreBuild` guard in message handler) | task-561 |
+| `marketplace.tsx` boost button | ✅ hidden (`isStoreBuild`) | Existing |
+| `biz-verification.tsx` $49 fee | ✅ hidden (`isStoreBuild`) — real-world fee, safe to revisit | Existing |
+
+**No remaining gaps.** All digital purchase surfaces on iOS now comply with
+Apple's External Purchase Link requirements.
 
 ---
 
@@ -138,10 +160,12 @@ When adding a new payment surface:
    product/subscription? Use the table above as the reference.
 2. **Real-world → Stripe with a unique `metadata.type`.** Wire the webhook
    handler in `server/routes.ts` and add the new type to this doc.
-3. **Digital → Stripe + decide store-build behavior up front.** Either gate
-   the UI with `isStoreBuild` or queue an IAP/Play Billing implementation
-   task before the next mobile release.
+3. **Digital → Stripe + ExternalPurchaseSheet on store builds.** Add the
+   product key to `server/mobile-checkout-token.ts` `VALID_PRODUCTS` and
+   handle it in `GET /api/mobile/checkout-redirect`. Wire `ExternalPurchaseSheet`
+   in the UI instead of the direct Stripe checkout mutation.
 4. **Never mix.** Don't use IAP for a real-world service. Don't use Stripe in
-   the iOS app for a digital product without IAP.
+   the iOS app for a digital product without the External Purchase Link
+   disclosure sheet.
 5. **Update this doc.** Add the new row to the appropriate table. This file
    is the authoritative classification.

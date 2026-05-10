@@ -1,15 +1,17 @@
-// GUBER Studio · Credits & Subscriptions (task-519)
-// Lists the 6 credit packs and 3 subscription tiers. Hidden in store builds
-// (Apple IAP / Play Billing rules — see docs/payment-routing.md).
+// GUBER Studio · Credits & Subscriptions (task-519, task-561)
+// Lists the 6 credit packs and 3 subscription tiers.
+// On iOS/Android store builds, purchase buttons go through the
+// ExternalPurchaseSheet (Apple External Purchase Link) disclosure flow.
 
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins } from "lucide-react";
+import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 
 type Pack = { id: string; credits: number; priceCents: number; label: string };
 type Tier = {
@@ -30,8 +32,6 @@ function dollars(cents: number) {
   return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
 }
 
-// Per-credit cost is sub-cent (~$0.015), so format with 4 decimals to
-// communicate the true cost basis instead of rounding to $0.02.
 function perCreditDollars(priceCents: number, credits: number) {
   return `$${(priceCents / 100 / credits).toFixed(4)}`;
 }
@@ -76,22 +76,6 @@ export default function StudioCreditsPage() {
     onError: (err: any) => toast({ title: "Cancel failed", description: err.message, variant: "destructive" }),
   });
 
-  if (isStoreBuild) {
-    return (
-      <div className="min-h-screen bg-black text-white px-6 py-10">
-        <Link href="/studio">
-          <button className="text-white/70 text-sm flex items-center gap-1 mb-6" data-testid="link-back-studio">
-            <ArrowLeft className="w-4 h-4" /> Back to Studio
-          </button>
-        </Link>
-        <h1 className="text-2xl font-bold mb-3">Studio Credits</h1>
-        <p className="text-white/70" data-testid="text-store-credits-unavailable">
-          Top-ups and subscriptions aren't available in the app yet. Visit guberapp.app to add credits or subscribe.
-        </p>
-      </div>
-    );
-  }
-
   const me = meQuery.data;
   const packs = packsQuery.data ?? [];
   const tiers = tiersQuery.data ?? [];
@@ -116,9 +100,16 @@ export default function StudioCreditsPage() {
             </div>
           )}
         </div>
-        <p className="text-white/60 text-sm mb-8">
+        <p className="text-white/60 text-sm mb-2">
           Pick a pack for one-time credits, or subscribe for a monthly drop. Credits never expire.
         </p>
+        {isStoreBuild && (
+          <p className="text-xs text-amber-300/80 mb-6 flex items-center gap-1.5" data-testid="text-store-external-notice">
+            <ExternalLink className="w-3 h-3 shrink-0" />
+            Purchases open in Safari — your credits sync back to the app automatically.
+          </p>
+        )}
+        {!isStoreBuild && <div className="mb-6" />}
 
         {loading && (
           <div className="flex items-center justify-center py-20">
@@ -130,19 +121,33 @@ export default function StudioCreditsPage() {
           <>
             <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">Credit Packs</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-12">
-              {packs.map((p) => {
-                return (
-                  <div
-                    key={p.id}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex flex-col gap-2 hover:bg-white/[0.06] transition"
-                    data-testid={`card-pack-${p.id}`}
-                  >
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/80">{p.label}</p>
-                    <p className="text-2xl font-black">{dollars(p.priceCents)}</p>
-                    <p className="text-sm text-white/80">
-                      <span className="font-bold tabular-nums">{p.credits.toLocaleString()}</span> credits
-                    </p>
-                    <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>
+              {packs.map((p) => (
+                <div
+                  key={p.id}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex flex-col gap-2 hover:bg-white/[0.06] transition"
+                  data-testid={`card-pack-${p.id}`}
+                >
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/80">{p.label}</p>
+                  <p className="text-2xl font-black">{dollars(p.priceCents)}</p>
+                  <p className="text-sm text-white/80">
+                    <span className="font-bold tabular-nums">{p.credits.toLocaleString()}</span> credits
+                  </p>
+                  <p className="text-[10px] text-white/40">≈ {perCreditDollars(p.priceCents, p.credits)} / cr</p>
+                  {isStoreBuild ? (
+                    <ExternalPurchaseSheet product="studio_credits" options={{ packId: p.id }}>
+                      {({ onPress, loading: btnLoading }) => (
+                        <Button
+                          size="sm"
+                          className="mt-2"
+                          disabled={btnLoading}
+                          onClick={onPress}
+                          data-testid={`button-buy-${p.id}`}
+                        >
+                          {btnLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ExternalLink className="w-4 h-4 mr-2" /> Buy</>}
+                        </Button>
+                      )}
+                    </ExternalPurchaseSheet>
+                  ) : (
                     <Button
                       size="sm"
                       className="mt-2"
@@ -152,9 +157,9 @@ export default function StudioCreditsPage() {
                     >
                       {buyPack.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ShoppingCart className="w-4 h-4 mr-2" /> Buy</>}
                     </Button>
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              ))}
             </div>
 
             <h2 className="text-xs uppercase tracking-[0.25em] text-white/50 mb-3">Monthly Subscriptions</h2>
@@ -202,6 +207,19 @@ export default function StudioCreditsPage() {
                           {cancel.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cancel"}
                         </Button>
                       )
+                    ) : isStoreBuild ? (
+                      <ExternalPurchaseSheet product="studio_subscription" options={{ tier: t.id }}>
+                        {({ onPress, loading: btnLoading }) => (
+                          <Button
+                            size="sm"
+                            disabled={btnLoading}
+                            onClick={onPress}
+                            data-testid={`button-subscribe-${t.id}`}
+                          >
+                            {btnLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ExternalLink className="w-4 h-4 mr-2" /> Subscribe</>}
+                          </Button>
+                        )}
+                      </ExternalPurchaseSheet>
                     ) : (
                       <Button
                         size="sm"
