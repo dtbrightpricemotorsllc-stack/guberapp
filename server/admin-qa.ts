@@ -768,15 +768,44 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       const settingRows = await db
         .select()
         .from(platformSettings)
-        .where(inArray(platformSettings.key, ["studio_orphan_sweep_destroy", "studio_orphan_sweep_last_run_at"]));
+        .where(inArray(platformSettings.key, [
+          "studio_orphan_sweep_destroy",
+          "studio_orphan_sweep_last_run_at",
+          "studio_orphan_sweep_alert_threshold_orphans",
+          "studio_orphan_sweep_alert_threshold_bytes",
+          "studio_orphan_sweep_alert_throttle_hours",
+          "studio_orphan_sweep_last_alert_at",
+          "studio_orphan_sweep_last_alert_orphans",
+          "studio_orphan_sweep_last_alert_bytes",
+        ]));
       const settingsMap: Record<string, string> = {};
       for (const r of settingRows) settingsMap[r.key] = String(r.value);
+      const lastAlertRows = await db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.action, "studio_orphan_sweep_alert"))
+        .orderBy(desc(auditLogs.id))
+        .limit(1);
+      let lastAlert: any = null;
+      if (lastAlertRows.length) {
+        try { lastAlert = JSON.parse(lastAlertRows[0].details || "{}"); } catch { lastAlert = null; }
+      }
       res.json({
         destroyEnabled: (settingsMap.studio_orphan_sweep_destroy || "").toLowerCase() === "true",
         lastRunAt: settingsMap.studio_orphan_sweep_last_run_at || null,
         lastResult,
         lastAuditAt: lastRows[0]?.createdAt ?? null,
         history,
+        alert: {
+          thresholdOrphans: Number(settingsMap.studio_orphan_sweep_alert_threshold_orphans ?? 100),
+          thresholdBytes: Number(settingsMap.studio_orphan_sweep_alert_threshold_bytes ?? 500 * 1024 * 1024),
+          throttleHours: Number(settingsMap.studio_orphan_sweep_alert_throttle_hours ?? 168),
+          lastAlertAt: settingsMap.studio_orphan_sweep_last_alert_at || null,
+          lastAlertOrphans: settingsMap.studio_orphan_sweep_last_alert_orphans ? Number(settingsMap.studio_orphan_sweep_last_alert_orphans) : null,
+          lastAlertBytes: settingsMap.studio_orphan_sweep_last_alert_bytes ? Number(settingsMap.studio_orphan_sweep_last_alert_bytes) : null,
+          lastAuditAt: lastAlertRows[0]?.createdAt ?? null,
+          lastAlertDetails: lastAlert,
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
@@ -801,6 +830,33 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         });
       await audit(req, "qa.studio.orphan_sweep.destroy_toggle", { enabled });
       res.json({ ok: true, enabled });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
+    }
+  });
+
+  // PATCH — tune the alert thresholds (task-546). All optional; only
+  // provided keys are written. Bytes are accepted as a raw integer.
+  app.patch("/api/admin/qa/studio/orphan-sweep/alert", requireAdmin, async (req: Request, res: Response) => {
+    const updates: { key: string; value: string; description: string }[] = [];
+    const { thresholdOrphans, thresholdBytes, throttleHours } = req.body || {};
+    const writeNum = (v: any, key: string, description: string) => {
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) updates.push({ key, value: String(Math.floor(n)), description });
+    };
+    if (thresholdOrphans !== undefined) writeNum(thresholdOrphans, "studio_orphan_sweep_alert_threshold_orphans", "Min orphan count to trigger an admin alert.");
+    if (thresholdBytes !== undefined) writeNum(thresholdBytes, "studio_orphan_sweep_alert_threshold_bytes", "Min orphan-bytes to trigger an admin alert.");
+    if (throttleHours !== undefined) writeNum(throttleHours, "studio_orphan_sweep_alert_throttle_hours", "Min hours between alerts for the same standing waste.");
+    if (!updates.length) return res.status(400).json({ error: "no valid fields" });
+    try {
+      for (const u of updates) {
+        await db
+          .insert(platformSettings)
+          .values({ key: u.key, value: u.value, category: "studio", description: u.description })
+          .onConflictDoUpdate({ target: platformSettings.key, set: { value: u.value, updatedAt: new Date() } });
+      }
+      await audit(req, "qa.studio.orphan_sweep.alert_thresholds", { updates: updates.map((u) => ({ key: u.key, value: u.value })) });
+      res.json({ ok: true, updated: updates.length });
     } catch (err: any) {
       res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
     }
