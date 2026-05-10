@@ -687,8 +687,14 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
 
   app.post("/api/admin/studio/featured", requireAdmin, async (req, res) => {
     const { slug, label, caption, videoUrl, posterUrl, position, active } = req.body || {};
-    if (!slug || !label || !caption || !videoUrl) {
-      return res.status(400).json({ error: "slug, label, caption, videoUrl are required" });
+    for (const [k, v] of [["slug", slug], ["label", label], ["caption", caption], ["videoUrl", videoUrl]] as const) {
+      if (!v || !String(v).trim()) {
+        return res.status(400).json({ error: `${k} is required and must be a non-empty string` });
+      }
+    }
+    const posNum = Number(position);
+    if (position === undefined || position === null || position === "" || !Number.isFinite(posNum) || posNum < 0) {
+      return res.status(400).json({ error: "position is required and must be a non-negative number" });
     }
     try {
       const row = await storage.createStudioFeaturedClip({
@@ -697,7 +703,7 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
         caption: String(caption).trim(),
         videoUrl: String(videoUrl).trim(),
         posterUrl: posterUrl ? String(posterUrl).trim() : null,
-        position: typeof position === "number" ? position : 100,
+        position: Number(position),
         active: active !== false,
       });
       await audit(req, "qa.studio.featured.create", { id: row.id, slug: row.slug });
@@ -714,11 +720,32 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
   app.patch("/api/admin/studio/featured/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "bad id" });
-    const patch: Record<string, any> = {};
-    for (const k of ["slug", "label", "caption", "videoUrl", "posterUrl", "position", "active"] as const) {
-      if (k in (req.body || {})) patch[k] = req.body[k];
+    const body = req.body || {};
+    // Validate provided fields before writing.
+    for (const k of ["slug", "label", "caption", "videoUrl"] as const) {
+      if (k in body && (!body[k] || !String(body[k]).trim())) {
+        return res.status(400).json({ error: `${k} must be a non-empty string` });
+      }
     }
-    const row = await storage.updateStudioFeaturedClip(id, patch);
+    if ("position" in body && (body.position === "" || !Number.isFinite(Number(body.position)) || Number(body.position) < 0)) {
+      return res.status(400).json({ error: "position must be a non-negative number" });
+    }
+    const patch: Record<string, unknown> = {};
+    for (const k of ["slug", "label", "caption", "videoUrl", "posterUrl"] as const) {
+      if (k in body) patch[k] = body[k] ? String(body[k]).trim() : null;
+    }
+    if ("position" in body) patch.position = Number(body.position);
+    if ("active" in body) patch.active = body.active;
+    let row;
+    try {
+      row = await storage.updateStudioFeaturedClip(id, patch);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (msg.includes("unique") || msg.includes("duplicate")) {
+        return res.status(409).json({ error: "slug already exists" });
+      }
+      return res.status(500).json({ error: msg.slice(0, 300) });
+    }
     if (!row) return res.status(404).json({ error: "not found" });
     await audit(req, "qa.studio.featured.update", { id, fields: Object.keys(patch) });
     res.json(row);
