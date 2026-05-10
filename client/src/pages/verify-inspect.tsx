@@ -980,7 +980,7 @@ export default function VerifyInspect() {
                       <img
                         src={lc.img}
                         alt={lc.name}
-                        className={`absolute inset-0 w-full h-full opacity-90 hover:opacity-100 transition-opacity ${(isPAV || isDrone) ? "object-cover" : "object-contain p-3"}`}
+                        className="absolute inset-0 w-full h-full object-cover object-center opacity-90 hover:opacity-100 transition-opacity"
                       />
                       <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/70 via-black/10 to-transparent"}`} />
                       {isPAV && (
