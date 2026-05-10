@@ -5,22 +5,21 @@ workflows:
     max_build_duration: 60
 
     # ---------------------------------------------------------------------------
-    # Environment variables — add ALL of these in the Codemagic dashboard under
-    # your app's "Environment variables" section before triggering a build.
+    # Code signing uses identities stored in the Codemagic dashboard under
+    # Code signing identities:
+    #   Certificate:          GUBER_iOS_Distribution
+    #   Provisioning profile: GUBER_AppStore_Profile
     #
-    # Code-signing variables:
-    #   CM_CERTIFICATE            Base64-encoded Apple Distribution .p12 certificate
-    #   CM_CERTIFICATE_PASSWORD   Password for the .p12 certificate
-    #   CM_PROVISIONING_PROFILE   Base64-encoded App Store provisioning profile (.mobileprovision)
-    #   DEVELOPMENT_TEAM          Your 10-character Apple Team ID (e.g. AB12CD34EF)
-    #                             Find it at developer.apple.com → Membership → Team ID
-    #
-    # App Store Connect API key (required for TestFlight / App Store upload):
-    #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Users & Access → Keys
+    # App Store Connect API key (required for TestFlight upload) — set these
+    # three environment variables in the Codemagic dashboard:
+    #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Keys page
     #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID shown next to the key name
     #   APP_STORE_CONNECT_PRIVATE_KEY     Full contents of the downloaded .p8 file
     # ---------------------------------------------------------------------------
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.guber.app
       vars:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
@@ -40,18 +39,7 @@ workflows:
       - name: Set up code signing keychain
         script: |
           keychain initialize
-          # Import the distribution certificate
-          echo "$CM_CERTIFICATE" | base64 --decode > /tmp/cert.p12
-          keychain add-certificates --certificate /tmp/cert.p12 \
-            --certificate-password "$CM_CERTIFICATE_PASSWORD"
-          # Install the provisioning profile
-          echo "$CM_PROVISIONING_PROFILE" | base64 --decode > /tmp/profile.mobileprovision
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          PROFILE_UUID=$(security cms -D -i /tmp/profile.mobileprovision \
-            | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
-          cp /tmp/profile.mobileprovision \
-            ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID".mobileprovision
-          echo "Installed provisioning profile: $PROFILE_UUID"
+          keychain add-certificates
           xcode-project use-profiles
 
       - name: Xcode archive (App Store export)
@@ -59,8 +47,7 @@ workflows:
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
-            --config Release \
-            --archive-xcargs "DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
+            --config Release
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -68,8 +55,6 @@ workflows:
 
     publishing:
       app_store_connect:
-        # API key credentials — set these three env vars in Codemagic dashboard.
-        # Do NOT use "auth: integration" and these fields at the same time; pick one.
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
