@@ -2266,7 +2266,7 @@ const popupBroadcastMutation = useMutation({
 const usePresetDay1OG = () => {
   setPopupTitle("👑 Become a Day-1 OG");
   setPopupBody("You're early — claim Day-1 OG status, lock in lower fees forever, and get your name in the founders wall. Only available while we unlock your city.");
-  setPopupCtaUrl("https://guberapp.com/day1og");
+  setPopupCtaUrl("https://guberapp.app/day1og");
   setPopupCtaLabel("Tell me more");
   setPopupAudience("non_og");
 };
