@@ -40,6 +40,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
 import { useFeatureFlag } from "@/hooks/use-feature-flag";
+import { StudioWelcomeTour } from "@/components/studio/studio-welcome-tour";
 import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
@@ -692,7 +693,9 @@ export default function StudioPageV2() {
                 <p className="text-sm font-black tracking-tight">STUDIO</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            {/* task-552: wrapper testid lets the welcome tour spotlight
+                both credits chip + plan pill in a single highlight. */}
+            <div className="flex items-center gap-2" data-testid="group-studio-credits-plan">
               {isStoreBuild ? (
                 <div
                   className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-3 py-1.5"
@@ -1234,7 +1237,7 @@ export default function StudioPageV2() {
         </section>
 
         {/* ─── LIBRARY (this session) ─────────────────────────────────── */}
-        <section>
+        <section data-testid="section-library">
           <div className="flex items-baseline justify-between mb-4">
             <h2 className="text-xl font-black tracking-tight">Your library</h2>
             {outputs.length > 0 && (
@@ -1337,6 +1340,11 @@ export default function StudioPageV2() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* task-552: first-time welcome tour. Renders nothing for users who
+          have already seen it (localStorage). Quietly self-dismisses on
+          Skip / Done / X. */}
+      <StudioWelcomeTour userId={user?.id ?? null} />
     </div>
   );
 }
