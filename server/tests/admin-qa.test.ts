@@ -1,6 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { filterVisibleItems } from "../visibility";
 import { toCloudinaryAttachmentUrl, classifyMedia } from "../media-download";
+import express from "express";
+import request from "supertest";
+import { db } from "../db";
+import { studioGenerationLog } from "@shared/schema";
+import { inArray } from "drizzle-orm";
+import { registerAdminQaRoutes } from "../admin-qa";
 
 describe("QA Dashboard — visibility filter", () => {
   const items = [
@@ -83,8 +89,6 @@ describe("QA Dashboard — feature flag resolver", () => {
 });
 
 // ── End-test refund-failure semantics ──────────────────────────────────────
-import express from "express";
-import request from "supertest";
 
 describe("QA Dashboard — end-test refund failure semantics (route shape)", () => {
   // We exercise the *response shape* the route must produce when a refund
@@ -292,5 +296,448 @@ describe("QA Dashboard — handsfree auto-flag + reset (task-482/483)", () => {
     ])).toEqual({ lastFlagAt: null, lastAdverseAt: t(150) });
     // No adverse events at all → both null
     expect(aggregate([])).toEqual({ lastFlagAt: null, lastAdverseAt: null });
+  });
+});
+
+// ── Studio Usage endpoint — /api/admin/qa/studio/usage ───────────────────
+//
+// The endpoint runs raw SQL aggregations over `studio_generation_log`.
+// These tests cover two layers:
+//
+//   1. Pure aggregation logic — mirrors the `totalsByWindow` and
+//      `perToolByWindow` helpers so a future schema change (e.g. renaming a
+//      column or adding a status) will immediately surface as a test failure
+//      rather than a silent NaN on the dashboard.
+//
+//   2. Route contract — a mini Express app that mirrors the endpoint's
+//      response shape so clients (the admin UI) have a stable shape contract.
+
+// ── Layer 1: aggregation logic ────────────────────────────────────────────
+
+type RawLogRow = {
+  status: string;
+  tool_key: string;
+  n: number;
+  credits: number;
+};
+
+/**
+ * Mirrors the `totalsByWindow` helper in the route: collapses raw SQL rows
+ * (grouped by `status`) into a flat map keyed by status.
+ */
+function totalsByWindow(rows: Pick<RawLogRow, "status" | "n" | "credits">[]) {
+  const out: Record<string, { n: number; credits: number }> = {
+    succeeded: { n: 0, credits: 0 },
+    refunded:  { n: 0, credits: 0 },
+    failed:    { n: 0, credits: 0 },
+  };
+  for (const row of rows) {
+    const k = String(row.status || "");
+    if (!out[k]) out[k] = { n: 0, credits: 0 };
+    out[k].n      = Number(row.n)       || 0;
+    out[k].credits = Number(row.credits) || 0;
+  }
+  return out;
+}
+
+/**
+ * Mirrors the `perToolByWindow` helper: pivots rows into per-tool summaries
+ * sorted by total generations descending.
+ */
+function perToolByWindow(rows: RawLogRow[]) {
+  const map: Record<string, { tool: string; succeeded: number; refunded: number; failed: number; credits: number }> = {};
+  for (const row of rows) {
+    const tool    = String(row.tool_key || "unknown");
+    const status  = String(row.status   || "");
+    const n       = Number(row.n)        || 0;
+    const credits = Number(row.credits)  || 0;
+    if (!map[tool]) map[tool] = { tool, succeeded: 0, refunded: 0, failed: 0, credits: 0 };
+    if (status === "succeeded") map[tool].succeeded = n;
+    else if (status === "refunded") map[tool].refunded = n;
+    else if (status === "failed")   map[tool].failed   = n;
+    map[tool].credits += credits;
+  }
+  return Object.values(map).sort(
+    (a, b) => (b.succeeded + b.refunded + b.failed) - (a.succeeded + a.refunded + a.failed),
+  );
+}
+
+describe("Studio Usage — totalsByWindow aggregation logic", () => {
+  it("accumulates succeeded / refunded / failed from raw DB rows", () => {
+    const rows = [
+      { status: "succeeded", n: 10, credits: 300 },
+      { status: "refunded",  n: 2,  credits:  60 },
+      { status: "failed",    n: 3,  credits:   0 },
+    ];
+    const out = totalsByWindow(rows);
+    expect(out.succeeded).toEqual({ n: 10, credits: 300 });
+    expect(out.refunded).toEqual({ n: 2,  credits:  60 });
+    expect(out.failed).toEqual({   n: 3,  credits:   0 });
+  });
+
+  it("zero-fills statuses absent from the DB result", () => {
+    const out = totalsByWindow([{ status: "succeeded", n: 5, credits: 150 }]);
+    expect(out.refunded).toEqual({ n: 0, credits: 0 });
+    expect(out.failed).toEqual(  { n: 0, credits: 0 });
+  });
+
+  it("returns all-zero map when no rows exist (empty window)", () => {
+    const out = totalsByWindow([]);
+    expect(out).toEqual({
+      succeeded: { n: 0, credits: 0 },
+      refunded:  { n: 0, credits: 0 },
+      failed:    { n: 0, credits: 0 },
+    });
+  });
+
+  it("coerces non-numeric DB values to 0 rather than NaN", () => {
+    const out = totalsByWindow([{ status: "succeeded", n: NaN, credits: NaN }]);
+    expect(out.succeeded.n).toBe(0);
+    expect(out.succeeded.credits).toBe(0);
+  });
+});
+
+describe("Studio Usage — perToolByWindow aggregation logic", () => {
+  // Seed rows that span two tools and three statuses, matching what the DB
+  // would return when there are real studio_generation_log rows.
+  const rows: RawLogRow[] = [
+    { tool_key: "wan_motion_5s",        status: "succeeded", n: 8,  credits: 240 },
+    { tool_key: "wan_motion_5s",        status: "refunded",  n: 1,  credits:  30 },
+    { tool_key: "wan_motion_5s",        status: "failed",    n: 2,  credits:   0 },
+    { tool_key: "kling_motion_control", status: "succeeded", n: 3,  credits: 240 },
+    { tool_key: "kling_motion_control", status: "failed",    n: 1,  credits:   0 },
+  ];
+
+  it("groups rows by tool_key and pivots status columns correctly", () => {
+    const out = perToolByWindow(rows);
+    const wan = out.find((t) => t.tool === "wan_motion_5s");
+    expect(wan).toBeDefined();
+    expect(wan!.succeeded).toBe(8);
+    expect(wan!.refunded).toBe(1);
+    expect(wan!.failed).toBe(2);
+
+    const kling = out.find((t) => t.tool === "kling_motion_control");
+    expect(kling).toBeDefined();
+    expect(kling!.succeeded).toBe(3);
+    expect(kling!.refunded).toBe(0);
+    expect(kling!.failed).toBe(1);
+  });
+
+  it("accumulates credits across all statuses for a tool", () => {
+    const out = perToolByWindow(rows);
+    // wan: 240 (succeeded) + 30 (refunded) + 0 (failed) = 270
+    const wan = out.find((t) => t.tool === "wan_motion_5s")!;
+    expect(wan.credits).toBe(270);
+    // kling: 240 + 0 = 240
+    const kling = out.find((t) => t.tool === "kling_motion_control")!;
+    expect(kling.credits).toBe(240);
+  });
+
+  it("sorts tools by total generation count descending", () => {
+    const out = perToolByWindow(rows);
+    // wan total = 8+1+2=11, kling total = 3+1=4 → wan first
+    expect(out[0].tool).toBe("wan_motion_5s");
+    expect(out[1].tool).toBe("kling_motion_control");
+  });
+
+  it("returns empty array when no rows exist", () => {
+    expect(perToolByWindow([])).toEqual([]);
+  });
+
+  it("falls back to 'unknown' tool key for empty string tool_key", () => {
+    const out = perToolByWindow([{ tool_key: "", status: "succeeded", n: 1, credits: 10 }]);
+    expect(out[0].tool).toBe("unknown");
+  });
+});
+
+// ── Layer 2: route contract (mini Express app) ────────────────────────────
+
+type RecentFailureRow = {
+  id: number; user_id: number; tool_key: string; status: string;
+  error_reason: string | null; credits_cost: number; created_at: string;
+};
+
+/**
+ * Maps raw DB rows to the `recentFailures` response shape.
+ * Mirrors the inline map in the production route.
+ */
+function mapRecentFailures(rows: RecentFailureRow[]) {
+  return rows.map((r) => ({
+    id:          Number(r.id),
+    userId:      Number(r.user_id),
+    toolKey:     String(r.tool_key    || ""),
+    status:      String(r.status      || ""),
+    errorReason: r.error_reason ? String(r.error_reason) : null,
+    creditsCost: Number(r.credits_cost) || 0,
+    createdAt:   r.created_at,
+  }));
+}
+
+describe("Studio Usage — recentFailures mapping logic", () => {
+  const seedRows: RecentFailureRow[] = [
+    { id: 5, user_id: 10, tool_key: "wan_motion_5s",        status: "failed",   error_reason: "provider_timeout",     credits_cost: 30, created_at: "2026-05-10T12:00:00Z" },
+    { id: 4, user_id: 11, tool_key: "kling_motion_control", status: "refunded", error_reason: "fal_upstream_error",   credits_cost: 80, created_at: "2026-05-10T11:00:00Z" },
+    { id: 3, user_id: 12, tool_key: "minimax_music",        status: "failed",   error_reason: null,                   credits_cost:  5, created_at: "2026-05-10T10:00:00Z" },
+  ];
+
+  it("maps id, userId, toolKey, status, errorReason, creditsCost, createdAt", () => {
+    const out = mapRecentFailures(seedRows);
+    expect(out[0]).toEqual({
+      id: 5, userId: 10, toolKey: "wan_motion_5s", status: "failed",
+      errorReason: "provider_timeout", creditsCost: 30, createdAt: "2026-05-10T12:00:00Z",
+    });
+    expect(out[1].status).toBe("refunded");
+    expect(out[2].errorReason).toBeNull();
+  });
+
+  it("preserves all rows in order (newest-first as returned by DB)", () => {
+    const out = mapRecentFailures(seedRows);
+    expect(out.map((r) => r.id)).toEqual([5, 4, 3]);
+  });
+
+  it("coerces numeric strings to numbers", () => {
+    const row: any = { id: "7", user_id: "99", tool_key: "wan_motion_10s", status: "failed", error_reason: null, credits_cost: "60", created_at: "2026-05-10T09:00:00Z" };
+    const [out] = mapRecentFailures([row]);
+    expect(out.id).toBe(7);
+    expect(out.userId).toBe(99);
+    expect(out.creditsCost).toBe(60);
+  });
+});
+
+// ── Layer 2: real integration test (real DB + real routes) ───────────────
+//
+// Seeds studio_generation_log rows using *synthetic* tool keys that are
+// unique to this test suite (test_wan_t558 / test_kling_t558).  Because the
+// SQL aggregation groups by tool_key, the perTool24h entries for these keys
+// are completely isolated from any ambient data, allowing exact equality
+// assertions on counts and credits rather than loose >= bounds.
+//
+// Seed layout (rows inserted within the last 24h → appear in both windows):
+//
+//   test_wan_t558   → 3 succeeded (30 cr) + 1 refunded (30 cr) + 1 failed (0 cr)
+//   test_kling_t558 → 2 succeeded (80 cr) + 1 failed (0 cr)
+
+describe("Studio Usage — /api/admin/qa/studio/usage (real DB, real routes)", () => {
+  // Unique synthetic tool keys isolate our rows from any ambient test data.
+  const TOOL_A = "test_wan_t558";
+  const TOOL_B = "test_kling_t558";
+  // No FK constraint on user_id in this table; any integer works.
+  const FAKE_USER_ID = 99_999_999;
+
+  let adminApp: ReturnType<typeof express>;
+  let anonApp:  ReturnType<typeof express>;
+  let insertedIds: number[] = [];
+
+  beforeAll(async () => {
+    // Insert seeded rows and capture their auto-generated ids for cleanup.
+    const rows = await db.insert(studioGenerationLog).values([
+      // tool A: 3 succeeded + 1 refunded + 1 failed
+      { userId: FAKE_USER_ID, toolKey: TOOL_A, status: "succeeded", creditsCost: 30 },
+      { userId: FAKE_USER_ID, toolKey: TOOL_A, status: "succeeded", creditsCost: 30 },
+      { userId: FAKE_USER_ID, toolKey: TOOL_A, status: "succeeded", creditsCost: 30 },
+      { userId: FAKE_USER_ID, toolKey: TOOL_A, status: "refunded",  creditsCost: 30, errorReason: "provider_timeout" },
+      { userId: FAKE_USER_ID, toolKey: TOOL_A, status: "failed",    creditsCost:  0, errorReason: "fal_upstream_error" },
+      // tool B: 2 succeeded + 1 failed
+      { userId: FAKE_USER_ID, toolKey: TOOL_B, status: "succeeded", creditsCost: 80 },
+      { userId: FAKE_USER_ID, toolKey: TOOL_B, status: "succeeded", creditsCost: 80 },
+      { userId: FAKE_USER_ID, toolKey: TOOL_B, status: "failed",    creditsCost:  0, errorReason: "provider_timeout" },
+    ]).returning({ id: studioGenerationLog.id });
+
+    insertedIds = rows.map((r) => r.id);
+
+    // Admin-authorised app uses the real route handler.
+    adminApp = express();
+    adminApp.use(express.json());
+    const allowAdmin = (_req: any, _res: any, next: any) => next();
+    registerAdminQaRoutes(adminApp, allowAdmin);
+
+    // Anon app whose requireAdmin always rejects.
+    anonApp = express();
+    anonApp.use(express.json());
+    const denyAdmin = (_req: any, res: any) => res.status(401).json({ message: "Unauthorized" });
+    registerAdminQaRoutes(anonApp, denyAdmin);
+  }, 30_000);
+
+  afterAll(async () => {
+    if (insertedIds.length) {
+      await db.delete(studioGenerationLog).where(inArray(studioGenerationLog.id, insertedIds));
+    }
+  }, 15_000);
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  it("returns 401 when requireAdmin blocks the request", async () => {
+    const res = await request(anonApp).get("/api/admin/qa/studio/usage");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 200 for an admin caller", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(res.status).toBe(200);
+  });
+
+  // ── Top-level shape ───────────────────────────────────────────────────────
+
+  it("response includes all expected top-level keys", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    for (const key of ["generatedAt", "totals24h", "totals7d", "perTool24h", "perTool7d", "hourly24", "daily7", "recentFailures"]) {
+      expect(res.body).toHaveProperty(key);
+    }
+  });
+
+  it("generatedAt is a valid ISO timestamp", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(typeof res.body.generatedAt).toBe("string");
+    expect(Number.isFinite(new Date(res.body.generatedAt).getTime())).toBe(true);
+  });
+
+  // ── totals24h — global counts include seeded rows ─────────────────────────
+  // Global totals aggregate all rows; use >= to avoid coupling to ambient data.
+
+  it("totals24h succeeded count is at least 5 (3 tool-A + 2 tool-B seeded)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(res.body.totals24h.succeeded.n).toBeGreaterThanOrEqual(5);
+  });
+
+  it("totals24h refunded count is at least 1 (1 tool-A seeded)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(res.body.totals24h.refunded.n).toBeGreaterThanOrEqual(1);
+  });
+
+  it("totals24h failed count is at least 2 (1 tool-A + 1 tool-B seeded)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(res.body.totals24h.failed.n).toBeGreaterThanOrEqual(2);
+  });
+
+  it("totals24h succeeded.credits is at least 250 (3×30 + 2×80 seeded)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(res.body.totals24h.succeeded.credits).toBeGreaterThanOrEqual(250);
+  });
+
+  it("totals24h status keys each carry numeric n and credits", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    for (const key of ["succeeded", "refunded", "failed"]) {
+      expect(typeof res.body.totals24h[key].n).toBe("number");
+      expect(typeof res.body.totals24h[key].credits).toBe("number");
+    }
+  });
+
+  it("totals7d counts are >= totals24h counts (seeded rows fall inside 7d window)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(res.body.totals7d.succeeded.n).toBeGreaterThanOrEqual(res.body.totals24h.succeeded.n);
+    expect(res.body.totals7d.failed.n).toBeGreaterThanOrEqual(res.body.totals24h.failed.n);
+  });
+
+  // ── perTool24h — exact assertions on isolated synthetic tool keys ─────────
+  // Because TOOL_A and TOOL_B are unique to this test run, their perTool
+  // entries are entirely our seeded rows — no ambient data can bleed in.
+
+  it("perTool24h contains both seeded synthetic tools", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    const names = res.body.perTool24h.map((t: any) => t.tool);
+    expect(names).toContain(TOOL_A);
+    expect(names).toContain(TOOL_B);
+  });
+
+  it("perTool24h TOOL_A has exactly 3 succeeded, 1 refunded, 1 failed, 120 credits", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    const a = res.body.perTool24h.find((t: any) => t.tool === TOOL_A);
+    expect(a).toBeDefined();
+    expect(a.succeeded).toBe(3);
+    expect(a.refunded).toBe(1);
+    expect(a.failed).toBe(1);
+    // credits = 3×30 (succeeded) + 1×30 (refunded) + 0 (failed) = 120
+    expect(a.credits).toBe(120);
+  });
+
+  it("perTool24h TOOL_B has exactly 2 succeeded, 0 refunded, 1 failed, 160 credits", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    const b = res.body.perTool24h.find((t: any) => t.tool === TOOL_B);
+    expect(b).toBeDefined();
+    expect(b.succeeded).toBe(2);
+    expect(b.refunded).toBe(0);
+    expect(b.failed).toBe(1);
+    // credits = 2×80 (succeeded) + 0 = 160
+    expect(b.credits).toBe(160);
+  });
+
+  it("perTool24h TOOL_A sorts before TOOL_B (total 5 vs 3 generations)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    const tools: any[] = res.body.perTool24h;
+    const aIdx = tools.findIndex((t) => t.tool === TOOL_A);
+    const bIdx = tools.findIndex((t) => t.tool === TOOL_B);
+    expect(aIdx).toBeLessThan(bIdx);
+  });
+
+  it("perTool24h entries carry numeric succeeded, refunded, failed, credits fields", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    for (const t of res.body.perTool24h) {
+      expect(typeof t.tool).toBe("string");
+      expect(typeof t.succeeded).toBe("number");
+      expect(typeof t.refunded).toBe("number");
+      expect(typeof t.failed).toBe("number");
+      expect(typeof t.credits).toBe("number");
+    }
+  });
+
+  // ── recentFailures ────────────────────────────────────────────────────────
+
+  it("recentFailures includes the 3 seeded adverse rows (2 failed + 1 refunded)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    const failures: any[] = res.body.recentFailures;
+    // Both synthetic tools' adverse rows must be present (seeded just now → highest ids)
+    const seededAdverse = failures.filter((f: any) =>
+      f.toolKey === TOOL_A || f.toolKey === TOOL_B,
+    );
+    expect(seededAdverse.length).toBe(3);
+    const statuses = seededAdverse.map((f: any) => f.status).sort();
+    expect(statuses).toEqual(["failed", "failed", "refunded"]);
+  });
+
+  it("recentFailures entries have correct shape (id, userId, toolKey, status, creditsCost, createdAt)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    for (const f of res.body.recentFailures) {
+      expect(typeof f.id).toBe("number");
+      expect(typeof f.userId).toBe("number");
+      expect(typeof f.toolKey).toBe("string");
+      expect(typeof f.status).toBe("string");
+      expect(typeof f.creditsCost).toBe("number");
+      expect(f.createdAt).toBeTruthy();
+      expect(f.errorReason === null || typeof f.errorReason === "string").toBe(true);
+    }
+  });
+
+  it("recentFailures contains only failed or refunded rows (not succeeded)", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    const allowed = new Set(["failed", "refunded"]);
+    for (const f of res.body.recentFailures) {
+      expect(allowed.has(f.status)).toBe(true);
+    }
+  });
+
+  // ── Time-series arrays ────────────────────────────────────────────────────
+
+  it("hourly24 is an array with entries having bucket, toolKey, status, n, credits", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(Array.isArray(res.body.hourly24)).toBe(true);
+    // Seeded rows are within the last 24h, so at least one bucket must exist.
+    expect(res.body.hourly24.length).toBeGreaterThanOrEqual(1);
+    const entry = res.body.hourly24[0];
+    expect(entry).toHaveProperty("bucket");
+    expect(typeof entry.toolKey).toBe("string");
+    expect(typeof entry.status).toBe("string");
+    expect(typeof entry.n).toBe("number");
+    expect(typeof entry.credits).toBe("number");
+  });
+
+  it("daily7 is an array with entries having bucket, status, n, credits", async () => {
+    const res = await request(adminApp).get("/api/admin/qa/studio/usage");
+    expect(Array.isArray(res.body.daily7)).toBe(true);
+    expect(res.body.daily7.length).toBeGreaterThanOrEqual(1);
+    const entry = res.body.daily7[0];
+    expect(entry).toHaveProperty("bucket");
+    expect(typeof entry.status).toBe("string");
+    expect(typeof entry.n).toBe("number");
+    expect(typeof entry.credits).toBe("number");
   });
 });
