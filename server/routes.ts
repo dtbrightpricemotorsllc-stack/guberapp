@@ -9987,9 +9987,21 @@ export async function registerRoutes(
     if (!pricing) return res.status(400).json({ message: "Unknown tool." });
     const creditsCost = opts.creditsCostOverride ?? pricing.creditsCost;
 
-    const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
-    if (newBalance === null) {
-      return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
+    // Admins have unlimited generation access — credits are still deducted
+    // for cost tracking, but the balance gate is skipped entirely.
+    const actingUser = await storage.getUser(userId);
+    const isAdminUser = actingUser?.role === "admin";
+
+    let newBalance: number;
+    if (isAdminUser) {
+      // Unconditional deduction — can go negative, no 402 gate.
+      newBalance = await storage.incrementStudioCredits(userId, -creditsCost);
+    } else {
+      const result = await storage.decrementStudioCredits(userId, creditsCost);
+      if (result === null) {
+        return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
+      }
+      newBalance = result;
     }
 
     // task-541: track Cloudinary assets we re-host so any failure between
