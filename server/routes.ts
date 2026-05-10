@@ -9651,21 +9651,35 @@ export async function registerRoutes(
       return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
     }
 
+    // task-541: track Cloudinary assets we re-host so any failure between
+    // upload and the studio_session_files row write destroys them — no
+    // orphans in paid storage.
+    const { createCloudinaryCleanup } = await import("./studio/cloudinary-cleanup");
+    let cloudinary: any = null;
+    try {
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        cloudinary = (await import("./cloudinary.js")).default;
+      }
+    } catch {}
+    const cleanup = createCloudinaryCleanup(cloudinary);
+
     try {
       const provider = await runProvider({ prompt: promptRaw, imageUrl });
 
       // Re-host on Cloudinary so we control the URL + can purge it on session end.
       let finalUrl = provider.url;
       let cloudinaryPublicId: string | null = null;
+      const effectiveResourceType: "video" | "image" =
+        provider.resourceType === "image" ? "image" : "video";
       try {
-        if (process.env.CLOUDINARY_CLOUD_NAME) {
-          const cloudinary = (await import("./cloudinary.js")).default;
+        if (cloudinary) {
           const uploaded = await cloudinary.uploader.upload(provider.url, {
             resource_type: provider.resourceType,
             folder: provider.folder,
           });
           finalUrl = uploaded.secure_url;
           cloudinaryPublicId = uploaded.public_id;
+          cleanup.track(cloudinaryPublicId, effectiveResourceType);
         }
       } catch (err: any) {
         console.warn(`[GUBER][studio v2] cloudinary re-host failed for ${toolKey}: ${err.message}`);
@@ -9680,6 +9694,12 @@ export async function registerRoutes(
         resourceType: provider.resourceType,
         meta: { toolKey, prompt: promptRaw, providerJobId: provider.jobId, creditsCost, ...(opts.extraMeta || {}) },
       });
+
+      // The asset is now persisted to studio_session_files and owned by the
+      // user — drop it from the cleanup list IMMEDIATELY so any late failure
+      // in touchStudioSession / logStudioGeneration doesn't destroy a file
+      // we just handed over.
+      cleanup.clear();
 
       await storage.touchStudioSession(session.id);
       await storage.logStudioGeneration({
@@ -9696,6 +9716,7 @@ export async function registerRoutes(
 
       res.json({ file, balance: newBalance });
     } catch (err: any) {
+      await cleanup.cleanup(toolKey);
       const refunded = await storage.incrementStudioCredits(userId, creditsCost);
       await storage.logStudioGeneration({
         userId,
@@ -9972,20 +9993,13 @@ export async function registerRoutes(
     let postDebitDurationSeconds: number | null = null;
     // Track every Cloudinary asset re-hosted during this run so any
     // refund/abort path can best-effort destroy ALL of them and never
-    // leave orphans in paid storage (task-538).
-    const createdAssets: { publicId: string; resourceType: "video" | "image" | "raw" }[] = [];
+    // leave orphans in paid storage (task-538). Lifted into a shared
+    // helper in task-541 so wan_motion / kling / mirror_motion / music
+    // get the same guarantee via runStudioGeneration().
+    const { createCloudinaryCleanup } = await import("./studio/cloudinary-cleanup");
+    let commercialCleanup = createCloudinaryCleanup(null);
     const cleanupCloudinaryAssets = async () => {
-      if (!postDebitCloudinary || createdAssets.length === 0) return;
-      for (const asset of createdAssets) {
-        try {
-          await postDebitCloudinary.uploader.destroy(asset.publicId, { resource_type: asset.resourceType });
-        } catch (destroyErr: any) {
-          console.warn(
-            `[GUBER][studio][commercial] cloudinary cleanup failed for ${asset.publicId} (${asset.resourceType}): ${destroyErr?.message || destroyErr}`
-          );
-        }
-      }
-      createdAssets.length = 0;
+      await commercialCleanup.cleanup("commercial");
     };
     try {
       const verticalSlug = String(req.body?.vertical || "").trim();
@@ -10067,6 +10081,7 @@ export async function registerRoutes(
         }
       } catch {}
       postDebitCloudinary = cloudinary;
+      commercialCleanup = createCloudinaryCleanup(cloudinary);
 
       const reHost = async (sourceUrlOrDataUrl: string, resourceType: "video" | "image" | "raw", folder: string): Promise<{ url: string; publicId: string | null }> => {
         if (!cloudinary) return { url: sourceUrlOrDataUrl, publicId: null };
@@ -10076,9 +10091,7 @@ export async function registerRoutes(
             resource_type: effectiveResourceType,
             folder,
           });
-          if (up.public_id) {
-            createdAssets.push({ publicId: up.public_id, resourceType: effectiveResourceType });
-          }
+          commercialCleanup.track(up.public_id, effectiveResourceType);
           return { url: up.secure_url, publicId: up.public_id };
         } catch (err: any) {
           console.warn(`[GUBER][studio][commercial] cloudinary re-host failed: ${err.message}`);
@@ -10193,7 +10206,7 @@ export async function registerRoutes(
       // Assets are now persisted to studio_session_files and belong to the
       // user — drop them from the cleanup list so any late failure on the
       // bookkeeping below doesn't destroy files we just handed over.
-      createdAssets.length = 0;
+      commercialCleanup.clear();
 
       await storage.touchStudioSession(session.id);
       await storage.logStudioGeneration({

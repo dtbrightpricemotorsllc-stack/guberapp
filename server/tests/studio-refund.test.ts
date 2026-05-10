@@ -407,6 +407,153 @@ describe("Studio refund path (task-533)", () => {
     expect(okLog).toBeTruthy();
   });
 
+  // task-541: orphan-cleanup safety net for the non-commercial Studio
+  // generators (runStudioGeneration). If re-host succeeds but the session-file
+  // row write throws, the rehosted Cloudinary asset must be destroyed —
+  // otherwise paid storage leaks on every DB hiccup. Previously only the
+  // commercial builder had this guarantee (task-538).
+  describe("Orphan-cleanup safety net (task-541)", () => {
+    it("destroys the wan_motion video when the session-file write fails", async () => {
+      generateWanMotion.mockResolvedValueOnce({
+        videoUrl: "https://example.com/wan.mp4",
+        jobId: "wan_ok_orphan",
+      });
+      const realAdd = mockStorage.addStudioSessionFile.getMockImplementation()!;
+      mockStorage.addStudioSessionFile.mockImplementationOnce(async () => {
+        throw new Error("DB write exploded after rehost");
+      });
+      mockStorage.addStudioSessionFile.mockImplementation(realAdd);
+
+      const res = await agent
+        .post("/api/studio/generate/wan-motion")
+        .send({ prompt: "neon alley", durationSeconds: 5 })
+        .expect(502);
+
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, 30);
+
+      // Cloudinary asset re-hosted, then destroyed by the cleanup helper.
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(1);
+      expect(cloudinaryDestroy).toHaveBeenCalledTimes(1);
+      const [destroyedId, destroyOpts] = cloudinaryDestroy.mock.calls[0];
+      expect(String(destroyedId)).toMatch(/^guber-studio-v2-wan\//);
+      expect(destroyOpts).toEqual({ resource_type: "video" });
+    });
+
+    it("destroys the mirror_motion video when the session-file write fails", async () => {
+      const sessionRow = await mockStorage.createStudioSession(USER_ID);
+      const refImage = await mockStorage.addStudioSessionFile({
+        sessionId: sessionRow.id,
+        userId: USER_ID,
+        fileType: "reference_image",
+        providerUrl: "https://example.com/photo.jpg",
+        cloudinaryPublicId: "ref/photo",
+        resourceType: "image",
+        meta: {},
+      });
+      mockStorage.incrementStudioCredits.mockClear();
+      mockStorage.decrementStudioCredits.mockClear();
+      cloudinaryUpload.mockClear();
+      cloudinaryDestroy.mockClear();
+
+      generateMirrorMotion.mockResolvedValueOnce({
+        videoUrl: "https://example.com/mirror.mp4",
+        jobId: "mirror_ok_orphan",
+      });
+      const realAdd = mockStorage.addStudioSessionFile.getMockImplementation()!;
+      mockStorage.addStudioSessionFile.mockImplementationOnce(async () => {
+        throw new Error("DB write exploded after mirror rehost");
+      });
+      mockStorage.addStudioSessionFile.mockImplementation(realAdd);
+
+      const res = await agent
+        .post("/api/studio/generate/mirror-motion")
+        .send({
+          prompt: "mirror the dance",
+          sourceFileId: refImage.id,
+          motionVideoUrl: "https://example.com/reference.mp4",
+          durationSeconds: 5,
+          audioRightsConfirmed: true,
+        })
+        .expect(502);
+
+      // Credits fully refunded (16 * 5 = 80 cr).
+      expect(state.users.get(USER_ID)!.studioCredits).toBe(STARTING_BALANCE);
+      expect(res.body.balance).toBe(STARTING_BALANCE);
+      expect(mockStorage.incrementStudioCredits).toHaveBeenCalledWith(USER_ID, 80);
+
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(1);
+      expect(cloudinaryDestroy).toHaveBeenCalledTimes(1);
+      const [destroyedId, destroyOpts] = cloudinaryDestroy.mock.calls[0];
+      expect(String(destroyedId)).toMatch(/^guber-studio-v2-mirror\//);
+      expect(destroyOpts).toEqual({ resource_type: "video" });
+    });
+
+    // Lifecycle regression: once the studio_session_files row commits, the
+    // asset is owned by the user. A late failure in touchStudioSession or
+    // logStudioGeneration must NOT destroy the rehosted Cloudinary asset
+    // (otherwise we'd have a row pointing to deleted media).
+    it("does NOT destroy the asset when touchStudioSession fails AFTER the row commits", async () => {
+      generateWanMotion.mockResolvedValueOnce({
+        videoUrl: "https://example.com/wan-late.mp4",
+        jobId: "wan_late_fail",
+      });
+      mockStorage.touchStudioSession.mockRejectedValueOnce(new Error("touch DB hiccup"));
+
+      // touch failing throws out of the try and lands in the refund catch,
+      // so we expect a 502 — but the cleanup must NOT have fired because
+      // cleanup.clear() ran right after addStudioSessionFile committed.
+      await agent
+        .post("/api/studio/generate/wan-motion")
+        .send({ prompt: "late-failure scenario", durationSeconds: 5 })
+        .expect(502);
+
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(1);
+      expect(cloudinaryDestroy).not.toHaveBeenCalled();
+
+      // Reset the mock for subsequent tests.
+      mockStorage.touchStudioSession.mockReset();
+      mockStorage.touchStudioSession.mockImplementation(async (_id: number) => {});
+    });
+
+    it("does NOT destroy the asset when logStudioGeneration fails AFTER the row commits", async () => {
+      generateWanMotion.mockResolvedValueOnce({
+        videoUrl: "https://example.com/wan-log-late.mp4",
+        jobId: "wan_log_late_fail",
+      });
+      const realLog = mockStorage.logStudioGeneration.getMockImplementation()!;
+      mockStorage.logStudioGeneration.mockImplementationOnce(async () => {
+        throw new Error("log DB hiccup");
+      });
+      mockStorage.logStudioGeneration.mockImplementation(realLog);
+
+      await agent
+        .post("/api/studio/generate/wan-motion")
+        .send({ prompt: "late-log-failure scenario", durationSeconds: 5 })
+        .expect(502);
+
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(1);
+      expect(cloudinaryDestroy).not.toHaveBeenCalled();
+    });
+
+    // Sanity: success path keeps the asset.
+    it("does NOT destroy the wan_motion asset when generation fully succeeds", async () => {
+      generateWanMotion.mockResolvedValueOnce({
+        videoUrl: "https://example.com/wan-ok.mp4",
+        jobId: "wan_ok_keep",
+      });
+
+      await agent
+        .post("/api/studio/generate/wan-motion")
+        .send({ prompt: "calm forest", durationSeconds: 5 })
+        .expect(200);
+
+      expect(cloudinaryUpload).toHaveBeenCalledTimes(1);
+      expect(cloudinaryDestroy).not.toHaveBeenCalled();
+    });
+  });
+
   // task-537: /api/studio/generate/commercial debits the 200-cr bundle up
   // front, then runs (1) Kling motion-control, (2) MiniMax music (1 retry),
   // (3) optional OpenAI TTS voiceover. Any of the 3 steps failing must
