@@ -43,7 +43,22 @@ export function ExternalPurchaseSheet({
       // the Stripe success_url. That way Stripe redirects straight into the
       // app and NativeDeepLinkHandler fires queryClient.invalidateQueries
       // immediately rather than waiting for the user to tap a banner.
-      options: { ...(options ?? {}), ...(isIOS ? { successUrl: "guber://purchase-complete" } : {}) },
+      options: {
+        ...(options ?? {}),
+        ...(isIOS ? {
+          successUrl: (() => {
+            const params = new URLSearchParams();
+            if (product === "studio_subscription") {
+              params.set("type", "subscription");
+              if (options?.tier) params.set("tier", options.tier);
+            } else if (product === "studio_credits") {
+              params.set("type", "credits");
+            }
+            const qs = params.toString();
+            return `guber://purchase-complete${qs ? "?" + qs : ""}`;
+          })(),
+        } : {}),
+      },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: "Failed to create checkout link" }));

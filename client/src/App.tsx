@@ -344,11 +344,23 @@ export function NativeDeepLinkHandler() {
             // the user record so updated credits / tier appear without delay.
             Browser.close().catch(() => {});
             queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-            toast({
-              title: "Credits added!",
-              description: "Your new credits are ready to use — enjoy!",
-              duration: 4000,
-            });
+            const purchaseParams = new URLSearchParams(parsed.search || "");
+            const purchaseType = purchaseParams.get("type");
+            const purchaseTier = purchaseParams.get("tier");
+            if (purchaseType === "subscription" && purchaseTier) {
+              const tierLabel = purchaseTier.charAt(0).toUpperCase() + purchaseTier.slice(1);
+              toast({
+                title: `${tierLabel} Plan activated!`,
+                description: `Welcome to ${tierLabel}! Your monthly credits have been added.`,
+                duration: 5000,
+              });
+            } else {
+              toast({
+                title: "Credits added!",
+                description: "Your new credits are ready to use — enjoy!",
+                duration: 4000,
+              });
+            }
           }
           return;
         }
