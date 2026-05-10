@@ -122,43 +122,42 @@ type ToolTile = {
   blurb: string;
   kind: "video" | "audio" | "image";
   icon: React.ComponentType<{ className?: string }>;
-  costToolKey: string | null; // null = free Quick Pic, kept for back-compat
+  costToolKey: string | null;
   starterPrompt?: string;
-  // task-549: every tool now lives on its own page. Tile tap → router push.
   href: string;
   badge?: string;
-  gradient: string;
+  accent: string; // neon hex accent color
 };
 const TOOL_TILES: ToolTile[] = [
   {
     key: "quick-pic", label: "Quick Pic", blurb: "AI image",
     kind: "image", icon: ImageIcon, costToolKey: null, badge: "Free",
-    gradient: "from-emerald-400 to-cyan-500",
+    accent: "#00e676",
     href: "/studio",
   },
   {
     key: "text-to-video", label: "Text → Video", blurb: "Motion clip",
     kind: "video", icon: Film, costToolKey: "wan_motion_5s",
-    gradient: "from-violet-500 to-fuchsia-500",
+    accent: "#a78bfa",
     href: "/studio/text-to-video",
   },
   {
     key: "mirror-motion-tile", label: "Mirror Motion", blurb: "Photo + video",
     kind: "video", icon: Repeat, costToolKey: "mirror_motion",
-    gradient: "from-rose-500 to-orange-500",
+    accent: "#f472b6",
     href: "/studio/mirror-motion",
   },
   {
     key: "build-commercial-tile", label: "Build Ad", blurb: "Full commercial",
     kind: "video", icon: Megaphone, costToolKey: "commercial_builder",
     badge: "New",
-    gradient: "from-amber-400 to-rose-600",
+    accent: "#fbbf24",
     href: "/studio/commercial",
   },
   {
     key: "music", label: "Music", blurb: "Instrumental track",
     kind: "audio", icon: Music, costToolKey: "minimax_music",
-    gradient: "from-indigo-500 to-purple-600",
+    accent: "#818cf8",
     href: "/studio/music",
   },
 ];
@@ -933,25 +932,45 @@ export default function StudioPageV2() {
                   key={tile.key}
                   type="button"
                   onClick={() => pickToolTile(tile)}
-                  className="group relative aspect-square rounded-2xl overflow-hidden ring-1 ring-white/10 hover:ring-white/30 transition-all hover:-translate-y-0.5 text-left"
+                  className="group relative aspect-square rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 active:scale-95 text-left"
+                  style={{
+                    background: "#07070f",
+                    border: `1.5px solid ${tile.accent}38`,
+                    boxShadow: `0 0 18px ${tile.accent}18, inset 0 1px 0 rgba(255,255,255,0.04)`,
+                  }}
                   data-testid={`tool-tile-${tile.key}`}
                 >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} opacity-90`} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent" />
-                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/25 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+                  {/* radial color bloom behind icon */}
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: `radial-gradient(ellipse at 50% 55%, ${tile.accent}30 0%, transparent 68%)` }}
+                  />
+                  {/* bottom fade for text legibility */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                  {/* shimmer sweep on hover */}
+                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 pointer-events-none" />
+                  {/* badge */}
                   {tile.badge && (
                     <div className="absolute top-2 left-2">
-                      <span className="text-[9px] uppercase tracking-wider bg-white text-black px-1.5 py-0.5 rounded-full font-black shadow-sm">
+                      <span
+                        className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full font-black"
+                        style={{ background: `${tile.accent}22`, color: tile.accent, border: `1px solid ${tile.accent}55` }}
+                      >
                         {tile.badge}
                       </span>
                     </div>
                   )}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <TileIcon className="w-9 h-9 text-white drop-shadow-lg" />
+                  {/* icon */}
+                  <div className="absolute inset-0 flex items-center justify-center pb-6">
+                    <TileIcon
+                      className="w-11 h-11"
+                      style={{ color: tile.accent, filter: `drop-shadow(0 0 12px ${tile.accent}88)` }}
+                    />
                   </div>
-                  <div className="absolute inset-x-0 bottom-0 p-2.5">
+                  {/* label + blurb */}
+                  <div className="absolute inset-x-0 bottom-0 px-2.5 pb-2.5">
                     <p className="font-black text-[13px] leading-tight text-white truncate">{tile.label}</p>
-                    <p className="text-[10px] text-white/80 leading-tight mt-0.5 truncate">{tile.blurb}</p>
+                    <p className="text-[10px] leading-tight mt-0.5 truncate" style={{ color: `${tile.accent}cc` }}>{tile.blurb}</p>
                   </div>
                 </button>
               );
