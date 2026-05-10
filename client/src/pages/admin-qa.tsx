@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown } from "lucide-react";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -1228,6 +1228,397 @@ function StudioUsageTab() {
   );
 }
 
+type FeaturedClip = {
+  id: number;
+  slug: string;
+  label: string;
+  caption: string;
+  videoUrl: string;
+  posterUrl: string | null;
+  position: number;
+  active: boolean;
+  createdAt: string;
+};
+
+type ClipFormState = {
+  slug: string;
+  label: string;
+  caption: string;
+  videoUrl: string;
+  posterUrl: string;
+  position: string;
+  active: boolean;
+};
+
+const EMPTY_FORM: ClipFormState = { slug: "", label: "", caption: "", videoUrl: "", posterUrl: "", position: "100", active: true };
+
+function clipFormErrors(f: ClipFormState) {
+  const errs: Record<string, string> = {};
+  if (!f.slug.trim()) errs.slug = "Required";
+  else if (!/^[a-z0-9-]+$/.test(f.slug.trim())) errs.slug = "Lowercase letters, numbers, hyphens only";
+  if (!f.label.trim()) errs.label = "Required";
+  if (!f.caption.trim()) errs.caption = "Required";
+  if (!f.videoUrl.trim()) errs.videoUrl = "Required";
+  const pos = Number(f.position);
+  if (f.position.trim() === "" || !Number.isFinite(pos) || pos < 0) errs.position = "Must be a non-negative number";
+  return errs;
+}
+
+function FeaturedClipsTab() {
+  const { toast } = useToast();
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState<ClipFormState>(EMPTY_FORM);
+  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<ClipFormState>(EMPTY_FORM);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+
+  const { data: clips, isLoading, isError, refetch } = useQuery<FeaturedClip[]>({
+    queryKey: ["/api/admin/studio/featured"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/admin/studio/featured", body).then((r) => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studio/featured"] });
+      setShowCreate(false);
+      setCreateForm(EMPTY_FORM);
+      setCreateErrors({});
+      toast({ title: "Clip created" });
+    },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: object }) =>
+      apiRequest("PATCH", `/api/admin/studio/featured/${id}`, body).then((r) => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studio/featured"] });
+      setEditingId(null);
+      toast({ title: "Clip updated" });
+    },
+    onError: (e: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studio/featured"] });
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/admin/studio/featured/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studio/featured"] });
+      toast({ title: "Clip deleted" });
+    },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const toggleActive = (clip: FeaturedClip) => {
+    updateMutation.mutate({ id: clip.id, body: { active: !clip.active } });
+  };
+
+  function startEdit(clip: FeaturedClip) {
+    setEditingId(clip.id);
+    setEditErrors({});
+    setEditForm({
+      slug: clip.slug,
+      label: clip.label,
+      caption: clip.caption,
+      videoUrl: clip.videoUrl,
+      posterUrl: clip.posterUrl ?? "",
+      position: String(clip.position),
+      active: clip.active,
+    });
+  }
+
+  function submitCreate() {
+    const errs = clipFormErrors(createForm);
+    if (Object.keys(errs).length > 0) { setCreateErrors(errs); return; }
+    createMutation.mutate({
+      slug: createForm.slug.trim(),
+      label: createForm.label.trim(),
+      caption: createForm.caption.trim(),
+      videoUrl: createForm.videoUrl.trim(),
+      posterUrl: createForm.posterUrl.trim() || null,
+      position: Number(createForm.position),
+      active: createForm.active,
+    });
+  }
+
+  function submitEdit() {
+    if (editingId === null) return;
+    const errs = clipFormErrors(editForm);
+    if (Object.keys(errs).length > 0) { setEditErrors(errs); return; }
+    updateMutation.mutate({
+      id: editingId,
+      body: {
+        slug: editForm.slug.trim(),
+        label: editForm.label.trim(),
+        caption: editForm.caption.trim(),
+        videoUrl: editForm.videoUrl.trim(),
+        posterUrl: editForm.posterUrl.trim() || null,
+        position: Number(editForm.position),
+        active: editForm.active,
+      },
+    });
+  }
+
+  function shiftPosition(clip: FeaturedClip, direction: "up" | "down", sorted: FeaturedClip[]) {
+    const idx = sorted.findIndex((c) => c.id === clip.id);
+    const neighbor = direction === "up" ? sorted[idx - 1] : sorted[idx + 1];
+    if (!neighbor) return;
+    updateMutation.mutate({ id: clip.id, body: { position: neighbor.position } });
+    updateMutation.mutate({ id: neighbor.id, body: { position: clip.position } });
+  }
+
+  const ClipField = ({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) => (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      {children}
+      {error && <p className="text-xs text-red-600" data-testid={`error-${label.toLowerCase()}`}>{error}</p>}
+    </div>
+  );
+
+  const FormFields = ({
+    form, setForm, errors,
+  }: { form: ClipFormState; setForm: (f: ClipFormState) => void; errors: Record<string, string> }) => (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <ClipField label="Slug" error={errors.slug}>
+        <Input
+          value={form.slug}
+          placeholder="my-clip-slug"
+          onChange={(e) => setForm({ ...form, slug: e.target.value })}
+          data-testid="input-clip-slug"
+        />
+      </ClipField>
+      <ClipField label="Label" error={errors.label}>
+        <Input
+          value={form.label}
+          placeholder="Trending label"
+          onChange={(e) => setForm({ ...form, label: e.target.value })}
+          data-testid="input-clip-label"
+        />
+      </ClipField>
+      <ClipField label="Position" error={errors.position}>
+        <Input
+          type="number"
+          min={0}
+          value={form.position}
+          onChange={(e) => setForm({ ...form, position: e.target.value })}
+          data-testid="input-clip-position"
+        />
+      </ClipField>
+      <ClipField label="Active">
+        <div className="flex items-center gap-2 pt-1">
+          <input
+            type="checkbox"
+            id="clip-active"
+            checked={form.active}
+            onChange={(e) => setForm({ ...form, active: e.target.checked })}
+            className="h-4 w-4 cursor-pointer"
+            data-testid="checkbox-clip-active"
+          />
+          <label htmlFor="clip-active" className="text-sm cursor-pointer">Show on Trends rail</label>
+        </div>
+      </ClipField>
+      <ClipField label="Video URL" error={errors.videoUrl}>
+        <Input
+          value={form.videoUrl}
+          placeholder="https://res.cloudinary.com/…/video.mp4"
+          onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
+          data-testid="input-clip-video-url"
+        />
+      </ClipField>
+      <ClipField label="Poster URL (optional)">
+        <Input
+          value={form.posterUrl}
+          placeholder="https://… (thumbnail image)"
+          onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
+          data-testid="input-clip-poster-url"
+        />
+      </ClipField>
+      <ClipField label="Caption (prompt text)" error={errors.caption}>
+        <Input
+          value={form.caption}
+          placeholder="Cinematic aerial shot of …"
+          onChange={(e) => setForm({ ...form, caption: e.target.value })}
+          className="sm:col-span-2"
+          data-testid="input-clip-caption"
+        />
+      </ClipField>
+    </div>
+  );
+
+  if (isLoading) return <div className="p-4 text-sm">Loading…</div>;
+  if (isError) return <Card><CardContent className="p-4 text-sm text-red-600">Failed to load featured clips.</CardContent></Card>;
+
+  const sorted = [...(clips ?? [])].sort((a, b) => a.position - b.position || a.id - b.id);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Manage the "Trending Now" rail on <code className="text-xs">/studio</code>. Clips are shown ordered by position (lower = first).
+        </p>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => refetch()} data-testid="button-featured-refresh">Refresh</Button>
+          <Button
+            size="sm"
+            onClick={() => { setShowCreate((v) => !v); setCreateErrors({}); setCreateForm(EMPTY_FORM); }}
+            data-testid="button-featured-new"
+          >
+            <Plus className="mr-1 h-3 w-3" /> New Clip
+          </Button>
+        </div>
+      </div>
+
+      {showCreate && (
+        <Card className="border-primary/40" data-testid="card-create-clip">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Plus className="h-4 w-4" /> New Featured Clip
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormFields form={createForm} setForm={setCreateForm} errors={createErrors} />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={submitCreate}
+                disabled={createMutation.isPending}
+                data-testid="button-create-clip-submit"
+              >
+                {createMutation.isPending ? "Saving…" : "Create Clip"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setShowCreate(false); setCreateErrors({}); }}
+                data-testid="button-create-clip-cancel"
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {sorted.length === 0 && !showCreate && (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">
+            No featured clips yet. Click "New Clip" to add the first one.
+          </CardContent>
+        </Card>
+      )}
+
+      {sorted.map((clip, idx) => {
+        const isEditing = editingId === clip.id;
+        const isDeleting = deleteMutation.isPending && deleteMutation.variables === clip.id;
+        const isUpdating = updateMutation.isPending && updateMutation.variables?.id === clip.id;
+
+        return (
+          <Card key={clip.id} data-testid={`card-clip-${clip.id}`} className={clip.active ? "" : "opacity-60"}>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Film className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="font-semibold text-sm truncate" data-testid={`text-clip-label-${clip.id}`}>{clip.label}</span>
+                    <code className="text-xs text-muted-foreground font-mono" data-testid={`text-clip-slug-${clip.id}`}>{clip.slug}</code>
+                    <Badge variant={clip.active ? "default" : "outline"} data-testid={`badge-clip-active-${clip.id}`}>
+                      {clip.active ? "Active" : "Inactive"}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">pos: {clip.position}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground truncate" data-testid={`text-clip-caption-${clip.id}`}>{clip.caption}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    disabled={idx === 0 || isUpdating}
+                    onClick={() => shiftPosition(clip, "up", sorted)}
+                    data-testid={`button-clip-up-${clip.id}`}
+                    title="Move up"
+                  >
+                    <ChevronUp className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    disabled={idx === sorted.length - 1 || isUpdating}
+                    onClick={() => shiftPosition(clip, "down", sorted)}
+                    data-testid={`button-clip-down-${clip.id}`}
+                    title="Move down"
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => toggleActive(clip)}
+                    disabled={isUpdating}
+                    data-testid={`button-clip-toggle-${clip.id}`}
+                  >
+                    {clip.active ? "Deactivate" : "Activate"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => isEditing ? setEditingId(null) : startEdit(clip)}
+                    data-testid={`button-clip-edit-${clip.id}`}
+                    title={isEditing ? "Cancel edit" : "Edit"}
+                  >
+                    {isEditing ? <XIcon className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => { if (confirm(`Delete clip "${clip.label}"?`)) deleteMutation.mutate(clip.id); }}
+                    disabled={isDeleting}
+                    data-testid={`button-clip-delete-${clip.id}`}
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+
+            {isEditing && (
+              <CardContent className="space-y-4 border-t pt-4">
+                <FormFields form={editForm} setForm={setEditForm} errors={editErrors} />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={submitEdit}
+                    disabled={updateMutation.isPending}
+                    data-testid={`button-clip-save-${clip.id}`}
+                  >
+                    {updateMutation.isPending ? "Saving…" : "Save Changes"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setEditingId(null); setEditErrors({}); }}
+                    data-testid={`button-clip-cancel-${clip.id}`}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function CashDropDebuggerTab() {
   const [id, setId] = useState("");
   return (
@@ -1264,6 +1655,7 @@ export default function AdminQa() {
           <TabsTrigger value="orphan-sweep" data-testid="tab-orphan-sweep"><Trash2 className="mr-1 h-3 w-3" />Orphan Sweep</TabsTrigger>
           <TabsTrigger value="studio-usage" data-testid="tab-studio-usage"><Activity className="mr-1 h-3 w-3" />Studio Usage</TabsTrigger>
           <TabsTrigger value="studio-tiles" data-testid="tab-studio-tiles"><ImageIcon className="mr-1 h-3 w-3" />Studio Tiles</TabsTrigger>
+          <TabsTrigger value="featured-clips" data-testid="tab-featured-clips"><Film className="mr-1 h-3 w-3" />Trends Rail</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -1291,6 +1683,7 @@ export default function AdminQa() {
         <TabsContent value="orphan-sweep"><OrphanSweepTab /></TabsContent>
         <TabsContent value="studio-usage"><StudioUsageTab /></TabsContent>
         <TabsContent value="studio-tiles"><StudioTilesTab /></TabsContent>
+        <TabsContent value="featured-clips"><FeaturedClipsTab /></TabsContent>
       </Tabs>
     </div>
   );
