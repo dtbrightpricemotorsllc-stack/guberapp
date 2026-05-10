@@ -534,6 +534,19 @@ function fuzzCoordinate(coord: number | null, seed: number = 0): number | null {
   return coord + (lcg - 0.5) * 0.003; // ±0.0015° ≈ ±0.1 mi — protects home address, avoids water displacement
 }
 
+/**
+ * Fuzz a cash-drop coordinate to ZIP-code level (±0.01° ≈ ±1.1 km).
+ * Seeded deterministically by drop ID + axis so every viewer sees the same
+ * approximate pin, but the exact drop location stays hidden until the user
+ * has an accepted attempt.
+ */
+function fuzzDropCoordinate(coord: number | null, dropId: number, axis: "lat" | "lng"): number | null {
+  if (coord == null) return null;
+  const seed = axis === "lat" ? dropId : dropId * 31 + 17;
+  const lcg = ((seed * 1664525 + 1013904223) & 0x7fffffff) / 0x7fffffff;
+  return Math.round((coord + (lcg - 0.5) * 0.02) * 1000) / 1000; // ±0.01° ≈ zip-code level
+}
+
 // Wrap a job-returning response so mutation endpoints don't accidentally
 // leak poster-only fields (auto-increase config, suggested boost, internal
 // admin notes) to assigned helpers or other viewers. Admins always receive
@@ -14402,6 +14415,14 @@ OUTPUT STYLE:
         allowlistedIds: allowlisted,
         ownerCheck: (d) => d.hostUserId === req.session?.userId,
       });
+      // Privacy: fuzz GPS to ZIP-code level for the public list/map.
+      // Exact coordinates are only revealed on the detail page once the user
+      // has an accepted attempt and taps Navigate.
+      drops = drops.map((d) => ({
+        ...d,
+        gpsLat: fuzzDropCoordinate(d.gpsLat, d.id, "lat"),
+        gpsLng: fuzzDropCoordinate(d.gpsLng, d.id, "lng"),
+      }));
       res.json(drops);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -14423,8 +14444,18 @@ OUTPUT STYLE:
       const attempt = await storage.getCashDropAttemptByUser(drop.id, userId);
       const clueVisible = attempt?.status === "arrived" || attempt?.status === "submitted" || attempt?.status === "won";
 
+      // Privacy: exact GPS is only revealed once the viewer has actively accepted
+      // the drop (or is the host / admin). Everyone else gets a ZIP-code-level
+      // fuzzed pin so the real location stays private until navigation is needed.
+      const isHost = drop.hostUserId === userId;
+      const activeAttemptStatuses = new Set(["accepted", "on_way", "arrived", "submitted", "won"]);
+      const hasActiveAttempt = attempt != null && activeAttemptStatuses.has(attempt.status);
+      const revealExactCoords = isAdmin || isHost || hasActiveAttempt;
+
       res.json({
         ...drop,
+        gpsLat: revealExactCoords ? drop.gpsLat : fuzzDropCoordinate(drop.gpsLat, drop.id, "lat"),
+        gpsLng: revealExactCoords ? drop.gpsLng : fuzzDropCoordinate(drop.gpsLng, drop.id, "lng"),
         clueText: (drop.clueRevealOnArrival && !clueVisible) ? null : drop.clueText,
         userAttempt: attempt || null,
       });

@@ -1409,7 +1409,14 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             )}
             <div className="bg-background rounded-xl p-3">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Location</p>
-              {(isOwner || isHelper) && isJobAddressUnlocked(job as any) ? (
+              {isOwner && job.location ? (
+                // Poster always sees their own address — it's their location.
+                <p className="text-sm flex items-center gap-1" data-testid="text-job-address-unlocked">
+                  <MapPin className="w-3 h-3" />{job.location}
+                </p>
+              ) : isHelper && isJobAddressUnlocked(job as any) ? (
+                // Assigned worker sees exact address only once both parties have
+                // agreed on a schedule and payment is held (job locked).
                 <p className="text-sm flex items-center gap-1" data-testid="text-job-address-unlocked">
                   <MapPin className="w-3 h-3" />{job.location || "N/A"}
                 </p>
@@ -1418,7 +1425,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                   <Lock className="w-3 h-3" />{(job as any).locationApprox || job.zip || "Locked"}
                 </p>
               )}
-              {(isOwner || isHelper) && !isJobAddressUnlocked(job as any) && (
+              {isHelper && !isOwner && !isJobAddressUnlocked(job as any) && (
                 <p className="text-[10px] text-muted-foreground/80 mt-1.5 leading-tight" data-testid="text-address-unlock-hint">
                   Address unlocks once the time is confirmed and payment is held.
                 </p>
