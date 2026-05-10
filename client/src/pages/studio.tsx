@@ -32,6 +32,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -334,6 +337,10 @@ export default function StudioPageV2() {
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [outputKind, setOutputKind] = useState<"video" | "audio" | "image">("video");
   const [prompt, setPrompt] = useState("");
+  // Explicit Exit confirm. Sessions live 24h after last activity, so this
+  // is purely a "are you sure you want to leave Studio?" navigation guard
+  // — it does NOT call /api/studio/session/exit and does not purge.
+  const [confirmExit, setConfirmExit] = useState(false);
   // Phase 3 — `/studio?prompt=...&kind=video` prefills from the For You
   // feed's "Recreate this" button. We consume the value once on mount,
   // strip the query string so a refresh doesn't re-trigger the focus,
@@ -640,15 +647,14 @@ export default function StudioPageV2() {
 
         <div className="relative z-10 max-w-2xl mx-auto px-5 pt-6 pb-12">
           <div className="flex items-center justify-between gap-3 mb-8">
-            <Link href="/">
-              <button
-                type="button"
-                className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
-                data-testid="button-studio-exit"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" /> Exit
-              </button>
-            </Link>
+            <button
+              type="button"
+              onClick={() => setConfirmExit(true)}
+              className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
+              data-testid="button-studio-exit"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Exit
+            </button>
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_0_24px_rgba(34,197,94,0.5)]">
                 <Wand2 className="w-5 h-5 text-black" />
@@ -1266,6 +1272,38 @@ export default function StudioPageV2() {
         </div>
       </div>
 
+      {/* Exit confirm — purely a navigation guard. Sessions live 24h after
+          last activity; nothing is purged when the user leaves Studio. */}
+      <Dialog open={confirmExit} onOpenChange={setConfirmExit}>
+        <DialogContent className="bg-neutral-950 border-white/10 text-white" data-testid="dialog-studio-exit">
+          <DialogHeader>
+            <DialogTitle>Leave Studio?</DialogTitle>
+            <DialogDescription className="text-white/70">
+              Your session sticks around for 24 hours, so any clips and uploads
+              will still be here when you come back.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-white/70 hover:text-white hover:bg-white/10"
+              onClick={() => setConfirmExit(false)}
+              data-testid="button-exit-cancel"
+            >
+              Stay
+            </Button>
+            <Button
+              type="button"
+              className="bg-white text-black hover:bg-white/90 font-bold"
+              onClick={() => { setConfirmExit(false); navigate("/"); }}
+              data-testid="button-exit-confirm"
+            >
+              Leave Studio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

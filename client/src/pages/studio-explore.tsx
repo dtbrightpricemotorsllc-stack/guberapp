@@ -12,7 +12,7 @@
 // Hidden behind a nav entry on /studio so the legacy v2 surface still
 // works for anyone deep-linking.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Heart, Share2, Sparkles, Wand2, Loader2, Volume2, VolumeX } from "lucide-react";
@@ -35,11 +35,13 @@ function ExploreCard({
   muted,
   onToggleMute,
   onRecreate,
+  onFailed,
 }: {
   clip: FeaturedClip;
   muted: boolean;
   onToggleMute: () => void;
   onRecreate: () => void;
+  onFailed: (id: number) => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [liked, setLiked] = useState(false);
@@ -90,6 +92,7 @@ function ExploreCard({
         loop
         playsInline
         preload="metadata"
+        onError={() => onFailed(clip.id)}
         className="absolute inset-0 w-full h-full object-cover"
         data-testid={`video-explore-${clip.slug}`}
       />
@@ -160,10 +163,34 @@ function ExploreCard({
   );
 }
 
+// Map a featured clip → the most appropriate dedicated tool route. We
+// look at the slug + caption text first (sharper signal than label), then
+// fall back to /studio/text-to-video which can handle any prompt.
+function routeForClip(clip: FeaturedClip): { path: string; query: string } {
+  const hay = `${clip.slug} ${clip.caption} ${clip.label}`.toLowerCase();
+  const params = new URLSearchParams({ prompt: clip.caption, ref: clip.slug });
+  if (/(music|song|track|score|beat|audio|instrumental)/.test(hay)) {
+    return { path: "/studio/music", query: params.toString() };
+  }
+  if (/(commercial|ad\b|advert|brand|product reveal|spot)/.test(hay)) {
+    return { path: "/studio/commercial", query: params.toString() };
+  }
+  if (/(portrait|photo|reference|mirror)/.test(hay)) {
+    return { path: "/studio/mirror-motion", query: params.toString() };
+  }
+  return { path: "/studio/text-to-video", query: params.toString() };
+}
+
 export default function StudioExplore() {
   const [, navigate] = useLocation();
   const featuredQuery = useQuery<FeaturedClip[]>({ queryKey: ["/api/studio/featured"] });
   const [muted, setMuted] = useState(true);
+  const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
+
+  const visibleClips = useMemo(
+    () => (featuredQuery.data ?? []).filter((c) => !failedIds.has(c.id)),
+    [featuredQuery.data, failedIds],
+  );
 
   useEffect(() => {
     const prev = document.title;
@@ -179,8 +206,8 @@ export default function StudioExplore() {
   }, []);
 
   function recreate(clip: FeaturedClip) {
-    const params = new URLSearchParams({ prompt: clip.caption, ref: clip.slug });
-    navigate(`/studio?${params.toString()}`);
+    const { path, query } = routeForClip(clip);
+    navigate(`${path}?${query}`);
   }
 
   return (
@@ -210,7 +237,7 @@ export default function StudioExplore() {
           </div>
         )}
 
-        {!featuredQuery.isLoading && (featuredQuery.data?.length ?? 0) === 0 && (
+        {!featuredQuery.isLoading && visibleClips.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
             <Sparkles className="w-8 h-8 text-emerald-400" />
             <p className="font-black text-lg">No clips yet</p>
@@ -225,13 +252,21 @@ export default function StudioExplore() {
 
         {/* vertical snap feed */}
         <div className="h-full overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-          {(featuredQuery.data ?? []).map((clip) => (
+          {visibleClips.map((clip) => (
             <ExploreCard
               key={clip.id}
               clip={clip}
               muted={muted}
               onToggleMute={() => setMuted((m) => !m)}
               onRecreate={() => recreate(clip)}
+              onFailed={(id) =>
+                setFailedIds((prev) => {
+                  if (prev.has(id)) return prev;
+                  const next = new Set(prev);
+                  next.add(id);
+                  return next;
+                })
+              }
             />
           ))}
         </div>
