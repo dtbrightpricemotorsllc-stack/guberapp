@@ -1338,6 +1338,21 @@ export async function runAllScheduledSweeps(): Promise<void> {
     } catch (err: any) {
       console.error("[cron] studio orphan sweep failed:", err?.message || err);
     }
+
+    // task-556 — Studio refund/failure-rate alert. Internally throttled
+    // (default 4 h) so firing on every 5-min cadence is safe.
+    try {
+      const { maybeCheckStudioRefundRate } = await import("./studio-refund-alert.js");
+      const result = await maybeCheckStudioRefundRate();
+      if (result.sent) {
+        const pct = result.sample ? (result.sample.rate * 100).toFixed(1) : "?";
+        console.log(
+          `[cron] studio refund alert sent: ${pct}% rate, notified=${result.notified}, emailed=${result.emailed}`,
+        );
+      }
+    } catch (err: any) {
+      console.error("[cron] studio refund alert check failed:", err?.message || err);
+    }
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -1526,6 +1541,21 @@ export function startCron() {
 
       const purged = await purgeViProofMedia();
       if (purged > 0) console.log(`[cron] purged media on ${purged} V&I proof(s) past 30-day retention`);
+
+      // task-556 — Studio refund/failure-rate alert. Internally throttled
+      // (default 4 h) so firing on every 5-min cadence is safe.
+      try {
+        const { maybeCheckStudioRefundRate } = await import("./studio-refund-alert.js");
+        const result = await maybeCheckStudioRefundRate();
+        if (result.sent) {
+          const pct = result.sample ? (result.sample.rate * 100).toFixed(1) : "?";
+          console.log(
+            `[cron] studio refund alert sent: ${pct}% rate, notified=${result.notified}, emailed=${result.emailed}`,
+          );
+        }
+      } catch (err: any) {
+        console.error("[cron] studio refund alert check failed:", err?.message || err);
+      }
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }
