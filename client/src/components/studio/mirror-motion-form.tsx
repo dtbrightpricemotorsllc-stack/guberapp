@@ -23,11 +23,13 @@ type StudioTool = { key: string; creditsCost: number; durationSeconds: number | 
 export function MirrorMotionForm({
   uploadedImages,
   onUpload,
+  initialPrompt,
   uploadPending,
   credits,
 }: {
   uploadedImages: StudioFile[];
   onUpload: (file: File) => void;
+  initialPrompt?: string;
   uploadPending: boolean;
   credits: number;
 }) {
@@ -37,7 +39,7 @@ export function MirrorMotionForm({
   const [sourceFileId, setSourceFileId] = useState<number | null>(null);
   const [motionVideoUrl, setMotionVideoUrl] = useState("");
   const [durationSeconds, setDurationSeconds] = useState<5 | 10>(5);
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [rights, setRights] = useState(false);
 
   // Pull live per-second pricing from /api/studio/tools so we don't drift

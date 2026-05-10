@@ -1,5 +1,7 @@
 // /studio/commercial — task-549.
 // Dedicated full page for the Commercial Builder, replaces the old in-modal wizard.
+import { useEffect, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -13,6 +15,17 @@ type StudioTool = { key: string; creditsCost: number };
 
 export default function StudioCommercialPage() {
   const { toast } = useToast();
+  const searchString = useSearch();
+  const prefillConsumedRef = useRef(false);
+  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (prefillConsumedRef.current || !searchString) return;
+    const p = new URLSearchParams(searchString).get("prompt");
+    if (!p) return;
+    prefillConsumedRef.current = true;
+    setInitialPrompt(p);
+    window.history.replaceState({}, "", "/studio/commercial");
+  }, [searchString]);
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
   const toolsQuery = useQuery<StudioTool[]>({ queryKey: ["/api/studio/tools"] });
   const sessionQuery = useQuery<SessionPayload>({
@@ -60,8 +73,10 @@ export default function StudioCommercialPage() {
       iconAccent="from-amber-400 to-rose-600"
     >
       <CommercialWizardForm
+        key={initialPrompt ?? ""}
         uploadedImages={uploadedImages}
         onUpload={onUpload}
+        initialPrompt={initialPrompt}
         uploadPending={uploadMutation.isPending}
         credits={credits}
         cost={cost}

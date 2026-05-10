@@ -31,12 +31,14 @@ type Step = typeof STEPS[number];
 export function CommercialWizardForm({
   uploadedImages,
   onUpload,
+  initialPrompt,
   uploadPending,
   credits,
   cost,
 }: {
   uploadedImages: StudioFile[];
   onUpload: (file: File) => void;
+  initialPrompt?: string;
   uploadPending: boolean;
   credits: number;
   cost: number;
@@ -49,7 +51,9 @@ export function CommercialWizardForm({
   const [customVertical, setCustomVertical] = useState("");
   const [productPhotoFileId, setProductPhotoFileId] = useState<number | null>(null);
   const [businessName, setBusinessName] = useState("");
-  const [businessDescription, setBusinessDescription] = useState("");
+  // initialPrompt arrives from /studio/explore "Recreate this" — seeds
+  // the business description so the user lands with intent preserved.
+  const [businessDescription, setBusinessDescription] = useState(initialPrompt ?? "");
   const [ctaText, setCtaText] = useState("Call today");
   const [voiceId, setVoiceId] = useState<string>("none");
 

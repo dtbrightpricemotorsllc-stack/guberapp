@@ -1,7 +1,8 @@
 // /studio/music — task-549.
 // Dedicated music-generation page (MiniMax). Indigo/violet palette so it
 // reads as audio at a glance — distinct from the green/violet video tools.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,18 @@ const MOOD_CHIPS = [
 export default function StudioMusicPage() {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState("");
+  // Recreate-this prefill from /studio/explore. Consume `prompt` once on
+  // mount and strip the query string so refresh doesn't retrigger.
+  const searchString = useSearch();
+  const prefillConsumedRef = useRef(false);
+  useEffect(() => {
+    if (prefillConsumedRef.current || !searchString) return;
+    const p = new URLSearchParams(searchString).get("prompt");
+    if (!p) return;
+    prefillConsumedRef.current = true;
+    setPrompt(p);
+    window.history.replaceState({}, "", "/studio/music");
+  }, [searchString]);
 
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
   const toolsQuery = useQuery<StudioTool[]>({ queryKey: ["/api/studio/tools"] });

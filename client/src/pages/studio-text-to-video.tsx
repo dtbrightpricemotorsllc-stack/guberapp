@@ -1,6 +1,7 @@
 // /studio/text-to-video — task-549.
 // Dedicated text→video page (Wan motion 5s / 10s). Pure prompt + duration toggle.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,16 @@ export default function StudioTextToVideoPage() {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState<5 | 10>(5);
+  const searchString = useSearch();
+  const prefillConsumedRef = useRef(false);
+  useEffect(() => {
+    if (prefillConsumedRef.current || !searchString) return;
+    const p = new URLSearchParams(searchString).get("prompt");
+    if (!p) return;
+    prefillConsumedRef.current = true;
+    setPrompt(p);
+    window.history.replaceState({}, "", "/studio/text-to-video");
+  }, [searchString]);
 
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
   const toolsQuery = useQuery<StudioTool[]>({ queryKey: ["/api/studio/tools"] });

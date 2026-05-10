@@ -1155,7 +1155,7 @@ export default function StudioPageV2() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold">Rendering your clip</p>
-                <p className="text-[11px] text-white/60 truncate">Pixels in motion. Hang tight — leaving this page wipes the result.</p>
+                <p className="text-[11px] text-white/60 truncate">Pixels in motion. Hang tight — your session sticks around for 24h.</p>
               </div>
             </div>
           )}
