@@ -120,14 +120,27 @@ and Apple will reject the build.
 2. Open the GUBER project in Xcode → Signing & Capabilities tab.
 3. Confirm the active provisioning profile shows **External Purchase Link** in the entitlements list (Xcode renders this automatically when the profile is present).
 
-**Step 4 — Verify the disclosure sheet is not blocked by the OS**
+**Step 4 — Run the TestFlight smoke test checklist**
 
-1. Build and run a TestFlight or local device build.
-2. Open `/studio/credits` and tap a credit pack or subscription.
-3. Confirm Apple's standard disclosure sheet appears:
-   > *"This link will take you to an external website. Apple is not responsible for the privacy or security of purchases made on the web."*
-4. Tap **Continue** and verify Stripe checkout loads inside SFSafariViewController (popover, not a full browser redirect).
-5. Complete a test purchase and confirm credits are applied on return to the app.
+Before every App Store submission, a team member must run the full smoke test
+suite documented in **[`docs/testflight-ios-payment-smoke-test.md`](./testflight-ios-payment-smoke-test.md)**.
+
+The checklist covers ten test cases (TC-01 through TC-10):
+
+- **TC-01** — Disclosure sheet appears on credit-pack tap
+- **TC-02** — Cancel dismisses the sheet without navigating
+- **TC-03** — Continue opens Stripe in SFSafariViewController (popover)
+- **TC-04** — Stripe test purchase completes and credits are applied
+- **TC-05** — Subscription tier purchase (Standard / Business / Enterprise)
+- **TC-06** — Day-1 OG purchase on `/profile`
+- **TC-07** — Trust Box purchase on `/ai-or-not`
+- **TC-08** — Business Scout plan on `/biz/talent-explorer`
+- **TC-09** — Token expiry edge case (negative test)
+- **TC-10** — Non-iOS fallback (regression, Android / web)
+
+At minimum, TC-01 through TC-05 must pass on a real iOS device via TestFlight
+before the build is marked **APPROVED** for submission. Use a Stripe test-mode
+key (`sk_test_…`) for all TestFlight smoke tests.
 
 > **Note:** The `ExternalPurchaseSheet` component (`client/src/components/external-purchase-sheet.tsx`) and the token bridge (`POST /api/mobile/checkout-link` → `GET /api/mobile/checkout-redirect`) are fully wired. The only remaining gate is the portal provisioning above.
 
