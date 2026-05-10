@@ -1,6 +1,7 @@
 import { Switch, Route, Redirect, useLocation, useSearch } from "wouter";
 import { useEffect, useState, lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
+import { parsePurchaseUrl } from "@/lib/purchase-toast";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -344,53 +345,8 @@ export function NativeDeepLinkHandler() {
             // the user record so updated credits / tier appear without delay.
             Browser.close().catch(() => {});
             queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-            const purchaseParams = new URLSearchParams(parsed.search || "");
-            const purchaseType = purchaseParams.get("type");
-            const purchaseTier = purchaseParams.get("tier");
-            if (purchaseType === "subscription" && purchaseTier) {
-              const tierLabel = purchaseTier.charAt(0).toUpperCase() + purchaseTier.slice(1);
-              toast({
-                title: `${tierLabel} Plan activated!`,
-                description: `Welcome to ${tierLabel}! Your monthly credits have been added.`,
-                duration: 5000,
-              });
-            } else if (purchaseType === "credits") {
-              toast({
-                title: "Credits added!",
-                description: "Your new credits are ready to use — enjoy!",
-                duration: 4000,
-              });
-            } else if (purchaseType === "day1og") {
-              toast({
-                title: "Day-1 OG unlocked!",
-                description: "You're officially a founding member. Your badge and perks are active.",
-                duration: 5000,
-              });
-            } else if (purchaseType === "trust_box") {
-              toast({
-                title: "Trust Box activated!",
-                description: "Your Trust Box is live and ready to collect tips.",
-                duration: 5000,
-              });
-            } else if (purchaseType === "business_scout") {
-              toast({
-                title: "Scout Plan activated!",
-                description: "You can now search and contact workers directly.",
-                duration: 5000,
-              });
-            } else if (purchaseType === "business_unlock") {
-              toast({
-                title: "Profile unlocks added!",
-                description: "Your additional worker profile unlocks are ready to use.",
-                duration: 4000,
-              });
-            } else {
-              toast({
-                title: "Credits added!",
-                description: "Your new credits are ready to use — enjoy!",
-                duration: 4000,
-              });
-            }
+            const purchaseToast = parsePurchaseUrl(url);
+            if (purchaseToast) toast(purchaseToast);
           }
           return;
         }
