@@ -73,6 +73,7 @@ export interface IStorage {
   listStudioModelPricing(): Promise<StudioModelPricing[]>;
   getStudioModelPricing(toolKey: string): Promise<StudioModelPricing | undefined>;
   setStudioTileImage(toolKey: string, imageUrl: string | null): Promise<void>;
+  updateStudioModelPricing(toolKey: string, patch: Partial<Pick<StudioModelPricing, "label" | "description" | "creditsCost" | "durationSeconds" | "active" | "tileImageUrl">>): Promise<void>;
   // Free Quick Pic quota (task-520).
   getStudioFreeQuotaUsed(userId: number, day: string): Promise<number>;
   consumeStudioFreeQuota(userId: number, day: string, dailyLimit: number): Promise<number | null>;
@@ -530,6 +531,22 @@ export class DatabaseStorage implements IStorage {
       .update(studioModelPricing)
       .set({ tileImageUrl: imageUrl, updatedAt: new Date() })
       .where(eq(studioModelPricing.toolKey, toolKey));
+    const { broadcastStudioToolsCacheBust } = await import("./studio-tools-notify");
+    broadcastStudioToolsCacheBust().catch((err: Error) =>
+      console.error("[studio-tools-notify] broadcast error:", err.message),
+    );
+  }
+
+  async updateStudioModelPricing(toolKey: string, patch: Partial<Pick<StudioModelPricing, "label" | "description" | "creditsCost" | "durationSeconds" | "active" | "tileImageUrl">>): Promise<void> {
+    if (Object.keys(patch).length === 0) return;
+    await db
+      .update(studioModelPricing)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(studioModelPricing.toolKey, toolKey));
+    const { broadcastStudioToolsCacheBust } = await import("./studio-tools-notify");
+    broadcastStudioToolsCacheBust().catch((err: Error) =>
+      console.error("[studio-tools-notify] broadcast error:", err.message),
+    );
   }
 
   async getStudioFreeQuotaUsed(userId: number, day: string): Promise<number> {

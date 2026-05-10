@@ -29,7 +29,6 @@ import { toCloudinaryAttachmentUrl, classifyMedia } from "./media-download";
 import { recordCashDropEvent, getCashDropEvents } from "./cash-drop-events";
 import { listAllFlags, updateFlag, ensureFlagsSeeded, invalidateFlagCache } from "./feature-flags";
 import { invalidateStudioToolsCache } from "./studio-tools-cache";
-import { broadcastStudioToolsCacheBust } from "./studio-tools-notify";
 import { FEATURE_FLAGS, isKnownFlag, type FeatureFlagKey } from "@shared/feature-flags";
 import type { User } from "@shared/schema";
 import { scrypt, randomBytes } from "crypto";
@@ -1108,9 +1107,6 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     if (!pricing) return res.status(404).json({ message: "Unknown tool key." });
     await storage.setStudioTileImage(toolKey, imageUrl);
     invalidateStudioToolsCache();
-    broadcastStudioToolsCacheBust().catch((err) =>
-      console.error("[studio-tools-notify] broadcast error:", err.message),
-    );
     await audit(req, "qa.studio_tile_image_set", { toolKey, imageUrl });
     res.json({ ok: true, toolKey, tileImageUrl: imageUrl });
   });
