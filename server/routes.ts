@@ -9439,6 +9439,21 @@ export async function registerRoutes(
     }
   });
 
+  // Validate a caller-supplied success URL against an allowlist so it can be
+  // forwarded to Stripe safely. Accepts:
+  //   guber://<anything>            — custom-scheme deep links (iOS/Android)
+  //   https://guberapp.app/<path>   — universal links on the app domain
+  // Anything else is rejected and the provided fallback is returned instead.
+  function resolveSuccessUrl(requested: string | undefined, fallback: string): string {
+    if (!requested) return fallback;
+    try {
+      const u = new URL(requested);
+      if (u.protocol === "guber:") return requested;
+      if (u.protocol === "https:" && u.hostname === "guberapp.app") return requested;
+    } catch {}
+    return fallback;
+  }
+
   app.get("/api/mobile/checkout-redirect", async (req: Request, res: Response) => {
     const APP_BASE = process.env.APP_URL || "https://guberapp.app";
     const raw = String(req.query.token || "");
@@ -9471,7 +9486,7 @@ export async function registerRoutes(
             quantity: 1,
           }],
           mode: "payment",
-          success_url: `${APP_BASE}/studio?credits=success`,
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/studio/credits?purchased=1`),
           cancel_url: `${APP_BASE}/studio/credits`,
           metadata: { userId: String(user.id), userEmail: user.email, type: "studio_credits", packId, credits: String(pack.credits) },
         });
@@ -9497,7 +9512,7 @@ export async function registerRoutes(
             },
             quantity: 1,
           }],
-          success_url: `${APP_BASE}/studio?subscription=success`,
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/studio/credits?purchased=1`),
           cancel_url: `${APP_BASE}/studio/credits`,
           subscription_data: {
             metadata: { userId: String(user.id), userEmail: user.email, type: "studio_subscription", tier: tierId, monthlyCredits: String(plan.monthlyCredits) },
@@ -9520,7 +9535,7 @@ export async function registerRoutes(
             quantity: 1,
           }],
           mode: "payment",
-          success_url: `${APP_BASE}/og-success?session_id={CHECKOUT_SESSION_ID}`,
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/og-success?session_id={CHECKOUT_SESSION_ID}&purchased=1`),
           cancel_url: `${APP_BASE}/profile`,
           metadata: { userId: String(user.id), userEmail: user.email, type: "day1og" },
         });
@@ -9538,7 +9553,7 @@ export async function registerRoutes(
           customer_email: user.email,
           line_items: [{ price: TRUST_BOX_PAYROLL_PRICE_ID, quantity: 1 }],
           mode: "subscription",
-          success_url: `${APP_BASE}/ai-or-not?trustbox=success`,
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/ai-or-not?trustbox=success&purchased=1`),
           cancel_url: `${APP_BASE}/ai-or-not`,
           subscription_data: {
             metadata: { userId: String(user.id), userEmail: user.email, type: "trust_box" },
@@ -9573,7 +9588,7 @@ export async function registerRoutes(
             quantity: 1,
           }],
           metadata: { type: "business_scout_plan", businessAccountId: String(acct.id) },
-          success_url: `${APP_BASE}/biz/dashboard?subscribed=true`,
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/biz/dashboard?subscribed=true&purchased=1`),
           cancel_url: `${APP_BASE}/biz/talent-explorer`,
         });
         sessionUrl = stripeSession.url;
@@ -9604,7 +9619,7 @@ export async function registerRoutes(
             quantity: qty,
           }],
           metadata: { type: "business_extra_unlocks", businessAccountId: String(acct.id), quantity: String(qty) },
-          success_url: `${APP_BASE}/biz/dashboard?unlocks_purchased=true`,
+          success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/biz/dashboard?unlocks_purchased=true&purchased=1`),
           cancel_url: `${APP_BASE}/biz/dashboard`,
         });
         sessionUrl = stripeSession.url;

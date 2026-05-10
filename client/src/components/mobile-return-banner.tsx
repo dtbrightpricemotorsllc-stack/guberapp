@@ -6,9 +6,10 @@ function isMobileBrowser(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-function hasGenericPurchaseParam(): boolean {
+function hasPurchaseParam(): boolean {
   if (typeof window === "undefined") return false;
-  return new URLSearchParams(window.location.search).get("purchase") === "success";
+  const sp = new URLSearchParams(window.location.search);
+  return sp.get("purchased") === "1" || sp.get("purchase") === "success";
 }
 
 interface MobileReturnBannerProps {
@@ -18,7 +19,7 @@ interface MobileReturnBannerProps {
 export function MobileReturnBanner({ show }: MobileReturnBannerProps) {
   const [dismissed, setDismissed] = useState(false);
 
-  const shouldShow = show || hasGenericPurchaseParam();
+  const shouldShow = show || hasPurchaseParam();
   if (!shouldShow || dismissed || !isMobileBrowser()) return null;
 
   return (
@@ -31,7 +32,7 @@ export function MobileReturnBanner({ show }: MobileReturnBannerProps) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold leading-tight">Purchase complete</p>
         <a
-          href="guber://"
+          href="guber://purchase-complete"
           className="text-xs text-white/90 underline underline-offset-2"
           data-testid="link-return-to-app"
         >

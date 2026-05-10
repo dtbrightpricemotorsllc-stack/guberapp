@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ExternalLink } from "lucide-react";
 
 export type ExternalPurchaseProduct =
@@ -39,7 +39,11 @@ export function ExternalPurchaseSheet({
   const fetchUrl = async (): Promise<string> => {
     const res = await apiRequest("POST", "/api/mobile/checkout-link", {
       product,
-      options: options ?? {},
+      // On iOS native builds, ask the server to use a guber:// deep-link as
+      // the Stripe success_url. That way Stripe redirects straight into the
+      // app and NativeDeepLinkHandler fires queryClient.invalidateQueries
+      // immediately rather than waiting for the user to tap a banner.
+      options: { ...(options ?? {}), ...(isIOS ? { successUrl: "guber://purchase-complete" } : {}) },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: "Failed to create checkout link" }));
@@ -71,6 +75,20 @@ export function ExternalPurchaseSheet({
   const handleContinue = async () => {
     if (!pendingUrl) return;
     setOpen(false);
+
+    // Fallback: if the user closes the SFSafariViewController without tapping
+    // the "Return to GUBER app" deep-link (e.g. swipe-dismiss after payment),
+    // wait 3 s for the Stripe webhook to land then refresh the user record.
+    // The fast path is the guber://purchase-complete deep-link handled in
+    // NativeDeepLinkHandler (App.tsx) which fires invalidation instantly.
+    let browserListener: { remove: () => void } | null = null;
+    Browser.addListener("browserFinished", () => {
+      if (browserListener) { browserListener.remove(); browserListener = null; }
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      }, 3000);
+    }).then((h) => { browserListener = h; });
+
     await Browser.open({ url: pendingUrl, presentationStyle: "popover" });
     setPendingUrl(null);
   };

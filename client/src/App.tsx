@@ -329,12 +329,19 @@ function NativeDeepLinkHandler() {
         // guber:// custom scheme (Android/iOS native OAuth callback)
         // e.g. guber://auth-success?token=... → host="auth-success", pathname=""
         if (parsed.protocol === "guber:") {
-          const path = "/" + parsed.host + (parsed.search || "");
+          const host = parsed.host;
+          const path = "/" + host + (parsed.search || "");
           if (path.startsWith("/auth-success")) {
             // Close the Chrome Custom Tab so it doesn't linger behind the app.
             // Do this before setLocation so the WebView is foregrounded first.
             Browser.close().catch(() => {});
             setLocation("/auth-success" + (parsed.search || ""));
+          } else if (host === "purchase-complete") {
+            // User tapped "Return to GUBER app" on the Stripe success page.
+            // Close the SFSafariViewController popover and immediately refresh
+            // the user record so updated credits / tier appear without delay.
+            Browser.close().catch(() => {});
+            queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
           }
           return;
         }
