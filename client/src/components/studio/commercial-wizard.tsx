@@ -124,32 +124,104 @@ export function CommercialWizardForm({
     URL.revokeObjectURL(url);
   }
 
+  // Per-vertical accent gradients so the picker feels cinematic instead
+  // of a wall of identical dark squares (round-6 polish).
+  const VERTICAL_GRADIENT: Record<string, string> = {
+    "auto-repair": "from-orange-500/30 to-rose-600/20",
+    restaurant: "from-amber-500/30 to-rose-500/20",
+    fitness: "from-rose-500/30 to-fuchsia-600/20",
+    "real-estate": "from-emerald-400/30 to-teal-600/20",
+    "lawn-care": "from-lime-400/30 to-emerald-600/20",
+    dental: "from-sky-400/25 to-cyan-500/20",
+    plumbing: "from-blue-500/30 to-sky-600/20",
+    "salon-beauty": "from-pink-400/30 to-fuchsia-500/20",
+    "retail-boutique": "from-fuchsia-500/30 to-violet-600/20",
+    photographer: "from-violet-500/30 to-purple-600/20",
+    "coffee-shop": "from-amber-700/30 to-amber-500/20",
+    "bar-nightlife": "from-purple-600/30 to-indigo-700/20",
+    "law-firm": "from-slate-500/30 to-neutral-600/20",
+    "medical-clinic": "from-cyan-400/25 to-emerald-500/20",
+    "pet-grooming": "from-yellow-400/25 to-orange-500/20",
+    construction: "from-amber-600/30 to-orange-700/20",
+    "auto-dealer": "from-red-500/30 to-rose-700/20",
+    moving: "from-orange-400/30 to-amber-600/20",
+    cleaning: "from-cyan-400/25 to-blue-500/20",
+    tutoring: "from-emerald-400/25 to-cyan-500/20",
+    "real-estate-agent": "from-yellow-500/30 to-amber-700/20",
+    "event-venue": "from-fuchsia-500/30 to-pink-600/20",
+    "spa-wellness": "from-teal-400/25 to-emerald-500/20",
+    "tech-saas": "from-indigo-500/30 to-violet-700/20",
+    "non-profit": "from-emerald-400/25 to-teal-600/20",
+    custom: "from-amber-300/30 to-yellow-500/20",
+  };
+
   return (
     <div className="space-y-5" data-testid="form-commercial">
-      <div className="text-[11px] uppercase tracking-widest text-white/50">
-        Step {STEPS.indexOf(step) + 1} of {STEPS.length} · {step === "vertical" ? "Pick your vertical" : step === "photo" ? "Add a product photo" : step === "info" ? "Business info" : "Preview & generate"}
+      {/* Step pills — replaces the small uppercase line. Reads like a
+          progress meter so users feel the wizard is alive. */}
+      <div className="flex items-center gap-1.5">
+        {STEPS.map((s, i) => {
+          const idx = STEPS.indexOf(step);
+          const reached = i <= idx;
+          return (
+            <div key={s} className="flex-1 flex items-center gap-1.5">
+              <div
+                className={`h-1.5 flex-1 rounded-full transition-all ${
+                  reached
+                    ? "bg-gradient-to-r from-emerald-400 via-cyan-300 to-violet-400"
+                    : "bg-white/10"
+                }`}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-center">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-white/50">
+          Step {STEPS.indexOf(step) + 1} of {STEPS.length}
+        </p>
+        <p className="text-base sm:text-lg font-black tracking-tight mt-0.5">
+          {step === "vertical" ? "Pick your vertical"
+            : step === "photo" ? "Add a product photo"
+            : step === "info" ? "Business info"
+            : "Preview & generate"}
+        </p>
       </div>
 
       {/* ── Step 1: vertical ────────────────────────────────────────── */}
       {step === "vertical" && (
         <div className="space-y-3">
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {allVerticals.map((v) => (
-              <button
-                key={v.slug}
-                type="button"
-                onClick={() => setVertical(v.slug)}
-                className={`p-3 rounded-lg border text-center transition ${
-                  vertical === v.slug
-                    ? "border-emerald-400 bg-emerald-400/10"
-                    : "border-white/10 bg-white/[0.02] hover:bg-white/5"
-                }`}
-                data-testid={`button-vertical-${v.slug}`}
-              >
-                <div className="text-xl">{v.emoji}</div>
-                <div className="text-[11px] mt-1 leading-tight">{v.label}</div>
-              </button>
-            ))}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+            {allVerticals.map((v) => {
+              const selected = vertical === v.slug;
+              const gradient = VERTICAL_GRADIENT[v.slug] ?? "from-white/10 to-white/5";
+              return (
+                <button
+                  key={v.slug}
+                  type="button"
+                  onClick={() => setVertical(v.slug)}
+                  className={`group relative p-3 rounded-2xl border text-center transition-all duration-200 overflow-hidden min-h-[88px] ${
+                    selected
+                      ? "border-emerald-400/80 ring-2 ring-emerald-400/40 shadow-[0_0_24px_rgba(52,211,153,0.35)] scale-[1.03]"
+                      : "border-white/10 hover:border-white/25 hover:scale-[1.02]"
+                  }`}
+                  data-testid={`button-vertical-${v.slug}`}
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-90`} />
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.18),transparent_60%)]" />
+                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/15 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700" />
+                  <div className="relative">
+                    <div className="text-2xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">{v.emoji}</div>
+                    <div className="text-[10.5px] mt-1.5 leading-tight font-bold text-white/90">{v.label}</div>
+                  </div>
+                  {selected && (
+                    <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-emerald-400 flex items-center justify-center shadow-md">
+                      <Check className="w-3 h-3 text-black" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
           {vertical === "custom" && (
             <div className="space-y-1.5">

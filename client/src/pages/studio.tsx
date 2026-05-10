@@ -221,12 +221,14 @@ const TEMPLATES: Template[] = [
     prompt: "Luxury product reveal, glossy black surfaces, gold accents, slow rotation, soft rim light, ultra-high-end commercial feel.",
     gradient: "from-yellow-400 via-amber-600 to-neutral-900",
     icon: Crown,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/bored.mp4",
   },
   {
     slug: "anime-intro", label: "Anime Intro", tag: "Stylized", kind: "video",
     prompt: "Anime-style intro, dynamic pan, vivid cel-shading, cherry blossoms swirling, motion-blur action lines, J-pop energy.",
     gradient: "from-pink-400 via-rose-400 to-indigo-500",
     icon: Sparkles,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/kitten_fighting.mp4",
   },
   {
     slug: "tiktok-reel", label: "TikTok Reel", tag: "Viral", kind: "video",
