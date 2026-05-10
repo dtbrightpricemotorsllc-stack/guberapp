@@ -1,7 +1,8 @@
 import pg from "pg";
 import { invalidateStudioToolsCache } from "./studio-tools-cache";
 
-const CHANNEL = "studio_tools_cache_bust";
+export const STUDIO_TOOLS_NOTIFY_CHANNEL = "studio_tools_cache_bust";
+const CHANNEL = STUDIO_TOOLS_NOTIFY_CHANNEL;
 
 let listenerClient: pg.Client | null = null;
 let reconnecting = false;
