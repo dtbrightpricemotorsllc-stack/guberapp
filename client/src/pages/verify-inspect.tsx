@@ -867,10 +867,10 @@ export default function VerifyInspect() {
   });
 
   const GRID_CATEGORIES = [
-    { name: "Property & Site Check", img: propertySiteImg, wide: false, label: "PROPERTY & SITE\nCHECK", labelColor: "hsl(190 90% 62%)" },
-    { name: "Online Items", img: onlineItemsImg, wide: false, label: "ONLINE ITEMS", labelColor: "hsl(52 95% 58%)" },
-    { name: "Wheels, Wings & Water", img: wheelsWingsImg, wide: false, label: "WINGS, WHEELS\n& WATER", labelColor: "hsl(200 85% 65%)" },
-    { name: "Quick Check", img: quickCheckImg, wide: false, label: "QUICK\nCHECK", labelColor: "hsl(142 72% 55%)" },
+    { name: "Property & Site Check", img: propertySiteImg, wide: false },
+    { name: "Online Items", img: onlineItemsImg, wide: false },
+    { name: "Wheels, Wings & Water", img: wheelsWingsImg, wide: false },
+    { name: "Quick Check", img: quickCheckImg, wide: false },
     { name: "Part Availability Verification", img: formPavImg, wide: true },
     { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true },
   ];
@@ -1001,16 +1001,6 @@ export default function VerifyInspect() {
                           </div>
                           <p className="text-white font-display font-black text-xl tracking-tight leading-tight">DRONE / AERIAL<br/>FOOTAGE</p>
                           <p className="text-white/80 text-[11px] mt-1">Real estate · Insurance · Construction · Events</p>
-                        </div>
-                      )}
-                      {"label" in lc && !isPAV && !isDrone && (
-                        <div className="absolute bottom-0 left-0 px-3 pb-3 w-full">
-                          <p
-                            className="font-display font-black text-base tracking-tight leading-tight whitespace-pre-line"
-                            style={{ color: (lc as any).labelColor, textShadow: `0 0 14px ${(lc as any).labelColor}99, 0 0 4px ${(lc as any).labelColor}66` }}
-                          >
-                            {(lc as any).label}
-                          </p>
                         </div>
                       )}
                     </button>
