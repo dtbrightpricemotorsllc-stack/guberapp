@@ -43,7 +43,7 @@ import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
   Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
-  Repeat,
+  Repeat, ChevronRight,
 } from "lucide-react";
 import { MirrorMotionDialog } from "@/components/studio/mirror-motion-form";
 import { CommercialWizardDialog } from "@/components/studio/commercial-wizard";
@@ -104,11 +104,63 @@ function toAttachment(url: string): string {
 }
 
 const TIER_LABEL: Record<string, string> = {
-  free:       "FREE",
-  standard:   "STANDARD",
-  business:   "BUSINESS",
-  enterprise: "ENTERPRISE",
+  free:       "Free Plan",
+  standard:   "Standard Plan",
+  business:   "Business Plan",
+  enterprise: "Enterprise Plan",
 };
+
+// Phase-2.5: Top-level tools grid (Kling-style "what can I make?" surface).
+// Each entry maps to a concrete generator. `costToolKey` looks up live
+// pricing from /api/studio/tools so the chip updates if admins reprice.
+// `kind` controls the prompt placeholder + tool routing in the prompt box.
+// `wizard` opens the Mirror Motion / Commercial Builder dialogs directly.
+type ToolTile = {
+  key: string;
+  label: string;
+  blurb: string;
+  kind: "video" | "audio" | "image";
+  icon: React.ComponentType<{ className?: string }>;
+  costToolKey: string | null; // null = free Quick Pic
+  wizard?: "mirror_motion" | "commercial_builder";
+  badge?: string;
+  gradient: string;
+  starterPrompt: string;
+};
+const TOOL_TILES: ToolTile[] = [
+  {
+    key: "quick-pic", label: "Quick Pic", blurb: "AI image",
+    kind: "image", icon: ImageIcon, costToolKey: null, badge: "Free",
+    gradient: "from-emerald-400 to-cyan-500",
+    starterPrompt: "A cinematic portrait, dramatic studio lighting, hyper-detailed.",
+  },
+  {
+    key: "text-to-video", label: "Text → Video", blurb: "5s motion clip",
+    kind: "video", icon: Film, costToolKey: "wan_motion_5s",
+    gradient: "from-violet-500 to-fuchsia-500",
+    starterPrompt: "A neon-lit panda DJ in Tokyo, slow cinematic dolly-in, vaporwave colors.",
+  },
+  {
+    key: "mirror-motion-tile", label: "Mirror Motion", blurb: "Photo + video",
+    kind: "video", icon: Repeat, costToolKey: "mirror_motion",
+    wizard: "mirror_motion",
+    gradient: "from-rose-500 to-orange-500",
+    starterPrompt: "",
+  },
+  {
+    key: "build-commercial-tile", label: "Build Ad", blurb: "Full commercial",
+    kind: "video", icon: Megaphone, costToolKey: "commercial_builder",
+    wizard: "commercial_builder", badge: "New",
+    gradient: "from-amber-400 to-rose-600",
+    starterPrompt: "",
+  },
+  {
+    key: "music", label: "Music", blurb: "30s instrumental",
+    kind: "audio", icon: Music, costToolKey: "minimax_music",
+    gradient: "from-indigo-500 to-purple-600",
+    starterPrompt: "Uplifting cinematic strings with hopeful melody, slow build, instrumental, 30 seconds.",
+  },
+];
 
 // ── Cinematic templates (CapCut-style starter prompts) ────────────────────
 // Each template declares its preferred output kind. Final tool routing also
@@ -469,6 +521,24 @@ export default function StudioPageV2() {
     }, 60);
   }
 
+  // Phase-2.5: tool-grid tap. Wizards open immediately; non-wizard tools
+  // set the output kind, drop a starter prompt (only if the box is empty
+  // so we don't overwrite the user's typing), and scroll to the prompt.
+  function pickToolTile(tile: ToolTile) {
+    if (tile.wizard) {
+      setActiveTemplate(tile.key);
+      setOpenWizard(tile.wizard);
+      return;
+    }
+    setActiveTemplate(null);
+    setOutputKind(tile.kind);
+    if (!prompt.trim() && tile.starterPrompt) setPrompt(tile.starterPrompt);
+    setTimeout(() => {
+      promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      promptRef.current?.focus();
+    }, 60);
+  }
+
   // Shared upload handler the wizards reuse so they don't duplicate the
   // moderation / dataUrl / 25 MB checks.
   function uploadFile(f: File) { handleFile(f); }
@@ -616,13 +686,31 @@ export default function StudioPageV2() {
                   <span className="text-[10px] text-emerald-200/80 hidden sm:inline">free</span>
                 </div>
               )}
-              <Badge
-                variant="outline"
-                className="tracking-widest text-[9px] border-white/20 bg-white/5"
-                data-testid="badge-studio-tier"
-              >
-                {TIER_LABEL[tier] || tier.toUpperCase()}
-              </Badge>
+              {isStoreBuild ? (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] border-white/20 bg-white/5 px-2.5 py-1"
+                  data-testid="badge-studio-tier"
+                >
+                  {TIER_LABEL[tier] || tier}
+                </Badge>
+              ) : (
+                <Link href="/studio/credits">
+                  <button
+                    type="button"
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition border backdrop-blur-md ${
+                      tier === "free"
+                        ? "bg-emerald-400/15 border-emerald-400/40 text-emerald-100 hover:bg-emerald-400/25"
+                        : "bg-gradient-to-r from-emerald-400/30 via-violet-400/30 to-fuchsia-400/30 border-white/20 text-white hover:from-emerald-400/40 hover:via-violet-400/40 hover:to-fuchsia-400/40"
+                    }`}
+                    data-testid="badge-studio-tier"
+                    aria-label="Manage subscription plan"
+                  >
+                    {tier === "free" ? <Sparkles className="w-3 h-3" /> : <Crown className="w-3 h-3" />}
+                    <span>{TIER_LABEL[tier] || tier}</span>
+                  </button>
+                </Link>
+              )}
             </div>
           </div>
 
@@ -637,6 +725,38 @@ export default function StudioPageV2() {
             Pick a template, type a moment, hit generate. Your AI clip lands in seconds —
             ready for a reel, an ad, or a listing.
           </p>
+
+          {/* Phase-2.5: Hero promo banner. Free users see an upgrade nudge
+              with the cheapest plan's effective per-credit price. Paid
+              users see a "what's new" promo. Hidden on store builds. */}
+          {!isStoreBuild && (
+            <Link href="/studio/credits">
+              <div
+                className="mt-6 group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-r from-emerald-500/15 via-violet-500/15 to-fuchsia-500/15 backdrop-blur-md p-4 hover:border-white/30 transition cursor-pointer"
+                data-testid="hero-promo-banner"
+              >
+                <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+                <div className="relative flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-violet-500 flex items-center justify-center shrink-0">
+                    {tier === "free" ? <Crown className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-white" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white leading-tight">
+                      {tier === "free"
+                        ? "Subscribers save up to 80% per credit"
+                        : "5 pro tools · Image · Video · Music · Mirror · Ads"}
+                    </p>
+                    <p className="text-[11px] text-white/70 mt-0.5">
+                      {tier === "free"
+                        ? "Unlock Standard, Business or Enterprise — monthly credits included."
+                        : "Tap to manage your plan or top up credits."}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-white/60 shrink-0" />
+                </div>
+              </div>
+            </Link>
+          )}
 
           {!heroOutput && !generateMutation.isPending && (
             <div className="mt-8 flex items-center gap-2 text-[11px] text-white/50">
@@ -749,6 +869,60 @@ export default function StudioPageV2() {
             The AI provider isn't connected yet. Generation is disabled until the key is set — your credits are safe.
           </div>
         )}
+
+        {/* ─── TOOLS GRID (Phase-2.5 Kling-style "what can I make?") ──── */}
+        <section data-testid="section-tool-tiles">
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
+              <Wand2 className="w-5 h-5 text-emerald-400" />
+              All tools
+            </h2>
+            <span className="text-[10px] uppercase tracking-widest text-white/40">tap to create</span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+            {TOOL_TILES.map((tile) => {
+              const TileIcon = tile.icon;
+              const liveCost = tile.costToolKey
+                ? tools.find((x) => x.key === tile.costToolKey)?.creditsCost
+                : null;
+              const costLabel = tile.costToolKey == null
+                ? "Free"
+                : liveCost != null ? `${liveCost} cr` : "—";
+              return (
+                <button
+                  key={tile.key}
+                  type="button"
+                  onClick={() => pickToolTile(tile)}
+                  className="group relative aspect-square rounded-2xl overflow-hidden ring-1 ring-white/10 hover:ring-white/30 transition-all hover:-translate-y-0.5 text-left"
+                  data-testid={`tool-tile-${tile.key}`}
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} opacity-90`} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent" />
+                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+                  <div className="absolute top-2 right-2">
+                    <span className="text-[9px] uppercase tracking-wider bg-black/40 backdrop-blur text-white/90 px-1.5 py-0.5 rounded-full font-bold">
+                      {costLabel}
+                    </span>
+                  </div>
+                  {tile.badge && (
+                    <div className="absolute top-2 left-2">
+                      <span className="text-[9px] uppercase tracking-wider bg-white text-black px-1.5 py-0.5 rounded-full font-black">
+                        {tile.badge}
+                      </span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <TileIcon className="w-9 h-9 text-white drop-shadow-lg" />
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 p-2.5">
+                    <p className="font-black text-[13px] leading-tight text-white">{tile.label}</p>
+                    <p className="text-[10px] text-white/80 leading-tight mt-0.5">{tile.blurb}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
         {/* ─── TRENDING NOW (Phase-2 admin-curated featured clips) ─────── */}
         {(featuredQuery.data?.length ?? 0) > 0 && (
