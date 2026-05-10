@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -377,6 +378,8 @@ export default function StudioPageV2() {
   const searchString = useSearch();
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [tilePickerOpenId, setTilePickerOpenId] = useState<number | null>(null);
+  const [openTilePreview, setOpenTilePreview] = useState<string | null>(null);
+  const closePreviewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const lowCreditNoticeRef = useRef(false);
@@ -1395,12 +1398,53 @@ export default function StudioPageV2() {
                                   data-testid={`btn-set-tile-${tile.dbKey}`}
                                 >
                                   {currentBg ? (
-                                    <img
-                                      src={currentBg}
-                                      alt=""
-                                      className="w-7 h-7 rounded object-cover flex-shrink-0 ring-1 ring-white/20"
-                                      data-testid={`thumb-tile-${tile.dbKey}`}
-                                    />
+                                    <Popover
+                                      open={openTilePreview === tile.dbKey}
+                                      onOpenChange={(v) => { if (!v) setOpenTilePreview(null); }}
+                                    >
+                                      <PopoverTrigger asChild>
+                                        <span
+                                          className="flex-shrink-0 rounded cursor-pointer"
+                                          onMouseEnter={() => {
+                                            if (closePreviewTimer.current) clearTimeout(closePreviewTimer.current);
+                                            setOpenTilePreview(tile.dbKey);
+                                          }}
+                                          onMouseLeave={() => {
+                                            closePreviewTimer.current = setTimeout(() => setOpenTilePreview(null), 80);
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenTilePreview((prev) => prev === tile.dbKey ? null : tile.dbKey);
+                                          }}
+                                        >
+                                          <img
+                                            src={currentBg}
+                                            alt=""
+                                            className="w-7 h-7 rounded object-cover ring-1 ring-white/20 block"
+                                            data-testid={`thumb-tile-${tile.dbKey}`}
+                                          />
+                                        </span>
+                                      </PopoverTrigger>
+                                      <PopoverContent
+                                        side="left"
+                                        sideOffset={8}
+                                        className="p-1 bg-black/90 border-white/10 rounded-lg shadow-2xl w-auto"
+                                        onMouseEnter={() => {
+                                          if (closePreviewTimer.current) clearTimeout(closePreviewTimer.current);
+                                          setOpenTilePreview(tile.dbKey);
+                                        }}
+                                        onMouseLeave={() => {
+                                          closePreviewTimer.current = setTimeout(() => setOpenTilePreview(null), 80);
+                                        }}
+                                        data-testid={`tooltip-tile-${tile.dbKey}`}
+                                      >
+                                        <img
+                                          src={currentBg}
+                                          alt={`${tile.label} tile preview`}
+                                          className="w-40 h-[90px] rounded object-cover block"
+                                        />
+                                      </PopoverContent>
+                                    </Popover>
                                   ) : (
                                     <span className="w-7 h-7 rounded flex-shrink-0 bg-white/10 ring-1 ring-white/10" data-testid={`thumb-tile-${tile.dbKey}-empty`} />
                                   )}
