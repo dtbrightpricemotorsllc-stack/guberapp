@@ -19,7 +19,11 @@ import {
   Search,
   Tag,
   Zap,
+  Loader2,
+  X,
 } from "lucide-react";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import { gpsGetCurrentPosition } from "@/lib/gps";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import formPropertyImg from "@assets/category-images/vi_property_site_check.png";
@@ -500,10 +504,11 @@ export default function VerifyInspect() {
   const [droneFlightDate, setDroneFlightDate] = useState<string>("");
   const [droneFlightTime, setDroneFlightTime] = useState<string>("");
 
-  // Location — full address for property/vehicle/quick, zip-only for PAV, none for online
-  const [viStreet, setViStreet] = useState<string>("");
-  const [viCity, setViCity] = useState<string>("");
-  const [viState, setViState] = useState<string>("");
+  // Location — PlacesAutocomplete for full mode, zip-only for PAV, none for online
+  const [viAddress, setViAddress] = useState<string>("");
+  const [viGpsLat, setViGpsLat] = useState<string>("");
+  const [viGpsLng, setViGpsLng] = useState<string>("");
+  const [locating, setLocating] = useState(false);
   // Description — what the poster needs documented / verified
   const [viDescription, setViDescription] = useState<string>("");
   // Property-specific poster context
@@ -662,7 +667,7 @@ export default function VerifyInspect() {
   const locationOk =
     locationMode === "none" ? true :
     locationMode === "zip" ? vizip.length >= 5 :
-    viStreet.trim().length >= 3 && vizip.length >= 5;
+    viAddress.trim().length >= 5;
 
   const isDrone = selectedCategory?.name === "Drone / Aerial Footage";
   const droneFlightWindowOk = isDrone ? !!(droneFlightDate && droneFlightTime) : true;
@@ -715,12 +720,61 @@ export default function VerifyInspect() {
     setInspectionPhase("");
     setReferencePhotoUrl("");
     setReferencePhotoPreview("");
-    setViStreet("");
-    setViCity("");
-    setViState("");
+    setViAddress("");
+    setViGpsLat("");
+    setViGpsLng("");
     setFaaCompliance(false);
     setDroneFlightDate("");
     setDroneFlightTime("");
+  }
+
+  async function handleLocate() {
+    setLocating(true);
+    try {
+      const pos = await gpsGetCurrentPosition();
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      setViGpsLat(String(lat.toFixed(6)));
+      setViGpsLng(String(lng.toFixed(6)));
+      try {
+        const r = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+        const d = await r.json();
+        if (d.address) {
+          setViAddress(d.address);
+          if (d.zip) setViZip(d.zip);
+        } else {
+          setViAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        }
+      } catch {
+        setViAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+      }
+      toast({ title: "Location found", description: "Your current location has been set." });
+    } catch {
+      toast({ title: "Location unavailable", description: "Could not get your current location.", variant: "destructive" });
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  async function handleLocateZip() {
+    setLocating(true);
+    try {
+      const pos = await gpsGetCurrentPosition();
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      try {
+        const r = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+        const d = await r.json();
+        if (d.zip) setViZip(d.zip);
+        else toast({ title: "ZIP not found", description: "Could not determine ZIP from your location.", variant: "destructive" });
+      } catch {
+        toast({ title: "Location unavailable", description: "Could not determine your ZIP code.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Location unavailable", description: "Could not get your current location.", variant: "destructive" });
+    } finally {
+      setLocating(false);
+    }
   }
 
   function handleUseCaseChange(val: string) {
@@ -765,9 +819,12 @@ export default function VerifyInspect() {
         locationMode === "none"
           ? "Online / Remote"
           : locationMode === "full"
-          ? [viStreet.trim(), [viCity.trim(), viState.trim()].filter(Boolean).join(", "), vizip].filter(Boolean).join(", ")
+          ? viAddress.trim()
           : `${vizip} area`;
       const locationZip = vizip || "";
+      const locationApproxFull = viAddress.trim()
+        ? viAddress.split(",").slice(-3).join(",").trim()
+        : `${vizip} area`;
 
       const payload = {
         category: "Verify & Inspect",
@@ -777,8 +834,9 @@ export default function VerifyInspect() {
         jobDetails: Object.keys(allJobDetails).length > 0 ? allJobDetails : undefined,
         budget: budgetNum,
         location: locationStr,
-        locationApprox: locationMode === "full" ? `${viCity.trim() || vizip} area` : `${vizip} area`,
+        locationApprox: locationMode === "full" ? locationApproxFull : `${vizip} area`,
         zip: locationZip,
+        ...(viGpsLat && viGpsLng ? { gpsLat: parseFloat(viGpsLat), gpsLng: parseFloat(viGpsLng) } : {}),
         urgentSwitch: viurgent,
         isBounty: isBounty,
         serviceType: selectedServiceType?.name || "",
@@ -927,22 +985,22 @@ export default function VerifyInspect() {
                       <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/40 to-transparent"}`} />
                       {isPAV && (
                         <div className="absolute bottom-0 left-0 p-3 w-full">
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <Sparkles className="w-3 h-3 text-yellow-400" />
-                            <span className="text-[9px] font-bold text-yellow-400/90 uppercase tracking-widest">Bounty Mode</span>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                            <span className="text-[10px] font-bold text-yellow-400/90 uppercase tracking-widest">Bounty Mode</span>
                           </div>
-                          <p className="text-white font-display font-black text-sm tracking-tight">PART AVAILABILITY VERIFICATION</p>
-                          <p className="text-white/80 text-[10px] mt-0.5">Salvage yards · Shops · Private sellers · Auction lots</p>
+                          <p className="text-white font-display font-black text-xl tracking-tight leading-tight">PART AVAILABILITY<br/>VERIFICATION</p>
+                          <p className="text-white/80 text-[11px] mt-1">Salvage yards · Shops · Private sellers · Auction lots</p>
                         </div>
                       )}
                       {isDrone && (
                         <div className="absolute bottom-0 left-0 p-3 w-full">
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <Camera className="w-3 h-3" style={{ color: "hsl(200 80% 65%)" }} />
-                            <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "hsl(200 80% 65%)" }}>FAA Part 107</span>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Camera className="w-3.5 h-3.5" style={{ color: "hsl(200 80% 65%)" }} />
+                            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "hsl(200 80% 65%)" }}>FAA Part 107</span>
                           </div>
-                          <p className="text-white font-display font-black text-sm tracking-tight">DRONE / AERIAL FOOTAGE</p>
-                          <p className="text-white/80 text-[10px] mt-0.5">Real estate · Insurance · Construction · Events</p>
+                          <p className="text-white font-display font-black text-xl tracking-tight leading-tight">DRONE / AERIAL<br/>FOOTAGE</p>
+                          <p className="text-white/80 text-[11px] mt-1">Real estate · Insurance · Construction · Events</p>
                         </div>
                       )}
                     </button>
@@ -2234,63 +2292,49 @@ export default function VerifyInspect() {
                 {/* Smart location: full address for property/vehicle/quick, zip for PAV, none for online */}
                 {locationMode === "full" && (
                   <div className="space-y-3">
-                    <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <MapPin className="w-3 h-3" /> Location <span className="text-destructive">*</span>
-                    </p>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
-                        Street Address <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        className="premium-input rounded-md w-full px-3 py-2.5 text-sm bg-background border border-input"
-                        placeholder="e.g. 123 Main St"
-                        value={viStreet}
-                        onChange={(e) => setViStreet(e.target.value)}
-                        data-testid="input-vi-street"
-                      />
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3" /> Location <span className="text-destructive">*</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleLocate}
+                        disabled={locating}
+                        className="flex items-center gap-1 text-[10px] font-display text-primary/70 hover:text-primary transition-colors disabled:opacity-50"
+                        data-testid="button-vi-use-location"
+                      >
+                        {locating ? <Loader2 className="w-3 h-3 animate-spin" /> : <MapPin className="w-3 h-3" />}
+                        Use my location
+                      </button>
                     </div>
-                    <div className="grid grid-cols-5 gap-2">
-                      <div className="col-span-2">
-                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">City</label>
-                        <input
-                          type="text"
-                          className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
-                          placeholder="City"
-                          value={viCity}
-                          onChange={(e) => setViCity(e.target.value)}
-                          data-testid="input-vi-city"
-                        />
+                    <PlacesAutocomplete
+                      value={viAddress}
+                      onChange={setViAddress}
+                      onPlaceSelect={(place) => {
+                        setViAddress(place.name ? `${place.name}, ${place.address}` : place.address);
+                        setViGpsLat(String(place.lat.toFixed(6)));
+                        setViGpsLng(String(place.lng.toFixed(6)));
+                        toast({ title: "Location pinpointed", description: place.address });
+                      }}
+                      placeholder="Search address or place name..."
+                      data-testid="input-vi-address"
+                    />
+                    {viGpsLat && viGpsLng && (
+                      <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-primary font-mono font-semibold" data-testid="text-vi-coordinates">
+                          {parseFloat(viGpsLat).toFixed(4)}, {parseFloat(viGpsLng).toFixed(4)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { setViAddress(""); setViGpsLat(""); setViGpsLng(""); }}
+                          className="text-muted-foreground hover:text-destructive"
+                          data-testid="button-vi-clear-location"
+                          aria-label="Clear location"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">State</label>
-                        <Select value={viState} onValueChange={setViState}>
-                          <SelectTrigger className="premium-input rounded-md h-[38px]" data-testid="select-vi-state">
-                            <SelectValue placeholder="ST" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {US_STATES.map((s) => (
-                              <SelectItem key={s} value={s}>{s}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block font-display tracking-wide">
-                          ZIP <span className="text-destructive">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={5}
-                          className="premium-input rounded-md w-full px-3 py-2 text-sm bg-background border border-input"
-                          placeholder="ZIP"
-                          value={vizip}
-                          onChange={(e) => setViZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                          data-testid="input-vi-zip"
-                        />
-                      </div>
-                    </div>
+                    )}
                     <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
                       Full address is shared only with the helper assigned to your request. Your general area is shown publicly.
                     </p>
@@ -2298,11 +2342,23 @@ export default function VerifyInspect() {
                 )}
 
                 {locationMode === "zip" && (
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1 font-display tracking-wide">
-                      <MapPin className="w-3 h-3" /> ZIP Code (Search Area)
-                      <span className="text-destructive">*</span>
-                    </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1 font-display tracking-wide">
+                        <MapPin className="w-3 h-3" /> ZIP Code (Search Area)
+                        <span className="text-destructive">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleLocateZip}
+                        disabled={locating}
+                        className="flex items-center gap-1 text-[10px] font-display text-primary/70 hover:text-primary transition-colors disabled:opacity-50"
+                        data-testid="button-vi-use-location-zip"
+                      >
+                        {locating ? <Loader2 className="w-3 h-3 animate-spin" /> : <MapPin className="w-3 h-3" />}
+                        Use my location
+                      </button>
+                    </div>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -2313,7 +2369,7 @@ export default function VerifyInspect() {
                       onChange={(e) => setViZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
                       data-testid="input-vi-zip"
                     />
-                    <p className="text-[10px] text-muted-foreground mt-1">Helpers in this area will see your request.</p>
+                    <p className="text-[10px] text-muted-foreground">Helpers in this area will see your request.</p>
                   </div>
                 )}
 
