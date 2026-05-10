@@ -62,6 +62,10 @@ const HostDropNew = lazy(() => import("@/pages/host-drop-new"));
 const Studio = lazy(() => import("@/pages/studio"));
 const StudioCredits = lazy(() => import("@/pages/studio-credits"));
 const StudioExplore = lazy(() => import("@/pages/studio-explore"));
+const StudioMirrorMotion = lazy(() => import("@/pages/studio-mirror-motion"));
+const StudioCommercial = lazy(() => import("@/pages/studio-commercial"));
+const StudioTextToVideo = lazy(() => import("@/pages/studio-text-to-video"));
+const StudioMusic = lazy(() => import("@/pages/studio-music"));
 const Investors = lazy(() => import("@/pages/investors"));
 
 // Feature pages — lazy loaded
@@ -271,6 +275,10 @@ function Router() {
       <Route path="/studio" component={() => <ProtectedRoute component={Studio} />} />
       <Route path="/studio/credits" component={() => <ProtectedRoute component={StudioCredits} />} />
       <Route path="/studio/explore" component={() => <ProtectedRoute component={StudioExplore} />} />
+      <Route path="/studio/mirror-motion" component={() => <ProtectedRoute component={StudioMirrorMotion} />} />
+      <Route path="/studio/commercial" component={() => <ProtectedRoute component={StudioCommercial} />} />
+      <Route path="/studio/text-to-video" component={() => <ProtectedRoute component={StudioTextToVideo} />} />
+      <Route path="/studio/music" component={() => <ProtectedRoute component={StudioMusic} />} />
       <Route path="/biz/login" component={() => <Redirect to="/login" />} />
       <Route path="/biz/dashboard" component={() => <BizRoute component={BizDashboard} />} />
       <Route path="/biz/post-job" component={() => <BizRoute component={BizPostJob} />} />

@@ -1,6 +1,9 @@
-// Commercial Builder wizard (task-521).
+// Commercial Builder form (task-549).
 // Multi-step: vertical → photo → business info → preview → generate.
 // Server composite: motion + music + optional voiceover. ~200 cr per ad.
+//
+// task-549: lifted out of the legacy Dialog wrapper. Now rendered as a full
+// page at /studio/commercial.
 import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -10,13 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 import {
-  Loader2, Image as ImageIcon, Megaphone, ChevronLeft, ChevronRight, Check, Download,
+  Loader2, Image as ImageIcon, ChevronLeft, ChevronRight, Check, Download,
 } from "lucide-react";
 import {
   COMMERCIAL_VERTICALS, CUSTOM_VERTICAL, OPENAI_TTS_VOICES,
@@ -27,17 +28,13 @@ type StudioFile = { id: number; providerUrl: string; fileType: string };
 const STEPS = ["vertical", "photo", "info", "preview"] as const;
 type Step = typeof STEPS[number];
 
-export function CommercialWizardDialog({
-  open,
-  onOpenChange,
+export function CommercialWizardForm({
   uploadedImages,
   onUpload,
   uploadPending,
   credits,
   cost,
 }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
   uploadedImages: StudioFile[];
   onUpload: (file: File) => void;
   uploadPending: boolean;
@@ -45,6 +42,7 @@ export function CommercialWizardDialog({
   cost: number;
 }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("vertical");
   const [vertical, setVertical] = useState<string>("");
@@ -81,8 +79,7 @@ export function CommercialWizardDialog({
           ? `Motion + music are in your library. (Voiceover skipped: ${data.voiceSkippedReason})`
           : "Motion, music, and voiceover are in your library.",
       });
-      onOpenChange(false);
-      setStep("vertical");
+      navigate("/studio");
     },
     onError: async (err: any) => {
       let msg = err?.message || "Generation failed";
@@ -123,178 +120,174 @@ export function CommercialWizardDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto" data-testid="dialog-commercial">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Megaphone className="w-5 h-5 text-emerald-400" /> Build a Commercial</DialogTitle>
-          <DialogDescription className="text-white/70">
-            Step {STEPS.indexOf(step) + 1} of {STEPS.length}: {step === "vertical" ? "Pick your vertical" : step === "photo" ? "Add a product photo" : step === "info" ? "Business info" : "Preview & generate"}
-          </DialogDescription>
-        </DialogHeader>
+    <div className="space-y-5" data-testid="form-commercial">
+      <div className="text-[11px] uppercase tracking-widest text-white/50">
+        Step {STEPS.indexOf(step) + 1} of {STEPS.length} · {step === "vertical" ? "Pick your vertical" : step === "photo" ? "Add a product photo" : step === "info" ? "Business info" : "Preview & generate"}
+      </div>
 
-        {/* ── Step 1: vertical ────────────────────────────────────────── */}
-        {step === "vertical" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              {allVerticals.map((v) => (
-                <button
-                  key={v.slug}
-                  type="button"
-                  onClick={() => setVertical(v.slug)}
-                  className={`p-3 rounded-lg border text-center transition ${
-                    vertical === v.slug
-                      ? "border-emerald-400 bg-emerald-400/10"
-                      : "border-white/10 bg-white/[0.02] hover:bg-white/5"
-                  }`}
-                  data-testid={`button-vertical-${v.slug}`}
-                >
-                  <div className="text-xl">{v.emoji}</div>
-                  <div className="text-[11px] mt-1 leading-tight">{v.label}</div>
-                </button>
-              ))}
-            </div>
-            {vertical === "custom" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="custom-vert" className="text-xs uppercase tracking-widest text-white/60">Your vertical</Label>
-                <Input
-                  id="custom-vert"
-                  value={customVertical}
-                  onChange={(e) => setCustomVertical(e.target.value)}
-                  maxLength={40}
-                  placeholder="e.g. drone photography"
-                  className="bg-white/5 border-white/15 text-white"
-                  data-testid="input-custom-vertical"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Step 2: photo ───────────────────────────────────────────── */}
-        {step === "photo" && (
-          <div className="space-y-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }}
-              data-testid="input-commercial-photo"
-            />
-            <div className="grid grid-cols-3 gap-2">
-              {uploadedImages.map((img) => (
-                <button
-                  key={img.id}
-                  type="button"
-                  onClick={() => setProductPhotoFileId(img.id)}
-                  className={`aspect-square rounded-lg overflow-hidden border-2 ${productPhotoFileId === img.id ? "border-emerald-400" : "border-white/15"}`}
-                  data-testid={`button-commercial-photo-${img.id}`}
-                >
-                  <img src={img.providerUrl} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
+      {/* ── Step 1: vertical ────────────────────────────────────────── */}
+      {step === "vertical" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {allVerticals.map((v) => (
               <button
+                key={v.slug}
                 type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploadPending}
-                className="aspect-square rounded-lg border-2 border-dashed border-white/20 flex flex-col items-center justify-center gap-1 hover:border-white/40 disabled:opacity-50"
-                data-testid="button-commercial-upload"
+                onClick={() => setVertical(v.slug)}
+                className={`p-3 rounded-lg border text-center transition ${
+                  vertical === v.slug
+                    ? "border-emerald-400 bg-emerald-400/10"
+                    : "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                }`}
+                data-testid={`button-vertical-${v.slug}`}
               >
-                {uploadPending
-                  ? <Loader2 className="w-5 h-5 animate-spin" />
-                  : <><ImageIcon className="w-5 h-5 text-white/60" /><span className="text-[10px] text-white/60">Upload</span></>}
+                <div className="text-xl">{v.emoji}</div>
+                <div className="text-[11px] mt-1 leading-tight">{v.label}</div>
               </button>
-            </div>
-            <p className="text-[11px] text-white/50">A clear, well-lit product or hero photo gives the best ad.</p>
+            ))}
           </div>
-        )}
+          {vertical === "custom" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="custom-vert" className="text-xs uppercase tracking-widest text-white/60">Your vertical</Label>
+              <Input
+                id="custom-vert"
+                value={customVertical}
+                onChange={(e) => setCustomVertical(e.target.value)}
+                maxLength={40}
+                placeholder="e.g. drone photography"
+                className="bg-white/5 border-white/15 text-white"
+                data-testid="input-custom-vertical"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* ── Step 3: info ────────────────────────────────────────────── */}
-        {step === "info" && (
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="biz-name" className="text-xs uppercase tracking-widest text-white/60">Business name</Label>
-              <Input id="biz-name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} maxLength={80} className="bg-white/5 border-white/15 text-white" data-testid="input-business-name" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="biz-desc" className="text-xs uppercase tracking-widest text-white/60">Business description</Label>
-              <Textarea id="biz-desc" value={businessDescription} onChange={(e) => setBusinessDescription(e.target.value)} maxLength={400} rows={3} placeholder="What you do, who you serve, why you're different." className="bg-white/5 border-white/15 text-white placeholder:text-white/40" data-testid="textarea-business-description" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="biz-cta" className="text-xs uppercase tracking-widest text-white/60">Call-to-action</Label>
-              <Input id="biz-cta" value={ctaText} onChange={(e) => setCtaText(e.target.value)} maxLength={80} placeholder="Book today · 555-0100" className="bg-white/5 border-white/15 text-white" data-testid="input-cta-text" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-widest text-white/60">Voiceover (optional)</Label>
-              <Select value={voiceId} onValueChange={setVoiceId}>
-                <SelectTrigger className="bg-white/5 border-white/15 text-white" data-testid="select-voice">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No voiceover</SelectItem>
-                  {OPENAI_TTS_VOICES.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-
-        {/* ── Step 4: preview ─────────────────────────────────────────── */}
-        {step === "preview" && (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 text-xs text-white/80">
-              <div><span className="text-white/50">Vertical:</span> {verticalObj?.label}{vertical === "custom" && ` — ${customVertical}`}</div>
-              <div><span className="text-white/50">Business:</span> {businessName}</div>
-              <div><span className="text-white/50">CTA:</span> {ctaText}</div>
-              <div><span className="text-white/50">Voiceover:</span> {voiceId === "none" ? "None" : OPENAI_TTS_VOICES.find((v) => v.id === voiceId)?.label}</div>
-              <div><span className="text-white/50">Description:</span> <span className="text-white/70">{businessDescription}</span></div>
-            </div>
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-100">
-              Composite render: motion + music + optional voiceover. Music will retry once on failure; if it still fails your credits are fully refunded.
-            </div>
+      {/* ── Step 2: photo ───────────────────────────────────────────── */}
+      {step === "photo" && (
+        <div className="space-y-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }}
+            data-testid="input-commercial-photo"
+          />
+          <div className="grid grid-cols-3 gap-2">
+            {uploadedImages.map((img) => (
+              <button
+                key={img.id}
+                type="button"
+                onClick={() => setProductPhotoFileId(img.id)}
+                className={`aspect-square rounded-lg overflow-hidden border-2 ${productPhotoFileId === img.id ? "border-emerald-400" : "border-white/15"}`}
+                data-testid={`button-commercial-photo-${img.id}`}
+              >
+                <img src={img.providerUrl} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
             <button
               type="button"
-              onClick={downloadBrandKit}
-              className="w-full text-[11px] text-white/60 hover:text-white py-2 border border-white/10 rounded-lg flex items-center justify-center gap-1.5"
-              data-testid="button-download-brand-kit"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadPending}
+              className="aspect-square rounded-lg border-2 border-dashed border-white/20 flex flex-col items-center justify-center gap-1 hover:border-white/40 disabled:opacity-50"
+              data-testid="button-commercial-upload"
             >
-              <Download className="w-3 h-3" /> Save brand kit (.json) for re-use
+              {uploadPending
+                ? <Loader2 className="w-5 h-5 animate-spin" />
+                : <><ImageIcon className="w-5 h-5 text-white/60" /><span className="text-[10px] text-white/60">Upload</span></>}
             </button>
           </div>
-        )}
+          <p className="text-[11px] text-white/50">A clear, well-lit product or hero photo gives the best ad.</p>
+        </div>
+      )}
 
-        <DialogFooter className="gap-2 flex-row sm:justify-between">
-          <Button
-            variant="outline"
-            onClick={step === "vertical" ? () => onOpenChange(false) : back}
-            data-testid="button-commercial-back"
+      {/* ── Step 3: info ────────────────────────────────────────────── */}
+      {step === "info" && (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="biz-name" className="text-xs uppercase tracking-widest text-white/60">Business name</Label>
+            <Input id="biz-name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} maxLength={80} className="bg-white/5 border-white/15 text-white" data-testid="input-business-name" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="biz-desc" className="text-xs uppercase tracking-widest text-white/60">Business description</Label>
+            <Textarea id="biz-desc" value={businessDescription} onChange={(e) => setBusinessDescription(e.target.value)} maxLength={400} rows={3} placeholder="What you do, who you serve, why you're different." className="bg-white/5 border-white/15 text-white placeholder:text-white/40" data-testid="textarea-business-description" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="biz-cta" className="text-xs uppercase tracking-widest text-white/60">Call-to-action</Label>
+            <Input id="biz-cta" value={ctaText} onChange={(e) => setCtaText(e.target.value)} maxLength={80} placeholder="Book today · 555-0100" className="bg-white/5 border-white/15 text-white" data-testid="input-cta-text" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-widest text-white/60">Voiceover (optional)</Label>
+            <Select value={voiceId} onValueChange={setVoiceId}>
+              <SelectTrigger className="bg-white/5 border-white/15 text-white" data-testid="select-voice">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No voiceover</SelectItem>
+                {OPENAI_TTS_VOICES.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 4: preview ─────────────────────────────────────────── */}
+      {step === "preview" && (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2 text-xs text-white/80">
+            <div><span className="text-white/50">Vertical:</span> {verticalObj?.label}{vertical === "custom" && ` — ${customVertical}`}</div>
+            <div><span className="text-white/50">Business:</span> {businessName}</div>
+            <div><span className="text-white/50">CTA:</span> {ctaText}</div>
+            <div><span className="text-white/50">Voiceover:</span> {voiceId === "none" ? "None" : OPENAI_TTS_VOICES.find((v) => v.id === voiceId)?.label}</div>
+            <div><span className="text-white/50">Description:</span> <span className="text-white/70">{businessDescription}</span></div>
+          </div>
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-100">
+            Composite render: motion + music + optional voiceover. Music will retry once on failure; if it still fails your credits are fully refunded.
+          </div>
+          <button
+            type="button"
+            onClick={downloadBrandKit}
+            className="w-full text-[11px] text-white/60 hover:text-white py-2 border border-white/10 rounded-lg flex items-center justify-center gap-1.5"
+            data-testid="button-download-brand-kit"
           >
-            <ChevronLeft className="w-4 h-4 mr-1" /> {step === "vertical" ? "Cancel" : "Back"}
+            <Download className="w-3 h-3" /> Save brand kit (.json) for re-use
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2 pt-2">
+        <Button
+          variant="outline"
+          onClick={step === "vertical" ? () => navigate("/studio") : back}
+          className="border-white/15 bg-transparent text-white hover:bg-white/5"
+          data-testid="button-commercial-back"
+        >
+          <ChevronLeft className="w-4 h-4 mr-1" /> {step === "vertical" ? "Cancel" : "Back"}
+        </Button>
+        {step !== "preview" ? (
+          <Button
+            disabled={!canAdvance}
+            onClick={next}
+            className="bg-emerald-400 text-black hover:bg-emerald-300"
+            data-testid="button-commercial-next"
+          >
+            Next <ChevronRight className="w-4 h-4 ml-1" />
           </Button>
-          {step !== "preview" ? (
-            <Button
-              disabled={!canAdvance}
-              onClick={next}
-              className="bg-emerald-400 text-black hover:bg-emerald-300"
-              data-testid="button-commercial-next"
-            >
-              Next <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          ) : (
-            <Button
-              disabled={insufficient || generate.isPending}
-              onClick={() => generate.mutate()}
-              className="bg-emerald-400 text-black hover:bg-emerald-300"
-              data-testid="button-commercial-generate"
-            >
-              {generate.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
-              {insufficient ? `Need ${cost} cr` : `Generate · ${cost} cr`}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        ) : (
+          <Button
+            disabled={insufficient || generate.isPending}
+            onClick={() => generate.mutate()}
+            className="bg-gradient-to-r from-emerald-400 via-cyan-300 to-violet-400 text-black font-black hover:opacity-90"
+            data-testid="button-commercial-generate"
+          >
+            {generate.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+            {insufficient ? `Need ${cost} cr` : `Generate · ${cost} cr`}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

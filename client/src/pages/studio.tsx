@@ -27,14 +27,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -45,8 +42,6 @@ import {
   Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
   Repeat, ChevronRight,
 } from "lucide-react";
-import { MirrorMotionDialog } from "@/components/studio/mirror-motion-form";
-import { CommercialWizardDialog } from "@/components/studio/commercial-wizard";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type StudioMe = {
@@ -121,44 +116,44 @@ type ToolTile = {
   blurb: string;
   kind: "video" | "audio" | "image";
   icon: React.ComponentType<{ className?: string }>;
-  costToolKey: string | null; // null = free Quick Pic
-  wizard?: "mirror_motion" | "commercial_builder";
+  costToolKey: string | null; // null = free Quick Pic, kept for back-compat
+  starterPrompt?: string;
+  // task-549: every tool now lives on its own page. Tile tap → router push.
+  href: string;
   badge?: string;
   gradient: string;
-  starterPrompt: string;
 };
 const TOOL_TILES: ToolTile[] = [
   {
     key: "quick-pic", label: "Quick Pic", blurb: "AI image",
     kind: "image", icon: ImageIcon, costToolKey: null, badge: "Free",
     gradient: "from-emerald-400 to-cyan-500",
-    starterPrompt: "A cinematic portrait, dramatic studio lighting, hyper-detailed.",
+    href: "/studio",
   },
   {
-    key: "text-to-video", label: "Text → Video", blurb: "5s motion clip",
+    key: "text-to-video", label: "Text → Video", blurb: "Motion clip",
     kind: "video", icon: Film, costToolKey: "wan_motion_5s",
     gradient: "from-violet-500 to-fuchsia-500",
-    starterPrompt: "A neon-lit panda DJ in Tokyo, slow cinematic dolly-in, vaporwave colors.",
+    href: "/studio/text-to-video",
   },
   {
     key: "mirror-motion-tile", label: "Mirror Motion", blurb: "Photo + video",
     kind: "video", icon: Repeat, costToolKey: "mirror_motion",
-    wizard: "mirror_motion",
     gradient: "from-rose-500 to-orange-500",
-    starterPrompt: "",
+    href: "/studio/mirror-motion",
   },
   {
     key: "build-commercial-tile", label: "Build Ad", blurb: "Full commercial",
     kind: "video", icon: Megaphone, costToolKey: "commercial_builder",
-    wizard: "commercial_builder", badge: "New",
+    badge: "New",
     gradient: "from-amber-400 to-rose-600",
-    starterPrompt: "",
+    href: "/studio/commercial",
   },
   {
-    key: "music", label: "Music", blurb: "30s instrumental",
+    key: "music", label: "Music", blurb: "Instrumental track",
     kind: "audio", icon: Music, costToolKey: "minimax_music",
     gradient: "from-indigo-500 to-purple-600",
-    starterPrompt: "Uplifting cinematic strings with hopeful melody, slow build, instrumental, 30 seconds.",
+    href: "/studio/music",
   },
 ];
 
@@ -335,6 +330,7 @@ export default function StudioPageV2() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
+  const [, navigate] = useLocation();
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [outputKind, setOutputKind] = useState<"video" | "audio" | "image">("video");
   const [prompt, setPrompt] = useState("");
@@ -344,8 +340,6 @@ export default function StudioPageV2() {
   // and scroll/focus into the prompt textarea.
   const searchString = useSearch();
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
-  const [confirmExit, setConfirmExit] = useState(false);
-  const [openWizard, setOpenWizard] = useState<null | "mirror_motion" | "commercial_builder">(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const lowCreditNoticeRef = useRef(false);
@@ -400,24 +394,17 @@ export default function StudioPageV2() {
         }
       } catch {}
     })();
-    const beforeUnload = () => {
-      try {
-        if (navigator.sendBeacon) navigator.sendBeacon("/api/studio/session/exit");
-        else fetch("/api/studio/session/exit", { method: "POST", credentials: "include", keepalive: true });
-      } catch {}
-    };
-    window.addEventListener("beforeunload", beforeUnload);
+    // task-549: removed beforeunload + unmount session-purge. Sessions now
+    // live for 24h after last activity (server cron handles cleanup), so
+    // tabbing away or hopping between tool pages no longer wipes uploads
+    // and clips. We still heartbeat so an actively-used session never
+    // times out within the day.
     const touchTimer = window.setInterval(() => {
       fetch("/api/studio/session/touch", { method: "POST", credentials: "include" }).catch(() => {});
     }, 4 * 60 * 1000);
     return () => {
       cancelled = true;
-      window.removeEventListener("beforeunload", beforeUnload);
       window.clearInterval(touchTimer);
-      try {
-        if (navigator.sendBeacon) navigator.sendBeacon("/api/studio/session/exit");
-        else fetch("/api/studio/session/exit", { method: "POST", credentials: "include", keepalive: true });
-      } catch {}
     };
   }, [isAdmin]);
 
@@ -531,12 +518,14 @@ export default function StudioPageV2() {
     },
   });
 
+  // task-549: every tool now lives on a dedicated page. Templates with a
+  // wizard slug map onto the matching route; everything else still drops
+  // its prompt into the inline Quick Pic / inline-text generator below.
   function pickTemplate(t: Template) {
-    if (t.wizard) {
-      setActiveTemplate(t.slug);
-      setOpenWizard(t.wizard);
-      return;
-    }
+    if (t.wizard === "mirror_motion") { navigate("/studio/mirror-motion"); return; }
+    if (t.wizard === "commercial_builder") { navigate("/studio/commercial"); return; }
+    if (t.kind === "audio") { navigate("/studio/music"); return; }
+    if (t.kind === "video") { navigate("/studio/text-to-video"); return; }
     setActiveTemplate(t.slug);
     setOutputKind(t.kind);
     setPrompt(t.prompt);
@@ -546,28 +535,21 @@ export default function StudioPageV2() {
     }, 60);
   }
 
-  // Phase-2.5: tool-grid tap. Wizards open immediately; non-wizard tools
-  // set the output kind, drop a starter prompt (only if the box is empty
-  // so we don't overwrite the user's typing), and scroll to the prompt.
+  // task-549: tool-tile tap → navigate to the dedicated tool page.
+  // Quick Pic stays inline on /studio so the homepage retains an
+  // immediate "type & ship" surface.
   function pickToolTile(tile: ToolTile) {
-    if (tile.wizard) {
-      setActiveTemplate(tile.key);
-      setOpenWizard(tile.wizard);
+    if (tile.href && tile.href !== "/studio") {
+      navigate(tile.href);
       return;
     }
     setActiveTemplate(null);
     setOutputKind(tile.kind);
-    if (!prompt.trim() && tile.starterPrompt) setPrompt(tile.starterPrompt);
     setTimeout(() => {
       promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       promptRef.current?.focus();
     }, 60);
   }
-
-  // Shared upload handler the wizards reuse so they don't duplicate the
-  // moderation / dataUrl / 25 MB checks.
-  function uploadFile(f: File) { handleFile(f); }
-  const commercialCost = tools.find((t) => t.key === "commercial_builder")?.creditsCost ?? 200;
 
   function clearReference() {
     setSelectedSourceId(null);
@@ -658,14 +640,15 @@ export default function StudioPageV2() {
 
         <div className="relative z-10 max-w-2xl mx-auto px-5 pt-6 pb-12">
           <div className="flex items-center justify-between gap-3 mb-8">
-            <button
-              type="button"
-              onClick={() => setConfirmExit(true)}
-              className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
-              data-testid="button-studio-exit"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Exit
-            </button>
+            <Link href="/">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition"
+                data-testid="button-studio-exit"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Exit
+              </button>
+            </Link>
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_0_24px_rgba(34,197,94,0.5)]">
                 <Wand2 className="w-5 h-5 text-black" />
@@ -882,12 +865,6 @@ export default function StudioPageV2() {
           </Link>
         </div>
 
-        {/* Session-temporary disclaimer */}
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
-          <strong className="font-bold">Heads up:</strong> Everything you make here lives only for this session.
-          Closing this page, refreshing, or 15 minutes of idle wipes your uploads and clips.
-        </div>
-
         {/* Provider down warning */}
         {!me.providerReady && (
           <div className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-xs text-red-100" data-testid="banner-provider-down">
@@ -904,15 +881,13 @@ export default function StudioPageV2() {
             </h2>
             <span className="text-[10px] uppercase tracking-widest text-white/40">tap to create</span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+          {/* task-549: removed per-tile credit chips — pricing varies by length
+              and quality, so showing one number on the tile was misleading.
+              Only the genuinely-free Quick Pic still flashes a "Free" badge.
+              The grid is fluid (2 → 3 → 5 cols) so it never overflows on phones. */}
+          <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-5 gap-2.5 sm:gap-3">
             {TOOL_TILES.map((tile) => {
               const TileIcon = tile.icon;
-              const liveCost = tile.costToolKey
-                ? tools.find((x) => x.key === tile.costToolKey)?.creditsCost
-                : null;
-              const costLabel = tile.costToolKey == null
-                ? "Free"
-                : liveCost != null ? `${liveCost} cr` : "—";
               return (
                 <button
                   key={tile.key}
@@ -923,15 +898,10 @@ export default function StudioPageV2() {
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${tile.gradient} opacity-90`} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent" />
-                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
-                  <div className="absolute top-2 right-2">
-                    <span className="text-[9px] uppercase tracking-wider bg-black/40 backdrop-blur text-white/90 px-1.5 py-0.5 rounded-full font-bold">
-                      {costLabel}
-                    </span>
-                  </div>
+                  <div className="absolute -inset-x-12 top-0 h-full bg-gradient-to-r from-transparent via-white/25 to-transparent translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
                   {tile.badge && (
                     <div className="absolute top-2 left-2">
-                      <span className="text-[9px] uppercase tracking-wider bg-white text-black px-1.5 py-0.5 rounded-full font-black">
+                      <span className="text-[9px] uppercase tracking-wider bg-white text-black px-1.5 py-0.5 rounded-full font-black shadow-sm">
                         {tile.badge}
                       </span>
                     </div>
@@ -940,8 +910,8 @@ export default function StudioPageV2() {
                     <TileIcon className="w-9 h-9 text-white drop-shadow-lg" />
                   </div>
                   <div className="absolute inset-x-0 bottom-0 p-2.5">
-                    <p className="font-black text-[13px] leading-tight text-white">{tile.label}</p>
-                    <p className="text-[10px] text-white/80 leading-tight mt-0.5">{tile.blurb}</p>
+                    <p className="font-black text-[13px] leading-tight text-white truncate">{tile.label}</p>
+                    <p className="text-[10px] text-white/80 leading-tight mt-0.5 truncate">{tile.blurb}</p>
                   </div>
                 </button>
               );
@@ -1296,54 +1266,6 @@ export default function StudioPageV2() {
         </div>
       </div>
 
-      <MirrorMotionDialog
-        open={openWizard === "mirror_motion"}
-        onOpenChange={(v) => { if (!v) setOpenWizard(null); }}
-        uploadedImages={uploadedImages}
-        onUpload={uploadFile}
-        uploadPending={uploadMutation.isPending}
-        credits={credits}
-      />
-      <CommercialWizardDialog
-        open={openWizard === "commercial_builder"}
-        onOpenChange={(v) => { if (!v) setOpenWizard(null); }}
-        uploadedImages={uploadedImages}
-        onUpload={uploadFile}
-        uploadPending={uploadMutation.isPending}
-        credits={credits}
-        cost={commercialCost}
-      />
-
-      {/* Exit confirm */}
-      <Dialog open={confirmExit} onOpenChange={setConfirmExit}>
-        <DialogContent className="bg-zinc-950 border-white/10 text-white">
-          <DialogHeader>
-            <DialogTitle>Leave Studio?</DialogTitle>
-            <DialogDescription className="text-white/70">
-              Your uploads and generated clips will be permanently deleted. Download anything you want to keep first.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setConfirmExit(false)} data-testid="button-exit-cancel">
-              Stay
-            </Button>
-            <Link href="/">
-              <Button
-                className="bg-red-500 hover:bg-red-400 text-white"
-                onClick={() => {
-                  try {
-                    if (navigator.sendBeacon) navigator.sendBeacon("/api/studio/session/exit");
-                    else fetch("/api/studio/session/exit", { method: "POST", credentials: "include", keepalive: true });
-                  } catch {}
-                }}
-                data-testid="button-exit-confirm"
-              >
-                <X className="w-4 h-4 mr-1" /> Discard & Leave
-              </Button>
-            </Link>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

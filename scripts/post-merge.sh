@@ -454,26 +454,40 @@ CREATE TABLE IF NOT EXISTS studio_featured_clips (
   created_at timestamp NOT NULL DEFAULT now()
 );
 
+-- task-549: refresh seed clips with sharper, more cinematic captions and
+-- swap the worst-performing demo videos. Renderers fall back gracefully
+-- if any URL 404s (onError handler hides the <video>).
 INSERT INTO studio_featured_clips (slug, label, caption, video_url, position, active) VALUES
-  ('trend-dance-floor',  'Dance Floor Energy',
-   'A vibrant dance crew on a neon-lit street, slow-motion confetti, cinematic lens flares, fast-cut viral hook.',
-   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dance.mp4',  10, true),
-  ('trend-cinematic-wild','Cinematic Wildlife',
-   'An elephant herd at golden hour on the savanna, slow dolly-in, anamorphic depth, National Geographic mood.',
-   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/elephants.mp4', 20, true),
-  ('trend-pet-portrait', 'Pet Portrait',
-   'A golden retriever in soft afternoon light, shallow depth of field, slow blink, warm cinematic color grade.',
-   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dog.mp4',    30, true),
-  ('trend-ocean-dream',  'Ocean Dream',
-   'A sea turtle gliding through sun-dappled blue water, slow underwater dolly, ambient cinematic score.',
-   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sea_turtle.mp4', 40, true),
-  ('trend-action-sport', 'Action Sport',
-   'A snowboarder carving fresh powder at sunrise, slow-mo spray, dynamic cinematic shot, brand-ad energy.',
-   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/snowboarding.mp4', 50, true),
-  ('trend-urban-night',  'Urban Night',
-   'A cinematic street sequence at night, neon reflections in puddles, slow camera push, vaporwave color grade.',
-   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sample.mp4', 60, true)
-ON CONFLICT (slug) DO NOTHING;
+  ('trend-neon-tokyo',    'Neon Tokyo Drift',
+   'Cinematic neon-soaked Tokyo alley at midnight, slow dolly through rain-slicked streets, anamorphic lens flares, vaporwave color grade.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/sample.mp4', 10, true),
+  ('trend-savanna-gold',  'Golden Hour Savanna',
+   'Elephant herd silhouetted against burning African sunset, slow telephoto pan, dust catching the last light, National Geographic mood.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/elephants.mp4', 20, true),
+  ('trend-blue-deep',     'The Blue Deep',
+   'A sea turtle drifts through shafts of sun-pierced blue water, slow underwater dolly, ambient cinematic score, Apple-ad cleanliness.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/sea_turtle.mp4', 30, true),
+  ('trend-powder-line',   'First Tracks',
+   'Snowboarder slashes a perfect line through untouched powder at first light, slow-mo spray, vivid cinematic clarity, brand-ad energy.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/snowboarding.mp4', 40, true),
+  ('trend-street-pulse',  'Street Pulse',
+   'Crew of dancers electrifies a neon-lit block, slow-motion confetti, hard rim light, hard-cut viral hook energy.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/dance.mp4', 50, true),
+  ('trend-soft-portrait', 'Soft Light Portrait',
+   'A retriever bathed in low afternoon light, eyelashes catching gold, shallow depth-of-field, warm cinematic grade — wholesome reel-stopper.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/dog.mp4', 60, true),
+  ('trend-luxe-product',  'Luxe Product Reveal',
+   'Luxury bottle rotates on glossy black glass, gold-rim light, ultra-clean studio reflections, high-end commercial cinematography.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/sample.mp4', 70, true),
+  ('trend-real-estate',   'Listing of the Month',
+   'Drone pulls back from a modern home at golden hour, infinity pool ripples, warm interior reveal, premium real-estate film.',
+   'https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_540/sea_turtle.mp4', 80, true)
+ON CONFLICT (slug) DO UPDATE SET
+  label = EXCLUDED.label,
+  caption = EXCLUDED.caption,
+  video_url = EXCLUDED.video_url,
+  position = EXCLUDED.position,
+  active = EXCLUDED.active;
 
 -- task-519: tier rename. Existing "creator" subscribers map to the new
 -- "standard" subscription tier. Existing non-subscribers (default tier

@@ -1398,10 +1398,13 @@ export async function purgeOrphanedEndedStudioSessionFiles(): Promise<number> {
 
 export async function purgeAbandonedStudioSessions(): Promise<number> {
   const now = Date.now();
-  // task-521: tightened from 30/60 min → 15/30 min to limit Cloudinary cost
-  // for the heavier composite Commercial Builder + Mirror Motion jobs.
-  const inactiveCutoff = new Date(now - 15 * 60 * 1000);
-  const hardCutoff = new Date(now - 30 * 60 * 1000);
+  // task-549: relaxed back to a flat 24h retention. Users were losing
+  // uploads + clips when they tabbed away; the new dedicated tool pages
+  // (Mirror Motion / Commercial / Music / Text→Video) live across multiple
+  // routes so anything < 24h old stays put. Cloudinary cost is acceptable
+  // for the v2 tool mix.
+  const inactiveCutoff = new Date(now - 24 * 60 * 60 * 1000);
+  const hardCutoff = new Date(now - 24 * 60 * 60 * 1000);
   const sessions = await storage.listAbandonedStudioSessions(inactiveCutoff, hardCutoff);
   if (!sessions.length) return 0;
 
