@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
 import shieldLogo from "@assets/__favicon_1773034423924.png";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 
 const MIN_SPLASH_MS = 3000;
 const MAX_SPLASH_MS = 20000;
@@ -30,6 +31,7 @@ export default function AiOrNot() {
   const trustboxSuccess = searchParams.get("trustbox") === "success";
   const ogSuccess = searchParams.get("og") === "success" || searchParams.get("day1og") === "success";
   const purchaseSuccess = trustboxSuccess || ogSuccess;
+  const showReturnBanner = purchaseSuccess;
 
   // Whether we are still waiting for the webhook to update the user record
   const [purchaseActivating, setPurchaseActivating] = useState(purchaseSuccess);
@@ -359,6 +361,7 @@ export default function AiOrNot() {
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
       `}</style>
+      <MobileReturnBanner show={showReturnBanner} />
     </div>
   );
 }

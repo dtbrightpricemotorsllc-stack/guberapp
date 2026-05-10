@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation, Link } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { BizLayout } from "@/components/biz-layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import {
   Building2, Upload, FileText, ShoppingBag, ChevronRight, Eye, Search,
   ShieldCheck, Send, TrendingUp, Zap, CreditCard, CheckCircle2,
@@ -109,8 +110,10 @@ function OnboardingStep({ step, title, desc, done, active }: { step: number; tit
 export default function BizDashboard() {
   const { user, isDemoUser } = useAuth();
   const [location, navigate] = useLocation();
+  const searchStr = useSearch();
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
+  const purchaseSuccess = new URLSearchParams(searchStr).get("subscribed") === "true";
 
   const { data: account, isLoading: accountLoading } = useQuery<any>({
     queryKey: ["/api/business/account"],
@@ -567,6 +570,7 @@ export default function BizDashboard() {
         </div>
 
       </div>
+      <MobileReturnBanner show={purchaseSuccess} />
     </BizLayout>
   );
 }

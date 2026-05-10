@@ -4,7 +4,7 @@
 // ExternalPurchaseSheet (Apple External Purchase Link) disclosure flow.
 
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Loader2, ShoppingCart, Sparkles, ArrowLeft, Coins, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 
 type Pack = { id: string; credits: number; priceCents: number; label: string };
 type Tier = {
@@ -38,6 +39,12 @@ function perCreditDollars(priceCents: number, credits: number) {
 
 export default function StudioCreditsPage() {
   const { toast } = useToast();
+  const searchStr = useSearch();
+  const searchParams = new URLSearchParams(searchStr);
+  const purchaseSuccess =
+    searchParams.get("credits") === "success" ||
+    searchParams.get("subscription") === "success";
+
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
   const packsQuery = useQuery<Pack[]>({ queryKey: ["/api/studio/packs"] });
   const tiersQuery = useQuery<Tier[]>({ queryKey: ["/api/studio/tiers"] });
@@ -83,6 +90,7 @@ export default function StudioCreditsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-white px-4 sm:px-6 py-8">
+      <MobileReturnBanner show={purchaseSuccess} />
       <div className="max-w-5xl mx-auto">
         <Link href="/studio">
           <button className="text-white/70 text-sm flex items-center gap-1 mb-6" data-testid="link-back-studio">

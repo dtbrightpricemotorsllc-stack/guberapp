@@ -7,6 +7,7 @@ import { Crown, Loader2 } from "lucide-react";
 import { Day1OGLogo } from "@/components/trust-badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { MobileReturnBanner } from "@/components/mobile-return-banner";
 
 export default function OGSuccess() {
   const searchStr = useSearch();
@@ -38,6 +39,7 @@ export default function OGSuccess() {
 
   return (
     <GuberLayout>
+      <MobileReturnBanner show={!!sessionId} />
       <div className="max-w-lg mx-auto px-4 py-16 text-center" data-testid="page-og-success">
         {confirmMutation.isPending ? (
           <div className="space-y-4">
