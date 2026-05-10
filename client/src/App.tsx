@@ -354,6 +354,36 @@ export function NativeDeepLinkHandler() {
                 description: `Welcome to ${tierLabel}! Your monthly credits have been added.`,
                 duration: 5000,
               });
+            } else if (purchaseType === "credits") {
+              toast({
+                title: "Credits added!",
+                description: "Your new credits are ready to use — enjoy!",
+                duration: 4000,
+              });
+            } else if (purchaseType === "day1og") {
+              toast({
+                title: "Day-1 OG unlocked!",
+                description: "You're officially a founding member. Your badge and perks are active.",
+                duration: 5000,
+              });
+            } else if (purchaseType === "trust_box") {
+              toast({
+                title: "Trust Box activated!",
+                description: "Your Trust Box is live and ready to collect tips.",
+                duration: 5000,
+              });
+            } else if (purchaseType === "business_scout") {
+              toast({
+                title: "Scout Plan activated!",
+                description: "You can now search and contact workers directly.",
+                duration: 5000,
+              });
+            } else if (purchaseType === "business_unlock") {
+              toast({
+                title: "Profile unlocks added!",
+                description: "Your additional worker profile unlocks are ready to use.",
+                duration: 4000,
+              });
             } else {
               toast({
                 title: "Credits added!",
