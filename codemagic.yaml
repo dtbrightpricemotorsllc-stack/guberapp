@@ -30,6 +30,15 @@ workflows:
       - name: Install Node dependencies
         script: npm ci
 
+      - name: Patch SPM version constraints
+        # @capacitor-community/background-geolocation ships with `from: "7.0.0"`
+        # which conflicts with all other Capacitor 8 plugins that use `from: "8.0.0"`.
+        # The Swift plugin code is Cap-8 compatible; only the version floor needs lifting.
+        script: |
+          sed -i '' 's/from: "7\.0\.0"/from: "8.0.0"/g' \
+            node_modules/@capacitor-community/background-geolocation/Package.swift
+          echo "Patched: $(grep 'capacitor-swift-pm' node_modules/@capacitor-community/background-geolocation/Package.swift)"
+
       - name: Build web app
         script: npm run build
 
