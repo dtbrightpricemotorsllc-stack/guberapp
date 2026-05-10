@@ -9809,6 +9809,7 @@ export async function registerRoutes(
       caption: r.caption,
       videoUrl: r.videoUrl,
       posterUrl: r.posterUrl,
+      position: r.position,
     })));
   });
 
