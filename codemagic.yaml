@@ -36,6 +36,13 @@ workflows:
       - name: Sync Capacitor (copy web assets into Xcode project)
         script: npx cap sync ios
 
+      - name: Resolve Swift Package Manager dependencies
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -clonedSourcePackagesDirPath ios/App/SourcePackages
+
       - name: Set up code signing keychain
         script: |
           keychain initialize
@@ -47,7 +54,8 @@ workflows:
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
-            --config Release
+            --config Release \
+            --xcargs "-clonedSourcePackagesDirPath ios/App/SourcePackages"
 
     artifacts:
       - build/ios/ipa/*.ipa
