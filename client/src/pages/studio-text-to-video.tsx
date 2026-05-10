@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Wand2, Film } from "lucide-react";
 import { StudioToolPageShell } from "@/components/studio/studio-tool-page-shell";
+import { isStoreBuild } from "@/lib/platform";
 
 type StudioMe = { credits: number; providerReady: boolean };
 type StudioTool = { key: string; creditsCost: number; durationSeconds: number | null };
@@ -104,7 +105,7 @@ export default function StudioTextToVideoPage() {
                   }`}
                   data-testid={`button-t2v-dur-${d}`}
                 >
-                  {d}s {c > 0 && <span className="opacity-80 font-normal">· {c} cr</span>}
+                  {d}s {!isStoreBuild && c > 0 && <span className="opacity-80 font-normal">· {c} cr</span>}
                 </button>
               );
             })}
@@ -119,7 +120,7 @@ export default function StudioTextToVideoPage() {
         >
           {generate.isPending
             ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Rendering…</>
-            : <><Wand2 className="w-5 h-5 mr-2" /> {insufficient ? `Need ${cost} cr` : `Generate · ${cost > 0 ? `${cost} cr` : "—"}`}</>}
+            : <><Wand2 className="w-5 h-5 mr-2" /> {isStoreBuild ? "Generate" : (insufficient ? `Need ${cost} cr` : `Generate · ${cost > 0 ? `${cost} cr` : "—"}`)}</>}
         </Button>
 
         <p className="text-center text-[12px] text-white/60">

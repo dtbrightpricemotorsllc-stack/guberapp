@@ -1,8 +1,12 @@
-import { ReactNode, useEffect } from "react";
-import { Link, Redirect } from "wouter";
+import { ReactNode, useEffect, useState } from "react";
+import { Link, Redirect, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Coins, Plus, Crown, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, Coins, Plus, Crown, Sparkles, Wand2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { isStoreBuild } from "@/lib/platform";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -36,6 +40,8 @@ export function StudioToolPageShell({
   // /studio shows them the StudioComingSoon screen there in one place.
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const [, navigate] = useLocation();
+  const [confirmExit, setConfirmExit] = useState(false);
 
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"], enabled: isAdmin });
   const me = meQuery.data;
@@ -122,9 +128,44 @@ export function StudioToolPageShell({
                 <span>{TIER_LABEL[tier] || tier}</span>
               </Link>
             )}
+            {/* Exit Studio — navigation-only confirm. Sessions are kept for
+                24h regardless, so this never purges anything. */}
+            <button
+              type="button"
+              onClick={() => setConfirmExit(true)}
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 transition"
+              data-testid="button-tool-exit"
+              aria-label="Exit Studio"
+              title="Exit Studio"
+            >
+              <X className="w-3.5 h-3.5 text-white/80" />
+            </button>
           </div>
         </div>
       </div>
+
+      <Dialog open={confirmExit} onOpenChange={setConfirmExit}>
+        <DialogContent data-testid="dialog-exit-studio">
+          <DialogHeader>
+            <DialogTitle>Leave Studio?</DialogTitle>
+            <DialogDescription>
+              Your work-in-progress sticks around for 24h — uploads, clips, and
+              prompts will all be here when you come back.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmExit(false)} data-testid="button-exit-cancel">
+              Stay
+            </Button>
+            <Button
+              onClick={() => { setConfirmExit(false); navigate("/"); }}
+              data-testid="button-exit-confirm"
+            >
+              Leave Studio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="max-w-2xl mx-auto px-4 sm:px-5 pt-6 sm:pt-8 space-y-6">
         <div>

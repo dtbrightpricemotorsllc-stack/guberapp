@@ -529,10 +529,13 @@ export default function StudioPageV2() {
   // wizard slug map onto the matching route; everything else still drops
   // its prompt into the inline Quick Pic / inline-text generator below.
   function pickTemplate(t: Template) {
-    if (t.wizard === "mirror_motion") { navigate("/studio/mirror-motion"); return; }
-    if (t.wizard === "commercial_builder") { navigate("/studio/commercial"); return; }
-    if (t.kind === "audio") { navigate("/studio/music"); return; }
-    if (t.kind === "video") { navigate("/studio/text-to-video"); return; }
+    // Preserve template intent: pass the starter prompt as ?prompt= so the
+    // dedicated page lands with the same text the user just tapped on.
+    const q = t.prompt ? `?prompt=${encodeURIComponent(t.prompt)}` : "";
+    if (t.wizard === "mirror_motion") { navigate(`/studio/mirror-motion${q}`); return; }
+    if (t.wizard === "commercial_builder") { navigate(`/studio/commercial${q}`); return; }
+    if (t.kind === "audio") { navigate(`/studio/music${q}`); return; }
+    if (t.kind === "video") { navigate(`/studio/text-to-video${q}`); return; }
     setActiveTemplate(t.slug);
     setOutputKind(t.kind);
     setPrompt(t.prompt);

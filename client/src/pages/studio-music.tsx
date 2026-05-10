@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Music, AudioLines } from "lucide-react";
 import { StudioToolPageShell } from "@/components/studio/studio-tool-page-shell";
+import { isStoreBuild } from "@/lib/platform";
 
 type StudioMe = { credits: number };
 type StudioTool = { key: string; creditsCost: number };
@@ -148,7 +149,7 @@ export default function StudioMusicPage() {
       >
         {generate.isPending
           ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Composing…</>
-          : <><AudioLines className="w-5 h-5 mr-2" /> {insufficient ? `Need ${cost} cr` : `Generate music · ${cost > 0 ? `${cost} cr` : "—"}`}</>}
+          : <><AudioLines className="w-5 h-5 mr-2" /> {isStoreBuild ? "Generate music" : (insufficient ? `Need ${cost} cr` : `Generate music · ${cost > 0 ? `${cost} cr` : "—"}`)}</>}
       </Button>
     </StudioToolPageShell>
   );
