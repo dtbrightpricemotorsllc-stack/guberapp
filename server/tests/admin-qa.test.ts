@@ -4,8 +4,8 @@ import { toCloudinaryAttachmentUrl, classifyMedia } from "../media-download";
 import express from "express";
 import request from "supertest";
 import { db } from "../db";
-import { studioGenerationLog } from "@shared/schema";
-import { inArray } from "drizzle-orm";
+import { studioGenerationLog, studioModelPricing } from "@shared/schema";
+import { inArray, eq } from "drizzle-orm";
 import { registerAdminQaRoutes } from "../admin-qa";
 
 describe("QA Dashboard — visibility filter", () => {
@@ -739,5 +739,133 @@ describe("Studio Usage — /api/admin/qa/studio/usage (real DB, real routes)", (
     expect(typeof entry.status).toBe("string");
     expect(typeof entry.n).toBe("number");
     expect(typeof entry.credits).toBe("number");
+  });
+});
+
+// ── Tile-image admin endpoint — PATCH /api/admin/studio/tools/:toolKey/tile-image ──
+//
+// The endpoint is now registered inside registerAdminQaRoutes (admin-qa.ts),
+// which accepts an injectable requireAdmin middleware.  These tests mount the
+// real route handler against the real DB, using three middleware variants to
+// exercise all four required scenarios:
+//
+//   1. Unauthenticated caller → 401  (denyWith401 middleware)
+//   2. Non-admin caller       → 403  (denyWith403 middleware)
+//   3. Admin + valid toolKey  → 200  (allowAdmin + seeded test row)
+//   4. Admin + unknown key    → 404  (allowAdmin + key not in DB)
+//
+// A synthetic tool key (test_tile_t602) is inserted in beforeAll and removed
+// in afterAll so the suite is fully self-contained and leaves no residue.
+
+const TILE_TEST_TOOL_KEY = "test_tile_t602";
+const SAMPLE_IMAGE_URL   = "https://res.cloudinary.com/demo/image/upload/sample.jpg";
+
+describe("Tile-image admin endpoint — PATCH /api/admin/studio/tools/:toolKey/tile-image", () => {
+  const allowAdmin  = (_req: any, _res: any, next: () => void) => next();
+  const denyWith401 = (_req: any, res: any) => res.status(401).json({ message: "Unauthorized" });
+  const denyWith403 = (_req: any, res: any) => res.status(403).json({ message: "Forbidden" });
+
+  let adminApp: ReturnType<typeof express>;
+  let app401:   ReturnType<typeof express>;
+  let app403:   ReturnType<typeof express>;
+
+  beforeAll(async () => {
+    // Seed an isolated test tool key so the test doesn't depend on production
+    // seed data and leaves no permanent mutation to real pricing rows.
+    await db
+      .insert(studioModelPricing)
+      .values({
+        toolKey:          TILE_TEST_TOOL_KEY,
+        label:            "Test Tile T602",
+        description:      "Synthetic row for tile-image access-control tests.",
+        providerEndpoint: "fal-ai/test/noop",
+        creditsCost:      1,
+        active:           false,
+      })
+      .onConflictDoNothing();
+
+    adminApp = express();
+    adminApp.use(express.json());
+    registerAdminQaRoutes(adminApp, allowAdmin);
+
+    app401 = express();
+    app401.use(express.json());
+    registerAdminQaRoutes(app401, denyWith401);
+
+    app403 = express();
+    app403.use(express.json());
+    registerAdminQaRoutes(app403, denyWith403);
+  }, 20_000);
+
+  afterAll(async () => {
+    await db
+      .delete(studioModelPricing)
+      .where(eq(studioModelPricing.toolKey, TILE_TEST_TOOL_KEY));
+  }, 10_000);
+
+  // ── Access control ────────────────────────────────────────────────────────
+
+  it("unauthenticated request → 401", async () => {
+    const res = await request(app401)
+      .patch(`/api/admin/studio/tools/${TILE_TEST_TOOL_KEY}/tile-image`)
+      .send({ imageUrl: SAMPLE_IMAGE_URL });
+    expect(res.status).toBe(401);
+  });
+
+  it("authenticated non-admin → 403", async () => {
+    const res = await request(app403)
+      .patch(`/api/admin/studio/tools/${TILE_TEST_TOOL_KEY}/tile-image`)
+      .send({ imageUrl: SAMPLE_IMAGE_URL });
+    expect(res.status).toBe(403);
+  });
+
+  // ── Admin access ──────────────────────────────────────────────────────────
+
+  it("admin with valid toolKey → 200 and tileImageUrl is updated in the DB", async () => {
+    const res = await request(adminApp)
+      .patch(`/api/admin/studio/tools/${TILE_TEST_TOOL_KEY}/tile-image`)
+      .send({ imageUrl: SAMPLE_IMAGE_URL });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.toolKey).toBe(TILE_TEST_TOOL_KEY);
+    expect(res.body.tileImageUrl).toBe(SAMPLE_IMAGE_URL);
+
+    // Confirm the DB row was actually updated (not just the response body).
+    const [row] = await db
+      .select({ tileImageUrl: studioModelPricing.tileImageUrl })
+      .from(studioModelPricing)
+      .where(eq(studioModelPricing.toolKey, TILE_TEST_TOOL_KEY))
+      .limit(1);
+    expect(row?.tileImageUrl).toBe(SAMPLE_IMAGE_URL);
+  });
+
+  it("admin clearing tileImageUrl (null) → 200 and DB column becomes null", async () => {
+    const res = await request(adminApp)
+      .patch(`/api/admin/studio/tools/${TILE_TEST_TOOL_KEY}/tile-image`)
+      .send({ imageUrl: null });
+    expect(res.status).toBe(200);
+    expect(res.body.tileImageUrl).toBeNull();
+
+    const [row] = await db
+      .select({ tileImageUrl: studioModelPricing.tileImageUrl })
+      .from(studioModelPricing)
+      .where(eq(studioModelPricing.toolKey, TILE_TEST_TOOL_KEY))
+      .limit(1);
+    expect(row?.tileImageUrl ?? null).toBeNull();
+  });
+
+  it("admin with unknown toolKey → 404", async () => {
+    const res = await request(adminApp)
+      .patch("/api/admin/studio/tools/nonexistent_tool_xyz/tile-image")
+      .send({ imageUrl: SAMPLE_IMAGE_URL });
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/unknown tool key/i);
+  });
+
+  it("admin with invalid imageUrl (non-URL string) → 400", async () => {
+    const res = await request(adminApp)
+      .patch(`/api/admin/studio/tools/${TILE_TEST_TOOL_KEY}/tile-image`)
+      .send({ imageUrl: "not-a-url" });
+    expect(res.status).toBe(400);
   });
 });

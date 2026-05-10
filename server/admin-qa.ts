@@ -2,6 +2,7 @@
 // audit-logged. Mounted from server/routes.ts.
 
 import type { Express, Request, Response } from "express";
+import { z } from "zod";
 import { db } from "./db";
 import { sql, eq, and, desc, inArray } from "drizzle-orm";
 import {
@@ -1089,6 +1090,23 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     } catch (err: any) {
       res.status(500).json({ error: String(err?.message || err).slice(0, 300) });
     }
+  });
+
+  // ── Studio tool tile-image (task-602) ───────────────────────────────────
+  // Admin: set or clear the background image for a Studio tool tile.
+  const tileImageBodySchema = z.object({ imageUrl: z.string().url().nullable() });
+  app.patch("/api/admin/studio/tools/:toolKey/tile-image", requireAdmin, async (req: Request, res: Response) => {
+    const { toolKey } = req.params;
+    const parsed = tileImageBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "imageUrl must be a valid URL string or null.", errors: parsed.error.flatten() });
+    }
+    const { imageUrl } = parsed.data;
+    const pricing = await storage.getStudioModelPricing(toolKey);
+    if (!pricing) return res.status(404).json({ message: "Unknown tool key." });
+    await storage.setStudioTileImage(toolKey, imageUrl);
+    await audit(req, "qa.studio_tile_image_set", { toolKey, imageUrl });
+    res.json({ ok: true, toolKey, tileImageUrl: imageUrl });
   });
 
   // Boot-time seed call so the table is populated before first admin visit.

@@ -9823,23 +9823,6 @@ export async function registerRoutes(
     })));
   });
 
-  // Admin: set or clear the background image for a Studio tool tile.
-  app.patch("/api/admin/studio/tools/:toolKey/tile-image", requireAdmin, async (req: Request, res: Response) => {
-    const { toolKey } = req.params;
-    const bodySchema = z.object({ imageUrl: z.string().url().nullable() });
-    const parsed = bodySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "imageUrl must be a valid URL string or null.", errors: parsed.error.flatten() });
-    const { imageUrl } = parsed.data;
-    const pricing = await storage.getStudioModelPricing(toolKey);
-    if (!pricing) return res.status(404).json({ message: "Unknown tool key." });
-    await storage.setStudioTileImage(toolKey, imageUrl);
-    await storage.createAuditLog({
-      userId: req.session.userId!,
-      action: "qa.studio_tile_image_set",
-      details: { toolKey, imageUrl },
-    });
-    res.json({ ok: true, toolKey, tileImageUrl: imageUrl });
-  });
 
   app.post("/api/studio/session", requireAuth, async (req: Request, res: Response) => {
     // If a prior active session exists, fully purge it (rows + Cloudinary
