@@ -26,10 +26,10 @@ import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
-import formPropertyImg from "@assets/category-images/vi_property_site_check.png";
-import formOnlineImg from "@assets/category-images/vi_online_items.png";
-import formWheelsImg from "@assets/category-images/vi_wheels_wings_water.png";
-import formQuickImg from "@assets/category-images/vi_quick_check.png";
+import propertySiteImg from "@assets/file_0000000010f471fd8230bcff69ab47cb_1772458042326.png";
+import onlineItemsImg from "@assets/file_00000000bc5871f8b88e63dbfa6c16d2_1772458082754.png";
+import wheelsWingsImg from "@assets/file_00000000a5947230b8561e43d9c81c1f_1772458107399.png";
+import quickCheckImg from "@assets/file_000000001e2471f586eaaf945485317c_1772458167013.png";
 import formPavImg from "@assets/category-images/vi_pav_salvage.png";
 import droneAerialImg from "@assets/category-images/vi_drone_aerial.png";
 import { Button } from "@/components/ui/button";
@@ -867,12 +867,12 @@ export default function VerifyInspect() {
   });
 
   const GRID_CATEGORIES = [
-    { name: "Property & Site Check", img: formPropertyImg, wide: false, label: "PROPERTY &\nSITE CHECK", labelColor: "hsl(190 90% 62%)" },
-    { name: "Online Items", img: formOnlineImg, wide: false, label: "ONLINE ITEMS", labelColor: "hsl(52 95% 58%)" },
-    { name: "Wheels, Wings & Water", img: formWheelsImg, wide: false, label: "WINGS, WHEELS\n& WATER", labelColor: "hsl(200 85% 65%)" },
-    { name: "Quick Check", img: formQuickImg, wide: false, label: "QUICK CHECK", labelColor: "hsl(142 72% 55%)" },
-    { name: "Part Availability Verification", img: formPavImg, wide: true, label: "", labelColor: "#fff" },
-    { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true, label: "", labelColor: "#fff" },
+    { name: "Property & Site Check", img: propertySiteImg, wide: false },
+    { name: "Online Items", img: onlineItemsImg, wide: false },
+    { name: "Wheels, Wings & Water", img: wheelsWingsImg, wide: false },
+    { name: "Quick Check", img: quickCheckImg, wide: false },
+    { name: "Part Availability Verification", img: formPavImg, wide: true },
+    { name: "Drone / Aerial Footage", img: droneAerialImg, wide: true },
   ];
 
   function handleLandingSelect(catName: string) {
@@ -974,15 +974,7 @@ export default function VerifyInspect() {
                       onClick={() => handleLandingSelect(lc.name)}
                       disabled={catsLoading && !cat}
                       className={`relative rounded-2xl overflow-hidden flex flex-col items-end justify-end transition-all active:scale-95 hover:scale-[1.02] ${lc.wide ? "col-span-2 h-36" : "aspect-square"}`}
-                      style={{
-                        background: "#0d0d1a",
-                        border: isDrone
-                          ? "1.5px solid hsl(200 80% 55% / 0.75)"
-                          : `1.5px solid ${lc.labelColor}44`,
-                        boxShadow: isDrone
-                          ? "0 0 12px hsl(200 80% 55% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)"
-                          : `0 0 14px ${lc.labelColor}22, inset 0 1px 0 rgba(255,255,255,0.06)`,
-                      }}
+                      style={{ background: "#0d0d1a", border: isDrone ? "1.5px solid hsl(200 80% 55% / 0.75)" : "1.5px solid hsl(275 90% 65% / 0.75)", boxShadow: isDrone ? "0 0 12px hsl(200 80% 55% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" : "0 0 12px hsl(275 90% 65% / 0.2), inset 0 1px 0 rgba(255,255,255,0.06)" }}
                       data-testid={`button-vi-category-${lc.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
                     >
                       <img
@@ -990,7 +982,7 @@ export default function VerifyInspect() {
                         alt={lc.name}
                         className="absolute inset-0 w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity"
                       />
-                      <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/60 via-black/20 to-transparent"}`} />
+                      <div className={`absolute inset-0 bg-gradient-to-t ${(isPAV || isDrone) ? "from-black/80 via-black/30 to-transparent" : "from-black/40 to-transparent"}`} />
                       {isPAV && (
                         <div className="absolute bottom-0 left-0 p-3 w-full">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -1009,16 +1001,6 @@ export default function VerifyInspect() {
                           </div>
                           <p className="text-white font-display font-black text-xl tracking-tight leading-tight">DRONE / AERIAL<br/>FOOTAGE</p>
                           <p className="text-white/80 text-[11px] mt-1">Real estate · Insurance · Construction · Events</p>
-                        </div>
-                      )}
-                      {!isPAV && !isDrone && lc.label && (
-                        <div className="absolute bottom-0 left-0 p-3 w-full">
-                          <p
-                            className="font-display font-black text-lg tracking-tight leading-tight whitespace-pre-line"
-                            style={{ color: lc.labelColor, textShadow: `0 0 12px ${lc.labelColor}88` }}
-                          >
-                            {lc.label}
-                          </p>
                         </div>
                       )}
                     </button>
