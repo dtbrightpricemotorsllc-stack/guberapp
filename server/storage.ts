@@ -34,6 +34,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ne, desc, and, or, sql, isNotNull, count, inArray, lt, lte, isNull } from "drizzle-orm";
+import { DuplicateSlugError } from "./errors";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -592,8 +593,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStudioFeaturedClip(data: InsertStudioFeaturedClip): Promise<StudioFeaturedClip> {
-    const [row] = await db.insert(studioFeaturedClips).values(data).returning();
-    return row;
+    const [existing] = await db
+      .select({ id: studioFeaturedClips.id })
+      .from(studioFeaturedClips)
+      .where(eq(studioFeaturedClips.slug, data.slug))
+      .limit(1);
+    if (existing) throw new DuplicateSlugError(data.slug);
+    try {
+      const [row] = await db.insert(studioFeaturedClips).values(data).returning();
+      return row;
+    } catch (e: any) {
+      if (e?.code === "23505") throw new DuplicateSlugError(data.slug);
+      throw e;
+    }
   }
 
   async updateStudioFeaturedClip(
@@ -604,8 +616,21 @@ export class DatabaseStorage implements IStorage {
       const [row] = await db.select().from(studioFeaturedClips).where(eq(studioFeaturedClips.id, id)).limit(1);
       return row;
     }
-    const [row] = await db.update(studioFeaturedClips).set(patch).where(eq(studioFeaturedClips.id, id)).returning();
-    return row;
+    if (patch.slug !== undefined) {
+      const [existing] = await db
+        .select({ id: studioFeaturedClips.id })
+        .from(studioFeaturedClips)
+        .where(and(eq(studioFeaturedClips.slug, patch.slug), ne(studioFeaturedClips.id, id)))
+        .limit(1);
+      if (existing) throw new DuplicateSlugError(patch.slug);
+    }
+    try {
+      const [row] = await db.update(studioFeaturedClips).set(patch).where(eq(studioFeaturedClips.id, id)).returning();
+      return row;
+    } catch (e: any) {
+      if (e?.code === "23505") throw new DuplicateSlugError(patch.slug ?? "");
+      throw e;
+    }
   }
 
   async deleteStudioFeaturedClip(id: number): Promise<boolean> {

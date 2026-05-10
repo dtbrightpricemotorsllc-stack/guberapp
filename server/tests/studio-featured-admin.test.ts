@@ -11,6 +11,7 @@
 // bypass so we can exercise the actual validation / error-handling logic.
 
 import { describe, it, expect, beforeAll, vi } from "vitest";
+import { DuplicateSlugError } from "../errors";
 import type { Request, Response, NextFunction } from "express";
 
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "test-session-secret-t610";
@@ -266,17 +267,15 @@ describe("Admin featured-clips POST — duplicate-slug handling (task-613)", () 
     position: 1,
   };
 
-  it("returns 409 when the storage layer throws a unique-constraint error", async () => {
-    mockCreateFeaturedClip.mockRejectedValueOnce(
-      new Error('duplicate key value violates unique constraint "studio_featured_clips_slug_key"'),
-    );
+  it("returns 409 when the storage layer throws a DuplicateSlugError", async () => {
+    mockCreateFeaturedClip.mockRejectedValueOnce(new DuplicateSlugError(VALID.slug));
     const res = await adminAgent.post("/api/admin/studio/featured").send(VALID);
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/slug already exists/i);
   });
 
-  it("returns 409 when the storage layer throws a 'duplicate' error", async () => {
-    mockCreateFeaturedClip.mockRejectedValueOnce(new Error("duplicate entry for slug"));
+  it("returns 409 for a second slug that also already exists", async () => {
+    mockCreateFeaturedClip.mockRejectedValueOnce(new DuplicateSlugError("another-slug"));
     const res = await adminAgent
       .post("/api/admin/studio/featured")
       .send({ ...VALID, slug: "another-slug" });
@@ -353,9 +352,7 @@ describe("Admin featured-clips PATCH — validation (task-613)", () => {
   });
 
   it("returns 409 when updating slug to an already-taken value", async () => {
-    mockUpdateFeaturedClip.mockRejectedValueOnce(
-      new Error('duplicate key value violates unique constraint "studio_featured_clips_slug_key"'),
-    );
+    mockUpdateFeaturedClip.mockRejectedValueOnce(new DuplicateSlugError("taken-slug"));
     const res = await adminAgent.patch("/api/admin/studio/featured/5").send({ slug: "taken-slug" });
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/slug already exists/i);

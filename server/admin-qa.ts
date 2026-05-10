@@ -24,6 +24,7 @@ import {
   pushSubscriptions,
 } from "@shared/schema";
 import { storage } from "./storage";
+import { DuplicateSlugError } from "./errors";
 import { sanitizeJobForPublic } from "./sanitize-job";
 import { toCloudinaryAttachmentUrl, classifyMedia } from "./media-download";
 import { recordCashDropEvent, getCashDropEvents } from "./cash-drop-events";
@@ -709,11 +710,10 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
       await audit(req, "qa.studio.featured.create", { id: row.id, slug: row.slug });
       res.json(row);
     } catch (e: any) {
-      const msg = String(e?.message || e);
-      if (msg.includes("unique") || msg.includes("duplicate")) {
+      if (e instanceof DuplicateSlugError) {
         return res.status(409).json({ error: "slug already exists" });
       }
-      res.status(500).json({ error: msg.slice(0, 300) });
+      res.status(500).json({ error: String(e?.message || e).slice(0, 300) });
     }
   });
 
@@ -740,11 +740,10 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     try {
       row = await storage.updateStudioFeaturedClip(id, patch);
     } catch (e: any) {
-      const msg = String(e?.message || e);
-      if (msg.includes("unique") || msg.includes("duplicate")) {
+      if (e instanceof DuplicateSlugError) {
         return res.status(409).json({ error: "slug already exists" });
       }
-      return res.status(500).json({ error: msg.slice(0, 300) });
+      return res.status(500).json({ error: String(e?.message || e).slice(0, 300) });
     }
     if (!row) return res.status(404).json({ error: "not found" });
     await audit(req, "qa.studio.featured.update", { id, fields: Object.keys(patch) });
