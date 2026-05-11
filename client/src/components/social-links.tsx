@@ -1,9 +1,10 @@
 import type { ComponentType } from "react";
-import { SiLinkedin, SiFacebook, SiTiktok, SiInstagram, SiX } from "react-icons/si";
+import { SiFacebook, SiTiktok, SiInstagram, SiX } from "react-icons/si";
+import { LuLinkedin } from "react-icons/lu";
 import { INVESTOR_CONFIG, type InvestorSocial } from "@/lib/investor-config";
 
 const ICONS: Record<InvestorSocial["brand"], ComponentType<{ className?: string }>> = {
-  linkedin: SiLinkedin,
+  linkedin: LuLinkedin,
   facebook: SiFacebook,
   tiktok: SiTiktok,
   instagram: SiInstagram,
