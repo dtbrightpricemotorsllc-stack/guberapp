@@ -5,19 +5,18 @@ workflows:
     max_build_duration: 60
 
     # ---------------------------------------------------------------------------
-    # Signing: fully automatic via App Store Connect API.
-    # app-store-connect fetch-signing-files fetches the provisioning profile
-    # directly from Apple on every build — guaranteed to include all current
-    # App ID capabilities (Sign in with Apple, Push Notifications, etc.).
-    # No ios_signing block so Codemagic does NOT pre-load any manually uploaded
-    # profile from Code Signing Identities (avoids stale profile conflict).
+    # Signing: Codemagic Code Signing Identities (manually uploaded assets).
+    #   Certificate : GUBER_iOS_Distribution
+    #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
     #
-    # Required env vars in the Codemagic dashboard:
-    #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Keys page
-    #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID
-    #   APP_STORE_CONNECT_PRIVATE_KEY     Full contents of the .p8 file
+    # ios_signing block tells Codemagic to install those assets before scripts run.
+    # xcode-project use-profiles then patches project.pbxproj with the real UUID —
+    # so we never hardcode a profile name that might not match what is on disk.
     # ---------------------------------------------------------------------------
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.guber.app
       vars:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
@@ -42,24 +41,13 @@ workflows:
 
       - name: Set up code signing
         script: |
+          # ios_signing block already installs certificate + profile.
+          # keychain add-certificates makes them accessible to xcodebuild.
+          # xcode-project use-profiles patches the App target's
+          # PROVISIONING_PROFILE_SPECIFIER with the installed profile UUID —
+          # this is the only correct way to reference it; never hardcode by name.
           keychain initialize
-
-          # Fetch the provisioning profile directly from Apple via App Store
-          # Connect API. This guarantees the profile reflects the live App ID
-          # capabilities (Sign in with Apple, etc.) with no manual upload needed.
-          # --create will regenerate the profile on Apple's side if missing.
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --certificate-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --create
-
-          # Add the distribution certificate (GUBER_iOS_Distribution) from
-          # Codemagic Code Signing Identities to the keychain.
           keychain add-certificates
-
-          # Apply the fetched profile to the Xcode project.
           xcode-project use-profiles
 
       - name: Xcode archive (App Store export)
@@ -82,7 +70,6 @@ workflows:
             -xcconfig /tmp/spm_override.xcconfig \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
-            DEVELOPMENT_TEAM=7MC93QFW6Q \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
@@ -98,7 +85,8 @@ workflows:
             exit "$ARCHIVE_STATUS"
           fi
 
-          # Export IPA
+          # Export IPA — signing style automatic so xcodebuild uses whatever
+          # profile xcode-project use-profiles already wired into the project.
           cat > /tmp/ExportOptions.plist << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -106,8 +94,8 @@ workflows:
           <dict>
             <key>method</key>
             <string>app-store</string>
-            <key>signingStyle</key>
-            <string>manual</string>
+            <key>teamID</key>
+            <string>7MC93QFW6Q</string>
           </dict>
           </plist>
           PLIST
