@@ -17,9 +17,6 @@ workflows:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
         BUNDLE_ID: com.guber.app
-        APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
-        APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY
       xcode: 16.2
 
     scripts:
@@ -95,6 +92,22 @@ workflows:
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
+
+      - name: Upload to TestFlight
+        script: |
+          IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" | head -1)
+          echo "IPA found: $IPA_PATH"
+
+          # Write .p8 key to file
+          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > /tmp/asc_key.p8
+
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --verbose 2>&1
 
     artifacts:
       - build/ios/ipa/*.ipa
