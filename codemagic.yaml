@@ -10,6 +10,8 @@ workflows:
     #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
     # ---------------------------------------------------------------------------
     environment:
+      groups:
+        - Default
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.guber.app
