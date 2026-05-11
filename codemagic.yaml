@@ -4,17 +4,10 @@ workflows:
     instance_type: mac_mini_m1
     max_build_duration: 60
 
-    integrations:
-      app_store_connect: Developer Portal
-
     # ---------------------------------------------------------------------------
     # Signing: Codemagic Code Signing Identities (manually uploaded assets).
     #   Certificate : GUBER_iOS_Distribution
     #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
-    #
-    # ios_signing block tells Codemagic to install those assets before scripts run.
-    # xcode-project use-profiles then patches project.pbxproj with the real UUID —
-    # so we never hardcode a profile name that might not match what is on disk.
     # ---------------------------------------------------------------------------
     environment:
       ios_signing:
@@ -24,6 +17,9 @@ workflows:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
         BUNDLE_ID: com.guber.app
+        APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
+        APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY
       xcode: 16.2
 
     scripts:
@@ -44,11 +40,6 @@ workflows:
 
       - name: Set up code signing
         script: |
-          # ios_signing block already installs certificate + profile.
-          # keychain add-certificates makes them accessible to xcodebuild.
-          # xcode-project use-profiles patches the App target's
-          # PROVISIONING_PROFILE_SPECIFIER with the installed profile UUID —
-          # this is the only correct way to reference it; never hardcode by name.
           keychain initialize
           keychain add-certificates
           xcode-project use-profiles
@@ -59,8 +50,6 @@ workflows:
           IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
           mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
 
-          # xcconfig to force minimal strict-concurrency across all targets
-          # including SPM packages (plain xcodebuild overrides don't reach them)
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\nOTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal\n' \
             > /tmp/spm_override.xcconfig
 
@@ -88,8 +77,6 @@ workflows:
             exit "$ARCHIVE_STATUS"
           fi
 
-          # Export IPA — signing style automatic so xcodebuild uses whatever
-          # profile xcode-project use-profiles already wired into the project.
           cat > /tmp/ExportOptions.plist << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -116,6 +103,8 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
         submit_to_app_store: false
