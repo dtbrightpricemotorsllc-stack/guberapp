@@ -65,10 +65,8 @@ workflows:
 
           # Write an xcconfig that forces minimal strict-concurrency for ALL targets,
           # including SPM packages — plain xcodebuild overrides don't reach SPM targets.
-          cat > /tmp/spm_override.xcconfig << 'XCCONFIG'
-SWIFT_STRICT_CONCURRENCY = minimal
-OTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal
-XCCONFIG
+          printf 'SWIFT_STRICT_CONCURRENCY = minimal\nOTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal\n' \
+            > /tmp/spm_override.xcconfig
 
           # Archive — pipe to log and capture exit code separately
           xcodebuild \
