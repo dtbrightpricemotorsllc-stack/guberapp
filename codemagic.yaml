@@ -8,7 +8,7 @@ workflows:
     # Code signing uses identities stored in the Codemagic dashboard under
     # Code signing identities:
     #   Certificate:          GUBER_iOS_Distribution
-    #   Provisioning profile: GUBER_AppStore_Profile
+    #   Provisioning profile: GUBER_AppStore_Profile_v2  (includes Sign in with Apple)
     #
     # App Store Connect API key (required for TestFlight upload) — set these
     # three environment variables in the Codemagic dashboard:
