@@ -95,10 +95,37 @@ workflows:
 
       - name: Upload to TestFlight via app-store-connect CLI
         script: |
-          IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" | head -1)
-          echo "Uploading: $IPA_PATH"
-          echo "Key ID:    $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
+          echo "=== IPA search ==="
+          find "$CM_BUILD_DIR/build" -name "*.ipa" -print 2>/dev/null || true
+          IPA_PATH=$(find "$CM_BUILD_DIR/build" -name "*.ipa" 2>/dev/null | head -1)
+          echo "IPA_PATH=$IPA_PATH"
+
+          echo "=== Credential check ==="
+          MISSING=""
+          [ -z "$APP_STORE_CONNECT_KEY_IDENTIFIER" ]  && MISSING="$MISSING APP_STORE_CONNECT_KEY_IDENTIFIER"
+          [ -z "$APP_STORE_CONNECT_ISSUER_ID" ]       && MISSING="$MISSING APP_STORE_CONNECT_ISSUER_ID"
+          [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ]     && MISSING="$MISSING APP_STORE_CONNECT_PRIVATE_KEY"
+
+          if [ -n "$MISSING" ]; then
+            echo "ERROR: The following secrets are blank in this build environment:"
+            for v in $MISSING; do echo "  - $v"; done
+            echo ""
+            echo "Fix: In Codemagic → guberapp → Environment variables,"
+            echo "ensure these are saved and their Group is set to 'default'."
+            exit 1
+          fi
+
+          if [ -z "$IPA_PATH" ]; then
+            echo "ERROR: No .ipa found under \$CM_BUILD_DIR/build"
+            echo "Contents of \$CM_BUILD_DIR/build/ios:"
+            find "$CM_BUILD_DIR/build/ios" -print 2>/dev/null | head -40 || true
+            exit 1
+          fi
+
+          echo "=== Uploading ==="
+          echo "IPA:      $IPA_PATH"
+          echo "Key ID:   $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "Issuer:   $APP_STORE_CONNECT_ISSUER_ID"
 
           app-store-connect publish \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
