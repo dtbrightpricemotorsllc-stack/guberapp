@@ -32,66 +32,18 @@ workflows:
 
       - name: Patch SPM version constraints
         # @capacitor-community/background-geolocation ships with `from: "7.0.0"`
-        # which conflicts with all other Capacitor 8 plugins that use `from: "8.0.0"`.
+        # which conflicts with the workspace-level `exact: "8.2.0"` pin.
         # The Swift plugin code is Cap-8 compatible; only the version floor needs lifting.
-        #
-        # @capacitor/preferences@8.0.1 still calls the single-arg getString() overload
-        # which was removed in the capacitor-swift-pm 8.3.0 binary XCFramework.
-        # We patch it to use the two-arg form (empty-string default) so it compiles
-        # under the same binary that @capacitor/browser@8.0.3 targets.
         script: |
-          # --- Patch 1: background-geolocation version floor ---
           sed -i '' 's/from: "7\.0\.0"/from: "8.0.0"/g' \
             node_modules/@capacitor-community/background-geolocation/Package.swift
-          echo "Patched: $(grep 'capacitor-swift-pm' node_modules/@capacitor-community/background-geolocation/Package.swift)"
-
-          # --- Patch 2: @capacitor/preferences — fix single-arg getString + reject ---
-          # capacitor-swift-pm 8.3.0 binary removed one-arg overloads of getString()
-          # and reject(). Replace with explicit multi-arg forms.
-          PREFS="node_modules/@capacitor/preferences/ios/Sources/PreferencesPlugin/PreferencesPlugin.swift"
-          sed -i '' 's/let group = call\.getString("group")/let group = call.getString("group", "")/g' "$PREFS"
-          sed -i '' 's/if let group = group {/if !group.isEmpty {/g' "$PREFS"
-          sed -i '' 's/guard let key = call\.getString("key") else {/let key = call.getString("key", ""); guard !key.isEmpty else {/g' "$PREFS"
-          sed -i '' 's/call\.reject("Must provide a key")/call.reject("Must provide a key", nil, nil, nil)/g' "$PREFS"
-          echo "Patched PreferencesPlugin.swift: $(grep -c 'call\.' "$PREFS") call.* lines"
-
-          # --- Patch 3: @capacitor/app — fix single-arg reject ---
-          APP="node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift"
-          sed -i '' 's/call\.reject("Unable to get App Info")/call.reject("Unable to get App Info", nil, nil, nil)/g' "$APP"
-          echo "Patched AppPlugin.swift: $(grep 'call.reject' "$APP")"
-
-          # --- Patch 4: @capacitor/browser — fix single-arg getString + reject ---
-          # BrowserPlugin uses single-arg getString("url") and several single-arg rejects.
-          BROWSER="node_modules/@capacitor/browser/ios/Sources/BrowserPlugin/BrowserPlugin.swift"
-          # getString("url") is used in a `guard let` — replace with two-arg + isEmpty guard
-          sed -i '' 's/guard let urlString = call\.getString("url"), let url = URL(string: urlString) else {/let urlStringRaw = call.getString("url", ""); guard let url = URL(string: urlStringRaw), !urlStringRaw.isEmpty else {/g' "$BROWSER"
-          # Other optional getString calls — add default empty string
-          sed -i '' 's/call\.getString("toolbarColor")/call.getString("toolbarColor", "")/g' "$BROWSER"
-          sed -i '' 's/call\.getString("presentationStyle")/call.getString("presentationStyle", "")/g' "$BROWSER"
-          # Single-arg reject calls
-          sed -i '' 's/call\.reject("Must provide a valid URL to open")/call.reject("Must provide a valid URL to open", nil, nil, nil)/g' "$BROWSER"
-          sed -i '' 's/call\.reject("Unable to display URL")/call.reject("Unable to display URL", nil, nil, nil)/g' "$BROWSER"
-          sed -i '' 's/call\.reject("No active window to close!")/call.reject("No active window to close!", nil, nil, nil)/g' "$BROWSER"
-          echo "Patched BrowserPlugin.swift: $(grep -c 'call\.' "$BROWSER") call.* lines"
+          echo "Patched background-geolocation: $(grep 'capacitor-swift-pm' node_modules/@capacitor-community/background-geolocation/Package.swift)"
 
       - name: Build web app
         script: npm run build
 
       - name: Sync Capacitor (copy web assets into Xcode project)
         script: npx cap sync ios
-
-      - name: Pin capacitor-swift-pm to 8.0.0 (binary 8.3.0 removed reject())
-        # capacitor-swift-pm 8.3.0 binary XCFramework removed `reject()` from
-        # CAPPluginCall entirely (no one-arg, no four-arg overload — gone).
-        # Every plugin we use (@capacitor/app, /browser, /preferences,
-        # @aparajita/capacitor-biometric-auth) calls `call.reject(...)` and fails
-        # to compile against 8.3.0. Pin to 8.0.0 where the API still exists.
-        # cap sync regenerates CapApp-SPM/Package.swift, so this MUST run after sync.
-        script: |
-          PKG="ios/App/CapApp-SPM/Package.swift"
-          sed -i '' 's|exact: "8\.3\.0"|exact: "8.0.0"|g' "$PKG"
-          echo "Pinned capacitor-swift-pm:"
-          grep 'capacitor-swift-pm' "$PKG"
 
       - name: Resolve Swift Package Manager dependencies
         script: |
