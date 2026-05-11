@@ -682,8 +682,12 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
 
   // ── Studio Trends rail (Phase-2) — admin CRUD for featured clips ────────
   app.get("/api/admin/studio/featured", requireAdmin, async (_req, res) => {
-    const rows = await storage.listStudioFeaturedClips(false);
-    res.json(rows);
+    try {
+      const rows = await storage.listStudioFeaturedClips(false);
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: String(e?.message || e).slice(0, 300) });
+    }
   });
 
   app.post("/api/admin/studio/featured", requireAdmin, async (req, res) => {

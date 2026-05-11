@@ -872,6 +872,48 @@ describe("Tile-image admin endpoint — PATCH /api/admin/studio/tools/:toolKey/t
   });
 });
 
+// ── GET /api/admin/studio/featured — storage error → 500 ─────────────────────
+//
+// Pins the contract: when storage.listStudioFeaturedClips throws (e.g. DB
+// connection drop) the route must return a clean 500 JSON response instead of
+// crashing with an unhandled rejection.
+
+describe("GET /api/admin/studio/featured — storage error yields 500", () => {
+  const allowAdmin = (_req: any, _res: any, next: () => void) => next();
+
+  let app: ReturnType<typeof express>;
+
+  beforeAll(() => {
+    app = express();
+    app.use(express.json());
+    registerAdminQaRoutes(app, allowAdmin);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("responds 200 with an array on success", async () => {
+    vi.spyOn(storage, "listStudioFeaturedClips").mockResolvedValueOnce([]);
+
+    const res = await request(app).get("/api/admin/studio/featured");
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("responds 500 with error message when storage throws", async () => {
+    vi.spyOn(storage, "listStudioFeaturedClips").mockRejectedValueOnce(
+      new Error("connection timeout"),
+    );
+
+    const res = await request(app).get("/api/admin/studio/featured");
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/connection timeout/);
+  });
+});
+
 // ── POST /api/admin/studio/featured — DuplicateSlugError → 409 ──────────────
 //
 // Pins the contract: when storage.createStudioFeaturedClip throws a
