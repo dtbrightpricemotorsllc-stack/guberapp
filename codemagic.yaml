@@ -93,16 +93,22 @@ workflows:
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
 
+      - name: Upload to TestFlight via app-store-connect CLI
+        script: |
+          IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" | head -1)
+          echo "Uploading: $IPA_PATH"
+          echo "Key ID:    $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
+
+          app-store-connect publish \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "@env:APP_STORE_CONNECT_PRIVATE_KEY" \
+            --path "$IPA_PATH" \
+            --testflight \
+            --max-build-processing-wait 0
 
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_archive.log
       - /tmp/xcodebuild_export.log
-
-    publishing:
-      app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        submit_to_testflight: true
-        submit_to_app_store: false
