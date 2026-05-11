@@ -5,13 +5,12 @@ workflows:
     max_build_duration: 60
 
     # ---------------------------------------------------------------------------
-    # Code signing uses identities stored in the Codemagic dashboard under
-    # Code signing identities:
-    #   Certificate:          GUBER_iOS_Distribution
-    #   Provisioning profile: GUBER_AppStore_Profile_v2  (includes Sign in with Apple)
+    # Automatic code signing: Codemagic fetches the certificate + provisioning
+    # profile directly from Apple via App Store Connect API on every build.
+    # This ensures the profile always reflects the current App ID capabilities
+    # (including Sign in with Apple) without manual profile uploads.
     #
-    # App Store Connect API key (required for TestFlight upload) — set these
-    # three environment variables in the Codemagic dashboard:
+    # Required environment variables in the Codemagic dashboard:
     #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Keys page
     #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID shown next to the key name
     #   APP_STORE_CONNECT_PRIVATE_KEY     Full contents of the downloaded .p8 file
@@ -45,6 +44,18 @@ workflows:
       - name: Set up code signing keychain
         script: |
           keychain initialize
+
+          # Fetch certificate + provisioning profile straight from Apple via
+          # App Store Connect API. --create will create a new profile if none
+          # exists. The fetched profile includes ALL current App ID capabilities
+          # (Sign in with Apple, Push Notifications, etc.) automatically.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --create
+
           keychain add-certificates
           xcode-project use-profiles
 
