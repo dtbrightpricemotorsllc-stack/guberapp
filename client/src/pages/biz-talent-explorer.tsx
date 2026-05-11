@@ -587,7 +587,7 @@ export default function BizTalentExplorer() {
                   </button>
                 )}
               </ExternalPurchaseSheet>
-              <p className="text-[10px] mt-3" style={{ color: TEXT_SECONDARY }}>Opens in Safari. Once active, all scouting features unlock here.</p>
+              <p className="text-[10px] mt-3" style={{ color: TEXT_SECONDARY }}>U.S. customers only · Opens in Safari · Features unlock immediately after payment.</p>
             </div>
           </div>
         )}

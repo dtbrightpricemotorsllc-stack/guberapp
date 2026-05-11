@@ -138,7 +138,7 @@ export function ExternalPurchaseSheet({
               Continue to external website
             </DialogTitle>
             <DialogDescription className="text-sm leading-relaxed mt-2">
-              This link will take you to an external website. Apple is not responsible for the privacy or security of purchases made on the web.
+              This purchase is available to U.S. customers only. You'll be taken to an external website to complete checkout. Apple is not responsible for the privacy or security of purchases made on the web.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 mt-2">

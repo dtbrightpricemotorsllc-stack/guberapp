@@ -44,6 +44,17 @@ export async function ensureFlagsSeeded(): Promise<void> {
       } catch {}
     }
   }
+  // One-time migration: studio_v2 was originally seeded with "role" scope.
+  // Lift to "global" so all authenticated users (including Apple reviewers)
+  // can access Studio without needing a specific role assignment.
+  const studioV2 = map.get("studio_v2");
+  if (studioV2 && studioV2.rolloutScope === "role" && (!studioV2.allowedRoles || studioV2.allowedRoles.length === 0)) {
+    try {
+      await db.update(featureFlags)
+        .set({ rolloutScope: "global" })
+        .where(eq(featureFlags.key, "studio_v2"));
+    } catch {}
+  }
   invalidateFlagCache();
 }
 

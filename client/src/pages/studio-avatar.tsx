@@ -91,6 +91,17 @@ export default function StudioAvatarPage() {
 
   const canGenerate = !!photoDataUrl && !generate.isPending;
 
+  if (isStoreBuild) {
+    return (
+      <StudioToolPageShell title="Avatar" accentColor="#38bdf8">
+        <div className="flex flex-col items-center justify-center min-h-[40vh] text-center px-6 gap-3">
+          <UserRound className="w-10 h-10 opacity-25" style={{ color: "#38bdf8" }} />
+          <p className="text-sm text-white/40 font-medium">Avatar Creator is coming to the iOS app soon.</p>
+        </div>
+      </StudioToolPageShell>
+    );
+  }
+
   return (
     <StudioToolPageShell title="Avatar" accentColor="#38bdf8">
       <div className="max-w-lg mx-auto px-4 pt-6 pb-16 space-y-6">

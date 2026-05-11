@@ -1092,9 +1092,6 @@ export default function PostJob() {
                     </button>
                   ))}
                 </div>
-                {pricingModeSelection === "request_quotes" && (
-                  <p className="text-[10px] text-muted-foreground italic">Quote requests are visible — workers will respond with bids. Full submission flow coming soon.</p>
-                )}
               </div>
             </div>
           )}

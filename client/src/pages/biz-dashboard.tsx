@@ -354,36 +354,37 @@ export default function BizDashboard() {
             <QuickAction href="/biz/verification" icon={ShieldCheck} label="Business Verification" sub={isVerified ? "Verified" : "Required for full access"} iconColor={isVerified ? SUCCESS : "#A1A1A1"} />
           </div>
 
-          {/* iOS: buy extra profile unlocks */}
-          {hasPlan && isStoreBuild && (
-            <div className="rounded-2xl p-5 mt-3" style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}` }}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `rgba(198,168,92,0.07)`, border: `1px solid rgba(198,168,92,0.16)` }}>
-                  <Key className="w-3.5 h-3.5" style={{ color: GOLD }} />
-                </div>
-                <div>
-                  <p className="text-[13px] font-black text-foreground">Extra Profile Unlocks</p>
-                  <p className="text-[10px]" style={{ color: TEXT_MUTED }}>$7.00 per unlock · 5-pack bundle</p>
-                </div>
-              </div>
-              <ExternalPurchaseSheet product="business_unlock" options={{ quantity: "5" }}>
-                {({ onPress, loading }) => (
-                  <Button
-                    onClick={onPress}
-                    disabled={loading}
-                    size="sm"
-                    className="w-full h-9 text-[10px] font-bold tracking-[0.14em] rounded-xl gap-1.5"
-                    style={{ background: `linear-gradient(135deg, ${GOLD}, ${GOLD_DK})`, color: "#000", border: "none" }}
-                    data-testid="button-ios-buy-unlocks"
-                  >
-                    {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
-                    {loading ? "OPENING…" : "BUY 5 UNLOCKS · $35"}
-                  </Button>
-                )}
-              </ExternalPurchaseSheet>
-            </div>
-          )}
         </div>
+
+        {/* iOS: buy extra profile unlocks (U.S. customers only) */}
+        {hasPlan && isStoreBuild && (
+          <div className="rounded-2xl p-5 mt-3" style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}` }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `rgba(198,168,92,0.07)`, border: `1px solid rgba(198,168,92,0.16)` }}>
+                <Key className="w-3.5 h-3.5" style={{ color: GOLD }} />
+              </div>
+              <div>
+                <p className="text-[13px] font-black text-foreground">Extra Profile Unlocks</p>
+                <p className="text-[10px]" style={{ color: TEXT_MUTED }}>$7.00 per unlock · 5-pack bundle · U.S. only</p>
+              </div>
+            </div>
+            <ExternalPurchaseSheet product="business_unlock" options={{ quantity: "5" }}>
+              {({ onPress, loading }) => (
+                <Button
+                  onClick={onPress}
+                  disabled={loading}
+                  size="sm"
+                  className="w-full h-9 text-[10px] font-bold tracking-[0.14em] rounded-xl gap-1.5"
+                  style={{ background: `linear-gradient(135deg, ${GOLD}, ${GOLD_DK})`, color: "#000", border: "none" }}
+                  data-testid="button-ios-buy-unlocks"
+                >
+                  {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Key className="w-3 h-3" />}
+                  {loading ? "OPENING…" : "BUY 5 UNLOCKS · $35"}
+                </Button>
+              )}
+            </ExternalPurchaseSheet>
+          </div>
+        )}
 
         {/* ── CAMPAIGNS ──────────────────────────────── */}
         <div style={{ marginBottom: "2.75rem" }}>

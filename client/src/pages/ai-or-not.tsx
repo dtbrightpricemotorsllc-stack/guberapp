@@ -4,8 +4,8 @@ import { ArrowLeft, CheckCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
-import shieldLogo from "@assets/__favicon_1773034423924.png";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
+import shieldLogo from "@assets/__favicon_1773034423924.png";
 import { MobileReturnBanner } from "@/components/mobile-return-banner";
 
 const MIN_SPLASH_MS = 3000;
@@ -252,6 +252,7 @@ export default function AiOrNot() {
           ))}
         </div>
       </div>
+
 
       {/* iOS store-build purchase panel — floats above iframe when user lacks Trust Box or Day-1 OG */}
       {isStoreBuild && showContent && !purchaseActivating && (

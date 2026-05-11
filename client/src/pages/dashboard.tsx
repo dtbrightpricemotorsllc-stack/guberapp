@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { Job } from "@shared/schema";
 import {
-  Zap, ShieldCheck, Hammer, Wrench, Repeat, ShoppingBag,
+  Zap, ShieldCheck, Hammer, Wrench, Repeat,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
   TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign,
 } from "lucide-react";
@@ -1140,32 +1140,6 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Marketplace — full-width coming soon */}
-          <Link href="/marketplace-preview">
-            <div
-              className="rounded-2xl p-4 flex items-center gap-4 cursor-pointer transition-all active:scale-[0.99]"
-              style={{
-                background: "linear-gradient(135deg,rgba(250,204,21,0.10),rgba(250,204,21,0.05))",
-                border: "1.5px solid rgba(250,204,21,0.28)",
-              }}
-              data-testid="card-category-marketplace"
-            >
-              <div className="p-2.5 rounded-xl shrink-0" style={{ background: "rgba(250,204,21,0.15)", border: "1px solid rgba(250,204,21,0.22)" }}>
-                <ShoppingBag className="w-5 h-5" style={{ color: "#FACC15" }} strokeWidth={1.8} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-display font-bold" style={{ color: "#FACC15" }}>Marketplace</p>
-                  <span className="text-[10px] font-display font-bold px-1.5 py-0.5 rounded-full tracking-wider"
-                    style={{ background: "rgba(250,204,21,0.12)", color: "#FACC15", border: "1px solid rgba(250,204,21,0.28)" }}>
-                    🚧 COMING SOON
-                  </span>
-                </div>
-                <p className="text-[10px] mt-0.5" style={{ color: "rgba(250,204,21,0.45)" }}>Buy & sell with verified confidence</p>
-              </div>
-              <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "rgba(250,204,21,0.35)" }} />
-            </div>
-          </Link>
         </div>
 
         {/* ── AI or Not ── */}

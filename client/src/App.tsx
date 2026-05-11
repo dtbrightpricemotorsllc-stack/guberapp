@@ -34,7 +34,6 @@ import Privacy from "@/pages/privacy";
 import AcceptableUse from "@/pages/acceptable-use";
 import DeleteAccount from "@/pages/delete-account";
 import JoinPage from "@/pages/join";
-import LoadingDemo from "@/pages/loading-demo";
 import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
@@ -53,7 +52,6 @@ const OGSuccess = lazy(() => import("@/pages/og-success"));
 const WorkerClipboard = lazy(() => import("@/pages/worker-clipboard"));
 const VIRequests = lazy(() => import("@/pages/vi-requests"));
 const Marketplace = lazy(() => import("@/pages/marketplace"));
-const MarketplacePreview = lazy(() => import("@/pages/marketplace-preview"));
 const MapExplore = lazy(() => import("@/pages/map-explore"));
 const CashDropsList = lazy(() => import("@/pages/cash-drops-list"));
 const CashDropDetail = lazy(() => import("@/pages/cash-drop-detail"));
@@ -262,7 +260,7 @@ function Router() {
       <Route path="/worker-clipboard/:id" component={() => <ProtectedRoute component={WorkerClipboard} />} />
       <Route path="/vi-requests" component={() => <ProtectedRoute component={VIRequests} />} />
       <Route path="/marketplace" component={() => <ProtectedRoute component={Marketplace} />} />
-      <Route path="/marketplace-preview" component={() => <ProtectedRoute component={MarketplacePreview} />} />
+      <Route path="/marketplace-preview" component={() => <Redirect to="/marketplace" />} />
       <Route path="/map" component={() => <ProtectedRoute component={MapExplore} />} />
       <Route path="/cash-drops" component={() => <ConsumerRoute component={CashDropsList} />} />
       <Route path="/cash-drop/:id" component={() => <ProtectedRoute component={CashDropDetail} />} />
@@ -303,7 +301,6 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />
       <Route path="/delete-account" component={DeleteAccount} />
-      <Route path="/loading-demo" component={LoadingDemo} />
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
       <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
