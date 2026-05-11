@@ -93,24 +93,6 @@ workflows:
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
 
-      - name: Upload to TestFlight
-        script: |
-          IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" | head -1)
-          echo "IPA found: $IPA_PATH"
-
-          # altool --apiKey looks for the .p8 file at this exact path
-          mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-
-          xcrun altool \
-            --upload-app \
-            --type ios \
-            --file "$IPA_PATH" \
-            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --verbose 2>&1
-          echo "altool exit: $?"
 
     artifacts:
       - build/ios/ipa/*.ipa
