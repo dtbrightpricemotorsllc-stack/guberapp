@@ -96,8 +96,8 @@ workflows:
       - name: Upload to TestFlight via app-store-connect CLI
         script: |
           echo "=== IPA search ==="
-          find "$CM_BUILD_DIR/build" -name "*.ipa" -print 2>/dev/null || true
-          IPA_PATH=$(find "$CM_BUILD_DIR/build" -name "*.ipa" 2>/dev/null | head -1)
+          find /Users/builder /tmp "$CM_BUILD_DIR" -name "*.ipa" -print 2>/dev/null || true
+          IPA_PATH=$(find /Users/builder /tmp "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null | head -1)
           echo "IPA_PATH=$IPA_PATH"
 
           echo "=== Credential check ==="
