@@ -63,16 +63,21 @@ workflows:
           IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
           mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
 
+          # Write an xcconfig that forces minimal strict-concurrency for ALL targets,
+          # including SPM packages — plain xcodebuild overrides don't reach SPM targets.
+          cat > /tmp/spm_override.xcconfig << 'XCCONFIG'
+SWIFT_STRICT_CONCURRENCY = minimal
+OTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal
+XCCONFIG
+
           # Archive — pipe to log and capture exit code separately
-          # SWIFT_STRICT_CONCURRENCY=minimal: suppresses Swift 6 concurrency errors
-          # in third-party SPM packages (e.g. @capacitor/preferences, Alamofire)
-          # that haven't yet adopted complete concurrency annotations.
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath "$ARCHIVE_PATH" \
             -destination "generic/platform=iOS" \
+            -xcconfig /tmp/spm_override.xcconfig \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
@@ -80,8 +85,10 @@ workflows:
 
           if [ "$ARCHIVE_STATUS" -ne 0 ]; then
             echo ""
-            echo "====== COMPILE ERRORS ======"
-            grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -80 || \
+            echo "====== COMPILE ERRORS (file:line:col) ======"
+            grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -80 || true
+            echo ""
+            echo "====== ALL error: LINES ======"
             grep -E "error:" /tmp/xcodebuild_archive.log | grep -v "^note:" | head -80 || true
             echo ""
             echo "====== LAST 150 LINES ======"
