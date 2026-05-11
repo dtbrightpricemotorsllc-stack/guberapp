@@ -34,10 +34,49 @@ workflows:
         # @capacitor-community/background-geolocation ships with `from: "7.0.0"`
         # which conflicts with all other Capacitor 8 plugins that use `from: "8.0.0"`.
         # The Swift plugin code is Cap-8 compatible; only the version floor needs lifting.
+        #
+        # @capacitor/preferences@8.0.1 still calls the single-arg getString() overload
+        # which was removed in the capacitor-swift-pm 8.3.0 binary XCFramework.
+        # We patch it to use the two-arg form (empty-string default) so it compiles
+        # under the same binary that @capacitor/browser@8.0.3 targets.
         script: |
+          # --- Patch 1: background-geolocation version floor ---
           sed -i '' 's/from: "7\.0\.0"/from: "8.0.0"/g' \
             node_modules/@capacitor-community/background-geolocation/Package.swift
           echo "Patched: $(grep 'capacitor-swift-pm' node_modules/@capacitor-community/background-geolocation/Package.swift)"
+
+          # --- Patch 2: @capacitor/preferences 8.0.1 — fix single-arg getString calls ---
+          PREFS_PLUGIN="node_modules/@capacitor/preferences/ios/Sources/PreferencesPlugin/PreferencesPlugin.swift"
+          python3 -c "
+import re, sys
+path = '$PREFS_PLUGIN'
+with open(path) as f:
+    src = f.read()
+
+# configure(): let group = call.getString(\"group\")
+#  then:       if let group = group { ... } else { ... }
+# Fix: use two-arg getString + isEmpty check
+src = src.replace(
+    'let group = call.getString(\"group\")',
+    'let group = call.getString(\"group\", \"\")'
+)
+src = src.replace(
+    'if let group = group {',
+    'if !group.isEmpty {'
+)
+
+# get/set/remove(): guard let key = call.getString(\"key\") else { call.reject(...) }
+# Fix: two-arg getString + isEmpty guard
+src = re.sub(
+    r'guard let key = call\.getString\(\"key\"\) else \{',
+    'let key = call.getString(\"key\", \"\"); guard !key.isEmpty else {',
+    src
+)
+
+with open(path, 'w') as f:
+    f.write(src)
+print('Patched PreferencesPlugin.swift — single-arg getString calls replaced')
+"
 
       - name: Build web app
         script: npm run build
