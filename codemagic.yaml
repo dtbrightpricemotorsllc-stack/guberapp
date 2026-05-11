@@ -77,23 +77,30 @@ workflows:
           fi
 
           cat > /tmp/ExportOptions.plist << 'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>teamID</key>
-            <string>7MC93QFW6Q</string>
-          </dict>
-          </plist>
-          PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>teamID</key>
+  <string>7MC93QFW6Q</string>
+</dict>
+</plist>
+PLIST
 
           xcodebuild \
             -exportArchive \
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
+          EXPORT_STATUS=${PIPESTATUS[0]}
+          if [ "$EXPORT_STATUS" -ne 0 ]; then
+            echo "====== EXPORT FAILED — last 30 lines ======"
+            tail -30 /tmp/xcodebuild_export.log
+            exit "$EXPORT_STATUS"
+          fi
+          echo "IPA exported to: $(find "$IPA_DIR" -name "*.ipa")"
 
       - name: Upload to TestFlight via app-store-connect CLI
         script: |
