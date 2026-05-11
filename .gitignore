@@ -29,3 +29,6 @@ attached_assets/branding-*
 attached_assets/content-*
 attached_assets/logo.*
 attached_assets/logoHref*
+
+# GitHub Actions — not pushed (PAT lacks workflow scope)
+.github/
