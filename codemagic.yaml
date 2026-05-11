@@ -83,14 +83,13 @@ workflows:
 
           if [ "$ARCHIVE_STATUS" -ne 0 ]; then
             echo ""
-            echo "====== COMPILE ERRORS (file:line:col) ======"
-            grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -80 || true
+            echo "====== LAST 50 LINES ======"
+            tail -50 /tmp/xcodebuild_archive.log
             echo ""
-            echo "====== ALL error: LINES ======"
-            grep -E "error:" /tmp/xcodebuild_archive.log | grep -v "^note:" | head -80 || true
-            echo ""
-            echo "====== LAST 150 LINES ======"
-            tail -150 /tmp/xcodebuild_archive.log
+            echo "====== COMPILE ERRORS (these are the actionable lines) ======"
+            grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -80 || \
+              grep -iE " error:" /tmp/xcodebuild_archive.log | grep -v "^note:" | head -80 || \
+              echo "(no error: lines found — check artifacts zip for full log)"
             exit "$ARCHIVE_STATUS"
           fi
 
