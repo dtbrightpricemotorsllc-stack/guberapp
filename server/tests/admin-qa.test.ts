@@ -928,6 +928,58 @@ describe("POST /api/admin/studio/featured — DuplicateSlugError yields 409", ()
   });
 });
 
+// ── DELETE /api/admin/studio/featured/:id ─────────────────────────────────────
+//
+// Pins three contracts:
+//   1. successful delete → 200 { ok: true }
+//   2. storage returns false (row not found) → 404
+//   3. unexpected storage throw → 500 (no stack-trace leak)
+
+describe("DELETE /api/admin/studio/featured/:id", () => {
+  const allowAdmin = (_req: any, _res: any, next: () => void) => next();
+
+  let app: ReturnType<typeof express>;
+
+  beforeAll(() => {
+    app = express();
+    app.use(express.json());
+    registerAdminQaRoutes(app, allowAdmin);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("responds 200 { ok: true } when storage deletes successfully", async () => {
+    vi.spyOn(storage, "deleteStudioFeaturedClip").mockResolvedValueOnce(true);
+
+    const res = await request(app).delete("/api/admin/studio/featured/1");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+  });
+
+  it("responds 404 when storage returns false (row not found)", async () => {
+    vi.spyOn(storage, "deleteStudioFeaturedClip").mockResolvedValueOnce(false);
+
+    const res = await request(app).delete("/api/admin/studio/featured/99");
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("not found");
+  });
+
+  it("responds 500 for unexpected storage errors without leaking stack traces", async () => {
+    vi.spyOn(storage, "deleteStudioFeaturedClip").mockRejectedValueOnce(
+      new Error("disk I/O error"),
+    );
+
+    const res = await request(app).delete("/api/admin/studio/featured/1");
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/disk I\/O error/);
+  });
+});
+
 // ── PATCH /api/admin/studio/featured/:id — DuplicateSlugError → 409 ─────────
 //
 // Pins the contract: when storage.updateStudioFeaturedClip throws a

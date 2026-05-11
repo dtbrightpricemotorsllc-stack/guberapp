@@ -753,7 +753,12 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
   app.delete("/api/admin/studio/featured/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "bad id" });
-    const ok = await storage.deleteStudioFeaturedClip(id);
+    let ok: boolean;
+    try {
+      ok = await storage.deleteStudioFeaturedClip(id);
+    } catch (e: any) {
+      return res.status(500).json({ error: String(e?.message || e).slice(0, 300) });
+    }
     if (!ok) return res.status(404).json({ error: "not found" });
     await audit(req, "qa.studio.featured.delete", { id });
     res.json({ ok: true });
