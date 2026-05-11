@@ -1,143 +1,93 @@
-# GUBER - Trust-Enforced Local Visibility Network
+# GUBER — Trust-Enforced Local Visibility Network
 
-GUBER is a local visibility network connecting individuals needing assistance with those who can provide it, emphasizing trust and efficient local service delivery.
+Local visibility network connecting hirers with workers, emphasizing trust and efficient local service delivery. U.S.-only launch.
 
 ## Run & Operate
-- **Run Unit Tests:** `npx vitest run --config vitest.config.ts`
-- **Run E2E Tests:** `npx playwright test` (requires `npm run dev` running on port 5000)
-- **Production Autoscale Environment Variables:**
-    - `DISABLE_BACKGROUND_JOBS=true`
-    - `CRON_SECRET=<long random string>`
-- **Scheduled Deployment Cron Job:** `curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" https://guberapp.app/api/internal/cron/run`
+- **Dev server:** `npm run dev` (port 5000, Express + Vite)
+- **Unit tests:** `npx vitest run --config vitest.config.ts`
+- **E2E tests:** `npx playwright test` (requires dev server running)
+- **Production (Autoscale) env vars:** `DISABLE_BACKGROUND_JOBS=true`, `CRON_SECRET=<random>`
+- **Cron trigger:** `curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" https://guberapp.app/api/internal/cron/run`
 
 ## Stack
-- **Frontend:** React, TypeScript, Vite, TailwindCSS
+- **Frontend:** React, TypeScript, Vite, TailwindCSS, TanStack Query, wouter
 - **Backend:** Express.js, Node.js
-- **Database:** PostgreSQL with Drizzle ORM
-- **State Management:** TanStack Query
-- **Authentication:** `express-session`, `scrypt`
+- **Database:** PostgreSQL + Drizzle ORM (`shared/schema.ts`)
+- **Auth:** `express-session` + `scrypt`
 - **Payments:** Stripe Connect
+- **AI / Media:** Fal.ai (`server/fal.ts`), OpenAI moderation, Cloudinary
 - **Mapping:** Google Maps JS API
+- **Mobile:** Capacitor 8.2.0 (iOS + Android)
 - **Testing:** Vitest, Supertest, Playwright
 
-## GUBER Studio v2 — session-based AI generation (Phase 1)
-- **Page:** `client/src/pages/studio.tsx` (route `/studio`). Cinematic CapCut-style shell on the v2 backend (task-516): hero with last clip as autoplay/muted/loop background (animated gradient + film grain when empty), GUBER STUDIO wordmark, Trending Templates carousel (12 vertical cards) with **animated preview loops** (lazy-loaded looping clips behind each card; gradient fallback for cards without a `videoUrl`; pauses off-screen via IntersectionObserver), glow Generate button, in-session library. Initial preview seeds use public Cloudinary demo videos — admins can swap them for our own AI-generated cinematic loops as part of the Trends-rail follow-up. Cost is read live from `/api/studio/tools` (no client-side hardcoding).
-- **Per-tool dedicated pages (task-549):** Every tool except the inline Quick Pic now lives on its own route — `/studio/text-to-video` (Wan 5s/10s), `/studio/mirror-motion` (Kling photo-driven motion), `/studio/commercial` (multi-step Commercial Builder), `/studio/music` (MiniMax instrumentals). All four share `client/src/components/studio/studio-tool-page-shell.tsx` (sticky header with Back-to-Studio · Plan pill · credits chip, plus session bootstrap + heartbeat). Tool tile taps on `/studio` and most template-card taps `navigate()` straight to the matching dedicated page. Tile credit chips were removed — pricing varies by length/quality so the chip read as misleading; only Quick Pic still flashes a "Free" badge.
-- **Session retention (task-549):** Sessions now live a flat **24h after last activity**. The "tab close = wipe" `navigator.sendBeacon` exit call is gone — users can hop between `/studio` and the tool pages, refresh, or tab away without losing their uploads or clips. Heartbeat (`/api/studio/session/touch`) still fires every 4 min so an actively-used session never expires within the day. The Exit button on `/studio` still opens a confirm Dialog ("Leave Studio?"), but it is purely a navigation guard — it does NOT call `/api/studio/session/exit` and does not purge. Cleanup safety net: `purgeAbandonedStudioSessions()` in `server/cron.ts` runs in the 5-min sweep at the 24h cutoff. Both row-deletes `studio_session_files` AND destroys the corresponding Cloudinary assets.
-- **Provider:** Fal.ai. Single integration point: `server/fal.ts`. Requires `FAL_KEY`. Without it, every `/api/studio/generate/*` returns 503 BEFORE charging credits.
-- **Phase 1 tools (server-priced via `studio_model_pricing`, repriced task-519):**
-    - `kling_motion_control` (80 cr, photo required) → `fal-ai/kling-video/v3/pro/motion-control`
-    - `wan_motion_5s`        (30 cr) / `wan_motion_10s` (60 cr) → `fal-ai/wan-motion`
-    - `minimax_music`        (5 cr) → `fal-ai/minimax-music/v2`
-- **Generate endpoints:** `POST /api/studio/generate/motion-control`, `POST /api/studio/generate/wan-motion`, `POST /api/studio/generate/music`. All share `runStudioGeneration()` in `server/routes.ts`: auth → validate → moderation 503/block → pricing lookup → atomic credit deduct (402 on insufficient) → provider call → re-host on Cloudinary → attach to session + log success. ANY provider failure → refund + 502.
-- **Session endpoints:** `POST /api/studio/session` opens (idempotent — safe to call from every page); `GET /api/studio/session/current` reads; `POST /api/studio/session/touch` heartbeats; `POST /api/studio/session/exit` is still wired but no longer called automatically.
-- **Reference uploads:** `POST /api/studio/upload` (image/video/audio dataUrl). Image uploads run OpenAI omni-moderation fail-closed before being kept; rejected images are destroyed.
-- **Credit packs (task-519, 6 packs):** Spark $5/330, Boost $10/660, Power $20/1320, Mega $50/3500, Ultra $100/7500, Whale $200/16000 (`STUDIO_CREDIT_PACKS` in `server/routes.ts`). Pack grid lives at `/studio/credits` → `client/src/pages/studio-credits.tsx`. Hidden in store builds via `isStoreBuild`.
-- **Tier subscriptions (task-519, 3 plans):** Standard $10.99/mo (+660 cr), Business $37.99/mo (+3000 cr), Enterprise $99/mo (+8000 cr). `STUDIO_TIER_PLANS` + `/api/studio/tiers` + `POST /api/stripe/studio-subscription-checkout` + `POST /api/stripe/cancel-studio-subscription`. `users.studio_tier` values: `free` (default, no sub), `standard`, `business`, `enterprise`. Cron `studioMonthlyDrip()` honors all three; `ogStudioCreditDripSweep()` now grants +20 cr/mo (rollover, no expiry).
-- **Free credits:** New signups get **2** trial credits (`server/auth.ts`). Day-1 OG members get +20 cr/month via `ogStudioCreditDripSweep`. All credits roll over forever.
-- **One-shot v519 migration:** `scripts/post-merge.sh` multiplies every existing user's `studio_credits` by 41.25 (tracked via `platform_settings.studio_credits_repriced_v519`) so no one loses purchasing power under the new per-tool prices. Tier rename runs in the same script: `creator` → `standard`, default non-sub `standard` → `free`.
-- **Storage tables (v2):** `studio_sessions`, `studio_session_files`, `studio_generation_log` (no URLs retained), `studio_model_pricing` (admin-editable). User fields kept: `studio_credits`, `studio_tier`, `studio_credits_last_drip_at`, `studio_subscription_*`. **Dropped in v2:** `studio_videos`, `studio_vibes`, `users.studio_resume_video_id`, `users.studio_business_promo_video_id`, `cash_drops.studio_video_id` — generated media is no longer pinned to profile/resume/business/cashdrop. Schema: `shared/schema.ts`; raw SQL: `scripts/post-merge.sh`.
-- **Feature flag:** `studio_v2` in `shared/feature-flags.ts` (default ON, global). The legacy `studio_ai` flag is retained for any callers but the v2 UI does not consult it.
-- **For You feed (Phase 3):** `/studio/explore` (`client/src/pages/studio-explore.tsx`, lazy-loaded, ProtectedRoute) — full-bleed, vertical snap-scroll feed of admin-curated `studio_featured_clips`. Each card autoplays/loops a single visible clip via IntersectionObserver (off-screen videos pause to save battery/CDN). Cards whose `<video>` fires `onError` are removed from the feed client-side via a `failedIds` Set so a 404'd CDN clip never renders as a dead black card. Right-rail Like (cosmetic) + Share (`navigator.share` → clipboard fallback). Mute toggle (videos start muted, persists across cards). **Recreate this (task-549):** routes to the dedicated tool page via `routeForClip()` slug/caption heuristics — `music|song|track|...` → `/studio/music`, `commercial|ad|brand|...` → `/studio/commercial`, `portrait|photo|reference|mirror` → `/studio/mirror-motion`, otherwise `/studio/text-to-video`, all with `?prompt=&ref=`. The dedicated pages and `/studio` both still consume `prompt` from the query string on mount. Entry point: "For You feed →" link in the Trending Now header on `/studio`. Page is `noindex,nofollow` (set via `useEffect`, cleaned up on unmount). No new dependencies — no `react-helmet`.
-- **Tools grid + Plan pill + Hero promo (Phase 2.5):** `/studio` now surfaces (a) a tappable **Plan pill** in the header (`Free/Standard/Business/Enterprise Plan`) that links to `/studio/credits` (where tier subscription cards already render); (b) a **hero promo banner** under the H1 — Free users see "Subscribers save up to 80% per credit", paid users see a feature recap; (c) an **All-tools grid** (5 tiles: Quick Pic free · Text→Video · Mirror Motion · Build Ad · Music) above the Trending Now rail. Tile credit costs read live from `/api/studio/tools` (no hard-coded prices). Tap → wizards open immediately; non-wizard tools set `outputKind`, drop a starter prompt only when the box is empty (won't overwrite typing), then scroll/focus the prompt textarea. Plan pill + hero promo are hidden on store builds (`isStoreBuild`).
-- **Trends rail (Phase 2):** Admin-curated "Trending now" carousel above the Templates carousel on `/studio`. Table `studio_featured_clips` (slug, label, caption, video_url, poster_url, position, active). Public `GET /api/studio/featured` (no auth) returns active rows ordered by `position`. Admin CRUD: `GET/POST /api/admin/studio/featured`, `PATCH/DELETE /api/admin/studio/featured/:id` — all in `server/admin-qa.ts`, audited. Tap a card → fills the prompt textarea with the clip's caption + scrolls to the input. Seeded with 6 Cloudinary demo clips in `scripts/post-merge.sh` (idempotent ON CONFLICT). No admin curation UI yet — manage via the API or direct SQL.
-- **No more "Use in…" handoff.** Studio is a self-contained surface. The previous Resume/Biz-Promo/Host-Drop pin flows have been removed from `client/src/pages/{studio,resume,biz-dashboard,host-drop-new}.tsx` and from `/api/resume/*` + `/api/cash-drops/host/create`.
+## User Preferences
+- Concise and direct communication style.
+- Ask for confirmation before major architectural changes or new external dependencies.
+- **Do NOT use task agents / project task queue.** All work must be done directly by the main agent. Parallel isolated agents have caused duplicate code and merge conflicts.
 
-## Apple External Purchase Link (task-561)
-- **Pattern:** All digital purchases on iOS go through `ExternalPurchaseSheet` (`client/src/components/external-purchase-sheet.tsx`) instead of being hidden. Shows Apple's mandated disclosure sheet, then opens Stripe checkout in SFSafariViewController via `@capacitor/browser`.
-- **Token bridge:** `POST /api/mobile/checkout-link` (requireAuth) signs a 15-min HMAC token and returns `https://guberapp.app/api/mobile/checkout-redirect?token=...`. `GET /api/mobile/checkout-redirect` validates token, creates Stripe Checkout Session for the userId (no web login needed), 302-redirects to Stripe URL.
-- **Token module:** `server/mobile-checkout-token.ts` — same b64url + HMAC-SHA256 pattern as `server/wearable-token.ts`. Valid products: `studio_credits`, `studio_subscription`, `day1og`, `trust_box`, `business_scout`, `business_unlock`.
-- **Wired surfaces:** `/studio/credits` (all 6 packs + 3 tiers), `/profile` (Day-1 OG card — now shows on iOS too), `/biz/talent-explorer` (Scout Plan subscription), `/biz/dashboard` (extra unlock 5-packs for Scout Plan holders), `/ai-or-not` (floating Trust Box + Day-1 OG purchase buttons when not yet purchased; iframe `hideCheckout=1` blocks in-iframe checkout).
-- **iOS entitlement:** `ios/App/App/App.entitlements` has `com.apple.developer.storekit.external-purchase-link = external-purchase`. Must be provisioned in Apple Developer portal before App Store submission.
-- **Docs:** `docs/payment-routing.md` updated — gaps section replaced with a full compliance table showing all surfaces as resolved.
+## Key File Locations
+| Area | Path |
+|---|---|
+| Routes (all API) | `server/routes.ts` |
+| Schema | `shared/schema.ts` |
+| Feature flags | `shared/feature-flags.ts`, `server/feature-flags.ts` |
+| Cron jobs | `server/cron.ts` |
+| Job builder config | `client/src/lib/job-builder-config.ts` |
+| Platform detection | `client/src/lib/platform.ts` (`isStoreBuild`, `isIOS`) |
+| Push notifications | `server/push.ts`, `client/src/lib/push.ts` |
+| Admin QA | `client/src/pages/admin-qa.tsx`, `server/admin-qa.ts` |
+| Dispute types | `shared/dispute.ts` |
+| Server tests | `server/tests/` |
+| E2E tests | `e2e/` |
 
-## QA Dashboard (task-462)
-- **Page:** `client/src/pages/admin-qa.tsx` at `/admin/qa` (admin-only). Sister pages: `admin-qa-inspect.tsx`, `admin-qa-cashdrop-debug.tsx`, `admin-qa-flags.tsx`, `admin-user-profile.tsx` at `/admin/users/:id`. Linked from `admin.tsx` header.
-- **Server module:** `server/admin-qa.ts` mounted at end of `registerRoutes()` via dynamic import. All `/api/admin/qa/*` + `/api/admin/users/:id/*` routes are gated by `requireAdmin` and write to `auditLog` (action prefix `qa.*`). Public hooks `/api/feature-flags` + `/api/feature-flags/:key` are unauthenticated and used by `useFeatureFlag` on the client.
-- **Sandbox safety:** `requireStripeTestMode` middleware refuses to run if `STRIPE_SECRET_KEY` starts with `sk_live_`. Test users carry `users.is_test_user=true`; test jobs carry `jobs.is_test_job=true`. Reset endpoint deletes only tagged rows + dependents (audit, proofs, attempts, etc).
-- **Live Allowlist:** `tester_allowlist (item_type, item_id, user_id)` table + `jobs.visibility` / `cash_drops.visibility` columns (`public` | `allowlist`). Public listings (`GET /api/jobs`, `GET /api/cash-drops/active`) hide allowlist items from non-listed viewers (filter in `server/visibility.ts`). Owner + admin always see their own. End-test endpoint requires `x-live-confirm: LIVE` header.
-- **Feature flags:** `shared/feature-flags.ts` (12-key registry: `studio_ai`, `studio_subscriptions`, `cash_drops`, `barter`, `direct_offers`, `observation_marketplace`, `handsfree_capture`, `paired_wearable_import`, `pov_summary`, `business_promo`, `business_signup`, `qa_dashboard`). Resolver in `server/feature-flags.ts` (30s in-process cache, scopes: `off|global|role|allowlist`, admin always passes). `feature_flags` table seeded on boot via `ensureFlagsSeeded()`.
-- **Cash Drop Debugger:** `cash_drop_events` table appends transitions (`auto_expired`, `force_expired`, `unexpired`, `extended`, `cancelled`); `server/cron.ts autoExpireCashDrops` records `auto_expired` events. Replay tools: extend-expiry, un-expire, force-expire, cancel — all audited.
-- **Media viewer:** `client/src/components/media-lightbox.tsx` opens any URL (image/video/audio/pdf/other) in a dialog with Open + Download buttons. Cloudinary URLs get `fl_attachment/` injected for forced download (`server/media-download.ts toCloudinaryAttachmentUrl`).
-- **User link:** `client/src/components/user-link.tsx` — drop-in clickable `<UserLink userId={id} label={name} />` jumps to `/admin/users/:id`.
-- **Tests:** `server/tests/admin-qa.test.ts` covers visibility filter (admin/owner/allowlisted/stranger), Cloudinary attachment-URL helper, media classifier, and feature-flag resolver scopes.
-
-## Hands-Free V&I (task-454)
-- **Component:** `client/src/components/handsfree-capture.tsx` (dialog: consent → camera preview → MediaRecorder → upload).
-- **Entry point:** "Hands-Free POV Capture" card in `worker-clipboard.tsx` (only when `job.category === "Verify & Inspect"`).
-- **Token:** `server/wearable-token.ts` — HMAC-SHA256 (key = `SESSION_SECRET`), 15-min TTL, payload `{jobId, helperId, exp, nonce}`.
-- **Routes:** `GET /api/jobs/:id/wearable-upload-token` (auth + assigned check) and `POST /api/proof/wearable-upload` (token + Cloudinary URL + `captureMeta`). Both gated by `platform_settings.handsfree_capture_enabled` (admin kill-switch, defaults `true`).
-- **Storage:** `proof_submissions.capture_meta jsonb` holds `{deviceKind, deviceModel, captureStartedAt, captureEndedAt, gpsAtStart, receivedAt, consentVersion}`. Hirer-side badge "POV · Hands-Free" rendered in `job-detail.tsx` proof card.
-- **Vendor neutrality:** product copy never names a glasses brand. Three paths documented in `docs/handsfree-vi-architecture.md` — phone-as-glasses (live), Capacitor paired-device import on Android + iOS (task-457 / task-460; iOS uses `<input type=file accept="video/*">` with no `capture` attr so the Photos picker shows; deviceKind `paired-ios`), and the public `/api/proof/wearable-upload` contract for partner devices. Allowed `captureMeta.deviceKind` values: `phone-handsfree`, `paired-android`, `paired-ios`, `direct-api`.
-- **Imported-clip freshness flags (task-461):** For `paired-android`/`paired-ios` deviceKind, `/api/proof/wearable-upload` enriches `captureMeta` with `recordedAt`, `recordedAgeSec`, `gpsDistanceMeters`, and `freshnessFlags[]` (`recorded_before_job` if `fileLastModified` < lockedAt − 24h, `recorded_in_future`, `missing_recorded_at`, `location_mismatch` if upload GPS > 1 km from job). Hirer proof card in `job-detail.tsx` shows "Imported clip · recorded {age}" subline plus yellow warning badges for each flag. Advisory only — never blocks upload.
-
-## Where things live
-- **Job Builder Config:** `client/src/lib/job-builder-config.ts`
-- **Guided Job Builder Component:** `client/src/components/guided-job-builder.tsx`
-- **Dispute Issue Types:** `shared/dispute.ts`
-- **Credential Card Component:** `client/src/components/credential-card.tsx`
-- **Platform Detection:** `client/src/lib/platform.ts`
-- **Push Notification Logic (Server):** `server/push.ts`
-- **Push Notification Logic (Client):** `client/src/lib/push.ts`
-- **Cron Job Logic:** `server/cron.ts`, `server/routes.ts`
-- **Reverse Geocoding:** `/api/places/reverse-geocode` (server/routes.ts)
-- **Account Settings UI:** `client/src/pages/account-settings.tsx`
-- **Delete Account UI:** `client/src/pages/delete-account.tsx`
-- **Server Tests:** `server/tests/`
-- **E2E Tests:** `e2e/`
+## iOS / App Store Status
+- **Distribution:** U.S. App Store only.
+- **External purchases:** All digital purchases on iOS use `ExternalPurchaseSheet` (`client/src/components/external-purchase-sheet.tsx`), which shows Apple's required disclosure then opens Stripe checkout in SFSafariViewController. Valid under updated U.S. App Store rules — **no `com.apple.developer.storekit.external-purchase-link` entitlement required or present.**
+- **Entitlements file** (`ios/App/App/App.entitlements`): only `aps-environment: production`. Do not add the external-purchase entitlement.
+- **Wired purchase surfaces:** `/studio/credits` (packs + tiers), `/profile` (Day-1 OG), `/biz/talent-explorer` (Scout Plan), `/biz/dashboard` (unlock 5-packs), `/ai-or-not` (Trust Box + Day-1 OG).
+- **Token bridge:** `POST /api/mobile/checkout-link` → signs 15-min HMAC token → `GET /api/mobile/checkout-redirect` creates Stripe session → 302 to Stripe. Module: `server/mobile-checkout-token.ts`.
+- **Background geolocation:** `@capacitor-community/background-geolocation` removed from `package.json` — not used, not compiled into the binary.
+- **Console logs:** stripped from production Vite build via `esbuild: { drop: ['console','debugger'] }`.
+- **Studio feature flag:** `studio_v2` is `global` scope — auto-migrated on server boot if DB still has old `role` scope.
+- **Hidden/removed for review:** `/loading-demo` unrouted; `/marketplace-preview` redirects to `/marketplace`; Dashboard marketplace "coming soon" card removed; quote-request "coming soon" text removed; Studio Avatar shows placeholder on iOS.
 
 ## Payment Routing Policy
-**Authoritative doc:** `docs/payment-routing.md`. Two rails, never mix:
-- **Stripe / Stripe Connect** for all real-world services (jobs, V&I, direct offers, barter, business verification, profile unlocks, marketplace boost, Cash Drops, worker payouts, platform fees, dispute refunds). Used on **every platform** including iOS/Android store builds — Apple IAP rules exempt person-to-person and physical services.
-- **Apple IAP / Google Play Billing** *may* be required for digital-only products on store builds (Studio credits, Studio subscriptions, Trust Box, Day-1 OG, AI Or Not credits, Business Scout plan). Not yet implemented. Until implemented, digital purchase UI must be hidden on store builds via `isStoreBuild` (`client/src/lib/platform.ts`).
-- **Apple Pay / Google Pay** are *wallet payment methods inside Stripe* — not a separate rail. Allowed on any Stripe flow.
-- Known store-build gating gaps (digital UI still visible in iOS/Android builds): Trust Box checkout, `business_scout_plan`. `studio.tsx` is fully gated (header credits CTA, out-of-credits CTA, low-credit toast all check `isStoreBuild`); `/studio/credits` shows a store-build notice. Must be resolved before App Store / Play submission — see `docs/payment-routing.md`.
+**Authoritative doc:** `docs/payment-routing.md`
 
-## Architecture decisions
-- **Post-First Job Flow:** Job posting is free; payment occurs only upon worker lock-in.
-- **Mandatory ID Verification:** For both job posters and workers to ensure security and trust.
-- **Strictly Dropdown-Driven Input:** For job creation to ensure structured data and dynamic form fields.
-- **Fuzzed Coordinates:** For privacy on map displays.
-- **Dual-Path Push Notifications:** VAPID web-push for browsers and APNs direct delivery for native iOS Capacitor builds.
-- **Soft-Delete for User Accounts:** Anonymizes personal data while retaining essential records for legal, safety, and fraud prevention.
+- **Stripe / Stripe Connect** — all real-world services: jobs, V&I, barter, direct offers, business verification, profile unlocks, Cash Drops, worker payouts, dispute refunds. Used on all platforms including iOS (person-to-person / physical services are exempt from Apple IAP).
+- **ExternalPurchaseSheet → Stripe** — digital products on iOS (U.S. only): Studio credits, Studio subscriptions, Trust Box, Day-1 OG, Business Scout plan, unlock packs. Apple disclosure shown before redirect.
+- **Apple Pay / Google Pay** — wallet methods inside Stripe, not a separate rail. Allowed anywhere Stripe is used.
+- **Apple IAP / Google Play Billing** — not implemented. Required for non-U.S. storefronts if GUBER ever expands internationally.
 
-## Product
-- **Core Functionality:** Connects individuals needing assistance with local service providers.
-- **Payment System:** Stripe-based, supporting destination charges, payouts, subscriptions, and boosts.
-- **Job Features:** Guided job builder, V&I smart forms, time-based pricing, barter listings, milestone tracking, proof engine, auto-pay increase.
-- **Trust & Reliability System:** Worker reliability tracking, badge tiers, dynamic trust scores.
-- **Admin Panel:** Role-based access for managing users, jobs, catalog, disputes, and proof templates.
-- **Direct Offer System:** Private hirer-to-worker offers with structured counters and expiration.
-- **Worker Clock-In System:** Workers must clock in to appear on maps and receive offers.
-- **Money Ledger:** Comprehensive tracking of all financial transactions for compliance.
-- **Dispute Resolution:** Structured issue taxonomy, evidence uploads, and admin-led resolution.
-- **Observation Marketplace:** Passive income opportunity for workers via real-world observations.
-- **GUBER Resume:** Auto-tracking work record with qualification management.
-- **AI Credential Cards:** AI-powered extraction and verification of worker credentials.
-- **Cash Drop System:** Alternative payment for marketing/promotional expenses.
-- **GUBER Business:** Platform for companies to scout talent, manage offers, and verify workers.
-- **Capacitor Integration:** Mobile app support for native features.
+## GUBER Studio v2
+- **Route:** `/studio` — session-based AI generation (24h sessions, heartbeat every 4 min).
+- **Provider:** Fal.ai. Requires `FAL_KEY` — without it every `/api/studio/generate/*` returns 503 before charging credits.
+- **Tools:** `kling_motion_control` (80 cr), `wan_motion_5s` (30 cr), `wan_motion_10s` (60 cr), `minimax_music` (5 cr). Prices are DB-managed via `studio_model_pricing`.
+- **Per-tool pages:** `/studio/text-to-video`, `/studio/mirror-motion`, `/studio/commercial`, `/studio/music`. Shell: `studio-tool-page-shell.tsx`.
+- **Avatar page** (`/studio/avatar`): shows "coming soon" placeholder on iOS store builds.
+- **Credits:** New users get 2 trial credits. Day-1 OG members get +20 cr/month (rollover, no expiry).
+- **Packs (6):** Spark $5/330 → Whale $200/16000. **Tiers (3):** Standard $10.99/mo, Business $37.99/mo, Enterprise $99/mo.
+- **For You feed:** `/studio/explore` — vertical snap-scroll of admin-curated `studio_featured_clips`.
+- **Storage:** `studio_sessions`, `studio_session_files`, `studio_generation_log`, `studio_model_pricing`.
+- **Feature flag:** `studio_v2` — default `global`, auto-migrated from legacy `role` scope on boot.
 
-## User preferences
-I prefer a concise and direct communication style. I value iterative development and clear explanations of the changes made. Please ask for confirmation before implementing major architectural changes or introducing new external dependencies. For code, I appreciate well-structured and readable solutions.
+## Other Key Features
+- **QA Dashboard** (`/admin/qa`): feature flags, cash drop debugger, allowlist, test user sandbox. Server module: `server/admin-qa.ts`.
+- **Hands-Free V&I:** `handsfree-capture.tsx` — phone-as-glasses POV capture for Verify & Inspect jobs. Token: `server/wearable-token.ts`.
+- **Investor Pitch:** `/investors` + `/guber-investor-deck` — public but `noindex`. Edit copy in `client/src/lib/investor-config.ts`.
+- **Observation Marketplace**, **Cash Drops**, **Barter**, **Direct Offers**, **GUBER Business** — all feature-flag gated via `shared/feature-flags.ts`.
 
-**IMPORTANT: Do NOT use task agents / project task queue.** All work must be done directly by the main agent in this environment. Parallel/isolated task agents have caused duplicate code and merge conflicts (e.g. duplicate ActiveAreasTab). Handle every request directly here.
+## Architecture Decisions
+- Job posting is free; payment only on worker lock-in.
+- Mandatory ID verification for hirers and workers.
+- Strictly dropdown-driven job creation (structured data).
+- Fuzzed GPS coordinates on all map displays.
+- Dual-path push: VAPID for web, APNs direct for native iOS.
+- Soft-delete accounts: anonymize data, retain records for legal/fraud.
 
 ## Gotchas
-- **Studio FAL_KEY:** `/api/studio/generate` requires `FAL_KEY`. Without it the route returns 503 and never deducts credits. Vibe presets table (`studio_vibes`) is empty — needs admin seed (or follow-up "generate vibes via Fal.ai" task) before the carousel renders content.
-
-
-- **Autoscale Production:** To maintain Autoscale's per-request pricing, ensure no recurring in-process timers are running; use `DISABLE_BACKGROUND_JOBS=true` and a `CRON_SECRET` with a scheduled `curl` command.
-- **Google Maps API Key:** Server-side Google Maps API calls require a separate API key with no HTTP-referer restrictions (or "IP addresses" restriction) if `GOOGLE_MAPS_API_KEY` has referer restrictions.
-- **Account Deletion:** Users are soft-deleted, anonymizing data while retaining records for legal/safety reasons. Public lookups for deleted users return 404.
-- **Google Play Compliance:** Digital purchase UI is hidden in Android/iOS store builds (`isStoreBuild`) to comply with store guidelines.
-
-## Investor Pitch (task-497)
-- **Page:** `client/src/pages/investors.tsx` at `/investors` and `/guber-investor-deck` (both public, lazy, registered before NotFound). 11 sections, dark theme with neon green/purple/cyan, IntersectionObserver scroll-reveal (gated by `prefers-reduced-motion`), print-to-PDF CSS, `noindex,nofollow,noarchive` set in `useEffect` and cleaned up on unmount.
-- **Single editable config:** `client/src/lib/investor-config.ts` — change copy, funding ask, contact info, social handles here only.
-- **Shared social icons:** `client/src/components/social-links.tsx` — 5 brand icons (LinkedIn / Facebook / TikTok / Instagram / X) from `react-icons/si`. Mounted on the investor page (Traction + CTA) AND on the marketing home footer (`client/src/pages/home.tsx`).
-- **Feature flag:** `investor_pitch_public` in `shared/feature-flags.ts` (default OFF). Reserved for a future public nav-link surface; the page itself is always reachable regardless of the flag.
-
-## Pointers
-- **QA Dashboard:** see "QA Dashboard (task-462)" section. Plan: `.local/tasks/task-462.md`.
-- **Investor Pitch:** see "Investor Pitch (task-497)" section. Plan: `.local/tasks/task-497.md`.
+- **FAL_KEY missing:** Studio generate endpoints return 503 without deducting credits.
+- **Autoscale timers:** No in-process recurring timers in production — use `DISABLE_BACKGROUND_JOBS=true` + scheduled cron curl.
+- **Google Maps server-side:** Requires a key with no HTTP-referer restrictions (use IP-restriction key or unrestricted).
+- **Account deletion:** Soft-delete only. Public lookups for deleted users return 404.
+- **`npm ci` on Codemagic:** Reads `package-lock.json` strictly. Keep it in sync with `package.json` — run `npm install` locally after any dependency change.
