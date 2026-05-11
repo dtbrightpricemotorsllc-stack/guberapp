@@ -45,14 +45,20 @@ workflows:
             node_modules/@capacitor-community/background-geolocation/Package.swift
           echo "Patched: $(grep 'capacitor-swift-pm' node_modules/@capacitor-community/background-geolocation/Package.swift)"
 
-          # --- Patch 2: @capacitor/preferences 8.0.1 — fix single-arg getString calls ---
+          # --- Patch 2: @capacitor/preferences — fix single-arg getString calls ---
           # capacitor-swift-pm 8.3.0 binary removed the one-arg getString() overload.
           # Replace each occurrence with the two-arg form + isEmpty guard.
           PREFS="node_modules/@capacitor/preferences/ios/Sources/PreferencesPlugin/PreferencesPlugin.swift"
           sed -i '' 's/let group = call\.getString("group")/let group = call.getString("group", "")/g' "$PREFS"
           sed -i '' 's/if let group = group {/if !group.isEmpty {/g' "$PREFS"
           sed -i '' 's/guard let key = call\.getString("key") else {/let key = call.getString("key", ""); guard !key.isEmpty else {/g' "$PREFS"
-          echo "Patched PreferencesPlugin.swift: $(grep -c 'call.getString' "$PREFS") getString calls remaining"
+          echo "Patched PreferencesPlugin.swift getString: $(grep -c 'call.getString' "$PREFS") calls remaining"
+
+          # --- Patch 3: @capacitor/preferences — fix single-arg reject() calls ---
+          # capacitor-swift-pm 8.3.0 binary also removed the one-arg reject() overload.
+          # Use the explicit four-arg form: reject(_ msg: String, _ code: String?, _ error: Error?, _ data: [String:Any]?)
+          sed -i '' 's/call\.reject("Must provide a key")/call.reject("Must provide a key", nil, nil, nil)/g' "$PREFS"
+          echo "Patched PreferencesPlugin.swift reject: $(grep -c 'call.reject' "$PREFS") reject calls remaining"
 
       - name: Build web app
         script: npm run build
