@@ -5,20 +5,19 @@ workflows:
     max_build_duration: 60
 
     # ---------------------------------------------------------------------------
-    # Automatic code signing: Codemagic fetches the certificate + provisioning
-    # profile directly from Apple via App Store Connect API on every build.
-    # This ensures the profile always reflects the current App ID capabilities
-    # (including Sign in with Apple) without manual profile uploads.
+    # Signing: fully automatic via App Store Connect API.
+    # app-store-connect fetch-signing-files fetches the provisioning profile
+    # directly from Apple on every build — guaranteed to include all current
+    # App ID capabilities (Sign in with Apple, Push Notifications, etc.).
+    # No ios_signing block so Codemagic does NOT pre-load any manually uploaded
+    # profile from Code Signing Identities (avoids stale profile conflict).
     #
-    # Required environment variables in the Codemagic dashboard:
+    # Required env vars in the Codemagic dashboard:
     #   APP_STORE_CONNECT_ISSUER_ID       From App Store Connect → Keys page
-    #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID shown next to the key name
-    #   APP_STORE_CONNECT_PRIVATE_KEY     Full contents of the downloaded .p8 file
+    #   APP_STORE_CONNECT_KEY_IDENTIFIER  Key ID
+    #   APP_STORE_CONNECT_PRIVATE_KEY     Full contents of the .p8 file
     # ---------------------------------------------------------------------------
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.guber.app
       vars:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
@@ -41,14 +40,14 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME"
 
-      - name: Set up code signing keychain
+      - name: Set up code signing
         script: |
           keychain initialize
 
-          # Fetch certificate + provisioning profile straight from Apple via
-          # App Store Connect API. --create will create a new profile if none
-          # exists. The fetched profile includes ALL current App ID capabilities
-          # (Sign in with Apple, Push Notifications, etc.) automatically.
+          # Fetch the provisioning profile directly from Apple via App Store
+          # Connect API. This guarantees the profile reflects the live App ID
+          # capabilities (Sign in with Apple, etc.) with no manual upload needed.
+          # --create will regenerate the profile on Apple's side if missing.
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --certificate-key @env:APP_STORE_CONNECT_PRIVATE_KEY \
@@ -56,7 +55,11 @@ workflows:
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --create
 
+          # Add the distribution certificate (GUBER_iOS_Distribution) from
+          # Codemagic Code Signing Identities to the keychain.
           keychain add-certificates
+
+          # Apply the fetched profile to the Xcode project.
           xcode-project use-profiles
 
       - name: Xcode archive (App Store export)
@@ -65,12 +68,11 @@ workflows:
           IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
           mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
 
-          # Write an xcconfig that forces minimal strict-concurrency for ALL targets,
-          # including SPM packages — plain xcodebuild overrides don't reach SPM targets.
+          # xcconfig to force minimal strict-concurrency across all targets
+          # including SPM packages (plain xcodebuild overrides don't reach them)
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\nOTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal\n' \
             > /tmp/spm_override.xcconfig
 
-          # Archive — pipe to log and capture exit code separately
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
@@ -88,7 +90,7 @@ workflows:
             echo "====== LAST 50 LINES ======"
             tail -50 /tmp/xcodebuild_archive.log
             echo ""
-            echo "====== COMPILE ERRORS (these are the actionable lines) ======"
+            echo "====== COMPILE ERRORS (actionable lines) ======"
             grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -80 || \
               grep -iE " error:" /tmp/xcodebuild_archive.log | grep -v "^note:" | head -80 || \
               echo "(no error: lines found — check artifacts zip for full log)"
