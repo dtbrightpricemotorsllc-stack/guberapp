@@ -46,37 +46,13 @@ workflows:
           echo "Patched: $(grep 'capacitor-swift-pm' node_modules/@capacitor-community/background-geolocation/Package.swift)"
 
           # --- Patch 2: @capacitor/preferences 8.0.1 — fix single-arg getString calls ---
-          PREFS_PLUGIN="node_modules/@capacitor/preferences/ios/Sources/PreferencesPlugin/PreferencesPlugin.swift"
-          python3 -c "
-import re, sys
-path = '$PREFS_PLUGIN'
-with open(path) as f:
-    src = f.read()
-
-# configure(): let group = call.getString(\"group\")
-#  then:       if let group = group { ... } else { ... }
-# Fix: use two-arg getString + isEmpty check
-src = src.replace(
-    'let group = call.getString(\"group\")',
-    'let group = call.getString(\"group\", \"\")'
-)
-src = src.replace(
-    'if let group = group {',
-    'if !group.isEmpty {'
-)
-
-# get/set/remove(): guard let key = call.getString(\"key\") else { call.reject(...) }
-# Fix: two-arg getString + isEmpty guard
-src = re.sub(
-    r'guard let key = call\.getString\(\"key\"\) else \{',
-    'let key = call.getString(\"key\", \"\"); guard !key.isEmpty else {',
-    src
-)
-
-with open(path, 'w') as f:
-    f.write(src)
-print('Patched PreferencesPlugin.swift — single-arg getString calls replaced')
-"
+          # capacitor-swift-pm 8.3.0 binary removed the one-arg getString() overload.
+          # Replace each occurrence with the two-arg form + isEmpty guard.
+          PREFS="node_modules/@capacitor/preferences/ios/Sources/PreferencesPlugin/PreferencesPlugin.swift"
+          sed -i '' 's/let group = call\.getString("group")/let group = call.getString("group", "")/g' "$PREFS"
+          sed -i '' 's/if let group = group {/if !group.isEmpty {/g' "$PREFS"
+          sed -i '' 's/guard let key = call\.getString("key") else {/let key = call.getString("key", ""); guard !key.isEmpty else {/g' "$PREFS"
+          echo "Patched PreferencesPlugin.swift: $(grep -c 'call.getString' "$PREFS") getString calls remaining"
 
       - name: Build web app
         script: npm run build
