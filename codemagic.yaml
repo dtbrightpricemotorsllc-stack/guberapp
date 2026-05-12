@@ -7,7 +7,7 @@ workflows:
     # ---------------------------------------------------------------------------
     # Signing: Codemagic Code Signing Identities (manually uploaded assets).
     #   Certificate : GUBER_iOS_Distribution
-    #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
+    #   Profile     : GUBER_AppStore_Profile_v3  (com.guber.app, App Store)
     # ---------------------------------------------------------------------------
     environment:
       groups:
@@ -76,16 +76,20 @@ workflows:
             exit "$ARCHIVE_STATUS"
           fi
 
+          # Minimal ExportOptions.plist — matches the previously-working setup.
+          # xcode-project use-profiles (earlier step) already patched the
+          # Xcode project with the installed profile's UUID, so xcodebuild
+          # picks it up automatically for both archive and export. Do NOT
+          # add signingStyle: manual or provisioningProfiles here — that
+          # overrides use-profiles and causes Xcode to pick the wrong/stale
+          # profile, producing the "missing Push Notifications / Sign in
+          # with Apple" exportArchive error.
           printf '%s\n' \
             '<?xml version="1.0" encoding="UTF-8"?>' \
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
             '<plist version="1.0"><dict>' \
             '<key>method</key><string>app-store</string>' \
             '<key>teamID</key><string>7MC93QFW6Q</string>' \
-            '<key>signingStyle</key><string>manual</string>' \
-            '<key>provisioningProfiles</key><dict>' \
-            '<key>com.guber.app</key><string>GUBER_Profile_v3</string>' \
-            '</dict>' \
             '</dict></plist>' \
             > /tmp/ExportOptions.plist
 
