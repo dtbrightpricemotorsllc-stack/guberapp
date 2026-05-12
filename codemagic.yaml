@@ -7,11 +7,19 @@ workflows:
     # ---------------------------------------------------------------------------
     # Signing: Codemagic Code Signing Identities (manually uploaded assets).
     #   Certificate : GUBER_iOS_Distribution
-    #   Profile     : GUBER_AppStore_Profile_v3  (com.guber.app, App Store)
+    #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
+    #
+    # IMPORTANT: Do NOT add an environment groups block that exposes App Store
+    # Connect API credentials here. If those keys are visible during the
+    # ios_signing phase, Codemagic auto-fetches the profile from Apple Developer
+    # Portal (GUBER_AppStore_Profile_v3) and ignores the manually uploaded
+    # GUBER_Profile_v3, causing exportArchive to fail with
+    # "missing Push Notifications / Sign in with Apple" entitlements.
+    #
+    # ASC credentials are injected by the native publishing block below — that
+    # is the only place they are needed.
     # ---------------------------------------------------------------------------
     environment:
-      groups:
-        - Default
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.guber.app
@@ -39,6 +47,11 @@ workflows:
 
       - name: Set up code signing
         script: |
+          # ios_signing block already installs certificate + profile.
+          # keychain add-certificates makes them accessible to xcodebuild.
+          # xcode-project use-profiles patches the App target's
+          # PROVISIONING_PROFILE_SPECIFIER with the installed profile UUID —
+          # this is the only correct way to reference it; never hardcode by name.
           keychain initialize
           keychain add-certificates
           xcode-project use-profiles
@@ -76,14 +89,6 @@ workflows:
             exit "$ARCHIVE_STATUS"
           fi
 
-          # Minimal ExportOptions.plist — matches the previously-working setup.
-          # xcode-project use-profiles (earlier step) already patched the
-          # Xcode project with the installed profile's UUID, so xcodebuild
-          # picks it up automatically for both archive and export. Do NOT
-          # add signingStyle: manual or provisioningProfiles here — that
-          # overrides use-profiles and causes Xcode to pick the wrong/stale
-          # profile, producing the "missing Push Notifications / Sign in
-          # with Apple" exportArchive error.
           printf '%s\n' \
             '<?xml version="1.0" encoding="UTF-8"?>' \
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -106,49 +111,15 @@ workflows:
           fi
           echo "IPA exported to: $(find "$IPA_DIR" -name "*.ipa")"
 
-      - name: Upload to TestFlight via app-store-connect CLI
-        script: |
-          echo "=== IPA search ==="
-          find /Users/builder /tmp "$CM_BUILD_DIR" -name "*.ipa" -print 2>/dev/null || true
-          IPA_PATH=$(find /Users/builder /tmp "$CM_BUILD_DIR" -name "*.ipa" 2>/dev/null | head -1)
-          echo "IPA_PATH=$IPA_PATH"
-
-          echo "=== Credential check ==="
-          MISSING=""
-          [ -z "$APP_STORE_CONNECT_KEY_IDENTIFIER" ]  && MISSING="$MISSING APP_STORE_CONNECT_KEY_IDENTIFIER"
-          [ -z "$APP_STORE_CONNECT_ISSUER_ID" ]       && MISSING="$MISSING APP_STORE_CONNECT_ISSUER_ID"
-          [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ]     && MISSING="$MISSING APP_STORE_CONNECT_PRIVATE_KEY"
-
-          if [ -n "$MISSING" ]; then
-            echo "ERROR: The following secrets are blank in this build environment:"
-            for v in $MISSING; do echo "  - $v"; done
-            echo ""
-            echo "Fix: In Codemagic → guberapp → Environment variables,"
-            echo "ensure these are saved and their Group is set to 'default'."
-            exit 1
-          fi
-
-          if [ -z "$IPA_PATH" ]; then
-            echo "ERROR: No .ipa found under \$CM_BUILD_DIR/build"
-            echo "Contents of \$CM_BUILD_DIR/build/ios:"
-            find "$CM_BUILD_DIR/build/ios" -print 2>/dev/null | head -40 || true
-            exit 1
-          fi
-
-          echo "=== Uploading ==="
-          echo "IPA:      $IPA_PATH"
-          echo "Key ID:   $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Issuer:   $APP_STORE_CONNECT_ISSUER_ID"
-
-          app-store-connect publish \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "@env:APP_STORE_CONNECT_PRIVATE_KEY" \
-            --path "$IPA_PATH" \
-            --testflight \
-            --max-build-processing-wait 0
-
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_archive.log
       - /tmp/xcodebuild_export.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
