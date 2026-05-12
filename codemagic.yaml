@@ -8,16 +8,6 @@ workflows:
     # Signing: Codemagic Code Signing Identities (manually uploaded assets).
     #   Certificate : GUBER_iOS_Distribution
     #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
-    #
-    # IMPORTANT: Do NOT add an environment groups block that exposes App Store
-    # Connect API credentials here. If those keys are visible during the
-    # ios_signing phase, Codemagic auto-fetches the profile from Apple Developer
-    # Portal (GUBER_AppStore_Profile_v3) and ignores the manually uploaded
-    # GUBER_Profile_v3, causing exportArchive to fail with
-    # "missing Push Notifications / Sign in with Apple" entitlements.
-    #
-    # ASC credentials are injected by the native publishing block below — that
-    # is the only place they are needed.
     # ---------------------------------------------------------------------------
     environment:
       ios_signing:
@@ -47,11 +37,6 @@ workflows:
 
       - name: Set up code signing
         script: |
-          # ios_signing block already installs certificate + profile.
-          # keychain add-certificates makes them accessible to xcodebuild.
-          # xcode-project use-profiles patches the App target's
-          # PROVISIONING_PROFILE_SPECIFIER with the installed profile UUID —
-          # this is the only correct way to reference it; never hardcode by name.
           keychain initialize
           keychain add-certificates
           xcode-project use-profiles
@@ -89,27 +74,25 @@ workflows:
             exit "$ARCHIVE_STATUS"
           fi
 
-          printf '%s\n' \
-            '<?xml version="1.0" encoding="UTF-8"?>' \
-            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
-            '<plist version="1.0"><dict>' \
-            '<key>method</key><string>app-store</string>' \
-            '<key>teamID</key><string>7MC93QFW6Q</string>' \
-            '</dict></plist>' \
-            > /tmp/ExportOptions.plist
+          cat > /tmp/ExportOptions.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>7MC93QFW6Q</string>
+          </dict>
+          </plist>
+          PLIST
 
           xcodebuild \
             -exportArchive \
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
-          EXPORT_STATUS=${PIPESTATUS[0]}
-          if [ "$EXPORT_STATUS" -ne 0 ]; then
-            echo "====== EXPORT FAILED — last 30 lines ======"
-            tail -30 /tmp/xcodebuild_export.log
-            exit "$EXPORT_STATUS"
-          fi
-          echo "IPA exported to: $(find "$IPA_DIR" -name "*.ipa")"
+
 
     artifacts:
       - build/ios/ipa/*.ipa
