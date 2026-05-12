@@ -8,8 +8,21 @@ workflows:
     # Signing: Codemagic Code Signing Identities (manually uploaded assets).
     #   Certificate : GUBER_iOS_Distribution
     #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
+    #
+    # The profile stored in Codemagic may not reflect the latest App ID
+    # capabilities (Push Notifications, Sign in with Apple). To guarantee the
+    # export uses a profile that includes those entitlements, the "Set up code
+    # signing" step fetches the current profile from Apple Developer Portal via
+    # the App Store Connect API before running xcode-project use-profiles.
+    #
+    # App Store Connect API creds come from the Default environment group:
+    #   APP_STORE_CONNECT_ISSUER_ID
+    #   APP_STORE_CONNECT_KEY_IDENTIFIER
+    #   APP_STORE_CONNECT_PRIVATE_KEY
     # ---------------------------------------------------------------------------
     environment:
+      groups:
+        - Default
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.guber.app
@@ -39,6 +52,20 @@ workflows:
         script: |
           keychain initialize
           keychain add-certificates
+
+          # Fetch the CURRENT App Store provisioning profile from Apple Developer
+          # Portal. This guarantees the installed profile encodes all capabilities
+          # that are enabled on the App ID today (Push Notifications, Sign in with
+          # Apple). The profile stored in Codemagic may be a stale snapshot that
+          # pre-dates those capabilities being added.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --issuer-id  "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id     "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "@env:APP_STORE_CONNECT_PRIVATE_KEY" \
+            --type IOS_APP_STORE \
+            --create
+
+          # Patch project.pbxproj with the UUID of the freshly fetched profile.
           xcode-project use-profiles
 
       - name: Xcode archive (App Store export)
@@ -94,7 +121,13 @@ workflows:
             -archivePath "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
-
+          EXPORT_STATUS=${PIPESTATUS[0]}
+          if [ "$EXPORT_STATUS" -ne 0 ]; then
+            echo "====== EXPORT FAILED — last 30 lines ======"
+            tail -30 /tmp/xcodebuild_export.log
+            exit "$EXPORT_STATUS"
+          fi
+          echo "IPA exported to: $(find "$IPA_DIR" -name "*.ipa")"
 
     artifacts:
       - build/ios/ipa/*.ipa
