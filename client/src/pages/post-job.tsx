@@ -107,6 +107,7 @@ export default function PostJob() {
   const [exactLng, setExactLng] = useState<number | null>(null);
   const [urgentSwitch, setUrgentSwitch] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const gpsLoadingRef = useRef(false);
   const [jobDetails, setJobDetails] = useState<Record<string, any>>({});
   const [estimatedMinutes, setEstimatedMinutes] = useState("");
   const [barterNeed, setBarterNeed] = useState("");
@@ -140,8 +141,10 @@ export default function PostJob() {
   });
 
   const handleGPS = () => {
+    if (gpsLoadingRef.current) return;
+    gpsLoadingRef.current = true;
     setGpsLoading(true);
-    gpsGetCurrentPosition({ timeout: 10000, enableHighAccuracy: true })
+    gpsGetCurrentPosition({ timeout: 15000, enableHighAccuracy: true })
       .then(async (pos) => {
         const { latitude, longitude } = pos.coords;
         setExactLat(latitude);
@@ -160,10 +163,17 @@ export default function PostJob() {
           setJobLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         }
         setGpsLoading(false);
+        gpsLoadingRef.current = false;
       })
-      .catch(() => {
-        toast({ title: "Location denied", description: "Please allow location access or enter your address manually.", variant: "destructive" });
+      .catch((err) => {
+        const code = err?.code ?? 0;
+        const description =
+          code === 1 ? "Location access denied. Enable it in Settings → Apps → GUBER → Permissions." :
+          code === 3 ? "Location timed out. Try again or type your address below." :
+                       "Couldn't get location. Enter your address manually.";
+        toast({ title: "Location unavailable", description, variant: "destructive" });
         setGpsLoading(false);
+        gpsLoadingRef.current = false;
       });
   };
 

@@ -3,7 +3,9 @@ import { Capacitor } from "@capacitor/core";
 const SESSION_KEY = "guber_gps_ok";
 
 type Resolver = () => void;
+type Rejector = (err: Error) => void;
 const pendingResolvers: Resolver[] = [];
+const pendingRejectors: Rejector[] = [];
 
 export function isGpsDisclaimerAccepted(): boolean {
   try { return localStorage.getItem(SESSION_KEY) === "1"; } catch { return false; }
@@ -11,15 +13,23 @@ export function isGpsDisclaimerAccepted(): boolean {
 
 export function acceptGpsDisclaimer(): void {
   try { localStorage.setItem(SESSION_KEY, "1"); } catch {}
-  while (pendingResolvers.length > 0) {
-    pendingResolvers.shift()?.();
-  }
+  pendingRejectors.length = 0;
+  while (pendingResolvers.length > 0) pendingResolvers.shift()?.();
+}
+
+/** Called when the user dismisses the GPS disclaimer without accepting (e.g. Android back button). */
+export function dismissGpsDisclaimer(): void {
+  pendingResolvers.length = 0;
+  const err = new Error("Location permission denied");
+  (err as any).code = 1;
+  while (pendingRejectors.length > 0) pendingRejectors.shift()?.(err);
 }
 
 export function ensureGpsDisclaimer(): Promise<void> {
   if (isGpsDisclaimerAccepted()) return Promise.resolve();
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     pendingResolvers.push(resolve);
+    pendingRejectors.push(reject);
     window.dispatchEvent(new Event("guber:show-gps-disclaimer"));
   });
 }

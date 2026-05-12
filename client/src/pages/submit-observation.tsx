@@ -64,11 +64,14 @@ export default function SubmitObservation() {
   const [notes, setNotes] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
+  const gpsLoadingRef = useRef(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const handleGPS = () => {
+    if (gpsLoadingRef.current) return;
+    gpsLoadingRef.current = true;
     setGpsLoading(true);
-    gpsGetCurrentPosition({ timeout: 10000 })
+    gpsGetCurrentPosition({ timeout: 15000, enableHighAccuracy: true })
       .then(async (pos) => {
         const { latitude, longitude } = pos.coords;
         setGpsLat(latitude);
@@ -86,10 +89,17 @@ export default function SubmitObservation() {
           setAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
         }
         setGpsLoading(false);
+        gpsLoadingRef.current = false;
       })
-      .catch(() => {
-        toast({ title: "Location denied", description: "Please allow location access.", variant: "destructive" });
+      .catch((err) => {
+        const code = err?.code ?? 0;
+        const description =
+          code === 1 ? "Location access denied. Enable it in Settings → Apps → GUBER → Permissions." :
+          code === 3 ? "Location timed out. Try again or type your address." :
+                       "Couldn't get location. Enter your address manually.";
+        toast({ title: "Location unavailable", description, variant: "destructive" });
         setGpsLoading(false);
+        gpsLoadingRef.current = false;
       });
   };
 

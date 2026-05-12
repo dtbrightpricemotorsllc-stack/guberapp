@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { MapPin, ShieldCheck } from "lucide-react";
-import { acceptGpsDisclaimer } from "@/lib/gps";
+import { acceptGpsDisclaimer, dismissGpsDisclaimer } from "@/lib/gps";
 
 export function GpsDisclaimerModal() {
   const [open, setOpen] = useState(false);
@@ -18,13 +18,20 @@ export function GpsDisclaimerModal() {
     setOpen(false);
   };
 
+  const handleDismiss = () => {
+    setOpen(false);
+    dismissGpsDisclaimer();
+  };
+
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center px-5 bg-black/60 backdrop-blur-sm"
       data-testid="modal-gps-disclaimer"
+      onClick={handleDismiss}
     >
       <div
         className="w-full max-w-sm rounded-3xl p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
         style={{
           // dark-gradient-allow: modal card surface, dark theme chrome
           background: "linear-gradient(135deg, #0d1117 0%, #161b22 100%)",
