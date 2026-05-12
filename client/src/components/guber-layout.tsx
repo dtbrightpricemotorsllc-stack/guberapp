@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Notification } from "@shared/schema";
-import { subscribeToPush } from "@/lib/push";
+import { subscribeToPush, clearNativeBadge } from "@/lib/push";
 import { playGuberPing, unlockAudio, isAudioUnlocked, playGuberSound, type SoundType } from "@/lib/notification-sound";
 import { isNativeApp, isAndroid } from "@/lib/platform";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
@@ -87,6 +87,29 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
     // dashboard / browse-jobs in-app prompts handle the actual ask.
     if (user?.id) subscribeToPush(user.id, { promptIfNeeded: false }).catch(() => {});
   }, [user?.id]);
+
+  // Clear app badge + notification-centre entries whenever the app comes to
+  // the foreground. This resets the red dot on the iOS/Android icon so the
+  // user knows the alerts have been seen. Runs once on mount (covers the case
+  // where the app was opened via a tap from a closed state) and again every
+  // time the App 'appStateChange' active event fires (background → foreground).
+  useEffect(() => {
+    if (!isNativeApp) return;
+    clearNativeBadge().catch(() => {});
+
+    let cleanupFn: (() => void) | undefined;
+    (async () => {
+      try {
+        const { App } = await import("@capacitor/app");
+        const handle = await App.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) clearNativeBadge().catch(() => {});
+        });
+        cleanupFn = () => handle.remove();
+      } catch {}
+    })();
+
+    return () => { cleanupFn?.(); };
+  }, []);
 
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

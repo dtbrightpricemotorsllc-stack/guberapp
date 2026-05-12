@@ -248,6 +248,27 @@ async function sendSubscriptionToServer(sub: PushSubscription): Promise<void> {
   });
 }
 
+/**
+ * Clear the app badge count and all delivered notifications from the
+ * notification centre. Call when the app comes to foreground so the red
+ * dot on the app icon resets immediately.
+ *
+ * iOS: PushNotifications.removeAllDeliveredNotifications() resets the badge
+ *      set by the APNs payload and removes tray entries.
+ * Android: Clearing the notification tray is done by removeAllDeliveredNotifications().
+ *          The badge (if the launcher supports it) is tied to unread counts; no
+ *          explicit badge-clear API is needed — dismissed notifications clear it.
+ */
+export async function clearNativeBadge(): Promise<void> {
+  if (!isNativeApp || (!isIOS && !isAndroid)) return;
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    await PushNotifications.removeAllDeliveredNotifications();
+  } catch (e) {
+    console.warn("[push] clearNativeBadge failed:", e);
+  }
+}
+
 export async function unsubscribeFromPush(): Promise<void> {
   // Native iOS / Android — remove the cached token from both the plugin and the server.
   if (isNativeApp && (isIOS || isAndroid)) {

@@ -214,11 +214,19 @@ async function sendToFcmTokens(
   // native side via the Capacitor push plugin's default channel config.
   const soundResource = (payload.sound || "guber_default.wav").replace(/\.wav$/i, "");
 
+  // TTL: time-sensitive tags (nearby-jobs, cashdrop) expire in 30 min so stale
+  // alerts never arrive hours late. All other notifications use 4 hours.
+  // collapseKey: same-tag messages collapse to one on reconnect (no pile-up).
+  const isShortLived = payload.tag === "nearby-jobs" || payload.tag?.startsWith("cashdrop");
+  const ttlMs = isShortLived ? 30 * 60 * 1000 : 4 * 60 * 60 * 1000;
+
   const message: admin.messaging.MulticastMessage = {
     tokens,
     notification: { title: payload.title, body: payload.body },
     android: {
       priority: "high",
+      ttl: ttlMs,
+      ...(payload.tag ? { collapseKey: payload.tag } : {}),
       notification: {
         sound: soundResource,
         channelId: "guber_default",

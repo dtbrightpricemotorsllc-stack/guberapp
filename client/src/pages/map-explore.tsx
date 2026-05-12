@@ -283,7 +283,7 @@ export default function MapExplore() {
         setLocating(false);
         setLocationDenied(true);
       },
-      { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
     ).then((id) => {
       if (watchCancelledRef.current) {
         if (navigator.geolocation) navigator.geolocation.clearWatch(id);

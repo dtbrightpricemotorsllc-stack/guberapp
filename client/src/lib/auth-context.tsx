@@ -65,6 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      // Remove push token from DB BEFORE destroying the session so the DELETE
+      // request still arrives authenticated. Wrapped in try/catch so a push
+      // failure never blocks logout itself.
+      try {
+        const { unsubscribeFromPush } = await import("./push");
+        await unsubscribeFromPush();
+      } catch {}
       await clearToken();
       if (Capacitor.isNativePlatform()) {
         await signOutFromGoogle();
