@@ -91,6 +91,29 @@ async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolea
       if (receive !== "granted") return false;
     }
 
+    // Android 8+: notification channels MUST exist before FCM messages that
+    // reference them are delivered — messages targeting a missing channel are
+    // silently discarded by the OS. Create (or update) the "guber_default"
+    // channel here so it exists before we call register(). createChannel() is
+    // idempotent — calling it multiple times with the same ID is safe.
+    if (isAndroid) {
+      try {
+        await PushNotifications.createChannel({
+          id: "guber_default",
+          name: "GUBER Alerts",
+          description: "Job updates, payments, and nearby activity",
+          importance: 4,           // IMPORTANCE_HIGH — shows heads-up banner
+          visibility: 1,           // VISIBILITY_PUBLIC
+          sound: "guber_default",  // matches guber_default.wav in res/raw/
+          vibration: true,
+          lights: true,
+          lightColor: "#00E676",   // GUBER green
+        });
+      } catch (e) {
+        console.warn("[push/fcm] createChannel failed:", e);
+      }
+    }
+
     // Remove any stale listeners from previous sessions before adding new ones.
     // Without this, every app open stacks an additional listener — on the 5th
     // launch you'd have 5 registration handlers all trying to upload the token.

@@ -51,6 +51,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Tell FCM which channel to use for notifications that arrive
+             before the JS channel-creation code has run (e.g. first cold boot).
+             The channel itself is created at runtime via PushNotifications.createChannel(). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="guber_default" />
     </application>
 
     <!-- Permissions -->
