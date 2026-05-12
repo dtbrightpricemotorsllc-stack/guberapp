@@ -53,17 +53,26 @@ workflows:
           keychain initialize
           keychain add-certificates
 
-          # Fetch the CURRENT App Store provisioning profile from Apple Developer
-          # Portal. This guarantees the installed profile encodes all capabilities
-          # that are enabled on the App ID today (Push Notifications, Sign in with
-          # Apple). The profile stored in Codemagic may be a stale snapshot that
-          # pre-dates those capabilities being added.
+          # Codemagic's ios_signing block pre-installs GUBER_Profile_v3 into the
+          # provisioning profiles folder before any script runs. That profile is a
+          # stale snapshot that may not include Push Notifications / Sign in with
+          # Apple. Wipe it now so only the freshly fetched profile remains.
+          echo "Removing pre-installed provisioning profiles..."
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision
+          echo "Done. Profiles folder is now empty."
+
+          # Fetch the CURRENT App Store profile from Apple Developer Portal.
+          # Because the App ID has Push Notifications + Sign in with Apple enabled,
+          # the profile Apple returns will include those entitlements.
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --issuer-id  "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id     "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer-id   "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id      "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "@env:APP_STORE_CONNECT_PRIVATE_KEY" \
             --type IOS_APP_STORE \
             --create
+
+          echo "Installed profiles after fetch:"
+          ls -1 ~/Library/MobileDevice/Provisioning\ Profiles/ 2>/dev/null || echo "(none)"
 
           # Patch project.pbxproj with the UUID of the freshly fetched profile.
           xcode-project use-profiles
