@@ -91,16 +91,32 @@ async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolea
       if (receive !== "granted") return false;
     }
 
+    // Remove any stale listeners from previous sessions before adding new ones.
+    // Without this, every app open stacks an additional listener — on the 5th
+    // launch you'd have 5 registration handlers all trying to upload the token.
+    await PushNotifications.removeAllListeners();
+
     // Attach listeners BEFORE calling register() so the token event is never missed.
     PushNotifications.addListener("registration", async (token) => {
       currentNativeToken = { value: token.value, route };
       try {
-        await fetch(route, {
+        const res = await fetch(route, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceToken: token.value }),
           credentials: "include",
         });
+        if (!res.ok) {
+          // Retry once after a short delay — the session cookie may not yet be
+          // flushed when the registration event fires on cold app launch.
+          await new Promise((r) => setTimeout(r, 1500));
+          await fetch(route, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceToken: token.value }),
+            credentials: "include",
+          });
+        }
       } catch (err) {
         console.warn(`[push/${platformLabel}] token upload failed:`, err);
       }
@@ -108,6 +124,31 @@ async function subscribeNative(_userId: number, opts?: { promptIfNeeded?: boolea
 
     PushNotifications.addListener("registrationError", (err) => {
       console.warn(`[push/${platformLabel}] registration error:`, err);
+    });
+
+    // Deep-link handler: fired when the user TAPS a notification from the
+    // background or the app is launched from a closed state via a push.
+    // Without this listener, tapping a notification opens the app at the
+    // home screen and the URL in the payload is never acted on.
+    PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+      try {
+        const url: string | undefined =
+          (action.notification.data as any)?.url ||
+          (action.notification as any)?.data?.url;
+        if (url && url !== "/" && typeof window !== "undefined") {
+          // Give the React router a tick to mount before navigating.
+          setTimeout(() => { window.location.href = url; }, 100);
+        }
+      } catch {}
+    });
+
+    // Foreground handler: belt-and-suspenders alongside presentationOptions.
+    // presentationOptions: ['alert','badge','sound'] in capacitor.config.ts
+    // already shows foreground banners on iOS 10+; this handler fires too but
+    // we don't need to do anything extra — the OS shows the banner itself.
+    PushNotifications.addListener("pushNotificationReceived", (_notification) => {
+      // No-op: the OS presents the alert via presentationOptions config.
+      // Add custom in-app logic here if needed in future (e.g. toast overlay).
     });
 
     // Register — fires the 'registration' listener with the device/registration token.
