@@ -71,8 +71,21 @@ workflows:
             --type IOS_APP_STORE \
             --create
 
-          echo "Installed profiles after fetch:"
-          ls -1 ~/Library/MobileDevice/Provisioning\ Profiles/ 2>/dev/null || echo "(none)"
+          echo "=== Installed profiles after fetch ==="
+          PROF_DIR=~/Library/MobileDevice/Provisioning\ Profiles
+          ls -1 "$PROF_DIR" 2>/dev/null || echo "(none)"
+
+          echo "=== Profile details (name, UUID, entitlements) ==="
+          for f in "$PROF_DIR"/*.mobileprovision; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            security cms -D -i "$f" 2>/dev/null | \
+              grep -A1 -E "<key>(Name|UUID|application-identifier)</key>" || true
+            echo "  Push entitlement present:"
+            security cms -D -i "$f" 2>/dev/null | grep -c "aps-environment" || echo "0"
+            echo "  Sign in with Apple entitlement present:"
+            security cms -D -i "$f" 2>/dev/null | grep -c "com.apple.developer.applesignin" || echo "0"
+          done
 
           # Patch project.pbxproj with the UUID of the freshly fetched profile.
           xcode-project use-profiles
