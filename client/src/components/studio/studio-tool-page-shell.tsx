@@ -79,7 +79,7 @@ export function StudioToolPageShell({
   const tier = me?.tier ?? "free";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-24" data-testid="page-studio-tool">
+    <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-24 overflow-x-hidden" data-testid="page-studio-tool">
       {/* sticky header */}
       <div className="sticky top-0 z-30 backdrop-blur-md bg-black/40 border-b border-white/5">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-2">

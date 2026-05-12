@@ -836,7 +836,7 @@ export default function VerifyInspect() {
         location: locationStr,
         locationApprox: locationMode === "full" ? locationApproxFull : `${vizip} area`,
         zip: locationZip,
-        ...(viGpsLat && viGpsLng ? { gpsLat: parseFloat(viGpsLat), gpsLng: parseFloat(viGpsLng) } : {}),
+        ...(viGpsLat && viGpsLng ? { lat: parseFloat(viGpsLat), lng: parseFloat(viGpsLng) } : {}),
         urgentSwitch: viurgent,
         isBounty: isBounty,
         serviceType: selectedServiceType?.name || "",
@@ -2459,13 +2459,20 @@ export default function VerifyInspect() {
             ) : (
               <>
                 <Shield className="w-4 h-4" />
-                {isDemoUser ? "SUBMIT REQUEST" : `SUBMIT REQUEST — PAY $${totalCharge > 0 ? totalCharge.toFixed(2) : "0.00"}`}
+                {isDemoUser
+                  ? "SUBMIT REQUEST"
+                  : urgentFee > 0
+                    ? `POST V&I — +$${urgentFee.toFixed(2)} URGENT`
+                    : "POST V&I — FREE"}
               </>
             )}
           </Button>
 
           <p className="text-[10px] text-muted-foreground/50 text-center leading-relaxed px-2" data-testid="text-vi-form-disclaimer">
-            Verify &amp; Inspect provides visual documentation only — not a legal guarantee of condition or authenticity. Use your own judgement before making purchasing decisions.
+            Posting is free. Your verifier offer{urgentFee > 0 ? " and urgent fee" : ""} is only charged when a worker locks in.
+          </p>
+          <p className="text-[10px] text-muted-foreground/50 text-center leading-relaxed px-2 mt-0.5">
+            Verify &amp; Inspect provides visual documentation only — not a legal guarantee of condition or authenticity.
           </p>
         </div>
       </div>

@@ -685,7 +685,7 @@ export default function StudioPageV2() {
     studioSearchParams.get("subscription") === "success";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-32" data-testid="page-studio">
+    <div className="min-h-screen bg-gradient-to-b from-black via-neutral-950 to-black text-white pb-32 overflow-x-hidden" data-testid="page-studio">
       <MobileReturnBanner show={studioPurchaseSuccess} paramsToStrip={["credits", "subscription"]} />
       {/* ─── HERO ─────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
