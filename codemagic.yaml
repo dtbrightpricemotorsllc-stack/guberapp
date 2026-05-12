@@ -112,6 +112,11 @@ workflows:
             <string>manual</string>
             <key>teamID</key>
             <string>7MC93QFW6Q</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.guber.app</key>
+              <string>GUBER_Profile_v3</string>
+            </dict>
           </dict>
           </plist>
           PLIST
