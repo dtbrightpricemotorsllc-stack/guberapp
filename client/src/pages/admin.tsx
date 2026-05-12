@@ -3430,6 +3430,7 @@ const [geocoding, setGeocoding] = useState(false);
 const [zipInput, setZipInput] = useState("");
 const [zipGeocoding, setZipGeocoding] = useState(false);
 const [useLocating, setUseLocating] = useState(false);
+const useLocatingRef = useRef(false);
 const [clueUploading, setClueUploading] = useState(false);
 
 // Auto-open form and prefill from sponsor when directed from Sponsors tab
@@ -3543,16 +3544,26 @@ finally { setZipGeocoding(false); }
 };
 
 const handleUseLocation = () => {
+// Ref guard prevents the double-tap race where React hasn't re-rendered
+// the disabled prop yet, causing two simultaneous location requests and
+// two error toasts when both timeout.
+if (useLocatingRef.current) return;
+useLocatingRef.current = true;
 setUseLocating(true);
-gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000 })
   .then((pos) => {
     const lat = pos.coords.latitude.toFixed(6);
     const lng = pos.coords.longitude.toFixed(6);
     setForm(f => ({ ...f, gpsLat: lat, gpsLng: lng }));
     toast({ title: "Location captured", description: `${lat}, ${lng}` });
     setUseLocating(false);
+    useLocatingRef.current = false;
   })
-  .catch(() => { toast({ title: "Could not get location", variant: "destructive" }); setUseLocating(false); });
+  .catch(() => {
+    toast({ title: "Could not get location", variant: "destructive" });
+    setUseLocating(false);
+    useLocatingRef.current = false;
+  });
 };
 
 const { data: drops, isLoading } = useQuery<any[]>({
