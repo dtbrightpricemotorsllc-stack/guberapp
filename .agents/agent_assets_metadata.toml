@@ -197,3 +197,15 @@ id = "thT5l44sNNhN-_CwjCeI_"
 uri = "file://attached_assets/appstore/real/04_ai_or_not.png"
 type = "image"
 title = "4. AI Or Not (real app)"
+
+[[outputs]]
+id = "h1RGxtugCHK4npeoTKj7X"
+uri = "file://investor-materials/GUBER-Investor-Deck.pdf"
+type = "pdf"
+title = "GUBER Investor Deck"
+
+[[outputs]]
+id = "_yynmQ6bkujFel0nbVtIL"
+uri = "file://investor-materials/GUBER-Executive-Summary.pdf"
+type = "pdf"
+title = "GUBER Executive Summary"
