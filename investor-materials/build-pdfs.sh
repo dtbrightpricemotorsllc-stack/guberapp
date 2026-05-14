@@ -29,10 +29,11 @@ render() {
     --headless \
     --disable-gpu \
     --no-sandbox \
+    --disable-dev-shm-usage \
     --no-pdf-header-footer \
     --print-to-pdf-no-header \
     --hide-scrollbars \
-    --virtual-time-budget=10000 \
+    --virtual-time-budget=30000 \
     --print-to-pdf="$out" \
     "file://$src" >/dev/null 2>&1
 }
