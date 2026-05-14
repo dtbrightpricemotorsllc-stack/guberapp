@@ -281,7 +281,7 @@ export const INVESTOR_CONFIG = {
     headline: "The ask.",
     raise: "$150,000 – $300,000",
     valuation: "$1.3M pre-money",
-    structure: "Equity or structured profit-share against platform-fee revenue — open to either. Speed of close is weighted heavily.",
+    structure: "SAFE equity financing. Speed of close is weighted heavily.",
     useHeadline: "Raising $150,000–$300,000 to scale GUBER nationwide through team expansion, launch-city growth, business partnerships, sponsorship outreach, iOS App Store launch, and operational infrastructure. Product is already live on web and Google Play — capital goes toward execution and growth, not starting from zero.",
     use: [
       "Team expansion.",
