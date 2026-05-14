@@ -397,27 +397,27 @@
 
   <!-- 8. THE COST STORY -->
   <section class="slide">
-    <h2>Operating cost ≈ <span class="neon">$0/day idle.</span></h2>
+    <h2>Low idle infrastructure cost.</h2>
     <div class="grid-2" style="margin-top:3vh;align-items:center">
       <div>
-        <p style="font-size:1.5vw">In April 2026 we re-architected the production deployment from always-warm to <span class="neon">true serverless autoscale</span>:</p>
+        <p style="font-size:1.5vw">In April 2026 we re-architected the production deployment from always-warm to <span class="neon">serverless autoscaling</span>:</p>
         <ul>
           <li>Eliminated all in-process timers and background jobs.</li>
           <li>Moved every periodic sweep behind a single secured external cron endpoint.</li>
           <li>Replaced the always-warm pinger with a free 2-minute scheduled GET.</li>
         </ul>
-        <p class="muted" style="margin-top:2vh;font-size:1.2vw">The platform now scales to zero between requests — we pay only when users actually use it.</p>
+        <p class="muted" style="margin-top:2vh;font-size:1.2vw">Lean infrastructure built to scale. Re-architected from roughly <span class="neon">$50/day</span> infrastructure cost to <span class="neon">near-zero idle cost</span> through serverless autoscaling. Costs scale with usage and revenue, not calendar time.</p>
       </div>
       <div style="display:flex;flex-direction:column;gap:3vh;align-items:center">
         <div class="bigstat"><div class="v">~$50</div><div class="l">per day · before</div></div>
         <div style="font-size:3vw;color:var(--neon)">↓</div>
-        <div class="bigstat"><div class="v">~$0</div><div class="l">per day · idle now</div></div>
-        <div class="pill" style="font-size:1.2vw">~99% reduction</div>
+        <div class="bigstat"><div class="v">Near-zero</div><div class="l">idle cost · now</div></div>
+        <div class="pill" style="font-size:1.2vw">Serverless autoscale</div>
       </div>
     </div>
     <p class="muted center" style="margin-top:3vh;font-size:1vw">
       Investor takeaway: <span class="neon">lean infrastructure and multiple revenue streams create strong long-term scaling potential.</span>
-      Infrastructure scales linearly with revenue, not with calendar time.
+      Costs scale with usage and revenue, not calendar time.
     </p>
   </section>
 
