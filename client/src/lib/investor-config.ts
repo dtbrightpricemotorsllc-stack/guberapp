@@ -44,7 +44,7 @@ export const INVESTOR_CONFIG = {
       },
     ],
     closer:
-      "Trillions of dollars of micro-services move through informal channels every year with zero infrastructure for trust, payment, or proof.",
+      "Hundreds of billions of dollars of micro-services move through informal channels every year with zero infrastructure for trust, payment, or proof.",
   },
 
   solution: {
