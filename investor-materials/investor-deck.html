@@ -386,16 +386,42 @@
     <p class="disclaimer">Market projections are third-party estimates and do not represent guaranteed company performance.</p>
   </section>
 
-  <!-- 8. BUSINESS MODEL -->
+  <!-- 8. BUSINESS MODEL · DETAILED MONETIZATION TABLE -->
   <section class="slide">
     <h2>How GUBER makes money.</h2>
-    <p class="muted" style="font-size:1.15vw;margin:0;max-width:95ch">Multiple revenue streams across transactions, subscriptions, sponsorships, and B2B — all wired to Stripe today.</p>
-    <div style="display:flex;gap:.6vw;margin-top:1.5vh;font-size:.85vw;flex-wrap:wrap">
-      <span class="pill" style="border-color:rgba(57,255,20,.4)">Transactions</span>
-      <span class="pill purple">Subscriptions</span>
-      <span class="pill" style="border-color:rgba(255,176,32,.4);color:var(--gold)">Sponsorship · Ads</span>
-      <span class="pill" style="border-color:rgba(255,176,32,.4);color:var(--gold)">B2B · Infrastructure</span>
+    <p class="muted" style="font-size:1vw;margin:.5vh 0 0;max-width:95ch">Eleven distinct revenue streams. All wired to Stripe.</p>
+    <div class="card" style="margin-top:2vh;padding:1.6vh 1.5vw">
+      <table style="width:100%;border-collapse:collapse;font-size:.85vw">
+        <thead>
+          <tr style="text-align:left;color:var(--neon);text-transform:uppercase;letter-spacing:.12em;font-size:.7vw">
+            <th style="padding:.7vh .6vw;width:28%">Stream</th>
+            <th style="padding:.7vh .6vw;width:32%">Who pays</th>
+            <th style="padding:.7vh .6vw;width:22%">Price</th>
+            <th style="padding:.7vh .6vw;width:18%">Status</th>
+          </tr>
+        </thead>
+        <tbody style="line-height:1.7">
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Job platform fee</td><td class="muted">Job poster (taken from helper share)</td><td><span class="neon" style="font-weight:700">20%</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Job processing fee</td><td class="muted">Job poster (added on top)</td><td><span class="neon" style="font-weight:700">3.2%</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Worker cashout — early</td><td class="muted">Helper</td><td><span class="neon" style="font-weight:700">2%</span></td><td><span class="pill" style="border-color:rgba(255,176,32,.5);color:var(--gold);font-size:.7vw;padding:.2vh .6vw">Flag-gated</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Worker cashout — instant</td><td class="muted">Helper</td><td><span class="neon" style="font-weight:700">5%</span></td><td><span class="pill" style="border-color:rgba(255,176,32,.5);color:var(--gold);font-size:.7vw;padding:.2vh .6vw">Flag-gated</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Trust Box subscription</td><td class="muted">End user</td><td><span class="neon" style="font-weight:700">$4.99 / mo</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Day-1 OG tier</td><td class="muted">Helper / supporter</td><td><span class="neon" style="font-weight:700">One-time</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Business verification</td><td class="muted">Business</td><td><span class="neon" style="font-weight:700">$49 one-time</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Business Scout Plan</td><td class="muted">Business</td><td><span class="neon" style="font-weight:700">$99 / mo</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Extra unlock packs</td><td class="muted">Business</td><td><span class="neon" style="font-weight:700">Per-pack</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Marketplace boost (7-day featured)</td><td class="muted">Seller</td><td><span class="neon" style="font-weight:700">Per-listing</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Cash Drop sponsorships</td><td class="muted">Brand sponsor</td><td><span class="neon" style="font-weight:700">Sponsor + platform share</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Observation marketplace</td><td class="muted">Business buyer (helper gets 80%)</td><td><span class="neon" style="font-weight:700">20% platform fee</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Direct Offers (Stripe Connect)</td><td class="muted">Hirer (gross-up math)</td><td><span class="neon" style="font-weight:700">Application fee</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
+          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Sponsored visibility / content licensing</td><td class="muted">Brand sponsor</td><td><span class="neon" style="font-weight:700">Per-impression / pack</span></td><td><span class="pill purple" style="font-size:.7vw;padding:.2vh .6vw">Emerging</span></td></tr>
+        </tbody>
+      </table>
     </div>
+  </section>
+
+  <!-- (legacy 11-card grid removed in favor of detailed table above) -->
+  <div style="display:none">
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1vw;margin-top:1.8vh">
       <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);opacity:.7">01</span><h4 class="neon">Marketplace transaction fees</h4><p>Take rate on every job completed through the marketplace. Pay-on-lock-in.</p></div>
       <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);opacity:.7">02</span><h4 class="neon">Verify &amp; Inspect fees</h4><p>Per-verification revenue on V&amp;I jobs — vehicles, properties, listings, salvage.</p></div>
