@@ -202,10 +202,10 @@ title = "4. AI Or Not (real app)"
 id = "h1RGxtugCHK4npeoTKj7X"
 uri = "file://investor-materials/GUBER-Investor-Deck.pdf"
 type = "pdf"
-title = "GUBER Investor Deck (final polish — SAFE financing, single contact)"
+title = "GUBER Investor Deck (with Vision + Guber Loop slides)"
 
 [[outputs]]
 id = "_yynmQ6bkujFel0nbVtIL"
 uri = "file://investor-materials/GUBER-Executive-Summary.pdf"
 type = "pdf"
-title = "GUBER Executive Summary (final polish)"
+title = "GUBER Executive Summary (with vision paragraph)"
