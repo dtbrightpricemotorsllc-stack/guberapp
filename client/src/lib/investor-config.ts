@@ -7,8 +7,8 @@ export const INVESTOR_CONFIG = {
     description:
       "Trust-enforced local visibility network. Verified identity, on-platform money, structured proof of work. Live on web and Google Play.",
     contactEmail: "Guberapp.global@gmail.com",
-    contactPhone: "+13362579787",
-    contactPhoneDisplay: "(336) 257-9787",
+    contactPhone: "+12512849412",
+    contactPhoneDisplay: "(251) 284-9412",
     contactMobileDisplay: "(251) 284-9412",
     publicUrl: "https://guberapp.com",
     confidentialNote: "Confidential — for invited investors only. Do not redistribute.",
