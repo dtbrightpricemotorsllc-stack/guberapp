@@ -282,12 +282,13 @@ export const INVESTOR_CONFIG = {
     raise: "$150,000 – $300,000",
     valuation: "$1.3M pre-money",
     structure: "Equity or structured profit-share against platform-fee revenue — open to either. Speed of close is weighted heavily.",
-    useHeadline: "Capital deploys to scale GUBER nationwide through user growth, business partnerships, platform expansion, and launch execution.",
+    useHeadline: "Raising $150,000–$300,000 to scale GUBER nationwide through team expansion, launch-city growth, business partnerships, sponsorship outreach, iOS App Store launch, and operational infrastructure. Product is already live on web and Google Play — capital goes toward execution and growth, not starting from zero.",
     use: [
-      "User acquisition in key launch cities.",
+      "Team expansion.",
+      "Launch-city growth & user acquisition.",
       "Business partnerships & sponsorship outreach.",
-      "Apple App Store + Android production launch.",
-      "Infrastructure, operations, and growth runway.",
+      "iOS App Store launch.",
+      "Operational infrastructure & growth runway.",
     ],
     whyNow: [
       "Product is shipped — capital goes straight to growth, not engineering.",
