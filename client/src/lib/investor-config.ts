@@ -268,6 +268,7 @@ export const INVESTOR_CONFIG = {
     headline: "About the founder.",
     name: "Dimetris Bowden",
     role: "Founder & CEO, GUBER Global LLC",
+    photo: "/founder.jpg",
     body: [
       "GUBER was built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand.",
       "The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed under the core platform is in production code today.",

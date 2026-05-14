@@ -721,6 +721,11 @@ export default function Investors() {
           <div className="inv-card p-7 sm:p-9" style={{ borderColor: `${NEON_GREEN}33` }}>
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1">
+                {(C.founder as any).photo && (
+                  <div className="mb-4 rounded-xl overflow-hidden" style={{ border: `1px solid ${NEON_GREEN}55`, boxShadow: `0 0 24px ${NEON_GREEN}22` }}>
+                    <img src={(C.founder as any).photo} alt={C.founder.name} className="w-full h-auto block" data-testid="img-founder-photo" />
+                  </div>
+                )}
                 <div className="num-font text-xs uppercase tracking-[0.18em] text-muted-foreground mb-2">Built by</div>
                 <div className="text-2xl font-bold text-white" data-testid="text-founder-name-section">{C.founder.name}</div>
                 <div className="text-sm text-muted-foreground mt-1">{C.founder.role}</div>
