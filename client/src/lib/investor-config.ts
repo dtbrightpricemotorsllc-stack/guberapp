@@ -18,7 +18,7 @@ export const INVESTOR_CONFIG = {
     eyebrow: "PRIVATE INVESTOR BRIEF · 2026",
     headline: "GUBER",
     tagline: "Trust-enforced local visibility network.",
-    sub: "The local services marketplace built around verified identity, on-platform money, and structured proof of work. Live on web and Google Play.",
+    sub: "The local services marketplace built around verified identity, on-platform money, and structured proof of work. Live on web and Google Play. An Economic Super App — a place where the user goes to build a life, not just scroll through a feed.",
     primaryCta: { label: "VIEW THE OPPORTUNITY", target: "section-funding-ask" },
     secondaryCta: { label: "CONTACT THE FOUNDER", target: "section-investor-cta" },
   },
