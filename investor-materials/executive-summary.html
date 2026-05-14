@@ -68,36 +68,38 @@
     </div>
     <div class="meta">
       Executive Summary · 2026<br/>
-      guberapp.app
+      guberapp.com
     </div>
   </div>
 
   <div>
     <h2>The opportunity</h2>
-    <p>Hundreds of billions of dollars of local micro-services move through Craigslist, Facebook groups, and cash every year — with zero infrastructure for trust, payment, or proof. GUBER is the trust layer: <span class="neon">verified identity on both sides</span>, <span class="neon">money on-platform via Stripe Connect</span>, and <span class="neon">structured proof of work with GPS-locked photos and checklists</span>. Live on web and native iOS.</p>
+    <p>Hundreds of billions of dollars of local micro-services move through Craigslist, Facebook groups, and cash every year — with zero infrastructure for trust, payment, or proof. GUBER is the trust layer: <span class="neon">verified identity on both sides</span>, <span class="neon">money on-platform via Stripe Connect</span>, and <span class="neon">structured proof of work with GPS-locked photos and checklists</span>. Live on web and Google Play; iOS App Store submission in progress.</p>
   </div>
 
   <div class="row">
     <div>
       <h2>What's already shipped</h2>
       <ul>
-        <li>50+ user-facing pages on web + Capacitor iOS app</li>
+        <li>50+ user-facing pages on web + Capacitor Android app (iOS in submission)</li>
         <li>50+ database tables: jobs, payments, money ledger, disputes, businesses, sponsors, observations</li>
-        <li>Two Stripe accounts (subscriptions + Connect) with split webhooks</li>
-        <li>Push notifications: VAPID web-push + APNs direct</li>
+        <li>Stripe Connect: subscriptions, one-time purchases, Connect payouts with split webhooks</li>
+        <li>Cloudinary + Cloudflare R2 integrated for media storage at scale</li>
+        <li>Google Sign-in live; Sign in with Apple + Apple Pay in process</li>
+        <li>Push notifications: VAPID web-push + APNs direct delivery</li>
         <li>Admin panel, dispute resolution, soft-delete + retention</li>
       </ul>
     </div>
     <div>
-      <h2>Eleven live revenue streams</h2>
+      <h2>Multiple live revenue streams</h2>
       <ul>
         <li>Job platform fee 20% + 3.2% processing</li>
         <li>Trust Box subscription $4.99/mo</li>
+        <li>Day-1 OG one-time tier ($1.99) — Stripe-live today</li>
         <li>Business verification $49 + Scout Plan $99/mo + add-on unlocks</li>
-        <li>Marketplace boosts (7-day featured)</li>
-        <li>Cash Drop brand sponsorships</li>
-        <li>Observation marketplace (20% take)</li>
-        <li>Direct Offers via Stripe Connect application_fee</li>
+        <li>Cash Drop brand sponsorships (~60% gross margin)</li>
+        <li>GUBER Studio: 6 credit packs ($5–$200) + 3 tiers ($10.99 / $37.99 / $99 mo)</li>
+        <li>Marketplace boosts · Observation marketplace (20% take) · Direct Offers</li>
       </ul>
     </div>
   </div>
@@ -106,57 +108,44 @@
     <div class="card">
       <h2>Cost story</h2>
       <div class="stat" style="margin-top:4pt"><div class="v">~$0</div><div class="l">per day idle</div></div>
-      <p style="margin-top:4pt">Re-architected to true serverless autoscale — down from ~$50/day. Infrastructure now scales linearly with revenue, not calendar time.</p>
+      <p style="margin-top:4pt">Lean infrastructure built to scale. Re-architected to true serverless autoscale (down from ~$50/day). Costs scale linearly with revenue, not calendar time.</p>
     </div>
     <div class="card">
       <h2>Defensibility</h2>
       <p style="margin-top:4pt">Verified-identity + proof-of-work dataset that compounds per user. None of the incumbents (Craigslist, TaskRabbit, Uber) collect this. Combined B2B side (Scout Plan + Observations) gives a second revenue engine no peer-to-peer competitor has.</p>
     </div>
     <div class="card">
-      <h2>Network effect</h2>
-      <p style="margin-top:4pt">Every new verified helper makes the marketplace more useful for posters, more attractive to businesses, and more valuable to data buyers. Cash Drops are sponsor-funded acquisition events.</p>
+      <h2>Two revenue rails</h2>
+      <p style="margin-top:4pt">Marketplace prints transaction revenue (20% take). GUBER Studio (AI media engine baked into every account) prints high-margin digital revenue from the same users — zero extra acquisition cost.</p>
     </div>
   </div>
 
   <div>
-    <h2>Monetization at a glance</h2>
-    <table>
-      <thead><tr><th>Stream</th><th>Who pays</th><th>Price</th><th>Status</th></tr></thead>
-      <tbody>
-        <tr><td>Job platform fee</td><td>Poster (taken from helper share)</td><td class="num">20%</td><td>Live</td></tr>
-        <tr><td>Job processing fee</td><td>Poster</td><td class="num">3.2%</td><td>Live</td></tr>
-        <tr><td>Trust Box subscription</td><td>End user</td><td class="num">$4.99 / mo</td><td>Live</td></tr>
-        <tr><td>Business Scout Plan</td><td>Business</td><td class="num">$99 / mo</td><td>Live</td></tr>
-        <tr><td>Business verification fee</td><td>Business</td><td class="num">$49 once</td><td>Live</td></tr>
-        <tr><td>Cash Drop sponsorships</td><td>Brand</td><td class="num">Sponsor + platform share</td><td>Live</td></tr>
-        <tr><td>Observation marketplace</td><td>Buyer (helper 80%)</td><td class="num">20%</td><td>Live</td></tr>
-        <tr><td>Marketplace boost</td><td>Seller</td><td class="num">7-day featured</td><td>Live</td></tr>
-        <tr><td>Sponsored visibility / content</td><td>Brand</td><td class="num">Per-impression / pack</td><td>Emerging</td></tr>
-      </tbody>
-    </table>
+    <h2>Cash Drops · sponsor-funded growth engine</h2>
+    <p>Brands sponsor geo-targeted Cash Drop rewards. GUBER builds the drop, runs the gamification, and pays the winners. <span class="neon">~40% to winner cash + costs, ~60% gross platform margin.</span> 27 drops already live with public Facebook winners. <span class="purple">Migration plan:</span> moving all sponsor billing onto Stripe in the next release so every sponsor dollar flows through the same money ledger — clean invoicing, full audit trail.</p>
   </div>
 
   <div class="row" style="margin-top:auto">
     <div>
-      <h2>Traction (live database · refreshed May 6, 2026)</h2>
+      <h2>Traction (real, no inflation)</h2>
       <ul>
-        <li>Total users to date: <span class="neon">294</span></li>
-        <li>Verified helpers (ID + selfie passed): <span class="neon">22</span></li>
-        <li>Lifetime jobs posted (real, excl. seed/demo): <span class="neon">15</span> · <span class="neon">14</span> paid through Stripe</li>
-        <li>GMV booked through Stripe: <span class="neon">$1,172</span> (≈$987 paid to helpers · $181 platform-fee revenue)</li>
-        <li>Active anchor metros (distinct ZIPs with real jobs): <span class="neon">8</span> · <span class="neon">27</span> Cash Drops · <span class="neon">1</span> verified business account</li>
+        <li>Verified non-sex-offender users: <span class="neon">310+</span> · 100% organic</li>
+        <li>ID-verified helpers (gov ID + selfie): <span class="neon">22</span></li>
+        <li>Lifetime real jobs (excl. seed/demo): <span class="neon">15</span></li>
+        <li>Sponsored Cash Drops in market: <span class="neon">27</span> · winners posting publicly on Facebook</li>
+        <li>Stripe GMV (Day-1 OG tier): <span class="neon">$53.76</span> across 24 paid charges · zero paid acquisition</li>
       </ul>
     </div>
     <div>
       <h2>The ask</h2>
-      <p>Raising <span class="neon">$[___]</span> as equity OR a structured profit-share against platform-fee revenue. Capital deploys to paid acquisition in anchor metros, B2B sales hires for Scout Plan + Cash Drop sponsorships, and App Store launch polish. <span class="neon">Product is shipped — capital is growth, not engineering.</span></p>
-      <p style="margin-top:6pt"><span class="purple">Contact:</span> support@guberapp.com · (336) 257-9787 · Mobile (251) 284-9412 · guberapp.app</p>
+      <p>Raising <span class="neon">$150,000 – $300,000</span> as equity OR a structured profit-share against platform-fee revenue. Capital deploys to scale GUBER nationwide: user acquisition in launch cities, business partnerships & sponsorship outreach, Apple App Store + Android production launch, and infrastructure / operations / growth runway. <span class="neon">Product is shipped — capital is growth, not engineering.</span></p>
+      <p style="margin-top:6pt"><span class="purple">Contact:</span> Guberapp.global@gmail.com · (336) 257-9787 · Mobile (251) 284-9412 · guberapp.com</p>
     </div>
   </div>
 
   <div class="footer">
     <span>GUBER · CONFIDENTIAL</span>
-    <span>guberapp.app</span>
+    <span>guberapp.com</span>
   </div>
 </div>
 </body>

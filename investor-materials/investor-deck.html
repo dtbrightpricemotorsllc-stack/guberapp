@@ -110,10 +110,10 @@
     <p style="margin-top:6vh;font-size:1.4vw;color:var(--muted);max-width:60ch">
       The local services marketplace built around <span class="neon">verified identity</span>,
       <span class="neon">on-platform money</span>, and <span class="neon">structured proof of work</span>.
-      Live on web and iOS. Multi-sided revenue. Idle infrastructure cost ~<span class="neon">$0/day</span>.
+      Live on web and Google Play. App Store launch in progress. Multi-sided revenue. Lean infrastructure built to scale.
     </p>
     <div style="margin-top:8vh;color:var(--muted);font-size:1vw;letter-spacing:.1em;text-transform:uppercase">
-      Investor / Profit-Share Brief · 2026 · guberapp.app
+      Investor / Profit-Share Brief · 2026 · guberapp.com
     </div>
   </section>
 
@@ -173,7 +173,7 @@
   <!-- 4. PRODUCT — WHAT'S BUILT -->
   <section class="slide">
     <h2>This is shipped software.</h2>
-    <p class="muted" style="font-size:1.3vw;margin-top:0">Not a deck. Not a prototype. <span class="neon">50+ live product surfaces</span> on web + native iOS today.</p>
+    <p class="muted" style="font-size:1.3vw;margin-top:0">Not a deck. Not a prototype. <span class="neon">50+ live product surfaces</span> on web + native Android today. iOS App Store submission in progress.</p>
     <div class="grid-4" style="margin-top:3vh">
       <div class="card"><h4 class="neon">Jobs Marketplace</h4><p>Guided builder, V&I smart forms, time-based pricing, barter, milestones, GPS proof, auto-pay-increase.</p></div>
       <div class="card"><h4 class="neon">Direct Offers</h4><p>Real-time worker→hirer offers via Stripe Connect with structured counters and 60-min expiry.</p></div>
@@ -254,23 +254,105 @@
       <div>
         <ul>
           <li><span class="neon">50+ live database tables</span> — jobs, payments, money ledger, disputes, business accounts, sponsors, observations, credentials.</li>
-          <li><span class="neon">50+ user-facing pages</span> across web + native iOS (Capacitor).</li>
-          <li><span class="neon">Two Stripe accounts</span> wired for split monetization (subscriptions vs Connect payouts) with separate webhooks.</li>
+          <li><span class="neon">50+ user-facing pages</span> across web + native Android (Capacitor). iOS submission in progress.</li>
+          <li><span class="neon">Stripe Connect</span> wired for split monetization (subscriptions, one-time purchases, Connect payouts) with separate webhooks.</li>
+          <li><span class="neon">Cloudinary + Cloudflare R2</span> already integrated for image / media storage at scale.</li>
+          <li>OAuth: <span class="neon">Google Sign-in</span> live web + native. Sign in with Apple + Apple Pay in process for the next App Store build.</li>
           <li>Push notifications: <span class="neon">VAPID web-push + APNs direct delivery</span> for native iOS.</li>
-          <li>OAuth: Google web + native. Sign in with Apple + Apple Pay queued for the next App Store build.</li>
           <li>Admin panel with role-based access for users, jobs, catalog, disputes, proof templates.</li>
         </ul>
       </div>
       <div>
         <h3>Real numbers, pulled from production</h3>
-        <p class="muted" style="font-size:1.1vw">Live database snapshot · last refreshed May 6, 2026.</p>
+        <p class="muted" style="font-size:1.1vw">All figures actual — no inflation, no projections.</p>
         <div class="grid-2" style="margin-top:1vh;gap:1.5vw">
-          <div class="card"><div class="num">294</div><h4>Total registered users</h4><p>To-date signups</p></div>
-          <div class="card"><div class="num">22</div><h4>Verified helpers</h4><p>ID + selfie passed</p></div>
+          <div class="card"><div class="num">310+</div><h4>Verified non-sex-offender users</h4><p>100% organic acquisition</p></div>
+          <div class="card"><div class="num">22</div><h4>ID-verified helpers</h4><p>Government ID + selfie passed</p></div>
           <div class="card"><div class="num">15</div><h4>Real jobs posted</h4><p>Lifetime, excl. seed/demo</p></div>
-          <div class="card"><div class="num">$1.2K</div><h4>GMV booked</h4><p>14 paid jobs · $987 paid out to helpers · $181 platform fee</p></div>
+          <div class="card"><div class="num">$53.76</div><h4>Stripe GMV (Day-1 OG)</h4><p>24 paid charges to date · zero paid acquisition</p></div>
         </div>
-        <p class="muted" style="font-size:.9vw;margin-top:1.2vh">Plus: 27 Cash Drops created · 1 verified business account · 8 distinct anchor ZIPs with paid jobs.</p>
+        <p class="muted" style="font-size:.9vw;margin-top:1.2vh">Plus: <span class="neon">27 sponsored Cash Drops</span> already in market with real winners posting publicly on Facebook (see proof slide).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7b. CASH DROP ECONOMICS -->
+  <section class="slide">
+    <h2>Cash Drops · sponsor-funded growth engine.</h2>
+    <p class="muted" style="font-size:1.3vw;margin-top:0">Brand sponsors fund geo-targeted treasure-hunt rewards. GUBER builds the drop, places it on the map, runs the gamification, and pays the winners.</p>
+    <div class="grid-2" style="margin-top:3vh;align-items:center">
+      <div>
+        <ul>
+          <li>Sponsor pays GUBER a single rate to launch a Cash Drop in their target city or zip.</li>
+          <li>GUBER allocates ~<span class="neon">40%</span> to winner payouts, costs, and brand creative.</li>
+          <li>Remaining ~<span class="neon">60%</span> is gross platform margin.</li>
+          <li>Each drop is also a free user-acquisition event — every winner posts proof to social, every player downloads the app to participate.</li>
+          <li><span class="neon">27 sponsored Cash Drops</span> already in market. Multiple winners have publicly posted on Facebook.</li>
+        </ul>
+        <p class="muted" style="margin-top:2vh;font-size:1.05vw"><span class="purple">Migration plan:</span> sponsor billing is collected directly today during the grassroots launch phase. Migrating all sponsor billing onto Stripe in the next release so every sponsor dollar flows through the same money ledger as the rest of the platform — clean invoicing, instant receipts, full audit trail.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3vh;align-items:center">
+        <div class="bigstat"><div class="v">~60%</div><div class="l">gross platform margin</div></div>
+        <div style="font-size:2vw;color:var(--purple)">on every sponsor dollar</div>
+        <div class="bigstat"><div class="v">27</div><div class="l">drops live in market</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7c. PROOF — REAL CASH DROP WINNERS -->
+  <section class="slide">
+    <h2>Real winners. Real cash. Real social proof.</h2>
+    <p class="muted" style="font-size:1.2vw;margin-top:0">Public Facebook posts from sponsored Cash Drop winners and grassroots launch creative. Zero paid acquisition.</p>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1.2vw;margin-top:3vh;align-items:start">
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:9/16;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260426_204611_Facebook_1778199034008.jpg" alt="Cash Drop winner — Jamie K." style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.6vw 0 0;font-size:.85vw;color:var(--ink)"><span class="neon">Jamie K.</span> — "Going straight to my church!"</p>
+      </div>
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:9/16;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260426_064824_Facebook_1778199034038.jpg" alt="Cash Drop winner — Kyle H." style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.6vw 0 0;font-size:.85vw;color:var(--ink)"><span class="neon">Kyle H.</span> — Found in ~30 minutes.</p>
+      </div>
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:9/16;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260420_042305_Facebook_1778199034079.jpg" alt="Cash Drop winner — Klin B." style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.6vw 0 0;font-size:.85vw;color:var(--ink)"><span class="neon">Klin B.</span> — Found in the steering wheel.</p>
+      </div>
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:9/16;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260331_102503_Facebook_1778199034115.jpg" alt="Cash Drop winner — James E." style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.6vw 0 0;font-size:.85vw;color:var(--ink)"><span class="neon">James E.</span> — Early adopter winner.</p>
+      </div>
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:9/16;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260414_205025_Facebook_1778199034088.jpg" alt="Cash Drop community winner" style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.6vw 0 0;font-size:.85vw;color:var(--ink)"><span class="neon">Community.</span> — Real winner. Real cash.</p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vw;margin-top:2vh;align-items:start">
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:16/10;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260427_203110_Business_Suite_1778199033998.jpg" alt="Facebook engagement — Business Suite" style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.5vw 0 0;font-size:.8vw;color:var(--muted)">Organic engagement · 60–80+ reactions per post · zero paid promotion.</p>
+      </div>
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:16/10;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260426_064428_Facebook_1778199034069.jpg" alt="Cash Drop launch creative" style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.5vw 0 0;font-size:.8vw;color:var(--muted)">Cash Drop launch creative — built and posted in-house.</p>
+      </div>
+      <div class="card" style="padding:.6vw;background:#0f0f0f">
+        <div style="aspect-ratio:16/10;background:#000;border-radius:8px;overflow:hidden">
+          <img src="../attached_assets/Screenshot_20260504_141354_Messages_1778199033968.jpg" alt="In-app organic conversation" style="width:100%;height:100%;object-fit:cover" />
+        </div>
+        <p style="margin:.5vw 0 0;font-size:.8vw;color:var(--muted)">Real users in the wild — organic reach driven by Cash Drops.</p>
       </div>
     </div>
   </section>
@@ -296,7 +378,7 @@
       </div>
     </div>
     <p class="muted center" style="margin-top:3vh;font-size:1vw">
-      Investor takeaway: <span class="neon">unit economics work from user #1.</span>
+      Investor takeaway: <span class="neon">lean infrastructure and multiple revenue streams create strong long-term scaling potential.</span>
       Infrastructure scales linearly with revenue, not with calendar time.
     </p>
   </section>
@@ -362,7 +444,7 @@
           <li><span class="neon">Verified-helper directory</span> grows with every job — credentials, ratings, proof history compound.</li>
           <li><span class="neon">B2B Scout Plan</span> drags businesses (and their bulk job volume) onto the platform. Recurring $99/mo.</li>
           <li><span class="neon">Observation Marketplace</span> turns passive walking-around into income — a unique on-ramp competitors can't match.</li>
-          <li><span class="neon">Native iOS app</span> in App Store + Sign in with Apple + Apple Pay (queued) maximize trust signals on mobile.</li>
+          <li><span class="neon">Native Android live on Google Play</span>; iOS App Store submission in progress with Sign in with Apple + Apple Pay maximizing trust signals on mobile.</li>
         </ul>
       </div>
     </div>
@@ -375,25 +457,25 @@
       <div class="card">
         <h4 class="neon">Now (0–30 days)</h4>
         <ul style="margin:0">
-          <li>Sign in with Apple + Apple Pay for App Store submission.</li>
-          <li>Cloud photo storage migration to Cloudflare R2.</li>
+          <li>Apple App Store submission with Sign in with Apple + Apple Pay.</li>
+          <li>Migrate Cash Drop sponsor billing onto Stripe — clean invoicing, automated receipts.</li>
           <li>Launch performance hardening for first-paint.</li>
         </ul>
       </div>
       <div class="card">
         <h4 class="neon">Next (30–90 days)</h4>
         <ul style="margin:0">
-          <li>Scale paid acquisition in 2–3 anchor metros.</li>
+          <li>User acquisition push in key launch cities.</li>
           <li>Activate Cash Drop sponsorship sales pipeline.</li>
-          <li>B2B sales: onboard 25 paying Scout Plan accounts.</li>
+          <li>B2B partnerships: onboard paying Scout Plan accounts.</li>
         </ul>
       </div>
       <div class="card">
         <h4 class="purple">Then (90–180 days)</h4>
         <ul style="margin:0">
+          <li>Unlock the full Marketplace — bulk job posting, broader categories, public talent directory.</li>
+          <li>Expand GUBER Content Studio — more tools, For You feed, creator program.</li>
           <li>Observation Marketplace API for insurance & marketplace partners.</li>
-          <li>Sponsored-visibility ad product.</li>
-          <li>Android store launch.</li>
         </ul>
       </div>
     </div>
@@ -424,28 +506,28 @@
     <h2>The ask.</h2>
     <div class="grid-2" style="margin-top:3vh">
       <div>
-        <p style="font-size:1.6vw">We're raising <span class="neon">$[___]</span> in exchange for either equity or a structured profit-share against platform-fee revenue.</p>
+        <p style="font-size:1.6vw">We're raising <span class="neon">$150,000 – $300,000</span> to scale GUBER nationwide — in exchange for either equity or a structured profit-share against platform-fee revenue.</p>
         <h3 style="margin-top:3vh">Use of capital</h3>
         <ul>
-          <li>Paid acquisition in anchor metros (~__%)</li>
-          <li>B2B sales hires for Scout Plan + sponsorships (~__%)</li>
-          <li>Apple App Store + Android launch polish (~__%)</li>
-          <li>12 months of runway at sub-$5/day infrastructure cost</li>
+          <li>User acquisition in key launch cities.</li>
+          <li>Business partnerships & sponsorship outreach.</li>
+          <li>Apple App Store + Android production launch.</li>
+          <li>Infrastructure, operations, and growth runway.</li>
         </ul>
       </div>
       <div>
         <h3>Why now</h3>
         <ul>
           <li>Product is shipped — capital goes straight to growth, not engineering.</li>
-          <li>Unit economics already work at scale-to-zero infra cost.</li>
-          <li>Multiple revenue streams hedge against any one not landing.</li>
-          <li>App Store presence imminent — first-mover trust signal in a still-informal market.</li>
+          <li>Lean infrastructure and multiple revenue streams create strong long-term scaling potential.</li>
+          <li>Live on Google Play; App Store imminent — first-mover trust signal in a still-informal market.</li>
+          <li>310 organic users + 22 ID-verified helpers + 27 sponsored Cash Drops with zero paid acquisition.</li>
         </ul>
         <div style="margin-top:4vh">
-          <div class="pill" style="font-size:1.1vw">support@guberapp.com</div>
+          <div class="pill" style="font-size:1.1vw">Guberapp.global@gmail.com</div>
           <div class="pill" style="font-size:1.1vw">(336) 257-9787</div>
           <div class="pill" style="font-size:1.1vw">Mobile: (251) 284-9412</div>
-          <div class="pill purple" style="font-size:1.1vw">guberapp.app</div>
+          <div class="pill purple" style="font-size:1.1vw">guberapp.com</div>
         </div>
       </div>
     </div>

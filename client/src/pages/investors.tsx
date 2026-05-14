@@ -738,6 +738,55 @@ export default function Investors() {
         </Reveal>
       </Section>
 
+      {/* 10b · CASH DROP MARGIN */}
+      {C.cashDropMargin && (
+        <Section id="section-cashdrop-margin" eyebrow={C.cashDropMargin.eyebrow} headline={C.cashDropMargin.headline} sub={C.cashDropMargin.sub}>
+          <div className="grid lg:grid-cols-5 gap-5">
+            <Reveal className="lg:col-span-3">
+              <div className="inv-card p-7 h-full">
+                <ul className="space-y-3.5 mb-5">
+                  {C.cashDropMargin.bullets.map((b, i) => (
+                    <li key={i} className="flex gap-3 text-sm sm:text-base leading-relaxed text-muted-foreground" data-testid={`text-cashdrop-bullet-${i}`}>
+                      <Check className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: NEON_GREEN }} />
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="border-t border-white/10 pt-5">
+                  <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-2" style={{ color: NEON_PURPLE }}>Stripe migration plan</div>
+                  <p className="text-sm sm:text-base leading-relaxed" style={{ color: "#d8d8de" }} data-testid="text-cashdrop-stripe-plan">{C.cashDropMargin.onPlatformPlan}</p>
+                </div>
+              </div>
+            </Reveal>
+            <Reveal className="lg:col-span-2" delay={120}>
+              <div className="inv-card p-7 h-full flex flex-col items-center justify-center text-center" style={{ borderColor: `${NEON_GREEN}55`, boxShadow: `0 0 32px hsl(152 100% 44% / .08)` }}>
+                <div className="num-font font-extrabold glow-text-green" style={{ color: NEON_GREEN, fontSize: "clamp(56px, 7vw, 96px)", lineHeight: 1 }}>~60%</div>
+                <div className="num-font text-xs uppercase tracking-[0.18em] mt-2 text-muted-foreground">gross platform margin</div>
+                <div className="text-sm mt-1 text-white">on every sponsor dollar</div>
+                <div className="mt-8 num-font font-extrabold glow-text-green" style={{ color: NEON_GREEN, fontSize: "clamp(40px, 5vw, 64px)", lineHeight: 1 }}>27</div>
+                <div className="num-font text-xs uppercase tracking-[0.18em] mt-2 text-muted-foreground">drops live in market</div>
+              </div>
+            </Reveal>
+          </div>
+        </Section>
+      )}
+
+      {/* 10c · FUTURE PLANS */}
+      {C.futurePlans && (
+        <Section id="section-future-plans" eyebrow={C.futurePlans.eyebrow} headline={C.futurePlans.headline}>
+          <div className="grid sm:grid-cols-2 gap-5">
+            {C.futurePlans.items.map((it, i) => (
+              <Reveal key={i} delay={(i % 2) * 80}>
+                <div className="inv-card p-6 inv-card-hover h-full" data-testid={`card-future-${i}`}>
+                  <h4 className="num-font text-sm uppercase tracking-[0.12em] mb-3" style={{ color: i % 2 === 0 ? NEON_GREEN : NEON_PURPLE }}>{it.title}</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{it.body}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* 11 · LEGAL / CORPORATE STACK */}
       <Section id="section-legal" eyebrow={C.legal.eyebrow} headline={C.legal.headline} sub={C.legal.sub}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -771,6 +820,9 @@ export default function Investors() {
           <Reveal delay={100}>
             <div className="inv-card p-7 h-full">
               <div className="num-font text-xs uppercase tracking-[0.15em] mb-4" style={{ color: NEON_GREEN }}>Use of capital</div>
+              {C.fundingAsk.useHeadline && (
+                <p className="text-sm leading-relaxed text-white mb-4" data-testid="text-use-headline">{C.fundingAsk.useHeadline}</p>
+              )}
               <ul className="space-y-3">
                 {C.fundingAsk.use.map((b, i) => (
                   <li key={i} className="flex gap-3 text-sm leading-relaxed text-muted-foreground" data-testid={`text-use-${i}`}>
