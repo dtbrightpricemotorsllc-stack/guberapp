@@ -43,18 +43,19 @@
   .slide{
     position:absolute;inset:0;
     display:flex;flex-direction:column;justify-content:center;
-    padding:6vh 8vw;
+    padding:5vh 7vw;
     opacity:0;pointer-events:none;
+    overflow:hidden;
     transition:opacity .25s ease;
     background:radial-gradient(circle at 20% 0%, #1a0a2a 0%, var(--bg) 55%);
   }
   .slide.active{opacity:1;pointer-events:auto}
   h1,h2,h3{font-family:'Oxanium',sans-serif;letter-spacing:.04em;margin:0 0 .4em}
   h1{font-size:6vw;line-height:1;font-weight:800;text-transform:uppercase}
-  h2{font-size:3.6vw;line-height:1.05;font-weight:800;margin-bottom:.6em}
-  h3{font-size:1.55vw;font-weight:700;color:var(--neon);letter-spacing:.05em}
-  p,li{font-size:1.25vw;line-height:1.55;color:var(--ink)}
-  .eyebrow{font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);text-transform:uppercase;letter-spacing:.22em;margin-bottom:1vh;opacity:.9}
+  h2{font-size:2.9vw;line-height:1.08;font-weight:800;margin-bottom:.4em}
+  h3{font-size:1.45vw;font-weight:700;color:var(--neon);letter-spacing:.04em}
+  p,li{font-size:1.1vw;line-height:1.5;color:var(--ink)}
+  .eyebrow{font-family:'Oxanium',sans-serif;font-size:.78vw;color:var(--neon);text-transform:uppercase;letter-spacing:.2em;margin-bottom:.6vh;opacity:.9}
   .muted{color:var(--muted)}
   .neon{color:var(--neon)}
   .purple{color:var(--purple)}
@@ -118,22 +119,22 @@
   .ptile p{font-size:.95vw;color:var(--muted);margin:0;line-height:1.45}
 
   /* Layered system tiles for product slide */
-  .layer-block{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0));border:1px solid var(--rule);border-radius:18px;padding:1.6vw 1.4vw;position:relative}
-  .layer-block::before{content:'';position:absolute;top:-1px;left:1.4vw;right:1.4vw;height:2px;border-radius:2px}
+  .layer-block{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0));border:1px solid var(--rule);border-radius:14px;padding:1.2vw 1.1vw;position:relative}
+  .layer-block::before{content:'';position:absolute;top:-1px;left:1.1vw;right:1.1vw;height:2px;border-radius:2px}
   .layer-block.core::before{background:linear-gradient(90deg,var(--neon),#5cff3a)}
   .layer-block.trust::before{background:linear-gradient(90deg,var(--purple),#c084fc)}
   .layer-block.growth::before{background:linear-gradient(90deg,var(--gold),#fbbf24)}
-  .layer-block .layer-eyebrow{font-family:'Oxanium',sans-serif;font-size:.78vw;letter-spacing:.22em;text-transform:uppercase;font-weight:700;margin-bottom:.6vh}
+  .layer-block .layer-eyebrow{font-family:'Oxanium',sans-serif;font-size:.7vw;letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:.4vh}
   .layer-block.core .layer-eyebrow{color:var(--neon)}
   .layer-block.trust .layer-eyebrow{color:var(--purple)}
   .layer-block.growth .layer-eyebrow{color:var(--gold)}
-  .layer-block h3{font-family:'Oxanium',sans-serif;font-size:1.4vw;color:#fff;margin:0 0 .8vh;letter-spacing:.04em}
-  .layer-block .layer-desc{font-size:.85vw;color:var(--muted);margin:0 0 1.2vh;line-height:1.5}
-  .layer-items{display:flex;flex-direction:column;gap:.6vh}
-  .layer-item{display:flex;justify-content:space-between;align-items:baseline;padding:.6vh 0;border-top:1px solid rgba(255,255,255,.05);font-size:.95vw}
+  .layer-block h3{font-family:'Oxanium',sans-serif;font-size:1.15vw;color:#fff;margin:0 0 .5vh;letter-spacing:.04em}
+  .layer-block .layer-desc{font-size:.78vw;color:var(--muted);margin:0 0 .9vh;line-height:1.45}
+  .layer-items{display:flex;flex-direction:column;gap:.3vh}
+  .layer-item{display:flex;justify-content:space-between;align-items:baseline;padding:.45vh 0;border-top:1px solid rgba(255,255,255,.05);font-size:.85vw}
   .layer-item:first-child{border-top:0}
   .layer-item-name{font-family:'Oxanium',sans-serif;font-weight:700;color:#fff}
-  .layer-item-tag{font-size:.75vw;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .layer-item-tag{font-size:.65vw;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
 
   /* Revenue category strip */
   .rev-cat-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:.8vw;margin-top:1.5vh}
@@ -168,7 +169,7 @@
     html,body{background:#0a0a0a;overflow:visible}
     body.scroll,body{overflow:visible}
     .deck{height:auto;width:100%;overflow:visible}
-    .slide{position:relative;opacity:1;pointer-events:auto;height:100vh;page-break-after:always;break-after:page}
+    .slide{position:relative;opacity:1;pointer-events:auto;height:100vh;overflow:hidden;page-break-after:always;break-after:page}
     .footer,.arrow,.progress,.pdfbtn{display:none}
   }
 </style>
@@ -183,13 +184,13 @@
     <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
       <img src="logos/shield-mark.png" alt="" style="width:8vw;height:auto;filter:drop-shadow(0 0 16px rgba(162,89,255,.35));margin-bottom:1.5vh;opacity:.95"/>
       <img src="logos/guber-wordmark-purple.png" alt="GUBER" style="width:36vw;height:auto;filter:drop-shadow(0 0 12px rgba(162,89,255,.25))"/>
-      <div style="margin-top:5vh;font-family:'Oxanium',sans-serif;font-size:3.6vw;line-height:1.1;font-weight:800;color:#fff;max-width:24ch">
+      <div style="margin-top:3vh;font-family:'Oxanium',sans-serif;font-size:3vw;line-height:1.1;font-weight:800;color:#fff;max-width:24ch">
         America's <span class="neon">Trust Infrastructure</span> Layer.
       </div>
-      <p style="margin-top:3vh;font-size:1.35vw;color:#e8e8ee;max-width:72ch;line-height:1.55">
+      <p style="margin-top:2vh;font-size:1.15vw;color:#e8e8ee;max-width:72ch;line-height:1.55">
         A nationwide <span class="neon">Human API for Truth</span> — verified identity, on-platform money, and structured proof of work, wired into a single real-world coordination network.
       </p>
-      <div style="margin-top:6vh;color:var(--muted);font-size:.85vw;letter-spacing:.22em;text-transform:uppercase">
+      <div style="margin-top:4vh;color:var(--muted);font-size:.8vw;letter-spacing:.22em;text-transform:uppercase">
         Investor Brief · 2026 · guberapp.com
       </div>
     </div>
@@ -199,8 +200,8 @@
   <section class="slide">
     <div class="eyebrow">The Problem</div>
     <h2>Trust is breaking — online and offline.</h2>
-    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:80ch">Across every category of everyday transaction, the cost of <span class="neon">not knowing who you're dealing with</span> is rising.</p>
-    <div class="grid-3" style="margin-top:5vh">
+    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:80ch">Across every category of everyday transaction, the cost of <span class="neon">not knowing who you're dealing with</span> is rising.</p>
+    <div class="grid-3" style="margin-top:3vh">
       <div class="card">
         <div class="num">$</div>
         <h4>AI-generated fraud</h4>
@@ -217,15 +218,15 @@
         <p>Cars bought remotely. Contractors hired sight-unseen. No on-demand human verification network exists for everyday people.</p>
       </div>
     </div>
-    <p class="muted" style="margin-top:5vh;font-size:1.15vw;text-align:center">This isn't a niche problem — it's <span class="neon">infrastructure that doesn't exist yet</span>.</p>
+    <p class="muted" style="margin-top:3vh;font-size:1.05vw;text-align:center">This isn't a niche problem — it's <span class="neon">infrastructure that doesn't exist yet</span>.</p>
   </section>
 
   <!-- 3. SOLUTION -->
   <section class="slide">
     <div class="eyebrow">The Solution</div>
     <h2>GUBER is the Human API for Truth.</h2>
-    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:90ch">A nationwide network connecting people who need <span class="neon">help, work, or verification</span> with real people who can deliver real-world action.</p>
-    <div class="grid-3" style="margin-top:5vh">
+    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:90ch">A nationwide network connecting people who need <span class="neon">help, work, or verification</span> with real people who can deliver real-world action.</p>
+    <div class="grid-3" style="margin-top:3vh">
       <div class="card">
         <div class="num">ID</div>
         <h4>Verified identity — both sides</h4>
@@ -242,7 +243,7 @@
         <p>GPS-locked photos, video, dynamic checklists. The proof layer no incumbent collects.</p>
       </div>
     </div>
-    <p style="margin-top:5vh;font-size:1.3vw;text-align:center;max-width:80ch;margin-left:auto;margin-right:auto">
+    <p style="margin-top:3vh;font-size:1.15vw;text-align:center;max-width:80ch;margin-left:auto;margin-right:auto">
       A <span class="neon">real-world trust layer</span> usable for any task where one human needs to verify something for another.
     </p>
   </section>
@@ -251,8 +252,8 @@
   <section class="slide">
     <div class="eyebrow">Mission</div>
     <h2>Built for everyday people.</h2>
-    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:90ch">An equal-opportunity platform where <span class="neon">access to work, income, and trust does not depend on who you know</span>.</p>
-    <div class="grid-2" style="margin-top:4vh">
+    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:90ch">An equal-opportunity platform where <span class="neon">access to work, income, and trust does not depend on who you know</span>.</p>
+    <div class="grid-2" style="margin-top:3vh">
       <div class="card">
         <h4 class="neon">Opportunity, not gatekeeping</h4>
         <p>Anyone with verified ID and willingness to show up can earn. No résumé bias, no referral wall, no opaque algorithm picking winners.</p>
@@ -276,8 +277,8 @@
   <section class="slide">
     <div class="eyebrow">Why Now</div>
     <h2>The window is open.</h2>
-    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:90ch">The conditions that make GUBER necessary <span class="neon">did not exist five years ago</span>.</p>
-    <div class="grid-2" style="margin-top:4vh">
+    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:90ch">The conditions that make GUBER necessary <span class="neon">did not exist five years ago</span>.</p>
+    <div class="grid-2" style="margin-top:3vh">
       <div>
         <h3>The crisis is compounding</h3>
         <ul>
@@ -296,15 +297,15 @@
         </ul>
       </div>
     </div>
-    <p class="center" style="margin-top:5vh;font-size:1.25vw"><span class="neon">The category does not have a category leader yet.</span></p>
+    <p class="center" style="margin-top:3vh;font-size:1.15vw"><span class="neon">The category does not have a category leader yet.</span></p>
   </section>
 
   <!-- 6. PRODUCT · THREE-LAYER OPERATING SYSTEM -->
   <section class="slide">
     <div class="eyebrow">Product</div>
     <h2>One operating system. Three connected layers.</h2>
-    <p class="muted" style="font-size:1.15vw;margin:1vh 0 0;max-width:90ch">Live in production today on web and Android. iOS App Store launch in progress.</p>
-    <div class="grid-3" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.05vw;margin:.6vh 0 0;max-width:90ch">Live in production today on web and Android. iOS App Store launch in progress.</p>
+    <div class="grid-3" style="margin-top:2.2vh">
       <div class="layer-block core">
         <div class="layer-eyebrow">Layer 01 · Core Marketplace</div>
         <h3>The productive engine.</h3>
@@ -338,7 +339,7 @@
         </div>
       </div>
     </div>
-    <p style="margin-top:3vh;text-align:center;font-size:1.1vw" class="muted">Each layer reinforces the next — <span class="neon">verified people</span> earn, <span class="neon">trust data</span> compounds, <span class="neon">growth surfaces</span> monetize the same network.</p>
+    <p style="margin-top:2vh;text-align:center;font-size:.95vw" class="muted">Each layer reinforces the next — <span class="neon">verified people</span> earn, <span class="neon">trust data</span> compounds, <span class="neon">growth surfaces</span> monetize the same network.</p>
   </section>
 
   <!-- 6a. GUBER STUDIO · SECOND REVENUE RAIL -->
@@ -782,19 +783,19 @@
   <section class="slide" style="background:radial-gradient(ellipse at 50% 30%, #1a0a2a 0%, var(--bg) 65%)">
     <div style="text-align:center;display:flex;flex-direction:column;align-items:center">
       <div class="eyebrow" style="color:var(--gold)">Long-Term Vision</div>
-      <h2 style="font-size:4.4vw;line-height:1.05;max-width:22ch;margin-top:1vh">America's Economic Super App.</h2>
-      <p style="font-size:1.35vw;max-width:80ch;margin-top:2vh;color:#e8e8ee;line-height:1.5">
+      <h2 style="font-size:3.4vw;line-height:1.05;max-width:22ch;margin-top:.5vh">America's Economic Super App.</h2>
+      <p style="font-size:1.15vw;max-width:80ch;margin-top:1.5vh;color:#e8e8ee;line-height:1.5">
         Powered by <span class="neon">trust</span>, <span class="neon">verification</span>, and <span class="neon">opportunity infrastructure</span> — a single nationwide system where reputation, proof, and earning move together.
       </p>
-      <div class="grid-3" style="margin-top:5vh;width:100%;max-width:90vw">
+      <div class="grid-3" style="margin-top:3vh;width:100%;max-width:90vw">
         <div class="card"><h4 class="neon">Income</h4><p>The productivity engine — work, V&amp;I, observations, portable resume. Real earnings in real communities.</p></div>
         <div class="card"><h4 style="color:var(--purple)">Commerce &amp; Community</h4><p>Verified marketplace, sponsored activations, and local businesses funded by their own neighborhoods.</p></div>
         <div class="card"><h4 style="color:var(--gold)">Infrastructure</h4><p>A Human API for Truth that insurers, lenders, marketplaces, and OEMs plug into at scale.</p></div>
       </div>
-      <p style="margin-top:5vh;font-size:1.4vw;max-width:80ch;color:#fff;font-weight:600">
+      <p style="margin-top:3vh;font-size:1.2vw;max-width:80ch;color:#fff;font-weight:600">
         Not another marketplace. <span class="neon">Infrastructure for real-world trust.</span>
       </p>
-      <div style="margin-top:3.5vh;display:flex;gap:1vw;flex-wrap:wrap;justify-content:center">
+      <div style="margin-top:2vh;display:flex;gap:1vw;flex-wrap:wrap;justify-content:center">
         <span class="pill">Guberapp.global@gmail.com</span>
         <span class="pill">(251) 284-9412</span>
         <span class="pill purple">guberapp.com</span>
