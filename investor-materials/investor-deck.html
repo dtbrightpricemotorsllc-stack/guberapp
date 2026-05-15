@@ -51,9 +51,10 @@
   .slide.active{opacity:1;pointer-events:auto}
   h1,h2,h3{font-family:'Oxanium',sans-serif;letter-spacing:.04em;margin:0 0 .4em}
   h1{font-size:6vw;line-height:1;font-weight:800;text-transform:uppercase}
-  h2{font-size:3.2vw;line-height:1.1;font-weight:700}
-  h3{font-size:1.6vw;font-weight:600;color:var(--neon)}
-  p,li{font-size:1.45vw;line-height:1.5;color:var(--ink)}
+  h2{font-size:3.6vw;line-height:1.05;font-weight:800;margin-bottom:.6em}
+  h3{font-size:1.55vw;font-weight:700;color:var(--neon);letter-spacing:.05em}
+  p,li{font-size:1.25vw;line-height:1.55;color:var(--ink)}
+  .eyebrow{font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);text-transform:uppercase;letter-spacing:.22em;margin-bottom:1vh;opacity:.9}
   .muted{color:var(--muted)}
   .neon{color:var(--neon)}
   .purple{color:var(--purple)}
@@ -116,6 +117,52 @@
   .ptile h4{font-family:'Oxanium',sans-serif;font-size:1.2vw;margin:0 0 .4em;color:var(--neon);letter-spacing:.04em}
   .ptile p{font-size:.95vw;color:var(--muted);margin:0;line-height:1.45}
 
+  /* Layered system tiles for product slide */
+  .layer-block{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0));border:1px solid var(--rule);border-radius:18px;padding:1.6vw 1.4vw;position:relative}
+  .layer-block::before{content:'';position:absolute;top:-1px;left:1.4vw;right:1.4vw;height:2px;border-radius:2px}
+  .layer-block.core::before{background:linear-gradient(90deg,var(--neon),#5cff3a)}
+  .layer-block.trust::before{background:linear-gradient(90deg,var(--purple),#c084fc)}
+  .layer-block.growth::before{background:linear-gradient(90deg,var(--gold),#fbbf24)}
+  .layer-block .layer-eyebrow{font-family:'Oxanium',sans-serif;font-size:.78vw;letter-spacing:.22em;text-transform:uppercase;font-weight:700;margin-bottom:.6vh}
+  .layer-block.core .layer-eyebrow{color:var(--neon)}
+  .layer-block.trust .layer-eyebrow{color:var(--purple)}
+  .layer-block.growth .layer-eyebrow{color:var(--gold)}
+  .layer-block h3{font-family:'Oxanium',sans-serif;font-size:1.4vw;color:#fff;margin:0 0 .8vh;letter-spacing:.04em}
+  .layer-block .layer-desc{font-size:.85vw;color:var(--muted);margin:0 0 1.2vh;line-height:1.5}
+  .layer-items{display:flex;flex-direction:column;gap:.6vh}
+  .layer-item{display:flex;justify-content:space-between;align-items:baseline;padding:.6vh 0;border-top:1px solid rgba(255,255,255,.05);font-size:.95vw}
+  .layer-item:first-child{border-top:0}
+  .layer-item-name{font-family:'Oxanium',sans-serif;font-weight:700;color:#fff}
+  .layer-item-tag{font-size:.75vw;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+
+  /* Revenue category strip */
+  .rev-cat-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:.8vw;margin-top:1.5vh}
+  .rev-cat{padding:1vh .9vw;border-radius:10px;border:1px solid var(--rule);background:#0f0f0f;text-align:center}
+  .rev-cat .rev-cat-name{font-family:'Oxanium',sans-serif;font-size:.78vw;text-transform:uppercase;letter-spacing:.14em;font-weight:700}
+  .rev-cat .rev-cat-count{font-family:'Oxanium',sans-serif;font-size:1.6vw;font-weight:800;color:#fff;margin-top:.3vh;line-height:1}
+  .rev-cat .rev-cat-sub{font-size:.7vw;color:var(--muted);margin-top:.2vh}
+
+  /* Mobile responsive — WeFunder/phone viewer */
+  @media (max-width: 768px){
+    .deck,.slide{position:relative;height:auto;width:100%;overflow:visible}
+    body{overflow:auto}
+    .slide{padding:6vh 5vw;opacity:1;pointer-events:auto;min-height:auto;page-break-after:always}
+    h1{font-size:9vw}
+    h2{font-size:7vw;line-height:1.1}
+    h3{font-size:4.5vw}
+    p,li{font-size:3.8vw;line-height:1.55}
+    .tagline{font-size:5vw}
+    .grid-2,.grid-3,.grid-4,.rev-cat-strip{grid-template-columns:1fr;gap:2vh}
+    .donut-wrap{grid-template-columns:1fr}
+    .donut{max-width:70vw}
+    .card,.layer-block,.ptile{padding:4vw}
+    .card h4,.layer-block h3,.ptile h4{font-size:5vw}
+    .card p,.ptile p,.layer-block .layer-desc{font-size:3.6vw}
+    .footer,.arrow,.pdfbtn{display:none}
+    table{font-size:3vw}
+    th,td{padding:.5em .4em}
+  }
+
   @media print{
     @page{size:landscape;margin:0}
     html,body{background:#0a0a0a;overflow:visible}
@@ -132,18 +179,17 @@
 <div class="deck" id="deck">
 
   <!-- 1. HERO -->
-  <section class="slide" style="background:radial-gradient(circle at 50% 30%, #2a0a3a 0%, var(--bg) 60%)">
+  <section class="slide" style="background:radial-gradient(ellipse at 50% 25%, #1a0a2a 0%, var(--bg) 65%)">
     <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
-      <img src="logos/shield-mark.png" alt="" style="width:12vw;height:auto;filter:drop-shadow(0 0 30px rgba(162,89,255,.55));margin-bottom:1vh"/>
-      <img src="logos/guber-wordmark-purple.png" alt="GUBER" style="width:42vw;height:auto;filter:drop-shadow(0 0 24px rgba(162,89,255,.4))"/>
-      <div class="tagline" style="margin-top:1.5vh;font-style:italic;font-size:1.6vw">Built by People, for People.</div>
-      <p style="margin-top:3vh;font-size:1.55vw;color:#e8e8ee;max-width:70ch;line-height:1.45">
-        The <span class="neon">Economic Super App</span> powered by a <span class="neon">Human API for Truth</span>.
+      <img src="logos/shield-mark.png" alt="" style="width:8vw;height:auto;filter:drop-shadow(0 0 16px rgba(162,89,255,.35));margin-bottom:1.5vh;opacity:.95"/>
+      <img src="logos/guber-wordmark-purple.png" alt="GUBER" style="width:36vw;height:auto;filter:drop-shadow(0 0 12px rgba(162,89,255,.25))"/>
+      <div style="margin-top:5vh;font-family:'Oxanium',sans-serif;font-size:3.6vw;line-height:1.1;font-weight:800;color:#fff;max-width:24ch">
+        America's <span class="neon">Trust Infrastructure</span> Layer.
+      </div>
+      <p style="margin-top:3vh;font-size:1.35vw;color:#e8e8ee;max-width:72ch;line-height:1.55">
+        A nationwide <span class="neon">Human API for Truth</span> — verified identity, on-platform money, and structured proof of work, wired into a single real-world coordination network.
       </p>
-      <p style="margin-top:1.5vh;font-size:1.15vw;color:var(--muted);max-width:72ch">
-        Building America's economic super app through <span class="neon">work</span>, <span class="neon">opportunity</span>, <span class="neon">verification</span>, and real-world <span class="neon">trust infrastructure</span>.
-      </p>
-      <div style="margin-top:5vh;color:var(--muted);font-size:.95vw;letter-spacing:.12em;text-transform:uppercase">
+      <div style="margin-top:6vh;color:var(--muted);font-size:.85vw;letter-spacing:.22em;text-transform:uppercase">
         Investor Brief · 2026 · guberapp.com
       </div>
     </div>
@@ -151,51 +197,53 @@
 
   <!-- 2. PROBLEM -->
   <section class="slide">
+    <div class="eyebrow">The Problem</div>
     <h2>Trust is breaking — online and offline.</h2>
-    <p class="muted" style="font-size:1.3vw;margin-top:0;max-width:90ch">Fake listings. Unsafe meetups. AI-generated scams. Unreliable workers. Remote buyers with no way to verify what's on the other end. Across every category of everyday transaction, the cost of <span class="neon">not knowing who you're dealing with</span> is rising.</p>
-    <div class="grid-3" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:80ch">Across every category of everyday transaction, the cost of <span class="neon">not knowing who you're dealing with</span> is rising.</p>
+    <div class="grid-3" style="margin-top:5vh">
       <div class="card">
         <div class="num">$</div>
-        <h4>Marketplace fraud</h4>
-        <p>AI-generated photos, fake sellers, and ghost listings now infect every major buy/sell platform — from Facebook Marketplace to luxury resale.</p>
+        <h4>AI-generated fraud</h4>
+        <p>Synthetic photos, fake sellers, and ghost listings now infect every major buy/sell platform.</p>
       </div>
       <div class="card">
         <div class="num">⚠</div>
         <h4>Unsafe local transactions</h4>
-        <p>Strangers meeting strangers — for jobs, sales, deliveries, services — with no shared identity layer, no shared payment ledger, no shared proof.</p>
+        <p>Strangers meeting strangers with no shared identity layer, no shared ledger, no shared proof.</p>
       </div>
       <div class="card">
         <div class="num">!</div>
         <h4>Real-world verification gap</h4>
-        <p>Buying a car remotely. Hiring a contractor sight-unseen. Inspecting a property cross-state. Today there is no on-demand human verification network for everyday people.</p>
+        <p>Cars bought remotely. Contractors hired sight-unseen. No on-demand human verification network exists for everyday people.</p>
       </div>
     </div>
-    <p class="muted" style="margin-top:3vh;font-size:1.1vw">The trust deficit isn't a niche problem — it's <span class="neon">infrastructure that doesn't exist yet</span>.</p>
+    <p class="muted" style="margin-top:5vh;font-size:1.15vw;text-align:center">This isn't a niche problem — it's <span class="neon">infrastructure that doesn't exist yet</span>.</p>
   </section>
 
   <!-- 3. SOLUTION -->
   <section class="slide">
+    <div class="eyebrow">The Solution</div>
     <h2>GUBER is the Human API for Truth.</h2>
-    <p class="muted" style="font-size:1.3vw;margin-top:0;max-width:95ch">A nationwide network connecting people who need <span class="neon">help, work, or verification</span> with real people who can deliver real-world action — backed by enforced identity, on-platform money, and structured proof of work.</p>
-    <div class="grid-3" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:90ch">A nationwide network connecting people who need <span class="neon">help, work, or verification</span> with real people who can deliver real-world action.</p>
+    <div class="grid-3" style="margin-top:5vh">
       <div class="card">
         <div class="num">ID</div>
-        <h4>Verified identity, both sides</h4>
-        <p>Mandatory ID + selfie verification for posters and helpers. No anonymous accounts. Sex-offender screening built into onboarding.</p>
+        <h4>Verified identity — both sides</h4>
+        <p>Mandatory ID + selfie. No anonymous accounts. Sex-offender screening at onboarding.</p>
       </div>
       <div class="card">
         <div class="num">$</div>
         <h4>On-platform payments</h4>
-        <p>Stripe Connect for every dollar. Escrow on lock-in, payout on confirmation. Fully traceable money ledger — no off-platform handshakes.</p>
+        <p>Stripe Connect for every dollar. Escrow on lock-in, payout on confirmation. Fully traceable.</p>
       </div>
       <div class="card">
         <div class="num">✓</div>
         <h4>Structured proof of work</h4>
-        <p>GPS-locked photos, video, dynamic checklists. Every job ends with verifiable evidence — the proof layer no incumbent collects.</p>
+        <p>GPS-locked photos, video, dynamic checklists. The proof layer no incumbent collects.</p>
       </div>
     </div>
-    <p style="margin-top:3vh;font-size:1.4vw">
-      The result: <span class="neon">a real-world trust layer</span> usable for jobs, marketplace transactions, inspections, and any task where one human needs to verify something for another.
+    <p style="margin-top:5vh;font-size:1.3vw;text-align:center;max-width:80ch;margin-left:auto;margin-right:auto">
+      A <span class="neon">real-world trust layer</span> usable for any task where one human needs to verify something for another.
     </p>
   </section>
 
@@ -203,77 +251,101 @@
   <section class="slide">
     <div class="eyebrow">Mission</div>
     <h2>Built for everyday people.</h2>
-    <p class="muted" style="font-size:1.2vw;margin:0;max-width:95ch">GUBER is an <span class="neon">equal-opportunity platform</span> — designed so access to work, income, and trust does not depend on who you know, where you live, or what gatekeeper you can get past.</p>
-    <div class="grid-2" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:90ch">An equal-opportunity platform where <span class="neon">access to work, income, and trust does not depend on who you know</span>.</p>
+    <div class="grid-2" style="margin-top:4vh">
       <div class="card">
-        <h4 class="neon">Opportunity should not depend on who you know.</h4>
-        <p>Anyone with proof of work, a verified ID, and a willingness to show up can earn on GUBER. No résumé bias, no referral wall, no opaque platform algorithm choosing winners.</p>
+        <h4 class="neon">Opportunity, not gatekeeping</h4>
+        <p>Anyone with verified ID and willingness to show up can earn. No résumé bias, no referral wall, no opaque algorithm picking winners.</p>
       </div>
       <div class="card">
-        <h4 class="neon">Trust should be earned through proof and action.</h4>
-        <p>Reputation on GUBER is built from real, GPS-verified, timestamped jobs — not follower counts, not badges paid for, not who knows the founder. Proof beats pedigree.</p>
+        <h4 class="neon">Proof beats pedigree</h4>
+        <p>Reputation is built from GPS-verified, timestamped jobs — not follower counts or paid badges. Trust is earned through action.</p>
       </div>
       <div class="card">
-        <h4 style="color:var(--purple)">Reputation becomes portable.</h4>
-        <p>Every completed job, verification, and on-time payout adds to a portable, structured record the user owns — usable across categories, cities, and over time.</p>
+        <h4 style="color:var(--purple)">Reputation is portable</h4>
+        <p>Every completed job and on-time payout builds a structured, portable record the user owns — across categories, cities, and time.</p>
       </div>
       <div class="card">
-        <h4 style="color:var(--gold)">Technology should empower people, not just corporations.</h4>
-        <p>The same trust infrastructure that powers B2B verification deals also powers a single neighbor helping another with a real-world task. One platform, both directions.</p>
+        <h4 style="color:var(--gold)">Infrastructure for people, not just enterprises</h4>
+        <p>The same trust stack powering B2B verification deals also powers a neighbor helping a neighbor. One platform, both directions.</p>
       </div>
     </div>
-    <p style="margin-top:3vh;font-size:1.25vw;text-align:center">
-      <span class="neon">Uber + Craigslist + LinkedIn + a trust layer</span> — built so everyday people can <span class="neon">earn, verify, and grow</span> in their own communities.
-    </p>
   </section>
 
   <!-- 5. WHY NOW -->
   <section class="slide">
-    <h2>Why now.</h2>
-    <p class="muted" style="font-size:1.3vw;margin-top:0;max-width:95ch">The conditions that make GUBER necessary <span class="neon">did not exist five years ago</span>. They are accelerating now.</p>
-    <div class="grid-2" style="margin-top:3vh">
+    <div class="eyebrow">Why Now</div>
+    <h2>The window is open.</h2>
+    <p class="muted" style="font-size:1.2vw;margin:1vh 0 0;max-width:90ch">The conditions that make GUBER necessary <span class="neon">did not exist five years ago</span>.</p>
+    <div class="grid-2" style="margin-top:4vh">
       <div>
-        <h3>The trust crisis is compounding</h3>
+        <h3>The crisis is compounding</h3>
         <ul>
-          <li><span class="neon">AI-generated fraud</span> — synthetic photos, deepfake videos, and generated reviews are flooding every consumer platform.</li>
-          <li><span class="neon">Marketplace scams</span> — Facebook Marketplace, Craigslist, OfferUp report rising fraud at every price tier.</li>
-          <li><span class="neon">Remote buying</span> — used cars, equipment, real estate, and goods are increasingly purchased sight-unseen.</li>
-          <li><span class="neon">Gig sprawl</span> — millions of Americans now earn income outside traditional employment, with no portable trust record.</li>
+          <li><span class="neon">AI-generated fraud</span> floods every consumer platform.</li>
+          <li><span class="neon">Marketplace scams</span> rise at every price tier.</li>
+          <li><span class="neon">Remote buying</span> happens sight-unseen at scale.</li>
+          <li><span class="neon">Gig sprawl</span> leaves millions with no portable trust record.</li>
         </ul>
       </div>
       <div>
-        <h3>The infrastructure to fix it is finally cheap</h3>
+        <h3>The infrastructure is finally cheap</h3>
         <ul>
-          <li>Smartphone GPS, on-device camera + ML, and serverless cloud make a national human-verification network <span class="neon">economically possible</span> for the first time.</li>
-          <li>Stripe Connect lets a single platform safely move money between millions of unrelated buyers and helpers.</li>
-          <li>The same generative-AI wave that <span class="neon">created</span> the trust crisis also makes the verification layer <span class="neon">visible</span> — "verified human" is now a feature people will pay for.</li>
+          <li>Smartphone GPS + on-device ML make a national verification network <span class="neon">economically possible</span> for the first time.</li>
+          <li>Stripe Connect safely moves money between millions of unrelated parties.</li>
+          <li>The same AI wave that <span class="neon">created</span> the crisis makes "verified human" <span class="neon">a feature people pay for</span>.</li>
         </ul>
       </div>
     </div>
-    <p class="center muted" style="margin-top:3vh;font-size:1.1vw"><span class="neon">The window is open. The category does not have a category leader yet.</span></p>
+    <p class="center" style="margin-top:5vh;font-size:1.25vw"><span class="neon">The category does not have a category leader yet.</span></p>
   </section>
 
-  <!-- 5. PRODUCT -->
+  <!-- 6. PRODUCT · THREE-LAYER OPERATING SYSTEM -->
   <section class="slide">
-    <h2>One platform. Seven connected layers.</h2>
-    <p class="muted" style="font-size:1.2vw;margin-top:0">Live in production today on web and Android. iOS App Store launch in progress.</p>
-    <div class="grid-4" style="margin-top:2.5vh">
-      <div class="ptile"><h4>Work & Hire</h4><p>Guided job builder, structured categories, time-based pricing, milestones, auto-pay-increase. Pay only when a verified helper locks in.</p></div>
-      <div class="ptile"><h4>Verify & Inspect</h4><p>On-demand human verification of vehicles, properties, marketplace listings, and salvage — by GPS-located, ID-verified helpers.</p></div>
-      <div class="ptile"><h4>GPS Proof Engine</h4><p>Every job ends with location-stamped photos, video, and dynamic checklists. Verifiable evidence, not promises.</p></div>
-      <div class="ptile"><h4>AI or Not</h4><p>Trust subscription: AI-image detection, unlimited text verification, "verified human" badge on profile. <span class="neon">$4.99/mo</span>.</p></div>
-      <div class="ptile"><h4>Cash Drops</h4><p>Brand-sponsored geo-targeted reward drops. Sponsors pay, GUBER places, users hunt. A new kind of physical ad network.</p></div>
-      <div class="ptile"><h4>Business Tools</h4><p>Verified business accounts, talent scouting, bulk job posting, observation purchasing, sponsored visibility.</p></div>
-      <div class="ptile"><h4>Trust & Safety</h4><p>ID + selfie checks, sex-offender screening, money ledger, structured dispute taxonomy, admin moderation panel.</p></div>
-      <div class="ptile" style="border-color:rgba(162,89,255,.4)"><h4 class="purple" style="color:var(--purple)">GUBER Resume</h4><p>Auto-tracked, portable work record + AI-extracted credentials (CPR, food handler, trade licenses). Reputation as equity.</p></div>
+    <div class="eyebrow">Product</div>
+    <h2>One operating system. Three connected layers.</h2>
+    <p class="muted" style="font-size:1.15vw;margin:1vh 0 0;max-width:90ch">Live in production today on web and Android. iOS App Store launch in progress.</p>
+    <div class="grid-3" style="margin-top:3vh">
+      <div class="layer-block core">
+        <div class="layer-eyebrow">Layer 01 · Core Marketplace</div>
+        <h3>The productive engine.</h3>
+        <p class="layer-desc">Where verified people get work done for verified people — backed by structured, evidenced proof.</p>
+        <div class="layer-items">
+          <div class="layer-item"><span class="layer-item-name">Work &amp; Hire</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">Verify &amp; Inspect</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">GPS Proof Engine</span><span class="layer-item-tag">Live</span></div>
+        </div>
+      </div>
+      <div class="layer-block trust">
+        <div class="layer-eyebrow">Layer 02 · Trust Layer</div>
+        <h3>The verification spine.</h3>
+        <p class="layer-desc">The data and identity moat — what every other GUBER surface is built on.</p>
+        <div class="layer-items">
+          <div class="layer-item"><span class="layer-item-name">Identity Verification</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">AI or Not · Trust Box</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">Portable Reputation</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">Stripe Money Ledger</span><span class="layer-item-tag">Live</span></div>
+        </div>
+      </div>
+      <div class="layer-block growth">
+        <div class="layer-eyebrow">Layer 03 · Growth Layer</div>
+        <h3>The activation engine.</h3>
+        <p class="layer-desc">Where the trust layer is monetized — by brands, businesses, and creators on the same network.</p>
+        <div class="layer-items">
+          <div class="layer-item"><span class="layer-item-name">Cash Drops</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">Business Tools</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">Sponsored Activations</span><span class="layer-item-tag">Live</span></div>
+          <div class="layer-item"><span class="layer-item-name">Content Studio</span><span class="layer-item-tag">Live</span></div>
+        </div>
+      </div>
     </div>
+    <p style="margin-top:3vh;text-align:center;font-size:1.1vw" class="muted">Each layer reinforces the next — <span class="neon">verified people</span> earn, <span class="neon">trust data</span> compounds, <span class="neon">growth surfaces</span> monetize the same network.</p>
   </section>
 
   <!-- 6a. GUBER STUDIO · SECOND REVENUE RAIL -->
   <section class="slide">
     <div class="eyebrow">Product · Second Revenue Rail</div>
-    <h2>GUBER Content Studio.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.5vh 0 0;max-width:95ch">An AI media engine baked into every account. <span class="neon">Live in production today.</span> Most marketplaces hand users to YouTube, Canva, or a freelancer to make content — GUBER ships a full AI studio inside the app and monetizes it on day one.</p>
+    <h2>Built-in creator &amp; business activation infrastructure.</h2>
+    <p class="muted" style="font-size:1.15vw;margin:1vh 0 0;max-width:90ch"><span class="neon">GUBER Content Studio</span> — an AI media engine wired into every verified account. Businesses generate ads, creators ship content, and digital revenue is layered on top of marketplace activity — <span class="neon">all without ever leaving the platform</span>.</p>
     <div class="grid-2" style="margin-top:2.5vh;gap:2vw">
       <div>
         <h3 class="neon" style="margin-top:0">What it does</h3>
@@ -388,9 +460,17 @@
 
   <!-- 8. BUSINESS MODEL · DETAILED MONETIZATION TABLE -->
   <section class="slide">
+    <div class="eyebrow">Business Model</div>
     <h2>How GUBER makes money.</h2>
-    <p class="muted" style="font-size:1vw;margin:.5vh 0 0;max-width:95ch">Eleven distinct revenue streams. All wired to Stripe.</p>
-    <div class="card" style="margin-top:2vh;padding:1.6vh 1.5vw">
+    <p class="muted" style="font-size:1.05vw;margin:1vh 0 0;max-width:90ch">Five revenue categories. Fourteen wired streams. <span class="neon">All running on Stripe today.</span></p>
+    <div class="rev-cat-strip">
+      <div class="rev-cat" style="border-color:rgba(57,255,20,.35)"><div class="rev-cat-name" style="color:var(--neon)">Marketplace</div><div class="rev-cat-count">4</div><div class="rev-cat-sub">Fees · processing · cashouts</div></div>
+      <div class="rev-cat" style="border-color:rgba(162,89,255,.35)"><div class="rev-cat-name" style="color:var(--purple)">Trust</div><div class="rev-cat-count">2</div><div class="rev-cat-sub">Trust Box · Day-1 OG</div></div>
+      <div class="rev-cat" style="border-color:rgba(255,176,32,.35)"><div class="rev-cat-name" style="color:var(--gold)">Business</div><div class="rev-cat-count">4</div><div class="rev-cat-sub">Verification · Scout · packs · observations</div></div>
+      <div class="rev-cat" style="border-color:rgba(196,107,255,.35)"><div class="rev-cat-name" style="color:var(--purple)">Sponsorship</div><div class="rev-cat-count">3</div><div class="rev-cat-sub">Cash Drops · boost · visibility</div></div>
+      <div class="rev-cat" style="border-color:rgba(57,255,20,.35)"><div class="rev-cat-name" style="color:var(--neon)">Digital / AI</div><div class="rev-cat-count">1+</div><div class="rev-cat-sub">Studio packs &amp; tiers (slide 7)</div></div>
+    </div>
+    <div class="card" style="margin-top:1.5vh;padding:1.4vh 1.5vw">
       <table style="width:100%;border-collapse:collapse;font-size:.85vw">
         <thead>
           <tr style="text-align:left;color:var(--neon);text-transform:uppercase;letter-spacing:.12em;font-size:.7vw">
@@ -443,20 +523,20 @@
   <!-- 9. CASH DROPS · REAL-WORLD COMMUNITY ACTIVATION -->
   <section class="slide">
     <div class="eyebrow">Community Activation</div>
-    <h2>Cash Drops — a new real-world advertising network.</h2>
-    <p class="muted" style="font-size:1.15vw;margin:0;max-width:95ch">Cash Drops are not promotions. They are <span class="neon">brand-sponsored economic activations</span> — gamified local discovery events that put real money in real hands and real foot traffic into real businesses.</p>
-    <div class="grid-3" style="margin-top:2.5vh">
+    <h2>The next-generation real-world advertising network.</h2>
+    <p class="muted" style="font-size:1.15vw;margin:1vh 0 0;max-width:90ch">Cash Drops are <span class="neon">sponsor-funded local activations</span> — measurable foot traffic, verified participation, and organic social reach delivered by a verified-human network no digital ad platform can replicate.</p>
+    <div class="grid-3" style="margin-top:3vh">
       <div class="card">
-        <h4 class="neon">How it works</h4>
-        <p><span class="neon">Businesses sponsor</span> a drop. <span class="neon">GUBER places</span> it on the map in their target city or neighborhood. <span class="neon">Users participate physically</span> — they go outside, hunt, find, and post their win to social. The brand gets reach. The neighborhood gets activated. The winner gets paid.</p>
+        <h4 class="neon">Sponsor-funded activation</h4>
+        <p>Brands fund the drop. GUBER places it in the target zip. Verified users participate in person — generating measurable foot traffic into a physical location.</p>
       </div>
       <div class="card">
-        <h4 style="color:var(--purple)">What sponsors get</h4>
-        <p>Local business activations · city-wide hunts · brand-sponsored community engagement · measurable foot-traffic generation · organic social posts from real winners · reward-based exploration of their physical location. A live ad unit no Facebook campaign can replicate.</p>
+        <h4 style="color:var(--purple)">Measurable real-world reach</h4>
+        <p>Verified participation · location-stamped attendance · organic social posts from real winners — a live ad unit no Facebook campaign can replicate.</p>
       </div>
       <div class="card">
-        <h4 style="color:var(--gold)">Why it's defensible</h4>
-        <p>Every drop is also a <span class="neon">free user-acquisition event</span> for GUBER itself. Every winner posts proof. Every player downloads the app to participate. Brand dollars fund our growth, our growth funds the brand's reach. A flywheel competitors can't easily copy.</p>
+        <h4 style="color:var(--gold)">Built-in growth flywheel</h4>
+        <p>Every drop is also a free user-acquisition event for GUBER. Brand dollars fund the reward; the reward funds organic growth; growth expands the network sponsors pay to reach.</p>
       </div>
     </div>
     <div class="grid-2" style="margin-top:2.5vh;gap:2vw;align-items:center">
@@ -699,25 +779,22 @@
   </section>
 
   <!-- 12. VISION -->
-  <section class="slide" style="background:radial-gradient(circle at 70% 30%, #1a0a2a 0%, var(--bg) 60%)">
+  <section class="slide" style="background:radial-gradient(ellipse at 50% 30%, #1a0a2a 0%, var(--bg) 65%)">
     <div style="text-align:center;display:flex;flex-direction:column;align-items:center">
-      <img src="logos/badger-mascot.png" alt="" style="width:9vw;height:auto;filter:drop-shadow(0 0 18px rgba(255,180,32,.35));margin-bottom:2vh"/>
-      <h2 style="font-size:3.6vw">America's Economic Super App.</h2>
-      <p style="font-size:1.45vw;max-width:90ch;margin-top:1vh">
-        The long-term goal is to build the <span class="neon">trust and opportunity layer for everyday life</span>. GUBER is designed to become <span class="neon">infrastructure for how people earn, verify, connect, and interact in the real world</span> — connecting people, work, verification, commerce, trust, community, and opportunity inside one nationwide system.
+      <div class="eyebrow" style="color:var(--gold)">Long-Term Vision</div>
+      <h2 style="font-size:4.4vw;line-height:1.05;max-width:22ch;margin-top:1vh">America's Economic Super App.</h2>
+      <p style="font-size:1.35vw;max-width:80ch;margin-top:2vh;color:#e8e8ee;line-height:1.5">
+        Powered by <span class="neon">trust</span>, <span class="neon">verification</span>, and <span class="neon">opportunity infrastructure</span> — a single nationwide system where reputation, proof, and earning move together.
       </p>
-      <div class="grid-3" style="margin-top:4vh;width:100%;max-width:90vw">
-        <div class="card"><h4 class="neon">Income</h4><p>The productivity engine — work, hire, V&amp;I, observations, portable resume. Real earnings for real people in their own communities.</p></div>
-        <div class="card"><h4 class="purple" style="color:var(--purple)">Commerce &amp; Community</h4><p>Verified marketplace · sponsored Cash Drops as a real-world ad network · local businesses activated · neighborhoods stimulated.</p></div>
-        <div class="card"><h4 class="gold" style="color:var(--gold)">Infrastructure</h4><p>The verification network — a Human API for Truth that insurers, lenders, marketplaces, and OEMs plug into at scale.</p></div>
+      <div class="grid-3" style="margin-top:5vh;width:100%;max-width:90vw">
+        <div class="card"><h4 class="neon">Income</h4><p>The productivity engine — work, V&amp;I, observations, portable resume. Real earnings in real communities.</p></div>
+        <div class="card"><h4 style="color:var(--purple)">Commerce &amp; Community</h4><p>Verified marketplace, sponsored activations, and local businesses funded by their own neighborhoods.</p></div>
+        <div class="card"><h4 style="color:var(--gold)">Infrastructure</h4><p>A Human API for Truth that insurers, lenders, marketplaces, and OEMs plug into at scale.</p></div>
       </div>
-      <p style="margin-top:4vh;font-size:1.25vw;max-width:90ch;text-align:center">
-        From local jobs to nationwide verification networks, GUBER is building <span class="neon">a system where reputation, proof, and opportunity move together</span>.
+      <p style="margin-top:5vh;font-size:1.4vw;max-width:80ch;color:#fff;font-weight:600">
+        Not another marketplace. <span class="neon">Infrastructure for real-world trust.</span>
       </p>
-      <p class="muted" style="margin-top:2.5vh;font-size:1.05vw;max-width:80ch;font-style:italic">
-        Built by people, for people. A serious infrastructure company — and a movement built for real people. Both are the same platform.
-      </p>
-      <div style="margin-top:3vh;display:flex;gap:1vw;flex-wrap:wrap;justify-content:center">
+      <div style="margin-top:3.5vh;display:flex;gap:1vw;flex-wrap:wrap;justify-content:center">
         <span class="pill">Guberapp.global@gmail.com</span>
         <span class="pill">(251) 284-9412</span>
         <span class="pill purple">guberapp.com</span>
@@ -739,12 +816,10 @@
         <div style="margin-top:1.5vh"><span class="pill">Solo-built · ~18 months</span></div>
       </div>
       <div>
-        <p style="font-size:1.1vw;line-height:1.55;margin:0 0 1.4vh">GUBER was built solo over roughly 18 months — product, full-stack engineering, payments, native mobile, admin tooling, brand. Self-taught. Every surface in this deck is shipped code in production today, not a pitch.</p>
-        <p style="font-size:1.1vw;line-height:1.55;margin:0 0 1.4vh"><span class="neon">Designed by someone who understands how hard it is for everyday people to access opportunity safely</span> — and who built the system they wished existed. Real-world experience, not slideware. People-first vision, not theory.</p>
-        <p style="font-size:1.1vw;line-height:1.55;margin:0 0 1.4vh">Today the platform is grown conservatively and organically — only accepting the volume the current infrastructure and a one-person operation can fully deliver on. That discipline protects the brand and the user, but it caps how fast we move.</p>
-        <p style="font-size:1.1vw;line-height:1.55;margin:0 0 1.4vh">This raise removes that ceiling: real infrastructure, a real team, and the paid-acquisition and B2B sales motion to turn an organic, verified user base into <span class="neon">a self-sustaining nationwide trust and opportunity network</span>.</p>
-        <p class="muted" style="font-size:1vw;line-height:1.5;margin:1.8vh 0 0;font-style:italic">Investors, advisors, operators — anyone who can move quickly and meaningfully — every serious inbound gets a serious reply. The app is live. The mission is clear. The window is open.</p>
-        <div style="margin-top:2vh;display:flex;gap:.8vw;flex-wrap:wrap">
+        <p style="font-size:1.15vw;line-height:1.6;margin:0 0 1.6vh">GUBER was built <span class="neon">solo over roughly 18 months</span> — product, full-stack engineering, payments, native mobile, admin tooling, brand. Self-taught. Every surface in this deck is <span class="neon">shipped code in production today</span>, not slideware.</p>
+        <p style="font-size:1.15vw;line-height:1.6;margin:0 0 1.6vh">Designed by someone who lived the problem firsthand — and built the system they wished existed. Real-world execution, not theory.</p>
+        <p style="font-size:1.15vw;line-height:1.6;margin:0 0 1.6vh">Today the platform is grown <span class="neon">conservatively and organically</span> — only accepting volume a one-person operation can deliver on. That discipline protects the brand. This raise removes the ceiling: <span class="neon">real infrastructure, a real team, and the sales motion</span> to turn a verified user base into a self-sustaining nationwide trust network.</p>
+        <div style="margin-top:2.5vh;display:flex;gap:.8vw;flex-wrap:wrap">
           <span class="pill">Guberapp.global@gmail.com</span>
           <span class="pill">(251) 284-9412</span>
           <span class="pill purple">guberapp.com</span>
