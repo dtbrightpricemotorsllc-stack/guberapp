@@ -143,8 +143,8 @@
   .rev-cat .rev-cat-count{font-family:'Oxanium',sans-serif;font-size:1.6vw;font-weight:800;color:#fff;margin-top:.3vh;line-height:1}
   .rev-cat .rev-cat-sub{font-size:.7vw;color:var(--muted);margin-top:.2vh}
 
-  /* Mobile responsive — WeFunder/phone viewer */
-  @media (max-width: 768px){
+  /* Mobile responsive — WeFunder/phone viewer (SCREEN ONLY — must not affect print) */
+  @media screen and (max-width: 768px){
     .deck,.slide{position:relative;height:auto;width:100%;overflow:visible}
     body{overflow:auto}
     .slide{padding:6vh 5vw;opacity:1;pointer-events:auto;min-height:auto;page-break-after:always}
@@ -682,6 +682,7 @@
 
   <!-- 13. TRACTION / CREDIBILITY -->
   <section class="slide">
+    <div class="eyebrow">Traction · Operational Status</div>
     <h2>What's already real.</h2>
     <p class="muted" style="font-size:1.2vw;margin-top:0;max-width:95ch">Credibility is built on what's <span class="neon">in the ground today</span> — not on slideware.</p>
     <div class="grid-4" style="margin-top:2vh">
@@ -704,6 +705,7 @@
 
   <!-- 10. USE OF FUNDS -->
   <section class="slide">
+    <div class="eyebrow">Use of Funds</div>
     <h2>Use of funds — $1M over 18 months.</h2>
     <p class="muted" style="font-size:1.2vw;margin-top:0">Capital deployed against the highest-leverage investments for a live product entering its growth phase.</p>
     <div class="donut-wrap">
@@ -752,6 +754,7 @@
 
   <!-- 11. VALUATION -->
   <section class="slide">
+    <div class="eyebrow">Valuation</div>
     <h2>Valuation framework.</h2>
     <div class="grid-2" style="margin-top:3vh;align-items:center">
       <div>
