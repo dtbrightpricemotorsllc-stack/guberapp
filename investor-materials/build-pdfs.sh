@@ -33,7 +33,7 @@ render() {
     --no-pdf-header-footer \
     --print-to-pdf-no-header \
     --hide-scrollbars \
-    --window-size=1920,1200 \
+    --window-size=1280,720 \
     --force-device-scale-factor=2 \
     --virtual-time-budget=30000 \
     --print-to-pdf="$out" \
