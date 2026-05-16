@@ -294,6 +294,15 @@ export const INVESTOR_CONFIG = {
       "Infrastructure, Cloud & Platform Scaling — 5% · $50K",
       "Working Capital & Contingency — 5% · $50K",
     ],
+    breakdown: [
+      { label: "Product Development & Engineering", pct: 30, amount: "$300K", color: "#39ff14" },
+      { label: "Marketing, Growth & Community Activation", pct: 25, amount: "$250K", color: "#a855f7" },
+      { label: "Operations, Compliance & Trust / Safety", pct: 15, amount: "$150K", color: "#f59e0b" },
+      { label: "Business Development & Partnerships", pct: 10, amount: "$100K", color: "#22c55e" },
+      { label: "Customer Support, Moderation & QC", pct: 10, amount: "$100K", color: "#c084fc" },
+      { label: "Infrastructure, Cloud & Platform Scaling", pct: 5, amount: "$50K", color: "#fbbf24" },
+      { label: "Working Capital & Contingency", pct: 5, amount: "$50K", color: "#9ca3af" },
+    ],
     whyNow: [
       "Product is shipped — capital goes straight to growth, not engineering.",
       "GUBER sits at the intersection of digital trust, fraud prevention, identity verification, and the gig economy — large, named, growing markets.",

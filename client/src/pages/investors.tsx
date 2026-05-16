@@ -996,16 +996,50 @@ export default function Investors() {
             <div className="inv-card p-7 h-full">
               <div className="num-font text-xs uppercase tracking-[0.15em] mb-4" style={{ color: NEON_GREEN }}>Use of capital</div>
               {C.fundingAsk.useHeadline && (
-                <p className="text-sm leading-relaxed text-white mb-4" data-testid="text-use-headline">{C.fundingAsk.useHeadline}</p>
+                <p className="text-sm leading-relaxed text-white mb-5" data-testid="text-use-headline">{C.fundingAsk.useHeadline}</p>
               )}
-              <ul className="space-y-3">
-                {C.fundingAsk.use.map((b, i) => (
-                  <li key={i} className="flex gap-3 text-sm leading-relaxed text-muted-foreground" data-testid={`text-use-${i}`}>
-                    <span className="num-font font-bold flex-shrink-0" style={{ color: NEON_GREEN }}>{String(i + 1).padStart(2, "0")}</span>
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="flex flex-col md:flex-row md:items-center gap-6 md:gap-7 mb-2">
+                <div className="relative flex-shrink-0 mx-auto md:mx-0" style={{ width: 180, height: 180 }}>
+                  <svg viewBox="0 0 42 42" className="absolute inset-0 w-full h-full" style={{ transform: "rotate(-90deg)" }} data-testid="svg-funding-donut">
+                    <circle cx="21" cy="21" r="15.915" fill="#000" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+                    {(() => {
+                      let acc = 0;
+                      return C.fundingAsk.breakdown.map((seg, i) => {
+                        const el = (
+                          <circle
+                            key={i}
+                            cx="21"
+                            cy="21"
+                            r="15.915"
+                            fill="transparent"
+                            stroke={seg.color}
+                            strokeWidth="6"
+                            strokeDasharray={`${seg.pct} 100`}
+                            strokeDashoffset={-acc}
+                            pathLength="100"
+                          />
+                        );
+                        acc += seg.pct;
+                        return el;
+                      });
+                    })()}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                    <div className="num-font font-extrabold text-2xl text-white leading-none">$1M</div>
+                    <div className="num-font text-[9px] uppercase tracking-[0.2em] text-muted-foreground mt-1">18-month plan</div>
+                  </div>
+                </div>
+                <ul className="flex-1 space-y-2 min-w-0">
+                  {C.fundingAsk.breakdown.map((seg, i) => (
+                    <li key={i} className="grid grid-cols-[12px_1fr_auto_auto] items-center gap-2 sm:gap-3 text-xs sm:text-sm" data-testid={`row-breakdown-${i}`}>
+                      <span className="h-3 w-3 rounded-sm flex-shrink-0" style={{ background: seg.color }} />
+                      <span className="text-white leading-tight truncate">{seg.label}</span>
+                      <span className="num-font font-bold tabular-nums" style={{ color: seg.color }}>{seg.pct}%</span>
+                      <span className="num-font text-muted-foreground tabular-nums">{seg.amount}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </Reveal>
         </div>
