@@ -17,7 +17,7 @@ export const INVESTOR_CONFIG = {
   hero: {
     eyebrow: "PRIVATE INVESTOR BRIEF · 2026",
     headline: "GUBER",
-    tagline: "Built by People, for People.",
+    tagline: "Built by People. Powered by Trust.",
     sub: "The Economic Super App powered by a Human API for Truth. Building America's nationwide layer for work, opportunity, verification, and real-world trust infrastructure. Live on web and Google Play; iOS App Store launch in progress.",
     primaryCta: { label: "VIEW THE OPPORTUNITY", target: "section-funding-ask" },
     secondaryCta: { label: "CONTACT THE FOUNDER", target: "section-investor-cta" },
@@ -271,9 +271,7 @@ export const INVESTOR_CONFIG = {
     role: "Founder & CEO, GUBER Global LLC",
     photo: "/founder.jpg",
     body: [
-      "For 17 years, I built my life around someone I loved. I sacrificed opportunities, stability, money, time, and pieces of myself trying to build a future I believed we both wanted. Then one day, it was just… gone. No real closure. No clear explanation that could justify losing nearly two decades of your life.",
-      "What made it harder wasn't losing the relationship — it was realizing how quickly a person can become emotionally, financially, and socially disconnected when the foundation they depended on disappears. Trying to survive emotionally while rebuilding financially, mentally, and physically at the same time.",
-      "One realization kept hitting me: people are surrounded by opportunity, help, skills, resources, and movement every single day — but when you're struggling, most of it feels invisible. That realization became the foundation for GUBER. GUBER isn't just about jobs. It's about visibility — clarity and accountability for the people the system left behind.",
+      "The full origin story — 17 years of loss, the realization that opportunity, help, and movement feel invisible when you're struggling, and how that became the foundation for GUBER — lives in Section 06 above (The Other Side of Why).",
       "GUBER was then built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand. The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed is in production code today.",
       "Right now I'm growing the platform conservatively and organically — only accepting the volume of jobs the current infrastructure and a one-person operation can fully deliver on. That discipline protects the brand, but it also caps how fast we move.",
       "I'm raising to remove that ceiling: real infrastructure, a real team, and the paid-acquisition and B2B sales motion that turn an organic, verified user base into a self-sustaining nationwide trust network.",
@@ -311,6 +309,153 @@ export const INVESTOR_CONFIG = {
     sub: "This brief is intentionally private. If you're reading it, the founder believes you can move quickly. Email, call, or text — same hour, same day. Investors, advisors, operators with relevant CVs — every serious inbound gets a serious reply.",
     founderName: "Dimetris Bowden",
     founderTitle: "Founder & CEO · 100% owner, GUBER Global LLC",
+  },
+
+  cracks: {
+    eyebrow: "WHAT'S ACTUALLY WRONG",
+    headline: "Four cracks in the real-world economy.",
+    items: [
+      { num: "01", text: "People with real skills", accent: "can't find work." },
+      { num: "02", text: "Buyers make expensive decisions on", accent: "incomplete information." },
+      { num: "03", text: "Hiring strangers locally is", accent: "unaccountable." },
+      { num: "04", text: "Communities have movement, money, and urgency — but no", accent: "live coordination layer." },
+    ],
+  },
+
+  whatIsGuber: {
+    eyebrow: "WHAT GUBER IS",
+    headline: "A trust-enforced visibility network.",
+    sub: "Not a job board. Not a marketplace clone. A local visibility layer where verified identity, on-platform money, and structured proof of work are all enforced by the platform — not the user.",
+    pillars: [
+      { title: "Visibility", body: "Opportunity, people, movement, and money — made instantly visible inside your community." },
+      { title: "Verification", body: "Mandatory ID + selfie on both sides. No anonymous accounts, no fake profiles." },
+      { title: "Accountability", body: "Every job ends with GPS-verified, timestamped, structured proof — auditable by anyone." },
+    ],
+  },
+
+  workerSide: {
+    eyebrow: "BUILT FOR THE WORKER",
+    headline: "Skills become visible. Money becomes real.",
+    sub: "If you can do the work — show up, do it well, leave proof — GUBER makes you findable, hire-able, and payable in your own community.",
+    bullets: [
+      "A verified identity that travels with you — not locked to one platform.",
+      "Real local jobs you can actually drive to, with pay confirmed before you start.",
+      "Structured proof builds a permanent track record — a portable resume of completed work.",
+      "Stripe Connect payouts the moment the job is confirmed — no chasing cash, no off-platform risk.",
+    ],
+    closer: "GUBER turns invisible labor into visible income.",
+  },
+
+  hirerSide: {
+    eyebrow: "BUILT FOR THE HIRER",
+    headline: "Strangers become trusted help.",
+    sub: "Post a need, see verified humans nearby, lock-in a price, and walk away with location-checked, timestamped proof the job actually happened.",
+    bullets: [
+      "Every helper is ID + selfie verified before they can accept a job.",
+      "Money sits in platform-managed escrow until you confirm the work.",
+      "Structured smart-forms guide the job — no guesswork, no scope creep.",
+      "Disputes are resolved against the evidence, not he-said / she-said.",
+    ],
+    closer: "GUBER removes the personal risk from hiring strangers locally.",
+  },
+
+  viOrigin: {
+    eyebrow: "WHY V&I EXISTS",
+    headline: "It started with a GT500 — 12 hours away.",
+    paragraphs: [
+      "A buyer 12 hours away from a dealership wanted to verify a Shelby GT500 before flying out. The dealer's photos were polished. The Carfax was clean. Everything looked perfect on paper.",
+      "But the buyer had no way to put a real human, on the ground, in front of that car — to confirm what the listing wasn't showing. No tire wear. No undercarriage. No quick walkaround in good light. Just paperwork and hope.",
+      "That's the gap: people make expensive decisions every day using incomplete information. Not because they're careless — because they lack access.",
+      "Verify & Inspect was built to close that gap. A verified human on-site, structured checklist, live visual proof — for any decision that's too expensive to make blind.",
+    ],
+    pullQuote: "People make expensive decisions every day using incomplete information. Not because they're careless. Because they lack access.",
+  },
+
+  otherSideOfWhy: {
+    eyebrow: "THE OTHER SIDE OF WHY",
+    headline: "17 years. Gone. And the realization that built GUBER.",
+    paragraphs: [
+      "For 17 years, I built my life around someone I loved. I sacrificed opportunities, stability, money, time, and pieces of myself trying to build a future I believed we both wanted.",
+      "Then one day, it was just… gone. No real closure. No clear explanation that could justify losing nearly two decades of your life. Just silence, distance, and the realization that the person you built your entire world around no longer saw you as part of theirs.",
+      "What made it harder wasn't losing the relationship — it was realizing how quickly a person can become emotionally, financially, and socially disconnected when the foundation they depended on disappears. Trying to survive emotionally while rebuilding financially, mentally, and physically at the same time.",
+    ],
+    realizationLine: "People are surrounded by opportunity, help, skills, resources, and movement every single day — but when you're struggling, most of it feels invisible.",
+    visibilityPillars: ["Opportunity", "Trusted People", "Work", "Movement", "Support", "Real-time Help", "Proof", "Local Activity"],
+    closingHeadline: "GUBER isn't just about jobs.",
+    closingAccent: "It's about visibility — clarity and accountability.",
+    closingFooter: "Proof that even after losing almost everything, something meaningful could still be built from the experience.",
+  },
+
+  fictionToReality: {
+    eyebrow: "FROM FICTION TO REALITY",
+    headline: "The visibility layer cinema imagined. Built by real people.",
+    rows: [
+      { title: "The Dark Knight", system: "Sonar Surveillance System", sub: "citywide instant awareness." },
+      { title: "Furious 7", system: "God's Eye", sub: "find anyone, anywhere, in real time." },
+      { title: "Eagle Eye", system: "ARIIA", sub: "every camera, every signal, one feed." },
+      { title: "Watch Dogs", system: "ctOS", sub: "central operating system for an entire city." },
+      { title: "Person of Interest", system: "The Machine", sub: "real-world events, observed and acted on." },
+    ],
+    notHeadline: ["Not surveillance.", "Not spying."],
+    butLine: "GUBER grounds the same core idea — through permission-based participation.",
+    optInBlock: {
+      title: "100% Opt-in. 100% User-Requested.",
+      sub: "No passive surveillance. No background tracking. No data scraping.",
+      body: "A verified human chooses to accept a specific request, captures live visual proof on-site, and the job ends. Cameras are off until a real person opts in for a specific task.",
+    },
+    consequence: "The result: access to any participating camera phone in the world — but only with explicit consent, only for a specific verified request, only for the duration of that task.",
+  },
+
+  trustAsService: {
+    eyebrow: "TRUST AS A SERVICE",
+    headline: "Software can guess.",
+    accent: "A verified human knows.",
+    sub: "Every claim on GUBER is backed by a real person at a real location, leaving real proof — not scraped data, not AI guesses. This is the Human API for Truth.",
+    primitives: [
+      { title: "Verified Identity", body: "Government ID + selfie required to onboard. No anonymous accounts." },
+      { title: "On-Platform Money", body: "Stripe Connect escrow + payout. Every dollar is traceable." },
+      { title: "Structured Proof", body: "GPS-checked, timestamped, dynamic-checklist evidence on every job." },
+      { title: "Permission-Based", body: "Cameras are off until a verified human opts in for a specific request." },
+    ],
+  },
+
+  liveMap: {
+    eyebrow: "THE LIVE MAP",
+    headline: "Opportunity made visible — block by block, city by city.",
+    sub: "Real Cash Drops, real jobs, real movement, rendered live on the map for every user.",
+  },
+
+  badger: {
+    eyebrow: "MEET THE BADGER",
+    headline: "Trust has a face.",
+    sub: "The GUBER badger isn't a mascot — it's the brand promise. Verified. Local. Accountable. The badger shows up wherever a real GUBER user is doing real work in the real world.",
+    bullets: [
+      "Brand identity that lives on hats, gloves, signage, and across every Cash Drop creative.",
+      "Instantly recognizable in social proof — every winner photo, every brand-funded drop.",
+      "Built to scale into a cultural mark, not just an app icon.",
+    ],
+  },
+
+  aiOrNot: {
+    eyebrow: "AI OR NOT · TRUST BOX",
+    headline: "The fastest way to ask 'is this real?'",
+    sub: "$4.99/mo subscription — AI-content detection plus unlimited text verification. Live, paying users today. The consumer-facing edge of GUBER's trust infrastructure.",
+    bullets: [
+      "Detect AI-generated images and text in seconds.",
+      "Unlimited verification queries — no per-check fees.",
+      "Built into the same identity + verification rails the rest of the platform runs on.",
+    ],
+  },
+
+  realityCheck: {
+    eyebrow: "REALITY CHECK",
+    familiarLine: "At first, GUBER looked familiar —",
+    familiarTags: ["Jobs.", "Side money.", "Local help.", "Verification."],
+    deeperBody: "But the deeper you went, the more visible the larger system became. Opportunity already exists. Movement already exists. People already exist. Trust already exists.",
+    pillars: ["Opportunity", "Movement", "People", "Trust"],
+    closer: "GUBER simply makes it visible.",
+    deep: "The marketplace is only the entry point. The deeper layer is visibility itself.",
+    footer: "Built by people. Powered by trust.",
   },
 
   socials: [
