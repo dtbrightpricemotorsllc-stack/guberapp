@@ -137,13 +137,60 @@
   .layer-item-name{font-family:'Oxanium',sans-serif;font-weight:700;color:#fff}
   .layer-item-tag{font-size:1.05vw;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
 
-  /* Dense traction slide (slide 16): 11 cards need tighter cards */
+  /* Dense traction slide: tighter cards */
   .slide.dense .card{padding:1.3vw}
   .slide.dense .card h4{font-size:1.35vw;margin:0 0 .35em}
   .slide.dense .card p{font-size:1.1vw;line-height:1.45}
   .slide.dense h2{font-size:3.4vw;margin-bottom:.35em}
   .slide.dense .grid-4{gap:1.1vw}
   .slide.dense .grid-3{gap:1.1vw}
+
+  /* Use-it verbs (slide 4): 6 BIG action tiles */
+  .verb-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6vw;margin-top:3vh}
+  .verb{background:linear-gradient(180deg,rgba(57,255,20,.08),rgba(57,255,20,.02));border:1px solid rgba(57,255,20,.28);border-radius:16px;padding:2.2vw 2vw;position:relative}
+  .verb .verb-num{font-family:'Oxanium',sans-serif;font-size:1.1vw;font-weight:700;color:var(--neon);letter-spacing:.18em;opacity:.7}
+  .verb h3{font-family:'Oxanium',sans-serif;font-size:2.6vw;color:#fff;margin:.4vh 0 .8vh;letter-spacing:.02em;text-transform:uppercase;line-height:1}
+  .verb p{font-size:1.35vw;color:var(--muted);margin:0;line-height:1.45}
+
+  /* BIG bold operational pills (slide 10) */
+  .opstat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.4vw 1.8vw;margin-top:3vh}
+  .opstat{display:flex;align-items:center;gap:1.4vw;padding:1.6vh 1.6vw;background:#0f0f0f;border:1px solid rgba(57,255,20,.3);border-radius:12px}
+  .opstat .check{flex:0 0 auto;width:3vw;height:3vw;border-radius:50%;background:rgba(57,255,20,.12);border:2px solid var(--neon);display:flex;align-items:center;justify-content:center;font-family:'Oxanium',sans-serif;font-weight:800;color:var(--neon);font-size:1.6vw}
+  .opstat .opstat-text{font-family:'Oxanium',sans-serif;font-size:1.85vw;color:#fff;font-weight:700;letter-spacing:.02em;line-height:1.15}
+
+  /* Real proof slide (slide 11): 3-row stacked layout — compact to fit */
+  .slide.proof h2{font-size:2.6vw;margin-bottom:.2em}
+  .slide.proof .eyebrow{margin-bottom:.6vh}
+  .proof-row{margin-top:.9vh}
+  .proof-row .proof-eyebrow{font-family:'Oxanium',sans-serif;font-size:.95vw;color:var(--neon);letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:.4vh}
+  .proof-row.purple .proof-eyebrow{color:var(--purple)}
+  .proof-row.gold .proof-eyebrow{color:var(--gold)}
+  .proof-tiles{display:grid;gap:.7vw}
+  .proof-tile{border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:#000;height:18vh;position:relative}
+  .proof-tile img{width:100%;height:100%;display:block;object-fit:cover;object-position:top center}
+  .proof-tile .proof-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(0deg,rgba(0,0,0,.9),transparent);color:#fff;font-family:'Oxanium',sans-serif;font-size:.7vw;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.8vh .5vw .3vh;text-align:center}
+  .proof-stat{font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);font-weight:800;letter-spacing:.06em;display:inline}
+
+  /* Roadmap (slide 12) */
+  .roadmap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.8vw;margin-top:2.5vh}
+  .phase{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0));border:1px solid var(--rule);border-radius:14px;padding:2vw 1.8vw;position:relative;overflow:hidden}
+  .phase::before{content:'';position:absolute;top:0;left:0;right:0;height:4px}
+  .phase.p1::before{background:linear-gradient(90deg,var(--neon),#5cff3a)}
+  .phase.p2::before{background:linear-gradient(90deg,var(--purple),#c084fc)}
+  .phase.p3::before{background:linear-gradient(90deg,var(--gold),#fbbf24)}
+  .phase .phase-tag{font-family:'Oxanium',sans-serif;font-size:.95vw;letter-spacing:.18em;text-transform:uppercase;font-weight:700;margin-bottom:.6vh}
+  .phase.p1 .phase-tag{color:var(--neon)}
+  .phase.p2 .phase-tag{color:var(--purple)}
+  .phase.p3 .phase-tag{color:var(--gold)}
+  .phase h3{font-family:'Oxanium',sans-serif;font-size:1.95vw;color:#fff;margin:0 0 .6vh;letter-spacing:.02em}
+  .phase .phase-window{font-family:'Oxanium',sans-serif;font-size:1.1vw;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:1.2vh}
+  .phase ul{margin:.6vh 0 0;padding-left:1.1em;font-size:1.2vw}
+  .phase li{margin:.55em 0;line-height:1.4;color:#e8e8ee}
+  .phase li::marker{color:var(--neon)}
+
+  /* Killer-line callout (slide 14) */
+  .killer-line{margin-top:2.5vh;padding:3vh 3vw;border-left:4px solid var(--neon);background:linear-gradient(90deg,rgba(57,255,20,.06),transparent);font-family:'Oxanium',sans-serif;font-size:2.4vw;line-height:1.25;color:#fff;font-weight:700;max-width:60ch}
+  .killer-line .attrib{display:block;font-family:'Inter',sans-serif;font-size:1vw;color:var(--muted);font-weight:400;letter-spacing:.18em;text-transform:uppercase;margin-top:1.4vh}
 
   /* Revenue category strip */
   .rev-cat-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:1vw;margin-top:1.8vh}
@@ -194,18 +241,19 @@
 <div class="progress" id="progress"></div>
 <div class="deck" id="deck">
 
+
   <!-- 1. HERO -->
   <section class="slide center-v" style="background:radial-gradient(ellipse at 50% 25%, #1a0a2a 0%, var(--bg) 65%)">
     <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
       <img src="logos/shield-mark.png" alt="" style="width:8vw;height:auto;filter:drop-shadow(0 0 16px rgba(162,89,255,.35));margin-bottom:1.5vh;opacity:.95"/>
       <img src="logos/guber-wordmark-purple.png" alt="GUBER" style="width:36vw;height:auto;filter:drop-shadow(0 0 12px rgba(162,89,255,.25))"/>
-      <div style="margin-top:3vh;font-family:'Oxanium',sans-serif;font-size:3vw;line-height:1.1;font-weight:800;color:#fff;max-width:24ch">
+      <div style="margin-top:3vh;font-family:'Oxanium',sans-serif;font-size:3.2vw;line-height:1.1;font-weight:800;color:#fff;max-width:24ch">
         America's <span class="neon">Trust Infrastructure</span> Layer.
       </div>
-      <p style="margin-top:2vh;font-size:1.15vw;color:#e8e8ee;max-width:72ch;line-height:1.55">
+      <p style="margin-top:2vh;font-size:1.4vw;color:#e8e8ee;max-width:72ch;line-height:1.55">
         A nationwide <span class="neon">Human API for Truth</span> — verified identity, on-platform money, and structured proof of work, wired into a single real-world coordination network.
       </p>
-      <div style="margin-top:4vh;color:var(--muted);font-size:.8vw;letter-spacing:.22em;text-transform:uppercase">
+      <div style="margin-top:4vh;color:var(--muted);font-size:.95vw;letter-spacing:.22em;text-transform:uppercase">
         Investor Brief · 2026 · guberapp.com
       </div>
     </div>
@@ -215,8 +263,8 @@
   <section class="slide">
     <div class="eyebrow">The Problem</div>
     <h2>Trust is breaking — online and offline.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:80ch">Across every category of everyday transaction, the cost of <span class="neon">not knowing who you're dealing with</span> is rising.</p>
-    <div class="grid-3" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.6vw;margin:1vh 0 0;max-width:80ch">Across every category of everyday transaction, the cost of <span class="neon">not knowing who you're dealing with</span> is rising.</p>
+    <div class="grid-3" style="margin-top:3.5vh">
       <div class="card">
         <div class="num">$</div>
         <h4>AI-generated fraud</h4>
@@ -233,15 +281,15 @@
         <p>Cars bought remotely. Contractors hired sight-unseen. No on-demand human verification network exists for everyday people.</p>
       </div>
     </div>
-    <p class="muted" style="margin-top:3vh;font-size:1.05vw;text-align:center">This isn't a niche problem — it's <span class="neon">infrastructure that doesn't exist yet</span>.</p>
+    <p class="muted" style="margin-top:3.5vh;font-size:1.5vw;text-align:center">This isn't a niche problem — it's <span class="neon">infrastructure that doesn't exist yet</span>.</p>
   </section>
 
   <!-- 3. SOLUTION -->
   <section class="slide">
     <div class="eyebrow">The Solution</div>
     <h2>GUBER is the Human API for Truth.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:90ch">A nationwide network connecting people who need <span class="neon">help, work, or verification</span> with real people who can deliver real-world action.</p>
-    <div class="grid-3" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.6vw;margin:1vh 0 0;max-width:90ch">A nationwide network connecting people who need <span class="neon">help, work, or verification</span> with real people who can deliver real-world action.</p>
+    <div class="grid-3" style="margin-top:3.5vh">
       <div class="card">
         <div class="num">ID</div>
         <h4>Verified identity — both sides</h4>
@@ -258,42 +306,164 @@
         <p>GPS-locked photos, video, dynamic checklists. The proof layer no incumbent collects.</p>
       </div>
     </div>
-    <p style="margin-top:3vh;font-size:1.15vw;text-align:center;max-width:80ch;margin-left:auto;margin-right:auto">
+    <p style="margin-top:3.5vh;font-size:1.6vw;text-align:center;max-width:80ch;margin-left:auto;margin-right:auto">
       A <span class="neon">real-world trust layer</span> usable for any task where one human needs to verify something for another.
     </p>
   </section>
 
-  <!-- 4. MISSION · EQUAL OPPORTUNITY -->
+  <!-- 4. HOW PEOPLE USE IT -->
   <section class="slide">
-    <div class="eyebrow">Mission</div>
-    <h2>Built for everyday people.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:90ch">An equal-opportunity platform where <span class="neon">access to work, income, and trust does not depend on who you know</span>.</p>
-    <div class="grid-2" style="margin-top:3vh">
-      <div class="card">
-        <h4 class="neon">Opportunity, not gatekeeping</h4>
-        <p>Anyone with verified ID and willingness to show up can earn. No résumé bias, no referral wall, no opaque algorithm picking winners.</p>
+    <div class="eyebrow">In the Hands of a User</div>
+    <h2>What you actually do with GUBER.</h2>
+    <p class="muted" style="font-size:1.6vw;margin:1vh 0 0;max-width:90ch">Six everyday actions. <span class="neon">All live, all wired, all in the app today.</span></p>
+    <div class="verb-grid">
+      <div class="verb"><div class="verb-num">01</div><h3>Find Work</h3><p>Open the app, see paid jobs and Cash Drops near you. No résumé. No recruiter.</p></div>
+      <div class="verb"><div class="verb-num">02</div><h3>Hire Help</h3><p>Post a job in seconds with a structured dropdown — verified workers come to you.</p></div>
+      <div class="verb"><div class="verb-num">03</div><h3>Verify Things</h3><p>Send a verified human to inspect a car, a property, or a marketplace listing on your behalf.</p></div>
+      <div class="verb"><div class="verb-num">04</div><h3>GPS Proof</h3><p>Every job ends with location-stamped photos, video, and checklists — tamper-resistant by design.</p></div>
+      <div class="verb"><div class="verb-num">05</div><h3>Instant Payouts</h3><p>Stripe Connect pays workers the moment a job is confirmed. No invoicing, no chasing.</p></div>
+      <div class="verb"><div class="verb-num">06</div><h3>Real Reputation</h3><p>Your portable record is built from verified jobs — not follower counts or paid badges.</p></div>
+    </div>
+  </section>
+
+  <!-- 5. TRUST / VERIFICATION LAYER -->
+  <section class="slide">
+    <div class="eyebrow">The Verification Spine</div>
+    <h2>Four primitives no one else collects.</h2>
+    <p class="muted" style="font-size:1.5vw;margin:1vh 0 0;max-width:90ch">No incumbent collects all four — verified identity, on-platform money, structured proof of work, and an open category set — under one roof. <span class="neon">GUBER does.</span></p>
+    <div class="grid-4" style="margin-top:3vh">
+      <div class="layer-block trust">
+        <div class="layer-eyebrow">Primitive 01</div>
+        <h3>Verified Identity</h3>
+        <p class="layer-desc">Mandatory ID + selfie on both sides of every transaction. Sex-offender screening at onboarding.</p>
+      </div>
+      <div class="layer-block trust">
+        <div class="layer-eyebrow">Primitive 02</div>
+        <h3>On-Platform Money</h3>
+        <p class="layer-desc">Stripe Connect ledger, escrow on lock-in, payout on confirmation, dispute flow built in.</p>
+      </div>
+      <div class="layer-block trust">
+        <div class="layer-eyebrow">Primitive 03</div>
+        <h3>Proof of Work</h3>
+        <p class="layer-desc">GPS-locked photos, video, dynamic checklists. A dataset no incumbent collects.</p>
+      </div>
+      <div class="layer-block trust">
+        <div class="layer-eyebrow">Primitive 04</div>
+        <h3>Open Category Set</h3>
+        <p class="layer-desc">Same trust stack runs across jobs, V&amp;I, marketplace, observations, and B2B verification.</p>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:2.5vh;gap:2.5vw">
+      <div class="card" style="border-color:rgba(162,89,255,.4)">
+        <h4 class="purple" style="color:var(--purple)">AI or Not — recurring trust subscription</h4>
+        <p>Standalone product at <code>/ai-or-not</code>. AI-image detection · unlimited text verification · verified-human badge. <span class="neon">$4.99/mo via Stripe</span> — Apple-compliant on iOS via the External Purchase Sheet. Same engine powers GUBER's internal moderation pipeline — every subscription dollar rides on infrastructure the marketplace already needs.</p>
       </div>
       <div class="card">
-        <h4 class="neon">Proof beats pedigree</h4>
-        <p>Reputation is built from GPS-verified, timestamped jobs — not follower counts or paid badges. Trust is earned through action.</p>
-      </div>
-      <div class="card">
-        <h4 style="color:var(--purple)">Reputation is portable</h4>
-        <p>Every completed job and on-time payout builds a structured, portable record the user owns — across categories, cities, and time.</p>
-      </div>
-      <div class="card">
-        <h4 style="color:var(--gold)">Infrastructure for people, not just enterprises</h4>
-        <p>The same trust stack powering B2B verification deals also powers a neighbor helping a neighbor. One platform, both directions.</p>
+        <h4 class="neon">Why this is defensible</h4>
+        <p>Two-sided verified identity — incumbents only verify one side, or neither. Every new verified helper expands what GUBER can verify, where, and how fast. Over time the proof-of-work data layer becomes a B2B product — insurance, lending, marketplaces, and OEMs all need real-world proof.</p>
       </div>
     </div>
   </section>
 
-  <!-- 5. WHY NOW -->
+  <!-- 6. LIVE COORDINATION LAYER -->
+  <section class="slide">
+    <div class="eyebrow">Real-World Coordination</div>
+    <h2>Software can guess. A verified human <span class="neon">knows</span>.</h2>
+    <p class="muted" style="font-size:1.55vw;margin:1vh 0 0;max-width:95ch">GUBER turns that simple idea into a nationwide on-demand verification network — running across <span class="neon">every U.S. zip code we activate</span>.</p>
+    <div class="grid-2" style="margin-top:3vh;align-items:start;gap:3vw">
+      <div>
+        <h3>How a job moves through the network</h3>
+        <ul>
+          <li><span class="neon">Request</span> — a consumer, business, or marketplace requests a real-world check or task.</li>
+          <li><span class="neon">Match</span> — the closest verified helper is matched in seconds via live geolocation.</li>
+          <li><span class="neon">Verify</span> — helper completes the task with GPS-locked photo, video, and a structured checklist.</li>
+          <li><span class="neon">Settle</span> — Stripe Connect pays the helper instantly. GUBER takes its cut. Requester gets evidence on file.</li>
+        </ul>
+        <p class="muted" style="margin-top:2.5vh;font-size:1.4vw">Every verified job adds to the helper's portable resume <span class="neon">and</span> to GUBER's proprietary real-world data layer — both compound over time.</p>
+      </div>
+      <div>
+        <div class="card" style="padding:2.2vw;border-color:rgba(162,89,255,.35)">
+          <h4 class="purple" style="font-size:1.85vw;margin-top:0;color:var(--purple)">Three connected layers, one network</h4>
+          <ul style="margin-top:1.2vh;font-size:1.4vw">
+            <li><span class="neon">Core Marketplace</span> — verified people work, hire, and verify for verified people.</li>
+            <li><span style="color:var(--purple)">Trust Layer</span> — identity, money ledger, AI-or-Not, portable reputation.</li>
+            <li><span style="color:var(--gold)">Growth Layer</span> — Cash Drops, business tools, sponsored activations, GUBER Studio.</li>
+          </ul>
+          <p class="muted" style="font-size:1.25vw;margin-top:2vh;font-style:italic">Each layer reinforces the next — verified people earn, trust data compounds, growth surfaces monetize the same network.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. MONETIZATION -->
+  <section class="slide">
+    <div class="eyebrow">Business Model</div>
+    <h2>How GUBER makes money.</h2>
+    <p class="muted" style="font-size:1.4vw;margin:1vh 0 0;max-width:95ch">Five revenue categories. Fourteen wired streams. <span class="neon">All running on Stripe today.</span></p>
+    <div class="rev-cat-strip" style="margin-top:2vh">
+      <div class="rev-cat" style="border-color:rgba(57,255,20,.35)"><div class="rev-cat-name" style="color:var(--neon)">Marketplace</div><div class="rev-cat-count">4</div><div class="rev-cat-sub">Fees · processing · cashouts</div></div>
+      <div class="rev-cat" style="border-color:rgba(162,89,255,.35)"><div class="rev-cat-name" style="color:var(--purple)">Trust</div><div class="rev-cat-count">2</div><div class="rev-cat-sub">Trust Box · Day-1 OG</div></div>
+      <div class="rev-cat" style="border-color:rgba(255,176,32,.35)"><div class="rev-cat-name" style="color:var(--gold)">Business</div><div class="rev-cat-count">4</div><div class="rev-cat-sub">Verification · Scout · packs · observations</div></div>
+      <div class="rev-cat" style="border-color:rgba(196,107,255,.35)"><div class="rev-cat-name" style="color:var(--purple)">Sponsorship</div><div class="rev-cat-count">3</div><div class="rev-cat-sub">Cash Drops · boost · visibility</div></div>
+      <div class="rev-cat" style="border-color:rgba(57,255,20,.35)"><div class="rev-cat-name" style="color:var(--neon)">Digital / AI</div><div class="rev-cat-count">1+</div><div class="rev-cat-sub">Studio packs &amp; tiers</div></div>
+    </div>
+    <div class="grid-3" style="margin-top:2.2vh;gap:1.6vw">
+      <div class="card" style="padding:1.6vw">
+        <h4 class="neon" style="font-size:1.55vw;margin-top:0">Cash Drops — already monetizing</h4>
+        <p style="font-size:1.2vw">Brand-funded local activations. <span class="neon">~60% gross platform margin</span> on every sponsor dollar. <span style="color:var(--gold)">Wayne Buys Junk Cars</span> is an active paid sponsor today. Sponsors fund the drop, winners get paid, GUBER keeps the spread.</p>
+      </div>
+      <div class="card" style="padding:1.6vw;border-color:rgba(162,89,255,.4)">
+        <h4 class="purple" style="font-size:1.55vw;margin-top:0;color:var(--purple)">GUBER Studio — second revenue rail</h4>
+        <p style="font-size:1.2vw">AI media engine wired into every account. Two Stripe rails today: one-time credit packs <span class="neon">$5–$200</span> and monthly tiers <span style="color:var(--purple)">$10.99 – $99/mo</span>. Software-margin economics on the same audience.</p>
+      </div>
+      <div class="card" style="padding:1.6vw">
+        <h4 style="color:var(--gold);font-size:1.55vw;margin-top:0">Marketplace + Trust core</h4>
+        <p style="font-size:1.2vw"><span class="neon">20% job fee + 3.2% processing</span>. Trust Box <span class="neon">$4.99/mo</span>. Business verification <span class="neon">$49 one-time</span>. Scout Plan <span class="neon">$99/mo</span>. Observation marketplace <span class="neon">20%</span>. All wired through Stripe Connect.</p>
+      </div>
+    </div>
+    <p style="margin-top:2.5vh;font-size:1.35vw;text-align:center;font-style:italic" class="neon">Marketplace prints transaction revenue. Studio prints high-margin digital revenue. Cash Drops print sponsor revenue. One network, three income statements.</p>
+  </section>
+
+  <!-- 8. MARKET OPPORTUNITY -->
+  <section class="slide">
+    <h2>Market opportunity.</h2>
+    <p class="muted" style="font-size:1.5vw;margin-top:0;max-width:95ch">GUBER sits at the intersection of large, named markets — all growing, all undergoing structural change, all citable to third-party research.</p>
+    <div style="margin-top:2vh">
+      <div class="mkt-row">
+        <div class="mkt-name">Digital Trust<span class="src">Source: Grand View Research</span></div>
+        <div class="mkt-bar"><div class="mkt-fill" style="width:100%"></div></div>
+        <div class="mkt-val neon">$360.48B<span style="display:block;font-size:.95vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2033 · $118.71B in 2024</span></div>
+      </div>
+      <div class="mkt-row">
+        <div class="mkt-name">Fraud Detection &amp; Prevention<span class="src">Source: Grand View Research</span></div>
+        <div class="mkt-bar"><div class="mkt-fill" style="width:25%"></div></div>
+        <div class="mkt-val neon">$90.07B<span style="display:block;font-size:.95vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2030 · $33.13B in 2024</span></div>
+      </div>
+      <div class="mkt-row">
+        <div class="mkt-name">Identity Verification<span class="src">Source: Mordor Intelligence</span></div>
+        <div class="mkt-bar"><div class="mkt-fill gold" style="width:7%"></div></div>
+        <div class="mkt-val gold">$26.8B<span style="display:block;font-size:.95vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2031</span></div>
+      </div>
+      <div class="mkt-row">
+        <div class="mkt-name">Trust &amp; Safety TAM<span class="src">Source: Duco Experts</span></div>
+        <div class="mkt-bar"><div class="mkt-fill gold" style="width:6%"></div></div>
+        <div class="mkt-val gold">$24.8B<span style="display:block;font-size:.95vw;color:var(--muted);font-weight:400;letter-spacing:.06em">total addressable</span></div>
+      </div>
+      <div class="mkt-row">
+        <div class="mkt-name">Gig &amp; Sharing Economy<span class="src">Source: Statista · Grand View Research</span></div>
+        <div class="mkt-bar"><div class="mkt-fill" style="width:100%;background:linear-gradient(90deg,var(--neon),var(--purple))"></div></div>
+        <div class="mkt-val" style="color:#fff">$1T – $1.8T<span style="display:block;font-size:.95vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2032 · range reflects market definition</span></div>
+      </div>
+    </div>
+    <p class="disclaimer">Market projections are third-party estimates and do not represent guaranteed company performance.</p>
+  </section>
+
+  <!-- 9. WHY NOW -->
   <section class="slide">
     <div class="eyebrow">Why Now</div>
     <h2>The window is open.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.8vh 0 0;max-width:90ch">The conditions that make GUBER necessary <span class="neon">did not exist five years ago</span>.</p>
-    <div class="grid-2" style="margin-top:3vh">
+    <p class="muted" style="font-size:1.5vw;margin:1vh 0 0;max-width:90ch">The conditions that make GUBER necessary <span class="neon">did not exist five years ago</span>.</p>
+    <div class="grid-2" style="margin-top:3.5vh">
       <div>
         <h3>The crisis is compounding</h3>
         <ul>
@@ -312,498 +482,163 @@
         </ul>
       </div>
     </div>
-    <p class="center" style="margin-top:3vh;font-size:1.15vw"><span class="neon">The category does not have a category leader yet.</span></p>
+    <p class="center" style="margin-top:3.5vh;font-size:1.7vw"><span class="neon">The category does not have a category leader yet.</span></p>
   </section>
 
-  <!-- 6. PRODUCT · THREE-LAYER OPERATING SYSTEM -->
+  <!-- 10. OPERATIONAL STATUS -->
   <section class="slide">
-    <div class="eyebrow">Product</div>
-    <h2>One operating system. Three connected layers.</h2>
-    <p class="muted" style="font-size:1.05vw;margin:.6vh 0 0;max-width:90ch">Live in production today on web and Android. iOS App Store launch in progress.</p>
-    <div class="grid-3" style="margin-top:2.2vh">
-      <div class="layer-block core">
-        <div class="layer-eyebrow">Layer 01 · Core Marketplace</div>
-        <h3>The productive engine.</h3>
-        <p class="layer-desc">Where verified people get work done for verified people — backed by structured, evidenced proof.</p>
-        <div class="layer-items">
-          <div class="layer-item"><span class="layer-item-name">Work &amp; Hire</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">Verify &amp; Inspect</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">GPS Proof Engine</span><span class="layer-item-tag">Live</span></div>
-        </div>
-      </div>
-      <div class="layer-block trust">
-        <div class="layer-eyebrow">Layer 02 · Trust Layer</div>
-        <h3>The verification spine.</h3>
-        <p class="layer-desc">The data and identity moat — what every other GUBER surface is built on.</p>
-        <div class="layer-items">
-          <div class="layer-item"><span class="layer-item-name">Identity Verification</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">AI or Not · Trust Box</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">Portable Reputation</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">Stripe Money Ledger</span><span class="layer-item-tag">Live</span></div>
-        </div>
-      </div>
-      <div class="layer-block growth">
-        <div class="layer-eyebrow">Layer 03 · Growth Layer</div>
-        <h3>The activation engine.</h3>
-        <p class="layer-desc">Where the trust layer is monetized — by brands, businesses, and creators on the same network.</p>
-        <div class="layer-items">
-          <div class="layer-item"><span class="layer-item-name">Cash Drops</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">Business Tools</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">Sponsored Activations</span><span class="layer-item-tag">Live</span></div>
-          <div class="layer-item"><span class="layer-item-name">Content Studio</span><span class="layer-item-tag">Live</span></div>
-        </div>
-      </div>
-    </div>
-    <p style="margin-top:2vh;text-align:center;font-size:.95vw" class="muted">Each layer reinforces the next — <span class="neon">verified people</span> earn, <span class="neon">trust data</span> compounds, <span class="neon">growth surfaces</span> monetize the same network.</p>
-  </section>
-
-  <!-- 6a. GUBER STUDIO · SECOND REVENUE RAIL -->
-  <section class="slide">
-    <div class="eyebrow">Product · Second Revenue Rail</div>
-    <h2>Built-in creator &amp; business activation infrastructure.</h2>
-    <p class="muted" style="font-size:1.15vw;margin:1vh 0 0;max-width:90ch"><span class="neon">GUBER Content Studio</span> — an AI media engine wired into every verified account. Businesses generate ads, creators ship content, and digital revenue is layered on top of marketplace activity — <span class="neon">all without ever leaving the platform</span>.</p>
-    <div class="grid-2" style="margin-top:2.5vh;gap:2vw">
-      <div>
-        <h3 class="neon" style="margin-top:0">What it does</h3>
-        <ul style="font-size:1vw">
-          <li><span class="neon">Cinematic motion clips</span> from a single reference photo (Kling Motion Control · 80 cr).</li>
-          <li><span class="neon">Mirror-motion videos</span> for short-form social — 5s and 10s (Wan Motion · 30 / 60 cr).</li>
-          <li><span class="neon">Business commercials</span> generated in-app for small businesses.</li>
-          <li><span class="neon">Brand music</span> via MiniMax (5 cr).</li>
-          <li><span class="neon">For You feed</span> at <code>/studio/explore</code> — vertical snap-scroll of curated generations that pulls non-Studio users into trying the tool.</li>
-          <li>Sessions are temporary by design — generated assets purge automatically — so storage cost stays flat as usage scales.</li>
-        </ul>
-      </div>
-      <div>
-        <h3 style="color:var(--purple);margin-top:0">How it makes money</h3>
-        <p class="muted" style="font-size:.95vw;margin:0 0 1.2vh">Two Stripe rails wired today: one-time credit packs <em>and</em> recurring monthly tiers.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1vw">
-          <div class="card" style="padding:1.4vh 1vw">
-            <h4 class="neon" style="font-size:.95vw;margin:0 0 .8vh">Credit packs (one-time)</h4>
-            <div style="font-size:.85vw;line-height:1.7">
-              Spark · <span class="neon">$5</span> / 330 cr<br/>
-              Pulse · <span class="neon">$10</span> / 700 cr<br/>
-              Charge · <span class="neon">$25</span> / 1,800 cr<br/>
-              Power · <span class="neon">$50</span> / 3,800 cr<br/>
-              Surge · <span class="neon">$100</span> / 8,000 cr<br/>
-              Whale · <span class="neon">$200</span> / 16,000 cr
-            </div>
-          </div>
-          <div class="card" style="padding:1.4vh 1vw">
-            <h4 style="color:var(--purple);font-size:.95vw;margin:0 0 .8vh">Monthly tiers</h4>
-            <div style="font-size:.85vw;line-height:1.7">
-              Standard · <span style="color:var(--purple)">$10.99</span> / mo<br/>
-              Business · <span style="color:var(--purple)">$37.99</span> / mo<br/>
-              Enterprise · <span style="color:var(--purple)">$99</span> / mo<br/>
-              + Day-1 OG: <span style="color:var(--gold)">+20 cr/mo</span> rollover<br/>
-              + Free 2-credit trial on every signup<br/>
-              All charges via Stripe today
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <p style="margin-top:2vh;font-size:1vw;text-align:center;font-style:italic" class="neon">Marketplace prints transaction revenue. Studio prints high-margin digital revenue from the same audience — zero extra acquisition cost. Software-margin economics layered on top of marketplace-volume economics.</p>
-  </section>
-
-  <!-- 6. HUMAN API FOR TRUTH -->
-  <section class="slide">
-    <h2>The Human API for Truth.</h2>
-    <p class="muted" style="font-size:1.3vw;margin-top:0;max-width:95ch">Software can guess. <span class="neon">A verified human at the location, with a phone, and proof, knows.</span> GUBER turns that simple idea into a nationwide on-demand verification network.</p>
-    <div class="grid-2" style="margin-top:3vh;align-items:center">
-      <div>
-        <h3>How it works</h3>
-        <ul>
-          <li><span class="neon">Request</span> — anyone (consumer, business, marketplace) requests a real-world check or task.</li>
-          <li><span class="neon">Match</span> — the closest verified helper is matched in seconds.</li>
-          <li><span class="neon">Verify</span> — helper completes the task with GPS-locked photo, video, and structured checklist.</li>
-          <li><span class="neon">Settle</span> — Stripe Connect pays the helper instantly, GUBER takes its cut, requester gets evidence on file.</li>
-        </ul>
-        <p class="muted" style="margin-top:2vh;font-size:1.05vw">Every verified job adds to the helper's portable resume <span class="neon">and</span> to GUBER's proprietary real-world data layer — both compound over time.</p>
-      </div>
-      <div>
-        <div class="card" style="padding:2vw">
-          <h4 class="neon" style="font-size:1.4vw;margin-top:0">Why this is defensible</h4>
-          <ul style="margin-top:1vh">
-            <li>Two-sided verified identity — incumbents only verify one side, or neither.</li>
-            <li>Structured GPS + photo + checklist proof — <span class="neon">a dataset no one else collects</span>.</li>
-            <li>Network effect: every new verified helper expands what GUBER can verify, where, and how fast.</li>
-            <li>The data layer becomes an addressable B2B product over time — insurance, lending, marketplaces, and OEMs all need real-world proof.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 7. MARKET INDICATORS -->
-  <section class="slide">
-    <h2>Market indicators.</h2>
-    <p class="muted" style="font-size:1.2vw;margin-top:0;max-width:95ch">GUBER sits at the intersection of large, named markets — all growing, all undergoing structural change, all citable to third-party research.</p>
-    <div style="margin-top:2vh">
-      <div class="mkt-row">
-        <div class="mkt-name">Digital Trust<span class="src">Source: Grand View Research</span></div>
-        <div class="mkt-bar"><div class="mkt-fill" style="width:100%"></div></div>
-        <div class="mkt-val neon">$360.48B<span style="display:block;font-size:.85vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2033 · $118.71B in 2024</span></div>
-      </div>
-      <div class="mkt-row">
-        <div class="mkt-name">Fraud Detection &amp; Prevention<span class="src">Source: Grand View Research</span></div>
-        <div class="mkt-bar"><div class="mkt-fill" style="width:25%"></div></div>
-        <div class="mkt-val neon">$90.07B<span style="display:block;font-size:.85vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2030 · $33.13B in 2024</span></div>
-      </div>
-      <div class="mkt-row">
-        <div class="mkt-name">Fraud Detection &amp; Prevention<span class="src">Source: MarketsandMarkets</span></div>
-        <div class="mkt-bar"><div class="mkt-fill purple" style="width:18%"></div></div>
-        <div class="mkt-val purple">$65.68B<span style="display:block;font-size:.85vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2030</span></div>
-      </div>
-      <div class="mkt-row">
-        <div class="mkt-name">Identity Verification<span class="src">Source: Mordor Intelligence</span></div>
-        <div class="mkt-bar"><div class="mkt-fill gold" style="width:7%"></div></div>
-        <div class="mkt-val gold">$26.8B<span style="display:block;font-size:.85vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2031</span></div>
-      </div>
-      <div class="mkt-row">
-        <div class="mkt-name">Trust &amp; Safety TAM<span class="src">Source: Duco Experts</span></div>
-        <div class="mkt-bar"><div class="mkt-fill gold" style="width:6%"></div></div>
-        <div class="mkt-val gold">$24.8B<span style="display:block;font-size:.85vw;color:var(--muted);font-weight:400;letter-spacing:.06em">total addressable</span></div>
-      </div>
-      <div class="mkt-row">
-        <div class="mkt-name">Gig &amp; Sharing Economy<span class="src">Source: Statista · Grand View Research</span></div>
-        <div class="mkt-bar"><div class="mkt-fill" style="width:100%;background:linear-gradient(90deg,var(--neon),var(--purple))"></div></div>
-        <div class="mkt-val" style="color:#fff">$1T – $1.8T<span style="display:block;font-size:.85vw;color:var(--muted);font-weight:400;letter-spacing:.06em">by 2032 · range reflects market definition</span></div>
-      </div>
-    </div>
-    <p class="disclaimer">Market projections are third-party estimates and do not represent guaranteed company performance.</p>
-  </section>
-
-  <!-- 8. BUSINESS MODEL · DETAILED MONETIZATION TABLE -->
-  <section class="slide">
-    <div class="eyebrow">Business Model</div>
-    <h2>How GUBER makes money.</h2>
-    <p class="muted" style="font-size:1.05vw;margin:1vh 0 0;max-width:90ch">Five revenue categories. Fourteen wired streams. <span class="neon">All running on Stripe today.</span></p>
-    <div class="rev-cat-strip">
-      <div class="rev-cat" style="border-color:rgba(57,255,20,.35)"><div class="rev-cat-name" style="color:var(--neon)">Marketplace</div><div class="rev-cat-count">4</div><div class="rev-cat-sub">Fees · processing · cashouts</div></div>
-      <div class="rev-cat" style="border-color:rgba(162,89,255,.35)"><div class="rev-cat-name" style="color:var(--purple)">Trust</div><div class="rev-cat-count">2</div><div class="rev-cat-sub">Trust Box · Day-1 OG</div></div>
-      <div class="rev-cat" style="border-color:rgba(255,176,32,.35)"><div class="rev-cat-name" style="color:var(--gold)">Business</div><div class="rev-cat-count">4</div><div class="rev-cat-sub">Verification · Scout · packs · observations</div></div>
-      <div class="rev-cat" style="border-color:rgba(196,107,255,.35)"><div class="rev-cat-name" style="color:var(--purple)">Sponsorship</div><div class="rev-cat-count">3</div><div class="rev-cat-sub">Cash Drops · boost · visibility</div></div>
-      <div class="rev-cat" style="border-color:rgba(57,255,20,.35)"><div class="rev-cat-name" style="color:var(--neon)">Digital / AI</div><div class="rev-cat-count">1+</div><div class="rev-cat-sub">Studio packs &amp; tiers (slide 7)</div></div>
-    </div>
-    <div class="card" style="margin-top:1.5vh;padding:1.4vh 1.5vw">
-      <table style="width:100%;border-collapse:collapse;font-size:.85vw">
-        <thead>
-          <tr style="text-align:left;color:var(--neon);text-transform:uppercase;letter-spacing:.12em;font-size:.7vw">
-            <th style="padding:.7vh .6vw;width:28%">Stream</th>
-            <th style="padding:.7vh .6vw;width:32%">Who pays</th>
-            <th style="padding:.7vh .6vw;width:22%">Price</th>
-            <th style="padding:.7vh .6vw;width:18%">Status</th>
-          </tr>
-        </thead>
-        <tbody style="line-height:1.7">
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Job platform fee</td><td class="muted">Job poster (taken from helper share)</td><td><span class="neon" style="font-weight:700">20%</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Job processing fee</td><td class="muted">Job poster (added on top)</td><td><span class="neon" style="font-weight:700">3.2%</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Worker cashout — early</td><td class="muted">Helper</td><td><span class="neon" style="font-weight:700">2%</span></td><td><span class="pill" style="border-color:rgba(255,176,32,.5);color:var(--gold);font-size:.7vw;padding:.2vh .6vw">Flag-gated</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Worker cashout — instant</td><td class="muted">Helper</td><td><span class="neon" style="font-weight:700">5%</span></td><td><span class="pill" style="border-color:rgba(255,176,32,.5);color:var(--gold);font-size:.7vw;padding:.2vh .6vw">Flag-gated</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Trust Box subscription</td><td class="muted">End user</td><td><span class="neon" style="font-weight:700">$4.99 / mo</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Day-1 OG tier</td><td class="muted">Helper / supporter</td><td><span class="neon" style="font-weight:700">One-time</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Business verification</td><td class="muted">Business</td><td><span class="neon" style="font-weight:700">$49 one-time</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Business Scout Plan</td><td class="muted">Business</td><td><span class="neon" style="font-weight:700">$99 / mo</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Extra unlock packs</td><td class="muted">Business</td><td><span class="neon" style="font-weight:700">Per-pack</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Marketplace boost (7-day featured)</td><td class="muted">Seller</td><td><span class="neon" style="font-weight:700">Per-listing</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Cash Drop sponsorships</td><td class="muted">Brand sponsor</td><td><span class="neon" style="font-weight:700">Sponsor + platform share</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Observation marketplace</td><td class="muted">Business buyer (helper gets 80%)</td><td><span class="neon" style="font-weight:700">20% platform fee</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Direct Offers (Stripe Connect)</td><td class="muted">Hirer (gross-up math)</td><td><span class="neon" style="font-weight:700">Application fee</span></td><td><span class="pill" style="border-color:rgba(57,255,20,.5);color:var(--neon);font-size:.7vw;padding:.2vh .6vw">Live</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.06)"><td style="padding:.55vh .6vw">Sponsored visibility / content licensing</td><td class="muted">Brand sponsor</td><td><span class="neon" style="font-weight:700">Per-impression / pack</span></td><td><span class="pill purple" style="font-size:.7vw;padding:.2vh .6vw">Emerging</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- (legacy 11-card grid removed in favor of detailed table above) -->
-  <div style="display:none">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1vw;margin-top:1.8vh">
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);opacity:.7">01</span><h4 class="neon">Marketplace transaction fees</h4><p>Take rate on every job completed through the marketplace. Pay-on-lock-in.</p></div>
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);opacity:.7">02</span><h4 class="neon">Verify &amp; Inspect fees</h4><p>Per-verification revenue on V&amp;I jobs — vehicles, properties, listings, salvage.</p></div>
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--neon);opacity:.7">03</span><h4 class="neon">Urgent job fees</h4><p>Premium pricing on time-sensitive jobs + auto-pay-increase mechanics.</p></div>
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--purple);opacity:.7">04</span><h4 style="color:var(--purple)">Business subscriptions</h4><p>Recurring B2B plans — talent scouting, bulk posting, verified onboarding.</p></div>
-
-      <div class="card" style="position:relative;border-color:rgba(196,107,255,.45)"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--purple);opacity:.7">05</span><h4 style="color:var(--purple)">Sponsored Cash Drops</h4><p>Brand-funded geo-targeted reward drops — gross-margin sponsorship + organic UA.</p></div>
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--purple);opacity:.7">06</span><h4 style="color:var(--purple)">AI or Not subscriptions</h4><p>Recurring trust toolbox — AI-image detection, text verification, verified-human badge.</p></div>
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--gold);opacity:.7">07</span><h4 style="color:var(--gold)">Featured visibility</h4><p>Boosted listings and featured placements across marketplace and discovery.</p></div>
-      <div class="card" style="position:relative"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--gold);opacity:.7">08</span><h4 style="color:var(--gold)">Advertising network</h4><p>Sponsored placements across the marketplace, map, and Cash Drop network.</p></div>
-
-      <div class="card" style="position:relative;border-color:rgba(255,176,32,.4)"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--gold);opacity:.7">09</span><h4 style="color:var(--gold)">Future B2B APIs</h4><p>API access for insurance, lending, marketplaces, and OEMs — verification at scale.</p></div>
-      <div class="card" style="position:relative;border-color:rgba(255,176,32,.4)"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--gold);opacity:.7">10</span><h4 style="color:var(--gold)">Verification infrastructure licensing</h4><p>License the GUBER verification stack to platforms that need a Human API for Truth.</p></div>
-      <div class="card" style="position:relative;border-color:rgba(255,176,32,.4)"><span style="position:absolute;top:.6vh;right:.7vw;font-family:'Oxanium',sans-serif;font-size:.85vw;color:var(--gold);opacity:.7">11</span><h4 style="color:var(--gold)">Trust data infrastructure</h4><p>Aggregate, anonymized trust signals as a data product for the digital economy.</p></div>
-      <div class="card" style="background:linear-gradient(135deg,rgba(57,255,20,.08),rgba(196,107,255,.08));border-color:rgba(57,255,20,.5);display:flex;flex-direction:column;justify-content:center;text-align:center"><h4 style="color:#fff;margin-bottom:.6vh">11 streams.<br/>One platform.</h4><p style="font-size:.85vw">Transactions · subscriptions · sponsorships · B2B · infrastructure — diversified by design.</p></div>
-    </div>
-  </div>
-
-  <!-- 9. CASH DROPS · REAL-WORLD COMMUNITY ACTIVATION -->
-  <section class="slide">
-    <div class="eyebrow">Community Activation</div>
-    <h2>The next-generation real-world advertising network.</h2>
-    <p class="muted" style="font-size:1.15vw;margin:1vh 0 0;max-width:90ch">Cash Drops are <span class="neon">sponsor-funded local activations</span> — measurable foot traffic, verified participation, and organic social reach delivered by a verified-human network no digital ad platform can replicate.</p>
-    <div class="grid-3" style="margin-top:3vh">
-      <div class="card">
-        <h4 class="neon">Sponsor-funded activation</h4>
-        <p>Brands fund the drop. GUBER places it in the target zip. Verified users participate in person — generating measurable foot traffic into a physical location.</p>
-      </div>
-      <div class="card">
-        <h4 style="color:var(--purple)">Measurable real-world reach</h4>
-        <p>Verified participation · location-stamped attendance · organic social posts from real winners — a live ad unit no Facebook campaign can replicate.</p>
-      </div>
-      <div class="card">
-        <h4 style="color:var(--gold)">Built-in growth flywheel</h4>
-        <p>Every drop is also a free user-acquisition event for GUBER. Brand dollars fund the reward; the reward funds organic growth; growth expands the network sponsors pay to reach.</p>
-      </div>
-    </div>
-    <div style="margin-top:4vh;display:flex;align-items:center;justify-content:center;gap:4vw;flex-wrap:wrap">
-      <div style="text-align:center">
-        <div style="font-family:'Oxanium',sans-serif;font-size:5.5vw;color:var(--neon);font-weight:800;line-height:1">~60%</div>
-        <div class="muted" style="font-size:.85vw;letter-spacing:.2em;text-transform:uppercase;margin-top:.8vh">Gross platform margin on every sponsor dollar</div>
-      </div>
-      <div style="max-width:42ch;font-size:1.05vw;line-height:1.6;color:var(--ink);border-left:2px solid rgba(57,255,20,.4);padding-left:1.8vw">
-        Sponsors fund the drop. Winners get paid. <span class="neon">GUBER keeps the spread</span> — and gains a verified, geo-stamped user-acquisition event on every payout.
-      </div>
-    </div>
-    <p class="muted" style="text-align:center;margin-top:3.5vh;font-size:.9vw;letter-spacing:.04em;font-style:italic">Multiple sponsored Cash Drops are live in market today. Real winners on the next slide.</p>
-  </section>
-
-  <!-- 10. CASH DROP WINNERS · REAL PROOF -->
-  <section class="slide">
-    <div class="eyebrow">Real Proof</div>
-    <h2>Real winners. Real posts. Real proof.</h2>
-    <p class="muted" style="font-size:1.05vw;margin:.5vh 0 0;max-width:95ch">A sample of GUBER Cash Drop winners who publicly posted their wins to Facebook. <span class="neon">Brand-sponsored, real cash, organic social reach</span> — all in market today.</p>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:1.2vw;margin-top:2.5vh;align-items:stretch;max-height:62vh">
-      <div style="border:1px solid rgba(57,255,20,.4);border-radius:12px;overflow:hidden;box-shadow:0 0 20px rgba(57,255,20,.18);background:#000;height:62vh"><img src="winners/w1.jpg" alt="Cash Drop winner" style="width:100%;height:100%;display:block;object-fit:cover"/></div>
-      <div style="border:1px solid rgba(57,255,20,.4);border-radius:12px;overflow:hidden;box-shadow:0 0 20px rgba(57,255,20,.18);background:#000;height:62vh"><img src="winners/w2.jpg" alt="Cash Drop winner" style="width:100%;height:100%;display:block;object-fit:cover"/></div>
-      <div style="border:1px solid rgba(57,255,20,.4);border-radius:12px;overflow:hidden;box-shadow:0 0 20px rgba(57,255,20,.18);background:#000;height:62vh"><img src="winners/w3.jpg" alt="Cash Drop winner" style="width:100%;height:100%;display:block;object-fit:cover"/></div>
-      <div style="border:1px solid rgba(57,255,20,.4);border-radius:12px;overflow:hidden;box-shadow:0 0 20px rgba(57,255,20,.18);background:#000;height:62vh"><img src="winners/w4.jpg" alt="Cash Drop winner" style="width:100%;height:100%;display:block;object-fit:cover"/></div>
-      <div style="border:1px solid rgba(57,255,20,.4);border-radius:12px;overflow:hidden;box-shadow:0 0 20px rgba(57,255,20,.18);background:#000;height:62vh"><img src="winners/w5.jpg" alt="Cash Drop winner" style="width:100%;height:100%;display:block;object-fit:cover"/></div>
-      <div style="border:1px solid rgba(57,255,20,.4);border-radius:12px;overflow:hidden;box-shadow:0 0 20px rgba(57,255,20,.18);background:#000;height:62vh"><img src="winners/w6.jpg" alt="Cash Drop winner" style="width:100%;height:100%;display:block;object-fit:cover"/></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;gap:2vw;margin-top:2.2vh;font-size:1vw;flex-wrap:wrap">
-      <span><span class="neon" style="font-weight:700">Sponsored, not subsidized</span> — payouts funded by brands, not GUBER.</span>
-      <span><span style="color:var(--purple);font-weight:700">Organic viral loop</span> — winners post in their own words, on their own networks.</span>
-      <span><span style="color:var(--gold);font-weight:700">Proof of concept, in market</span> — running and paying out today.</span>
-    </div>
-  </section>
-
-  <!-- 11. COMMUNITY IMPACT -->
-  <section class="slide">
-    <div class="eyebrow">Community Impact</div>
-    <h2>Designed to stimulate local economies.</h2>
-    <p class="muted" style="font-size:1.15vw;margin:0;max-width:95ch">Every dollar that moves through GUBER moves between people in the same neighborhood. The platform is built to keep money local, surface real opportunity, and make safe transactions between strangers possible.</p>
-    <div class="grid-2" style="margin-top:2.5vh">
-      <div class="card">
-        <h4 class="neon">For everyday people</h4>
-        <ul>
-          <li><span class="neon">Find work</span> in your own city — no commute, no recruiter</li>
-          <li><span class="neon">Earn fast income</span> from real tasks, paid through Stripe</li>
-          <li><span class="neon">Help neighbors</span> and build a portable reputation doing it</li>
-          <li>Complete real-world tasks for real people — verified on both sides</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h4 style="color:var(--purple)">For local businesses &amp; communities</h4>
-        <ul>
-          <li><span style="color:var(--purple)">Support local businesses</span> through Cash Drop activations</li>
-          <li><span style="color:var(--purple)">Drive real foot traffic</span> into physical locations</li>
-          <li><span style="color:var(--purple)">Create safer local transactions</span> with ID, payment, and proof on every job</li>
-          <li>Help everyday people earn — not extract value out of the community</li>
-        </ul>
-      </div>
-    </div>
-    <p style="margin-top:2.5vh;font-size:1.2vw;text-align:center">
-      <span class="neon">Economic empowerment is not a side effect of GUBER — it's the design.</span>
-    </p>
-  </section>
-
-  <!-- 12a. AI OR NOT · TRUST SUBSCRIPTION -->
-  <section class="slide">
-    <div class="eyebrow">Product · Recurring Trust Revenue</div>
-    <h2>AI or Not — the trust subscription.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.5vh 0 0;max-width:95ch">A standalone trust product live at <code>/ai-or-not</code>. As AI-generated profiles, listings, and reviews flood every other marketplace, <span class="neon">"verified human" becomes a feature people pay for</span>.</p>
-    <div class="grid-2" style="margin-top:2.5vh;gap:2vw">
-      <div>
-        <h3 class="neon" style="margin-top:0">What it does</h3>
-        <ul style="font-size:1vw">
-          <li><span class="neon">AI-image detection</span> — paste or upload an image, get an AI-or-real verdict in seconds.</li>
-          <li><span class="neon">Unlimited text verification</span> — detect AI-generated copy in listings, messages, reviews.</li>
-          <li><span class="neon">Verified-human badge</span> on the user's GUBER profile so anyone transacting with them sees the trust signal instantly.</li>
-          <li>Same engine powers GUBER's <span class="neon">internal moderation pipeline</span> — every subscription dollar rides on infrastructure the marketplace already needs.</li>
-        </ul>
-      </div>
-      <div>
-        <h3 style="color:var(--purple);margin-top:0">How it makes money</h3>
-        <div class="card" style="margin-top:1vh">
-          <table style="width:100%;border-collapse:collapse;font-size:.9vw">
-            <thead>
-              <tr style="text-align:left;color:var(--neon);text-transform:uppercase;letter-spacing:.1em;font-size:.75vw">
-                <th style="padding:.6vh 0">Product</th>
-                <th>Price</th>
-                <th>Rail</th>
-              </tr>
-            </thead>
-            <tbody style="line-height:1.8">
-              <tr><td>Trust Box subscription</td><td><span class="neon">$4.99 / mo</span></td><td>Stripe (web) · ExternalPurchaseSheet (iOS, U.S.)</td></tr>
-              <tr><td>Verified-human badge</td><td><span style="color:var(--gold)">Included</span></td><td>Bundled with Trust Box</td></tr>
-              <tr><td>Internal moderation reuse</td><td><span style="color:var(--gold)">Cost offset</span></td><td>Same engine, no extra spend</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="muted" style="font-size:.85vw;margin-top:1.5vh;font-style:italic">Apple-compliant on iOS: required disclosure shown before Stripe checkout opens in SFSafariViewController — no IAP cut, no entitlement risk.</p>
-      </div>
-    </div>
-    <p style="margin-top:2vh;font-size:1vw;text-align:center;font-style:italic" class="neon">Recurring digital revenue with software-margin economics — bolted onto the same verified-identity audience that already pays for jobs, Studio, and Day-1 OG.</p>
-  </section>
-
-  <!-- 12b. WHY WE WIN · COMPETITIVE MATRIX -->
-  <section class="slide">
-    <div class="eyebrow">Defensibility</div>
-    <h2>Why we win.</h2>
-    <p class="muted" style="font-size:1.1vw;margin:.5vh 0 0;max-width:95ch">No incumbent collects all four primitives — verified identity, on-platform money, structured proof of work, and an open category set — under one roof. GUBER does.</p>
-    <div class="card" style="margin-top:2.5vh;padding:2vh 1.5vw">
-      <table style="width:100%;border-collapse:collapse;font-size:.95vw">
-        <thead>
-          <tr style="color:var(--neon);text-transform:uppercase;letter-spacing:.08em;font-size:.7vw;text-align:left">
-            <th style="padding:.8vh .6vw;width:24%"></th>
-            <th style="padding:.8vh .6vw">Craigslist · FB Groups</th>
-            <th style="padding:.8vh .6vw">TaskRabbit · Handy</th>
-            <th style="padding:.8vh .6vw">Uber · DoorDash</th>
-            <th style="padding:.8vh .6vw;color:#fff;background:rgba(57,255,20,.08);border-radius:6px">GUBER</th>
-          </tr>
-        </thead>
-        <tbody style="line-height:1.9">
-          <tr style="border-top:1px solid rgba(255,255,255,.08)"><td style="padding:.6vh .6vw" class="muted">Verified identity (both sides)</td><td>—</td><td>Workers only</td><td>Workers only</td><td style="background:rgba(57,255,20,.06)"><span class="neon">✓ Both</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.08)"><td style="padding:.6vh .6vw" class="muted">Money on-platform</td><td>—</td><td>✓</td><td>✓</td><td style="background:rgba(57,255,20,.06)"><span class="neon">✓</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.08)"><td style="padding:.6vh .6vw" class="muted">Structured proof of work</td><td>—</td><td>—</td><td>Receipt only</td><td style="background:rgba(57,255,20,.06)"><span class="neon">✓ GPS + photo + checklist</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.08)"><td style="padding:.6vh .6vw" class="muted">Open category set</td><td>✓ but unsafe</td><td>Limited</td><td>Single vertical</td><td style="background:rgba(57,255,20,.06)"><span class="neon">✓ Open + verified</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.08)"><td style="padding:.6vh .6vw" class="muted">B2B side (talent + data)</td><td>—</td><td>—</td><td>—</td><td style="background:rgba(57,255,20,.06)"><span class="neon">✓ Scout Plan + Observations</span></td></tr>
-          <tr style="border-top:1px solid rgba(255,255,255,.08)"><td style="padding:.6vh .6vw" class="muted">Brand-sponsored gamification</td><td>—</td><td>—</td><td>—</td><td style="background:rgba(57,255,20,.06)"><span style="color:var(--purple)">✓ Cash Drops</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p style="margin-top:2vh;font-size:1.05vw;text-align:center">Defensibility is the <span class="neon">verified-identity + proof-of-work data</span> we accumulate per user — <span class="neon">none of which the incumbents collect</span>.</p>
-  </section>
-
-  <!-- 13. TRACTION / CREDIBILITY -->
-  <section class="slide dense">
-    <div class="eyebrow">Traction · Operational Status</div>
+    <div class="eyebrow">Operational Status</div>
     <h2>What's already real.</h2>
-    <p class="muted" style="font-size:1.2vw;margin-top:0;max-width:95ch">Credibility is built on what's <span class="neon">in the ground today</span> — not on slideware.</p>
-    <div class="grid-4" style="margin-top:2vh">
-      <div class="card"><h4 class="neon">Live product</h4><p>Shipped on web and Google Play. Active production deployment. iOS App Store launch in progress.</p></div>
-      <div class="card"><h4 class="neon">Stripe Connect infrastructure</h4><p>Marketplace payment rails wired end-to-end — escrow, payout, ledger, webhooks, dispute flow.</p></div>
-      <div class="card"><h4 class="neon">GPS verification logic</h4><p>Location-stamped proof engine running across every job type. Tamper-resistant by design.</p></div>
-      <div class="card"><h4 class="neon">Verify &amp; Inspect system</h4><p>End-to-end V&amp;I product live in production — vehicles, properties, marketplace, salvage.</p></div>
-      <div class="card"><h4 class="purple" style="color:var(--purple)">AI or Not trust feature</h4><p>Standalone trust subscription product live with Stripe billing and verified-human badge.</p></div>
-      <div class="card"><h4 class="gold" style="color:var(--gold)">Delaware LLC</h4><p>Properly formed legal entity. Structured for institutional investment.</p></div>
-      <div class="card"><h4 class="gold" style="color:var(--gold)">D-U-N-S Number</h4><p>Registered with Dun &amp; Bradstreet. Eligible for enterprise vendor programs and B2B procurement.</p></div>
-      <div class="card"><h4 class="gold" style="color:var(--gold)">Mercury business banking</h4><p>Active business banking relationship. Clean books from day one.</p></div>
+    <p class="muted" style="font-size:1.5vw;margin:1vh 0 0;max-width:95ch">Credibility is built on what's <span class="neon">in the ground today</span> — not on slideware.</p>
+    <div class="opstat-grid">
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text">Live on web &amp; <span class="neon">Google Play</span></div></div>
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text"><span class="neon">Stripe Connect</span> wired end-to-end</div></div>
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text"><span class="neon">GPS proof engine</span> running on every job</div></div>
+      <div class="opstat"><div class="check">⏱</div><div class="opstat-text"><span style="color:var(--gold)">iOS App Store</span> launch in progress</div></div>
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text"><span class="purple" style="color:var(--purple)">Delaware LLC</span> formed</div></div>
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text"><span class="purple" style="color:var(--purple)">D-U-N-S Number</span> registered</div></div>
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text"><span class="purple" style="color:var(--purple)">Mercury</span> business banking active</div></div>
+      <div class="opstat"><div class="check">✓</div><div class="opstat-text"><span class="neon">Sex-offender screening</span> at onboarding</div></div>
     </div>
-    <div class="grid-3" style="margin-top:1.5vh">
-      <div class="card"><h4 class="neon">Google &amp; social presence</h4><p>Indexed Google business presence and active social media footprint driving organic discovery.</p></div>
-      <div class="card" style="border-color:rgba(162,89,255,.4)"><h4 class="purple" style="color:var(--purple)">Early AI search visibility</h4><p>Major AI assistants can already identify GUBER / Guberapp as a gig, verification, and trust platform — early brand recognition in the AI-search era.</p></div>
-      <div class="card"><h4 class="neon">Sex-offender screening</h4><p>Trust-layer protections built into onboarding to keep the network safe at the point of identity.</p></div>
-    </div>
-    <p class="disclaimer">Early AI search visibility refers to recognition by AI assistants and is not an endorsement. References to specific AI products are descriptive only.</p>
+    <p style="margin-top:3vh;text-align:center;font-size:1.3vw" class="muted">Already recognized by <span class="neon">major AI assistants and Google Search</span> as a verified gig + trust platform — early brand signal in the AI-search era.</p>
+    <p class="disclaimer">References to AI assistants and search platforms are descriptive only and do not constitute endorsements.</p>
   </section>
 
-  <!-- 10. USE OF FUNDS -->
+  <!-- 11. REAL PROOF -->
+  <section class="slide proof">
+    <div class="eyebrow">Real Proof · In Market Today</div>
+    <h2>Not theoretical. <span class="neon">Already shipping.</span></h2>
+
+    <div class="proof-row">
+      <div class="proof-eyebrow">Row 1 · Live Cash Drops shipping today</div>
+      <div class="proof-tiles" style="grid-template-columns:repeat(4,1fr)">
+        <div class="proof-tile"><img src="proof/fb-jacob-mcneal.jpg" alt="Cash Drop winner"/><div class="proof-label">Jacob McNeal · winner</div></div>
+        <div class="proof-tile"><img src="proof/fb-mobile-baldwin-active.jpg" alt="Active drops map"/><div class="proof-label">2 Cash Drops Active</div></div>
+        <div class="proof-tile"><img src="proof/fb-wayne-sponsor.jpg" alt="Wayne Buys Junk Cars sponsor"/><div class="proof-label">Wayne Buys Junk Cars · paid sponsor</div></div>
+        <div class="proof-tile"><img src="proof/fb-baldwin-mobile-posts.jpg" alt="Movement is live"/><div class="proof-label">"The Movement is Live"</div></div>
+      </div>
+    </div>
+
+    <div class="proof-row purple">
+      <div class="proof-eyebrow">Row 2 · Influencer reach &nbsp;·&nbsp; <span class="proof-stat" style="display:inline;color:var(--purple)">1.16M+ combined organic followers</span></div>
+      <div class="proof-tiles" style="grid-template-columns:repeat(3,1fr)">
+        <div class="proof-tile"><img src="proof/ig-blackcarguru.jpg" alt="@theblackcarguru"/><div class="proof-label">@theblackcarguru · 624K IG · verified ✓</div></div>
+        <div class="proof-tile"><img src="proof/tt-80inscrubs.jpg" alt="@80inscrubs"/><div class="proof-label">@80inscrubs · 536.4K TikTok · 7.6M likes</div></div>
+        <div class="proof-tile"><img src="proof/tt-80inscrubs-dm.jpg" alt="@80inscrubs DM"/><div class="proof-label">@80inscrubs DM · organic, not paid</div></div>
+      </div>
+    </div>
+
+    <div class="proof-row gold">
+      <div class="proof-eyebrow">Row 3 · Network &amp; distribution &nbsp;·&nbsp; <span class="proof-stat" style="display:inline;color:var(--gold)">31K+ FB partner reach</span></div>
+      <div class="proof-tiles" style="grid-template-columns:repeat(4,1fr)">
+        <div class="proof-tile"><img src="proof/fb-findcashpcola.jpg" alt="Findcashpcola FB page"/><div class="proof-label">Findcashpcola · 31K FB partner</div></div>
+        <div class="proof-tile"><img src="proof/fb-pcola-pelican-saturday.jpg" alt="Pcola partner posts"/><div class="proof-label">Partner pushing GUBER posts</div></div>
+        <div class="proof-tile"><img src="proof/ig-guber-global.jpg" alt="@guber_global"/><div class="proof-label">@guber_global · official IG</div></div>
+        <div class="proof-tile"><img src="proof/tt-cashflow-followers.jpg" alt="Cash Flow by GUBER"/><div class="proof-label">Cash Flow by GUBER · TikTok</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.8vh;display:grid;grid-template-columns:repeat(6,1fr);gap:.7vw">
+      <div style="border:1px solid rgba(57,255,20,.35);border-radius:8px;overflow:hidden;background:#000;aspect-ratio:9/16"><img src="winners/w1.jpg" style="width:100%;height:100%;object-fit:cover;display:block" alt=""/></div>
+      <div style="border:1px solid rgba(57,255,20,.35);border-radius:8px;overflow:hidden;background:#000;aspect-ratio:9/16"><img src="winners/w2.jpg" style="width:100%;height:100%;object-fit:cover;display:block" alt=""/></div>
+      <div style="border:1px solid rgba(57,255,20,.35);border-radius:8px;overflow:hidden;background:#000;aspect-ratio:9/16"><img src="winners/w3.jpg" style="width:100%;height:100%;object-fit:cover;display:block" alt=""/></div>
+      <div style="border:1px solid rgba(57,255,20,.35);border-radius:8px;overflow:hidden;background:#000;aspect-ratio:9/16"><img src="winners/w4.jpg" style="width:100%;height:100%;object-fit:cover;display:block" alt=""/></div>
+      <div style="border:1px solid rgba(57,255,20,.35);border-radius:8px;overflow:hidden;background:#000;aspect-ratio:9/16"><img src="winners/w5.jpg" style="width:100%;height:100%;object-fit:cover;display:block" alt=""/></div>
+      <div style="border:1px solid rgba(57,255,20,.35);border-radius:8px;overflow:hidden;background:#000;aspect-ratio:9/16"><img src="winners/w6.jpg" style="width:100%;height:100%;object-fit:cover;display:block" alt=""/></div>
+    </div>
+  </section>
+
+  <!-- 12. ROADMAP -->
   <section class="slide">
-    <div class="eyebrow">Use of Funds</div>
-    <h2>Use of funds — $1M over 18 months.</h2>
-    <p class="muted" style="font-size:1.2vw;margin-top:0">Capital deployed against the highest-leverage investments for a live product entering its growth phase.</p>
-    <div class="donut-wrap">
+    <div class="eyebrow">Roadmap</div>
+    <h2>The 18-month build.</h2>
+    <p class="muted" style="font-size:1.5vw;margin:1vh 0 0;max-width:95ch">Funded execution turns a verified user base into a <span class="neon">self-sustaining nationwide trust network</span>.</p>
+    <div class="roadmap-grid">
+      <div class="phase p1">
+        <div class="phase-tag">Phase 01</div>
+        <h3>Launch &amp; Lock In</h3>
+        <div class="phase-window">0 – 90 days</div>
+        <ul>
+          <li>iOS App Store launch (U.S.)</li>
+          <li>Studio v2 ramp + paid creator activations</li>
+          <li>First office + 3 key hires (engineering, growth, ops)</li>
+          <li>Ramp Cash Drop sponsor pipeline</li>
+        </ul>
+      </div>
+      <div class="phase p2">
+        <div class="phase-tag">Phase 02</div>
+        <h3>Gulf Coast Beachhead</h3>
+        <div class="phase-window">3 – 9 months</div>
+        <ul>
+          <li>Target <span class="purple" style="color:var(--purple)">30K verified users</span> across Mobile, Baldwin, Pcola</li>
+          <li>Activate <span class="purple" style="color:var(--purple)">@theblackcarguru</span> + <span class="purple" style="color:var(--purple)">@80inscrubs</span></li>
+          <li>Sign 25+ local business sponsors</li>
+          <li>B2B verification pilots with regional buyers</li>
+        </ul>
+      </div>
+      <div class="phase p3">
+        <div class="phase-tag">Phase 03</div>
+        <h3>National Expansion</h3>
+        <div class="phase-window">9 – 18 months</div>
+        <ul>
+          <li>Target <span style="color:var(--gold)">500K verified users</span> across U.S.</li>
+          <li>Scout Plan + Observation marketplace at scale</li>
+          <li>Open the trust-data API to insurance, lending, OEMs</li>
+          <li>Position for Series A on real revenue</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. FUNDING ASK -->
+  <section class="slide">
+    <div class="eyebrow">The Ask</div>
+    <h2>$1M raise · $15M valuation framework.</h2>
+    <div class="donut-wrap" style="margin-top:1.5vh">
       <div>
         <svg class="donut" viewBox="0 0 300 300" role="img" aria-label="Use of funds allocation">
-          <!-- background ring -->
           <circle cx="150" cy="150" r="100" fill="none" stroke="#0f0f0f" stroke-width="50"/>
-          <!-- segments: dasharray "len 628.32-len", rotation = startPct*360 - 90 -->
-          <!-- 30% Product & Engineering -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#39ff14" stroke-width="50"
-            stroke-dasharray="188.5 439.82" transform="rotate(-90 150 150)"/>
-          <!-- 25% Marketing -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#a259ff" stroke-width="50"
-            stroke-dasharray="157.08 471.24" transform="rotate(18 150 150)"/>
-          <!-- 15% Ops/Compliance -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#ffb020" stroke-width="50"
-            stroke-dasharray="94.25 534.07" transform="rotate(108 150 150)"/>
-          <!-- 10% BizDev -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#5cff3a" stroke-width="50"
-            stroke-dasharray="62.83 565.49" transform="rotate(162 150 150)"/>
-          <!-- 10% Support/Moderation -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#c084fc" stroke-width="50"
-            stroke-dasharray="62.83 565.49" transform="rotate(198 150 150)"/>
-          <!-- 5% Infrastructure -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#fbbf24" stroke-width="50"
-            stroke-dasharray="31.42 596.9" transform="rotate(234 150 150)"/>
-          <!-- 5% Working Capital -->
-          <circle cx="150" cy="150" r="100" fill="none" stroke="#6b7280" stroke-width="50"
-            stroke-dasharray="31.42 596.9" transform="rotate(252 150 150)"/>
-          <!-- center label -->
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#39ff14" stroke-width="50" stroke-dasharray="188.5 439.82" transform="rotate(-90 150 150)"/>
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#a259ff" stroke-width="50" stroke-dasharray="157.08 471.24" transform="rotate(18 150 150)"/>
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#ffb020" stroke-width="50" stroke-dasharray="94.25 534.07" transform="rotate(108 150 150)"/>
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#5cff3a" stroke-width="50" stroke-dasharray="62.83 565.49" transform="rotate(162 150 150)"/>
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#c084fc" stroke-width="50" stroke-dasharray="62.83 565.49" transform="rotate(198 150 150)"/>
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#fbbf24" stroke-width="50" stroke-dasharray="31.42 596.9" transform="rotate(234 150 150)"/>
+          <circle cx="150" cy="150" r="100" fill="none" stroke="#6b7280" stroke-width="50" stroke-dasharray="31.42 596.9" transform="rotate(252 150 150)"/>
           <text x="150" y="142" text-anchor="middle" fill="#f5f5f5" font-family="Oxanium" font-weight="800" font-size="36">$1M</text>
           <text x="150" y="170" text-anchor="middle" fill="#9aa0a6" font-family="Inter" font-size="11" letter-spacing="2" style="text-transform:uppercase">18-month plan</text>
         </svg>
+        <p class="muted" style="font-size:1.05vw;text-align:center;margin-top:1.5vh">Capital deployed against the highest-leverage investments for a live product entering its growth phase.</p>
       </div>
-      <div class="uof-legend">
-        <div class="uof-row"><div class="uof-swatch" style="background:#39ff14"></div><div class="uof-label">Product Development &amp; Engineering</div><div class="uof-pct">30%</div><div class="uof-amt">$300K</div></div>
-        <div class="uof-row"><div class="uof-swatch" style="background:#a259ff"></div><div class="uof-label">Marketing, Growth &amp; Community Activation</div><div class="uof-pct" style="color:var(--purple)">25%</div><div class="uof-amt">$250K</div></div>
-        <div class="uof-row"><div class="uof-swatch" style="background:#ffb020"></div><div class="uof-label">Operations, Compliance &amp; Trust / Safety</div><div class="uof-pct" style="color:var(--gold)">15%</div><div class="uof-amt">$150K</div></div>
-        <div class="uof-row"><div class="uof-swatch" style="background:#5cff3a"></div><div class="uof-label">Business Development &amp; Partnerships</div><div class="uof-pct">10%</div><div class="uof-amt">$100K</div></div>
-        <div class="uof-row"><div class="uof-swatch" style="background:#c084fc"></div><div class="uof-label">Customer Support, Moderation &amp; QC</div><div class="uof-pct" style="color:var(--purple)">10%</div><div class="uof-amt">$100K</div></div>
-        <div class="uof-row"><div class="uof-swatch" style="background:#fbbf24"></div><div class="uof-label">Infrastructure, Cloud &amp; Platform Scaling</div><div class="uof-pct" style="color:var(--gold)">5%</div><div class="uof-amt">$50K</div></div>
-        <div class="uof-row" style="border-bottom:0"><div class="uof-swatch" style="background:#6b7280"></div><div class="uof-label">Working Capital &amp; Contingency</div><div class="uof-pct" style="color:var(--muted)">5%</div><div class="uof-amt">$50K</div></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 11. VALUATION -->
-  <section class="slide">
-    <div class="eyebrow">Valuation</div>
-    <h2>Valuation framework.</h2>
-    <div class="grid-2" style="margin-top:3vh;align-items:center">
       <div>
-        <div class="bigstat" style="margin-bottom:3vh">
-          <div class="v">$15M</div>
-          <div class="l">early-stage valuation framework</div>
+        <div class="uof-legend">
+          <div class="uof-row"><div class="uof-swatch" style="background:#39ff14"></div><div class="uof-label">Product Development &amp; Engineering</div><div class="uof-pct">30%</div><div class="uof-amt">$300K</div></div>
+          <div class="uof-row"><div class="uof-swatch" style="background:#a259ff"></div><div class="uof-label">Marketing, Growth &amp; Community Activation</div><div class="uof-pct" style="color:var(--purple)">25%</div><div class="uof-amt">$250K</div></div>
+          <div class="uof-row"><div class="uof-swatch" style="background:#ffb020"></div><div class="uof-label">Operations, Compliance &amp; Trust / Safety</div><div class="uof-pct" style="color:var(--gold)">15%</div><div class="uof-amt">$150K</div></div>
+          <div class="uof-row"><div class="uof-swatch" style="background:#5cff3a"></div><div class="uof-label">Business Development &amp; Partnerships</div><div class="uof-pct">10%</div><div class="uof-amt">$100K</div></div>
+          <div class="uof-row"><div class="uof-swatch" style="background:#c084fc"></div><div class="uof-label">Customer Support, Moderation &amp; QC</div><div class="uof-pct" style="color:var(--purple)">10%</div><div class="uof-amt">$100K</div></div>
+          <div class="uof-row"><div class="uof-swatch" style="background:#fbbf24"></div><div class="uof-label">Infrastructure, Cloud &amp; Platform Scaling</div><div class="uof-pct" style="color:var(--gold)">5%</div><div class="uof-amt">$50K</div></div>
+          <div class="uof-row" style="border-bottom:0"><div class="uof-swatch" style="background:#6b7280"></div><div class="uof-label">Working Capital &amp; Contingency</div><div class="uof-pct" style="color:var(--muted)">5%</div><div class="uof-amt">$50K</div></div>
         </div>
-        <p style="font-size:1.3vw;max-width:54ch">
-          GUBER is seeking a <span class="neon">$15M valuation framework</span> based on its live product, early infrastructure, trust-based platform model, and position within large growing markets connected to <span class="neon">work, verification, fraud prevention, and digital trust</span>.
-        </p>
-      </div>
-      <div>
-        <h3>What this framework reflects</h3>
-        <ul>
-          <li><span class="neon">Live product</span> — already deployed and transacting on real users.</li>
-          <li><span class="neon">Existing deployment</span> — web + Android live, iOS in progress.</li>
-          <li><span class="neon">Platform infrastructure</span> — Stripe Connect, GPS proof engine, ID verification, money ledger, dispute system already built.</li>
-          <li><span class="neon">Market opportunity</span> — addressable across digital trust, fraud prevention, identity verification, and the gig economy.</li>
-          <li><span class="neon">Trust &amp; verification positioning</span> — a category with no current category leader.</li>
-          <li><span class="neon">Scalable economic coordination model</span> — designed for nationwide deployment on a lean infrastructure base.</li>
-          <li><span class="neon">Future national expansion potential</span> — clear product roadmap into B2B and additional verticals.</li>
-        </ul>
-        <p class="disclaimer">This is an early-stage valuation framework, not a guaranteed company worth. Market projections are third-party estimates and do not represent guaranteed company performance.</p>
+        <p class="disclaimer">$15M is an early-stage valuation framework — based on live product, existing infrastructure, and category position — not a guaranteed company worth.</p>
       </div>
     </div>
   </section>
 
-  <!-- 12. VISION -->
+  <!-- 14. CLOSING / VISION -->
   <section class="slide center-v" style="background:radial-gradient(ellipse at 50% 30%, #1a0a2a 0%, var(--bg) 65%)">
-    <div style="text-align:center;display:flex;flex-direction:column;align-items:center">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;max-width:90vw;margin:0 auto;width:100%">
       <div class="eyebrow" style="color:var(--gold)">Long-Term Vision</div>
-      <h2 style="font-size:3.4vw;line-height:1.05;max-width:22ch;margin-top:.5vh">America's Economic Super App.</h2>
-      <p style="font-size:1.15vw;max-width:80ch;margin-top:1.5vh;color:#e8e8ee;line-height:1.5">
+      <h2 style="font-size:5vw;line-height:1;max-width:18ch">America's Economic Super App.</h2>
+      <p style="font-size:1.6vw;max-width:80ch;margin-top:1.5vh;color:#e8e8ee;line-height:1.5">
         Powered by <span class="neon">trust</span>, <span class="neon">verification</span>, and <span class="neon">opportunity infrastructure</span> — a single nationwide system where reputation, proof, and earning move together.
       </p>
-      <div class="grid-3" style="margin-top:3vh;width:100%;max-width:90vw">
-        <div class="card"><h4 class="neon">Income</h4><p>The productivity engine — work, V&amp;I, observations, portable resume. Real earnings in real communities.</p></div>
-        <div class="card"><h4 style="color:var(--purple)">Commerce &amp; Community</h4><p>Verified marketplace, sponsored activations, and local businesses funded by their own neighborhoods.</p></div>
-        <div class="card"><h4 style="color:var(--gold)">Infrastructure</h4><p>A Human API for Truth that insurers, lenders, marketplaces, and OEMs plug into at scale.</p></div>
+      <div class="killer-line">
+        Software can pass.<br/>
+        A verified human at the location, with a phone, and proof, <span class="neon">knows.</span>
+        <span class="attrib">— The Human API for Truth</span>
       </div>
-      <p style="margin-top:3vh;font-size:1.2vw;max-width:80ch;color:#fff;font-weight:600">
-        Not another marketplace. <span class="neon">Infrastructure for real-world trust.</span>
-      </p>
-      <div style="margin-top:2vh;display:flex;gap:1vw;flex-wrap:wrap;justify-content:center">
+      <div style="margin-top:3vh;display:flex;gap:1vw;flex-wrap:wrap">
         <span class="pill">Guberapp.global@gmail.com</span>
         <span class="pill">(251) 284-9412</span>
         <span class="pill purple">guberapp.com</span>
@@ -811,7 +646,7 @@
     </div>
   </section>
 
-  <!-- FOUNDER -->
+  <!-- 15. FOUNDER -->
   <section class="slide">
     <div class="eyebrow">Founder</div>
     <h2>Built from lived experience, not theory.</h2>
@@ -820,14 +655,14 @@
         <div style="border:1px solid rgba(57,255,20,.4);border-radius:14px;overflow:hidden;box-shadow:0 0 32px rgba(57,255,20,.18)">
           <img src="founder.jpg" alt="Dimetris Bowden" style="width:100%;height:auto;display:block"/>
         </div>
-        <div style="margin-top:1.4vh;font-family:'Oxanium',sans-serif;font-size:1.5vw;font-weight:800;color:#fff">Dimetris Bowden</div>
-        <div class="muted" style="font-size:.95vw;margin-top:.4vh">Founder &amp; CEO · GUBER Global LLC</div>
+        <div style="margin-top:1.4vh;font-family:'Oxanium',sans-serif;font-size:1.7vw;font-weight:800;color:#fff">Dimetris Bowden</div>
+        <div class="muted" style="font-size:1.15vw;margin-top:.4vh">Founder &amp; CEO · GUBER Global LLC</div>
         <div style="margin-top:1.5vh"><span class="pill">Solo-built · ~18 months</span></div>
       </div>
       <div>
-        <p style="font-size:1.15vw;line-height:1.6;margin:0 0 1.6vh">GUBER was built <span class="neon">solo over roughly 18 months</span> — product, full-stack engineering, payments, native mobile, admin tooling, brand. Self-taught. Every surface in this deck is <span class="neon">shipped code in production today</span>, not slideware.</p>
-        <p style="font-size:1.15vw;line-height:1.6;margin:0 0 1.6vh">Designed by someone who lived the problem firsthand — and built the system they wished existed. Real-world execution, not theory.</p>
-        <p style="font-size:1.15vw;line-height:1.6;margin:0 0 1.6vh">Today the platform is grown <span class="neon">conservatively and organically</span> — only accepting volume a one-person operation can deliver on. That discipline protects the brand. This raise removes the ceiling: <span class="neon">real infrastructure, a real team, and the sales motion</span> to turn a verified user base into a self-sustaining nationwide trust network.</p>
+        <p style="font-size:1.45vw;line-height:1.55;margin:0 0 1.6vh">GUBER was built <span class="neon">solo over roughly 18 months</span> — product, full-stack engineering, payments, native mobile, admin tooling, brand. Self-taught. Every surface in this deck is <span class="neon">shipped code in production today</span>, not slideware.</p>
+        <p style="font-size:1.45vw;line-height:1.55;margin:0 0 1.6vh">Designed by someone who lived the problem firsthand — and built the system they wished existed. Real-world execution, not theory.</p>
+        <p style="font-size:1.45vw;line-height:1.55;margin:0 0 1.6vh">Today the platform is grown <span class="neon">conservatively and organically</span> — only accepting volume a one-person operation can deliver on. That discipline protects the brand. This raise removes the ceiling: <span class="neon">real infrastructure, a real team, and the sales motion</span> to turn a verified user base into a self-sustaining nationwide trust network.</p>
         <div style="margin-top:2.5vh;display:flex;gap:.8vw;flex-wrap:wrap">
           <span class="pill">Guberapp.global@gmail.com</span>
           <span class="pill">(251) 284-9412</span>
@@ -841,7 +676,7 @@
 
 <div class="footer">
   <span>GUBER · INVESTOR DECK · 2026</span>
-  <span><span id="cur">1</span> / <span id="tot">20</span></span>
+  <span><span id="cur">1</span> / <span id="tot">15</span></span>
 </div>
 <div class="arrow">← → arrows · F fullscreen · P print to PDF</div>
 
