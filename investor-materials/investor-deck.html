@@ -32,7 +32,6 @@
     padding:48px 70px 70px;
   }
   .slide:last-child{page-break-after:auto}
-  /* ambient glow */
   .slide::before{
     content:"";position:absolute;inset:0;pointer-events:none;
     background:
@@ -41,7 +40,6 @@
   }
   .slide > *{position:relative;z-index:1}
 
-  /* type */
   .eyebrow{font-family:'Oxanium',sans-serif;font-size:14px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:var(--magenta);margin-bottom:24px}
   .eyebrow.cyan{color:var(--cyan)}
   .eyebrow.mint{color:var(--mint)}
@@ -65,11 +63,9 @@
   .accent-gold{color:var(--gold)}
   .muted{color:var(--muted)}
 
-  /* footer chip */
   .pageno{display:none}
   .brandtag{position:absolute;bottom:28px;left:80px;font-family:'Oxanium',sans-serif;font-size:11px;letter-spacing:.32em;color:#4b5563;text-transform:uppercase}
 
-  /* layouts */
   .center{align-items:center;justify-content:center;text-align:center}
   .row{display:flex;gap:32px}
   .col{display:flex;flex-direction:column;gap:24px}
@@ -83,13 +79,11 @@
   .cover-meta{position:absolute;top:48px;left:70px;right:70px;display:flex;justify-content:space-between;align-items:center;font-family:'Oxanium',sans-serif;font-size:11px;letter-spacing:.32em;color:#6b7280;text-transform:uppercase;z-index:2}
   .cover-meta .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 12px var(--mint);margin-right:10px;vertical-align:middle}
 
-  /* problem stab list */
   .stabs{display:flex;flex-direction:column;gap:28px;margin-top:40px}
   .stab{display:flex;align-items:baseline;gap:28px;font-family:'Oxanium',sans-serif;font-weight:700;font-size:54px;line-height:1.05;color:#fff}
   .stab .num{font-size:18px;letter-spacing:.3em;color:#52525b;font-weight:700;min-width:56px}
   .stab .accent{color:var(--magenta)}
 
-  /* verb chips (what guber is) */
   .verbs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:28px}
   .verb{padding:20px 22px;border:1px solid var(--rule);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0));position:relative;overflow:hidden}
   .verb::after{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--magenta),var(--purple),var(--cyan));opacity:.7}
@@ -97,7 +91,6 @@
   .verb .v-word{font-family:'Oxanium',sans-serif;font-weight:800;font-size:34px;line-height:1;margin-top:8px;letter-spacing:-.005em}
   .verb .v-line{font-family:'Inter',sans-serif;font-size:13px;color:#9aa0a6;margin-top:8px;line-height:1.45}
 
-  /* category pills (find work) */
   .pills-wrap{display:flex;flex-wrap:wrap;gap:18px;margin-top:48px;max-width:880px}
   .pill-big{padding:22px 34px;border:1px solid rgba(217,70,239,.4);border-radius:999px;font-family:'Oxanium',sans-serif;font-weight:700;font-size:30px;color:#fff;background:rgba(217,70,239,.08);letter-spacing:-.005em}
   .pill-big.cyan{border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.08)}
@@ -105,21 +98,18 @@
   .pill-big.purple{border-color:rgba(168,85,247,.4);background:rgba(168,85,247,.08)}
   .pill-big.gold{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.08)}
 
-  /* workflow steps (hire) */
   .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:40px;align-items:stretch}
   .step{padding:28px 22px;border:1px solid var(--rule);border-radius:16px;background:#0a0a0a;position:relative}
   .step .s-num{font-family:'Oxanium',sans-serif;font-size:12px;letter-spacing:.3em;color:var(--magenta);font-weight:700;text-transform:uppercase}
   .step .s-word{font-family:'Oxanium',sans-serif;font-weight:800;font-size:34px;margin-top:10px;line-height:1.05}
   .step .s-line{font-family:'Inter',sans-serif;font-size:14px;color:#9aa0a6;margin-top:12px;line-height:1.5}
 
-  /* trust pillars (4) */
   .pillars{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:40px}
   .pillar{padding:24px 20px;border:1px solid var(--rule);border-radius:14px;background:#0a0a0a}
   .pillar .ico{font-family:'Oxanium',sans-serif;font-weight:800;font-size:36px;color:var(--cyan);line-height:1}
   .pillar .p-word{font-family:'Oxanium',sans-serif;font-weight:800;font-size:22px;margin-top:14px}
   .pillar .p-line{font-family:'Inter',sans-serif;font-size:14px;color:#9aa0a6;margin-top:8px;line-height:1.5}
 
-  /* hero image slides */
   .imgwrap{flex:1;display:flex;align-items:center;justify-content:center;margin-top:24px;border:1px solid var(--rule);border-radius:18px;overflow:hidden;background:#050505}
   .imgwrap img{max-width:100%;max-height:100%;object-fit:contain;display:block}
   .split{display:grid;grid-template-columns:1.05fr 1fr;gap:48px;flex:1;margin-top:18px;align-items:center}
@@ -127,18 +117,15 @@
   .split .visual{height:100%;border:1px solid var(--rule);border-radius:18px;overflow:hidden;background:#050505;display:flex;align-items:center;justify-content:center;padding:24px}
   .split .visual img{max-width:100%;max-height:100%;object-fit:contain}
 
-  /* big stat row */
   .bignums{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:48px}
   .bignum .v{font-family:'Oxanium',sans-serif;font-weight:800;font-size:84px;line-height:1;letter-spacing:-.01em}
   .bignum .l{font-family:'Inter',sans-serif;font-size:16px;color:#9aa0a6;margin-top:10px;line-height:1.5}
 
-  /* checklist */
   .checks{display:grid;grid-template-columns:1fr 1fr;gap:14px 36px;margin-top:28px}
   .check{display:flex;align-items:center;gap:14px;font-family:'Oxanium',sans-serif;font-weight:700;font-size:20px;color:#fff;line-height:1.25}
   .check .dot{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:rgba(57,255,20,.12);border:2px solid var(--mint);display:flex;align-items:center;justify-content:center;color:var(--mint);font-size:15px;font-weight:800}
   .check.purple .dot{background:rgba(168,85,247,.12);border-color:var(--purple);color:var(--purple)}
 
-  /* social proof: 3 large cards */
   .proof3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:24px;flex:1;min-height:0}
   .proof-card{border:1px solid var(--rule);border-radius:14px;background:#050505;display:flex;flex-direction:column;overflow:hidden;min-height:0}
   .proof-card .img{flex:1;background:#000;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;padding:10px;min-height:0}
@@ -147,13 +134,11 @@
   .proof-card .handle{font-family:'Oxanium',sans-serif;font-weight:800;font-size:20px;color:#fff}
   .proof-card .stat{font-family:'Inter',sans-serif;font-size:13px;color:#9aa0a6;margin-top:3px}
 
-  /* winners 6-up */
   .winners{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:28px;flex:1;min-height:0;max-height:380px}
   .winner{border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:#050505;position:relative;display:flex;align-items:center;justify-content:center}
   .winner img{width:100%;height:100%;object-fit:cover;display:block}
   .winner .tag{position:absolute;bottom:0;left:0;right:0;padding:8px 10px;background:linear-gradient(0deg,rgba(0,0,0,.92),transparent);font-family:'Oxanium',sans-serif;font-weight:700;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#fff;text-align:center}
 
-  /* roadmap */
   .roadmap{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:32px;flex:1;min-height:0}
   .phase{border:1px solid var(--rule);border-radius:16px;padding:22px 22px;background:#0a0a0a;position:relative;overflow:hidden}
   .phase::before{content:"";position:absolute;top:0;left:0;right:0;height:3px}
@@ -173,7 +158,6 @@
   .phase.p2 li::before{background:var(--purple)}
   .phase.p3 li::before{background:var(--gold)}
 
-  /* ask: donut + breakdown */
   .ask{display:grid;grid-template-columns:.85fr 1.15fr;gap:48px;margin-top:24px;flex:1;align-items:center;min-height:0}
   .donut{position:relative;width:300px;height:300px;margin:0 auto;border-radius:50%;
     background:conic-gradient(
@@ -196,36 +180,23 @@
   .brow .pc{font-family:'Oxanium',sans-serif;font-weight:800;font-size:16px;text-align:right}
   .brow .am{font-family:'Oxanium',sans-serif;font-weight:700;font-size:14px;text-align:right;color:#9aa0a6}
 
-  /* closing */
   .closing-mark{font-family:'Oxanium',sans-serif;font-weight:800;font-size:300px;line-height:.85;letter-spacing:-.02em;text-shadow:0 0 80px rgba(217,70,239,.5),0 0 200px rgba(168,85,247,.4)}
   .cta{display:inline-flex;align-items:center;gap:18px;margin-top:40px;padding:20px 42px;border:1px solid var(--mint);border-radius:999px;font-family:'Oxanium',sans-serif;font-weight:800;font-size:30px;letter-spacing:.04em;color:var(--mint);background:rgba(57,255,20,.06);box-shadow:0 0 40px rgba(57,255,20,.15)}
 
-  /* killer line block */
   .killer{margin-top:32px;padding:36px 40px;border-left:4px solid var(--mint);background:linear-gradient(90deg,rgba(57,255,20,.06),transparent 70%);border-radius:0 16px 16px 0}
   .killer .l1{font-family:'Oxanium',sans-serif;font-weight:700;font-size:38px;line-height:1.2;color:#fff}
   .killer .l2{font-family:'Oxanium',sans-serif;font-weight:800;font-size:46px;line-height:1.15;color:var(--mint);margin-top:8px}
   .killer .src{font-family:'Oxanium',sans-serif;font-size:12px;letter-spacing:.28em;color:#71717a;margin-top:18px;text-transform:uppercase}
 
-  /* founder */
-  .founder{display:grid;grid-template-columns:.85fr 1.15fr;gap:60px;margin-top:18px;flex:1;align-items:center}
-  .founder .photo{width:100%;height:480px;border-radius:24px;overflow:hidden;border:1px solid var(--rule)}
-  .founder .photo img{width:100%;height:100%;object-fit:cover}
-  .founder .name{font-family:'Oxanium',sans-serif;font-weight:800;font-size:64px;line-height:1}
-  .founder .role{font-family:'Oxanium',sans-serif;font-weight:700;font-size:22px;color:var(--magenta);margin-top:10px;letter-spacing:.04em}
-  .founder p{font-family:'Inter',sans-serif;font-size:18px;color:#cfd2d6;margin-top:22px;line-height:1.6}
-
-  /* contacts row */
   .contacts{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap}
   .contact{padding:14px 22px;border:1px solid var(--rule);border-radius:999px;font-family:'Oxanium',sans-serif;font-weight:700;font-size:16px;color:#fff;background:#0a0a0a}
   .contact.mint{color:var(--mint);border-color:rgba(57,255,20,.3)}
   .contact.cyan{color:var(--cyan);border-color:rgba(34,211,238,.3)}
   .contact.purple{color:var(--purple);border-color:rgba(168,85,247,.3)}
 
-  /* big quote (problem 2) */
   .quote-eyebrow{font-family:'Oxanium',sans-serif;font-weight:800;font-size:120px;line-height:.95;letter-spacing:-.01em}
   .quote-eyebrow .pulse{color:var(--magenta)}
 
-  /* live map slide */
   .map-wrap{flex:1;display:grid;grid-template-columns:1fr 1.4fr;gap:48px;margin-top:18px;align-items:center}
   .map-wrap .left{display:flex;flex-direction:column;gap:20px}
   .map-wrap .right-img{height:100%;max-height:480px;border-radius:18px;overflow:hidden;border:1px solid var(--rule);background:#050505;display:flex;align-items:flex-start;justify-content:center;padding:14px}
@@ -234,7 +205,6 @@
   .map-stat .v{font-family:'Oxanium',sans-serif;font-weight:800;font-size:52px;line-height:1}
   .map-stat .l{font-family:'Inter',sans-serif;font-size:15px;color:#9aa0a6}
 
-  /* revenue table */
   .rev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:28px;flex:1;min-height:0}
   .rev-card{padding:20px 22px;border:1px solid var(--rule);border-radius:14px;background:#0a0a0a;display:flex;flex-direction:column;gap:8px}
   .rev-card .num{font-family:'Oxanium',sans-serif;font-size:10px;letter-spacing:.3em;color:#52525b;font-weight:700;text-transform:uppercase}
@@ -247,7 +217,6 @@
   .rev-card.gold .ttl{color:var(--gold)}
   .rev-card.mint .ttl{color:var(--mint)}
 
-  /* AI or Not */
   .ai-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:48px;margin-top:18px;flex:1;align-items:center}
   .ai-grid .left{display:flex;flex-direction:column;gap:20px}
   .ai-feat{display:flex;flex-direction:column;gap:10px;margin-top:24px}
@@ -259,7 +228,6 @@
   .price-card .pp .per{font-size:20px;color:#9aa0a6;font-weight:700}
   .price-card .ptag{font-family:'Inter',sans-serif;font-size:14px;color:#cfd2d6;margin-top:14px;line-height:1.55}
 
-  /* cash drops */
   .drop-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:48px;margin-top:18px;flex:1;align-items:center}
   .drop-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}
   .drop-stat{padding:16px 18px;border:1px solid var(--rule);border-radius:12px;background:#0a0a0a}
@@ -270,35 +238,91 @@
   .sponsor-card .name{font-family:'Oxanium',sans-serif;font-weight:800;font-size:34px;line-height:1.05}
   .sponsor-card .blurb{font-family:'Inter',sans-serif;font-size:14px;color:#cfd2d6;line-height:1.5}
 
-  /* gamified day-1 og */
-  .og-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:48px;margin-top:18px;flex:1;align-items:center}
-  .og-seal{width:100%;max-width:380px;margin:0 auto;display:block}
-  .og-list{display:flex;flex-direction:column;gap:18px}
-  .og-row{display:flex;align-items:flex-start;gap:18px}
-  .og-row .b{font-family:'Oxanium',sans-serif;font-weight:800;font-size:20px;color:var(--gold);flex:0 0 36px;line-height:1.4}
-  .og-row .t{font-family:'Oxanium',sans-serif;font-weight:700;font-size:24px;color:#fff;line-height:1.3}
-  .og-row .t span{display:block;font-family:'Inter',sans-serif;font-weight:400;font-size:15px;color:#9aa0a6;margin-top:4px;line-height:1.55}
-
-  /* hero phone for cover/find work */
   .cover-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:48px;flex:1;align-items:center;margin-top:24px}
   .cover-grid .text{display:flex;flex-direction:column}
   .cover-grid .visual{display:flex;align-items:center;justify-content:center;height:100%}
   .phone-frame{position:relative;width:240px;height:480px;border-radius:36px;border:5px solid #1f1f23;background:#000;overflow:hidden;box-shadow:0 0 80px rgba(217,70,239,.35),0 0 160px rgba(168,85,247,.25)}
   .phone-frame img{width:100%;height:100%;object-fit:cover;display:block}
 
-  /* market sizing */
   .market{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:28px;flex:1;min-height:0}
   .mkt{padding:24px 22px;border:1px solid var(--rule);border-radius:16px;background:#0a0a0a;display:flex;flex-direction:column;gap:6px}
   .mkt .label{font-family:'Oxanium',sans-serif;font-size:10px;letter-spacing:.3em;color:#71717a;font-weight:700;text-transform:uppercase}
   .mkt .v{font-family:'Oxanium',sans-serif;font-weight:800;font-size:62px;line-height:1;letter-spacing:-.01em}
   .mkt .name{font-family:'Oxanium',sans-serif;font-weight:700;font-size:18px;margin-top:4px}
   .mkt .desc{font-family:'Inter',sans-serif;font-size:13px;color:#9aa0a6;margin-top:6px;line-height:1.5}
+
+  /* ───────── VERIFY & INSPECT (NEW) ───────── */
+  .vi-why{display:grid;grid-template-columns:.65fr 1.35fr;gap:48px;margin-top:14px;flex:1;align-items:center}
+  .vi-why .photo{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .vi-why .photo img{width:100%;max-width:260px;height:auto;border-radius:16px;border:1px solid rgba(217,70,239,.3);box-shadow:0 0 50px rgba(217,70,239,.3),0 0 120px rgba(168,85,247,.25)}
+  .vi-why .photo .nm{font-family:'Oxanium',sans-serif;font-weight:800;font-size:18px;color:#fff;letter-spacing:.04em;text-align:center}
+  .vi-why .photo .rl{font-family:'Oxanium',sans-serif;font-weight:700;font-size:10px;letter-spacing:.28em;color:var(--gold);text-transform:uppercase;margin-top:4px;text-align:center}
+  .vi-why .body{display:flex;flex-direction:column;gap:14px}
+  .vi-why .body p{font-family:'Inter',sans-serif;font-size:16px;line-height:1.6;color:#cfd2d6}
+  .vi-why .body p b{color:#fff;font-weight:600}
+  .vi-pull{margin-top:8px;padding:22px 26px;border-left:4px solid var(--magenta);background:linear-gradient(90deg,rgba(217,70,239,.08),transparent 80%);border-radius:0 14px 14px 0}
+  .vi-pull .l1{font-family:'Oxanium',sans-serif;font-weight:800;font-size:26px;line-height:1.2;color:#fff}
+  .vi-pull .l2{font-family:'Oxanium',sans-serif;font-weight:700;font-size:22px;line-height:1.2;color:var(--magenta);margin-top:8px}
+
+  .vi-how{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:18px}
+  .vi-col{padding:18px 18px;border:1px solid var(--rule);border-radius:14px;background:#0a0a0a;display:flex;flex-direction:column;gap:8px;min-height:0}
+  .vi-col .step{font-family:'Oxanium',sans-serif;font-size:10px;letter-spacing:.28em;font-weight:700;text-transform:uppercase}
+  .vi-col.t1 .step{color:var(--cyan)}
+  .vi-col.t2 .step{color:var(--magenta)}
+  .vi-col.t3 .step{color:var(--mint)}
+  .vi-col .ttl{font-family:'Oxanium',sans-serif;font-weight:800;font-size:22px;line-height:1.1;margin-top:2px}
+  .vi-col .desc{font-family:'Inter',sans-serif;font-size:12.5px;color:#cfd2d6;line-height:1.5}
+  .vi-menu{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+  .vi-menu span{font-family:'Oxanium',sans-serif;font-size:10px;letter-spacing:.04em;font-weight:700;padding:4px 8px;border:1px solid rgba(217,70,239,.3);border-radius:999px;color:#fff;background:rgba(217,70,239,.06)}
+  .vi-rule{margin-top:14px;padding:14px 22px;border:1px solid rgba(57,255,20,.3);border-radius:14px;background:rgba(57,255,20,.04);display:flex;align-items:center;justify-content:space-between;gap:18px}
+  .vi-rule .nope{display:flex;gap:18px;flex-wrap:wrap}
+  .vi-rule .nope span{font-family:'Oxanium',sans-serif;font-weight:800;font-size:14px;letter-spacing:.18em;color:#fff;text-transform:uppercase}
+  .vi-rule .yes{font-family:'Oxanium',sans-serif;font-weight:800;font-size:16px;letter-spacing:.04em;color:var(--mint)}
+
+  /* ───────── FROM FICTION TO REALITY (NEW) ───────── */
+  .fiction-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:14px;flex:1;align-items:center;min-height:0}
+  .fiction-list{display:flex;flex-direction:column;gap:10px}
+  .fic-row{display:grid;grid-template-columns:180px 1fr;gap:18px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--rule)}
+  .fic-row:last-child{border-bottom:0}
+  .fic-row .title{font-family:'Oxanium',sans-serif;font-weight:800;font-size:18px;color:#fff;letter-spacing:.02em}
+  .fic-row .tool{font-family:'Inter',sans-serif;font-size:14px;color:#9aa0a6;line-height:1.4}
+  .fic-row .tool b{color:var(--cyan);font-weight:600}
+  .fiction-right{display:flex;flex-direction:column;gap:22px}
+  .fic-not{display:flex;gap:24px}
+  .fic-not span{font-family:'Oxanium',sans-serif;font-weight:800;font-size:38px;color:#3f3f46;text-transform:uppercase;letter-spacing:-.005em;text-decoration:line-through;text-decoration-thickness:3px;text-decoration-color:rgba(217,70,239,.8)}
+  .fic-but{font-family:'Oxanium',sans-serif;font-weight:800;font-size:32px;line-height:1.15;color:#fff}
+  .fic-but .glow{color:var(--mint);text-shadow:0 0 24px rgba(57,255,20,.45)}
+  .fic-def{font-family:'Inter',sans-serif;font-size:15px;color:#cfd2d6;line-height:1.65;padding:18px 22px;border-left:3px solid var(--cyan);background:linear-gradient(90deg,rgba(34,211,238,.06),transparent 80%);border-radius:0 12px 12px 0}
+  .fic-def b{color:#fff;font-weight:600}
+
+  /* ───────── BADGER (NEW) ───────── */
+  .badger-grid{display:grid;grid-template-columns:.95fr 1.05fr;gap:48px;margin-top:14px;flex:1;align-items:center}
+  .badger-grid .ph{display:flex;align-items:center;justify-content:center}
+  .badger-grid .ph img{max-height:440px;max-width:100%;object-fit:contain;filter:drop-shadow(0 0 60px rgba(168,85,247,.4)) drop-shadow(0 0 120px rgba(57,255,20,.25))}
+  .badger-traits{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+  .trait{padding:14px 16px;border:1px solid var(--rule);border-radius:12px;background:#0a0a0a}
+  .trait .w{font-family:'Oxanium',sans-serif;font-weight:800;font-size:20px;color:#fff;letter-spacing:.02em}
+  .trait .d{font-family:'Inter',sans-serif;font-size:12px;color:#9aa0a6;line-height:1.45;margin-top:4px}
+  .badger-quote{margin-top:18px;padding:18px 22px;border-left:3px solid var(--purple);background:linear-gradient(90deg,rgba(168,85,247,.08),transparent 80%);border-radius:0 12px 12px 0;font-family:'Oxanium',sans-serif;font-weight:700;font-size:18px;line-height:1.4;color:#fff}
+  .badger-quote span{color:var(--purple)}
+
+  /* ───────── CLOSING REALITY CHECK (NEW) ───────── */
+  .reality{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;flex:1;gap:12px;padding:0 40px}
+  .reality .pre{display:grid;grid-template-columns:repeat(4,auto);gap:28px;justify-content:center}
+  .reality .pre span{font-family:'Oxanium',sans-serif;font-weight:800;font-size:18px;letter-spacing:.04em;color:#9aa0a6}
+  .reality .pre span::after{content:".";color:var(--mint)}
+  .reality .scope{display:grid;grid-template-columns:repeat(4,auto);gap:24px;justify-content:center;margin-top:2px}
+  .reality .scope span{font-family:'Oxanium',sans-serif;font-weight:800;font-size:20px;color:#fff;letter-spacing:.02em}
+  .reality .scope span b{color:var(--magenta);font-weight:800}
+  .reality .kicker{font-family:'Oxanium',sans-serif;font-weight:800;font-size:38px;line-height:1.1;letter-spacing:-.005em;max-width:980px;margin-top:4px}
+  .reality .kicker .glow{color:var(--mint);text-shadow:0 0 24px rgba(57,255,20,.45)}
+  .reality .deep{font-family:'Oxanium',sans-serif;font-weight:700;font-size:15px;letter-spacing:.16em;color:var(--cyan);text-transform:uppercase;margin-top:2px}
 </style>
 </head>
 <body>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 1 · COVER
+     S1 · COVER  (PHASE 1 — FAMILIARITY)
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="cover-meta">
@@ -312,46 +336,43 @@
       <div class="cover-sub">Verified work. Powered by people.</div>
     </div>
     <div class="visual">
-      <img src="brand/cover-phone.png" alt="GUBER app — live local map" style="max-width:100%;max-height:470px;object-fit:contain;filter:drop-shadow(0 0 70px rgba(217,70,239,.4)) drop-shadow(0 0 140px rgba(168,85,247,.3))"/>
+      <img src="brand/cover-phone.png" alt="GUBER app — live local map" style="max-width:100%;max-height:560px;object-fit:contain;filter:drop-shadow(0 0 70px rgba(217,70,239,.4)) drop-shadow(0 0 140px rgba(168,85,247,.3))"/>
     </div>
   </div>
-  <div class="pageno">01 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 2 · PROBLEM (HEADLINE)
+     S2 · PROBLEM (HEADLINE)
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide center">
   <div class="eyebrow">The Problem</div>
-  <div class="quote-eyebrow">Trust is <span class="pulse">broken.</span></div>
-  <div class="lede" style="margin-top:36px;text-align:center">The digital economy was built for screens. The real economy still runs on people — and people don't have an internet of trust.</div>
+  <div class="quote-eyebrow">Opportunity is <span class="pulse">invisible.</span></div>
+  <div class="lede" style="margin-top:36px;text-align:center">People are surrounded by opportunity every day — work, help, trust, movement, money — but most of it stays hidden. There's no live coordination layer connecting it.</div>
   <div class="brandtag">GUBER · THE PROBLEM</div>
-  <div class="pageno">02 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 3 · PROBLEM (STABS)
+     S3 · WHAT'S ACTUALLY WRONG
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow">What's actually wrong</div>
   <h2>Four cracks in the<br/>real-world economy.</h2>
   <div class="stabs">
-    <div class="stab"><span class="num">01</span><span>Hiring strangers is <span class="accent">risky.</span></span></div>
-    <div class="stab"><span class="num">02</span><span>Online listings are <span class="accent">fake.</span></span></div>
-    <div class="stab"><span class="num">03</span><span>People need work <span class="accent">now.</span></span></div>
-    <div class="stab"><span class="num">04</span><span>Communities are <span class="accent">disconnected.</span></span></div>
+    <div class="stab"><span class="num">01</span><span>People with real skills can't <span class="accent">find work.</span></span></div>
+    <div class="stab"><span class="num">02</span><span>Buyers make expensive decisions on <span class="accent">incomplete information.</span></span></div>
+    <div class="stab"><span class="num">03</span><span>Hiring strangers locally is <span class="accent">unaccountable.</span></span></div>
+    <div class="stab"><span class="num">04</span><span>Communities have movement, money, and urgency — but no <span class="accent">live coordination layer.</span></span></div>
   </div>
   <div class="brandtag">GUBER · THE PROBLEM</div>
-  <div class="pageno">03 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 4 · WHAT GUBER IS
+     S4 · WHAT GUBER IS
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow cyan">What GUBER is</div>
   <h2>One app. <span class="grad-cyan">Six everyday actions.</span></h2>
-  <div class="lede tight">A local network where verified people find work, hire help, prove what's real, and get paid — instantly.</div>
+  <div class="lede tight">Not because it tries to do everything — because it connects real people, real movement, and real opportunity into one live coordination network.</div>
   <div class="verbs">
     <div class="verb">
       <div class="v-num">01</div>
@@ -380,16 +401,15 @@
     </div>
     <div class="verb">
       <div class="v-num">06</div>
-      <div class="v-word grad-magenta" style="background:linear-gradient(180deg,#fff,#d946ef);-webkit-background-clip:text;background-clip:text;color:transparent">Coordinate</div>
+      <div class="v-word" style="background:linear-gradient(180deg,#fff,#d946ef);-webkit-background-clip:text;background-clip:text;color:transparent">Coordinate</div>
       <div class="v-line">A live map of real local activity — not a feed of strangers.</div>
     </div>
   </div>
   <div class="brandtag">GUBER · OVERVIEW</div>
-  <div class="pageno">04 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 5 · FIND WORK INSTANTLY
+     S5 · FIND WORK TODAY
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow mint">For Workers</div>
@@ -406,11 +426,10 @@
     <div class="pill-big purple">Cash Drops</div>
   </div>
   <div class="brandtag">GUBER · WORKER SIDE</div>
-  <div class="pageno">05 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 6 · HIRE VERIFIED HELP
+     S6 · HIRE VERIFIED HELP
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow purple">For Hirers</div>
@@ -439,23 +458,130 @@
     </div>
   </div>
   <div class="brandtag">GUBER · HIRER SIDE</div>
-  <div class="pageno">06 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 7 · TRUST AS A SERVICE (KILLER LINE)
+     S7 · WHY VERIFY & INSPECT EXISTS  (PHASE 2 — THE REVEAL)
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="eyebrow gold">Why Verify &amp; Inspect Exists</div>
+  <h2>$25,000 lost on a vehicle <span class="accent-gold">I never saw.</span></h2>
+  <div class="vi-why">
+    <div class="photo">
+      <img src="brand/founder.jpg" alt="Dimetris Bowden — Founder &amp; CEO"/>
+      <div>
+        <div class="nm">DIMETRIS BOWDEN</div>
+        <div class="rl">Founder &amp; CEO · Greensboro, NC</div>
+      </div>
+    </div>
+    <div class="body">
+      <p>Before GUBER, I was a small independent dealer. I bought a <b>Mustang Shelby GT500</b> at a dealer auto auction across the country — Florida to California, $25,000 wired sight-unseen.</p>
+      <p>The condition report was <b>outdated</b>. The vehicle had <b>modifications I didn't know about</b>. Modifications voided arbitration. By the time the motor was smoking on arrival, the loss was already real.</p>
+      <p>Auctions move fast. Big buyers have people physically on the ground. Small dealers across the country have a few photos and a condition report written months ago. Rules favor the auction. Loopholes protect them from losing money.</p>
+      <div class="vi-pull">
+        <div class="l1">People make expensive decisions every day using incomplete information.</div>
+        <div class="l2">Not because they're careless. Because they lack access.</div>
+      </div>
+      <p style="margin-top:4px"><b>If I could have paid someone already at that auction to send me real-time photos and videos before bidding, I would have gladly spent hundreds for that clarity.</b> That realization became GUBER Verify &amp; Inspect.</p>
+    </div>
+  </div>
+  <div class="brandtag">GUBER · THE FOUNDER PAIN POINT</div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     S8 · VERIFY & INSPECT — HOW IT WORKS
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="eyebrow cyan">Verify &amp; Inspect</div>
+  <h2>Real-time visual clarity from <span class="accent-cyan">real people at real locations.</span></h2>
+  <div class="lede tight" style="font-size:18px">Request live photos and video from participating verified humans anywhere the network exists — before you bid, before you wire, before you commit.</div>
+  <div class="vi-how">
+    <div class="vi-col t1">
+      <div class="step">Step 01 · Trigger</div>
+      <div class="ttl">Someone's already there.</div>
+      <div class="desc">An on-site participant — auction employee, transporter, detailer, vendor, another dealer — gets a nearby request notification on the app.</div>
+    </div>
+    <div class="vi-col t2">
+      <div class="step">Step 02 · Capture</div>
+      <div class="ttl">The buyer chooses exactly what they need to see.</div>
+      <div class="vi-menu">
+        <span>Walkaround</span><span>Startup video</span><span>VIN</span><span>Undercarriage</span><span>Tires</span><span>Paint</span><span>Mods</span><span>Cold start</span><span>Damage</span><span>GPS + time-locked</span>
+      </div>
+      <div class="desc" style="margin-top:4px">Live photos and video delivered through the GUBER app.</div>
+    </div>
+    <div class="vi-col t3">
+      <div class="step">Step 03 · Decide</div>
+      <div class="ttl">Buyer pays $50–$300 for instant clarity.</div>
+      <div class="desc">Bids confidently — or walks away. Spending a few hundred prevents losing tens of thousands. Same logic applies to marketplace listings, property rentals, salvage yards, equipment.</div>
+    </div>
+  </div>
+  <div class="vi-rule">
+    <div class="nope">
+      <span>No opinions.</span>
+      <span>No diagnosis.</span>
+      <span>No influence.</span>
+    </div>
+    <div class="yes">→ Just real-time visual clarity.</div>
+  </div>
+  <div class="brandtag">GUBER · VERIFY &amp; INSPECT</div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     S9 · FROM FICTION TO REALITY  (THE BIG REVEAL)
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide">
+  <div class="eyebrow magenta">From Fiction to Reality</div>
+  <h2>The visibility layer cinema imagined. <span class="accent-magenta">Built by real people.</span></h2>
+  <div class="fiction-grid">
+    <div class="fiction-list">
+      <div class="fic-row">
+        <div class="title">The Dark Knight</div>
+        <div class="tool"><b>Sonar Surveillance System</b> — citywide instant awareness.</div>
+      </div>
+      <div class="fic-row">
+        <div class="title">Furious 7</div>
+        <div class="tool"><b>God's Eye</b> — find anyone, anywhere, in real time.</div>
+      </div>
+      <div class="fic-row">
+        <div class="title">Eagle Eye</div>
+        <div class="tool"><b>ARIIA</b> — every camera, every signal, one feed.</div>
+      </div>
+      <div class="fic-row">
+        <div class="title">Watch Dogs</div>
+        <div class="tool"><b>ctOS</b> — central operating system for an entire city.</div>
+      </div>
+      <div class="fic-row">
+        <div class="title">Person of Interest</div>
+        <div class="tool"><b>The Machine</b> — real-world events, observed and acted on.</div>
+      </div>
+    </div>
+    <div class="fiction-right">
+      <div class="fic-not">
+        <span>Not surveillance.</span>
+        <span>Not spying.</span>
+      </div>
+      <div class="fic-but">GUBER grounds the same core idea — through <span class="glow">permission-based participation.</span></div>
+      <div class="fic-def">
+        <b>GUBER is permission-based, user-requested, real-world verification infrastructure</b> — powered by participating verified humans providing live visual proof from real locations. In many ways, you're getting access to any participating camera phone in the world.
+      </div>
+    </div>
+  </div>
+  <div class="brandtag">GUBER · THE BIG IDEA</div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     S10 · TRUST AS A SERVICE
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide center">
   <div class="eyebrow mint">Trust as a Service</div>
   <h2 class="giant" style="text-align:center">Software can <span class="muted">guess.</span></h2>
   <h2 class="giant" style="text-align:center;margin-top:18px">A verified human <span class="accent-mint">knows.</span></h2>
-  <div class="lede" style="margin-top:36px;text-align:center;max-width:900px">Every claim on GUBER is backed by a real person at a real location, leaving real proof — not scraped data, not AI guesses.</div>
+  <div class="lede" style="margin-top:36px;text-align:center;max-width:900px">Every claim on GUBER is backed by a real person at a real location, leaving real proof — not scraped data, not AI guesses. This is the Human API for Truth.</div>
   <div class="brandtag">GUBER · TRUST</div>
-  <div class="pageno">07 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 8 · TRUST PILLARS
+     S11 · TRUST PRIMITIVES
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow cyan">How verification actually works</div>
@@ -484,11 +610,10 @@
     </div>
   </div>
   <div class="brandtag">GUBER · TRUST PRIMITIVES</div>
-  <div class="pageno">08 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 9 · LIVE MAP ACTIVITY
+     S12 · LIVE MAP ACTIVITY
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow mint">Live Activity</div>
@@ -505,11 +630,10 @@
     </div>
   </div>
   <div class="brandtag">GUBER · COORDINATION LAYER</div>
-  <div class="pageno">09 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 10 · CASH DROPS (own slide, sponsor)
+     S13 · CASH DROPS  (PHASE 3 — PROOF OF LIFE)
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow gold">Cash Drops</div>
@@ -532,44 +656,34 @@
     </div>
   </div>
   <div class="brandtag">GUBER · CASH DROPS</div>
-  <div class="pageno">10 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 11 · GAMIFIED COMMUNITY (Day-1 OG)
+     S14 · THE BADGER (community / identity)
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
-  <div class="eyebrow gold">Gamified Community</div>
-  <h2>Reward the people who <span class="accent-gold">show up first.</span></h2>
-  <div class="og-grid">
-    <div>
-      <img class="og-seal" src="brand/guber-shield-gold.png" alt="Day-1 OG gold shield" style="filter:drop-shadow(0 0 60px rgba(245,158,11,.4))"/>
+  <div class="eyebrow purple">The Badger</div>
+  <h2>Built like the badger. <span class="accent-purple">Underestimated. Unstoppable.</span></h2>
+  <div class="badger-grid">
+    <div class="ph">
+      <img src="brand/mascot.png" alt="GUBER badger mascot"/>
     </div>
-    <div class="og-list">
-      <div class="og-row">
-        <div class="b">→</div>
-        <div class="t">Day-1 OG Membership<span>Founding members get +20 Studio credits/month, profile badge, and revenue share on referrals — for life.</span></div>
+    <div>
+      <div class="lede tight">Every GUBER member carries the badger. Not a logo. A code.</div>
+      <div class="badger-traits">
+        <div class="trait"><div class="w accent-purple">Resilience</div><div class="d">Keeps moving when the system breaks down.</div></div>
+        <div class="trait"><div class="w accent-mint">Survival</div><div class="d">Builds, hunts, earns — every single day.</div></div>
+        <div class="trait"><div class="w accent-cyan">Protection</div><div class="d">Guards its territory, its people, its work.</div></div>
+        <div class="trait"><div class="w accent-gold">Persistence</div><div class="d">Underestimated until it changes the game.</div></div>
       </div>
-      <div class="og-row">
-        <div class="b">→</div>
-        <div class="t">Reputation, not followers<span>Your portable record is built from verified jobs — not paid badges or vanity metrics.</span></div>
-      </div>
-      <div class="og-row">
-        <div class="b">→</div>
-        <div class="t">Helper Network<span>Top-rated locals unlock Verify &amp; Inspect tiers, business onboarding bonuses, and priority job matching.</span></div>
-      </div>
-      <div class="og-row">
-        <div class="b">→</div>
-        <div class="t">Earn-to-Stay-In<span>Engagement, referrals, and completed jobs translate directly into Studio credits, Cash Drop boosts, and visibility.</span></div>
-      </div>
+      <div class="badger-quote">GUBER wasn't built from theory. It was built from <span>real loss, real frustration, and the refusal to quit.</span> The badger isn't marketing — it's earned.</div>
     </div>
   </div>
-  <div class="brandtag">GUBER · COMMUNITY LAYER</div>
-  <div class="pageno">11 / 22</div>
+  <div class="brandtag">GUBER · COMMUNITY · IDENTITY</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 12 · AI OR NOT (own slide)
+     S15 · AI OR NOT
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow">Recurring Revenue Product</div>
@@ -585,7 +699,7 @@
       </div>
     </div>
     <div class="price-card" style="padding:20px;display:flex;flex-direction:column;align-items:center;gap:14px">
-      <img src="brand/ai-or-not-ui.jpg" alt="AI or Not — live product UI" style="max-height:340px;width:auto;border-radius:18px;border:1px solid rgba(217,70,239,.3);box-shadow:0 0 40px rgba(217,70,239,.25)"/>
+      <img src="brand/ai-or-not-ui.jpg" alt="AI or Not — live product UI" style="max-height:380px;width:auto;border-radius:18px;border:1px solid rgba(217,70,239,.3);box-shadow:0 0 40px rgba(217,70,239,.25)"/>
       <div style="text-align:center">
         <div class="pname accent-magenta" style="font-size:22px">Trust Box · $4.99/mo</div>
         <div class="ptag" style="margin-top:6px">Live at /ai-or-not — Apple-compliant on iOS via External Purchase Sheet.</div>
@@ -593,11 +707,10 @@
     </div>
   </div>
   <div class="brandtag">GUBER · DIGITAL RAIL</div>
-  <div class="pageno">12 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 13 · REVENUE MODEL
+     S16 · REVENUE MODEL
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow cyan">Revenue Model</div>
@@ -641,11 +754,10 @@
     </div>
   </div>
   <div class="brandtag">GUBER · REVENUE</div>
-  <div class="pageno">13 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 14 · TRACTION (real items only)
+     S17 · TRACTION
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow mint">Traction</div>
@@ -664,11 +776,10 @@
     <div class="check purple"><span class="dot">✓</span>1.16M+ combined organic reach across partner network</div>
   </div>
   <div class="brandtag">GUBER · TRACTION</div>
-  <div class="pageno">14 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 15 · SOCIAL PROOF (3 large screenshots)
+     S18 · SOCIAL PROOF
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow magenta">Social Proof</div>
@@ -697,11 +808,10 @@
     </div>
   </div>
   <div class="brandtag">GUBER · SOCIAL PROOF</div>
-  <div class="pageno">15 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 16 · WINNERS (real-world payouts)
+     S19 · REAL WINNERS
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow gold">Real Winners · Real Payouts</div>
@@ -716,16 +826,15 @@
     <div class="winner"><img src="winners/w5.jpg" alt="Winner 5"/><div class="tag">Pcola · Drop 05</div></div>
   </div>
   <div class="brandtag">GUBER · CASH DROP WINNERS</div>
-  <div class="pageno">16 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 17 · THE BIGGER VISION
+     S20 · THE BIGGER VISION  (PHASE 4 — EXPANSION)
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow purple">The Bigger Vision</div>
-  <h2>A nationwide <span class="accent-purple">trust infrastructure layer.</span></h2>
-  <div class="lede tight">Today: a marketplace. Tomorrow: the verification rail every U.S. industry secretly needs — insurance, lending, OEMs, marketplaces, classifieds, government.</div>
+  <h2>Today: a marketplace. <span class="accent-purple">Tomorrow: trust infrastructure.</span></h2>
+  <div class="lede tight">The visibility layer every U.S. industry quietly needs — insurance, lending, OEMs, marketplaces, classifieds, local commerce, government.</div>
   <div class="market">
     <div class="mkt">
       <div class="label">Current Surface</div>
@@ -743,19 +852,18 @@
       <div class="label">Long-term Surface</div>
       <div class="v accent-magenta">∞</div>
       <div class="name">The Human API for Truth</div>
-      <div class="desc">Every claim that needs a human at a real location, leaving real proof — that's the open market we're building toward.</div>
+      <div class="desc">Every claim that needs a human at a real location, leaving real proof — the open market we're building toward.</div>
     </div>
   </div>
   <div class="brandtag">GUBER · VISION &amp; MARKET</div>
-  <div class="pageno">17 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 18 · ROADMAP
+     S21 · ROADMAP
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow cyan">Roadmap · 18 Months</div>
-  <h2>From beachhead to <span class="accent-cyan">national network.</span></h2>
+  <h2>From Gulf Coast beachhead to <span class="accent-cyan">national network.</span></h2>
   <div class="roadmap">
     <div class="phase p1">
       <div class="ph">Phase 01</div>
@@ -776,7 +884,7 @@
         <li>Target 30K verified users · Mobile · Baldwin · Pcola</li>
         <li>Activate @theblackcarguru + @80inscrubs</li>
         <li>Sign 25+ local business sponsors</li>
-        <li>B2B verification pilots with regional buyers</li>
+        <li>V&amp;I pilots with regional auto dealers</li>
       </ul>
     </div>
     <div class="phase p3">
@@ -792,82 +900,10 @@
     </div>
   </div>
   <div class="brandtag">GUBER · ROADMAP</div>
-  <div class="pageno">18 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 19 · BRAND IDENTITY
-     ══════════════════════════════════════════════════════════════ -->
-<section class="slide">
-  <div class="eyebrow purple">The Brand</div>
-  <h2>Not just an app. <span class="accent-magenta">A symbol people wear.</span></h2>
-  <div class="lede tight">A full identity system — neon shield, gold Day-1 mark, and a mascot already on merch and creator content across the Gulf Coast.</div>
-  <div style="display:grid;grid-template-columns:.9fr 1.1fr;gap:36px;margin-top:14px;align-items:center">
-    <div style="display:flex;align-items:center;justify-content:center">
-      <img src="brand/mascot.png" alt="GUBER mascot" style="max-height:340px;max-width:100%;object-fit:contain;filter:drop-shadow(0 0 60px rgba(168,85,247,.4)) drop-shadow(0 0 120px rgba(57,255,20,.25))"/>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-      <div style="padding:16px 12px;border:1px solid var(--rule);border-radius:14px;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;gap:10px">
-        <img src="brand/guber-shield-neon.png" alt="GUBER neon shield" style="height:110px;object-fit:contain"/>
-        <div style="font-family:'Oxanium',sans-serif;font-weight:700;font-size:11px;letter-spacing:.22em;color:#9aa0a6;text-transform:uppercase;text-align:center">Primary Mark</div>
-      </div>
-      <div style="padding:16px 12px;border:1px solid rgba(245,158,11,.3);border-radius:14px;background:linear-gradient(180deg,rgba(245,158,11,.06),transparent),#0a0a0a;display:flex;flex-direction:column;align-items:center;gap:10px">
-        <img src="brand/guber-shield-gold.png" alt="Day-1 OG gold shield" style="height:110px;object-fit:contain"/>
-        <div style="font-family:'Oxanium',sans-serif;font-weight:700;font-size:11px;letter-spacing:.22em;color:var(--gold);text-transform:uppercase;text-align:center">Day-1 OG</div>
-      </div>
-      <div style="padding:16px 12px;border:1px solid rgba(34,211,238,.3);border-radius:14px;background:linear-gradient(180deg,rgba(34,211,238,.05),transparent),#0a0a0a;display:flex;flex-direction:column;align-items:center;gap:10px">
-        <img src="brand/verify-inspect-shield.png" alt="Verify &amp; Inspect" style="height:110px;object-fit:contain"/>
-        <div style="font-family:'Oxanium',sans-serif;font-weight:700;font-size:11px;letter-spacing:.22em;color:var(--cyan);text-transform:uppercase;text-align:center">Verify &amp; Inspect</div>
-      </div>
-    </div>
-  </div>
-  <div class="brandtag">GUBER · BRAND SYSTEM</div>
-  <div class="pageno">19 / 22</div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════
-     SLIDE 20 · FOUNDER (movement anchor)
-     ══════════════════════════════════════════════════════════════ -->
-<section class="slide">
-  <div class="eyebrow gold">The Founder</div>
-  <h2>Built from real-world struggle. <span class="accent-gold">Not Silicon Valley theory.</span></h2>
-  <div style="display:grid;grid-template-columns:.7fr 1.3fr;gap:44px;margin-top:12px;align-items:start">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
-      <img src="brand/founder.jpg" alt="Dimetris Bowden — Founder" style="width:100%;max-width:260px;height:auto;border-radius:16px;border:1px solid rgba(217,70,239,.3);box-shadow:0 0 50px rgba(217,70,239,.3),0 0 120px rgba(168,85,247,.25);display:block"/>
-      <div style="text-align:center;width:100%;max-width:260px">
-        <div style="font-family:'Oxanium',sans-serif;font-weight:800;font-size:18px;color:#fff;letter-spacing:.04em">DIMETRIS BOWDEN</div>
-        <div style="font-family:'Oxanium',sans-serif;font-weight:700;font-size:11px;letter-spacing:.28em;color:var(--gold);text-transform:uppercase;margin-top:4px">Founder &amp; CEO · Greensboro, NC</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <img src="brand/guber-logo-full.png" alt="GUBER" style="width:170px;display:block;filter:drop-shadow(0 0 24px rgba(217,70,239,.4))"/>
-      <div style="font-family:'Oxanium',sans-serif;font-weight:700;font-size:20px;line-height:1.3;color:#fff">
-        I didn't build GUBER from a deck. I built it from the road.
-      </div>
-      <div style="font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.55;color:#cfd2d6">
-        Born and raised in <span style="color:#fff;font-weight:600">Greensboro, NC</span>. I bought a <span style="color:#fff;font-weight:600">Mustang Shelby GT500 sight-unseen from a California auto auction</span> — $25,000 wired, the listing said nothing was wrong with it. It arrived with the motor smoking. Dead. Nobody on the ground had verified it. Nobody could be held accountable.
-      </div>
-      <div style="font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.55;color:#cfd2d6">
-        That's the day <span style="color:#fff;font-weight:600">GUBER's Verify &amp; Inspect</span> rail was born. I'm a <span style="color:#fff;font-weight:600">solo founder</span> who designed, branded, and built GUBER end-to-end — 22 live screens, six wired revenue rails, Stripe Connect payouts, AI moderation, the Day-1 OG community, and a real Cash Drops sponsor in market.
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:2px">
-        <div style="padding:11px 13px;border-left:3px solid var(--magenta);background:rgba(217,70,239,.06)">
-          <div style="font-family:'Oxanium',sans-serif;font-size:10px;letter-spacing:.28em;color:var(--magenta);font-weight:800;text-transform:uppercase">Why I built it</div>
-          <div style="font-family:'Inter',sans-serif;font-size:12px;color:#cfd2d6;margin-top:4px;line-height:1.45">Real people deserve real work, real pay, and a record nobody can take from them.</div>
-        </div>
-        <div style="padding:11px 13px;border-left:3px solid var(--mint);background:rgba(57,255,20,.06)">
-          <div style="font-family:'Oxanium',sans-serif;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800;text-transform:uppercase">Why now</div>
-          <div style="font-family:'Inter',sans-serif;font-size:12px;color:#cfd2d6;margin-top:4px;line-height:1.45">AI made every photo a lie. The ground-truth layer has to get built — by someone who's lived it.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="brandtag">GUBER · THE FOUNDER</div>
-  <div class="pageno">20 / 22</div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════
-     SLIDE 21 · THE ASK
+     S22 · THE ASK
      ══════════════════════════════════════════════════════════════ -->
 <section class="slide">
   <div class="eyebrow mint">The Ask</div>
@@ -893,23 +929,33 @@
   </div>
   <div class="lede" style="font-size:14px;color:#71717a;font-style:italic;margin-top:14px;max-width:none">$15M is an early-stage valuation framework — based on live product, existing infrastructure, and category position — not a guaranteed company worth.</div>
   <div class="brandtag">GUBER · THE ASK</div>
-  <div class="pageno">21 / 22</div>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════
-     SLIDE 20 · CLOSING
+     S23 · REALITY CHECK · CLOSING
      ══════════════════════════════════════════════════════════════ -->
-<section class="slide center">
-  <img src="brand/guber-logo-full.png" alt="GUBER" style="width:520px;max-width:60%;display:block;margin:0 auto;filter:drop-shadow(0 0 80px rgba(217,70,239,.5)) drop-shadow(0 0 200px rgba(168,85,247,.4))"/>
-  <h2 style="margin-top:36px;text-align:center;font-size:62px">The movement <span class="accent-mint">starts now.</span></h2>
-  <div class="lede" style="text-align:center;margin-top:14px;font-size:22px">Built by people. Powered by trust.</div>
-  <div class="cta">GUBERAPP.COM →</div>
-  <div class="contacts" style="justify-content:center">
-    <div class="contact mint">investors@guberapp.com</div>
-    <div class="contact cyan">(251) 284-9412</div>
-    <div class="contact purple">@guber_global</div>
+<section class="slide" style="padding:36px 70px 36px">
+  <div class="eyebrow mint" style="text-align:center;margin:4px 0 8px">Reality Check</div>
+  <h2 style="text-align:center;font-size:60px;margin-bottom:8px">You just experienced <span class="accent-mint">GUBER.</span></h2>
+  <div class="reality">
+    <div style="font-family:'Inter',sans-serif;font-size:15px;color:#9aa0a6;letter-spacing:.06em">At first, GUBER looked familiar —</div>
+    <div class="pre">
+      <span>Jobs</span><span>Side money</span><span>Local help</span><span>Verification</span>
+    </div>
+    <div style="font-family:'Inter',sans-serif;font-size:14.5px;color:#cfd2d6;max-width:820px;line-height:1.55">But the deeper you went, the more visible the larger system became. Opportunity already exists. Movement already exists. People already exist. Trust already exists.</div>
+    <div class="scope">
+      <span><b>Opportunity</b></span><span><b>Movement</b></span><span><b>People</b></span><span><b>Trust</b></span>
+    </div>
+    <div class="kicker">GUBER simply makes it <span class="glow">visible.</span></div>
+    <div class="deep">The marketplace is only the entry point. The deeper layer is visibility itself.</div>
+    <img src="brand/guber-logo-full.png" alt="GUBER" style="width:240px;margin-top:6px;filter:drop-shadow(0 0 40px rgba(217,70,239,.5)) drop-shadow(0 0 110px rgba(168,85,247,.35))"/>
+    <div style="font-family:'Oxanium',sans-serif;font-size:12px;letter-spacing:.32em;color:#9aa0a6;text-transform:uppercase">Built by people. Powered by trust.</div>
+    <div class="contacts" style="justify-content:center;margin-top:4px;gap:10px">
+      <div class="contact mint" style="padding:10px 18px;font-size:14px">investors@guberapp.com</div>
+      <div class="contact cyan" style="padding:10px 18px;font-size:14px">(251) 284-9412</div>
+      <div class="contact purple" style="padding:10px 18px;font-size:14px">@guber_global</div>
+    </div>
   </div>
-  <div class="pageno">22 / 22</div>
 </section>
 
 </body>
