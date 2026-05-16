@@ -74,6 +74,7 @@ export const INVESTOR_CONFIG = {
     headline: "Verify & Inspect — our wedge into a multi-billion-dollar market.",
     sub: "A purpose-built vertical inside the marketplace where verified helpers act as on-the-ground eyes for buyers, insurers, lenders, and online marketplaces.",
     bullets: [
+      "100% opt-in, 100% user-requested. No passive surveillance, no background tracking, no data scraping — a verified human chooses to accept a specific request, captures live visual proof on-site, and the job ends.",
       "Helpers don't certify, diagnose, or appraise — they take clear photos, short video, and submit GPS-verified, timestamped evidence on a structured checklist.",
       "Smart-form templates today cover vehicles, properties, marketplace listings, and salvage; new verticals plug in without code changes.",
       "Every job ends with a structured, location-checked, timestamped evidence bundle the buyer can download, share, and audit.",
@@ -270,8 +271,10 @@ export const INVESTOR_CONFIG = {
     role: "Founder & CEO, GUBER Global LLC",
     photo: "/founder.jpg",
     body: [
-      "GUBER was built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand.",
-      "The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed under the core platform is in production code today.",
+      "For 17 years, I built my life around someone I loved. I sacrificed opportunities, stability, money, time, and pieces of myself trying to build a future I believed we both wanted. Then one day, it was just… gone. No real closure. No clear explanation that could justify losing nearly two decades of your life.",
+      "What made it harder wasn't losing the relationship — it was realizing how quickly a person can become emotionally, financially, and socially disconnected when the foundation they depended on disappears. Trying to survive emotionally while rebuilding financially, mentally, and physically at the same time.",
+      "One realization kept hitting me: people are surrounded by opportunity, help, skills, resources, and movement every single day — but when you're struggling, most of it feels invisible. That realization became the foundation for GUBER. GUBER isn't just about jobs. It's about visibility — clarity and accountability for the people the system left behind.",
+      "GUBER was then built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand. The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed is in production code today.",
       "Right now I'm growing the platform conservatively and organically — only accepting the volume of jobs the current infrastructure and a one-person operation can fully deliver on. That discipline protects the brand, but it also caps how fast we move.",
       "I'm raising to remove that ceiling: real infrastructure, a real team, and the paid-acquisition and B2B sales motion that turn an organic, verified user base into a self-sustaining nationwide trust network.",
       "Investors, advisors, operators — anyone who can move quickly and meaningfully — I want to hear from you. The app is live. The window is open. Once GUBER hits scale, this entry point won't exist again.",
