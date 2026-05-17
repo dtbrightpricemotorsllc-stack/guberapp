@@ -166,7 +166,7 @@ export const INVESTOR_CONFIG = {
     winners: [
       { name: "Jamie K.", quote: "Going straight to my church!", asset: "winner-jamie" },
       { name: "Kyle H.", quote: "Found it — took me about 30 minutes.", asset: "winner-kyle" },
-      { name: "Klin B.", quote: "Found in the steering wheel.", asset: "winner-klin" },
+      { name: "Klin B.", quote: "Cash Drop claimed.", asset: "winner-klin" },
       { name: "James E.", quote: "Cash Drop winner — early adopter.", asset: "winner-james" },
       { name: "Community", quote: "Real winner. Real cash. No fakes.", asset: "winner-extra" },
       { name: "Engagement", quote: "84 reactions · multiple shares — organic, no paid promo.", asset: "engagement" },
@@ -256,11 +256,11 @@ export const INVESTOR_CONFIG = {
 
   whyNow: {
     headline: "Why this round, why now.",
-    sub: "The product risk is behind us. The capital risk is the only thing left.",
+    sub: "The product is built and the rails are live. Capital is what turns a disciplined solo operation into a scaled, backed one.",
     cards: [
       { title: "Product is shipped", body: "50+ live surfaces on web and Google Play. Capital goes straight to growth, not engineering." },
-      { title: "Lean infrastructure built to scale", body: "Lean infrastructure and multiple revenue streams create strong long-term scaling potential. Idle cost is near-zero, so every dollar raised buys growth, not survival." },
-      { title: "Multiple revenue streams hedge risk", body: "Distinct streams across consumer, helper, and B2B. No single bet has to land." },
+      { title: "Lean infrastructure built to scale", body: "Idle cost is near-zero. Every dollar raised buys growth, not survival — and the rails are already wired for it." },
+      { title: "Optionality across multiple rails", body: "Consumer, helper, and B2B rails are all built and capable today. Volume is being held back by choice while solo — capital removes that ceiling and lets the rails open up on a deliberate timeline." },
       { title: "First-mover trust signal", body: "Live on Google Play; App Store imminent. Verified-identity local marketplaces are still rare — the window to anchor the category is open now." },
     ],
   },
@@ -273,8 +273,8 @@ export const INVESTOR_CONFIG = {
     body: [
       "The full origin story — 17 years of loss, the realization that opportunity, help, and movement feel invisible when you're struggling, and how that became the foundation for GUBER — lives in Section 06 above (The Other Side of Why).",
       "GUBER was then built solo over ~18 months — product design, full-stack engineering, payments, native mobile, admin tooling, and brand. The platform you're seeing in this brief is the result of shipping continuously, not pitching. Every feature listed is in production code today.",
-      "Right now I'm growing the platform conservatively and organically — only accepting the volume of jobs the current infrastructure and a one-person operation can fully deliver on. That discipline protects the brand, but it also caps how fast we move.",
-      "I'm raising to remove that ceiling: real infrastructure, a real team, and the paid-acquisition and B2B sales motion that turn an organic, verified user base into a self-sustaining nationwide trust network.",
+      "Right now I'm deliberately holding volume back — only accepting the load that one operator can deliver on without compromising the brand. That's a choice, not a gap: until there's a financial cushion for the things one person can't absorb (legal, support load, scaling incidents, the unknowns), opening the rails wider would be reckless rather than ambitious.",
+      "I'm raising to buy that cushion and the team behind it: real infrastructure, real coverage on the unknowns, and the paid-acquisition and B2B sales motion that turn a disciplined, verified user base into a self-sustaining nationwide trust network. The rails are built and capable across multiple monetization paths today — capital is what lets us turn them on at scale, backed.",
       "Investors, advisors, operators — anyone who can move quickly and meaningfully — I want to hear from you. The app is live. The window is open. Once GUBER hits scale, this entry point won't exist again.",
     ],
   },
@@ -306,7 +306,7 @@ export const INVESTOR_CONFIG = {
     whyNow: [
       "Product is shipped — capital goes straight to growth, not engineering.",
       "GUBER sits at the intersection of digital trust, fraud prevention, identity verification, and the gig economy — large, named, growing markets.",
-      "Multiple revenue streams hedge against any single one not landing.",
+      "Multiple revenue rails are built and ready — optionality across consumer, helper, and B2B, opened on a deliberate timeline once the operation is backed.",
       "Live on Google Play; App Store imminent — first-mover trust signal in a still-informal market.",
       "The trust & verification category does not have a category leader yet — the window to anchor it is open now.",
     ],
@@ -365,7 +365,7 @@ export const INVESTOR_CONFIG = {
       "Structured smart-forms guide the job — no guesswork, no scope creep.",
       "Disputes are resolved against the evidence, not he-said / she-said.",
     ],
-    closer: "GUBER removes the personal risk from hiring strangers locally.",
+    closer: "GUBER gives you the tools — verified identity, escrowed payment, structured evidence — so you can decide who to trust, with eyes open.",
   },
 
   viOrigin: {
