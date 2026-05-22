@@ -1,4 +1,23 @@
 User-agent: *
-Allow: /
+
+# Public listing pages — allow crawling
+Allow: /marketplace/p/
+Allow: /login
+Allow: /signup
+
+# Block private app routes
+Disallow: /marketplace$
+Disallow: /profile
+Disallow: /post-job
+Disallow: /browse-jobs
+Disallow: /my-jobs
+Disallow: /vi-requests
+Disallow: /messages
+Disallow: /wallet
+Disallow: /admin
+Disallow: /studio
+Disallow: /biz/
+Disallow: /settings
+Disallow: /api/
 
 Sitemap: https://guberapp.app/sitemap.xml

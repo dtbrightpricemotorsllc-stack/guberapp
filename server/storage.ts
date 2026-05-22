@@ -1154,12 +1154,21 @@ export class DatabaseStorage implements IStorage {
       if (sort === "price_asc") return (a.price || 0) - (b.price || 0);
       if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
       if (sort === "newest") return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
-      const aBoost = a.boosted && a.boostedUntil && a.boostedUntil > now;
-      const bBoost = b.boosted && b.boostedUntil && b.boostedUntil > now;
-      if (aBoost && !bBoost) return -1;
-      if (!aBoost && bBoost) return 1;
-      if (a.guberVerified && !b.guberVerified) return -1;
-      if (!a.guberVerified && b.guberVerified) return 1;
+      const aBoost = a.boosted && a.boostedUntil && new Date(a.boostedUntil) > now;
+      const bBoost = b.boosted && b.boostedUntil && new Date(b.boostedUntil) > now;
+      const aVerified = a.guberVerified;
+      const bVerified = b.guberVerified;
+      // Ranking: Verified+Boosted(3) > Boosted(2) > Verified(1) > Default(0)
+      const aScore = aBoost && aVerified ? 3 : aBoost ? 2 : aVerified ? 1 : 0;
+      const bScore = bBoost && bVerified ? 3 : bBoost ? 2 : bVerified ? 1 : 0;
+      if (aScore !== bScore) return bScore - aScore;
+      // Within boosted tier, longer duration ranks higher
+      if (aBoost && bBoost) {
+        const boostRank: Record<string, number> = { "7day": 3, "3day": 2, "24h": 1 };
+        const aBO = boostRank[(a as any).boostType as string] || 0;
+        const bBO = boostRank[(b as any).boostType as string] || 0;
+        if (aBO !== bBO) return bBO - aBO;
+      }
       return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
     });
   }
@@ -1192,6 +1201,26 @@ export class DatabaseStorage implements IStorage {
 
   async getAllMarketplaceItems(): Promise<MarketplaceItem[]> {
     return db.select().from(marketplaceItems).orderBy(desc(marketplaceItems.createdAt));
+  }
+
+  async expireMarketplaceBoosts(): Promise<number> {
+    const now = new Date();
+    const result = await db.update(marketplaceItems)
+      .set({ boosted: false, boostType: null } as any)
+      .where(
+        and(
+          eq(marketplaceItems.boosted, true),
+          lt(marketplaceItems.boostedUntil, now)
+        )
+      )
+      .returning({ id: marketplaceItems.id });
+    return result.length;
+  }
+
+  async getActiveMarketplaceListings(): Promise<MarketplaceItem[]> {
+    return db.select().from(marketplaceItems)
+      .where(eq(marketplaceItems.status, "available"))
+      .orderBy(desc(marketplaceItems.createdAt));
   }
 
   async createMarketplaceOffer(data: any): Promise<MarketplaceOffer> {

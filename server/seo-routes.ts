@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
-import { jobs as jobsTable } from "@shared/schema";
+import { jobs as jobsTable, marketplaceItems } from "@shared/schema";
 import { eq, and, or, desc, sql, notInArray } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
@@ -311,6 +311,33 @@ export function setupPublicSeoRoutes(app: Express) {
       const categorySlugs = ["on-demand-help", "general-labor", "skilled-labor", "verify-and-inspect", "barter-labor", "marketplace"];
       for (const cat of categorySlugs) {
         xml += `  <url><loc>https://guberapp.app/${cat}</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
+      }
+
+      // Marketplace listings — only available items with a public slug
+      const marketplaceRows = await db
+        .select({
+          publicSlug: marketplaceItems.publicSlug,
+          updatedAt: marketplaceItems.updatedAt,
+          createdAt: marketplaceItems.createdAt,
+        })
+        .from(marketplaceItems)
+        .where(
+          and(
+            eq(marketplaceItems.status, "available"),
+            sql`${marketplaceItems.publicSlug} IS NOT NULL`,
+          )
+        )
+        .orderBy(desc(marketplaceItems.createdAt))
+        .limit(50000);
+
+      for (const listing of marketplaceRows) {
+        if (!listing.publicSlug) continue;
+        const lastmod = listing.updatedAt
+          ? new Date(listing.updatedAt).toISOString().split("T")[0]
+          : listing.createdAt
+          ? new Date(listing.createdAt).toISOString().split("T")[0]
+          : today;
+        xml += `  <url><loc>https://guberapp.app/marketplace/p/${listing.publicSlug}</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>\n`;
       }
 
       xml += `</urlset>`;

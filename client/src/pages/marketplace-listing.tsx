@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { MarketplaceItem } from "@shared/schema";
 
@@ -9,6 +9,44 @@ function statusLabel(status: string | null | undefined) {
   if (status === "pending") return "Sale Pending";
   if (status === "expired" || status === "removed") return "No Longer Available";
   return "Available";
+}
+
+function JsonLd({ item, seoTitle, seoDescription, canonicalUrl }: {
+  item: MarketplaceItem;
+  seoTitle: string;
+  seoDescription: string;
+  canonicalUrl: string;
+}) {
+  const photos = item.photos as string[] | null;
+  const schema: Record<string, any> = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: item.title,
+    description: item.description || seoDescription,
+    url: canonicalUrl,
+    offers: {
+      "@type": "Offer",
+      availability: item.status === "available"
+        ? "https://schema.org/InStock"
+        : "https://schema.org/Discontinued",
+      priceCurrency: "USD",
+      ...(item.price ? { price: item.price.toFixed(2) } : {}),
+      seller: {
+        "@type": "Person",
+        name: item.sellerName || "GUBER Seller",
+      },
+    },
+  };
+  if (item.brand) schema.brand = { "@type": "Brand", name: item.brand };
+  if (photos && photos.length > 0) schema.image = photos;
+  if (item.category) schema.category = item.category;
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
 }
 
 export default function MarketplaceListing() {
@@ -34,31 +72,61 @@ export default function MarketplaceListing() {
 
   if (error || !item) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4 text-center">
-        <AlertCircle className="w-12 h-12 text-muted-foreground" />
-        <h1 className="text-xl font-display font-bold">Listing Not Found</h1>
-        <p className="text-muted-foreground text-sm">This listing may have been sold, removed, or expired.</p>
-        <Button onClick={() => navigate("/marketplace")} className="premium-btn font-display">Browse Marketplace</Button>
-      </div>
+      <>
+        <title>Listing Not Found | GUBER</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4 text-center">
+          <AlertCircle className="w-12 h-12 text-muted-foreground" />
+          <h1 className="text-xl font-display font-bold">Listing Not Found</h1>
+          <p className="text-muted-foreground text-sm">This listing may have been sold, removed, or expired.</p>
+          <Button onClick={() => navigate("/marketplace")} className="premium-btn font-display">Browse Marketplace</Button>
+        </div>
+      </>
     );
   }
 
   const photos = item.photos as string[] | null;
   const location = item.city && item.state ? `${item.city}, ${item.state}` : item.locationApprox || "";
-  const isAvailable = ["available", "active"].includes(item.status || "available");
+  const isIndexable = ["available"].includes(item.status || "available");
+  const canonicalUrl = `https://guberapp.app/marketplace/p/${item.publicSlug || slug}`;
+
+  // SEO copy
+  const categoryLabel = item.category || "item";
   const seoTitle = `${item.title}${location ? ` for sale in ${location}` : ""} | GUBER`;
-  const seoDescription = `View this listing on GUBER. Contact seller, request a viewing, or use GUBER Verify & Inspect before buying. ${item.description?.slice(0, 100) || ""}`;
-  const price = item.price ? `$${item.price.toLocaleString()}` : item.askingType === "free" ? "Free" : "Contact for price";
+  const seoDescription = `View this ${categoryLabel} listing on GUBER. Contact the seller, request a viewing, or use GUBER Verify & Inspect before buying.${item.description ? " " + item.description.slice(0, 100) : ""}`;
+  const ogImage = photos && photos[0] ? photos[0] : "https://guberapp.app/icon-1024.png";
+
+  const price = item.price
+    ? `$${item.price.toLocaleString()}`
+    : item.askingType === "free"
+    ? "Free"
+    : "Contact for price";
+
+  const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
 
   return (
     <>
       <title>{seoTitle}</title>
       <meta name="description" content={seoDescription} />
-      {(!isAvailable) && <meta name="robots" content="noindex" />}
+      <link rel="canonical" href={canonicalUrl} />
+      <meta name="robots" content={isIndexable ? "index, follow" : "noindex, nofollow"} />
+
+      {/* Open Graph */}
+      <meta property="og:type" content="product" />
       <meta property="og:title" content={seoTitle} />
       <meta property="og:description" content={seoDescription} />
-      <meta property="og:type" content="website" />
-      {photos && photos[0] && <meta property="og:image" content={photos[0]} />}
+      <meta property="og:image" content={ogImage} />
+      <meta property="og:url" content={canonicalUrl} />
+      <meta property="og:site_name" content="GUBER" />
+
+      {/* Twitter Card */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={seoTitle} />
+      <meta name="twitter:description" content={seoDescription} />
+      <meta name="twitter:image" content={ogImage} />
+
+      {/* JSON-LD */}
+      <JsonLd item={item} seoTitle={seoTitle} seoDescription={seoDescription} canonicalUrl={canonicalUrl} />
 
       <div className="min-h-screen bg-background text-foreground">
         {/* Header */}
@@ -66,7 +134,13 @@ export default function MarketplaceListing() {
           <button onClick={() => navigate("/marketplace")} className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <span className="text-sm font-display font-bold truncate">{item.title}</span>
+          <span className="text-sm font-display font-bold truncate flex-1">{item.title}</span>
+          {isBoostedActive && (
+            <span className="flex items-center gap-1 text-[10px] font-display font-extrabold px-2 py-0.5 rounded-full flex-shrink-0"
+              style={{ background: "rgba(245,165,0,0.18)", border: "1.5px solid rgba(245,165,0,0.35)", color: "#f5a500" }}>
+              <Zap className="w-2.5 h-2.5" /> FEATURED
+            </span>
+          )}
         </div>
 
         {/* Photo */}
@@ -86,14 +160,20 @@ export default function MarketplaceListing() {
         )}
 
         <div className="max-w-2xl mx-auto px-4 py-6">
-          {/* Status */}
+          {/* Status badges */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <span className={`text-xs font-display font-bold px-2.5 py-1 rounded-full ${isAvailable ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-gray-500/10 text-gray-400 border border-gray-500/20"}`}>
+            <span className={`text-xs font-display font-bold px-2.5 py-1 rounded-full ${isIndexable ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-gray-500/10 text-gray-400 border border-gray-500/20"}`}>
               {statusLabel(item.status)}
             </span>
             {item.guberVerified && (
               <span className="inline-flex items-center gap-1.5 text-xs font-display font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                 <ShieldCheck className="w-3 h-3" /> GUBER VERIFIED
+              </span>
+            )}
+            {isBoostedActive && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-display font-bold px-2.5 py-1 rounded-full"
+                style={{ background: "rgba(245,165,0,0.12)", border: "1px solid rgba(245,165,0,0.3)", color: "#f5a500" }}>
+                <Zap className="w-3 h-3" /> FEATURED
               </span>
             )}
           </div>
@@ -112,7 +192,12 @@ export default function MarketplaceListing() {
             {item.year && <span>Year: {item.year}</span>}
             {item.brand && <span>Brand: {item.brand}</span>}
             {item.model && <span>Model: {item.model}</span>}
-            {item.createdAt && <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" />Listed {new Date(item.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>}
+            {item.createdAt && (
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                Listed {new Date(item.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+              </span>
+            )}
           </div>
 
           {/* V&I badge */}
@@ -127,7 +212,7 @@ export default function MarketplaceListing() {
                 {item.verifiedByName ? ` Verified by ${item.verifiedByName}.` : ""}
                 {item.verificationDate ? ` On ${new Date(item.verificationDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.` : ""}
               </p>
-              <p className="text-xs text-muted-foreground mt-2">Verify & Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.</p>
+              <p className="text-xs text-muted-foreground mt-2">Verify &amp; Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.</p>
             </div>
           )}
 
@@ -155,22 +240,22 @@ export default function MarketplaceListing() {
           {/* Disclaimer */}
           <div className="rounded-2xl p-4 mb-6 text-xs text-muted-foreground leading-relaxed"
             style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify & Inspect service is requested. Meet in a safe public location when possible. Do not share private address information until you are comfortable.
+            GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested. Meet in a safe public location when possible.
           </div>
 
           {/* CTA */}
-          {isAvailable && (
+          {isIndexable && (
             <div className="space-y-3">
               <Button className="w-full premium-btn font-display" onClick={() => navigate(`/marketplace`)}>
                 <MessageCircle className="w-4 h-4 mr-2" /> Open in GUBER App
               </Button>
-              <p className="text-center text-xs text-muted-foreground">Sign in to contact seller, make an offer, or request Verify & Inspect</p>
+              <p className="text-center text-xs text-muted-foreground">Sign in to contact seller, make an offer, or request Verify &amp; Inspect</p>
             </div>
           )}
 
           {/* GUBER branding */}
           <div className="mt-8 text-center">
-            <p className="text-xs text-muted-foreground">Listed on <span className="font-display font-bold text-primary">GUBER</span> · Simple listings with Verify & Inspect built in</p>
+            <p className="text-xs text-muted-foreground">Listed on <span className="font-display font-bold text-primary">GUBER</span> · Local listings with Verify &amp; Inspect built in</p>
           </div>
         </div>
       </div>

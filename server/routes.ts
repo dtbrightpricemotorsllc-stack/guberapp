@@ -3560,6 +3560,24 @@ export async function registerRoutes(
 
           console.log(`[GUBER][webhook/main] sponsor_drop: created sponsor #${sponsor.id} for ${m.company_name} ($${sponsorAmount}, platform: $${platformAmt}, pool: $${dropPoolAmt})`);
 
+        } else if (metadata?.type === "marketplace_boost") {
+          const boostItemId = metadata?.itemId ? parseInt(metadata.itemId) : null;
+          const boostHours = metadata?.boostHours ? parseInt(metadata.boostHours) : 168;
+          const boostType = metadata?.boostType || "7day";
+          if (boostItemId) {
+            const now = new Date();
+            const expiresAt = new Date(now.getTime() + boostHours * 60 * 60 * 1000);
+            await storage.updateMarketplaceItem(boostItemId, {
+              boosted: true,
+              boostedUntil: expiresAt,
+              boostType,
+              boostStartedAt: now,
+              boostPaymentStatus: "paid",
+              boostStripeSessionId: session.id,
+            } as any);
+            console.log(`[GUBER][webhook/main] marketplace_boost: item #${boostItemId} boosted (${boostType}) until ${expiresAt.toISOString()}`);
+          }
+
         } else {
           console.log(`[GUBER][webhook/main] checkout.session.completed: unhandled session type "${metadata?.type || "none"}" — ignored`);
         }
@@ -5164,6 +5182,14 @@ export async function registerRoutes(
       if (!item) return res.status(404).json({ message: "Item not found" });
       if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
 
+      const boostType = (req.body.boostType as string) || "7day";
+      const boostTiers: Record<string, { label: string; amount: number; hours: number }> = {
+        "24h":  { label: "24-Hour Boost",  amount: 299,  hours: 24 },
+        "3day": { label: "3-Day Boost",    amount: 699,  hours: 72 },
+        "7day": { label: "7-Day Boost",    amount: 1299, hours: 168 },
+      };
+      const tier = boostTiers[boostType] || boostTiers["7day"];
+
       const host = req.get("host") || "localhost:5000";
       const protocol = req.get("x-forwarded-proto") || "http";
       const baseUrl = `${protocol}://${host}`;
@@ -5174,17 +5200,23 @@ export async function registerRoutes(
           price_data: {
             currency: "usd",
             product_data: {
-              name: "GUBER Marketplace Featured Boost",
-              description: `7-day featured placement for: ${item.title}`,
+              name: `GUBER Marketplace Boost — ${tier.label}`,
+              description: `Higher placement in GUBER for: ${item.title}`,
             },
-            unit_amount: 499,
+            unit_amount: tier.amount,
           },
           quantity: 1,
         }],
         mode: "payment",
         success_url: `${baseUrl}/marketplace?boost_success=1&item=${itemId}`,
         cancel_url: `${baseUrl}/marketplace`,
-        metadata: { userId: String(req.session.userId), itemId: String(itemId), type: "marketplace_boost" },
+        metadata: {
+          userId: String(req.session.userId),
+          itemId: String(itemId),
+          boostType,
+          boostHours: String(tier.hours),
+          type: "marketplace_boost",
+        },
       });
 
       res.json({ checkoutUrl: session.url });

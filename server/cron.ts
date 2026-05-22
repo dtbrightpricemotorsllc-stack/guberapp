@@ -1527,6 +1527,10 @@ export function startCron() {
       const purgedStudioSessions = await purgeAbandonedStudioSessions();
       if (purgedStudioSessions > 0) console.log(`[cron] purged ${purgedStudioSessions} abandoned studio session(s)`);
 
+      // Marketplace boost expiry
+      const expiredBoosts = await storage.expireMarketplaceBoosts();
+      if (expiredBoosts > 0) console.log(`[cron] expired ${expiredBoosts} marketplace boost(s)`);
+
       await purgeOrphanedEndedStudioSessionFiles();
 
       const decayedHf = await decayHandsfreeBlockedAttempts();

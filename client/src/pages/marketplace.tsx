@@ -424,8 +424,10 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
   const sb = statusBadge(item.status);
   const avail = availabilityColor(item.sellerAvailability);
 
+  const [showBoostPanel, setShowBoostPanel] = useState(false);
   const boostMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/marketplace/${item.id}/boost-checkout`, {}),
+    mutationFn: (boostType: "24h" | "3day" | "7day") =>
+      apiRequest("POST", `/api/marketplace/${item.id}/boost-checkout`, { boostType }),
     onSuccess: (data: any) => { if (data?.checkoutUrl) window.location.href = data.checkoutUrl; },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -576,14 +578,50 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
             {/* Seller actions */}
             {isSeller ? (
               <div className="space-y-2">
-                {!isBoostedActive && !isStoreBuild && !isDemoUser && (
-                  <button onClick={() => boostMutation.mutate()} disabled={boostMutation.isPending}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-display font-bold transition-all hover:scale-[1.01] disabled:opacity-60"
-                    style={{ background: "rgba(245,165,0,0.15)", border: "1.5px solid rgba(245,165,0,0.35)", color: "#f5a500" }}
-                    data-testid="button-boost-listing">
-                    <Zap className="w-3.5 h-3.5" />
-                    {boostMutation.isPending ? "Loading..." : "BOOST TO FEATURED — $4.99 / 7 DAYS"}
-                  </button>
+                {/* Boost Panel */}
+                {!isStoreBuild && !isDemoUser && (
+                  <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid rgba(245,165,0,0.3)" }}>
+                    <button onClick={() => setShowBoostPanel(p => !p)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-xs font-display font-bold transition-all"
+                      style={{ background: "rgba(245,165,0,0.10)", color: "#f5a500" }}
+                      data-testid="button-toggle-boost-panel">
+                      <span className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5" />
+                        {isBoostedActive ? `BOOSTED · Expires ${new Date((item as any).boostedUntil).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "BOOST LISTING"}
+                      </span>
+                      <span className="text-muted-foreground text-[10px]">{showBoostPanel ? "▲" : "▼"}</span>
+                    </button>
+                    {showBoostPanel && (
+                      <div className="p-3 space-y-2" style={{ background: "rgba(245,165,0,0.04)" }}>
+                        <p className="text-[11px] text-muted-foreground mb-2">Get more visibility inside GUBER. Higher placement in search and category results.</p>
+                        {([
+                          { type: "24h" as const, label: "24 Hours", price: "$2.99", desc: "Boosted badge + higher placement" },
+                          { type: "3day" as const, label: "3 Days", price: "$6.99", desc: "Priority over 24h boosts" },
+                          { type: "7day" as const, label: "7 Days", price: "$12.99", desc: "Top priority boost" },
+                        ]).map(tier => (
+                          <button key={tier.type}
+                            onClick={() => boostMutation.mutate(tier.type)}
+                            disabled={boostMutation.isPending}
+                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-display font-bold transition-all hover:scale-[1.01] disabled:opacity-60"
+                            style={{ background: "rgba(245,165,0,0.12)", border: "1px solid rgba(245,165,0,0.25)", color: "#f5a500" }}
+                            data-testid={`button-boost-${tier.type}`}>
+                            <span className="flex flex-col items-start gap-0.5">
+                              <span>{tier.label}</span>
+                              <span className="text-[10px] font-normal text-muted-foreground">{tier.desc}</span>
+                            </span>
+                            <span>{boostMutation.isPending ? "..." : tier.price}</span>
+                          </button>
+                        ))}
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">Boosting increases listing visibility inside GUBER. It does not guarantee views, offers, or a sale.</p>
+                        {item.guberVerified && (
+                          <p className="text-[10px] text-emerald-500 leading-relaxed">✓ Verified listings may rank higher — your listing already has a trust advantage.</p>
+                        )}
+                        {!item.guberVerified && (
+                          <p className="text-[10px] text-muted-foreground leading-relaxed">Tip: Requesting GUBER Verify &amp; Inspect can improve buyer confidence and boost ranking.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 <div className="flex gap-2">
                   <button onClick={() => statusMutation.mutate("pending")} disabled={statusMutation.isPending || !isAvailable}
