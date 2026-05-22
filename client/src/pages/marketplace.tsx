@@ -1041,10 +1041,11 @@ export default function Marketplace() {
     return `/api/marketplace?${params.toString()}`;
   };
 
-  const { data: items = [], isLoading } = useQuery<MarketplaceItem[]>({
+  const { data: rawItems, isLoading } = useQuery<MarketplaceItem[]>({
     queryKey: ["/api/marketplace", activeCategory, search, filters],
     queryFn: () => fetch(buildUrl()).then(r => r.json()),
   });
+  const items: MarketplaceItem[] = Array.isArray(rawItems) ? rawItems : [];
 
   const handleSearch = () => setSearch(searchInput);
 
