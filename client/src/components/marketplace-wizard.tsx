@@ -42,13 +42,23 @@ const VEHICLE_MAKES = [
 ];
 
 const VEHICLE_TYPES = ["Car","Truck","SUV","Van/Minivan","Motorcycle","ATV/UTV","RV/Motorhome","Boat","Trailer","Equipment","Other"];
-const TITLE_STATUSES = ["Clean Title","Salvage Title","Rebuilt Title","Bill of Sale Only","Title in Hand","Lien Present","Not Paid Off"];
+const TITLE_STATUSES = [
+  "Clean Title – In Hand",
+  "Clean Title – Not in Hand",
+  "Salvage Title – In Hand",
+  "Salvage Title – Not in Hand",
+  "Rebuilt / Reconstructed Title",
+  "Bill of Sale Only",
+  "Parts Only / No Title",
+  "Lien Present – Not Paid Off",
+  "Unknown",
+];
 const CONDITION_FLAGS = [
   "Runs & Drives","Starts – Won't Drive","Inoperable","Needs Tires",
   "Needs Engine Work","Needs Transmission Work","Check Engine Light On",
   "Heat Works","AC Works","Accident History","Flood Damage","Frame Damage",
 ];
-const VEHICLE_SELLER_TYPES = ["Private Seller","Dealer","Buy Here Pay Here","Broker"];
+const VEHICLE_SELLER_TYPES = ["Private Seller","Dealer","Broker","Other"];
 const VEHICLE_LISTING_TYPES = [
   { value: "cash_sale", label: "Cash Sale" },
   { value: "financing", label: "Financing Available" },
@@ -433,8 +443,8 @@ function NoteField({ value, onChange }: { value: string; onChange: (v: string) =
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-[10px] font-display font-bold text-gray-500 tracking-widest uppercase mb-3 border-b border-white/5 pb-1.5">{title}</p>
+    <div className="pt-4 border-t border-white/[0.05]">
+      <p className="text-[10px] font-display font-bold text-gray-500 tracking-widest uppercase mb-3">{title}</p>
       <div className="space-y-3">{children}</div>
     </div>
   );
@@ -573,10 +583,67 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
     setForm((f: WizardForm) => ({ ...f, description: v }));
   };
 
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+
+  const scanBarcode = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    (input as any).capture = "environment";
+    input.onchange = async (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      setScanningBarcode(true);
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+      await new Promise(r => { img.onload = r; });
+      let found = false;
+      try {
+        if ("BarcodeDetector" in window) {
+          const detector = new (window as any).BarcodeDetector({
+            formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code"],
+          });
+          const codes: any[] = await detector.detect(img);
+          if (codes.length > 0) {
+            found = true;
+            const barcode = codes[0].rawValue as string;
+            URL.revokeObjectURL(url);
+            try {
+              const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
+              const data = await res.json();
+              if (data.items?.[0]) {
+                const item = data.items[0];
+                setForm((f: WizardForm) => ({
+                  ...f,
+                  title: item.title || f.title,
+                  brand: item.brand || f.brand,
+                  model: item.model || f.model,
+                  description: item.description || f.description,
+                }));
+                toast({ title: "Item found!", description: item.title });
+              } else {
+                toast({ title: `Barcode: ${barcode}`, description: "Not in database — fill in details below." });
+              }
+            } catch {
+              toast({ title: "Lookup failed", description: "Fill in details manually." });
+            }
+          }
+        }
+      } catch {}
+      URL.revokeObjectURL(url);
+      setScanningBarcode(false);
+      if (!found) toast({ title: "No barcode detected", description: "Take a clear photo of the barcode or fill in manually.", variant: "destructive" });
+    };
+    document.body.appendChild(input);
+    input.click();
+    setTimeout(() => document.body.removeChild(input), 1000);
+  };
+
   const inProgress = Object.keys(uploadProgress).length > 0;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto p-4 space-y-5 pb-28">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Photos & Basics</h2>
         <p className="text-xs text-gray-400 mt-1">{form.category} listing · Photos help buyers inspect before contacting</p>
@@ -658,6 +725,18 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
             onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
           <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
             onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
+
+          {/* Barcode item assist — non-vehicle only */}
+          {form.category !== "Vehicles" && form.category !== "Property" && (
+            <button type="button" onClick={scanBarcode} disabled={scanningBarcode || uploading}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
+              style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}
+              data-testid="button-scan-barcode">
+              {scanningBarcode
+                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Looking up item…</>
+                : <><ScanLine className="w-4 h-4" /> Scan Barcode — Auto-Fill Item Details</>}
+            </button>
+          )}
         </div>
       )}
 
@@ -699,19 +778,6 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
         </div>
       )}
 
-      <div className="flex gap-3 pt-1">
-        <button type="button" onClick={onBack}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors"
-          style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-          <ChevronLeft className="w-3.5 h-3.5" /> Back
-        </button>
-        <button type="button" onClick={onNext}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold"
-          style={{ background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }}
-          data-testid="button-step2-next">
-          {photos.length === 0 ? "Skip Photos — Next" : "Next: Details"} <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
     </div>
   );
 }
@@ -722,6 +788,21 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
   const { toast } = useToast();
   const [decoding, setDecoding] = useState(false);
   const set = (k: keyof WizardForm, v: any) => setForm((f: WizardForm) => ({ ...f, [k]: v }));
+
+  const applyVINDecode = (vin: string, data: Awaited<ReturnType<typeof decodeVINFromNHTSA>>) => {
+    if (!data) return;
+    setForm((f: WizardForm) => ({
+      ...f, vinDecoded: true, vinNumber: vin,
+      vehicleYear: data.year || f.vehicleYear,
+      vehicleMake: data.make || f.vehicleMake,
+      vehicleModel: data.model || f.vehicleModel,
+      vehicleTrim: data.trim || f.vehicleTrim,
+      engine: data.engine || f.engine,
+      fuelType: data.fuelType || f.fuelType,
+      driveType: data.driveType || f.driveType,
+      transmission: data.transmission || f.transmission,
+    }));
+  };
 
   const handleDecodeVIN = async () => {
     const vin = form.vinNumber.toUpperCase().trim();
@@ -736,21 +817,59 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
         toast({ title: "VIN not recognized", description: "Fill in year, make, and model below.", variant: "destructive" });
         return;
       }
-      setForm((f: WizardForm) => ({
-        ...f, vinDecoded: true,
-        vehicleYear: data.year || f.vehicleYear,
-        vehicleMake: data.make || f.vehicleMake,
-        vehicleModel: data.model || f.vehicleModel,
-        vehicleTrim: data.trim || f.vehicleTrim,
-        engine: data.engine || f.engine,
-        fuelType: data.fuelType || f.fuelType,
-        driveType: data.driveType || f.driveType,
-        transmission: data.transmission || f.transmission,
-      }));
+      applyVINDecode(vin, data);
       toast({ title: "VIN decoded!", description: `${data.year} ${data.make} ${data.model}` });
     } catch {
       toast({ title: "Decode failed", description: "Check your connection or enter details below.", variant: "destructive" });
     } finally { setDecoding(false); }
+  };
+
+  const scanVin = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    (input as any).capture = "environment";
+    input.onchange = async (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+      await new Promise(r => { img.onload = r; });
+      let found = false;
+      try {
+        if ("BarcodeDetector" in window) {
+          const detector = new (window as any).BarcodeDetector({
+            formats: ["code_128", "qr_code", "data_matrix", "code_39", "code_93"],
+          });
+          const codes: any[] = await detector.detect(img);
+          for (const code of codes) {
+            const raw = (code.rawValue as string).toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+            if (/^[A-HJ-NPR-Z0-9]{17}$/.test(raw)) {
+              found = true;
+              set("hasVin", "yes");
+              URL.revokeObjectURL(url);
+              setDecoding(true);
+              try {
+                const data = await decodeVINFromNHTSA(raw);
+                applyVINDecode(raw, data);
+                toast({ title: data ? "VIN scanned & decoded!" : `VIN found: ${raw}`,
+                  description: data ? `${data.year} ${data.make} ${data.model}` : "Enter details below." });
+              } finally { setDecoding(false); }
+              break;
+            }
+          }
+        }
+      } catch {}
+      URL.revokeObjectURL(url);
+      if (!found) {
+        set("hasVin", "yes");
+        toast({ title: "No VIN barcode detected", description: "Enter your 17-digit VIN manually below.", variant: "destructive" });
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+    setTimeout(() => document.body.removeChild(input), 1000);
   };
 
   const years = Array.from({ length: 77 }, (_, i) => String(2026 - i));
@@ -768,15 +887,13 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
         {!form.hasVin && (
           <div className="grid grid-cols-3 gap-2">
             <button type="button"
-              onClick={() => {
-                set("hasVin", "yes");
-                toast({ title: "VIN Scan", description: "Camera-based VIN scanning coming soon — type your 17-digit VIN below.", duration: 4000 });
-              }}
-              className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
+              onClick={scanVin}
+              disabled={decoding}
+              className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-60"
               style={{ background: "rgba(0,229,118,0.07)", border: "1.5px solid rgba(0,229,118,0.2)" }}
               data-testid="button-vin-scan">
-              <ScanLine className="w-5 h-5 text-primary" />
-              <span className="text-[10px] font-display font-bold text-primary">Scan VIN</span>
+              {decoding ? <RefreshCw className="w-5 h-5 text-primary animate-spin" /> : <ScanLine className="w-5 h-5 text-primary" />}
+              <span className="text-[10px] font-display font-bold text-primary">{decoding ? "Scanning…" : "Scan VIN"}</span>
             </button>
             <button type="button"
               onClick={() => set("hasVin", "yes")}
@@ -893,7 +1010,7 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
         </Row2>
       </Section>
 
-      <Section title="Title Status">
+      <Section title="Title / Ownership">
         <ChipSelect options={TITLE_STATUSES} value={form.titleStatus} onChange={v => set("titleStatus", v)} small />
       </Section>
 
@@ -1280,7 +1397,7 @@ function BoatBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
           <div><FL optional>ENGINE TYPE</FL><SField value={form.engineType} onChange={v => set("engineType", v)} options={["Outboard","Inboard","Stern Drive","Jet","Electric","Other"]} placeholder="Engine" /></div>
           <div><FL optional>HOURS</FL><NumInput value={form.hours} onChange={v => set("hours", v)} placeholder="250" /></div>
         </Row2>
-        <div><FL>TITLE STATUS</FL><ChipSelect options={TITLE_STATUSES} value={form.titleStatus} onChange={v => set("titleStatus", v)} small /></div>
+        <div><FL>TITLE / OWNERSHIP</FL><ChipSelect options={TITLE_STATUSES} value={form.titleStatus} onChange={v => set("titleStatus", v)} small /></div>
         <div><FL>CONDITION</FL><ChipSelect options={CONDITIONS} value={form.condition} onChange={v => set("condition", v)} /></div>
         <Row2>
           <div><FL>RUNS WELL</FL><ChipSelect options={["Yes","No","Needs Work"]} value={form.boatRuns} onChange={v => set("boatRuns", v)} small /></div>
@@ -1305,7 +1422,7 @@ function TrailerBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
           <div><FL optional>LENGTH (ft)</FL><NumInput value={form.trailerLength} onChange={v => set("trailerLength", v)} placeholder="16" /></div>
           <div><FL optional>VIN</FL><input className={`${ic} font-mono`} placeholder="If available" value={form.vinNumber} onChange={e => set("vinNumber", e.target.value)} /></div>
         </Row2>
-        <div><FL>TITLE STATUS</FL><ChipSelect options={TITLE_STATUSES} value={form.titleStatus} onChange={v => set("titleStatus", v)} small /></div>
+        <div><FL>TITLE / OWNERSHIP</FL><ChipSelect options={TITLE_STATUSES} value={form.titleStatus} onChange={v => set("titleStatus", v)} small /></div>
         <div><FL>CONDITION</FL><ChipSelect options={CONDITIONS} value={form.condition} onChange={v => set("condition", v)} /></div>
         <Row2>
           <div><FL>TIRES GOOD</FL><YesNo value={form.tiresGood} onChange={v => set("tiresGood", v)} /></div>
@@ -1360,12 +1477,12 @@ function DetailsStep({ form, setForm, onNext, onBack }: {
 }) {
   const cat = form.category;
   return (
-    <div className="flex-1 overflow-y-auto p-4">
+    <div className="flex-1 overflow-y-auto p-4 pb-28">
       <div className="mb-5">
         <h2 className="text-xl font-display font-extrabold text-white">{cat} Details</h2>
-        <p className="text-xs text-gray-400 mt-1">The more you fill in, the fewer messages you'll get</p>
+        <p className="text-xs text-gray-400 mt-1">Fill in what applies — more info means fewer back-and-forths</p>
       </div>
-      <div className="space-y-5 mb-6">
+      <div className="space-y-5">
         {cat === "Vehicles" && <VehicleBuilder form={form} setForm={setForm} />}
         {cat === "Property" && <PropertyBuilder form={form} setForm={setForm} />}
         {cat === "Tools & Equipment" && <ToolsBuilder form={form} setForm={setForm} />}
@@ -1378,18 +1495,6 @@ function DetailsStep({ form, setForm, onNext, onBack }: {
         {!["Vehicles","Property","Tools & Equipment","Electronics","Furniture","Appliances","Boats & Marine","Trailers","Parts"].includes(cat) && (
           <GenericBuilder form={form} setForm={setForm} />
         )}
-      </div>
-      <div className="flex gap-3">
-        <button type="button" onClick={onBack} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors"
-          style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-          <ChevronLeft className="w-3.5 h-3.5" /> Back
-        </button>
-        <button type="button" onClick={onNext}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold"
-          style={{ background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }}
-          data-testid="button-step3-next">
-          Next: Price & Location <ChevronRight className="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
   );
@@ -1442,7 +1547,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
   ].filter(r => r.value && r.value.trim());
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto p-4 space-y-5 pb-28">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Price & Location</h2>
         <p className="text-xs text-gray-400 mt-1">Almost done — review before posting</p>
@@ -1564,16 +1669,6 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
         GUBER does not process sales. All transactions are between buyer and seller. Listings expire after 30 days.
       </div>
 
-      <div className="flex gap-3 pb-4">
-        <button type="button" onClick={onBack} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors"
-          style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-          <ChevronLeft className="w-3.5 h-3.5" /> Back
-        </button>
-        <Button onClick={onSubmit} disabled={isSubmitting || !form.city || !form.state}
-          className="flex-1 premium-btn font-display" data-testid="button-submit-listing">
-          {isSubmitting ? "Posting…" : "POST LISTING — FREE"}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -1759,6 +1854,30 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
     };
   };
 
+  const DRAFT_KEY = `guber_draft_${user?.id ?? "anon"}`;
+
+  const handleSaveDraft = () => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, form, photos, photoMeta }));
+      toast({ title: "Draft saved", description: "Pick up where you left off next time." });
+      onClose();
+    } catch {
+      toast({ title: "Couldn't save draft", variant: "destructive" });
+    }
+  };
+
+  const handleWizardNext = () => {
+    if (step === 4) {
+      if (!form.city || !form.state) {
+        toast({ title: "Location required", description: "Please enter a city and state.", variant: "destructive" });
+        return;
+      }
+      mutation.mutate(buildPayload());
+    } else {
+      setStep(s => s + 1);
+    }
+  };
+
   const handleSubmit = () => {
     if (!form.city || !form.state) {
       toast({ title: "Location required", description: "Please enter a city and state.", variant: "destructive" });
@@ -1803,6 +1922,36 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
         {step === 3 && <DetailsStep form={form} setForm={setForm} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
         {step === 4 && <PriceLocationStep form={form} setForm={setForm} photos={photos}
           onBack={() => setStep(3)} onSubmit={handleSubmit} isSubmitting={mutation.isPending} />}
+
+        {/* Fixed bottom action bar — steps 2-4 */}
+        {step > 1 && (
+          <div className="shrink-0 px-4 pt-3 border-t border-white/[0.06]"
+            style={{ background: "#0e0e0e", paddingBottom: "max(16px, env(safe-area-inset-bottom, 16px))" }}>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setStep(s => s - 1)}
+                className="flex items-center gap-1 px-3 py-3 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors shrink-0"
+                style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+                data-testid="button-wizard-back">
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button type="button" onClick={handleSaveDraft}
+                className="px-3 py-3 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors shrink-0"
+                style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+                data-testid="button-save-draft">
+                Save Draft
+              </button>
+              <button type="button" onClick={handleWizardNext}
+                disabled={mutation.isPending}
+                className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-display font-bold disabled:opacity-50 transition-all"
+                style={{ background: "rgba(0,229,118,0.18)", border: "1.5px solid rgba(0,229,118,0.45)", color: "#00e676" }}
+                data-testid={step === 4 ? "button-submit-listing" : "button-wizard-next"}>
+                {step === 4
+                  ? (mutation.isPending ? "Posting…" : "POST LISTING — FREE")
+                  : (step === 3 ? "Next: Review →" : "Next: Details →")}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import type { MarketplaceItem } from "@shared/schema";
 import {
   ShieldCheck, Plus, X, MapPin, Package, Car, Laptop, Sofa, Wrench, Shirt,
   Dumbbell, AlertCircle, CheckCircle, Clock, Zap, Star, Search, Filter,
-  Eye, MessageCircle, Calendar, Flag, ChevronDown, Anchor, Truck, Tag,
+  Eye, Calendar, Flag, ChevronDown, Anchor, Truck, Tag,
   Home, Archive, Layers, ArrowUpDown, Bed, Bath, Gauge, FileText,
   DollarSign, Users, PawPrint, Info, Expand,
 } from "lucide-react";
@@ -572,36 +572,6 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
   );
 }
 
-function ContactSellerModal({ item, onClose }: { item: MarketplaceItem; onClose: () => void }) {
-  const { toast } = useToast();
-  const [message, setMessage] = useState("");
-  const mutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", `/api/marketplace/${item.id}/contact`, data),
-    onSuccess: () => { toast({ title: "Message sent!" }); onClose(); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-  return (
-    <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-contact-seller">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-display font-extrabold">Contact Seller</h3>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">Seller: <span className="text-foreground font-bold">{item.sellerName || "GUBER Seller"}</span></p>
-        <div className="mb-4">
-          <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">YOUR MESSAGE</label>
-          <textarea className={`${inputClass} resize-none`} rows={4} placeholder={`Hi, I'm interested in your listing: ${item.title}`}
-            value={message} onChange={e => setMessage(e.target.value)} data-testid="textarea-contact-message" />
-        </div>
-        <Button onClick={() => mutation.mutate({ message })} disabled={mutation.isPending || !message.trim()}
-          className="w-full premium-btn font-display" data-testid="button-send-contact-message">
-          {mutation.isPending ? "Sending…" : "SEND MESSAGE"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function ReportListingModal({ item, onClose }: { item: MarketplaceItem; onClose: () => void }) {
   const { toast } = useToast();
   const [reason, setReason] = useState("");
@@ -760,7 +730,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
   const photos = item.photos as string[] | null;
   const [photoIdx, setPhotoIdx] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [modal, setModal] = useState<"offer" | "viewing" | "vi" | "contact" | "report" | null>(null);
+  const [modal, setModal] = useState<"offer" | "viewing" | "vi" | "report" | null>(null);
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
   const isSeller = currentUser && item.sellerId === currentUser.id;
   const isAvailable = ["available", "active"].includes(item.status || "available");
@@ -1000,11 +970,6 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
               </div>
             ) : currentUser ? (
               <div className="space-y-2">
-                <button onClick={() => setModal("contact")}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-display font-bold premium-btn"
-                  data-testid="button-contact-seller">
-                  <MessageCircle className="w-4 h-4" /> CONTACT SELLER
-                </button>
                 <div className="flex gap-2">
                   <button onClick={() => setModal("viewing")} disabled={!isAvailable}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
@@ -1034,7 +999,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 </button>
               </div>
             ) : (
-              <p className="text-center text-xs text-muted-foreground">Sign in to contact seller or request verification</p>
+              <p className="text-center text-xs text-muted-foreground">Sign in to make an offer or request verification</p>
             )}
           </div>
         </div>
@@ -1043,7 +1008,6 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
       {modal === "offer" && <MakeOfferModal item={item} onClose={() => setModal(null)} />}
       {modal === "viewing" && <RequestViewingModal item={item} onClose={() => setModal(null)} />}
       {modal === "vi" && <RequestVIModal item={item} onClose={() => setModal(null)} />}
-      {modal === "contact" && <ContactSellerModal item={item} onClose={() => setModal(null)} />}
       {modal === "report" && <ReportListingModal item={item} onClose={() => setModal(null)} />}
       {viewerOpen && photos && photos.length > 0 && (
         <MarketplacePhotoViewer photos={photos} initialIndex={photoIdx} onClose={() => setViewerOpen(false)} />
