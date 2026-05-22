@@ -173,13 +173,13 @@ export default function InvestorsPage() {
         <img src={logoImg} alt="GUBER" className="h-7 object-contain" style={{ mixBlendMode: "screen" }} data-testid="img-nav-logo" />
         <div className="flex items-center gap-3">
           <span className="pill pill-green num-font" data-testid="text-nav-confidential">Confidential</span>
-          <button
-            onClick={handlePrint}
+          <a
+            href="/investor/deck.pdf"
+            download="GUBER-Investor-Deck.pdf"
             className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inline-flex items-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition text-white"
-            data-testid="button-nav-pdf"
-            title="Save as PDF — enable 'Background graphics' in the print dialog for best results">
-            <Printer className="w-3.5 h-3.5" /> PDF
-          </button>
+            data-testid="button-nav-pdf">
+            <Printer className="w-3.5 h-3.5" /> Download PDF
+          </a>
           <button
             onClick={() => scrollToId("section-cta")}
             className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inv-cta-primary hidden sm:inline-flex items-center gap-2"
