@@ -157,9 +157,10 @@ export default function InvestorsPage() {
           /* Show all reveal nodes regardless of scroll position */
           .inv-reveal-node { opacity: 1 !important; transform: none !important; transition: none !important; }
 
-          /* Section spacing for print */
-          .inv-section { padding-top: 24px !important; padding-bottom: 24px !important; page-break-inside: avoid; }
-          section { page-break-before: auto; break-before: auto; }
+          /* Section spacing for print — each section = new page */
+          .inv-section { padding-top: 20px !important; padding-bottom: 20px !important; }
+          section { page-break-before: always !important; break-before: page !important; }
+          section:first-of-type { page-break-before: avoid !important; break-before: avoid !important; }
 
           /* Cards keep borders */
           .inv-card { border: 1px solid rgba(255,255,255,0.15) !important; background: rgba(255,255,255,0.04) !important; }
