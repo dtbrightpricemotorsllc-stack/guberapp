@@ -221,3 +221,9 @@ id = "k6NCcZtf8kTN8FHQVKR2d"
 uri = "file://attached_assets/GUBER-Investor-Deck-22_1779161043698.pdf"
 type = "pdf"
 title = "GUBER Investor Deck (PDF)"
+
+[[outputs]]
+id = "ddAnJjQZnfzQWppNSQsUv"
+uri = "file://attached_assets/GUBER-Investor-Deck-New_1779438626245.pdf"
+type = "pdf"
+title = "GUBER Investor Deck — New 14-Slide Version (PDF)"
