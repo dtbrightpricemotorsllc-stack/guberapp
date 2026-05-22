@@ -144,6 +144,7 @@ export default function JobDetail() {
   const showError = useErrorToast();
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
+  const [reviewTags, setReviewTags] = useState<string[]>([]);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
   const [sellForm, setSellForm] = useState({ category: "", condition: "", price: "", askingType: "fixed" });
@@ -757,6 +758,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       revieweeId: user?.id === job?.postedById ? job?.assignedHelperId : job?.postedById,
       rating: reviewRating,
       comment: reviewComment,
+      tags: reviewTags,
     }),
     onSuccess: () => {
       setReviewSubmitted(true);
@@ -3110,6 +3112,40 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             </div>
           )}
 
+          {["funded", "active", "in_progress", "proof_submitted", "completion_submitted", "completed_paid", "disputed"].includes(job.status) && (() => {
+            const checkpoints: { label: string; at: string | Date | null | undefined; done: boolean }[] = [
+              { label: "Job Posted", at: job.createdAt, done: true },
+              { label: "Accepted & Funded", at: (job as any).lockedAt, done: !!(job as any).lockedAt },
+              { label: "Worker On The Way", at: (job as any).onTheWayAt, done: !!(job as any).onTheWayAt },
+              { label: "Worker Arrived", at: (job as any).arrivedAt, done: !!(job as any).arrivedAt },
+              { label: "Work Submitted", at: (job as any).reviewTimerStartedAt, done: !!(job as any).reviewTimerStartedAt },
+              { label: "Confirmed & Paid", at: (job as any).chargedAt, done: !!(job as any).chargedAt },
+            ];
+            const doneCount = checkpoints.filter(c => c.done).length;
+            const fmtDate = (d: string | Date | null | undefined) => d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+            return (
+              <div className="bg-card rounded-2xl border border-border/20 p-4 space-y-3" data-testid="card-task-timeline">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider">TASK TIMELINE</p>
+                  <span className="text-[10px] text-muted-foreground">{doneCount}/{checkpoints.length} steps</span>
+                </div>
+                <div className="space-y-2">
+                  {checkpoints.map((cp, i) => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${cp.done ? "bg-emerald-500/15 border border-emerald-500/40" : "bg-muted/20 border border-border/30"}`}>
+                        {cp.done && <CheckCircle className="w-3 h-3 text-emerald-400" />}
+                      </div>
+                      <div className="flex-1 flex items-center justify-between min-w-0">
+                        <p className={`text-[11px] font-medium ${cp.done ? "text-foreground" : "text-muted-foreground/50"}`}>{cp.label}</p>
+                        {cp.done && cp.at && <p className="text-[10px] text-muted-foreground shrink-0 ml-2">{fmtDate(cp.at)}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {(job.status === "completion_submitted" || job.status === "completed_paid") && isHelper && (job as any).reviewTimerStartedAt && (() => {
             const startedAt = new Date((job as any).reviewTimerStartedAt).getTime();
             const expiresAt = startedAt + 12 * 60 * 60 * 1000;
@@ -3146,24 +3182,59 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             );
           })()}
 
-          {(job.status === "completion_submitted" || job.status === "completed_paid") && (isOwner || isHelper) && !reviewSubmitted && (
-            <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
-              <h3 className="font-display font-semibold text-sm">Leave a Review</h3>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <button key={s} onClick={() => setReviewRating(s)} data-testid={`button-star-${s}`}>
-                    <Star className={`w-6 h-6 ${s <= reviewRating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`} />
-                  </button>
-                ))}
+          {(job.status === "completion_submitted" || job.status === "completed_paid") && (isOwner || isHelper) && !reviewSubmitted && (() => {
+            const QUICK_TAGS = isOwner
+              ? ["On time", "Good communication", "Accurate proof", "Professional", "Would hire again"]
+              : ["On time", "Good communication", "Fair pay", "Clear instructions", "Would work for again"];
+            return (
+              <div className="rounded-2xl p-5 space-y-4" style={{ border: "1.5px solid rgba(250,204,21,0.3)", background: "rgba(250,204,21,0.04)" }} data-testid="card-review-form">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                    <h3 className="font-display font-bold text-sm text-foreground">Rate Your Experience</h3>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Your rating builds trust and improves the community.</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button key={s} onClick={() => setReviewRating(s)} data-testid={`button-star-${s}`}>
+                      <Star className={`w-7 h-7 transition-colors ${s <= reviewRating ? "text-yellow-400 fill-yellow-400" : "text-muted-foreground/40"}`} />
+                    </button>
+                  ))}
+                  <span className="ml-1 text-xs text-muted-foreground tabular-nums">
+                    {["", "Poor", "Fair", "Good", "Great", "Excellent"][reviewRating]}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-2">QUICK TAGS</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_TAGS.map(tag => {
+                      const active = reviewTags.includes(tag);
+                      return (
+                        <button key={tag}
+                          onClick={() => setReviewTags(prev => active ? prev.filter(t => t !== tag) : [...prev, tag])}
+                          className="px-2.5 py-1 rounded-full text-[11px] font-display font-semibold transition-all"
+                          style={{
+                            background: active ? "rgba(250,204,21,0.15)" : "rgba(255,255,255,0.05)",
+                            border: active ? "1px solid rgba(250,204,21,0.5)" : "1px solid rgba(255,255,255,0.1)",
+                            color: active ? "#fbbf24" : "var(--muted-foreground)",
+                          }}
+                          data-testid={`button-tag-${tag.toLowerCase().replace(/\s+/g, "-")}`}>
+                          {active ? "✓ " : ""}{tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <Textarea value={reviewComment} onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Add a comment (optional)..." className="bg-background border-border/30 text-sm" rows={2} data-testid="input-review-comment" />
+                <Button onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending}
+                  className="w-full font-display font-bold rounded-xl" style={{ background: "rgba(250,204,21,0.15)", color: "#fbbf24", border: "1px solid rgba(250,204,21,0.35)" }} data-testid="button-submit-review">
+                  {reviewMutation.isPending ? "Submitting…" : "Submit Review"}
+                </Button>
               </div>
-              <Textarea value={reviewComment} onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Share your experience..." className="bg-background border-border/30" data-testid="input-review-comment" />
-              <Button onClick={() => reviewMutation.mutate()} disabled={reviewMutation.isPending}
-                className="bg-secondary text-secondary-foreground font-display rounded-xl" data-testid="button-submit-review">
-                Submit Review
-              </Button>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
 

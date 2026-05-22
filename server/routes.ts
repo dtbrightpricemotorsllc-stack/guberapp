@@ -5109,7 +5109,15 @@ export async function registerRoutes(
       const item = await storage.getMarketplaceItemBySlug(req.params.slug);
       if (!item) return res.status(404).json({ message: "Listing not found" });
       await storage.updateMarketplaceItem(item.id, { viewCount: (item.viewCount || 0) + 1 });
-      res.json(item);
+      const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
+      const sellerStats = seller ? {
+        sellerRating: seller.rating,
+        sellerReviewCount: (seller as any).reviewCount ?? 0,
+        sellerCompletedJobs: (seller as any).completedJobs ?? 0,
+        sellerTrustScore: seller.trustScore,
+        sellerIdentityVerified: (seller as any).identityVerified ?? false,
+      } : {};
+      res.json({ ...item, ...sellerStats });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5122,7 +5130,15 @@ export async function registerRoutes(
       const item = await storage.getMarketplaceItem(id);
       if (!item) return res.status(404).json({ message: "Item not found" });
       await storage.updateMarketplaceItem(id, { viewCount: (item.viewCount || 0) + 1 });
-      res.json(item);
+      const seller = item.sellerId ? await storage.getUser(item.sellerId) : null;
+      const sellerStats = seller ? {
+        sellerRating: seller.rating,
+        sellerReviewCount: (seller as any).reviewCount ?? 0,
+        sellerCompletedJobs: (seller as any).completedJobs ?? 0,
+        sellerTrustScore: seller.trustScore,
+        sellerIdentityVerified: (seller as any).identityVerified ?? false,
+      } : {};
+      res.json({ ...item, ...sellerStats });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

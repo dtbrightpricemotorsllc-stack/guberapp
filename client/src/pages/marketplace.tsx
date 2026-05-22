@@ -893,12 +893,38 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
               </div>
             )}
 
-            {/* Seller info */}
-            <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
-              <span className="font-bold text-foreground">{item.sellerName || "Seller"}</span>
-              <span>·</span>
-              <span style={{ color: availabilityColor(item.sellerAvailability).color }}>{availabilityLabel(item.sellerAvailability)}</span>
-              {item.sellerType && <><span>·</span><span>{item.sellerType}</span></>}
+            {/* Seller credibility */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-display font-bold text-foreground">{item.sellerName || "Seller"}</p>
+                <div className="flex items-center gap-1.5">
+                  {(item as any).sellerIdentityVerified && (
+                    <span className="flex items-center gap-0.5 text-[10px] font-display font-bold" style={{ color: "#22c55e" }}>
+                      <CheckCircle className="w-3 h-3" /> ID Verified
+                    </span>
+                  )}
+                  {(item as any).sellerTrustScore >= 80 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-display font-bold" style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#86efac" }}>Trusted</span>
+                  )}
+                  {(item as any).sellerTrustScore >= 60 && (item as any).sellerTrustScore < 80 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-display font-bold" style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.3)", color: "#93c5fd" }}>Verified</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {(item as any).sellerRating > 0 && (
+                  <span className="flex items-center gap-0.5 text-[11px] text-yellow-400">
+                    <Star className="w-3 h-3 fill-yellow-400" />
+                    <span className="font-bold">{((item as any).sellerRating as number).toFixed(1)}</span>
+                    <span className="text-muted-foreground">({(item as any).sellerReviewCount} reviews)</span>
+                  </span>
+                )}
+                {(item as any).sellerCompletedJobs > 0 && (
+                  <span className="text-[11px] text-muted-foreground">{(item as any).sellerCompletedJobs} jobs completed</span>
+                )}
+                {item.sellerType && <span className="text-[11px] text-muted-foreground">{item.sellerType}</span>}
+                <span className="text-[11px]" style={{ color: availabilityColor(item.sellerAvailability).color }}>{availabilityLabel(item.sellerAvailability)}</span>
+              </div>
             </div>
 
             {/* Disclaimer */}
