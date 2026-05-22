@@ -5142,6 +5142,19 @@ export async function registerRoutes(
       } = req.body;
       if (!title || !category) return res.status(400).json({ message: "Title and category are required" });
 
+      // Block off-platform contact info in user-provided text
+      const CONTACT_RE = [
+        /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/,
+        /\(\d{3}\)\s*\d{3}[-.\s]\d{4}/,
+        /\b\d{10}\b/,
+        /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/,
+        /\b(cashapp|cash\s*app|venmo|paypal|zelle|telegram|whatsapp|snapchat|signal|kik|text\s*me|call\s*me|email\s*me|dm\s*me|hit\s*me\s*up)\b/i,
+      ];
+      const hasBad = (s?: string) => !!s && CONTACT_RE.some(p => p.test(s));
+      if (hasBad(title) || hasBad(description)) {
+        return res.status(400).json({ message: "For safety, phone numbers, emails, and off-platform contact info are not allowed in listings. Keep communication inside GUBER." });
+      }
+
       let guberVerified = false;
       let verificationDate: Date | null = null;
       let verifiedByUserId: number | null = null;

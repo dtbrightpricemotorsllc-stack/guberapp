@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -6,9 +6,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   X, Camera, ChevronRight, ChevronLeft, Car, Home, Cpu, Wrench, Sofa, Shirt,
   Dumbbell, Archive, Anchor, Truck, Tag, Layers, ShieldCheck, Package, Zap,
-  AlertCircle, Check, RefreshCw, Star,
+  AlertCircle, Check, RefreshCw, Star, ImagePlus, ScanLine, Edit3, SkipForward,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { uploadToCloudinarySigned } from "@/lib/cloudinary-upload";
+import { detectContactInfo, CONTACT_WARN_MSG } from "@/lib/contact-filter";
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
@@ -91,6 +93,16 @@ const AVAILABILITIES = [
 ];
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
+
+export interface PhotoMeta {
+  url: string;
+  isLive: boolean;
+  source: "camera" | "gallery";
+  timestamp: string;
+  lat: number | null;
+  lng: number | null;
+  aiScanStatus: "pending" | "clean" | "flagged" | "skipped";
+}
 
 interface WizardForm {
   category: string;
@@ -396,6 +408,29 @@ function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3">{children}</div>;
 }
 
+function NoteField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [warn, setWarn] = useState<string | null>(null);
+  const handle = (v: string) => {
+    const check = detectContactInfo(v);
+    setWarn(check.found ? CONTACT_WARN_MSG : null);
+    onChange(v);
+  };
+  return (
+    <div className="space-y-2">
+      <textarea className={`${ic} resize-none`} rows={2}
+        placeholder="Meeting instructions, what's included, pickup hours… No phone numbers or emails."
+        value={value} onChange={e => handle(e.target.value)} />
+      {warn && (
+        <div className="flex items-start gap-2 p-2.5 rounded-xl text-xs"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}>
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span>{warn}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
@@ -441,101 +476,240 @@ function CategoryStep({ form, setForm, onNext }: { form: WizardForm; setForm: an
 
 // ─── STEP 2: PHOTOS + BASICS ─────────────────────────────────────────────────
 
-function PhotosStep({ form, setForm, photos, setPhotos, onNext, onBack }: {
+async function getGPS(): Promise<{ lat: number; lng: number } | null> {
+  if (!navigator.geolocation) return null;
+  return new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 6000, enableHighAccuracy: false },
+    );
+  });
+}
+
+function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta, onNext, onBack }: {
   form: WizardForm; setForm: any;
   photos: string[]; setPhotos: (p: string[]) => void;
+  photoMeta: PhotoMeta[]; setPhotoMeta: (m: PhotoMeta[]) => void;
   onNext: () => void; onBack: () => void;
 }) {
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [contactWarn, setContactWarn] = useState<string | null>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = useCallback(async (files: FileList) => {
-    if (photos.length >= 10) return;
+  const handleFiles = useCallback(async (files: FileList, source: "camera" | "gallery") => {
+    if (photos.length >= 10) {
+      toast({ title: "Max 10 photos per listing", variant: "destructive" });
+      return;
+    }
     const remaining = 10 - photos.length;
     const toUp = Array.from(files).slice(0, remaining);
     setUploading(true);
-    const uploaded: string[] = [];
-    for (const file of toUp) {
-      if (file.size > 25 * 1024 * 1024) { toast({ title: `${file.name} too large (max 25MB)`, variant: "destructive" }); continue; }
-      const fd = new FormData();
-      fd.append("file", file); fd.append("upload_preset", "ml_default");
-      try {
-        const r = await fetch("https://api.cloudinary.com/v1_1/guber/image/upload", { method: "POST", body: fd });
-        if (r.ok) { const j = await r.json(); uploaded.push(j.secure_url); }
-        else toast({ title: `Failed to upload ${file.name}`, variant: "destructive" });
-      } catch { toast({ title: `Upload failed: ${file.name}`, variant: "destructive" }); }
-    }
-    if (uploaded.length) setPhotos([...photos, ...uploaded]);
-    setUploading(false);
-  }, [photos, toast, setPhotos]);
 
-  const canNext = photos.length > 0 || form.title;
+    const isLive = source === "camera";
+    const timestamp = new Date().toISOString();
+    const gps = isLive ? await getGPS() : null;
+
+    const newUrls: string[] = [];
+    const newMeta: PhotoMeta[] = [];
+
+    for (const file of toUp) {
+      const MAX_MB = 25;
+      if (file.size > MAX_MB * 1024 * 1024) {
+        toast({
+          title: `Photo too large`,
+          description: `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — max is ${MAX_MB} MB`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      const key = file.name + file.size;
+      try {
+        const result = await uploadToCloudinarySigned(file, {
+          resourceType: "image",
+          fileName: `marketplace-${Date.now()}-${file.name}`,
+          onProgress: pct => setUploadProgress(prev => ({ ...prev, [key]: pct })),
+        });
+        newUrls.push(result.url);
+        newMeta.push({
+          url: result.url,
+          isLive,
+          source,
+          timestamp,
+          lat: gps?.lat ?? null,
+          lng: gps?.lng ?? null,
+          aiScanStatus: isLive ? "skipped" : "pending",
+        });
+        setUploadProgress(prev => { const n = { ...prev }; delete n[key]; return n; });
+      } catch (err: any) {
+        toast({
+          title: `Upload failed: ${file.name}`,
+          description: err?.message || "Check your connection and try again.",
+          variant: "destructive",
+        });
+        console.error("[Marketplace upload error]", err);
+      }
+    }
+
+    if (newUrls.length) {
+      setPhotos([...photos, ...newUrls]);
+      setPhotoMeta([...photoMeta, ...newMeta]);
+    }
+    setUploading(false);
+  }, [photos, photoMeta, toast, setPhotos, setPhotoMeta]);
+
+  const onTitleChange = (v: string) => {
+    const check = detectContactInfo(v);
+    setContactWarn(check.found ? CONTACT_WARN_MSG : null);
+    setForm((f: WizardForm) => ({ ...f, title: v }));
+  };
+
+  const onDescChange = (v: string) => {
+    const check = detectContactInfo(v);
+    setContactWarn(check.found ? CONTACT_WARN_MSG : null);
+    setForm((f: WizardForm) => ({ ...f, description: v }));
+  };
+
+  const inProgress = Object.keys(uploadProgress).length > 0;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Photos & Basics</h2>
-        <p className="text-xs text-gray-400 mt-1">{form.category} listing · Listings with photos get more attention</p>
+        <p className="text-xs text-gray-400 mt-1">{form.category} listing · Photos help buyers inspect before contacting</p>
       </div>
 
-      {/* Photo upload */}
-      <div>
-        <FL>PHOTOS ({photos.length}/10)</FL>
-        {photos.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-3">
-            {photos.map((p, i) => (
-              <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden group">
-                <img src={p} alt="" className="w-full h-full object-cover" />
-                <button type="button" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
-                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <X className="w-3 h-3 text-white" />
-                </button>
-              </div>
-            ))}
+      {/* Photo thumbnails */}
+      {photos.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {photos.map((p, i) => (
+            <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden group"
+              data-testid={`img-listing-photo-${i}`}>
+              <img src={p} alt="" className="w-full h-full object-cover" />
+              {photoMeta[i] && (
+                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-0.5"
+                  style={{ background: "rgba(0,0,0,0.65)" }}>
+                  <span className="text-[9px] font-bold" style={{ color: photoMeta[i].isLive ? "#00e676" : "#f59e0b" }}>
+                    {photoMeta[i].isLive ? "📷 LIVE" : "🖼 UPLOAD"}
+                  </span>
+                </div>
+              )}
+              <button type="button"
+                onClick={() => {
+                  setPhotos(photos.filter((_, j) => j !== i));
+                  setPhotoMeta(photoMeta.filter((_, j) => j !== i));
+                }}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+                data-testid={`button-remove-photo-${i}`}>
+                <X className="w-3 h-3 text-white" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload progress */}
+      {inProgress && (
+        <div className="space-y-1">
+          {Object.entries(uploadProgress).map(([k, pct]) => (
+            <div key={k} className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#00e676" }} />
+            </div>
+          ))}
+          <p className="text-[10px] text-gray-400">{uploading ? "Uploading…" : "Processing…"}</p>
+        </div>
+      )}
+
+      {/* Photo action buttons */}
+      {photos.length < 10 && !inProgress && (
+        <div className="space-y-2">
+          <p className="text-[11px] font-bold text-gray-500 tracking-wider">ADD PHOTOS ({photos.length}/10)</p>
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* Take Photo — camera, GPS + timestamp tracked */}
+            <button type="button"
+              onClick={() => cameraRef.current?.click()}
+              disabled={uploading}
+              className="flex flex-col items-center gap-2 py-5 rounded-2xl transition-all active:scale-[0.97] disabled:opacity-50"
+              style={{ background: "rgba(0,229,118,0.07)", border: "1.5px solid rgba(0,229,118,0.2)" }}
+              data-testid="button-take-photo">
+              <Camera className="w-7 h-7 text-primary" />
+              <span className="text-xs font-display font-bold text-primary">Take Photo</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">GPS + timestamp<br />captured automatically</span>
+            </button>
+
+            {/* Upload from Gallery */}
+            <button type="button"
+              onClick={() => galleryRef.current?.click()}
+              disabled={uploading}
+              className="flex flex-col items-center gap-2 py-5 rounded-2xl transition-all active:scale-[0.97] disabled:opacity-50"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+              data-testid="button-upload-gallery">
+              <ImagePlus className="w-7 h-7 text-gray-400" />
+              <span className="text-xs font-display font-bold text-gray-300">From Gallery</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">Up to {10 - photos.length} photos<br />Max 25 MB each</span>
+            </button>
           </div>
-        )}
-        {photos.length < 10 && (
-          <label className="flex flex-col items-center justify-center gap-2 py-8 rounded-2xl cursor-pointer transition-all hover:bg-white/5"
-            style={{ border: "2px dashed rgba(255,255,255,0.12)" }} data-testid="label-photo-upload">
-            <Camera className="w-8 h-8 text-gray-500" />
-            <span className="text-sm font-display font-bold text-gray-400">
-              {uploading ? "Uploading…" : "Tap to add photos"}
-            </span>
-            <span className="text-xs text-gray-600">Up to 10 photos · Max 25MB each</span>
-            <input type="file" accept="image/*" multiple className="hidden"
-              onChange={e => e.target.files && handleUpload(e.target.files)} disabled={uploading} />
-          </label>
-        )}
-      </div>
+
+          {/* Hidden file inputs */}
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+            onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
+          <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
+        </div>
+      )}
+
+      {/* Photo trust badge */}
+      {photos.length > 0 && (
+        <div className="flex items-start gap-2 p-2.5 rounded-xl text-[10px] text-gray-500 leading-relaxed"
+          style={{ background: "rgba(0,229,118,0.04)", border: "1px solid rgba(0,229,118,0.1)" }}>
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+          <span>Live camera photos with GPS are trusted more by buyers. Uploaded photos are flagged for AI screening.</span>
+        </div>
+      )}
 
       {/* Title */}
       <div>
         <FL optional>TITLE</FL>
-        <input className={ic} placeholder={`e.g. ${form.category === "Vehicles" ? "2019 Honda Accord Sport – 82k miles" : form.category === "Property" ? "3 BR House – Mobile, AL" : "Item title"}`}
-          value={form.title} onChange={e => setForm((f: WizardForm) => ({ ...f, title: e.target.value }))}
+        <input className={ic}
+          placeholder={`e.g. ${form.category === "Vehicles" ? "2019 Honda Accord Sport – 82k miles" : form.category === "Property" ? "3 BR House – Mobile, AL" : "Item title"}`}
+          value={form.title} onChange={e => onTitleChange(e.target.value)}
           data-testid="input-listing-title" />
-        {form.category === "Vehicles" && <p className="text-[10px] text-gray-500 mt-1">Can also auto-generate from VIN in the next step</p>}
+        {form.category === "Vehicles" && <p className="text-[10px] text-gray-500 mt-1">Title auto-generates from VIN in the next step</p>}
       </div>
 
-      {/* Description */}
+      {/* Description — special notes only */}
       <div>
-        <FL optional>DESCRIPTION</FL>
-        <textarea className={`${ic} resize-none`} rows={3}
-          placeholder="Describe the item, its history, any issues, what's included…"
-          value={form.description} onChange={e => setForm((f: WizardForm) => ({ ...f, description: e.target.value }))}
+        <FL optional>SPECIAL NOTES</FL>
+        <p className="text-[10px] text-gray-600 mb-1.5">For extra context only — major details belong in the structured fields on the next screen</p>
+        <textarea className={`${ic} resize-none`} rows={2}
+          placeholder="Any known issues, what's included, pickup notes…"
+          value={form.description} onChange={e => onDescChange(e.target.value)}
           data-testid="textarea-listing-description" />
       </div>
 
+      {/* Contact info warning */}
+      {contactWarn && (
+        <div className="flex items-start gap-2 p-3 rounded-xl text-xs"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}>
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{contactWarn}</span>
+        </div>
+      )}
+
       <div className="flex gap-3 pt-1">
-        <button type="button" onClick={onBack} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors"
+        <button type="button" onClick={onBack}
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors"
           style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
           <ChevronLeft className="w-3.5 h-3.5" /> Back
         </button>
-        <button type="button" onClick={onNext} disabled={!canNext}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
+        <button type="button" onClick={onNext}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold"
           style={{ background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }}
           data-testid="button-step2-next">
-          {photos.length === 0 && !form.title ? "Skip for now" : "Next: Details"} <ChevronRight className="w-3.5 h-3.5" />
+          {photos.length === 0 ? "Skip Photos — Next" : "Next: Details"} <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
@@ -552,13 +726,16 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
   const handleDecodeVIN = async () => {
     const vin = form.vinNumber.toUpperCase().trim();
     if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
-      toast({ title: "Invalid VIN", description: "VINs are 17 characters, no I, O, or Q.", variant: "destructive" });
+      toast({ title: "Invalid VIN", description: "VINs are 17 characters — no I, O, or Q.", variant: "destructive" });
       return;
     }
     setDecoding(true);
     try {
       const data = await decodeVINFromNHTSA(vin);
-      if (!data) { toast({ title: "VIN not recognized", description: "Enter vehicle details manually below.", variant: "destructive" }); return; }
+      if (!data) {
+        toast({ title: "VIN not recognized", description: "Fill in year, make, and model below.", variant: "destructive" });
+        return;
+      }
       setForm((f: WizardForm) => ({
         ...f, vinDecoded: true,
         vehicleYear: data.year || f.vehicleYear,
@@ -571,8 +748,9 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
         transmission: data.transmission || f.transmission,
       }));
       toast({ title: "VIN decoded!", description: `${data.year} ${data.make} ${data.model}` });
-    } catch { toast({ title: "Decode failed", description: "Enter details manually.", variant: "destructive" }); }
-    finally { setDecoding(false); }
+    } catch {
+      toast({ title: "Decode failed", description: "Check your connection or enter details below.", variant: "destructive" });
+    } finally { setDecoding(false); }
   };
 
   const years = Array.from({ length: 77 }, (_, i) => String(2026 - i));
@@ -581,6 +759,82 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
 
   return (
     <div className="space-y-5">
+
+      {/* ── VIN FIRST ─────────────────────────────────────────────── */}
+      <Section title="VIN Lookup">
+        <p className="text-[10px] text-gray-500 -mt-1">Found on the door jamb, dashboard, or your title</p>
+
+        {/* Scan / Enter / Skip — big action buttons */}
+        {!form.hasVin && (
+          <div className="grid grid-cols-3 gap-2">
+            <button type="button"
+              onClick={() => {
+                set("hasVin", "yes");
+                toast({ title: "VIN Scan", description: "Camera-based VIN scanning coming soon — type your 17-digit VIN below.", duration: 4000 });
+              }}
+              className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
+              style={{ background: "rgba(0,229,118,0.07)", border: "1.5px solid rgba(0,229,118,0.2)" }}
+              data-testid="button-vin-scan">
+              <ScanLine className="w-5 h-5 text-primary" />
+              <span className="text-[10px] font-display font-bold text-primary">Scan VIN</span>
+            </button>
+            <button type="button"
+              onClick={() => set("hasVin", "yes")}
+              className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)" }}
+              data-testid="button-vin-enter">
+              <Edit3 className="w-5 h-5 text-gray-300" />
+              <span className="text-[10px] font-display font-bold text-gray-300">Enter VIN</span>
+            </button>
+            <button type="button"
+              onClick={() => set("hasVin", "no")}
+              className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+              data-testid="button-vin-skip">
+              <SkipForward className="w-5 h-5 text-gray-500" />
+              <span className="text-[10px] font-display font-bold text-gray-500">Skip VIN</span>
+            </button>
+          </div>
+        )}
+
+        {form.hasVin === "yes" && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input className={`${ic} flex-1 font-mono tracking-wider uppercase`}
+                placeholder="17-character VIN"
+                value={form.vinNumber} onChange={e => set("vinNumber", e.target.value.toUpperCase())}
+                maxLength={17} data-testid="input-vin" />
+              <button type="button" onClick={handleDecodeVIN}
+                disabled={decoding || form.vinNumber.length !== 17}
+                className="px-3 py-2 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40 shrink-0"
+                style={{ background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.35)", color: "#00e676" }}
+                data-testid="button-decode-vin">
+                {decoding ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : "Decode"}
+              </button>
+            </div>
+            {form.vinDecoded && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold">
+                <Check className="w-3.5 h-3.5" /> Auto-filled from VIN · Edit below if needed
+              </div>
+            )}
+            <button type="button" onClick={() => set("hasVin", "")}
+              className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors">
+              ← Change VIN option
+            </button>
+          </div>
+        )}
+
+        {form.hasVin === "no" && (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 text-[11px] text-gray-500">Filling in year, make, and model below.</div>
+            <button type="button" onClick={() => set("hasVin", "")}
+              className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors shrink-0">
+              ← Back
+            </button>
+          </div>
+        )}
+      </Section>
+
       <Section title="Listing Type">
         <ChipSelect options={VEHICLE_LISTING_TYPES} value={form.purchaseType} onChange={v => set("purchaseType", v)} />
         <div>
@@ -590,43 +844,6 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
       </Section>
 
       <Section title="Vehicle Info">
-        <div>
-          <FL>DO YOU HAVE A VIN?</FL>
-          <div className="flex gap-2 mb-3">
-            {["yes", "no"].map(v => (
-              <button key={v} type="button" onClick={() => set("hasVin", v)}
-                className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all capitalize"
-                style={form.hasVin === v
-                  ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                  : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#6b7280" }}>
-                {v === "yes" ? "Yes – Enter VIN" : "No – Enter Manually"}
-              </button>
-            ))}
-          </div>
-
-          {form.hasVin === "yes" && (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input className={`${ic} flex-1 font-mono tracking-wider`} placeholder="17-character VIN"
-                  value={form.vinNumber} onChange={e => set("vinNumber", e.target.value.toUpperCase())}
-                  maxLength={17} data-testid="input-vin" />
-                <button type="button" onClick={handleDecodeVIN} disabled={decoding || form.vinNumber.length !== 17}
-                  className="px-3 py-2 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40 shrink-0"
-                  style={{ background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.35)", color: "#00e676" }}
-                  data-testid="button-decode-vin">
-                  {decoding ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : "Decode"}
-                </button>
-              </div>
-              {form.vinDecoded && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold">
-                  <Check className="w-3.5 h-3.5" />
-                  Auto-filled from VIN · Edit below if needed
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         <div>
           <FL>VEHICLE TYPE</FL>
           <SField value={form.subCategory} onChange={v => set("subCategory", v)} options={VEHICLE_TYPES} placeholder="Select type" />
@@ -1323,9 +1540,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
 
       {/* Notes */}
       <Section title="Notes for Buyer">
-        <textarea className={`${ic} resize-none`} rows={2}
-          placeholder="Any instructions, preferred contact method, or additional info…"
-          value={form.sellerNotes} onChange={e => set("sellerNotes", e.target.value)} />
+        <NoteField value={form.sellerNotes} onChange={v => set("sellerNotes", v)} />
       </Section>
 
       {/* Review summary */}
@@ -1371,6 +1586,7 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<WizardForm>(defaultForm);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [photoMeta, setPhotoMeta] = useState<PhotoMeta[]>([]);
 
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/marketplace", data),
@@ -1530,7 +1746,7 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
       vehicleMileage: form.vehicleMileage ? parseInt(form.vehicleMileage) : null,
       titleStatus: form.titleStatus || null,
       purchaseType: form.purchaseType || null,
-      details: Object.keys(details).length > 0 ? details : null,
+      details: Object.keys(details).length > 0 ? { ...details, photoMeta: photoMeta.length ? photoMeta : undefined } : (photoMeta.length ? { photoMeta } : null),
       city: form.city,
       state: form.state,
       zipcode: form.zipcode || user?.zipcode || null,
@@ -1582,6 +1798,7 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
         {/* Step content */}
         {step === 1 && <CategoryStep form={form} setForm={setForm} onNext={() => setStep(2)} />}
         {step === 2 && <PhotosStep form={form} setForm={setForm} photos={photos} setPhotos={setPhotos}
+          photoMeta={photoMeta} setPhotoMeta={setPhotoMeta}
           onNext={() => setStep(3)} onBack={() => setStep(1)} />}
         {step === 3 && <DetailsStep form={form} setForm={setForm} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
         {step === 4 && <PriceLocationStep form={form} setForm={setForm} photos={photos}

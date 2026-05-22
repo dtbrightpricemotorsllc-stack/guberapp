@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { isStoreBuild } from "@/lib/platform";
@@ -13,7 +14,7 @@ import {
   Dumbbell, AlertCircle, CheckCircle, Clock, Zap, Star, Search, Filter,
   Eye, MessageCircle, Calendar, Flag, ChevronDown, Anchor, Truck, Tag,
   Home, Archive, Layers, ArrowUpDown, Bed, Bath, Gauge, FileText,
-  DollarSign, Users, PawPrint, Info,
+  DollarSign, Users, PawPrint, Info, Expand,
 } from "lucide-react";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -641,11 +642,124 @@ function ReportListingModal({ item, onClose }: { item: MarketplaceItem; onClose:
 
 // ─── ITEM DETAIL MODAL ────────────────────────────────────────────────────────
 
+function SellerOffersPanel({ item }: { item: MarketplaceItem }) {
+  const { toast } = useToast();
+  const [counterAmt, setCounterAmt] = useState<Record<number, string>>({});
+  const [showCounter, setShowCounter] = useState<number | null>(null);
+
+  const { data: offers, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/marketplace", item.id, "offers"],
+    queryFn: () => fetch(`/api/marketplace/${item.id}/offers`).then(r => r.json()),
+    refetchInterval: 30000,
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: ({ offerId, action, counterAmount }: { offerId: number; action: string; counterAmount?: number }) =>
+      apiRequest("PATCH", `/api/marketplace/offers/${offerId}`, { action, counterAmount }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace", item.id, "offers"] });
+      setShowCounter(null);
+      toast({ title: "Offer updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="h-10 rounded-xl bg-white/5 animate-pulse" />;
+  const pending = (offers || []).filter((o: any) => ["pending", "countered"].includes(o.status));
+  if (!pending.length) return null;
+
+  return (
+    <div className="mb-4 rounded-2xl overflow-hidden" style={{ border: "1.5px solid rgba(99,102,241,0.3)" }}>
+      <div className="px-3 py-2" style={{ background: "rgba(99,102,241,0.1)" }}>
+        <p className="text-[11px] font-display font-bold tracking-wider" style={{ color: "#818cf8" }}>
+          INCOMING OFFERS · {pending.length}
+        </p>
+      </div>
+      <div className="divide-y divide-white/5">
+        {pending.map((offer: any) => {
+          const exchanges = offer.offerActionCount ?? 0;
+          const remaining = 4 - exchanges;
+          const expires = offer.expiresAt ? new Date(offer.expiresAt) : null;
+          const isExpired = expires ? expires < new Date() : false;
+          const status = offer.status as string;
+          return (
+            <div key={offer.id} className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-white">${Number(offer.offerAmount).toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    from {offer.buyerName || "Buyer"}
+                    {status === "countered" && " · awaiting their response"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-display font-bold" style={{ color: remaining <= 1 ? "#f87171" : "#9ca3af" }}>
+                    {remaining} exchange{remaining !== 1 ? "s" : ""} left
+                  </p>
+                  {expires && !isExpired && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Expires {expires.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
+                  {isExpired && <p className="text-[10px] text-red-400">Expired</p>}
+                </div>
+              </div>
+              {offer.message && (
+                <p className="text-xs text-muted-foreground italic">"{offer.message}"</p>
+              )}
+              {!isExpired && status !== "countered" && (
+                <>
+                  {showCounter === offer.id ? (
+                    <div className="flex gap-2">
+                      <input type="number" placeholder="Counter $" value={counterAmt[offer.id] || ""}
+                        onChange={e => setCounterAmt(prev => ({ ...prev, [offer.id]: e.target.value }))}
+                        className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white"
+                        data-testid={`input-counter-${offer.id}`} />
+                      <button onClick={() => actionMutation.mutate({ offerId: offer.id, action: "counter", counterAmount: parseFloat(counterAmt[offer.id] || "0") })}
+                        disabled={!counterAmt[offer.id] || actionMutation.isPending}
+                        className="px-3 py-1.5 rounded-lg text-xs font-display font-bold disabled:opacity-40"
+                        style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)", color: "#818cf8" }}
+                        data-testid={`button-send-counter-${offer.id}`}>Send</button>
+                      <button onClick={() => setShowCounter(null)}
+                        className="px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-white transition-colors"
+                        data-testid={`button-cancel-counter-${offer.id}`}>✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => actionMutation.mutate({ offerId: offer.id, action: "accept" })}
+                        disabled={actionMutation.isPending}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold disabled:opacity-40"
+                        style={{ background: "rgba(0,229,118,0.15)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e676" }}
+                        data-testid={`button-accept-offer-${offer.id}`}>Accept</button>
+                      {remaining > 0 && (
+                        <button onClick={() => setShowCounter(offer.id)}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold"
+                          style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", color: "#818cf8" }}
+                          data-testid={`button-counter-offer-${offer.id}`}>Counter</button>
+                      )}
+                      <button onClick={() => actionMutation.mutate({ offerId: offer.id, action: "decline" })}
+                        disabled={actionMutation.isPending}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold disabled:opacity-40"
+                        style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}
+                        data-testid={`button-decline-offer-${offer.id}`}>Decline</button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem; onClose: () => void; currentUser?: any }) {
   const { isDemoUser } = useAuth();
   const { toast } = useToast();
   const photos = item.photos as string[] | null;
   const [photoIdx, setPhotoIdx] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [modal, setModal] = useState<"offer" | "viewing" | "vi" | "contact" | "report" | null>(null);
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
   const isSeller = currentUser && item.sellerId === currentUser.id;
@@ -686,17 +800,22 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
           {/* Photo gallery */}
           {photos && photos.length > 0 ? (
-            <div className="relative h-64 bg-black/40 overflow-hidden">
+            <div className="relative h-64 bg-black/40 overflow-hidden cursor-pointer" onClick={() => setViewerOpen(true)}>
               <img src={photos[photoIdx]} alt={item.title} className="w-full h-full object-cover" />
+              {/* Expand hint */}
+              <div className="absolute bottom-10 right-3 p-1 rounded-md bg-black/50 backdrop-blur-sm"
+                style={{ border: "1px solid rgba(255,255,255,0.15)" }}>
+                <Expand className="w-3.5 h-3.5 text-white/70" />
+              </div>
               {photos.length > 1 && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5" onClick={e => e.stopPropagation()}>
                   {photos.map((_, i) => (
                     <button key={i} onClick={() => setPhotoIdx(i)}
                       className={`w-2 h-2 rounded-full transition-all ${i === photoIdx ? "bg-white scale-125" : "bg-white/40"}`} />
                   ))}
                 </div>
               )}
-              <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-full bg-black/50 backdrop-blur-sm" data-testid="button-close-modal">
+              <button onClick={e => { e.stopPropagation(); onClose(); }} className="absolute top-3 right-3 p-1.5 rounded-full bg-black/50 backdrop-blur-sm" data-testid="button-close-modal">
                 <X className="w-4 h-4 text-white" />
               </button>
               {isSample && (
@@ -819,6 +938,8 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
             </div>
 
             {/* Actions */}
+            {isSeller && <SellerOffersPanel item={item} />}
+
             {isSeller ? (
               <div className="space-y-2">
                 {!isStoreBuild && !isDemoUser && (
@@ -924,6 +1045,9 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
       {modal === "vi" && <RequestVIModal item={item} onClose={() => setModal(null)} />}
       {modal === "contact" && <ContactSellerModal item={item} onClose={() => setModal(null)} />}
       {modal === "report" && <ReportListingModal item={item} onClose={() => setModal(null)} />}
+      {viewerOpen && photos && photos.length > 0 && (
+        <MarketplacePhotoViewer photos={photos} initialIndex={photoIdx} onClose={() => setViewerOpen(false)} />
+      )}
     </>
   );
 }
