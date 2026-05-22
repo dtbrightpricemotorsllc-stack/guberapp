@@ -232,4 +232,10 @@ title = "GUBER Investor Deck — New 14-Slide Version (PDF)"
 id = "-qMqQhh8E9aHqhBTQQieF"
 uri = "file://attached_assets/GUBER-Investor-Deck-2026.pptx"
 type = "slides"
-title = "GUBER Investor Deck 2026 — 16 Slides (PowerPoint)"
+title = "GUBER Investor Deck 2026 — PPTX (editable)"
+
+[[outputs]]
+id = "OvJRsJNed4cTvLY_IhFQ7"
+uri = "file://attached_assets/GUBER-Investor-Deck-2026.pdf"
+type = "pdf"
+title = "GUBER Investor Deck 2026 — 15-Slide PDF"
