@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Mail, Phone, Globe, ChevronRight, Check, ArrowDown } from "lucide-react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import { Mail, Phone, Globe, ChevronRight, Check, ArrowDown, Printer } from "lucide-react";
 import { INVESTOR_CONFIG as C } from "@/lib/investor-config";
 import { SocialLinks } from "@/components/social-links";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
@@ -52,7 +52,7 @@ function useReveal<T extends HTMLElement>() {
 function Reveal({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
   const { ref, shown } = useReveal<HTMLDivElement>();
   return (
-    <div ref={ref} className={`transition-all duration-700 ease-out will-change-[opacity,transform] ${className}`}
+    <div ref={ref} className={`inv-reveal-node transition-all duration-700 ease-out will-change-[opacity,transform] ${className}`}
       style={{ opacity: shown ? 1 : 0, transform: shown ? "translateY(0)" : "translateY(20px)", transitionDelay: `${delay}ms` }}>
       {children}
     </div>
@@ -97,6 +97,16 @@ function PhoneFrame({ src, alt, label, testId }: { src: string; alt: string; lab
 }
 
 export default function InvestorsPage() {
+  const handlePrint = useCallback(() => {
+    // Force all Reveal elements visible before printing
+    const nodes = document.querySelectorAll<HTMLElement>(".inv-reveal-node");
+    nodes.forEach((el) => {
+      el.style.opacity = "1";
+      el.style.transform = "none";
+    });
+    setTimeout(() => window.print(), 80);
+  }, []);
+
   return (
     <div className="inv-root" style={{ background: "#09090f", color: "#e8e8f0", minHeight: "100vh" }}>
       <style>{`
@@ -121,8 +131,40 @@ export default function InvestorsPage() {
         .inv-cta-primary { background: ${NEON_GREEN}; color: #000; font-weight: 800; transition: filter 0.15s; }
         .inv-cta-primary:hover { filter: brightness(1.08); }
         .step-line { width: 1px; height: 32px; background: rgba(255,255,255,0.1); margin: 0 auto; }
+
         @media print {
-          .inv-cta-primary { background: #000 !important; color: white !important; }
+          @page { size: A4 landscape; margin: 12mm 14mm; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          html, body { background: #09090f !important; color: #e8e8f0 !important; }
+          .inv-root { background: #09090f !important; }
+
+          /* Hide interactive nav & no-print elements */
+          header, .inv-no-print { display: none !important; }
+
+          /* Show all reveal nodes regardless of scroll position */
+          .inv-reveal-node { opacity: 1 !important; transform: none !important; transition: none !important; }
+
+          /* Section spacing for print */
+          .inv-section { padding-top: 24px !important; padding-bottom: 24px !important; page-break-inside: avoid; }
+          section { page-break-before: auto; break-before: auto; }
+
+          /* Cards keep borders */
+          .inv-card { border: 1px solid rgba(255,255,255,0.15) !important; background: rgba(255,255,255,0.04) !important; }
+
+          /* Ensure neon text colours survive */
+          .glow-text-green { color: #39FF14 !important; text-shadow: none !important; }
+          .inv-eyebrow { color: #39FF14 !important; }
+          .inv-cta-primary { background: #39FF14 !important; color: #000 !important; }
+
+          /* Fit images */
+          img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; }
+
+          /* Remove sticky/fixed positioning */
+          .sticky, [style*="position: sticky"], [style*="position:sticky"] { position: relative !important; }
+
+          /* Avoid breaking key content */
+          h2, h3, h4 { page-break-after: avoid; break-after: avoid; }
+          ul, ol { page-break-inside: avoid; break-inside: avoid; }
         }
       `}</style>
 
@@ -131,6 +173,13 @@ export default function InvestorsPage() {
         <img src={logoImg} alt="GUBER" className="h-7 object-contain" style={{ mixBlendMode: "screen" }} data-testid="img-nav-logo" />
         <div className="flex items-center gap-3">
           <span className="pill pill-green num-font" data-testid="text-nav-confidential">Confidential</span>
+          <button
+            onClick={handlePrint}
+            className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inline-flex items-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition text-white"
+            data-testid="button-nav-pdf"
+            title="Save as PDF — enable 'Background graphics' in the print dialog for best results">
+            <Printer className="w-3.5 h-3.5" /> PDF
+          </button>
           <button
             onClick={() => scrollToId("section-cta")}
             className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inv-cta-primary hidden sm:inline-flex items-center gap-2"
