@@ -3,7 +3,7 @@ import {
   notifications, reviews, strikeRecords, proofSubmissions, walletTransactions,
   viCategories, useCases, catalogServiceTypes, detailOptionSets,
   proofTemplates, proofChecklistItems, auditLogs, passwordResetTokens,
-  marketplaceItems, jobStatusLogs, bountyAttempts,
+  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, jobStatusLogs, bountyAttempts,
   businessProfiles, bulkJobBatches, cashDrops, cashDropAttempts, servicePricingConfig,
   workerQualifications, observations, dropSponsors,
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
@@ -21,7 +21,7 @@ import {
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
   type DetailOptionSet, type ProofTemplate, type ProofChecklistItem, type AuditLog,
-  type MarketplaceItem, type JobStatusLog, type BountyAttempt,
+  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type JobStatusLog, type BountyAttempt,
   type BusinessProfile, type CashDrop, type CashDropAttempt, type ServicePricingConfig,
   type WorkerQualification, type Observation, type DropSponsor,
   type BusinessAccount, type BusinessPlan, type BusinessCandidateUnlock,
@@ -1127,16 +1127,37 @@ export class DatabaseStorage implements IStorage {
     await db.update(passwordResetTokens).set({ used: true }).where(eq(passwordResetTokens.token, token));
   }
 
-  async getMarketplaceItems(filters?: { category?: string; status?: string }): Promise<MarketplaceItem[]> {
-    const conditions = [eq(marketplaceItems.status, filters?.status || "active")];
-    if (filters?.category) conditions.push(eq(marketplaceItems.category, filters.category));
-    const items = await db.select().from(marketplaceItems).where(and(...conditions));
+  async getMarketplaceItems(filters?: { category?: string; status?: string; search?: string; priceMin?: number; priceMax?: number; verifiedOnly?: boolean; makeOfferEnabled?: boolean; sellerAvailability?: string; sort?: string }): Promise<MarketplaceItem[]> {
+    const activeStatuses = ["available", "active"];
+    const statusFilter = filters?.status ? [filters.status] : activeStatuses;
+    const allItems = await db.select().from(marketplaceItems);
+    let items = allItems.filter(i => statusFilter.includes(i.status || "available"));
+    if (filters?.category) items = items.filter(i => i.category === filters.category);
+    if (filters?.search) {
+      const q = filters.search.toLowerCase();
+      items = items.filter(i =>
+        i.title.toLowerCase().includes(q) ||
+        (i.description || "").toLowerCase().includes(q) ||
+        i.category.toLowerCase().includes(q) ||
+        (i.city || "").toLowerCase().includes(q) ||
+        (i.state || "").toLowerCase().includes(q)
+      );
+    }
+    if (filters?.priceMin !== undefined) items = items.filter(i => (i.price || 0) >= filters.priceMin!);
+    if (filters?.priceMax !== undefined) items = items.filter(i => (i.price || 0) <= filters.priceMax!);
+    if (filters?.verifiedOnly) items = items.filter(i => i.guberVerified);
+    if (filters?.makeOfferEnabled) items = items.filter(i => i.makeOfferEnabled);
+    if (filters?.sellerAvailability) items = items.filter(i => i.sellerAvailability === filters.sellerAvailability);
     const now = new Date();
     return items.sort((a, b) => {
-      const aActive = a.boosted && a.boostedUntil && a.boostedUntil > now;
-      const bActive = b.boosted && b.boostedUntil && b.boostedUntil > now;
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
+      const sort = filters?.sort || "default";
+      if (sort === "price_asc") return (a.price || 0) - (b.price || 0);
+      if (sort === "price_desc") return (b.price || 0) - (a.price || 0);
+      if (sort === "newest") return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+      const aBoost = a.boosted && a.boostedUntil && a.boostedUntil > now;
+      const bBoost = b.boosted && b.boostedUntil && b.boostedUntil > now;
+      if (aBoost && !bBoost) return -1;
+      if (!aBoost && bBoost) return 1;
       if (a.guberVerified && !b.guberVerified) return -1;
       if (!a.guberVerified && b.guberVerified) return 1;
       return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
@@ -1148,13 +1169,18 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
+  async getMarketplaceItemBySlug(slug: string): Promise<MarketplaceItem | undefined> {
+    const [item] = await db.select().from(marketplaceItems).where(eq(marketplaceItems.publicSlug, slug));
+    return item;
+  }
+
   async createMarketplaceItem(data: any): Promise<MarketplaceItem> {
     const [item] = await db.insert(marketplaceItems).values(data).returning();
     return item;
   }
 
   async updateMarketplaceItem(id: number, data: Partial<MarketplaceItem>): Promise<MarketplaceItem | undefined> {
-    const [item] = await db.update(marketplaceItems).set(data).where(eq(marketplaceItems.id, id)).returning();
+    const [item] = await db.update(marketplaceItems).set({ ...data, updatedAt: new Date() }).where(eq(marketplaceItems.id, id)).returning();
     return item;
   }
 
@@ -1162,6 +1188,93 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(marketplaceItems)
       .where(eq(marketplaceItems.sellerId, sellerId))
       .orderBy(desc(marketplaceItems.createdAt));
+  }
+
+  async getAllMarketplaceItems(): Promise<MarketplaceItem[]> {
+    return db.select().from(marketplaceItems).orderBy(desc(marketplaceItems.createdAt));
+  }
+
+  async createMarketplaceOffer(data: any): Promise<MarketplaceOffer> {
+    const [offer] = await db.insert(marketplaceOffers).values(data).returning();
+    return offer;
+  }
+
+  async getMarketplaceOffer(id: number): Promise<MarketplaceOffer | undefined> {
+    const [offer] = await db.select().from(marketplaceOffers).where(eq(marketplaceOffers.id, id));
+    return offer;
+  }
+
+  async getMarketplaceOffersByListing(listingId: number): Promise<MarketplaceOffer[]> {
+    return db.select().from(marketplaceOffers)
+      .where(eq(marketplaceOffers.listingId, listingId))
+      .orderBy(desc(marketplaceOffers.createdAt));
+  }
+
+  async getMarketplaceOfferByBuyer(listingId: number, buyerUserId: number): Promise<MarketplaceOffer | undefined> {
+    const offers = await db.select().from(marketplaceOffers)
+      .where(and(eq(marketplaceOffers.listingId, listingId), eq(marketplaceOffers.buyerUserId, buyerUserId)));
+    return offers[0];
+  }
+
+  async updateMarketplaceOffer(id: number, data: Partial<MarketplaceOffer>): Promise<MarketplaceOffer | undefined> {
+    const [offer] = await db.update(marketplaceOffers).set({ ...data, updatedAt: new Date() }).where(eq(marketplaceOffers.id, id)).returning();
+    return offer;
+  }
+
+  async createMarketplaceViewingRequest(data: any): Promise<MarketplaceViewingRequest> {
+    const [req] = await db.insert(marketplaceViewingRequests).values(data).returning();
+    return req;
+  }
+
+  async getMarketplaceViewingRequest(id: number): Promise<MarketplaceViewingRequest | undefined> {
+    const [req] = await db.select().from(marketplaceViewingRequests).where(eq(marketplaceViewingRequests.id, id));
+    return req;
+  }
+
+  async getMarketplaceViewingRequestsByListing(listingId: number): Promise<MarketplaceViewingRequest[]> {
+    return db.select().from(marketplaceViewingRequests)
+      .where(eq(marketplaceViewingRequests.listingId, listingId))
+      .orderBy(desc(marketplaceViewingRequests.createdAt));
+  }
+
+  async updateMarketplaceViewingRequest(id: number, data: Partial<MarketplaceViewingRequest>): Promise<MarketplaceViewingRequest | undefined> {
+    const [req] = await db.update(marketplaceViewingRequests).set({ ...data, updatedAt: new Date() }).where(eq(marketplaceViewingRequests.id, id)).returning();
+    return req;
+  }
+
+  async createMarketplaceVerificationRequest(data: any): Promise<MarketplaceVerificationRequest> {
+    const [req] = await db.insert(marketplaceVerificationRequests).values(data).returning();
+    return req;
+  }
+
+  async getMarketplaceVerificationRequestsByListing(listingId: number): Promise<MarketplaceVerificationRequest[]> {
+    return db.select().from(marketplaceVerificationRequests)
+      .where(eq(marketplaceVerificationRequests.listingId, listingId))
+      .orderBy(desc(marketplaceVerificationRequests.createdAt));
+  }
+
+  async updateMarketplaceVerificationRequest(id: number, data: Partial<MarketplaceVerificationRequest>): Promise<MarketplaceVerificationRequest | undefined> {
+    const [req] = await db.update(marketplaceVerificationRequests).set({ ...data, updatedAt: new Date() }).where(eq(marketplaceVerificationRequests.id, id)).returning();
+    return req;
+  }
+
+  async createMarketplaceListingReport(data: any): Promise<MarketplaceListingReport> {
+    const [report] = await db.insert(marketplaceListingReports).values(data).returning();
+    return report;
+  }
+
+  async getMarketplaceListingReports(listingId?: number): Promise<MarketplaceListingReport[]> {
+    if (listingId) {
+      return db.select().from(marketplaceListingReports)
+        .where(eq(marketplaceListingReports.listingId, listingId))
+        .orderBy(desc(marketplaceListingReports.createdAt));
+    }
+    return db.select().from(marketplaceListingReports).orderBy(desc(marketplaceListingReports.createdAt));
+  }
+
+  async updateMarketplaceListingReport(id: number, data: Partial<MarketplaceListingReport>): Promise<MarketplaceListingReport | undefined> {
+    const [report] = await db.update(marketplaceListingReports).set(data).where(eq(marketplaceListingReports.id, id)).returning();
+    return report;
   }
 
   async createJobStatusLog(data: any): Promise<JobStatusLog> {

@@ -690,33 +690,118 @@ export const marketplaceItems = pgTable("marketplace_items", {
   condition: text("condition"),
   price: real("price"),
   askingType: text("asking_type").default("fixed"),
+  priceType: text("price_type").default("firm"),
+  makeOfferEnabled: boolean("make_offer_enabled").default(false),
+  minOfferThreshold: real("min_offer_threshold"),
+  brand: text("brand"),
+  model: text("model"),
+  year: integer("year"),
+  city: text("city"),
+  state: text("state"),
+  sellerAvailability: text("seller_availability").default("available_now"),
   photos: json("photos").$type<string[]>(),
+  thumbnailUrl: text("thumbnail_url"),
   zipcode: text("zipcode"),
   locationApprox: text("location_approx"),
-  status: text("status").default("active"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  approximateLocationOnly: boolean("approximate_location_only").default(true),
+  status: text("status").default("available"),
   guberVerified: boolean("guber_verified").default(false),
   verificationDate: timestamp("verification_date"),
   verifiedByUserId: integer("verified_by_user_id"),
   verifiedByName: text("verified_by_name"),
   viJobId: integer("vi_job_id"),
   verificationNotes: text("verification_notes"),
+  verificationReportId: integer("verification_report_id"),
   sellerName: text("seller_name"),
   boosted: boolean("boosted").default(false),
   boostedUntil: timestamp("boosted_until"),
+  publicSlug: text("public_slug"),
+  viewCount: integer("view_count").default(0),
+  contactCount: integer("contact_count").default(0),
+  verificationRequestCount: integer("verification_request_count").default(0),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const marketplaceOffers = pgTable("marketplace_offers", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  buyerUserId: integer("buyer_user_id").notNull(),
+  sellerUserId: integer("seller_user_id").notNull(),
+  offerAmount: real("offer_amount").notNull(),
+  counterAmount: real("counter_amount"),
+  offerActionCount: integer("offer_action_count").default(1),
+  status: text("status").default("pending"),
+  message: text("message"),
+  expiresAt: timestamp("expires_at"),
+  sellerRespondedAt: timestamp("seller_responded_at"),
+  buyerRespondedAt: timestamp("buyer_responded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const marketplaceViewingRequests = pgTable("marketplace_viewing_requests", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  buyerUserId: integer("buyer_user_id").notNull(),
+  sellerUserId: integer("seller_user_id").notNull(),
+  requestedTime: timestamp("requested_time"),
+  sellerResponseTime: timestamp("seller_response_time"),
+  status: text("status").default("requested"),
+  note: text("note"),
+  addressUnlocked: boolean("address_unlocked").default(false),
+  buyerOnTheWay: boolean("buyer_on_the_way").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const marketplaceVerificationRequests = pgTable("marketplace_verification_requests", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  buyerUserId: integer("buyer_user_id").notNull(),
+  sellerUserId: integer("seller_user_id").notNull(),
+  generatedTaskId: integer("generated_task_id"),
+  verificationLevel: text("verification_level").default("standard"),
+  status: text("status").default("pending"),
+  paymentStatus: text("payment_status").default("unpaid"),
+  proofReportId: integer("proof_report_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const marketplaceListingReports = pgTable("marketplace_listing_reports", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  reporterUserId: integer("reporter_user_id").notNull(),
+  reason: text("reason").notNull(),
+  details: text("details"),
+  status: text("status").default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
 });
 
 export const insertMarketplaceItemSchema = createInsertSchema(marketplaceItems).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
   guberVerified: true,
   verificationDate: true,
   verifiedByUserId: true,
   verifiedByName: true,
+  viewCount: true,
+  contactCount: true,
+  verificationRequestCount: true,
 });
 
 export type MarketplaceItem = typeof marketplaceItems.$inferSelect;
 export type InsertMarketplaceItem = z.infer<typeof insertMarketplaceItemSchema>;
+export type MarketplaceOffer = typeof marketplaceOffers.$inferSelect;
+export type MarketplaceViewingRequest = typeof marketplaceViewingRequests.$inferSelect;
+export type MarketplaceVerificationRequest = typeof marketplaceVerificationRequests.$inferSelect;
+export type MarketplaceListingReport = typeof marketplaceListingReports.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

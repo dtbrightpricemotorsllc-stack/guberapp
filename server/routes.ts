@@ -5024,9 +5024,39 @@ export async function registerRoutes(
   // MARKETPLACE ROUTES
   app.get("/api/marketplace", async (req: Request, res: Response) => {
     try {
-      const category = req.query.category as string | undefined;
-      const items = await storage.getMarketplaceItems({ category });
+      const items = await storage.getMarketplaceItems({
+        category: req.query.category as string | undefined,
+        search: req.query.search as string | undefined,
+        priceMin: req.query.priceMin ? parseFloat(req.query.priceMin as string) : undefined,
+        priceMax: req.query.priceMax ? parseFloat(req.query.priceMax as string) : undefined,
+        verifiedOnly: req.query.verifiedOnly === "true",
+        makeOfferEnabled: req.query.makeOfferEnabled === "true",
+        sellerAvailability: req.query.sellerAvailability as string | undefined,
+        sort: req.query.sort as string | undefined,
+        status: req.query.status as string | undefined,
+      });
       res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Specific sub-routes BEFORE /:id to avoid Express swallowing them
+  app.get("/api/marketplace/my-listings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const items = await storage.getMarketplaceItemsBySeller(req.session.userId!);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/marketplace/slug/:slug", async (req: Request, res: Response) => {
+    try {
+      const item = await storage.getMarketplaceItemBySlug(req.params.slug);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      await storage.updateMarketplaceItem(item.id, { viewCount: (item.viewCount || 0) + 1 });
+      res.json(item);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5035,8 +5065,10 @@ export async function registerRoutes(
   app.get("/api/marketplace/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(404).json({ message: "Not found" });
       const item = await storage.getMarketplaceItem(id);
       if (!item) return res.status(404).json({ message: "Item not found" });
+      await storage.updateMarketplaceItem(id, { viewCount: (item.viewCount || 0) + 1 });
       res.json(item);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -5048,7 +5080,11 @@ export async function registerRoutes(
       const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
-      const { title, description, category, condition, price, askingType, photos, zipcode, locationApprox, viJobId } = req.body;
+      const {
+        title, description, category, condition, price, askingType, priceType, makeOfferEnabled,
+        minOfferThreshold, brand, model, year, city, state, photos, zipcode, locationApprox,
+        sellerAvailability, viJobId, expiresAt,
+      } = req.body;
       if (!title || !category) return res.status(400).json({ message: "Title and category are required" });
 
       let guberVerified = false;
@@ -5073,27 +5109,49 @@ export async function registerRoutes(
         }
       }
 
+      // Generate a public slug from title + city + id (id appended after insert)
+      const slugBase = `${title} ${city || ""} ${state || ""}`
+        .toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
+
+      const locationText = city && state ? `${city}, ${state}` : locationApprox || (user.zipcode ? `${user.zipcode} area` : null);
+
       const item = await storage.createMarketplaceItem({
         sellerId: userId,
         sellerName: user.fullName,
         title,
         description,
         category,
-        condition,
+        condition: condition || null,
         price: price ? parseFloat(price) : null,
-        askingType: askingType || "fixed",
+        askingType: askingType || (makeOfferEnabled ? "obo" : "fixed"),
+        priceType: priceType || "firm",
+        makeOfferEnabled: !!makeOfferEnabled,
+        minOfferThreshold: minOfferThreshold ? parseFloat(minOfferThreshold) : null,
+        brand: brand || null,
+        model: model || null,
+        year: year ? parseInt(year) : null,
+        city: city || null,
+        state: state || null,
         photos: photos || [],
-        zipcode: zipcode || user.zipcode,
-        locationApprox: locationApprox || (user.zipcode ? `${user.zipcode} area` : null),
-        status: "active",
+        zipcode: zipcode || user.zipcode || null,
+        locationApprox: locationText,
+        sellerAvailability: sellerAvailability || "available_now",
+        approximateLocationOnly: true,
+        status: "available",
         guberVerified,
         verificationDate,
         verifiedByUserId,
         verifiedByName,
         viJobId: viJobId ? parseInt(viJobId) : null,
         verificationNotes,
+        expiresAt: expiresAt ? new Date(expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
-      res.json(item);
+
+      // Update with slug that includes the ID
+      const slug = `${slugBase}-${item.id}`;
+      await storage.updateMarketplaceItem(item.id, { publicSlug: slug });
+
+      res.json({ ...item, publicSlug: slug });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5130,6 +5188,395 @@ export async function registerRoutes(
       });
 
       res.json({ checkoutUrl: session.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Contact seller
+  app.post("/api/marketplace/:id/contact", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const senderId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId === senderId) return res.status(400).json({ message: "Cannot contact yourself" });
+      const sender = await storage.getUser(senderId);
+      const { message } = req.body;
+      if (!message || !message.trim()) return res.status(400).json({ message: "Message is required" });
+      await storage.createNotification({
+        userId: item.sellerId,
+        title: `Message about: ${item.title.slice(0, 40)}`,
+        body: `${sender?.fullName || "A buyer"}: ${message.slice(0, 120)}`,
+        type: "marketplace",
+        jobId: null,
+      });
+      await storage.updateMarketplaceItem(listingId, { contactCount: (item.contactCount || 0) + 1 });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Update listing status (seller only)
+  app.patch("/api/marketplace/:id/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(id);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
+      const { status } = req.body;
+      const allowed = ["available", "pending", "sold", "removed"];
+      if (!allowed.includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const updated = await storage.updateMarketplaceItem(id, { status });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Submit an offer on a listing
+  app.post("/api/marketplace/:id/offer", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const buyerUserId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (!item.makeOfferEnabled) return res.status(400).json({ message: "This listing is firm price" });
+      if (item.sellerId === buyerUserId) return res.status(400).json({ message: "Cannot offer on your own listing" });
+      if (!["available", "active"].includes(item.status || "available")) return res.status(400).json({ message: "Listing is not available" });
+
+      const { offerAmount, message } = req.body;
+      if (!offerAmount || offerAmount <= 0) return res.status(400).json({ message: "Invalid offer amount" });
+
+      const existing = await storage.getMarketplaceOfferByBuyer(listingId, buyerUserId);
+      if (existing && ["pending", "countered"].includes(existing.status || "")) {
+        return res.status(400).json({ message: "You already have an active offer on this listing" });
+      }
+      if (existing && (existing.offerActionCount || 0) >= 4) {
+        return res.status(400).json({ message: "You have reached the 4-action offer limit for this listing" });
+      }
+
+      // Check against hidden minimum threshold
+      if (item.minOfferThreshold && offerAmount < item.minOfferThreshold) {
+        const filtered = await storage.createMarketplaceOffer({
+          listingId,
+          buyerUserId,
+          sellerUserId: item.sellerId,
+          offerAmount,
+          status: "filtered",
+          message,
+          offerActionCount: 1,
+        });
+        return res.json({ offer: filtered, filtered: true, message: "This offer is below the seller's acceptable range." });
+      }
+
+      // Calculate expiry based on seller availability
+      let expiresAt: Date | null = null;
+      const now = new Date();
+      if (item.sellerAvailability === "available_now") expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      else if (item.sellerAvailability === "today") expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+      else if (item.sellerAvailability === "this_week") expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      const actionCount = existing ? (existing.offerActionCount || 0) + 1 : 1;
+      const offer = await storage.createMarketplaceOffer({
+        listingId,
+        buyerUserId,
+        sellerUserId: item.sellerId,
+        offerAmount,
+        status: "pending",
+        message,
+        offerActionCount: actionCount,
+        expiresAt,
+      });
+
+      // Notify seller
+      await storage.createNotification({
+        userId: item.sellerId,
+        title: "New Offer Received",
+        body: `Someone offered $${offerAmount.toLocaleString()} on your listing: ${item.title}`,
+        type: "marketplace",
+        jobId: null,
+      });
+
+      res.json({ offer, filtered: false });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Get offers for a listing (seller view)
+  app.get("/api/marketplace/:id/offers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
+      const offers = await storage.getMarketplaceOffersByListing(listingId);
+      res.json(offers);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Respond to an offer (seller: accept/decline/counter)
+  app.patch("/api/marketplace/offers/:offerId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const offerId = parseInt(req.params.offerId);
+      const offer = await storage.getMarketplaceOffer(offerId);
+      if (!offer) return res.status(404).json({ message: "Offer not found" });
+      const item = await storage.getMarketplaceItem(offer.listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+
+      const userId = req.session.userId!;
+      const isSeller = item.sellerId === userId;
+      const isBuyer = offer.buyerUserId === userId;
+      if (!isSeller && !isBuyer) return res.status(403).json({ message: "Unauthorized" });
+
+      const { action, counterAmount } = req.body;
+
+      if (isSeller) {
+        if (action === "accept") {
+          await storage.updateMarketplaceOffer(offerId, { status: "accepted", sellerRespondedAt: new Date() });
+          await storage.updateMarketplaceItem(item.id, { status: "pending" });
+          await storage.createNotification({
+            userId: offer.buyerUserId,
+            title: "Offer Accepted!",
+            body: `Your offer of $${offer.offerAmount} on "${item.title}" was accepted. Contact the seller to arrange the transaction.`,
+            type: "marketplace",
+            jobId: null,
+          });
+        } else if (action === "decline") {
+          await storage.updateMarketplaceOffer(offerId, { status: "declined", sellerRespondedAt: new Date() });
+          await storage.createNotification({
+            userId: offer.buyerUserId,
+            title: "Offer Declined",
+            body: `Your offer on "${item.title}" was declined.`,
+            type: "marketplace",
+            jobId: null,
+          });
+        } else if (action === "counter" && counterAmount) {
+          const newCount = (offer.offerActionCount || 1) + 1;
+          await storage.updateMarketplaceOffer(offerId, {
+            status: "countered",
+            counterAmount,
+            offerActionCount: newCount,
+            sellerRespondedAt: new Date(),
+          });
+          await storage.createNotification({
+            userId: offer.buyerUserId,
+            title: "Counter Offer Received",
+            body: `The seller countered your offer with $${counterAmount.toLocaleString()} on "${item.title}"`,
+            type: "marketplace",
+            jobId: null,
+          });
+        }
+      } else if (isBuyer) {
+        if (action === "accept_counter" && offer.status === "countered") {
+          await storage.updateMarketplaceOffer(offerId, { status: "accepted", buyerRespondedAt: new Date() });
+          await storage.updateMarketplaceItem(item.id, { status: "pending" });
+          await storage.createNotification({
+            userId: item.sellerId,
+            title: "Counter Offer Accepted",
+            body: `Buyer accepted your counter offer of $${offer.counterAmount} on "${item.title}"`,
+            type: "marketplace",
+            jobId: null,
+          });
+        } else if (action === "decline_counter") {
+          await storage.updateMarketplaceOffer(offerId, { status: "declined", buyerRespondedAt: new Date() });
+        }
+      }
+
+      const updated = await storage.getMarketplaceOffer(offerId);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Request viewing
+  app.post("/api/marketplace/:id/viewing", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const buyerUserId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId === buyerUserId) return res.status(400).json({ message: "Cannot request viewing of your own listing" });
+
+      const { requestedTime, note } = req.body;
+      const viewing = await storage.createMarketplaceViewingRequest({
+        listingId,
+        buyerUserId,
+        sellerUserId: item.sellerId,
+        requestedTime: requestedTime ? new Date(requestedTime) : null,
+        note,
+        status: "requested",
+      });
+
+      await storage.createNotification({
+        userId: item.sellerId,
+        title: "Viewing Request",
+        body: `Someone wants to view "${item.title}"${requestedTime ? ` on ${new Date(requestedTime).toLocaleDateString()}` : ""}`,
+        type: "marketplace",
+        jobId: null,
+      });
+
+      res.json(viewing);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Respond to viewing request (seller)
+  app.patch("/api/marketplace/viewing/:viewingId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const viewingId = parseInt(req.params.viewingId);
+      const viewing = await storage.getMarketplaceViewingRequest(viewingId);
+      if (!viewing) return res.status(404).json({ message: "Request not found" });
+      const item = await storage.getMarketplaceItem(viewing.listingId);
+      if (!item || item.sellerId !== req.session.userId) return res.status(403).json({ message: "Unauthorized" });
+
+      const { action } = req.body;
+      const statusMap: Record<string, string> = { approve: "approved", decline: "declined", reschedule: "rescheduled" };
+      const newStatus = statusMap[action];
+      if (!newStatus) return res.status(400).json({ message: "Invalid action" });
+
+      const updated = await storage.updateMarketplaceViewingRequest(viewingId, { status: newStatus, sellerResponseTime: new Date() });
+
+      const notifMap: Record<string, { title: string; body: string }> = {
+        approved: { title: "Viewing Approved!", body: `Your viewing request for "${item.title}" was approved. The seller will contact you to confirm details.` },
+        declined: { title: "Viewing Declined", body: `Your viewing request for "${item.title}" was declined.` },
+        rescheduled: { title: "Viewing Reschedule Request", body: `The seller wants to reschedule your viewing of "${item.title}".` },
+      };
+      if (notifMap[newStatus]) {
+        await storage.createNotification({ userId: viewing.buyerUserId, ...notifMap[newStatus], type: "marketplace", jobId: null });
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Request V&I on a marketplace listing
+  app.post("/api/marketplace/:id/vi-request", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const buyerUserId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId === buyerUserId) return res.status(400).json({ message: "Cannot request V&I on your own listing" });
+
+      const buyer = await storage.getUser(buyerUserId);
+      if (!buyer) return res.status(401).json({ message: "User not found" });
+
+      // Build category-specific checklist
+      const category = item.category || "Other";
+      const checklistMap: Record<string, string[]> = {
+        "Vehicles": ["Exterior photos (all 4 sides)", "Interior photos", "VIN photo if visible", "Odometer photo", "Tire/wheel condition", "Damage closeups", "Listing match confirmation"],
+        "Parts": ["Part present and photographed", "Part number/tag if visible", "Condition photos", "Damage closeups", "Donor vehicle context if applicable"],
+        "Furniture": ["Front/back/side photos", "Damage closeups", "Measurements if provided", "Material/label photo if visible"],
+        "Electronics": ["Item present", "Model/serial photo if visible", "Accessories included", "Power-on photo if safe", "Damage closeups"],
+        "Boats & Marine": ["Exterior photos", "Interior/deck photos", "Hull condition", "Engine area if accessible", "Damage closeups"],
+        "Tools & Equipment": ["Item present", "Brand/model photo", "Condition photos", "Operational check if safe", "Damage closeups"],
+        "Appliances": ["Item present", "Model label photo", "Condition photos", "Power-on photo if safe", "Damage closeups"],
+      };
+      const checklist = checklistMap[category] || ["Item present", "Overall condition photos", "Damage closeups", "Photo matching listing", "Location/context photo"];
+
+      const description = `Marketplace Verification: ${item.title}\n\nCategory: ${category}\n\nChecklist:\n${checklist.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\nListing ID: ${listingId}\n\nDISCLAIMER: Verify & Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.`;
+
+      const zip = item.zipcode || item.city || (buyer as any).zipcode || "00000";
+
+      // Create a hidden V&I job — category "Verify & Inspect", not visible in normal job feeds
+      const job = await storage.createJob({
+        postedById: buyerUserId,
+        title: `Verify Marketplace Listing: ${item.title.slice(0, 60)}`,
+        description,
+        category: "Verify & Inspect",
+        jobType: "vi",
+        status: "open",
+        budget: 0,
+        zip,
+        locationApprox: item.city || zip,
+        visibility: "private",
+      });
+
+      const viRequest = await storage.createMarketplaceVerificationRequest({
+        listingId,
+        buyerUserId,
+        sellerUserId: item.sellerId,
+        generatedTaskId: job.id,
+        status: "task_created",
+        paymentStatus: "unpaid",
+      });
+
+      await storage.updateMarketplaceItem(listingId, {
+        verificationRequestCount: (item.verificationRequestCount || 0) + 1,
+      });
+
+      // Notify seller
+      await storage.createNotification({
+        userId: item.sellerId,
+        title: "V&I Requested on Your Listing",
+        body: `A buyer requested GUBER Verify & Inspect for your listing: "${item.title}". A local helper will document the item.`,
+        type: "marketplace",
+        jobId: job.id,
+      });
+
+      res.json({ viRequest, jobId: job.id, checklist });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Report a listing
+  app.post("/api/marketplace/:id/report", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const reporterUserId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      const { reason, details } = req.body;
+      if (!reason) return res.status(400).json({ message: "Reason is required" });
+      const report = await storage.createMarketplaceListingReport({ listingId, reporterUserId, reason, details });
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin: get all listings
+  app.get("/api/admin/marketplace", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+      const items = await storage.getAllMarketplaceItems();
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin: remove a listing
+  app.patch("/api/admin/marketplace/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateMarketplaceItem(id, { status: "removed" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin: get listing reports
+  app.get("/api/admin/marketplace-reports", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+      const reports = await storage.getMarketplaceListingReports();
+      res.json(reports);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
