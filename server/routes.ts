@@ -19564,11 +19564,12 @@ OUTPUT STYLE:
   app.get("/api/internal/cron/run", handleCronRun);
 
   // ── Investor deck HTML (new 2026 deck) ────────────────────────────────────
+  const { join: pathJoin } = await import("path");
   app.get("/deck", async (req: Request, res: Response) => {
     const { readFileSync } = await import("fs");
-    const { join } = await import("path");
     try {
-      const html = readFileSync(join(process.cwd(), "investor-materials/investor-deck.html"), "utf-8");
+      let html = readFileSync(pathJoin(process.cwd(), "investor-materials/investor-deck.html"), "utf-8");
+      html = html.replace("<head>", '<head><base href="/deck/">');
       res.setHeader("Content-Type", "text/html");
       res.setHeader("X-Robots-Tag", "noindex, nofollow");
       res.send(html);
@@ -19576,6 +19577,7 @@ OUTPUT STYLE:
       res.status(404).send("Deck not found");
     }
   });
+  app.use("/deck/", express.static(pathJoin(process.cwd(), "investor-materials")));
 
   // ── Investor deck PDF (server-side Playwright render) ────────────────────
   app.get("/api/investor/pdf", async (req: Request, res: Response) => {
