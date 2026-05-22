@@ -97,14 +97,27 @@ function PhoneFrame({ src, alt, label, testId }: { src: string; alt: string; lab
 }
 
 export default function InvestorsPage() {
-  const handlePrint = useCallback(() => {
-    // Force all Reveal elements visible before printing
-    const nodes = document.querySelectorAll<HTMLElement>(".inv-reveal-node");
-    nodes.forEach((el) => {
-      el.style.opacity = "1";
-      el.style.transform = "none";
-    });
-    setTimeout(() => window.print(), 80);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPdf = useCallback(async () => {
+    setPdfLoading(true);
+    try {
+      const res = await fetch("/api/investor/pdf");
+      if (!res.ok) throw new Error("generation failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "GUBER-Investor-Deck.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("PDF generation failed — please try again.");
+    } finally {
+      setPdfLoading(false);
+    }
   }, []);
 
   return (
@@ -173,13 +186,14 @@ export default function InvestorsPage() {
         <img src={logoImg} alt="GUBER" className="h-7 object-contain" style={{ mixBlendMode: "screen" }} data-testid="img-nav-logo" />
         <div className="flex items-center gap-3">
           <span className="pill pill-green num-font" data-testid="text-nav-confidential">Confidential</span>
-          <a
-            href="/investor/deck.pdf"
-            download="GUBER-Investor-Deck.pdf"
-            className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inline-flex items-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition text-white"
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfLoading}
+            className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inline-flex items-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition text-white disabled:opacity-60 disabled:cursor-wait"
             data-testid="button-nav-pdf">
-            <Printer className="w-3.5 h-3.5" /> Download PDF
-          </a>
+            <Printer className={`w-3.5 h-3.5 ${pdfLoading ? "animate-spin" : ""}`} />
+            {pdfLoading ? "Generating…" : "Download PDF"}
+          </button>
           <button
             onClick={() => scrollToId("section-cta")}
             className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inv-cta-primary hidden sm:inline-flex items-center gap-2"

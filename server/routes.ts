@@ -19313,6 +19313,50 @@ OUTPUT STYLE:
   app.post("/api/internal/cron/run", handleCronRun);
   app.get("/api/internal/cron/run", handleCronRun);
 
+  // ── Investor deck PDF (server-side Playwright render) ────────────────────
+  app.get("/api/investor/pdf", async (req: Request, res: Response) => {
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("@playwright/test") as any;
+      const CHROMIUM_PATH = "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium-browser";
+      browser = await chromium.launch({
+        executablePath: CHROMIUM_PATH,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const base = `http://localhost:${process.env.PORT || 5000}`;
+      await page.goto(`${base}/investors?nosplash=1`, { waitUntil: "networkidle", timeout: 60000 });
+      // Let fonts + reveal animations settle
+      await page.waitForTimeout(2500);
+      // Force all reveal nodes visible
+      await page.evaluate(() => {
+        document.querySelectorAll<HTMLElement>(".inv-reveal-node").forEach((el) => {
+          el.style.opacity = "1";
+          el.style.transform = "none";
+          el.style.transition = "none";
+        });
+      });
+      await page.waitForTimeout(500);
+      const pdfBuffer = await page.pdf({
+        format: "A4",
+        landscape: true,
+        printBackground: true,
+        margin: { top: "10mm", bottom: "10mm", left: "12mm", right: "12mm" },
+      });
+      await browser.close();
+      browser = null;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="GUBER-Investor-Deck.pdf"');
+      res.setHeader("Cache-Control", "no-store");
+      res.send(Buffer.from(pdfBuffer));
+    } catch (err: any) {
+      if (browser) { try { await browser.close(); } catch {} }
+      console.error("[investor-pdf]", err?.message);
+      res.status(500).json({ error: "PDF generation failed", detail: err?.message });
+    }
+  });
+
   // ── QA Dashboard (task-462) ──────────────────────────────────────────────
   const { registerAdminQaRoutes } = await import("./admin-qa.js");
   registerAdminQaRoutes(app, requireAdmin);
