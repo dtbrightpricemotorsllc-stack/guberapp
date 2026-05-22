@@ -1,24 +1,27 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { isStoreBuild } from "@/lib/platform";
 import { GuberLayout } from "@/components/guber-layout";
+import { ListingWizard } from "@/components/marketplace-wizard";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import type { MarketplaceItem } from "@shared/schema";
-import { useLocation } from "wouter";
 import {
   ShieldCheck, Plus, X, MapPin, Package, Car, Laptop, Sofa, Wrench, Shirt,
   Dumbbell, AlertCircle, CheckCircle, Clock, Zap, Star, Search, Filter,
   Eye, MessageCircle, Calendar, Flag, ChevronDown, Anchor, Truck, Tag,
-  Home, Archive, Layers, ArrowUpDown, RefreshCw, Camera,
+  Home, Archive, Layers, ArrowUpDown, Bed, Bath, Gauge, FileText,
+  DollarSign, Users, PawPrint, Info,
 } from "lucide-react";
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
   { name: "All", icon: Package },
   { name: "Vehicles", icon: Car },
+  { name: "Property", icon: Home },
   { name: "Parts", icon: Layers },
   { name: "Boats & Marine", icon: Anchor },
   { name: "Trailers", icon: Truck },
@@ -33,15 +36,6 @@ const CATEGORIES = [
   { name: "Other", icon: Tag },
 ];
 
-const CONDITIONS = ["New", "Like New", "Good", "Fair", "Poor"];
-
-const AVAILABILITY_OPTIONS = [
-  { value: "available_now", label: "Available Now" },
-  { value: "today", label: "Available Today" },
-  { value: "this_week", label: "Available This Week" },
-  { value: "appointment", label: "By Appointment" },
-];
-
 const REPORT_REASONS = ["Scam", "Prohibited item", "Offensive content", "Wrong category", "Duplicate", "Other"];
 
 const US_STATES = [
@@ -51,9 +45,17 @@ const US_STATES = [
   "VA","WA","WV","WI","WY",
 ];
 
+const AVAILABILITY_OPTIONS = [
+  { value: "available_now", label: "Available Now" },
+  { value: "today", label: "Available Today" },
+  { value: "this_week", label: "Available This Week" },
+  { value: "appointment", label: "By Appointment" },
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
 function availabilityLabel(val: string | null | undefined) {
-  const found = AVAILABILITY_OPTIONS.find(o => o.value === val);
-  return found?.label || "Available Now";
+  return AVAILABILITY_OPTIONS.find(o => o.value === val)?.label || "Available Now";
 }
 
 function availabilityColor(val: string | null | undefined) {
@@ -73,6 +75,25 @@ function statusBadge(status: string | null | undefined) {
   return { label: "Available", color: "#00e676", bg: "rgba(0,229,118,0.1)", border: "rgba(0,229,118,0.25)" };
 }
 
+function fmtPrice(n: number | null | undefined) {
+  if (!n) return null;
+  return `$${n.toLocaleString()}`;
+}
+
+function listingTypeLabel(t: string | null | undefined) {
+  if (!t) return null;
+  const map: Record<string, string> = {
+    cash_sale: "Cash Only", financing: "Financing Available", bhph: "Buy Here Pay Here",
+    lease: "Lease Available", trade: "Trade/Barter", parts_only: "Parts Only",
+    rental: "Rental Available", for_rent: "For Rent", for_sale: "For Sale",
+    short_term: "Short-Term Stay", lease_option: "Lease Option",
+    owner_financing: "Owner Financing", roommate: "Roommate Wanted",
+  };
+  return map[t] || t.replace(/_/g, " ");
+}
+
+// ─── VERIFIED BADGE ───────────────────────────────────────────────────────────
+
 function VerifiedBadge({ item }: { item: MarketplaceItem }) {
   if (!item.guberVerified) return null;
   const date = item.verificationDate
@@ -87,17 +108,37 @@ function VerifiedBadge({ item }: { item: MarketplaceItem }) {
   );
 }
 
+// ─── PRICE DISPLAY ────────────────────────────────────────────────────────────
+
 function PriceDisplay({ item, large }: { item: MarketplaceItem; large?: boolean }) {
-  const sz = large ? "text-2xl" : "text-base";
+  const sz = large ? "text-2xl" : "text-sm";
+  const details = (item.details as any) || {};
   if (item.askingType === "free") return <span className={`${sz} font-display font-black text-emerald-400`}>FREE</span>;
-  if (item.makeOfferEnabled || item.askingType === "obo") return (
-    <span className={`${sz} font-display font-black text-primary`}>
-      {item.price ? `$${item.price.toLocaleString()}` : "Make Offer"}
-      <span className="text-xs font-normal text-muted-foreground ml-1">Open to Offers</span>
-    </span>
-  );
+
+  // For lease — show monthly
+  if (item.listingType === "lease" && details.monthlyPayment) {
+    return (
+      <span className={`${sz} font-display font-black text-primary`}>
+        ${details.monthlyPayment.toLocaleString()}<span className="text-xs font-normal text-muted-foreground">/mo (lease)</span>
+      </span>
+    );
+  }
+  // For rent — show rent
+  if (item.listingType === "for_rent" && item.price) {
+    return <span className={`${sz} font-display font-black text-primary`}>${item.price.toLocaleString()}<span className="text-xs font-normal text-muted-foreground">/mo</span></span>;
+  }
+  if (item.makeOfferEnabled || item.askingType === "obo") {
+    return (
+      <span className={`${sz} font-display font-black text-primary`}>
+        {item.price ? `$${item.price.toLocaleString()}` : "Make Offer"}
+        <span className="text-xs font-normal text-muted-foreground ml-1">OBO</span>
+      </span>
+    );
+  }
   return <span className={`${sz} font-display font-black text-primary`}>{item.price ? `$${item.price.toLocaleString()}` : "Contact"}</span>;
 }
+
+// ─── ITEM CARD ────────────────────────────────────────────────────────────────
 
 function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => void }) {
   const photos = item.photos as string[] | null;
@@ -106,6 +147,10 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
   const sb = statusBadge(item.status);
   const avail = availabilityColor(item.sellerAvailability);
   const location = item.city && item.state ? `${item.city}, ${item.state}` : item.locationApprox || "";
+  const details = (item.details as any) || {};
+  const isSample = (item as any).isSample;
+  const isVehicle = item.category === "Vehicles";
+  const isProperty = item.category === "Property";
 
   return (
     <div
@@ -116,12 +161,13 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
       onClick={onClick}
       data-testid={`card-marketplace-${item.id}`}
     >
-      <div className="relative h-40 bg-muted/30 flex items-center justify-center overflow-hidden">
+      {/* Photo */}
+      <div className="relative h-44 bg-muted/30 flex items-center justify-center overflow-hidden">
         {hasPhoto ? (
           <img src={photos![0]} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Package className="w-8 h-8" />
+            <Package className="w-8 h-8 opacity-30" />
           </div>
         )}
         {item.guberVerified && (
@@ -140,7 +186,15 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
             </span>
           </div>
         )}
-        {item.condition && (
+        {isSample && (
+          <div className="absolute top-2 right-2">
+            <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
+              style={{ background: "rgba(239,68,68,0.8)", color: "#fff" }}>
+              SAMPLE
+            </span>
+          </div>
+        )}
+        {!isSample && item.condition && (
           <div className="absolute top-2 right-2">
             <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
               style={{ background: "rgba(0,0,0,0.6)", color: "#e5e7eb" }}>
@@ -149,11 +203,38 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
           </div>
         )}
       </div>
+
+      {/* Body */}
       <div className="p-3">
         <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-0.5">{item.category}</p>
         <h3 className="text-xs font-bold text-foreground leading-snug mb-1.5 line-clamp-2" data-testid={`text-item-title-${item.id}`}>{item.title}</h3>
-        <PriceDisplay item={item} />
-        <div className="flex items-center justify-between mt-1.5 flex-wrap gap-1">
+
+        <div className="flex items-baseline gap-2 mb-1.5">
+          <PriceDisplay item={item} />
+          {item.listingType && (
+            <span className="text-[10px] text-muted-foreground">{listingTypeLabel(item.listingType)}</span>
+          )}
+        </div>
+
+        {/* Vehicle quick-facts */}
+        {isVehicle && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
+            {item.vehicleMileage && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Gauge className="w-2.5 h-2.5" />{item.vehicleMileage.toLocaleString()} mi</span>}
+            {item.titleStatus && <span className="text-[10px] text-muted-foreground">{item.titleStatus}</span>}
+            {item.sellerType && <span className="text-[10px] text-muted-foreground">{item.sellerType}</span>}
+          </div>
+        )}
+
+        {/* Property quick-facts */}
+        {isProperty && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1.5">
+            {details.bedrooms && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Bed className="w-2.5 h-2.5" />{details.bedrooms} bed</span>}
+            {details.bathrooms && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Bath className="w-2.5 h-2.5" />{details.bathrooms} bath</span>}
+            {details.deposit && <span className="text-[10px] text-muted-foreground">Dep: ${details.deposit.toLocaleString()}</span>}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mt-1 flex-wrap gap-1">
           {location && (
             <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
               <MapPin className="w-2.5 h-2.5" />{location}
@@ -164,6 +245,7 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
             {availabilityLabel(item.sellerAvailability)}
           </span>
         </div>
+
         {(item.status && item.status !== "available" && item.status !== "active") && (
           <div className="mt-1.5">
             <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
@@ -177,33 +259,205 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
   );
 }
 
+// ─── TRANSPARENCY PANELS ──────────────────────────────────────────────────────
+
+function VehicleTransparency({ item }: { item: MarketplaceItem }) {
+  const d = (item.details as any) || {};
+  const rows: { label: string; value: string; warn?: boolean }[] = [];
+  if (item.vinNumber) rows.push({ label: "VIN", value: item.vinNumber });
+  if (item.vehicleMileage) rows.push({ label: "Mileage", value: `${item.vehicleMileage.toLocaleString()} miles` });
+  if (item.titleStatus) rows.push({ label: "Title Status", value: item.titleStatus, warn: item.titleStatus !== "Clean Title" });
+  if (item.sellerType) rows.push({ label: "Seller Type", value: item.sellerType });
+  if (item.listingType && item.listingType !== "cash_sale") {
+    if (d.downPayment) rows.push({ label: "Down Payment", value: `$${d.downPayment.toLocaleString()}` });
+    if (d.monthlyPayment) rows.push({ label: "Monthly Payment", value: `$${d.monthlyPayment.toLocaleString()}/mo` });
+    if (d.termLength) rows.push({ label: "Term Length", value: d.termLength });
+    if (d.interestRate) rows.push({ label: "Interest Rate", value: `${d.interestRate}%` });
+    if (d.dueAtSigning) rows.push({ label: "Due at Signing", value: `$${d.dueAtSigning.toLocaleString()}` });
+    if (d.mileageLimit) rows.push({ label: "Mileage Limit/yr", value: `${d.mileageLimit.toLocaleString()} mi` });
+    if (d.creditCheckRequired !== undefined) rows.push({ label: "Credit Check Required", value: d.creditCheckRequired ? "Yes" : "No" });
+    if (d.creditCheckRequired && d.minCreditScore) rows.push({ label: "Min Credit Score", value: String(d.minCreditScore) });
+    if (d.proofOfIncomeRequired !== undefined) rows.push({ label: "Proof of Income", value: d.proofOfIncomeRequired ? "Required" : "Not Required" });
+  }
+  if (d.transmission) rows.push({ label: "Transmission", value: d.transmission });
+  if (d.fuelType) rows.push({ label: "Fuel Type", value: d.fuelType });
+  if (d.engine) rows.push({ label: "Engine", value: d.engine });
+  if (d.driveType) rows.push({ label: "Drive Type", value: d.driveType });
+  if (d.exteriorColor) rows.push({ label: "Exterior Color", value: d.exteriorColor });
+
+  if (rows.length === 0) return null;
+  return (
+    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <Car className="w-3.5 h-3.5 text-primary" />
+        <p className="text-[11px] font-display font-bold text-muted-foreground tracking-wider">VEHICLE DETAILS</p>
+      </div>
+      <div className="divide-y divide-white/5">
+        {rows.map(r => (
+          <div key={r.label} className="flex justify-between items-center px-3 py-2 text-xs">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className={`font-bold ${r.warn ? "text-amber-400" : "text-foreground"}`}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+      {d.conditionFlags && d.conditionFlags.length > 0 && (
+        <div className="px-3 py-2 border-t border-white/5">
+          <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-2">CONDITION FLAGS</p>
+          <div className="flex flex-wrap gap-1.5">
+            {d.conditionFlags.map((f: string) => (
+              <span key={f} className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.2)", color: "#4ade80" }}>
+                ✓ {f}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PropertyTransparency({ item }: { item: MarketplaceItem }) {
+  const d = (item.details as any) || {};
+  const lt = item.listingType;
+  const isRent = lt === "for_rent" || lt === "roommate";
+  const rows: { label: string; value: string; icon?: any }[] = [];
+  if (d.propertyType) rows.push({ label: "Property Type", value: d.propertyType });
+  if (d.bedrooms) rows.push({ label: "Bedrooms", value: d.bedrooms, icon: Bed });
+  if (d.bathrooms) rows.push({ label: "Bathrooms", value: d.bathrooms, icon: Bath });
+  if (d.squareFeet) rows.push({ label: "Sq Ft", value: `${d.squareFeet.toLocaleString()} sq ft` });
+  if (d.yearBuilt) rows.push({ label: "Year Built", value: String(d.yearBuilt) });
+  if (isRent && d.deposit) rows.push({ label: "Security Deposit", value: `$${d.deposit.toLocaleString()}`, icon: DollarSign });
+  if (d.applicationFee) rows.push({ label: "Application Fee", value: `$${d.applicationFee.toLocaleString()}` });
+  if (d.availableDate) rows.push({ label: "Available Date", value: new Date(d.availableDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), icon: Calendar });
+  if (d.leaseLength) rows.push({ label: "Lease Length", value: d.leaseLength });
+  if (isRent) {
+    if (d.incomeRequirement && d.incomeRequirement !== "None") rows.push({ label: "Income Requirement", value: d.incomeRequirement, icon: DollarSign });
+    rows.push({ label: "Credit Check Required", value: d.creditCheckRequired ? "Yes" : "No" });
+    if (d.creditCheckRequired && d.minCreditScore) rows.push({ label: "Min Credit Score", value: String(d.minCreditScore) });
+    rows.push({ label: "Background Check", value: d.backgroundCheck ? "Required" : "Not Required" });
+    rows.push({ label: "Evictions Accepted", value: d.evictionsAccepted || "No" });
+    rows.push({ label: "Section 8", value: d.section8 || "No" });
+    rows.push({ label: "Pets Allowed", value: d.petPolicy || "No", icon: PawPrint });
+    if (d.petPolicy && d.petPolicy !== "No") {
+      if (d.petDeposit) rows.push({ label: "Pet Deposit", value: `$${d.petDeposit.toLocaleString()}` });
+      if (d.petRent) rows.push({ label: "Pet Rent/mo", value: `$${d.petRent.toLocaleString()}` });
+    }
+  }
+  if (d.listingSource) rows.push({ label: "Listed By", value: d.listingSource, icon: Users });
+  if (d.ownerFinancing) rows.push({ label: "Owner Financing", value: "Available" });
+
+  if (rows.length === 0) return null;
+  return (
+    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <Home className="w-3.5 h-3.5 text-primary" />
+        <p className="text-[11px] font-display font-bold text-muted-foreground tracking-wider">PROPERTY DETAILS</p>
+      </div>
+      <div className="divide-y divide-white/5">
+        {rows.map(r => (
+          <div key={r.label} className="flex justify-between items-center px-3 py-2 text-xs">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="font-bold text-foreground">{r.value}</span>
+          </div>
+        ))}
+      </div>
+      {d.features && d.features.length > 0 && (
+        <div className="px-3 py-2 border-t border-white/5">
+          <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-2">FEATURES</p>
+          <div className="flex flex-wrap gap-1.5">
+            {d.features.map((f: string) => (
+              <span key={f} className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.2)", color: "#4ade80" }}>
+                ✓ {f}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GenericDetailsPanel({ item }: { item: MarketplaceItem }) {
+  const d = (item.details as any) || {};
+  const rows: { label: string; value: string }[] = [];
+  if (item.brand) rows.push({ label: "Brand", value: item.brand });
+  if (item.model) rows.push({ label: "Model", value: item.model });
+  if (item.year) rows.push({ label: "Year", value: String(item.year) });
+  if (d.toolType) rows.push({ label: "Tool Type", value: d.toolType });
+  if (d.worksProper) rows.push({ label: "Works Properly", value: d.worksProper });
+  if (d.batteryIncluded && d.batteryIncluded !== "N/A") rows.push({ label: "Battery Included", value: d.batteryIncluded });
+  if (d.chargerIncluded && d.chargerIncluded !== "N/A") rows.push({ label: "Charger Included", value: d.chargerIncluded });
+  if (d.rentalAvailable) rows.push({ label: "Rental Available", value: `Yes${d.rentalPrice ? ` – $${d.rentalPrice}/day` : ""}` });
+  if (d.deviceType) rows.push({ label: "Device Type", value: d.deviceType });
+  if (d.storageSize) rows.push({ label: "Storage", value: d.storageSize });
+  if (d.carrier) rows.push({ label: "Carrier", value: d.carrier });
+  if (d.unlocked) rows.push({ label: "Unlocked", value: d.unlocked });
+  if (d.crackedScreen) rows.push({ label: "Cracked Screen", value: "Yes" });
+  if (d.batteryHealth) rows.push({ label: "Battery Health", value: d.batteryHealth });
+  if (d.includesCharger !== undefined) rows.push({ label: "Includes Charger", value: d.includesCharger ? "Yes" : "No" });
+  if (d.furnitureType) rows.push({ label: "Type", value: d.furnitureType });
+  if (d.material) rows.push({ label: "Material", value: d.material });
+  if (d.color) rows.push({ label: "Color", value: d.color });
+  if (d.dimensions) rows.push({ label: "Dimensions", value: d.dimensions });
+  if (d.deliveryAvailable) rows.push({ label: "Delivery", value: "Available" });
+  if (d.assemblyRequired) rows.push({ label: "Assembly Required", value: "Yes" });
+  if (d.applianceType) rows.push({ label: "Appliance Type", value: d.applianceType });
+  if (d.gasOrElectric && d.gasOrElectric !== "N/A") rows.push({ label: "Gas/Electric", value: d.gasOrElectric });
+  if (d.installationAvailable) rows.push({ label: "Installation", value: "Available" });
+  if (d.warrantyRemaining) rows.push({ label: "Warranty", value: "Remaining" });
+  if (d.boatType) rows.push({ label: "Boat Type", value: d.boatType });
+  if (d.engineType) rows.push({ label: "Engine Type", value: d.engineType });
+  if (d.hours) rows.push({ label: "Engine Hours", value: d.hours });
+  if (d.trailerIncluded) rows.push({ label: "Trailer Included", value: "Yes" });
+  if (d.boatRuns) rows.push({ label: "Runs Well", value: d.boatRuns });
+  if (d.trailerType) rows.push({ label: "Trailer Type", value: d.trailerType });
+  if (d.tiresGood) rows.push({ label: "Tires", value: "Good" });
+  if (d.lightsWork) rows.push({ label: "Lights", value: "Work" });
+  if (d.compatibleMake || d.compatibleModel) rows.push({ label: "Fits", value: `${d.compatibleMake || ""} ${d.compatibleModel || ""}`.trim() });
+  if (d.compatibleYears) rows.push({ label: "Fit Years", value: d.compatibleYears });
+
+  if (rows.length === 0) return null;
+  return (
+    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <Info className="w-3.5 h-3.5 text-primary" />
+        <p className="text-[11px] font-display font-bold text-muted-foreground tracking-wider">ITEM DETAILS</p>
+      </div>
+      <div className="divide-y divide-white/5">
+        {rows.map(r => (
+          <div key={r.label} className="flex justify-between items-center px-3 py-2 text-xs">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="font-bold text-foreground">{r.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── BUYER MODALS ─────────────────────────────────────────────────────────────
+
+const inputClass = "w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
+
 function MakeOfferModal({ item, onClose }: { item: MarketplaceItem; onClose: () => void }) {
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
-
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", `/api/marketplace/${item.id}/offer`, data),
     onSuccess: (data: any) => {
       if (data?.filtered) {
-        toast({ title: "Offer not sent", description: data.message || "This offer is below the seller's acceptable range.", variant: "destructive" });
+        toast({ title: "Offer not sent", description: data.message || "Below acceptable range.", variant: "destructive" });
       } else {
-        toast({ title: "Offer sent!", description: "The seller will be notified. You'll get a notification on their response." });
+        toast({ title: "Offer sent!" });
         queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
         onClose();
       }
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
-
-  const handleSubmit = () => {
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) return toast({ title: "Enter a valid amount", variant: "destructive" });
-    mutation.mutate({ offerAmount: amt, message });
-  };
-
-  const inputClass = "w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
-
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-make-offer">
@@ -211,7 +465,7 @@ function MakeOfferModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
           <h3 className="text-base font-display font-extrabold">Make an Offer</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Asking: <span className="text-foreground font-bold">{item.price ? `$${item.price.toLocaleString()}` : "Open"}</span> · You get 4 total offer actions. Low offers may be filtered automatically.</p>
+        <p className="text-xs text-muted-foreground mb-4">Asking: <span className="text-foreground font-bold">{item.price ? `$${item.price.toLocaleString()}` : "Open"}</span> · You get 4 total offer actions.</p>
         <div className="space-y-3 mb-4">
           <div>
             <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">YOUR OFFER ($)</label>
@@ -219,15 +473,16 @@ function MakeOfferModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
           </div>
           <div>
             <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">MESSAGE (OPTIONAL)</label>
-            <textarea className={`${inputClass} resize-none`} rows={2} placeholder="Introduce yourself or explain your offer..." value={message} onChange={e => setMessage(e.target.value)} />
+            <textarea className={`${inputClass} resize-none`} rows={2} placeholder="Introduce yourself…" value={message} onChange={e => setMessage(e.target.value)} />
           </div>
         </div>
         <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
           Accepted offers do not complete a purchase through GUBER. Buyer and seller are responsible for completing the transaction safely.
         </div>
-        <Button onClick={handleSubmit} disabled={mutation.isPending} className="w-full premium-btn font-display" data-testid="button-submit-offer">
-          {mutation.isPending ? "Sending..." : "SEND OFFER"}
+        <Button onClick={() => { const a = parseFloat(amount); if (!a || a <= 0) { toast({ title: "Enter a valid amount", variant: "destructive" }); return; } mutation.mutate({ offerAmount: a, message }); }}
+          disabled={mutation.isPending} className="w-full premium-btn font-display" data-testid="button-submit-offer">
+          {mutation.isPending ? "Sending…" : "SEND OFFER"}
         </Button>
       </div>
     </div>
@@ -238,18 +493,11 @@ function RequestViewingModal({ item, onClose }: { item: MarketplaceItem; onClose
   const { toast } = useToast();
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
-
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", `/api/marketplace/${item.id}/viewing`, data),
-    onSuccess: () => {
-      toast({ title: "Viewing requested!", description: "The seller will be notified and can approve, decline, or suggest another time." });
-      onClose();
-    },
+    onSuccess: () => { toast({ title: "Viewing requested!" }); onClose(); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
-
-  const inputClass = "w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
-
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-request-viewing">
@@ -259,7 +507,7 @@ function RequestViewingModal({ item, onClose }: { item: MarketplaceItem; onClose
         </div>
         <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
           style={{ background: "rgba(245,165,0,0.06)", border: "1px solid rgba(245,165,0,0.15)" }}>
-          Meet in a safe public location when possible. Do not share private address information until you are comfortable.
+          Meet in a safe public location when possible.
         </div>
         <div className="space-y-3 mb-4">
           <div>
@@ -268,12 +516,12 @@ function RequestViewingModal({ item, onClose }: { item: MarketplaceItem; onClose
           </div>
           <div>
             <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">NOTE (OPTIONAL)</label>
-            <textarea className={`${inputClass} resize-none`} rows={2} placeholder="Any special requests or notes for the seller..." value={note} onChange={e => setNote(e.target.value)} />
+            <textarea className={`${inputClass} resize-none`} rows={2} placeholder="Any requests or notes…" value={note} onChange={e => setNote(e.target.value)} />
           </div>
         </div>
         <Button onClick={() => mutation.mutate({ requestedTime: date || null, note })} disabled={mutation.isPending}
           className="w-full premium-btn font-display" data-testid="button-submit-viewing">
-          {mutation.isPending ? "Sending..." : "REQUEST VIEWING"}
+          {mutation.isPending ? "Sending…" : "REQUEST VIEWING"}
         </Button>
       </div>
     </div>
@@ -282,18 +530,15 @@ function RequestViewingModal({ item, onClose }: { item: MarketplaceItem; onClose
 
 function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () => void }) {
   const { toast } = useToast();
-  const [, navigate] = useLocation();
-
   const mutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/marketplace/${item.id}/vi-request`, {}),
     onSuccess: (data: any) => {
-      toast({ title: "V&I Task Created!", description: `A local GUBER helper will document the item. Job #${data.jobId} created.` });
+      toast({ title: "V&I Task Created!", description: `Job #${data.jobId} created. A local helper will verify the item.` });
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       onClose();
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
-
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-request-vi">
@@ -301,8 +546,7 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
           <h3 className="text-base font-display font-extrabold">Request Verify & Inspect</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
-        <div className="rounded-xl p-4 mb-4"
-          style={{ background: "rgba(0,180,80,0.07)", border: "1px solid rgba(0,180,80,0.18)" }}>
+        <div className="rounded-xl p-4 mb-4" style={{ background: "rgba(0,180,80,0.07)", border: "1px solid rgba(0,180,80,0.18)" }}>
           <div className="flex items-center gap-2 mb-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span className="text-sm font-display font-bold text-emerald-400">What happens next</span>
@@ -311,16 +555,16 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
             <li>• A hidden task is created for local GUBER helpers</li>
             <li>• An eligible helper nearby accepts and visits the item in person</li>
             <li>• They document it with photos based on a <strong className="text-foreground">{item.category}</strong> checklist</li>
-            <li>• You receive a proof report — the listing can earn the GUBER Verified badge</li>
+            <li>• You receive a proof report — listing can earn the GUBER Verified badge</li>
             <li>• Neither buyer nor seller can accept this task</li>
           </ul>
         </div>
         <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-          Verify & Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.
+          Verify &amp; Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.
         </div>
         <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full premium-btn font-display" data-testid="button-confirm-vi-request">
-          {mutation.isPending ? "Creating Task..." : "REQUEST VERIFY & INSPECT"}
+          {mutation.isPending ? "Creating Task…" : "REQUEST VERIFY & INSPECT"}
         </Button>
       </div>
     </div>
@@ -330,18 +574,11 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
 function ContactSellerModal({ item, onClose }: { item: MarketplaceItem; onClose: () => void }) {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
-
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", `/api/marketplace/${item.id}/contact`, data),
-    onSuccess: () => {
-      toast({ title: "Message sent!", description: "The seller has been notified." });
-      onClose();
-    },
+    onSuccess: () => { toast({ title: "Message sent!" }); onClose(); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
-
-  const inputClass = "w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
-
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-contact-seller">
@@ -350,16 +587,14 @@ function ContactSellerModal({ item, onClose }: { item: MarketplaceItem; onClose:
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
         <p className="text-xs text-muted-foreground mb-4">Seller: <span className="text-foreground font-bold">{item.sellerName || "GUBER Seller"}</span></p>
-        <div className="space-y-3 mb-4">
-          <div>
-            <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">YOUR MESSAGE</label>
-            <textarea className={`${inputClass} resize-none`} rows={4} placeholder={`Hi, I'm interested in your listing: ${item.title}`}
-              value={message} onChange={e => setMessage(e.target.value)} data-testid="textarea-contact-message" />
-          </div>
+        <div className="mb-4">
+          <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">YOUR MESSAGE</label>
+          <textarea className={`${inputClass} resize-none`} rows={4} placeholder={`Hi, I'm interested in your listing: ${item.title}`}
+            value={message} onChange={e => setMessage(e.target.value)} data-testid="textarea-contact-message" />
         </div>
         <Button onClick={() => mutation.mutate({ message })} disabled={mutation.isPending || !message.trim()}
           className="w-full premium-btn font-display" data-testid="button-send-contact-message">
-          {mutation.isPending ? "Sending..." : "SEND MESSAGE"}
+          {mutation.isPending ? "Sending…" : "SEND MESSAGE"}
         </Button>
       </div>
     </div>
@@ -370,18 +605,11 @@ function ReportListingModal({ item, onClose }: { item: MarketplaceItem; onClose:
   const { toast } = useToast();
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
-
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", `/api/marketplace/${item.id}/report`, data),
-    onSuccess: () => {
-      toast({ title: "Report submitted", description: "Our team will review this listing." });
-      onClose();
-    },
+    onSuccess: () => { toast({ title: "Report submitted" }); onClose(); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
-
-  const inputClass = "w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
-
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
       <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-report-listing">
@@ -399,17 +627,19 @@ function ReportListingModal({ item, onClose }: { item: MarketplaceItem; onClose:
           </div>
           <div>
             <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">DETAILS (OPTIONAL)</label>
-            <textarea className={`${inputClass} resize-none`} rows={3} placeholder="Describe the issue..." value={details} onChange={e => setDetails(e.target.value)} />
+            <textarea className={`${inputClass} resize-none`} rows={3} placeholder="Describe the issue…" value={details} onChange={e => setDetails(e.target.value)} />
           </div>
         </div>
         <Button onClick={() => mutation.mutate({ reason, details })} disabled={mutation.isPending || !reason}
           className="w-full font-display" variant="destructive" data-testid="button-submit-report">
-          {mutation.isPending ? "Submitting..." : "SUBMIT REPORT"}
+          {mutation.isPending ? "Submitting…" : "SUBMIT REPORT"}
         </Button>
       </div>
     </div>
   );
 }
+
+// ─── ITEM DETAIL MODAL ────────────────────────────────────────────────────────
 
 function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem; onClose: () => void; currentUser?: any }) {
   const { isDemoUser } = useAuth();
@@ -423,8 +653,9 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
   const location = item.city && item.state ? `${item.city}, ${item.state}` : item.locationApprox || "";
   const sb = statusBadge(item.status);
   const avail = availabilityColor(item.sellerAvailability);
-
+  const isSample = (item as any).isSample;
   const [showBoostPanel, setShowBoostPanel] = useState(false);
+
   const boostMutation = useMutation({
     mutationFn: (boostType: "24h" | "3day" | "7day") =>
       apiRequest("POST", `/api/marketplace/${item.id}/boost-checkout`, { boostType }),
@@ -468,6 +699,14 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
               <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-full bg-black/50 backdrop-blur-sm" data-testid="button-close-modal">
                 <X className="w-4 h-4 text-white" />
               </button>
+              {isSample && (
+                <div className="absolute top-3 left-3">
+                  <span className="text-[10px] font-display font-bold px-2 py-1 rounded-full"
+                    style={{ background: "rgba(239,68,68,0.9)", color: "#fff" }}>
+                    SAMPLE / DELETE ME
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-32 flex items-center justify-center bg-muted/20 relative">
@@ -479,7 +718,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
           )}
 
           <div className="p-5">
-            {/* Status + boost */}
+            {/* Status badges */}
             <div className="flex flex-wrap gap-2 mb-3">
               <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
                 style={{ background: sb.bg, border: `1px solid ${sb.border}`, color: sb.color }}>{sb.label}</span>
@@ -491,6 +730,12 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 <span className="flex items-center gap-1 text-[10px] font-display font-extrabold px-2 py-0.5 rounded-full"
                   style={{ background: "rgba(245,165,0,0.18)", border: "1.5px solid rgba(245,165,0,0.35)", color: "#f5a500" }}>
                   <Zap className="w-2.5 h-2.5" /> FEATURED
+                </span>
+              )}
+              {item.listingType && (
+                <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", color: "#818cf8" }}>
+                  {listingTypeLabel(item.listingType)}
                 </span>
               )}
             </div>
@@ -506,23 +751,20 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   OPEN TO OFFERS
                 </span>
               )}
-              {!item.makeOfferEnabled && item.askingType !== "obo" && (
-                <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: "rgba(107,114,128,0.1)", border: "1px solid rgba(107,114,128,0.2)", color: "#9ca3af" }}>
-                  FIRM PRICE
-                </span>
-              )}
             </div>
 
-            {/* Details row */}
+            {/* Basic info row */}
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4 text-xs text-muted-foreground">
               {location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{location}</span>}
               {item.condition && <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" />{item.condition}</span>}
               {item.year && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Year: {item.year}</span>}
-              {item.brand && <span>Brand: {item.brand}</span>}
-              {item.model && <span>Model: {item.model}</span>}
               {item.createdAt && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Listed {new Date(item.createdAt).toLocaleDateString()}</span>}
             </div>
+
+            {/* Transparency panels */}
+            {item.category === "Vehicles" && <VehicleTransparency item={item} />}
+            {item.category === "Property" && <PropertyTransparency item={item} />}
+            {!["Vehicles", "Property"].includes(item.category) && <GenericDetailsPanel item={item} />}
 
             {/* V&I status */}
             <div className="rounded-xl p-3.5 mb-4"
@@ -541,7 +783,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     {verificationDate ? ` on ${verificationDate}` : ""}.
                     {item.verificationNotes && ` Notes: ${item.verificationNotes}`}
                   </p>
-                  <p className="text-[10px] text-muted-foreground mt-1">Verify & Inspect provides visual proof only — not a guarantee of condition, authenticity, or functionality.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Verify &amp; Inspect provides visual proof only — not a guarantee of condition, authenticity, or functionality.</p>
                 </>
               ) : (
                 <>
@@ -549,7 +791,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs font-display font-bold text-muted-foreground">Not Yet Verified</span>
                   </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">No on-site visual proof on file. Request V&I below to get a local helper to document this item.</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">No on-site visual proof on file. Request V&amp;I below to get a local helper to document this item.</p>
                 </>
               )}
             </div>
@@ -562,23 +804,23 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
               </div>
             )}
 
-            {/* Seller availability */}
+            {/* Seller info */}
             <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
               <span className="font-bold text-foreground">{item.sellerName || "Seller"}</span>
               <span>·</span>
               <span style={{ color: availabilityColor(item.sellerAvailability).color }}>{availabilityLabel(item.sellerAvailability)}</span>
+              {item.sellerType && <><span>·</span><span>{item.sellerType}</span></>}
             </div>
 
             {/* Disclaimer */}
             <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
               style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify & Inspect service is requested.
+              GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested.
             </div>
 
-            {/* Seller actions */}
+            {/* Actions */}
             {isSeller ? (
               <div className="space-y-2">
-                {/* Boost Panel */}
                 {!isStoreBuild && !isDemoUser && (
                   <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid rgba(245,165,0,0.3)" }}>
                     <button onClick={() => setShowBoostPanel(p => !p)}
@@ -593,14 +835,13 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     </button>
                     {showBoostPanel && (
                       <div className="p-3 space-y-2" style={{ background: "rgba(245,165,0,0.04)" }}>
-                        <p className="text-[11px] text-muted-foreground mb-2">Get more visibility inside GUBER. Higher placement in search and category results.</p>
+                        <p className="text-[11px] text-muted-foreground mb-2">Higher placement in search and category results.</p>
                         {([
                           { type: "24h" as const, label: "24 Hours", price: "$2.99", desc: "Boosted badge + higher placement" },
                           { type: "3day" as const, label: "3 Days", price: "$6.99", desc: "Priority over 24h boosts" },
                           { type: "7day" as const, label: "7 Days", price: "$12.99", desc: "Top priority boost" },
                         ]).map(tier => (
-                          <button key={tier.type}
-                            onClick={() => boostMutation.mutate(tier.type)}
+                          <button key={tier.type} onClick={() => boostMutation.mutate(tier.type)}
                             disabled={boostMutation.isPending}
                             className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-display font-bold transition-all hover:scale-[1.01] disabled:opacity-60"
                             style={{ background: "rgba(245,165,0,0.12)", border: "1px solid rgba(245,165,0,0.25)", color: "#f5a500" }}
@@ -609,15 +850,11 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                               <span>{tier.label}</span>
                               <span className="text-[10px] font-normal text-muted-foreground">{tier.desc}</span>
                             </span>
-                            <span>{boostMutation.isPending ? "..." : tier.price}</span>
+                            <span>{boostMutation.isPending ? "…" : tier.price}</span>
                           </button>
                         ))}
-                        <p className="text-[10px] text-muted-foreground leading-relaxed">Boosting increases listing visibility inside GUBER. It does not guarantee views, offers, or a sale.</p>
                         {item.guberVerified && (
-                          <p className="text-[10px] text-emerald-500 leading-relaxed">✓ Verified listings may rank higher — your listing already has a trust advantage.</p>
-                        )}
-                        {!item.guberVerified && (
-                          <p className="text-[10px] text-muted-foreground leading-relaxed">Tip: Requesting GUBER Verify &amp; Inspect can improve buyer confidence and boost ranking.</p>
+                          <p className="text-[10px] text-emerald-500 leading-relaxed">✓ Verified listings may rank higher — you already have a trust advantage.</p>
                         )}
                       </div>
                     )}
@@ -627,22 +864,16 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   <button onClick={() => statusMutation.mutate("pending")} disabled={statusMutation.isPending || !isAvailable}
                     className="flex-1 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
                     style={{ background: "rgba(245,165,0,0.1)", border: "1px solid rgba(245,165,0,0.25)", color: "#f5a500" }}
-                    data-testid="button-mark-pending">
-                    Mark Pending
-                  </button>
+                    data-testid="button-mark-pending">Mark Pending</button>
                   <button onClick={() => statusMutation.mutate("sold")} disabled={statusMutation.isPending}
                     className="flex-1 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
                     style={{ background: "rgba(107,114,128,0.1)", border: "1px solid rgba(107,114,128,0.2)", color: "#9ca3af" }}
-                    data-testid="button-mark-sold">
-                    Mark Sold
-                  </button>
+                    data-testid="button-mark-sold">Mark Sold</button>
                   {!isAvailable && (
                     <button onClick={() => statusMutation.mutate("available")} disabled={statusMutation.isPending}
                       className="flex-1 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
                       style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.25)", color: "#00e676" }}
-                      data-testid="button-mark-available">
-                      Relist
-                    </button>
+                      data-testid="button-mark-available">Relist</button>
                   )}
                 </div>
               </div>
@@ -664,7 +895,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
                     style={{ background: "rgba(0,180,80,0.1)", border: "1px solid rgba(0,180,80,0.25)", color: "#16a34a" }}
                     data-testid="button-request-vi">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Request V&I
+                    <ShieldCheck className="w-3.5 h-3.5" /> Verify Before Buying
                   </button>
                 </div>
                 {(item.makeOfferEnabled || item.askingType === "obo") && isAvailable && (
@@ -697,290 +928,16 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
   );
 }
 
-function PostListingModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [, navigate] = useLocation();
-  const [step, setStep] = useState(1);
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [form, setForm] = useState({
-    title: "", category: "", condition: "", price: "", priceType: "firm",
-    makeOfferEnabled: false, minOfferThreshold: "", description: "",
-    city: "", state: "", zipcode: "", brand: "", model: "", year: "",
-    sellerAvailability: "available_now", sellerNotes: "", viJobId: "",
-  });
-
-  const mutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/marketplace", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace/my-listings"] });
-      toast({ title: "Listing posted!", description: "Your item is now live in Marketplace Beta." });
-      onSuccess();
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
-  const handlePhotoUpload = useCallback(async (files: FileList) => {
-    if (photos.length >= 6) return toast({ title: "Max 6 photos", variant: "destructive" });
-    const remaining = 6 - photos.length;
-    const toUpload = Array.from(files).slice(0, remaining);
-    setUploading(true);
-    const uploaded: string[] = [];
-    for (const file of toUpload) {
-      if (file.size > 20 * 1024 * 1024) { toast({ title: `${file.name} too large (max 20MB)`, variant: "destructive" }); continue; }
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", "ml_default");
-      try {
-        const r = await fetch("https://api.cloudinary.com/v1_1/guber/image/upload", { method: "POST", body: fd });
-        if (r.ok) { const j = await r.json(); uploaded.push(j.secure_url); }
-      } catch {
-        toast({ title: `Failed to upload ${file.name}`, description: "Try again", variant: "destructive" });
-      }
-    }
-    if (uploaded.length) setPhotos(p => [...p, ...uploaded]);
-    setUploading(false);
-  }, [photos, toast]);
-
-  const handleSubmit = () => {
-    if (!form.title) return toast({ title: "Title is required", variant: "destructive" });
-    if (!form.category) return toast({ title: "Category is required", variant: "destructive" });
-    if (!form.city || !form.state) return toast({ title: "City and state are required", variant: "destructive" });
-    mutation.mutate({
-      title: form.title,
-      description: form.description,
-      category: form.category,
-      condition: form.condition || null,
-      price: form.priceType !== "free" && form.price ? parseFloat(form.price) : null,
-      askingType: form.makeOfferEnabled ? "obo" : form.priceType === "free" ? "free" : "fixed",
-      priceType: form.priceType,
-      makeOfferEnabled: form.makeOfferEnabled,
-      minOfferThreshold: form.makeOfferEnabled && form.minOfferThreshold ? parseFloat(form.minOfferThreshold) : null,
-      brand: form.brand || null,
-      model: form.model || null,
-      year: form.year ? parseInt(form.year) : null,
-      city: form.city,
-      state: form.state,
-      zipcode: form.zipcode || user?.zipcode || null,
-      locationApprox: `${form.city}, ${form.state}`,
-      sellerAvailability: form.sellerAvailability,
-      photos,
-      sellerNotes: form.sellerNotes || null,
-      viJobId: form.viJobId ? parseInt(form.viJobId) : null,
-      status: "available",
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    });
-  };
-
-  const inputClass = "w-full bg-input border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50";
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl max-h-[94vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()} data-testid="modal-post-listing">
-        <div className="p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-lg font-display font-extrabold">List an Item</h2>
-              <p className="text-xs text-muted-foreground">Free to post · Physical items only</p>
-            </div>
-            <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-5 h-5 text-muted-foreground" /></button>
-          </div>
-
-          <div className="space-y-4">
-            {/* Title */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">TITLE *</label>
-              <input className={inputClass} placeholder="e.g. 2019 Honda Civic – 80k miles, clean title"
-                value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} data-testid="input-listing-title" />
-            </div>
-
-            {/* Category */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">CATEGORY *</label>
-              <select className={inputClass} value={form.category}
-                onChange={e => setForm(f => ({ ...f, category: e.target.value }))} data-testid="select-listing-category">
-                <option value="">Select category</option>
-                {CATEGORIES.filter(c => c.name !== "All").map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-              </select>
-            </div>
-
-            {/* Price type */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">PRICE TYPE *</label>
-              <div className="flex gap-2">
-                {[["firm", "Firm Price"], ["free", "Free"]].map(([val, label]) => (
-                  <button key={val} onClick={() => setForm(f => ({ ...f, priceType: val, makeOfferEnabled: false }))}
-                    className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
-                    style={form.priceType === val && !form.makeOfferEnabled
-                      ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                      : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b7280" }}
-                    data-testid={`button-pricetype-${val}`}>{label}</button>
-                ))}
-                <button onClick={() => setForm(f => ({ ...f, priceType: "firm", makeOfferEnabled: true }))}
-                  className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
-                  style={form.makeOfferEnabled
-                    ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                    : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b7280" }}
-                  data-testid="button-pricetype-offers">Open to Offers</button>
-              </div>
-            </div>
-
-            {/* Price */}
-            {form.priceType !== "free" && (
-              <div>
-                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">
-                  {form.makeOfferEnabled ? "ASKING PRICE ($)" : "PRICE ($)"} *
-                </label>
-                <input className={inputClass} type="number" placeholder="0.00"
-                  value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} data-testid="input-listing-price" />
-              </div>
-            )}
-
-            {/* Hidden minimum */}
-            {form.makeOfferEnabled && (
-              <div>
-                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">
-                  MINIMUM OFFER THRESHOLD ($) — HIDDEN FROM BUYERS
-                </label>
-                <input className={inputClass} type="number" placeholder="Offers below this are auto-filtered silently"
-                  value={form.minOfferThreshold} onChange={e => setForm(f => ({ ...f, minOfferThreshold: e.target.value }))} data-testid="input-min-threshold" />
-                <p className="text-[10px] text-muted-foreground mt-1">Buyers below this threshold see "offer below acceptable range" — you're never notified</p>
-              </div>
-            )}
-
-            {/* Condition */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">CONDITION</label>
-              <select className={inputClass} value={form.condition}
-                onChange={e => setForm(f => ({ ...f, condition: e.target.value }))} data-testid="select-listing-condition">
-                <option value="">Select condition</option>
-                {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-
-            {/* Optional: brand/model/year */}
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">BRAND</label>
-                <input className={inputClass} placeholder="e.g. Honda" value={form.brand}
-                  onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">MODEL</label>
-                <input className={inputClass} placeholder="e.g. Civic" value={form.model}
-                  onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">YEAR</label>
-                <input className={inputClass} type="number" placeholder="2019" value={form.year}
-                  onChange={e => setForm(f => ({ ...f, year: e.target.value }))} />
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">DESCRIPTION *</label>
-              <textarea className={`${inputClass} resize-none`} rows={3} placeholder="Describe the item, its history, any issues..."
-                value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                data-testid="textarea-listing-description" />
-            </div>
-
-            {/* Location */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">LOCATION *</label>
-              <div className="flex gap-2 mb-2">
-                <input className={inputClass} placeholder="City" value={form.city}
-                  onChange={e => setForm(f => ({ ...f, city: e.target.value }))} data-testid="input-listing-city" />
-                <select className={`${inputClass} w-28`} value={form.state}
-                  onChange={e => setForm(f => ({ ...f, state: e.target.value }))} data-testid="select-listing-state">
-                  <option value="">State</option>
-                  {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <input className={inputClass} placeholder="ZIP code (optional)" value={form.zipcode}
-                onChange={e => setForm(f => ({ ...f, zipcode: e.target.value }))} data-testid="input-listing-zip" />
-            </div>
-
-            {/* Seller availability */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">SELLER AVAILABILITY *</label>
-              <select className={inputClass} value={form.sellerAvailability}
-                onChange={e => setForm(f => ({ ...f, sellerAvailability: e.target.value }))} data-testid="select-listing-availability">
-                {AVAILABILITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <p className="text-[10px] text-muted-foreground mt-1">Controls how quickly offer expiration kicks in</p>
-            </div>
-
-            {/* Photos */}
-            <div>
-              <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">
-                PHOTOS ({photos.length}/6)
-              </label>
-              {photos.length > 0 && (
-                <div className="flex gap-2 flex-wrap mb-2">
-                  {photos.map((p, i) => (
-                    <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden">
-                      <img src={p} alt="" className="w-full h-full object-cover" />
-                      <button onClick={() => setPhotos(ps => ps.filter((_, j) => j !== i))}
-                        className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 flex items-center justify-center">
-                        <X className="w-2.5 h-2.5 text-white" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {photos.length < 6 && (
-                <label className="flex items-center justify-center gap-2 py-3 rounded-xl cursor-pointer text-xs font-display font-bold text-muted-foreground transition-all hover:text-foreground"
-                  style={{ border: "1px dashed rgba(255,255,255,0.15)" }} data-testid="label-photo-upload">
-                  <Camera className="w-4 h-4" />
-                  {uploading ? "Uploading..." : "Add Photos (max 6)"}
-                  <input type="file" accept="image/*" multiple className="hidden"
-                    onChange={e => e.target.files && handlePhotoUpload(e.target.files)} disabled={uploading} />
-                </label>
-              )}
-            </div>
-
-            {/* V&I link */}
-            <div>
-              <label className="text-xs font-display font-bold text-emerald-400/80 tracking-wider block mb-1.5 flex items-center gap-1.5">
-                <ShieldCheck className="w-3 h-3" /> V&I JOB ID (OPTIONAL — FOR VERIFIED BADGE)
-              </label>
-              <input className={inputClass} placeholder="Enter V&I job ID if already documented"
-                value={form.viJobId} onChange={e => setForm(f => ({ ...f, viJobId: e.target.value }))}
-                data-testid="input-listing-vi-job" />
-            </div>
-
-            <div className="rounded-xl p-3 text-[11px] text-muted-foreground leading-relaxed"
-              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              GUBER does not process the sale of marketplace items. The sale happens between buyer and seller. Listings expire after 30 days.
-            </div>
-
-            <Button onClick={handleSubmit} disabled={mutation.isPending || uploading}
-              className="w-full premium-btn font-display" data-testid="button-submit-listing">
-              {mutation.isPending ? "Posting..." : "POST LISTING — FREE"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── MY LISTINGS TAB ──────────────────────────────────────────────────────────
 
 function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem) => void }) {
-  const { data: listings = [], isLoading } = useQuery<MarketplaceItem[]>({
+  const { data: rawListings, isLoading } = useQuery<MarketplaceItem[]>({
     queryKey: ["/api/marketplace/my-listings"],
     queryFn: () => fetch("/api/marketplace/my-listings").then(r => r.json()),
   });
+  const listings: MarketplaceItem[] = Array.isArray(rawListings) ? rawListings : [];
 
-  if (isLoading) return (
-    <div className="space-y-3">
-      {[1, 2].map(i => <div key={i} className="rounded-2xl bg-white/5 animate-pulse h-20" />)}
-    </div>
-  );
-
+  if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <div key={i} className="rounded-2xl bg-white/5 animate-pulse h-20" />)}</div>;
   if (!listings.length) return (
     <div className="text-center py-12 text-muted-foreground">
       <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -994,6 +951,7 @@ function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem)
       {listings.map(item => {
         const sb = statusBadge(item.status);
         const photos = item.photos as string[] | null;
+        const isSample = (item as any).isSample;
         return (
           <div key={item.id} className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer hover:bg-white/5 transition-all"
             style={{ border: "1px solid rgba(255,255,255,0.07)" }} onClick={() => onSelectItem(item)}
@@ -1003,10 +961,13 @@ function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem)
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold truncate">{item.title}</p>
-              <p className="text-xs text-muted-foreground">{item.price ? `$${item.price.toLocaleString()}` : "Free"}</p>
+              <p className="text-xs text-muted-foreground">{item.price ? `$${item.price.toLocaleString()}` : "Free"} · {item.category}</p>
             </div>
-            <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full shrink-0"
-              style={{ background: sb.bg, border: `1px solid ${sb.border}`, color: sb.color }}>{sb.label}</span>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
+                style={{ background: sb.bg, border: `1px solid ${sb.border}`, color: sb.color }}>{sb.label}</span>
+              {isSample && <span className="text-[9px] font-bold text-red-400">SAMPLE</span>}
+            </div>
           </div>
         );
       })}
@@ -1014,19 +975,20 @@ function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem)
   );
 }
 
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+
 export default function Marketplace() {
   const { user } = useAuth();
-  const { toast } = useToast();
-  const [, navigate] = useLocation();
   const [tab, setTab] = useState<"browse" | "my">("browse");
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
-  const [showPostModal, setShowPostModal] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    priceMin: "", priceMax: "", verifiedOnly: false, sort: "default", makeOfferEnabled: false,
+    priceMin: "", priceMax: "", verifiedOnly: false, sort: "default",
+    makeOfferEnabled: false, listingType: "",
   });
 
   const buildUrl = () => {
@@ -1037,6 +999,7 @@ export default function Marketplace() {
     if (filters.priceMax) params.set("priceMax", filters.priceMax);
     if (filters.verifiedOnly) params.set("verifiedOnly", "true");
     if (filters.makeOfferEnabled) params.set("makeOfferEnabled", "true");
+    if (filters.listingType) params.set("listingType", filters.listingType);
     if (filters.sort !== "default") params.set("sort", filters.sort);
     return `/api/marketplace?${params.toString()}`;
   };
@@ -1047,9 +1010,8 @@ export default function Marketplace() {
   });
   const items: MarketplaceItem[] = Array.isArray(rawItems) ? rawItems : [];
 
-  const handleSearch = () => setSearch(searchInput);
-
   const verifiedCount = items.filter(i => i.guberVerified).length;
+  const hasActiveFilters = filters.priceMin || filters.priceMax || filters.verifiedOnly || filters.makeOfferEnabled || filters.listingType || filters.sort !== "default";
 
   return (
     <GuberLayout>
@@ -1058,11 +1020,13 @@ export default function Marketplace() {
         {/* Header */}
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h1 className="text-2xl font-display font-extrabold tracking-tight">Marketplace <span className="text-xs font-normal text-primary ml-1 align-middle">BETA</span></h1>
-            <p className="text-xs text-muted-foreground mt-0.5">List items. Find deals. Request verification before you buy.</p>
+            <h1 className="text-2xl font-display font-extrabold tracking-tight">
+              Marketplace <span className="text-xs font-normal text-primary ml-1 align-middle">BETA</span>
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">List items free · Find local deals · Verify before you buy</p>
           </div>
           {user && (
-            <Button size="sm" onClick={() => setShowPostModal(true)}
+            <Button size="sm" onClick={() => setShowWizard(true)}
               className="premium-btn font-display text-xs tracking-wider gap-1.5 shrink-0" data-testid="button-post-listing">
               <Plus className="w-3.5 h-3.5" /> LIST ITEM
             </Button>
@@ -1070,137 +1034,169 @@ export default function Marketplace() {
         </div>
 
         {/* Tabs */}
-        {user && (
-          <div className="flex gap-1 mb-5 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            {([["browse", "Browse"], ["my", "My Listings"]] as const).map(([t, label]) => (
-              <button key={t} onClick={() => setTab(t)}
-                className="flex-1 py-2 rounded-lg text-xs font-display font-bold transition-all"
-                style={tab === t
-                  ? { background: "rgba(0,229,118,0.15)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e676" }
-                  : { color: "#6b7280" }}
-                data-testid={`tab-${t}`}>{label}</button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-2 mb-4">
+          {[{ k: "browse", l: "Browse" }, { k: "my", l: "My Listings" }].map(({ k, l }) => (
+            <button key={k} onClick={() => setTab(k as any)}
+              className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
+              style={tab === k
+                ? { background: "rgba(0,229,118,0.12)", border: "1.5px solid rgba(0,229,118,0.3)", color: "#00e676" }
+                : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b7280" }}
+              data-testid={`tab-${k}`}>
+              {l}
+            </button>
+          ))}
+        </div>
 
         {tab === "my" ? (
           <MyListingsTab onSelectItem={setSelectedItem} />
         ) : (
           <>
             {/* Search */}
-            <div className="flex gap-2 mb-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="flex gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <input
-                  className="w-full bg-input border border-border rounded-xl pl-9 pr-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                  placeholder="Search listings..."
+                  className="w-full bg-input border border-border rounded-xl pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                  placeholder="Search listings…"
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSearch()}
-                  data-testid="input-search"
+                  onKeyDown={e => e.key === "Enter" && setSearch(searchInput)}
+                  data-testid="input-search-listings"
                 />
               </div>
-              <button onClick={handleSearch} className="px-3 py-2.5 rounded-xl text-xs font-display font-bold transition-all"
-                style={{ background: "rgba(0,229,118,0.15)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e676" }}
-                data-testid="button-search">
+              <button onClick={() => setSearch(searchInput)}
+                className="px-3 py-2 rounded-xl text-xs font-display font-bold transition-all"
+                style={{ background: "rgba(0,229,118,0.12)", border: "1px solid rgba(0,229,118,0.25)", color: "#00e676" }}>
                 Search
               </button>
               <button onClick={() => setShowFilters(f => !f)}
-                className="px-3 py-2.5 rounded-xl text-xs font-display font-bold transition-all"
-                style={showFilters
-                  ? { background: "rgba(0,229,118,0.15)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e676" }
+                className="px-3 py-2 rounded-xl text-xs font-display font-bold transition-all relative"
+                style={hasActiveFilters
+                  ? { background: "rgba(0,229,118,0.12)", border: "1.5px solid rgba(0,229,118,0.35)", color: "#00e676" }
                   : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#6b7280" }}
                 data-testid="button-toggle-filters">
                 <Filter className="w-3.5 h-3.5" />
+                {hasActiveFilters && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
               </button>
             </div>
 
-            {/* Filter panel */}
+            {/* Filters panel */}
             {showFilters && (
               <div className="rounded-2xl p-4 mb-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] font-display font-bold text-muted-foreground block mb-1">MIN PRICE</label>
-                    <input className="w-full bg-input border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/50"
-                      type="number" placeholder="$0" value={filters.priceMin} onChange={e => setFilters(f => ({ ...f, priceMin: e.target.value }))} />
+                    <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-1">MIN PRICE</p>
+                    <input type="number" placeholder="$0" className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-primary/50"
+                      value={filters.priceMin} onChange={e => setFilters(f => ({ ...f, priceMin: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="text-[10px] font-display font-bold text-muted-foreground block mb-1">MAX PRICE</label>
-                    <input className="w-full bg-input border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/50"
-                      type="number" placeholder="No limit" value={filters.priceMax} onChange={e => setFilters(f => ({ ...f, priceMax: e.target.value }))} />
+                    <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-1">MAX PRICE</p>
+                    <input type="number" placeholder="No limit" className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-primary/50"
+                      value={filters.priceMax} onChange={e => setFilters(f => ({ ...f, priceMax: e.target.value }))} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] font-display font-bold text-muted-foreground block mb-1">SORT BY</label>
-                  <select className="w-full bg-input border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none"
-                    value={filters.sort} onChange={e => setFilters(f => ({ ...f, sort: e.target.value }))} data-testid="select-sort">
-                    <option value="default">Verified & Boosted First</option>
+                  <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-1.5">LISTING TYPE</p>
+                  <select className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs focus:outline-none"
+                    value={filters.listingType} onChange={e => setFilters(f => ({ ...f, listingType: e.target.value }))}>
+                    <option value="">All Types</option>
+                    <option value="cash_sale">Cash Only</option>
+                    <option value="financing">Financing Available</option>
+                    <option value="bhph">Buy Here Pay Here</option>
+                    <option value="lease">Lease Available</option>
+                    <option value="for_rent">For Rent</option>
+                    <option value="for_sale">For Sale</option>
+                    <option value="short_term">Short-Term Stay</option>
+                    <option value="rental">Rental Available</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-1.5">SORT BY</p>
+                  <select className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs focus:outline-none"
+                    value={filters.sort} onChange={e => setFilters(f => ({ ...f, sort: e.target.value }))}
+                    data-testid="select-sort">
+                    <option value="default">Featured First</option>
                     <option value="newest">Newest First</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
                   </select>
                 </div>
                 <div className="flex gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={filters.verifiedOnly} onChange={e => setFilters(f => ({ ...f, verifiedOnly: e.target.checked }))}
-                      className="rounded" data-testid="checkbox-verified-only" />
-                    <span className="text-xs text-muted-foreground flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-emerald-400" /> Verified only</span>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
+                    <input type="checkbox" className="accent-primary" checked={filters.verifiedOnly}
+                      onChange={e => setFilters(f => ({ ...f, verifiedOnly: e.target.checked }))} />
+                    Verified only
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={filters.makeOfferEnabled} onChange={e => setFilters(f => ({ ...f, makeOfferEnabled: e.target.checked }))}
-                      className="rounded" />
-                    <span className="text-xs text-muted-foreground">Open to offers</span>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
+                    <input type="checkbox" className="accent-primary" checked={filters.makeOfferEnabled}
+                      onChange={e => setFilters(f => ({ ...f, makeOfferEnabled: e.target.checked }))} />
+                    Open to offers
                   </label>
                 </div>
-                <button onClick={() => { setFilters({ priceMin: "", priceMax: "", verifiedOnly: false, sort: "default", makeOfferEnabled: false }); setSearch(""); setSearchInput(""); }}
-                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
-                  <RefreshCw className="w-3 h-3" /> Clear all filters
-                </button>
+                {hasActiveFilters && (
+                  <button onClick={() => setFilters({ priceMin: "", priceMax: "", verifiedOnly: false, sort: "default", makeOfferEnabled: false, listingType: "" })}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display font-bold">
+                    Clear all filters
+                  </button>
+                )}
               </div>
             )}
 
             {/* Category chips */}
-            <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
-              {CATEGORIES.map(({ name, icon: Icon }) => (
-                <button key={name} onClick={() => setActiveCategory(name)}
-                  className="flex items-center gap-1.5 shrink-0 px-3 py-2 rounded-xl text-xs font-display font-bold tracking-wider transition-all"
-                  style={activeCategory === name
-                    ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                    : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b7280" }}
-                  data-testid={`button-category-${name.toLowerCase().replace(/[\s&]/g, "-")}`}>
-                  <Icon className="w-3 h-3" />{name}
-                </button>
-              ))}
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+              {CATEGORIES.map(cat => {
+                const Icon = cat.icon;
+                const active = activeCategory === cat.name;
+                return (
+                  <button key={cat.name} onClick={() => setActiveCategory(cat.name)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-display font-bold whitespace-nowrap transition-all shrink-0"
+                    style={active
+                      ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
+                      : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#6b7280" }}
+                    data-testid={`chip-category-${cat.name.replace(/\s/g, "-").toLowerCase()}`}>
+                    <Icon className="w-3 h-3" />{cat.name}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Verified count */}
-            {verifiedCount > 0 && !isLoading && (
-              <div className="flex items-center gap-2 mb-3">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-[10px] font-display font-bold text-emerald-400 tracking-widest">GUBER VERIFIED ({verifiedCount})</span>
+            {/* Stats bar */}
+            {items.length > 0 && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-3 px-1">
+                <span>{items.length} listing{items.length !== 1 ? "s" : ""}{activeCategory !== "All" ? ` in ${activeCategory}` : ""}</span>
+                {verifiedCount > 0 && (
+                  <span className="flex items-center gap-1 text-emerald-500 font-bold">
+                    <ShieldCheck className="w-3 h-3" />{verifiedCount} verified
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Search clear */}
+            {search && (
+              <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+                <span>Searching: <strong className="text-foreground">"{search}"</strong></span>
+                <button onClick={() => { setSearch(""); setSearchInput(""); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             )}
 
             {/* Grid */}
             {isLoading ? (
               <div className="grid grid-cols-2 gap-3">
-                {[1, 2, 3, 4].map(i => <div key={i} className="rounded-2xl bg-white/5 animate-pulse h-52" />)}
+                {[1, 2, 3, 4].map(i => <div key={i} className="rounded-2xl bg-white/5 animate-pulse h-56" />)}
               </div>
             ) : items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-4">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <Package className="w-7 h-7 text-muted-foreground" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-display font-bold text-muted-foreground">No listings found</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {search ? `No results for "${search}"` : activeCategory !== "All" ? `No ${activeCategory} items listed` : "Be the first to list an item"}
-                  </p>
-                </div>
+              <div className="text-center py-16 text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-display font-bold">No listings found</p>
+                <p className="text-xs mt-1 mb-4">
+                  {search ? `No results for "${search}"` : activeCategory !== "All" ? `No ${activeCategory} listings yet` : "Be the first to list something!"}
+                </p>
                 {user && (
-                  <Button size="sm" onClick={() => setShowPostModal(true)} className="premium-btn font-display text-xs" data-testid="button-first-listing">
-                    <Plus className="w-3.5 h-3.5 mr-1" /> List an Item
+                  <Button size="sm" onClick={() => setShowWizard(true)} className="premium-btn font-display text-xs gap-1.5">
+                    <Plus className="w-3.5 h-3.5" /> LIST ITEM
                   </Button>
                 )}
               </div>
@@ -1211,28 +1207,25 @@ export default function Marketplace() {
                 ))}
               </div>
             )}
-
-            {/* Not signed in CTA */}
-            {!user && items.length > 0 && (
-              <div className="mt-6 rounded-2xl p-4 text-center"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <p className="text-sm font-display font-bold mb-1">Want to sell?</p>
-                <p className="text-xs text-muted-foreground mb-3">Sign in to list items and contact sellers</p>
-                <Button size="sm" onClick={() => navigate("/login")} className="premium-btn font-display text-xs" data-testid="button-signin-to-list">
-                  SIGN IN TO LIST
-                </Button>
-              </div>
-            )}
           </>
         )}
       </div>
 
-      {selectedItem && (
-        <ItemDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} currentUser={user} />
+      {/* Listing wizard */}
+      {showWizard && (
+        <ListingWizard
+          onClose={() => setShowWizard(false)}
+          onSuccess={() => setShowWizard(false)}
+        />
       )}
 
-      {showPostModal && (
-        <PostListingModal onClose={() => setShowPostModal(false)} onSuccess={() => setShowPostModal(false)} />
+      {/* Item detail */}
+      {selectedItem && (
+        <ItemDetailModal
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+          currentUser={user}
+        />
       )}
     </GuberLayout>
   );

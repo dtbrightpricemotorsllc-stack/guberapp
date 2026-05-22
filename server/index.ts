@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCron } from "./cron";
-import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedDroneCategory, seedAutomotiveVIUseCases, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns, seedLiabilityColumns } from "./seed";
+import { seedCatalog, syncAdminCredentials, syncOGPreapprovedEmails, seedJobChecklists, migrateGuberIds, seedPAVCategory, seedPropertySituationsV2, seedReferralCodes, seedReferralExpiry, seedServicePricingConfigs, seedBoostColumns, seedDroneServices, seedDroneCategory, seedAutomotiveVIUseCases, seedBarterChecklists, reseedOnlineItemsSituations, seedPlatformSettings, seedUploadQuotaColumns, seedDisputeProtectionColumns, seedLiabilityColumns, seedMarketplaceSamples } from "./seed";
 import { seedDemoAccounts } from "./seed-demo";
 import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
@@ -360,6 +360,7 @@ app.use((req, res, next) => {
   reseedOnlineItemsSituations().catch(e => console.error("[seed] Online Items reseed error:", e));
   seedPlatformSettings().catch(e => console.error("[seed] Platform settings seed error:", e));
   seedDemoAccounts().then(() => invalidateDemoIdCache()).catch(e => console.error("[seed] Demo accounts seed error:", e));
+  seedMarketplaceSamples().catch(e => console.error("[seed] Marketplace samples seed error:", e));
   pool.query("UPDATE jobs SET status = 'posted_public' WHERE status = 'open'").then((r: any) => {
     if (r.rowCount > 0) console.log(`[GUBER] Migrated ${r.rowCount} jobs from 'open' → 'posted_public'.`);
   }).catch(e => console.error("[seed] Job status migration error:", e));

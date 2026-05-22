@@ -1448,3 +1448,177 @@ export async function seedDroneCategory() {
     console.error("[GUBER] seedDroneCategory error:", e);
   }
 }
+
+export async function seedMarketplaceSamples() {
+  try {
+    const { pool } = await import("./db");
+    const existing = await pool.query("SELECT COUNT(*) FROM marketplace_items WHERE is_sample = true");
+    if (parseInt(existing.rows[0].count) > 0) return;
+    const adminRow = await pool.query("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
+    const sellerRow = adminRow.rows[0] || (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
+    if (!sellerRow) return;
+    const sellerId = sellerRow.id;
+    const sellerNameRow = await pool.query("SELECT full_name FROM users WHERE id = $1", [sellerId]);
+    const sellerName = sellerNameRow.rows[0]?.full_name || "GUBER Sample";
+
+    const now = new Date();
+    const expires = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const samples = [
+      {
+        title: "2019 Honda Accord Sport – 82k Miles, Clean Title",
+        category: "Vehicles", subCategory: "Car", listingType: "cash_sale", sellerType: "Private Seller",
+        purchaseType: "cash_sale", brand: "Honda", model: "Accord", year: 2019,
+        vehicleMileage: 82000, titleStatus: "Clean Title", condition: "Good",
+        price: 14500, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36601", locationApprox: "Mobile, AL",
+        description: "One owner, well maintained. No accidents. New tires 10k ago. Honda service records available.",
+        details: { transmission: "CVT", fuelType: "Gasoline", exteriorColor: "Sonic Gray Pearl", conditionFlags: ["Runs & Drives", "AC Works", "Heat Works"] },
+        photos: ["https://picsum.photos/seed/accord2019/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "2015 Ford F-150 XLT SuperCrew – 4WD, Financing Available",
+        category: "Vehicles", subCategory: "Truck", listingType: "financing", sellerType: "Dealer",
+        purchaseType: "financing", brand: "Ford", model: "F-150", year: 2015,
+        vehicleMileage: 118000, titleStatus: "Clean Title", condition: "Good",
+        price: 18900, priceType: "firm", makeOfferEnabled: false, askingType: "fixed",
+        city: "Mobile", state: "AL", zipcode: "36601", locationApprox: "Mobile, AL",
+        description: "Tow package, bed liner, backup camera. Clean Carfax. Financing available for all credit types.",
+        details: { transmission: "Automatic", fuelType: "Gasoline", driveType: "4WD", downPayment: 1500, monthlyPayment: 389, termLength: "60 months", interestRate: 12.9, creditCheckRequired: true, minCreditScore: 540, proofOfIncomeRequired: true, conditionFlags: ["Runs & Drives", "AC Works", "Heat Works"] },
+        photos: ["https://picsum.photos/seed/f150xlt/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "2011 Dodge Charger R/T – Buy Here Pay Here, $1,200 Down",
+        category: "Vehicles", subCategory: "Car", listingType: "bhph", sellerType: "Buy Here Pay Here",
+        purchaseType: "bhph", brand: "Dodge", model: "Charger", year: 2011,
+        vehicleMileage: 147000, titleStatus: "Clean Title", condition: "Fair",
+        price: 9800, priceType: "firm", makeOfferEnabled: false, askingType: "fixed",
+        city: "Mobile", state: "AL", zipcode: "36605", locationApprox: "Mobile, AL",
+        description: "Hemi V8, runs strong. Some cosmetic wear. No credit check required.",
+        details: { transmission: "Automatic", fuelType: "Gasoline", downPayment: 1200, monthlyPayment: 259, termLength: "48 months", creditCheckRequired: false, proofOfIncomeRequired: true, conditionFlags: ["Runs & Drives", "AC Works"] },
+        photos: ["https://picsum.photos/seed/chargerrt/600/400"],
+        status: "available", sellerAvailability: "today",
+      },
+      {
+        title: "3 BR / 2 BA House for Rent – $1,250/mo, Pets OK",
+        category: "Property", subCategory: "House", listingType: "for_rent", sellerType: "Owner",
+        purchaseType: null, brand: null, model: null, year: null,
+        price: 1250, priceType: "firm", makeOfferEnabled: false, askingType: "fixed",
+        city: "Mobile", state: "AL", zipcode: "36608", locationApprox: "Mobile, AL",
+        description: "Spacious 3/2 in quiet neighborhood. Fenced backyard, central heat/AC, washer/dryer hookups. 12-month lease.",
+        details: { propertyType: "House", bedrooms: "3", bathrooms: "2", squareFeet: 1450, yearBuilt: 1998, deposit: 1250, leaseLength: "12 months", applicationFee: 50, incomeRequirement: "3x Rent", creditCheckRequired: true, minCreditScore: 580, backgroundCheck: true, evictionsAccepted: "No", section8: "Case-by-case", petPolicy: "Yes", petDeposit: 300, petRent: 25, features: ["Central Heat", "Central AC", "Fenced Yard", "Washer/Dryer"] },
+        photos: ["https://picsum.photos/seed/house3br/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "Furnished Studio – Short-Term Stay, $65/Night",
+        category: "Property", subCategory: "Apartment", listingType: "short_term", sellerType: "Owner",
+        purchaseType: null, brand: null, model: null, year: null,
+        price: 65, priceType: "firm", makeOfferEnabled: false, askingType: "fixed",
+        city: "Mobile", state: "AL", zipcode: "36602", locationApprox: "Mobile, AL",
+        description: "Cozy furnished studio near downtown. Full kitchen, fast WiFi, parking included. Min 2-night stay.",
+        details: { propertyType: "Apartment", bedrooms: "Studio", bathrooms: "1", squareFeet: 420, nightlyRate: 65, weeklyRate: 390, cleaningFee: 45, maxGuests: 2, minStay: 2, features: ["Internet Included", "Furnished", "Central AC"] },
+        photos: ["https://picsum.photos/seed/studio65/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "0.75 Acre Lot – Mobile, AL – Owner Financing Available",
+        category: "Property", subCategory: "Land", listingType: "owner_financing", sellerType: "Owner",
+        purchaseType: null, brand: null, model: null, year: null,
+        price: 28000, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36619", locationApprox: "Mobile, AL",
+        description: "Cleared residential lot, utilities at street. Great for new build. Owner will finance with 10% down.",
+        details: { propertyType: "Land", acreage: "0.75 acres", zoning: "Residential", ownerFinancing: true, ownerDownPayment: 2800, ownerMonthlyPayment: 350, ownerTermLength: "84 months" },
+        photos: ["https://picsum.photos/seed/landlot75/600/400"],
+        status: "available", sellerAvailability: "appointment",
+      },
+      {
+        title: "DeWalt 3000 PSI Pressure Washer – Works Great, $75/Day Rental",
+        category: "Tools & Equipment", listingType: null, sellerType: "Private Seller",
+        purchaseType: "cash_sale", brand: "DeWalt", model: "DWPW3000",
+        condition: "Good", price: 375, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36606", locationApprox: "Mobile, AL",
+        description: "Electric start, Honda engine. Comes with extension wand, 25ft hose, and surface cleaner attachment.",
+        details: { toolType: "Construction", worksProper: "Yes", batteryIncluded: "N/A", chargerIncluded: "N/A", rentalAvailable: true, rentalPrice: 75, rentalDeposit: 100 },
+        photos: ["https://picsum.photos/seed/pressurewasher/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "iPhone 14 Pro 256GB – Unlocked, 91% Battery, Space Black",
+        category: "Electronics", listingType: null, sellerType: "Private Seller",
+        purchaseType: "cash_sale", brand: "Apple", model: "iPhone 14 Pro",
+        condition: "Like New", price: 680, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36604", locationApprox: "Mobile, AL",
+        description: "Excellent condition, used 6 months. No scratches, original box included. Unlocked for all carriers.",
+        details: { deviceType: "Smartphone", storageSize: "256GB", carrier: "Unlocked", unlocked: "Yes", crackedScreen: false, batteryHealth: "91%", includesCharger: true },
+        photos: ["https://picsum.photos/seed/iphone14pro/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "Ashley Furniture Sectional Sofa – Gray, Delivery Available",
+        category: "Furniture", listingType: null, sellerType: "Private Seller",
+        purchaseType: "cash_sale", brand: "Ashley", model: null,
+        condition: "Good", price: 450, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36609", locationApprox: "Mobile, AL",
+        description: "Moving sale. 3-piece sectional, gray fabric, good condition. Pet-free, smoke-free home. Delivery available for $50.",
+        details: { furnitureType: "Sectional", material: "Fabric", color: "Gray", dimensions: "110\" x 85\"", deliveryAvailable: true, assemblyRequired: false, smokeFreeHome: true, petFreeHome: true },
+        photos: ["https://picsum.photos/seed/sectionalsofa/600/400"],
+        status: "available", sellerAvailability: "this_week",
+      },
+      {
+        title: "Whirlpool Washer & Dryer Set – Works Perfect, Delivery Available",
+        category: "Appliances", listingType: null, sellerType: "Private Seller",
+        purchaseType: "cash_sale", brand: "Whirlpool", model: "WTW4816FW",
+        condition: "Good", price: 425, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36606", locationApprox: "Mobile, AL",
+        description: "Full-size top-load washer and electric dryer. Work perfectly. Upgrading, must go this weekend.",
+        details: { applianceType: "Washer/Dryer Set", gasOrElectric: "Electric", worksProper: "Yes", deliveryAvailable: true, installationAvailable: false, warrantyRemaining: false },
+        photos: ["https://picsum.photos/seed/washerdryer/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+      {
+        title: "2018 Tracker Pro Team 175 TXW – 90HP, Clean Title, Trailer Included",
+        category: "Boats & Marine", listingType: null, sellerType: "Private Seller",
+        purchaseType: "cash_sale", brand: "Tracker", model: "Pro Team 175 TXW", year: 2018,
+        titleStatus: "Clean Title", condition: "Good",
+        price: 11500, priceType: "firm", makeOfferEnabled: true, askingType: "obo",
+        city: "Mobile", state: "AL", zipcode: "36601", locationApprox: "Mobile, AL",
+        description: "90HP Mercury motor, 260 hours. Live well, trolling motor, depth finder. Title in hand. Trailer included.",
+        details: { boatType: "Fishing Boat", boatLength: "17", engineType: "Outboard", hours: "260", trailerIncluded: true, boatRuns: "Yes" },
+        photos: ["https://picsum.photos/seed/tracker175/600/400"],
+        status: "available", sellerAvailability: "available_now",
+      },
+    ];
+
+    for (const s of samples) {
+      const slugBase = s.title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").slice(0, 70);
+      const result = await pool.query(
+        `INSERT INTO marketplace_items (
+          seller_id, seller_name, title, description, category, sub_category, listing_type,
+          seller_type, purchase_type, brand, model, year, vehicle_mileage, title_status,
+          condition, price, price_type, make_offer_enabled, asking_type, city, state, zipcode,
+          location_approx, photos, status, seller_availability, details, is_sample,
+          expires_at, approximate_location_only, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$31)
+        RETURNING id`,
+        [
+          sellerId, sellerName, s.title, s.description || null, s.category,
+          (s as any).subCategory || null, s.listingType || null, s.sellerType || null,
+          s.purchaseType || null, (s as any).brand || null, (s as any).model || null,
+          (s as any).year || null, (s as any).vehicleMileage || null, (s as any).titleStatus || null,
+          (s as any).condition || null, s.price, s.priceType, s.makeOfferEnabled, s.askingType,
+          s.city, s.state, s.zipcode, s.locationApprox,
+          JSON.stringify(s.photos), s.status, s.sellerAvailability,
+          JSON.stringify(s.details), true, expires, true, now,
+        ]
+      );
+      const id = result.rows[0].id;
+      const slug = `${slugBase}-${id}`;
+      await pool.query("UPDATE marketplace_items SET public_slug = $1 WHERE id = $2", [slug, id]);
+    }
+    console.log("[GUBER] Marketplace sample listings seeded.");
+  } catch (e: any) {
+    console.error("[GUBER] seedMarketplaceSamples error:", e.message);
+  }
+}

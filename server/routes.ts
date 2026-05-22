@@ -5040,6 +5040,41 @@ export async function registerRoutes(
   });
 
   // MARKETPLACE ROUTES
+  // VIN decode proxy (NHTSA public API)
+  app.get("/api/vin-decode/:vin", async (req: Request, res: Response) => {
+    try {
+      const vin = req.params.vin.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+      if (vin.length !== 17) return res.status(400).json({ message: "VIN must be 17 characters (no I, O, or Q)" });
+      const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`);
+      if (!r.ok) return res.status(502).json({ message: "NHTSA service unavailable" });
+      const data = await r.json();
+      const results: Array<{ Variable: string; Value: string }> = data.Results || [];
+      const get = (name: string) => {
+        const row = results.find((r: any) => r.Variable === name);
+        return row?.Value && row.Value !== "Not Applicable" && row.Value !== "null" ? row.Value : "";
+      };
+      const year = get("Model Year");
+      const make = get("Make");
+      const model = get("Model");
+      if (!year || !make || !model) return res.status(422).json({ message: "VIN not recognized — enter details manually" });
+      const tc = (s: string) => s.toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const cyl = get("Engine Number of Cylinders");
+      const disp = get("Displacement (L)");
+      const engine = [cyl && `${cyl}-cyl`, disp && `${parseFloat(disp).toFixed(1)}L`].filter(Boolean).join(" ");
+      res.json({
+        year, make: tc(make), model: tc(model),
+        trim: get("Trim") || get("Series") || "",
+        bodyClass: get("Body Class"),
+        engine,
+        fuelType: get("Fuel Type - Primary"),
+        driveType: get("Drive Type"),
+        transmission: get("Transmission Style"),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/marketplace", async (req: Request, res: Response) => {
     try {
       const items = await storage.getMarketplaceItems({
@@ -5102,6 +5137,8 @@ export async function registerRoutes(
         title, description, category, condition, price, askingType, priceType, makeOfferEnabled,
         minOfferThreshold, brand, model, year, city, state, photos, zipcode, locationApprox,
         sellerAvailability, viJobId, expiresAt,
+        subCategory, listingType, sellerType, vinNumber, vehicleMileage,
+        titleStatus, purchaseType, details,
       } = req.body;
       if (!title || !category) return res.status(400).json({ message: "Title and category are required" });
 
@@ -5163,6 +5200,14 @@ export async function registerRoutes(
         viJobId: viJobId ? parseInt(viJobId) : null,
         verificationNotes,
         expiresAt: expiresAt ? new Date(expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        subCategory: subCategory || null,
+        listingType: listingType || null,
+        sellerType: sellerType || null,
+        vinNumber: vinNumber || null,
+        vehicleMileage: vehicleMileage ? parseInt(vehicleMileage) : null,
+        titleStatus: titleStatus || null,
+        purchaseType: purchaseType || null,
+        details: details || null,
       });
 
       // Update with slug that includes the ID
