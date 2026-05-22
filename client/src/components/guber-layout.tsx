@@ -35,6 +35,7 @@ import {
   Map,
   Zap,
   Download,
+  ShoppingBag,
 } from "lucide-react";
 
 const SOUND_PRIORITY: SoundType[] = ["money", "nearby", "action", "closed", "default"];
@@ -137,7 +138,7 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
   const bottomTabs = [
     { href: "/dashboard", label: "Home", icon: Home },
     { href: "/map", label: "Map", icon: Map },
-    { href: "/cash-drops", label: "Drops", icon: Zap },
+    { href: "/marketplace", label: "Market", icon: ShoppingBag },
     { href: "/my-jobs", label: "Jobs", icon: Briefcase },
     ...(isAdmin
       ? [{ href: "/admin", label: "Admin", icon: Shield }]
