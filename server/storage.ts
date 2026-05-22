@@ -3,7 +3,7 @@ import {
   notifications, reviews, strikeRecords, proofSubmissions, walletTransactions,
   viCategories, useCases, catalogServiceTypes, detailOptionSets,
   proofTemplates, proofChecklistItems, auditLogs, passwordResetTokens,
-  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, jobStatusLogs, bountyAttempts,
+  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceDeals, marketplaceDealMessages, jobStatusLogs, bountyAttempts,
   businessProfiles, bulkJobBatches, cashDrops, cashDropAttempts, servicePricingConfig,
   workerQualifications, observations, dropSponsors,
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
@@ -21,7 +21,7 @@ import {
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
   type DetailOptionSet, type ProofTemplate, type ProofChecklistItem, type AuditLog,
-  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type JobStatusLog, type BountyAttempt,
+  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceDeal, type MarketplaceDealMessage, type JobStatusLog, type BountyAttempt,
   type BusinessProfile, type CashDrop, type CashDropAttempt, type ServicePricingConfig,
   type WorkerQualification, type Observation, type DropSponsor,
   type BusinessAccount, type BusinessPlan, type BusinessCandidateUnlock,
@@ -1304,6 +1304,80 @@ export class DatabaseStorage implements IStorage {
   async updateMarketplaceListingReport(id: number, data: Partial<MarketplaceListingReport>): Promise<MarketplaceListingReport | undefined> {
     const [report] = await db.update(marketplaceListingReports).set(data).where(eq(marketplaceListingReports.id, id)).returning();
     return report;
+  }
+
+  // ── Marketplace Deals ─────────────────────────────────────────────────────
+  async createMarketplaceDeal(data: any): Promise<MarketplaceDeal> {
+    const [deal] = await db.insert(marketplaceDeals).values(data).returning();
+    return deal;
+  }
+
+  async getMarketplaceDeal(id: number): Promise<MarketplaceDeal | undefined> {
+    const [deal] = await db.select().from(marketplaceDeals).where(eq(marketplaceDeals.id, id));
+    return deal;
+  }
+
+  async getMarketplaceDealByOffer(offerId: number): Promise<MarketplaceDeal | undefined> {
+    const [deal] = await db.select().from(marketplaceDeals).where(eq(marketplaceDeals.offerId, offerId));
+    return deal;
+  }
+
+  async getMarketplaceDealsByUser(userId: number): Promise<MarketplaceDeal[]> {
+    return db.select().from(marketplaceDeals)
+      .where(or(eq(marketplaceDeals.buyerUserId, userId), eq(marketplaceDeals.sellerUserId, userId)))
+      .orderBy(desc(marketplaceDeals.createdAt));
+  }
+
+  async updateMarketplaceDeal(id: number, data: Partial<MarketplaceDeal>): Promise<MarketplaceDeal | undefined> {
+    const [deal] = await db.update(marketplaceDeals).set({ ...data, updatedAt: new Date() }).where(eq(marketplaceDeals.id, id)).returning();
+    return deal;
+  }
+
+  // ── Marketplace Deal Messages ─────────────────────────────────────────────
+  async createDealMessage(data: any): Promise<MarketplaceDealMessage> {
+    const [msg] = await db.insert(marketplaceDealMessages).values(data).returning();
+    return msg;
+  }
+
+  async getDealMessages(dealId: number): Promise<MarketplaceDealMessage[]> {
+    return db.select().from(marketplaceDealMessages)
+      .where(eq(marketplaceDealMessages.dealId, dealId))
+      .orderBy(marketplaceDealMessages.createdAt);
+  }
+
+  // ── Marketplace reputation stats ──────────────────────────────────────────
+  async getUserMarketplaceStats(userId: number): Promise<{
+    completedSales: number; completedPurchases: number;
+    sellerBackouts: number; buyerBackouts: number;
+    sellerNoShows: number; buyerNoShows: number;
+    totalAsSellerDeals: number; totalAsBuyerDeals: number;
+    sellerCompletionRate: number; buyerCompletionRate: number;
+  }> {
+    const [user] = await db.select({
+      mktCompletedSales: users.mktCompletedSales,
+      mktCompletedPurchases: users.mktCompletedPurchases,
+      mktSellerBackouts: users.mktSellerBackouts,
+      mktBuyerBackouts: users.mktBuyerBackouts,
+      mktSellerNoShows: users.mktSellerNoShows,
+      mktBuyerNoShows: users.mktBuyerNoShows,
+      mktDealsAsSellerTotal: users.mktDealsAsSellerTotal,
+      mktDealsAsBuyerTotal: users.mktDealsAsBuyerTotal,
+    }).from(users).where(eq(users.id, userId));
+    if (!user) return { completedSales:0, completedPurchases:0, sellerBackouts:0, buyerBackouts:0, sellerNoShows:0, buyerNoShows:0, totalAsSellerDeals:0, totalAsBuyerDeals:0, sellerCompletionRate:100, buyerCompletionRate:100 };
+    const s = user.mktDealsAsSellerTotal || 0;
+    const b = user.mktDealsAsBuyerTotal || 0;
+    return {
+      completedSales: user.mktCompletedSales || 0,
+      completedPurchases: user.mktCompletedPurchases || 0,
+      sellerBackouts: user.mktSellerBackouts || 0,
+      buyerBackouts: user.mktBuyerBackouts || 0,
+      sellerNoShows: user.mktSellerNoShows || 0,
+      buyerNoShows: user.mktBuyerNoShows || 0,
+      totalAsSellerDeals: s,
+      totalAsBuyerDeals: b,
+      sellerCompletionRate: s > 0 ? Math.round(((user.mktCompletedSales || 0) / s) * 100) : 100,
+      buyerCompletionRate: b > 0 ? Math.round(((user.mktCompletedPurchases || 0) / b) * 100) : 100,
+    };
   }
 
   async createJobStatusLog(data: any): Promise<JobStatusLog> {

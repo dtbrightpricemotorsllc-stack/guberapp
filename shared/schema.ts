@@ -193,15 +193,18 @@ export const users = pgTable("users", {
   liabilityDisclaimerAcceptedAt: timestamp("liability_disclaimer_accepted_at"),
 
   // ── Soft-delete / data-retention fields ────────────────────────────────────
-  // When a user requests account deletion we set deletedAt + a 90-day purge
-  // window instead of hard-deleting the row. This preserves job history,
-  // payment records, device/IP audit logs, and verification records for the
-  // retention period required by safety, fraud-prevention, and legal/finance
-  // compliance. The purge cron (future) deletes rows whose purge timestamp
-  // has elapsed AND have no outstanding dispute / payment hold.
   deletedAt: timestamp("deleted_at"),
   deletionScheduledPurgeAt: timestamp("deletion_scheduled_purge_at"),
   deletionReason: text("deletion_reason"),
+  // ── Marketplace reputation stats ─────────────────────────────────────────
+  mktCompletedSales: integer("mkt_completed_sales").default(0),
+  mktCompletedPurchases: integer("mkt_completed_purchases").default(0),
+  mktSellerBackouts: integer("mkt_seller_backouts").default(0),
+  mktBuyerBackouts: integer("mkt_buyer_backouts").default(0),
+  mktSellerNoShows: integer("mkt_seller_no_shows").default(0),
+  mktBuyerNoShows: integer("mkt_buyer_no_shows").default(0),
+  mktDealsAsSellerTotal: integer("mkt_deals_as_seller_total").default(0),
+  mktDealsAsBuyerTotal: integer("mkt_deals_as_buyer_total").default(0),
 });
 
 export const categories = pgTable("categories", {
@@ -796,6 +799,35 @@ export const marketplaceListingReports = pgTable("marketplace_listing_reports", 
   reviewedAt: timestamp("reviewed_at"),
 });
 
+export const marketplaceDeals = pgTable("marketplace_deals", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  offerId: integer("offer_id").notNull(),
+  buyerUserId: integer("buyer_user_id").notNull(),
+  sellerUserId: integer("seller_user_id").notNull(),
+  agreedPrice: real("agreed_price").notNull(),
+  // pending_completion | completed | buyer_backed_out | seller_backed_out | buyer_no_show | seller_no_show | mutual_cancellation
+  status: text("status").default("pending_completion"),
+  outcomeNote: text("outcome_note"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: integer("resolved_by"),
+  // Future placeholder hooks
+  appointmentAt: timestamp("appointment_at"),
+  meetingAddress: text("meeting_address"),
+  escrowId: text("escrow_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const marketplaceDealMessages = pgTable("marketplace_deal_messages", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull(),
+  senderUserId: integer("sender_user_id").notNull(),
+  message: text("message").notNull(),
+  attachmentUrl: text("attachment_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertMarketplaceItemSchema = createInsertSchema(marketplaceItems).omit({
   id: true,
   createdAt: true,
@@ -815,6 +847,8 @@ export type MarketplaceOffer = typeof marketplaceOffers.$inferSelect;
 export type MarketplaceViewingRequest = typeof marketplaceViewingRequests.$inferSelect;
 export type MarketplaceVerificationRequest = typeof marketplaceVerificationRequests.$inferSelect;
 export type MarketplaceListingReport = typeof marketplaceListingReports.$inferSelect;
+export type MarketplaceDeal = typeof marketplaceDeals.$inferSelect;
+export type MarketplaceDealMessage = typeof marketplaceDealMessages.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

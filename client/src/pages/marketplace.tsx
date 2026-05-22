@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -466,7 +467,7 @@ function MakeOfferModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
           <h3 className="text-base font-display font-extrabold">Make an Offer</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Asking: <span className="text-foreground font-bold">{item.price ? `$${item.price.toLocaleString()}` : "Open"}</span> · You get 4 total offer actions.</p>
+        <p className="text-xs text-muted-foreground mb-4">Asking: <span className="text-foreground font-bold">{item.price ? `$${item.price.toLocaleString()}` : "Open"}</span> · Up to 2 counter offers allowed per side.</p>
         <div className="space-y-3 mb-4">
           <div>
             <label className="text-xs font-display font-bold text-muted-foreground tracking-wider block mb-1.5">YOUR OFFER ($)</label>
@@ -610,10 +611,123 @@ function ReportListingModal({ item, onClose }: { item: MarketplaceItem; onClose:
   );
 }
 
+// ─── BUYER OFFER STATUS PANEL ─────────────────────────────────────────────────
+
+function BuyerOfferPanel({ item, currentUserId }: { item: MarketplaceItem; currentUserId: number }) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [counterAmt, setCounterAmt] = useState("");
+  const [showCounterInput, setShowCounterInput] = useState(false);
+
+  const { data: offers } = useQuery<any[]>({
+    queryKey: ["/api/marketplace", item.id, "offers"],
+    queryFn: () => fetch(`/api/marketplace/${item.id}/offers`).then(r => r.json()),
+    refetchInterval: 20000,
+  });
+
+  const myOffer = (offers || []).find((o: any) => o.buyerUserId === currentUserId && ["pending", "countered", "accepted"].includes(o.status));
+
+  const actionMutation = useMutation({
+    mutationFn: ({ offerId, action, counterAmount }: { offerId: number; action: string; counterAmount?: number }) =>
+      apiRequest("PATCH", `/api/marketplace/offers/${offerId}`, { action, counterAmount }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace", item.id, "offers"] });
+      setShowCounterInput(false);
+      if (data?.deal?.id) {
+        toast({ title: "Deal accepted — chat unlocked!" });
+        navigate(`/marketplace/deals/${data.deal.id}`);
+      } else {
+        toast({ title: "Response sent" });
+      }
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  if (!myOffer) return null;
+
+  const actionCount = myOffer.offerActionCount ?? 0;
+  const canCounterBack = actionCount < 3;
+
+  if (myOffer.status === "accepted") {
+    return (
+      <div className="rounded-xl p-3 mb-2" style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.25)" }}>
+        <p className="text-xs font-display font-bold text-emerald-400 mb-1">✓ Your offer was accepted</p>
+        <p className="text-[11px] text-muted-foreground mb-2">A deal has been created. Chat is now available.</p>
+        <button onClick={async () => {
+          const deal = await fetch(`/api/marketplace/deals/my`).then(r => r.json());
+          const d = deal.find((dd: any) => dd.offerId === myOffer.id);
+          if (d) navigate(`/marketplace/deals/${d.id}`);
+        }}
+          className="text-xs font-display font-bold text-emerald-400 underline underline-offset-2"
+          data-testid="link-open-deal">
+          Open Deal & Chat →
+        </button>
+      </div>
+    );
+  }
+
+  if (myOffer.status === "countered") {
+    return (
+      <div className="rounded-xl p-3 mb-2" style={{ background: "rgba(99,102,241,0.08)", border: "1.5px solid rgba(99,102,241,0.3)" }}>
+        <p className="text-xs font-display font-bold mb-1" style={{ color: "#818cf8" }}>Counter Offer Received</p>
+        <p className="text-sm font-black text-white mb-1">${Number(myOffer.counterAmount || myOffer.offerAmount).toLocaleString()}</p>
+        <p className="text-[11px] text-muted-foreground mb-2">
+          The seller countered your ${Number(myOffer.offerAmount).toLocaleString()} offer.{!canCounterBack ? " This is the final round — accept or decline only." : ""}
+        </p>
+        {showCounterInput ? (
+          <div className="space-y-2">
+            <input type="number" placeholder="Your counter $" value={counterAmt}
+              onChange={e => setCounterAmt(e.target.value)}
+              className="w-full text-xs px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white"
+              data-testid="input-buyer-counter" />
+            <div className="flex gap-2">
+              <button onClick={() => actionMutation.mutate({ offerId: myOffer.id, action: "counter_back", counterAmount: parseFloat(counterAmt) })}
+                disabled={!counterAmt || actionMutation.isPending}
+                className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold disabled:opacity-40"
+                style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)", color: "#818cf8" }}
+                data-testid="button-submit-buyer-counter">Counter Back</button>
+              <button onClick={() => setShowCounterInput(false)} className="px-2 text-xs text-muted-foreground">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={() => actionMutation.mutate({ offerId: myOffer.id, action: "accept_counter" })}
+              disabled={actionMutation.isPending}
+              className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold disabled:opacity-40"
+              style={{ background: "rgba(0,229,118,0.15)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e676" }}
+              data-testid="button-accept-counter">Accept</button>
+            {canCounterBack && (
+              <button onClick={() => setShowCounterInput(true)}
+                className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold"
+                style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", color: "#818cf8" }}
+                data-testid="button-counter-back">Counter</button>
+            )}
+            <button onClick={() => actionMutation.mutate({ offerId: myOffer.id, action: "decline_counter" })}
+              disabled={actionMutation.isPending}
+              className="flex-1 py-1.5 rounded-lg text-xs font-display font-bold disabled:opacity-40"
+              style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}
+              data-testid="button-decline-counter">Decline</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Pending — show offer status
+  return (
+    <div className="rounded-xl p-3 mb-2" style={{ background: "rgba(245,165,0,0.06)", border: "1px solid rgba(245,165,0,0.2)" }}>
+      <p className="text-xs font-display font-bold text-yellow-500 mb-0.5">Offer Pending</p>
+      <p className="text-sm font-black text-white">${Number(myOffer.offerAmount).toLocaleString()}</p>
+      <p className="text-[11px] text-muted-foreground mt-0.5">Waiting for seller response…</p>
+    </div>
+  );
+}
+
 // ─── ITEM DETAIL MODAL ────────────────────────────────────────────────────────
 
 function SellerOffersPanel({ item }: { item: MarketplaceItem }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [counterAmt, setCounterAmt] = useState<Record<number, string>>({});
   const [showCounter, setShowCounter] = useState<number | null>(null);
 
@@ -626,10 +740,15 @@ function SellerOffersPanel({ item }: { item: MarketplaceItem }) {
   const actionMutation = useMutation({
     mutationFn: ({ offerId, action, counterAmount }: { offerId: number; action: string; counterAmount?: number }) =>
       apiRequest("PATCH", `/api/marketplace/offers/${offerId}`, { action, counterAmount }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace", item.id, "offers"] });
       setShowCounter(null);
-      toast({ title: "Offer updated" });
+      if (data?.deal?.id) {
+        toast({ title: "Deal created — chat unlocked!" });
+        navigate(`/marketplace/deals/${data.deal.id}`);
+      } else {
+        toast({ title: "Offer updated" });
+      }
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -648,7 +767,7 @@ function SellerOffersPanel({ item }: { item: MarketplaceItem }) {
       <div className="divide-y divide-white/5">
         {pending.map((offer: any) => {
           const exchanges = offer.offerActionCount ?? 0;
-          const remaining = 4 - exchanges;
+          const remaining = 3 - exchanges;
           const expires = offer.expiresAt ? new Date(offer.expiresAt) : null;
           const isExpired = expires ? expires < new Date() : false;
           const status = offer.status as string;
@@ -996,6 +1115,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
               </div>
             ) : currentUser ? (
               <div className="space-y-2">
+                <BuyerOfferPanel item={item} currentUserId={currentUser.id} />
                 <div className="flex gap-2">
                   <button onClick={() => setModal("viewing")} disabled={!isAvailable}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
@@ -1043,6 +1163,83 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 }
 
 // ─── MY LISTINGS TAB ──────────────────────────────────────────────────────────
+
+// ─── MY DEALS TAB ─────────────────────────────────────────────────────────────
+
+interface DealSummary {
+  id: number;
+  listingId: number;
+  buyerUserId: number;
+  sellerUserId: number;
+  agreedPrice: number;
+  status: string;
+  createdAt: string;
+  listingTitle: string;
+  listingSlug: string | null;
+  listingPhoto: string | null;
+}
+
+const DEAL_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  pending_completion: { label: "In Progress", color: "#f5a500" },
+  completed: { label: "Completed", color: "#00e676" },
+  buyer_backed_out: { label: "Buyer Backed Out", color: "#ef4444" },
+  seller_backed_out: { label: "Seller Backed Out", color: "#ef4444" },
+  buyer_no_show: { label: "Buyer No-Show", color: "#f97316" },
+  seller_no_show: { label: "Seller No-Show", color: "#f97316" },
+  mutual_cancellation: { label: "Cancelled", color: "#9ca3af" },
+};
+
+function MyDealsTab() {
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+
+  const { data: rawDeals, isLoading } = useQuery<DealSummary[]>({
+    queryKey: ["/api/marketplace/deals/my"],
+    queryFn: () => fetch("/api/marketplace/deals/my").then(r => r.json()),
+  });
+  const deals: DealSummary[] = Array.isArray(rawDeals) ? rawDeals : [];
+
+  if (isLoading) return <div className="space-y-3">{[1, 2].map(i => <div key={i} className="rounded-2xl bg-white/5 animate-pulse h-20" />)}</div>;
+  if (!deals.length) return (
+    <div className="text-center py-12 text-muted-foreground">
+      <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
+      <p className="text-sm font-display font-bold">No deals yet</p>
+      <p className="text-xs mt-1">Accepted offers will appear here with gated chat</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      {deals.map(deal => {
+        const isBuyer = user?.id === deal.buyerUserId;
+        const meta = DEAL_STATUS_LABELS[deal.status] || DEAL_STATUS_LABELS.pending_completion;
+        return (
+          <div key={deal.id}
+            className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer hover:bg-white/5 transition-all"
+            style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+            onClick={() => navigate(`/marketplace/deals/${deal.id}`)}
+            data-testid={`deal-card-${deal.id}`}>
+            <div className="w-14 h-14 rounded-xl overflow-hidden bg-muted/30 shrink-0">
+              {deal.listingPhoto
+                ? <img src={deal.listingPhoto} alt="" className="w-full h-full object-cover" />
+                : <Package className="w-6 h-6 text-muted-foreground m-auto mt-4" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold truncate">{deal.listingTitle}</p>
+              <p className="text-xs text-muted-foreground">
+                ${deal.agreedPrice.toLocaleString()} · {isBuyer ? "Buying" : "Selling"}
+              </p>
+            </div>
+            <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full shrink-0"
+              style={{ background: `${meta.color}15`, border: `1px solid ${meta.color}40`, color: meta.color }}>
+              {meta.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem) => void }) {
   const { data: rawListings, isLoading } = useQuery<MarketplaceItem[]>({
@@ -1093,7 +1290,7 @@ function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem)
 
 export default function Marketplace() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"browse" | "my">("browse");
+  const [tab, setTab] = useState<"browse" | "my" | "deals">("browse");
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -1149,7 +1346,7 @@ export default function Marketplace() {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
-          {[{ k: "browse", l: "Browse" }, { k: "my", l: "My Listings" }].map(({ k, l }) => (
+          {[{ k: "browse", l: "Browse" }, { k: "my", l: "My Listings" }, { k: "deals", l: "My Deals" }].map(({ k, l }) => (
             <button key={k} onClick={() => setTab(k as any)}
               className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
               style={tab === k
@@ -1163,6 +1360,8 @@ export default function Marketplace() {
 
         {tab === "my" ? (
           <MyListingsTab onSelectItem={setSelectedItem} />
+        ) : tab === "deals" ? (
+          <MyDealsTab />
         ) : (
           <>
             {/* Search */}

@@ -5417,9 +5417,15 @@ export async function registerRoutes(
       const listingId = parseInt(req.params.id);
       const item = await storage.getMarketplaceItem(listingId);
       if (!item) return res.status(404).json({ message: "Listing not found" });
-      if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
-      const offers = await storage.getMarketplaceOffersByListing(listingId);
-      res.json(offers);
+      const userId = req.session.userId!;
+      // Sellers see all offers; buyers see only their own
+      if (item.sellerId === userId) {
+        const offers = await storage.getMarketplaceOffersByListing(listingId);
+        return res.json(offers);
+      }
+      // Buyer: return their own offer only
+      const myOffer = await storage.getMarketplaceOfferByBuyer(listingId, userId);
+      return res.json(myOffer ? [myOffer] : []);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5441,17 +5447,32 @@ export async function registerRoutes(
 
       const { action, counterAmount } = req.body;
 
+      const currentCount = offer.offerActionCount || 1;
+
       if (isSeller) {
         if (action === "accept") {
           await storage.updateMarketplaceOffer(offerId, { status: "accepted", sellerRespondedAt: new Date() });
           await storage.updateMarketplaceItem(item.id, { status: "pending" });
+          // Auto-create deal and unlock chat
+          const deal = await storage.createMarketplaceDeal({
+            listingId: item.id,
+            offerId,
+            buyerUserId: offer.buyerUserId,
+            sellerUserId: item.sellerId,
+            agreedPrice: offer.offerAmount,
+            status: "pending_completion",
+          });
+          // Increment deal totals for both users
+          await storage.updateUser(item.sellerId, { mktDealsAsSellerTotal: (await storage.getUser(item.sellerId))!.mktDealsAsSellerTotal! + 1 });
+          await storage.updateUser(offer.buyerUserId, { mktDealsAsBuyerTotal: (await storage.getUser(offer.buyerUserId))!.mktDealsAsBuyerTotal! + 1 });
           await storage.createNotification({
             userId: offer.buyerUserId,
-            title: "Offer Accepted!",
-            body: `Your offer of $${offer.offerAmount} on "${item.title}" was accepted. Contact the seller to arrange the transaction.`,
+            title: "Offer Accepted — Deal Created",
+            body: `Your offer of $${offer.offerAmount.toLocaleString()} on "${item.title}" was accepted. In-app chat is now unlocked.`,
             type: "marketplace",
             jobId: null,
           });
+          return res.json({ offer: await storage.getMarketplaceOffer(offerId), deal });
         } else if (action === "decline") {
           await storage.updateMarketplaceOffer(offerId, { status: "declined", sellerRespondedAt: new Date() });
           await storage.createNotification({
@@ -5462,11 +5483,13 @@ export async function registerRoutes(
             jobId: null,
           });
         } else if (action === "counter" && counterAmount) {
-          const newCount = (offer.offerActionCount || 1) + 1;
+          if (currentCount >= 3) {
+            return res.status(400).json({ message: "Maximum counter offers reached. Only accept or decline is allowed." });
+          }
           await storage.updateMarketplaceOffer(offerId, {
             status: "countered",
             counterAmount,
-            offerActionCount: newCount,
+            offerActionCount: currentCount + 1,
             sellerRespondedAt: new Date(),
           });
           await storage.createNotification({
@@ -5481,10 +5504,40 @@ export async function registerRoutes(
         if (action === "accept_counter" && offer.status === "countered") {
           await storage.updateMarketplaceOffer(offerId, { status: "accepted", buyerRespondedAt: new Date() });
           await storage.updateMarketplaceItem(item.id, { status: "pending" });
+          // Auto-create deal and unlock chat
+          const agreedPrice = offer.counterAmount ?? offer.offerAmount;
+          const deal = await storage.createMarketplaceDeal({
+            listingId: item.id,
+            offerId,
+            buyerUserId: offer.buyerUserId,
+            sellerUserId: item.sellerId,
+            agreedPrice,
+            status: "pending_completion",
+          });
+          await storage.updateUser(item.sellerId, { mktDealsAsSellerTotal: (await storage.getUser(item.sellerId))!.mktDealsAsSellerTotal! + 1 });
+          await storage.updateUser(offer.buyerUserId, { mktDealsAsBuyerTotal: (await storage.getUser(offer.buyerUserId))!.mktDealsAsBuyerTotal! + 1 });
           await storage.createNotification({
             userId: item.sellerId,
-            title: "Counter Offer Accepted",
-            body: `Buyer accepted your counter offer of $${offer.counterAmount} on "${item.title}"`,
+            title: "Counter Offer Accepted — Deal Created",
+            body: `Buyer accepted your counter of $${agreedPrice.toLocaleString()} on "${item.title}". In-app chat is now unlocked.`,
+            type: "marketplace",
+            jobId: null,
+          });
+          return res.json({ offer: await storage.getMarketplaceOffer(offerId), deal });
+        } else if (action === "counter_back" && offer.status === "countered" && counterAmount) {
+          if (currentCount >= 3) {
+            return res.status(400).json({ message: "Maximum counter offers reached. Only accept or decline is allowed." });
+          }
+          await storage.updateMarketplaceOffer(offerId, {
+            status: "countered",
+            offerAmount: counterAmount,
+            offerActionCount: currentCount + 1,
+            buyerRespondedAt: new Date(),
+          });
+          await storage.createNotification({
+            userId: item.sellerId,
+            title: "Buyer Counter Offer",
+            body: `Buyer counter-offered $${counterAmount.toLocaleString()} on "${item.title}"`,
             type: "marketplace",
             jobId: null,
           });
@@ -5683,6 +5736,203 @@ export async function registerRoutes(
       if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
       const reports = await storage.getMarketplaceListingReports();
       res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Marketplace Deals ─────────────────────────────────────────────────────
+
+  app.get("/api/marketplace/deals/my", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const deals = await storage.getMarketplaceDealsByUser(userId);
+      // Enrich with listing title
+      const enriched = await Promise.all(deals.map(async (d) => {
+        const item = await storage.getMarketplaceItem(d.listingId);
+        return { ...d, listingTitle: item?.title || "Unknown listing", listingSlug: item?.publicSlug || null, listingPhoto: (item?.photos as string[])?.[0] || null };
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/marketplace/deals/:dealId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const userId = req.session.userId!;
+      const deal = await storage.getMarketplaceDeal(dealId);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      if (deal.buyerUserId !== userId && deal.sellerUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const item = await storage.getMarketplaceItem(deal.listingId);
+      const buyer = await storage.getUser(deal.buyerUserId);
+      const seller = await storage.getUser(deal.sellerUserId);
+      res.json({
+        ...deal,
+        listingTitle: item?.title || "Unknown listing",
+        listingSlug: item?.publicSlug || null,
+        listingPhoto: (item?.photos as string[])?.[0] || null,
+        listingCategory: item?.category || null,
+        buyerName: buyer ? `${buyer.firstName} ${buyer.lastName}`.trim() : "Buyer",
+        sellerName: seller ? `${seller.firstName} ${seller.lastName}`.trim() : "Seller",
+        buyerAvatarUrl: buyer?.avatarUrl || null,
+        sellerAvatarUrl: seller?.avatarUrl || null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Resolve deal with one of 6 outcomes
+  app.post("/api/marketplace/deals/:dealId/outcome", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const userId = req.session.userId!;
+      const deal = await storage.getMarketplaceDeal(dealId);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      if (deal.buyerUserId !== userId && deal.sellerUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      if (deal.status !== "pending_completion") {
+        return res.status(400).json({ message: "Deal is already resolved" });
+      }
+
+      const { outcome, note } = req.body;
+      const validOutcomes = ["completed", "buyer_backed_out", "seller_backed_out", "buyer_no_show", "seller_no_show", "mutual_cancellation"];
+      if (!validOutcomes.includes(outcome)) {
+        return res.status(400).json({ message: "Invalid outcome" });
+      }
+
+      const isSeller = deal.sellerUserId === userId;
+      const isBuyer = deal.buyerUserId === userId;
+
+      // Enforce who can report which outcome
+      if (outcome === "buyer_backed_out" && !isSeller) return res.status(403).json({ message: "Only seller can report buyer backout" });
+      if (outcome === "seller_backed_out" && !isBuyer) return res.status(403).json({ message: "Only buyer can report seller backout" });
+      if (outcome === "buyer_no_show" && !isSeller) return res.status(403).json({ message: "Only seller can report buyer no-show" });
+      if (outcome === "seller_no_show" && !isBuyer) return res.status(403).json({ message: "Only buyer can report seller no-show" });
+
+      await storage.updateMarketplaceDeal(dealId, {
+        status: outcome,
+        outcomeNote: note || null,
+        resolvedAt: new Date(),
+        resolvedBy: userId,
+      });
+
+      // Update reputation stats
+      const seller = await storage.getUser(deal.sellerUserId);
+      const buyer = await storage.getUser(deal.buyerUserId);
+      if (!seller || !buyer) return res.status(500).json({ message: "Users not found" });
+
+      if (outcome === "completed") {
+        await storage.updateUser(deal.sellerUserId, { mktCompletedSales: (seller.mktCompletedSales || 0) + 1 });
+        await storage.updateUser(deal.buyerUserId, { mktCompletedPurchases: (buyer.mktCompletedPurchases || 0) + 1 });
+        // Mark listing as sold
+        await storage.updateMarketplaceItem(deal.listingId, { status: "sold" });
+      } else if (outcome === "seller_backed_out") {
+        await storage.updateUser(deal.sellerUserId, { mktSellerBackouts: (seller.mktSellerBackouts || 0) + 1 });
+        await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
+      } else if (outcome === "buyer_backed_out") {
+        await storage.updateUser(deal.buyerUserId, { mktBuyerBackouts: (buyer.mktBuyerBackouts || 0) + 1 });
+        await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
+      } else if (outcome === "seller_no_show") {
+        await storage.updateUser(deal.sellerUserId, { mktSellerNoShows: (seller.mktSellerNoShows || 0) + 1 });
+        await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
+      } else if (outcome === "buyer_no_show") {
+        await storage.updateUser(deal.buyerUserId, { mktBuyerNoShows: (buyer.mktBuyerNoShows || 0) + 1 });
+        await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
+      } else if (outcome === "mutual_cancellation") {
+        await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
+      }
+
+      // Notify other party
+      const notifyUserId = isSeller ? deal.buyerUserId : deal.sellerUserId;
+      const outcomeLabels: Record<string, string> = {
+        completed: "marked as completed",
+        buyer_backed_out: "reported a buyer back-out",
+        seller_backed_out: "reported a seller back-out",
+        buyer_no_show: "reported a buyer no-show",
+        seller_no_show: "reported a seller no-show",
+        mutual_cancellation: "reported mutual cancellation",
+      };
+      await storage.createNotification({
+        userId: notifyUserId,
+        title: "Deal Outcome Recorded",
+        body: `The other party ${outcomeLabels[outcome]} on a deal.`,
+        type: "marketplace",
+        jobId: null,
+      });
+
+      res.json({ success: true, outcome });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Get deal messages (gated: deal must exist and user must be participant)
+  app.get("/api/marketplace/deals/:dealId/messages", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const userId = req.session.userId!;
+      const deal = await storage.getMarketplaceDeal(dealId);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      if (deal.buyerUserId !== userId && deal.sellerUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const messages = await storage.getDealMessages(dealId);
+      res.json(messages);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Post deal message — content filtered pre-deal is N/A here (chat IS post-deal); still filter PII
+  app.post("/api/marketplace/deals/:dealId/messages", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const userId = req.session.userId!;
+      const deal = await storage.getMarketplaceDeal(dealId);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      if (deal.buyerUserId !== userId && deal.sellerUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      if (!["pending_completion"].includes(deal.status || "")) {
+        return res.status(400).json({ message: "Chat is closed — deal has been resolved." });
+      }
+
+      const { message } = req.body;
+      if (!message || typeof message !== "string" || !message.trim()) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+      if (message.trim().length > 1000) {
+        return res.status(400).json({ message: "Message too long (max 1000 characters)" });
+      }
+
+      // Content filter: block external contact info to keep transactions on-platform
+      const PHONE_RE = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/;
+      const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+      const URL_RE = /https?:\/\/[^\s]+|www\.[^\s]+/i;
+      const SOCIAL_RE = /\b(instagram|snapchat|tiktok|facebook|twitter|fb\.me|ig:|sc:)\b/i;
+      if (PHONE_RE.test(message) || EMAIL_RE.test(message) || URL_RE.test(message) || SOCIAL_RE.test(message)) {
+        return res.status(400).json({ message: "Messages cannot contain phone numbers, email addresses, links, or social media handles. Use GUBER's in-app contact tools." });
+      }
+
+      const msg = await storage.createDealMessage({ dealId, senderUserId: userId, message: message.trim() });
+      res.json(msg);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Marketplace user stats (reputation)
+  app.get("/api/marketplace/users/:userId/stats", async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const stats = await storage.getUserMarketplaceStats(userId);
+      res.json(stats);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

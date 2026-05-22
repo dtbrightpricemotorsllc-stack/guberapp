@@ -53,6 +53,7 @@ const WorkerClipboard = lazy(() => import("@/pages/worker-clipboard"));
 const VIRequests = lazy(() => import("@/pages/vi-requests"));
 const Marketplace = lazy(() => import("@/pages/marketplace"));
 const MarketplaceListing = lazy(() => import("@/pages/marketplace-listing"));
+const MarketplaceDeal = lazy(() => import("@/pages/marketplace-deal"));
 const MapExplore = lazy(() => import("@/pages/map-explore"));
 const CashDropsList = lazy(() => import("@/pages/cash-drops-list"));
 const CashDropDetail = lazy(() => import("@/pages/cash-drop-detail"));
@@ -261,6 +262,7 @@ function Router() {
       <Route path="/worker-clipboard/:id" component={() => <ProtectedRoute component={WorkerClipboard} />} />
       <Route path="/vi-requests" component={() => <ProtectedRoute component={VIRequests} />} />
       <Route path="/marketplace" component={() => <ProtectedRoute component={Marketplace} />} />
+      <Route path="/marketplace/deals/:id" component={() => <ProtectedRoute component={MarketplaceDeal} />} />
       <Route path="/marketplace/p/:slug" component={() => <Suspense fallback={<PageLoader />}><MarketplaceListing /></Suspense>} />
       <Route path="/marketplace-preview" component={() => <Redirect to="/marketplace" />} />
       <Route path="/map" component={() => <ProtectedRoute component={MapExplore} />} />

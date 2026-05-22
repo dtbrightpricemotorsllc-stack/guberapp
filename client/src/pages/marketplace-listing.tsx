@@ -18,28 +18,69 @@ function JsonLd({ item, seoTitle, seoDescription, canonicalUrl }: {
   canonicalUrl: string;
 }) {
   const photos = item.photos as string[] | null;
-  const schema: Record<string, any> = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: item.title,
-    description: item.description || seoDescription,
-    url: canonicalUrl,
-    offers: {
-      "@type": "Offer",
-      availability: item.status === "available"
-        ? "https://schema.org/InStock"
-        : "https://schema.org/Discontinued",
-      priceCurrency: "USD",
-      ...(item.price ? { price: item.price.toFixed(2) } : {}),
-      seller: {
-        "@type": "Person",
-        name: item.sellerName || "GUBER Seller",
-      },
-    },
+  const details = (item.details as any) || {};
+  const cat = (item.category || "").toLowerCase();
+  const isVehicle = ["vehicles", "parts", "boats & marine", "trailers"].includes(cat);
+  const isProperty = ["property"].includes(cat);
+
+  const offerBlock = {
+    "@type": "Offer",
+    availability: item.status === "available"
+      ? "https://schema.org/InStock"
+      : "https://schema.org/Discontinued",
+    priceCurrency: "USD",
+    ...(item.price ? { price: item.price.toFixed(2) } : {}),
+    seller: { "@type": "Person", name: item.sellerName || "GUBER Seller" },
   };
-  if (item.brand) schema.brand = { "@type": "Brand", name: item.brand };
-  if (photos && photos.length > 0) schema.image = photos;
-  if (item.category) schema.category = item.category;
+
+  let schema: Record<string, any>;
+
+  if (isVehicle) {
+    schema = {
+      "@context": "https://schema.org",
+      "@type": "Vehicle",
+      name: item.title,
+      description: item.description || seoDescription,
+      url: canonicalUrl,
+      offers: offerBlock,
+      ...(item.brand ? { brand: { "@type": "Brand", name: item.brand } } : {}),
+      ...(item.model ? { model: item.model } : {}),
+      ...(item.year ? { vehicleModelDate: String(item.year) } : {}),
+      ...(item.condition ? { itemCondition: item.condition === "New" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition" } : {}),
+      ...(details.mileage ? { mileageFromOdometer: { "@type": "QuantitativeValue", value: details.mileage, unitCode: "SMI" } } : {}),
+      ...(details.vin ? { vehicleIdentificationNumber: details.vin } : {}),
+      ...(details.fuelType ? { fuelType: details.fuelType } : {}),
+      ...(details.transmission ? { vehicleTransmission: details.transmission } : {}),
+      ...(details.driveWheelConfig ? { driveWheelConfiguration: details.driveWheelConfig } : {}),
+      ...(photos && photos.length > 0 ? { image: photos } : {}),
+    };
+  } else if (isProperty) {
+    schema = {
+      "@context": "https://schema.org",
+      "@type": "RealEstateListing",
+      name: item.title,
+      description: item.description || seoDescription,
+      url: canonicalUrl,
+      offers: offerBlock,
+      ...(item.city && item.state ? { address: { "@type": "PostalAddress", addressLocality: item.city, addressRegion: item.state, addressCountry: "US" } } : {}),
+      ...(details.bedrooms ? { numberOfRooms: details.bedrooms } : {}),
+      ...(details.sqft ? { floorSize: { "@type": "QuantitativeValue", value: details.sqft, unitCode: "FTK" } } : {}),
+      ...(photos && photos.length > 0 ? { image: photos } : {}),
+    };
+  } else {
+    schema = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: item.title,
+      description: item.description || seoDescription,
+      url: canonicalUrl,
+      offers: offerBlock,
+      ...(item.brand ? { brand: { "@type": "Brand", name: item.brand } } : {}),
+      ...(photos && photos.length > 0 ? { image: photos } : {}),
+      ...(item.category ? { category: item.category } : {}),
+      ...(item.condition ? { itemCondition: item.condition === "New" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition" } : {}),
+    };
+  }
 
   return (
     <script
