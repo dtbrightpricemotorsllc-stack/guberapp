@@ -215,3 +215,9 @@ id = "ltwG12X2pGmA0y_R43tTN"
 uri = "file://investor-materials/GUBER-Investor-Deck.pptx"
 type = "slides"
 title = "GUBER Investor Deck (PPTX)"
+
+[[outputs]]
+id = "k6NCcZtf8kTN8FHQVKR2d"
+uri = "file://attached_assets/GUBER-Investor-Deck-22_1779161043698.pdf"
+type = "pdf"
+title = "GUBER Investor Deck (PDF)"
