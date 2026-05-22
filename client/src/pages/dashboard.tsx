@@ -14,7 +14,7 @@ import type { Job } from "@shared/schema";
 import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
-  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign,
+  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign, ShoppingBag,
 } from "lucide-react";
 import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
@@ -828,6 +828,26 @@ export default function Dashboard() {
             <HostDropCta testIdSuffix="work" />
           )}
         </div>
+
+        {/* ── Marketplace CTA ── */}
+        <Link href="/marketplace">
+          <div className="mb-4 rounded-2xl p-4 flex items-center gap-4 cursor-pointer animate-fade-in active:scale-[0.97] transition-all"
+            style={{
+              background: "linear-gradient(135deg,#0d2b1a,#0f3320,#0a2416)",
+              border: "1.5px solid rgba(0,229,118,0.22)",
+              boxShadow: "0 0 24px rgba(0,229,118,0.07)",
+            }}
+            data-testid="card-marketplace-cta">
+            <div className="p-2.5 rounded-xl shrink-0" style={{ background: "rgba(0,229,118,0.12)", border: "1px solid rgba(0,229,118,0.2)" }}>
+              <ShoppingBag className="w-5 h-5" style={{ color: "#00e676" }} strokeWidth={1.8} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-display font-bold text-white leading-tight">Marketplace <span className="text-[10px] font-normal opacity-60 ml-1">BETA</span></p>
+              <p className="text-[11px] text-white/50 mt-0.5">Buy, sell &amp; verify local items — free to list</p>
+            </div>
+            <ChevronRight className="w-4 h-4 shrink-0 opacity-40" />
+          </div>
+        </Link>
 
         {/* ── Nearby Jobs / Map ── */}
         <div className="mb-5 animate-fade-in stagger-3" data-testid="section-nearby-jobs">
