@@ -19563,6 +19563,20 @@ OUTPUT STYLE:
   app.post("/api/internal/cron/run", handleCronRun);
   app.get("/api/internal/cron/run", handleCronRun);
 
+  // ── Investor deck HTML (new 2026 deck) ────────────────────────────────────
+  app.get("/deck", async (req: Request, res: Response) => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    try {
+      const html = readFileSync(join(process.cwd(), "investor-materials/investor-deck.html"), "utf-8");
+      res.setHeader("Content-Type", "text/html");
+      res.setHeader("X-Robots-Tag", "noindex, nofollow");
+      res.send(html);
+    } catch {
+      res.status(404).send("Deck not found");
+    }
+  });
+
   // ── Investor deck PDF (server-side Playwright render) ────────────────────
   app.get("/api/investor/pdf", async (req: Request, res: Response) => {
     let browser: import("playwright").Browser | null = null;
