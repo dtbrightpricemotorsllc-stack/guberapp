@@ -669,12 +669,14 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
               URL.revokeObjectURL(url);
               try {
                 const data = await decodeVINFromNHTSA(raw);
+                const autoTitle = data ? `${data.year} ${data.make} ${data.model}`.trim() : "";
                 setForm((f: WizardForm) => ({ ...f, hasVin: "yes", vinDecoded: !!data, vinNumber: raw,
                   vehicleYear: data?.year || f.vehicleYear, vehicleMake: data?.make || f.vehicleMake,
                   vehicleModel: data?.model || f.vehicleModel, vehicleTrim: data?.trim || f.vehicleTrim,
                   bodyStyle: data?.bodyStyle || f.bodyStyle, engine: data?.engine || f.engine,
                   fuelType: data?.fuelType || f.fuelType, driveType: data?.driveType || f.driveType,
                   transmission: data?.transmission || f.transmission,
+                  title: f.title || autoTitle,
                 }));
                 toast({ title: data ? "VIN scanned & decoded!" : `VIN found: ${raw}`,
                   description: data ? `${data.year} ${data.make} ${data.model}` : "Enter details on next step." });
@@ -748,7 +750,8 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
                   try {
                     const data = await decodeVINFromNHTSA(vin);
                     if (data) {
-                      setForm((f: WizardForm) => ({ ...f, vinDecoded: true, vehicleYear: data.year || f.vehicleYear, vehicleMake: data.make || f.vehicleMake, vehicleModel: data.model || f.vehicleModel, vehicleTrim: data.trim || f.vehicleTrim, bodyStyle: data.bodyStyle || f.bodyStyle, engine: data.engine || f.engine, fuelType: data.fuelType || f.fuelType, driveType: data.driveType || f.driveType, transmission: data.transmission || f.transmission }));
+                      const autoTitle = `${data.year} ${data.make} ${data.model}`.trim();
+                      setForm((f: WizardForm) => ({ ...f, vinDecoded: true, vehicleYear: data.year || f.vehicleYear, vehicleMake: data.make || f.vehicleMake, vehicleModel: data.model || f.vehicleModel, vehicleTrim: data.trim || f.vehicleTrim, bodyStyle: data.bodyStyle || f.bodyStyle, engine: data.engine || f.engine, fuelType: data.fuelType || f.fuelType, driveType: data.driveType || f.driveType, transmission: data.transmission || f.transmission, title: f.title || autoTitle }));
                       toast({ title: "VIN decoded!", description: `${data.year} ${data.make} ${data.model}` });
                     } else { toast({ title: "VIN not found", description: "Fill in details on the next step.", variant: "destructive" }); }
                   } catch { toast({ title: "Decode failed", variant: "destructive" }); }
@@ -1804,6 +1807,20 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoMeta, setPhotoMeta] = useState<PhotoMeta[]>([]);
 
+  // Keep sheet within visual viewport so the action bar stays above the keyboard
+  const [sheetHeight, setSheetHeight] = useState<string>("94dvh");
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const pct = Math.round((vv.height / window.innerHeight) * 94);
+      setSheetHeight(`${Math.min(pct, 94)}dvh`);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
+  }, []);
+
   // Auto-populate city/state from user's zipcode on mount
   useEffect(() => {
     if (!user?.zipcode) return;
@@ -2044,7 +2061,7 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }}>
       <div className="w-full max-w-lg bg-[#0e0e0e] border border-white/8 rounded-t-3xl flex flex-col"
-        style={{ height: "94dvh", borderTop: "1.5px solid rgba(0,229,118,0.18)" }}
+        style={{ height: sheetHeight, borderTop: "1.5px solid rgba(0,229,118,0.18)" }}
         data-testid="modal-listing-wizard">
 
         {/* Header */}
