@@ -781,18 +781,9 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
 
       {/* ── SECTION 2: PHOTOS ─────────────────────────────────────── */}
       <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">PHOTOS ({photos.length}/10)</p>
-            <p className="text-[10px] text-gray-600 mt-0.5">Optional — live camera photos are trusted more by buyers</p>
-          </div>
-          {photos.length === 0 && (
-            <button type="button" onClick={onNext}
-              className="text-[11px] font-display font-bold text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
-              data-testid="button-skip-photos-inline">
-              Skip
-            </button>
-          )}
+        <div>
+          <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">PHOTOS ({photos.length}/10)</p>
+          <p className="text-[10px] text-gray-600 mt-0.5">At least 1 photo required — live camera photos are trusted more by buyers</p>
         </div>
 
         {/* Uploaded thumbnails */}
@@ -2036,6 +2027,10 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
     if (step === 4) {
       doSubmit();
     } else {
+      if (step === 2 && photos.length === 0) {
+        toast({ title: "At least 1 photo required", description: "Take a photo or upload from your gallery.", variant: "destructive" });
+        return;
+      }
       setStep(s => s + 1);
     }
   };
@@ -2106,7 +2101,6 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
                 {step === 4
                   ? (mutation.isPending ? "Posting…" : "POST LISTING — FREE")
                   : step === 3 ? "Next: Review →"
-                  : step === 2 && photos.length === 0 ? "Skip Photos →"
                   : "Next: Details →"}
               </button>
             </div>
