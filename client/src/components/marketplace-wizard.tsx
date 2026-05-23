@@ -847,11 +847,6 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
           </div>
         )}
 
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
-          onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
-        <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
-          onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
-
         {/* Barcode assist — non-vehicle, non-property */}
         {!isVehicle && form.category !== "Property" && (
           <button type="button" onClick={scanBarcode} disabled={scanningBarcode || uploading}
@@ -903,6 +898,10 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
       </div>
 
     </div>
+    <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+      onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
+    <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
+      onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
   );
 }
 
@@ -1807,19 +1806,6 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoMeta, setPhotoMeta] = useState<PhotoMeta[]>([]);
 
-  // Keep sheet within visual viewport so the action bar stays above the keyboard
-  const [sheetHeight, setSheetHeight] = useState<string>("94dvh");
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const pct = Math.round((vv.height / window.innerHeight) * 94);
-      setSheetHeight(`${Math.min(pct, 94)}dvh`);
-    };
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
-  }, []);
 
   // Auto-populate city/state from user's zipcode on mount
   useEffect(() => {
@@ -2061,7 +2047,7 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }}>
       <div className="w-full max-w-lg bg-[#0e0e0e] border border-white/8 rounded-t-3xl flex flex-col"
-        style={{ height: sheetHeight, borderTop: "1.5px solid rgba(0,229,118,0.18)" }}
+        style={{ height: "calc(94dvh - env(safe-area-inset-bottom, 48px))", marginBottom: "env(safe-area-inset-bottom, 48px)", borderTop: "1.5px solid rgba(0,229,118,0.18)" }}
         data-testid="modal-listing-wizard">
 
         {/* Header */}
