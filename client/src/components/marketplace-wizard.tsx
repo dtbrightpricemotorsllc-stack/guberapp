@@ -454,7 +454,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function CategoryStep({ form, setForm, onNext }: { form: WizardForm; setForm: any; onNext: () => void }) {
   return (
-    <div className="flex-1 overflow-y-auto p-4 pb-28">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-28">
       <div className="mb-5">
         <h2 className="text-xl font-display font-extrabold text-white">What are you listing?</h2>
         <p className="text-xs text-gray-400 mt-1">Tap a category to get started</p>
@@ -699,7 +699,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 pb-28">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Photos & Basics</h2>
         <p className="text-xs text-gray-400 mt-1">{form.category} · All fields optional — add what you have</p>
@@ -1601,7 +1601,7 @@ function DetailsStep({ form, setForm, onNext, onBack }: {
 }) {
   const cat = form.category;
   return (
-    <div className="flex-1 overflow-y-auto p-4 pb-28">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-28">
       <div className="mb-5">
         <h2 className="text-xl font-display font-extrabold text-white">{cat} Details</h2>
         <p className="text-xs text-gray-400 mt-1">Fill in what applies — more info means fewer back-and-forths</p>
@@ -1671,7 +1671,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
   ].filter(r => r.value && r.value.trim());
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5 pb-28">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5 pb-28">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Price & Location</h2>
         <p className="text-xs text-gray-400 mt-1">Almost done — review before posting</p>
