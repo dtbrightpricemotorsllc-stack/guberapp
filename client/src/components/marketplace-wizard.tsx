@@ -454,7 +454,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function CategoryStep({ form, setForm, onNext }: { form: WizardForm; setForm: any; onNext: () => void }) {
   return (
-    <div className="flex-1 overflow-y-auto p-4">
+    <div className="flex-1 overflow-y-auto p-4 pb-28">
       <div className="mb-5">
         <h2 className="text-xl font-display font-extrabold text-white">What are you listing?</h2>
         <p className="text-xs text-gray-400 mt-1">Tap a category to get started</p>
