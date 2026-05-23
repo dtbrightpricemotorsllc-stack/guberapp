@@ -699,6 +699,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
   };
 
   return (
+    <>
     <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 pb-28">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Photos & Basics</h2>
@@ -902,6 +903,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
       onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
     <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
       onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
+    </>
   );
 }
 
