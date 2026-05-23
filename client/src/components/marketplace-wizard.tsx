@@ -699,7 +699,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-6">
+    <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Photos & Basics</h2>
         <p className="text-xs text-gray-400 mt-1">{form.category} · All fields optional — add what you have</p>
