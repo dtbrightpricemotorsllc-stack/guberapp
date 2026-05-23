@@ -5385,12 +5385,8 @@ export async function registerRoutes(
         return res.json({ offer: filtered, filtered: true, message: "This offer is below the seller's acceptable range." });
       }
 
-      // Calculate expiry based on seller availability
-      let expiresAt: Date | null = null;
-      const now = new Date();
-      if (item.sellerAvailability === "available_now") expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      else if (item.sellerAvailability === "today") expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-      else if (item.sellerAvailability === "this_week") expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      // 20-minute response window per exchange
+      const expiresAt = new Date(Date.now() + 20 * 60 * 1000);
 
       const actionCount = existing ? (existing.offerActionCount || 0) + 1 : 1;
       const offer = await storage.createMarketplaceOffer({
@@ -5499,6 +5495,7 @@ export async function registerRoutes(
             counterAmount,
             offerActionCount: currentCount + 1,
             sellerRespondedAt: new Date(),
+            expiresAt: new Date(Date.now() + 20 * 60 * 1000),
           });
           await storage.createNotification({
             userId: offer.buyerUserId,
@@ -5541,6 +5538,7 @@ export async function registerRoutes(
             offerAmount: counterAmount,
             offerActionCount: currentCount + 1,
             buyerRespondedAt: new Date(),
+            expiresAt: new Date(Date.now() + 20 * 60 * 1000),
           });
           await storage.createNotification({
             userId: item.sellerId,
@@ -5744,6 +5742,100 @@ export async function registerRoutes(
       if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
       const reports = await storage.getMarketplaceListingReports();
       res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin: seed sample listings (idempotent — skip if samples already exist)
+  app.post("/api/admin/marketplace/seed-samples", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+
+      const existing = await storage.getAllMarketplaceItems();
+      const alreadySeeded = existing.filter((i: any) => i.isSample);
+      if (alreadySeeded.length >= 3) {
+        return res.json({ message: "Samples already seeded", count: alreadySeeded.length });
+      }
+
+      const adminId = user.id;
+      const samples = [
+        {
+          sellerId: adminId,
+          title: "2018 Honda Accord EX — Clean Title",
+          category: "Vehicles",
+          description: "One owner. Clean CarFax. Regular maintenance. AC works great. Minor scuff on rear bumper.",
+          price: 17500,
+          askingType: "obo",
+          condition: "Good",
+          conditionFlags: ["Runs & Drives"],
+          makeOfferEnabled: true,
+          photos: [] as string[],
+          city: "Los Angeles",
+          state: "CA",
+          zip: "90001",
+          locationApprox: "Los Angeles, CA",
+          status: "available",
+          sellerAvailability: "today",
+          titleStatus: "clean",
+          sellerType: "Private Seller",
+          year: "2018",
+          make: "Honda",
+          model: "Accord",
+          isSample: true,
+          minOfferThreshold: 15000,
+        },
+        {
+          sellerId: adminId,
+          title: "2BR/1BA Apartment — Near Downtown",
+          category: "Property",
+          description: "Bright 2-bed 1-bath unit. Hardwood floors, in-unit laundry hookups, parking included. No smoking. Small pets ok.",
+          price: 1850,
+          askingType: "firm",
+          condition: null,
+          conditionFlags: [] as string[],
+          makeOfferEnabled: false,
+          photos: [] as string[],
+          city: "Los Angeles",
+          state: "CA",
+          zip: "90001",
+          locationApprox: "Los Angeles, CA",
+          status: "available",
+          sellerAvailability: "this_week",
+          listingType: "rent",
+          listingSource: "Owner",
+          isSample: true,
+        },
+        {
+          sellerId: adminId,
+          title: "Milwaukee M18 Drill + Impact Driver Kit",
+          category: "Tools & Equipment",
+          description: "Barely used. Comes with 2 batteries, dual charger, and case. Selling because I upgraded to brushless set.",
+          price: 220,
+          askingType: "obo",
+          condition: "Like New",
+          conditionFlags: [] as string[],
+          makeOfferEnabled: true,
+          photos: [] as string[],
+          city: "Los Angeles",
+          state: "CA",
+          zip: "90001",
+          locationApprox: "Los Angeles, CA",
+          status: "available",
+          sellerAvailability: "available_now",
+          isSample: true,
+          minOfferThreshold: 180,
+        },
+      ];
+
+      let created = 0;
+      for (const sample of samples) {
+        await storage.createMarketplaceItem(sample as any);
+        created++;
+      }
+
+      res.json({ message: `${created} sample listings created`, created });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

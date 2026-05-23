@@ -62,6 +62,26 @@ function ChecklistTab() {
   );
 }
 
+function MarketplaceSeedCard() {
+  const { toast } = useToast();
+  const seed = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/marketplace/seed-samples").then((r: any) => r.json ? r.json() : r),
+    onSuccess: (d: any) => toast({ title: d.message || "Done", description: d.created ? `${d.created} listings created` : undefined }),
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  return (
+    <Card>
+      <CardHeader><CardTitle>Marketplace sample listings</CardTitle></CardHeader>
+      <CardContent className="space-y-2">
+        <div className="text-sm text-muted-foreground">Seeds 3 representative listings (Vehicle, Property, Tools) tagged SAMPLE / DELETE ME. Idempotent — skips if already seeded.</div>
+        <Button onClick={() => seed.mutate()} disabled={seed.isPending} data-testid="button-seed-samples">
+          {seed.isPending ? "Seeding…" : "Seed Sample Listings"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SandboxTab() {
   const { toast } = useToast();
   const personas = useQuery<any[]>({ queryKey: ["/api/admin/qa/sandbox/personas"] });
@@ -180,6 +200,8 @@ function SandboxTab() {
           </ul>
         </CardContent>
       </Card>
+
+      <MarketplaceSeedCard />
 
       <Card className="border-red-300">
         <CardHeader><CardTitle className="text-red-700">Reset sandbox data</CardTitle></CardHeader>

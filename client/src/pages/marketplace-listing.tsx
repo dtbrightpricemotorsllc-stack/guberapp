@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
 import type { MarketplaceItem } from "@shared/schema";
 
 function statusLabel(status: string | null | undefined) {
@@ -93,6 +95,8 @@ function JsonLd({ item, seoTitle, seoDescription, canonicalUrl }: {
 export default function MarketplaceListing() {
   const { slug } = useParams();
   const [, navigate] = useLocation();
+  const [photoIdx, setPhotoIdx] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const { data: item, isLoading, error } = useQuery<MarketplaceItem>({
     queryKey: ["/api/marketplace/slug", slug],
@@ -184,20 +188,51 @@ export default function MarketplaceListing() {
           )}
         </div>
 
-        {/* Photo */}
+        {/* Photo gallery */}
         {photos && photos.length > 0 ? (
-          <div className="relative h-64 sm:h-80 bg-black overflow-hidden">
-            <img src={photos[0]} alt={item.title} className="w-full h-full object-cover" />
+          <div className="relative h-64 sm:h-80 bg-black overflow-hidden cursor-pointer" onClick={() => setViewerOpen(true)} data-testid="photo-gallery-hero">
+            <img src={photos[photoIdx]} alt={item.title} className="w-full h-full object-cover" />
+            {/* Expand hint */}
+            <div className="absolute bottom-10 right-3 p-1 rounded-md bg-black/50 backdrop-blur-sm"
+              style={{ border: "1px solid rgba(255,255,255,0.15)" }}>
+              <Expand className="w-3.5 h-3.5 text-white/70" />
+            </div>
+            {/* Dot nav for multiple photos */}
             {photos.length > 1 && (
-              <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
-                +{photos.length - 1} more
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5" onClick={e => e.stopPropagation()}>
+                {photos.map((_, i) => (
+                  <button key={i} onClick={() => setPhotoIdx(i)}
+                    className={`rounded-full transition-all ${i === photoIdx ? "bg-white scale-125" : "bg-white/40"}`}
+                    style={{ width: i === photoIdx ? 16 : 6, height: 6 }}
+                    data-testid={`button-photo-dot-${i}`} />
+                ))}
               </div>
+            )}
+            {/* Prev / next arrows */}
+            {photos.length > 1 && (
+              <>
+                <button onClick={e => { e.stopPropagation(); setPhotoIdx(i => (i > 0 ? i - 1 : photos.length - 1)); }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)" }}
+                  data-testid="button-photo-prev">
+                  <ChevronLeft className="w-4 h-4 text-white" />
+                </button>
+                <button onClick={e => { e.stopPropagation(); setPhotoIdx(i => (i < photos.length - 1 ? i + 1 : 0)); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)" }}
+                  data-testid="button-photo-next">
+                  <ChevronRight className="w-4 h-4 text-white" />
+                </button>
+              </>
             )}
           </div>
         ) : (
           <div className="h-48 flex items-center justify-center bg-muted/20">
             <Package className="w-14 h-14 text-muted-foreground" />
           </div>
+        )}
+        {viewerOpen && photos && photos.length > 0 && (
+          <MarketplacePhotoViewer photos={photos} initialIndex={photoIdx} onClose={() => setViewerOpen(false)} />
         )}
 
         <div className="max-w-2xl mx-auto px-4 py-6">

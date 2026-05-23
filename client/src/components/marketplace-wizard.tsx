@@ -1975,7 +1975,9 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
                 data-testid={step === 4 ? "button-submit-listing" : "button-wizard-next"}>
                 {step === 4
                   ? (mutation.isPending ? "Posting…" : "POST LISTING — FREE")
-                  : (step === 3 ? "Next: Review →" : "Next: Details →")}
+                  : step === 3 ? "Next: Review →"
+                  : step === 2 && photos.length === 0 ? "Skip Photos →"
+                  : "Next: Details →"}
               </button>
             </div>
           </div>
