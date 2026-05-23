@@ -1808,6 +1808,26 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoMeta, setPhotoMeta] = useState<PhotoMeta[]>([]);
 
+  // Compute exact pixel offset so action bar always clears the OS nav bar
+  const [sheetStyle, setSheetStyle] = useState<React.CSSProperties>({ height: "94dvh", marginBottom: 0 });
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const update = () => {
+      const winH = window.innerHeight;
+      const vvH = vv ? vv.height : winH;
+      const vvTop = vv ? vv.offsetTop : 0;
+      const bottomGap = Math.max(winH - (vvTop + vvH), 0);   // nav bar overlay height
+      const sheetH = Math.round(vvH * 0.94);
+      setSheetStyle({ height: `${sheetH}px`, marginBottom: `${bottomGap}px` });
+    };
+    update();
+    if (vv) { vv.addEventListener("resize", update); vv.addEventListener("scroll", update); }
+    window.addEventListener("resize", update);
+    return () => {
+      if (vv) { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); }
+      window.removeEventListener("resize", update);
+    };
+  }, []);
 
   // Auto-populate city/state from user's zipcode on mount
   useEffect(() => {
@@ -2049,7 +2069,7 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }}>
       <div className="w-full max-w-lg bg-[#0e0e0e] border border-white/8 rounded-t-3xl flex flex-col"
-        style={{ height: "calc(94dvh - env(safe-area-inset-bottom, 48px))", marginBottom: "env(safe-area-inset-bottom, 48px)", borderTop: "1.5px solid rgba(0,229,118,0.18)" }}
+        style={{ ...sheetStyle, borderTop: "1.5px solid rgba(0,229,118,0.18)" }}
         data-testid="modal-listing-wizard">
 
         {/* Header */}
