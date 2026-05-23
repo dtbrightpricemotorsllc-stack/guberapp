@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
-import { lookupZip, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
+import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -5073,6 +5073,14 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  app.get("/api/zip-lookup", (req: Request, res: Response) => {
+    const rawZip = ((req.query.zip as string) || "").trim().replace(/-\d{4}$/, "").padStart(5, "0");
+    if (!/^\d{5}$/.test(rawZip)) return res.status(400).json({ message: "Invalid zip" });
+    const result = lookupZipCity(rawZip);
+    if (!result) return res.status(404).json({ message: "Not found" });
+    return res.json(result);
   });
 
   app.get("/api/marketplace", async (req: Request, res: Response) => {

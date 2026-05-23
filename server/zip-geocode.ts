@@ -96,6 +96,12 @@ export function lookupZip(zip: string): ZipCoords | null {
   return { latitude: result.latitude, longitude: result.longitude };
 }
 
+export function lookupZipCity(zip: string): { zip: string; city: string; state: string } | null {
+  const result = zipcodesLib.lookup(zip);
+  if (!result || !result.city || !result.state) return null;
+  return { zip, city: result.city, state: result.state };
+}
+
 function normalizeZip(zip: string): string | null {
   const raw = (zip || "").trim();
   const z = raw.replace(/-\d{4}$/, "").padStart(5, "0");

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -1683,6 +1683,20 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoMeta, setPhotoMeta] = useState<PhotoMeta[]>([]);
 
+  // Auto-populate city/state from user's zipcode on mount
+  useEffect(() => {
+    if (!user?.zipcode) return;
+    setForm(f => ({ ...f, zipcode: user.zipcode! }));
+    fetch(`/api/zip-lookup?zip=${encodeURIComponent(user.zipcode)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { city: string; state: string } | null) => {
+        if (data?.city && data?.state) {
+          setForm(f => ({ ...f, city: f.city || data.city, state: f.state || data.state }));
+        }
+      })
+      .catch(() => {});
+  }, [user?.zipcode]);
+
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/marketplace", data),
     onSuccess: () => {
@@ -1866,24 +1880,38 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
     }
   };
 
+  const doSubmit = async () => {
+    let city = form.city;
+    let state = form.state;
+    // If missing, try to resolve from zipcode first
+    if ((!city || !state) && form.zipcode) {
+      try {
+        const r = await fetch(`/api/zip-lookup?zip=${encodeURIComponent(form.zipcode)}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (data.city) { city = data.city; setForm(f => ({ ...f, city: data.city, state: data.state })); }
+          if (data.state) { state = data.state; }
+        }
+      } catch {}
+    }
+    if (!city || !state) {
+      toast({ title: "Location required", description: "Please enter your city and state on the Price & Location step.", variant: "destructive" });
+      setStep(4);
+      return;
+    }
+    mutation.mutate({ ...buildPayload(), city, state });
+  };
+
   const handleWizardNext = () => {
     if (step === 4) {
-      if (!form.city || !form.state) {
-        toast({ title: "Location required", description: "Please enter a city and state.", variant: "destructive" });
-        return;
-      }
-      mutation.mutate(buildPayload());
+      doSubmit();
     } else {
       setStep(s => s + 1);
     }
   };
 
   const handleSubmit = () => {
-    if (!form.city || !form.state) {
-      toast({ title: "Location required", description: "Please enter a city and state.", variant: "destructive" });
-      return;
-    }
-    mutation.mutate(buildPayload());
+    doSubmit();
   };
 
   const STEP_LABELS = ["Category", "Photos", "Details", "Price & Location"];
