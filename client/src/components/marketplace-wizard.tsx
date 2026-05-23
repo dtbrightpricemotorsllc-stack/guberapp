@@ -641,142 +641,272 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
   };
 
   const inProgress = Object.keys(uploadProgress).length > 0;
+  const isVehicle = form.category === "Vehicles";
+  const [vinScanning, setVinScanning] = useState(false);
+
+  const scanVinInline = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    (input as any).capture = "environment";
+    input.onchange = async (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      setVinScanning(true);
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = url;
+      await new Promise(r => { img.onload = r; });
+      let found = false;
+      try {
+        if ("BarcodeDetector" in window) {
+          const detector = new (window as any).BarcodeDetector({ formats: ["code_128", "qr_code", "data_matrix", "code_39", "code_93"] });
+          const codes: any[] = await detector.detect(img);
+          for (const code of codes) {
+            const raw = (code.rawValue as string).toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "");
+            if (/^[A-HJ-NPR-Z0-9]{17}$/.test(raw)) {
+              found = true;
+              URL.revokeObjectURL(url);
+              try {
+                const data = await decodeVINFromNHTSA(raw);
+                setForm((f: WizardForm) => ({ ...f, hasVin: "yes", vinDecoded: !!data, vinNumber: raw,
+                  vehicleYear: data?.year || f.vehicleYear, vehicleMake: data?.make || f.vehicleMake,
+                  vehicleModel: data?.model || f.vehicleModel, vehicleTrim: data?.trim || f.vehicleTrim,
+                  bodyStyle: data?.bodyStyle || f.bodyStyle, engine: data?.engine || f.engine,
+                  fuelType: data?.fuelType || f.fuelType, driveType: data?.driveType || f.driveType,
+                  transmission: data?.transmission || f.transmission,
+                }));
+                toast({ title: data ? "VIN scanned & decoded!" : `VIN found: ${raw}`,
+                  description: data ? `${data.year} ${data.make} ${data.model}` : "Enter details on next step." });
+              } catch { toast({ title: "VIN scan failed", variant: "destructive" }); }
+              break;
+            }
+          }
+        }
+      } catch {}
+      URL.revokeObjectURL(url);
+      setVinScanning(false);
+      if (!found) {
+        setForm((f: WizardForm) => ({ ...f, hasVin: "yes" }));
+        toast({ title: "No VIN barcode detected", description: "Enter your 17-digit VIN manually below.", variant: "destructive" });
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+    setTimeout(() => document.body.removeChild(input), 1000);
+  };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5 pb-28">
+    <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-6">
       <div>
         <h2 className="text-xl font-display font-extrabold text-white">Photos & Basics</h2>
-        <p className="text-xs text-gray-400 mt-1">{form.category} listing · Photos help buyers inspect before contacting</p>
+        <p className="text-xs text-gray-400 mt-1">{form.category} · All fields optional — add what you have</p>
       </div>
 
-      {/* Photo thumbnails */}
-      {photos.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {photos.map((p, i) => (
-            <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden group"
-              data-testid={`img-listing-photo-${i}`}>
-              <img src={p} alt="" className="w-full h-full object-cover" />
-              {photoMeta[i] && (
-                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-0.5"
-                  style={{ background: "rgba(0,0,0,0.65)" }}>
-                  <span className="text-[9px] font-bold" style={{ color: photoMeta[i].isLive ? "#00e676" : "#f59e0b" }}>
-                    {photoMeta[i].isLive ? "📷 LIVE" : "🖼 UPLOAD"}
-                  </span>
-                </div>
-              )}
-              <button type="button"
-                onClick={() => {
-                  setPhotos(photos.filter((_, j) => j !== i));
-                  setPhotoMeta(photoMeta.filter((_, j) => j !== i));
-                }}
-                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-                data-testid={`button-remove-photo-${i}`}>
-                <X className="w-3 h-3 text-white" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Upload progress */}
-      {inProgress && (
-        <div className="space-y-1">
-          {Object.entries(uploadProgress).map(([k, pct]) => (
-            <div key={k} className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#00e676" }} />
-            </div>
-          ))}
-          <p className="text-[10px] text-gray-400">{uploading ? "Uploading…" : "Processing…"}</p>
-        </div>
-      )}
-
-      {/* Photo action buttons */}
-      {photos.length < 10 && !inProgress && (
-        <div className="space-y-2">
-          <p className="text-[11px] font-bold text-gray-500 tracking-wider">ADD PHOTOS ({photos.length}/10)</p>
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Take Photo — camera, GPS + timestamp tracked */}
-            <button type="button"
-              onClick={() => cameraRef.current?.click()}
-              disabled={uploading}
-              className="flex flex-col items-center gap-2 py-5 rounded-2xl transition-all active:scale-[0.97] disabled:opacity-50"
-              style={{ background: "rgba(0,229,118,0.07)", border: "1.5px solid rgba(0,229,118,0.2)" }}
-              data-testid="button-take-photo">
-              <Camera className="w-7 h-7 text-primary" />
-              <span className="text-xs font-display font-bold text-primary">Take Photo</span>
-              <span className="text-[10px] text-gray-500 text-center leading-tight">GPS + timestamp<br />captured automatically</span>
-            </button>
-
-            {/* Upload from Gallery */}
-            <button type="button"
-              onClick={() => galleryRef.current?.click()}
-              disabled={uploading}
-              className="flex flex-col items-center gap-2 py-5 rounded-2xl transition-all active:scale-[0.97] disabled:opacity-50"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
-              data-testid="button-upload-gallery">
-              <ImagePlus className="w-7 h-7 text-gray-400" />
-              <span className="text-xs font-display font-bold text-gray-300">From Gallery</span>
-              <span className="text-[10px] text-gray-500 text-center leading-tight">Up to {10 - photos.length} photos<br />Max 25 MB each</span>
-            </button>
+      {/* ── SECTION 1: VIN (Vehicles only, first) ─────────────────── */}
+      {isVehicle && (
+        <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+          <div>
+            <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">VIN LOOKUP</p>
+            <p className="text-[10px] text-gray-600 mt-0.5">Scan or enter to auto-fill year, make, model, trim & more</p>
           </div>
 
-          {/* Hidden file inputs */}
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
-            onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
-          <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
-            onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
-
-          {/* Barcode item assist — non-vehicle only */}
-          {form.category !== "Vehicles" && form.category !== "Property" && (
-            <button type="button" onClick={scanBarcode} disabled={scanningBarcode || uploading}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
-              style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}
-              data-testid="button-scan-barcode">
-              {scanningBarcode
-                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Looking up item…</>
-                : <><ScanLine className="w-4 h-4" /> Scan Barcode — Auto-Fill Item Details</>}
-            </button>
+          {!form.hasVin ? (
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={scanVinInline} disabled={vinScanning || uploading}
+                className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-60"
+                style={{ background: "rgba(0,229,118,0.07)", border: "1.5px solid rgba(0,229,118,0.2)" }}
+                data-testid="button-vin-scan-photo">
+                {vinScanning ? <RefreshCw className="w-5 h-5 text-primary animate-spin" /> : <ScanLine className="w-5 h-5 text-primary" />}
+                <span className="text-[10px] font-display font-bold text-primary">{vinScanning ? "Scanning…" : "Scan VIN"}</span>
+              </button>
+              <button type="button" onClick={() => setForm((f: WizardForm) => ({ ...f, hasVin: "yes" }))}
+                className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)" }}
+                data-testid="button-vin-enter-photo">
+                <Edit3 className="w-5 h-5 text-gray-300" />
+                <span className="text-[10px] font-display font-bold text-gray-300">Enter VIN</span>
+              </button>
+              <button type="button" onClick={() => setForm((f: WizardForm) => ({ ...f, hasVin: "no" }))}
+                className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                data-testid="button-vin-skip-photo">
+                <SkipForward className="w-5 h-5 text-gray-500" />
+                <span className="text-[10px] font-display font-bold text-gray-500">No VIN</span>
+              </button>
+            </div>
+          ) : form.hasVin === "yes" ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input className={`${ic} flex-1 font-mono uppercase`} placeholder="17-char VIN"
+                  value={form.vinNumber || ""} maxLength={17}
+                  onChange={e => setForm((f: WizardForm) => ({ ...f, vinNumber: e.target.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "") }))}
+                  data-testid="input-vin-number-photo" />
+                <button type="button" onClick={async () => {
+                  const vin = (form.vinNumber || "").toUpperCase().trim();
+                  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { toast({ title: "Invalid VIN", description: "17 characters required", variant: "destructive" }); return; }
+                  try {
+                    const data = await decodeVINFromNHTSA(vin);
+                    if (data) {
+                      setForm((f: WizardForm) => ({ ...f, vinDecoded: true, vehicleYear: data.year || f.vehicleYear, vehicleMake: data.make || f.vehicleMake, vehicleModel: data.model || f.vehicleModel, vehicleTrim: data.trim || f.vehicleTrim, bodyStyle: data.bodyStyle || f.bodyStyle, engine: data.engine || f.engine, fuelType: data.fuelType || f.fuelType, driveType: data.driveType || f.driveType, transmission: data.transmission || f.transmission }));
+                      toast({ title: "VIN decoded!", description: `${data.year} ${data.make} ${data.model}` });
+                    } else { toast({ title: "VIN not found", description: "Fill in details on the next step.", variant: "destructive" }); }
+                  } catch { toast({ title: "Decode failed", variant: "destructive" }); }
+                }}
+                  className="px-3 py-2.5 rounded-xl text-xs font-display font-bold transition-all active:scale-95"
+                  style={{ background: "rgba(0,229,118,0.12)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e676" }}
+                  data-testid="button-decode-vin-photo">
+                  Decode
+                </button>
+              </div>
+              {form.vinDecoded && (
+                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                  <Check className="w-3 h-3" /> Decoded — details pre-filled on next step
+                </div>
+              )}
+              <button type="button" onClick={() => setForm((f: WizardForm) => ({ ...f, hasVin: undefined, vinNumber: "", vinDecoded: false }))}
+                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors" data-testid="button-vin-reset">
+                ← Clear VIN
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500">Skipped — fill in details manually on next step</span>
+              <button type="button" onClick={() => setForm((f: WizardForm) => ({ ...f, hasVin: undefined }))}
+                className="text-[10px] text-gray-400 hover:text-white" data-testid="button-vin-undo-skip">Undo</button>
+            </div>
           )}
         </div>
       )}
 
-      {/* Photo trust badge */}
-      {photos.length > 0 && (
-        <div className="flex items-start gap-2 p-2.5 rounded-xl text-[10px] text-gray-500 leading-relaxed"
-          style={{ background: "rgba(0,229,118,0.04)", border: "1px solid rgba(0,229,118,0.1)" }}>
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-          <span>Live camera photos with GPS are trusted more by buyers. Uploaded photos are flagged for AI screening.</span>
+      {/* ── SECTION 2: PHOTOS ─────────────────────────────────────── */}
+      <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">PHOTOS ({photos.length}/10)</p>
+            <p className="text-[10px] text-gray-600 mt-0.5">Optional — live camera photos are trusted more by buyers</p>
+          </div>
+          {photos.length === 0 && (
+            <button type="button" onClick={onNext}
+              className="text-[11px] font-display font-bold text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+              data-testid="button-skip-photos-inline">
+              Skip
+            </button>
+          )}
         </div>
-      )}
 
-      {/* Title */}
-      <div>
-        <FL optional>TITLE</FL>
-        <input className={ic}
-          placeholder={`e.g. ${form.category === "Vehicles" ? "2019 Honda Accord Sport – 82k miles" : form.category === "Property" ? "3 BR House – Mobile, AL" : "Item title"}`}
-          value={form.title} onChange={e => onTitleChange(e.target.value)}
-          data-testid="input-listing-title" />
-        {form.category === "Vehicles" && <p className="text-[10px] text-gray-500 mt-1">Title auto-generates from VIN in the next step</p>}
+        {/* Uploaded thumbnails */}
+        {photos.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {photos.map((p, i) => (
+              <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden group" data-testid={`img-listing-photo-${i}`}>
+                <img src={p} alt="" className="w-full h-full object-cover" />
+                {photoMeta[i] && (
+                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-0.5" style={{ background: "rgba(0,0,0,0.65)" }}>
+                    <span className="text-[9px] font-bold" style={{ color: photoMeta[i].isLive ? "#00e676" : "#f59e0b" }}>
+                      {photoMeta[i].isLive ? "📷 LIVE" : "🖼 UPLOAD"}
+                    </span>
+                  </div>
+                )}
+                <button type="button"
+                  onClick={() => { setPhotos(photos.filter((_, j) => j !== i)); setPhotoMeta(photoMeta.filter((_, j) => j !== i)); }}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+                  data-testid={`button-remove-photo-${i}`}>
+                  <X className="w-3 h-3 text-white" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Upload progress */}
+        {inProgress && (
+          <div className="space-y-1">
+            {Object.entries(uploadProgress).map(([k, pct]) => (
+              <div key={k} className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#00e676" }} />
+              </div>
+            ))}
+            <p className="text-[10px] text-gray-400">{uploading ? "Uploading…" : "Processing…"}</p>
+          </div>
+        )}
+
+        {/* Add photo buttons */}
+        {photos.length < 10 && !inProgress && (
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => cameraRef.current?.click()} disabled={uploading}
+              className="flex flex-col items-center gap-2 py-4 rounded-xl transition-all active:scale-[0.97] disabled:opacity-50"
+              style={{ background: "rgba(0,229,118,0.07)", border: "1.5px solid rgba(0,229,118,0.2)" }}
+              data-testid="button-take-photo">
+              <Camera className="w-6 h-6 text-primary" />
+              <span className="text-xs font-display font-bold text-primary">Take Photo</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">GPS + timestamp</span>
+            </button>
+            <button type="button" onClick={() => galleryRef.current?.click()} disabled={uploading}
+              className="flex flex-col items-center gap-2 py-4 rounded-xl transition-all active:scale-[0.97] disabled:opacity-50"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+              data-testid="button-upload-gallery">
+              <ImagePlus className="w-6 h-6 text-gray-400" />
+              <span className="text-xs font-display font-bold text-gray-300">From Gallery</span>
+              <span className="text-[10px] text-gray-500 text-center leading-tight">Up to {10 - photos.length} · 25 MB max</span>
+            </button>
+          </div>
+        )}
+
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+          onChange={e => e.target.files && handleFiles(e.target.files, "camera")} />
+        <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
+          onChange={e => e.target.files && handleFiles(e.target.files, "gallery")} />
+
+        {/* Barcode assist — non-vehicle, non-property */}
+        {!isVehicle && form.category !== "Property" && (
+          <button type="button" onClick={scanBarcode} disabled={scanningBarcode || uploading}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
+            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}
+            data-testid="button-scan-barcode">
+            {scanningBarcode ? <><RefreshCw className="w-4 h-4 animate-spin" /> Looking up item…</> : <><ScanLine className="w-4 h-4" /> Scan Barcode — Auto-Fill Details</>}
+          </button>
+        )}
+
+        {photos.length > 0 && (
+          <div className="flex items-start gap-2 p-2.5 rounded-xl text-[10px] text-gray-500 leading-relaxed"
+            style={{ background: "rgba(0,229,118,0.04)", border: "1px solid rgba(0,229,118,0.1)" }}>
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+            <span>Live camera photos with GPS are trusted more by buyers. Uploaded photos are flagged for AI screening.</span>
+          </div>
+        )}
       </div>
 
-      {/* Description — special notes only */}
-      <div>
-        <FL optional>SPECIAL NOTES</FL>
-        <p className="text-[10px] text-gray-600 mb-1.5">For extra context only — major details belong in the structured fields on the next screen</p>
-        <textarea className={`${ic} resize-none`} rows={2}
-          placeholder="Any known issues, what's included, pickup notes…"
-          value={form.description} onChange={e => onDescChange(e.target.value)}
-          data-testid="textarea-listing-description" />
-      </div>
+      {/* ── SECTION 3: TITLE & NOTES ──────────────────────────────── */}
+      <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+        <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">LISTING BASICS</p>
 
-      {/* Contact info warning */}
-      {contactWarn && (
-        <div className="flex items-start gap-2 p-3 rounded-xl text-xs"
-          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}>
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{contactWarn}</span>
+        <div>
+          <FL optional>TITLE</FL>
+          <input className={ic}
+            placeholder={isVehicle ? "e.g. 2019 Honda Accord Sport – 82k miles" : form.category === "Property" ? "e.g. 3 BR House – Mobile, AL" : "e.g. Item title"}
+            value={form.title} onChange={e => onTitleChange(e.target.value)}
+            data-testid="input-listing-title" />
+          {isVehicle && <p className="text-[10px] text-gray-500 mt-1">Auto-fills from VIN decode above</p>}
         </div>
-      )}
+
+        <div>
+          <FL optional>SPECIAL NOTES</FL>
+          <p className="text-[10px] text-gray-600 mb-1.5">Known issues, what's included, pickup notes — major details go on the next screen</p>
+          <textarea className={`${ic} resize-none`} rows={2}
+            placeholder="Any extra context for buyers…"
+            value={form.description} onChange={e => onDescChange(e.target.value)}
+            data-testid="textarea-listing-description" />
+        </div>
+
+        {contactWarn && (
+          <div className="flex items-start gap-2 p-3 rounded-xl text-xs"
+            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}>
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{contactWarn}</span>
+          </div>
+        )}
+      </div>
 
     </div>
   );
