@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check, ScanSearch, Pencil, Trash2, Lock, ExternalLink, AlertTriangle } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check, ScanSearch, Pencil, Trash2, Lock, ExternalLink, AlertTriangle, Star } from "lucide-react";
 import { InfoHint } from "@/components/info-hint";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -184,6 +184,15 @@ export default function MarketplaceListing() {
       navigate("/marketplace");
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // Seller reputation — always fetch for non-seller buyers
+  const sellerId = (item as any)?.sellerId;
+  const { data: sellerStats } = useQuery<any>({
+    queryKey: ["/api/marketplace/users", sellerId, "stats"],
+    queryFn: () => fetch(`/api/marketplace/users/${sellerId}/stats`).then(r => r.json()),
+    enabled: !!sellerId && !isMySelling,
+    staleTime: 60_000,
   });
 
   const boDetailsMutation = useMutation({
@@ -698,15 +707,48 @@ export default function MarketplaceListing() {
 
           {/* Seller */}
           <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-1">SELLER</p>
-            <p className="text-sm font-bold">{item.sellerName || "GUBER Seller"}</p>
-            {item.sellerAvailability && (
-              <p className="text-xs text-muted-foreground mt-0.5 flex items-center">
-                {item.sellerAvailability === "available_now" ? "Available Now" :
-                  item.sellerAvailability === "today" ? "Available Today" :
-                    item.sellerAvailability === "this_week" ? "Available This Week" : "By Appointment"}
-                {item.sellerAvailability === "available_now" && <InfoHint title="Available Now" description="Seller indicates they are currently available to respond or coordinate." />}
-              </p>
+            <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-2">SELLER</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold truncate">{item.sellerName || "GUBER Seller"}</p>
+                {item.sellerAvailability && (
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.sellerAvailability === "available_now" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                    {item.sellerAvailability === "available_now" ? "Available Now" :
+                      item.sellerAvailability === "today" ? "Available Today" :
+                        item.sellerAvailability === "this_week" ? "Available This Week" : "By Appointment"}
+                    {item.sellerAvailability === "available_now" && <InfoHint title="Available Now" description="Seller indicates they are currently available to respond or coordinate." />}
+                  </p>
+                )}
+              </div>
+              {/* Star rating badge */}
+              {sellerStats && sellerStats.sellerRating !== null && (
+                <div className="flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-lg" style={{ background: "rgba(245,165,0,0.1)", border: "1px solid rgba(245,165,0,0.25)" }}>
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span className="text-xs font-display font-bold text-amber-400">{sellerStats.sellerRating.toFixed(1)}</span>
+                  <span className="text-[10px] text-muted-foreground">({sellerStats.sellerRatingCount})</span>
+                </div>
+              )}
+            </div>
+            {/* Track record stats — shown to buyers once seller has activity */}
+            {sellerStats && sellerStats.completedSales > 0 && (
+              <div className="mt-3 pt-3 border-t border-white/6 flex flex-wrap gap-x-4 gap-y-1.5">
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span><strong className="text-foreground">{sellerStats.completedSales}</strong> completed sale{sellerStats.completedSales !== 1 ? "s" : ""}</span>
+                </span>
+                {sellerStats.verifiedSales > 0 && (
+                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                    <span><strong className="text-foreground">{sellerStats.verifiedSales}</strong> verified</span>
+                  </span>
+                )}
+                {sellerStats.totalAsSellerDeals > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    <strong className="text-foreground">{sellerStats.sellerCompletionRate}%</strong> completion rate
+                  </span>
+                )}
+              </div>
             )}
           </div>
 

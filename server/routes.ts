@@ -6809,7 +6809,12 @@ export async function registerRoutes(
       if (!seller || !buyer) return res.status(500).json({ message: "Users not found" });
 
       if (outcome === "completed") {
-        await storage.updateUser(deal.sellerUserId, { mktCompletedSales: (seller.mktCompletedSales || 0) + 1 });
+        const listingForOutcome = await storage.getMarketplaceItem(deal.listingId);
+        const verifiedBonus = listingForOutcome?.guberVerified ? 1 : 0;
+        await storage.updateUser(deal.sellerUserId, {
+          mktCompletedSales: (seller.mktCompletedSales || 0) + 1,
+          mktVerifiedSales: (seller.mktVerifiedSales || 0) + verifiedBonus,
+        });
         await storage.updateUser(deal.buyerUserId, { mktCompletedPurchases: (buyer.mktCompletedPurchases || 0) + 1 });
         // Mark listing as sold
         await storage.updateMarketplaceItem(deal.listingId, { status: "sold" });
