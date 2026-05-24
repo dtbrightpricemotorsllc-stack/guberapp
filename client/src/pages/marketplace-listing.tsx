@@ -1,10 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText } from "lucide-react";
 import { InfoHint } from "@/components/info-hint";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
+import { useAuth } from "@/lib/auth-context";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { isStoreBuild } from "@/lib/platform";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import type { MarketplaceItem } from "@shared/schema";
 
 function statusLabel(status: string | null | undefined) {
@@ -98,6 +103,17 @@ export default function MarketplaceListing() {
   const [, navigate] = useLocation();
   const [photoIdx, setPhotoIdx] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [buyerOrderSessionId, setBuyerOrderSessionId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("buyer_order") === "paid" && params.get("session_id")) {
+      setBuyerOrderSessionId(params.get("session_id"));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const { data: item, isLoading, error } = useQuery<MarketplaceItem>({
     queryKey: ["/api/marketplace/slug", slug],
@@ -149,6 +165,22 @@ export default function MarketplaceListing() {
     : "Contact for price";
 
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
+  const hasVin = !!item.vinNumber;
+
+  const buyerOrderMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/marketplace/${item.id}/buyer-order/checkout`, { slug: item.publicSlug || slug }),
+    onSuccess: (data: any) => {
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Could not start checkout", variant: "destructive" });
+    },
+  });
+
+  const handleBuyerOrderClick = () => {
+    if (!user) { navigate("/auth"); return; }
+    buyerOrderMutation.mutate();
+  };
 
   return (
     <>
@@ -303,6 +335,94 @@ export default function MarketplaceListing() {
             <div className="mb-6">
               <h2 className="text-sm font-display font-bold text-muted-foreground tracking-wider mb-3">DESCRIPTION</h2>
               <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{item.description}</p>
+            </div>
+          )}
+
+          {/* ── Buyer's Order ── */}
+          {hasVin && (
+            <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(0,180,80,0.05)", border: "1px solid rgba(0,180,80,0.18)" }} data-testid="section-buyer-order">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-sm font-display font-bold text-primary">Buyer's Order</span>
+                <InfoHint
+                  title="What is a Buyer's Order?"
+                  description="A Buyer's Order is a downloadable PDF of this vehicle listing's key information — formatted for sharing with banks, credit unions, or insurance providers."
+                  bullets={[
+                    "Email to your bank or credit union",
+                    "Check insurance quotes",
+                    "Share with a spouse or co-buyer",
+                    "Print and review before meeting the seller",
+                  ]}
+                  warning="This is NOT financing, loan approval, a purchase contract, inspection report, or vehicle history report. It is listing information only."
+                />
+              </div>
+
+              {buyerOrderSessionId ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Buyer's Order is ready.</p>
+                  <a
+                    href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`}
+                    download
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black transition-colors"
+                    style={{ background: "#00e676" }}
+                    data-testid="button-download-buyer-order"
+                  >
+                    <Download className="w-4 h-4" /> Download Buyer's Order PDF
+                  </a>
+                  <p className="text-[10px] text-muted-foreground text-center">Save the link above — you can re-download anytime using the same page URL.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Get a clean PDF of this vehicle's information to share with your bank, insurer, or partner.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    VIN: <span className="font-mono font-bold text-foreground/60 tracking-widest">
+                      {(item.vinNumber || "").slice(0, -4).replace(/./g, "•")}{(item.vinNumber || "").slice(-4)}
+                    </span>
+                    <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full VIN included in PDF)</span>
+                  </p>
+                  {isStoreBuild ? (
+                    <ExternalPurchaseSheet
+                      product="marketplace_buyer_order"
+                      options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}
+                    >
+                      {({ onPress, loading }) => (
+                        <Button
+                          className="w-full font-display text-sm gap-2"
+                          style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                          onClick={() => { if (!user) { navigate("/auth"); return; } onPress(); }}
+                          disabled={loading}
+                          data-testid="button-get-buyer-order"
+                        >
+                          {loading ? (
+                            <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Opening checkout…</span>
+                          ) : (
+                            <><Download className="w-4 h-4" /> Download Buyer's Order — $1.00</>
+                          )}
+                        </Button>
+                      )}
+                    </ExternalPurchaseSheet>
+                  ) : (
+                    <Button
+                      className="w-full font-display text-sm gap-2"
+                      style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                      onClick={handleBuyerOrderClick}
+                      disabled={buyerOrderMutation.isPending}
+                      data-testid="button-get-buyer-order"
+                    >
+                      {buyerOrderMutation.isPending ? (
+                        <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Opening checkout…</span>
+                      ) : (
+                        <><Download className="w-4 h-4" /> Download Buyer's Order — $1.00</>
+                      )}
+                    </Button>
+                  )}
+                  {!user && (
+                    <p className="text-[10px] text-muted-foreground text-center">Sign in required to purchase</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

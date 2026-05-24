@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import PDFDocument from "pdfkit";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
@@ -5304,6 +5305,193 @@ export async function registerRoutes(
       res.json({ checkoutUrl: session.url });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Buyer Order: $1 Stripe checkout ──────────────────────────────────────
+  app.post("/api/marketplace/:id/buyer-order/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const itemId = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(itemId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (!item.vinNumber) return res.status(400).json({ message: "This listing does not have a VIN" });
+
+      const { slug } = req.body as { slug?: string };
+      const host = req.get("host") || "localhost:5000";
+      const protocol = req.get("x-forwarded-proto") || "http";
+      const baseUrl = `${protocol}://${host}`;
+      const returnPath = slug ? `/marketplace/p/${slug}` : `/marketplace/${itemId}`;
+
+      const session = await stripeMain.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "GUBER Buyer's Order PDF",
+              description: `Vehicle listing info sheet for: ${item.title}`,
+            },
+            unit_amount: 100,
+          },
+          quantity: 1,
+        }],
+        mode: "payment",
+        success_url: `${baseUrl}${returnPath}?buyer_order=paid&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}${returnPath}`,
+        metadata: {
+          type: "marketplace_buyer_order",
+          itemId: String(itemId),
+          userId: String(req.session.userId),
+        },
+      });
+
+      res.json({ checkoutUrl: session.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Buyer Order: PDF generation (verify session, stream PDF) ─────────────
+  app.get("/api/marketplace/:id/buyer-order/pdf", async (req: Request, res: Response) => {
+    try {
+      const itemId = parseInt(req.params.id);
+      const sessionId = req.query.session_id as string;
+      if (!sessionId) return res.status(400).json({ message: "Missing session_id" });
+
+      const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
+      if (stripeSession.payment_status !== "paid") return res.status(402).json({ message: "Payment not completed" });
+      const meta = stripeSession.metadata || {};
+      if (String(meta.itemId) !== String(itemId) || meta.type !== "marketplace_buyer_order") {
+        return res.status(403).json({ message: "Session does not match this listing" });
+      }
+
+      const item = await storage.getMarketplaceItem(itemId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+
+      const details = (item.details as Record<string, any>) || {};
+      const sellerTypeLabel = item.sellerType === "dealer" ? "Dealer" : "Private Seller";
+      const vinDisplay = item.vinNumber || "Not provided";
+      const mileage = item.vehicleMileage ? `${item.vehicleMileage.toLocaleString()} miles` : "Not provided";
+      const priceDisplay = item.price ? `$${item.price.toLocaleString()}` : item.askingType === "free" ? "Free" : "Contact for price";
+      const generatedDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="guber-buyer-order-${itemId}.pdf"`);
+
+      const doc = new PDFDocument({ size: "LETTER", margin: 55, bufferPages: true });
+      doc.pipe(res);
+
+      const GREEN = "#00b050";
+      const DARK = "#111111";
+      const GRAY = "#555555";
+      const LIGHT_GRAY = "#888888";
+      const LINE_COLOR = "#dddddd";
+      const BG_LIGHT = "#f7f7f7";
+
+      const pageW = doc.page.width - 110;
+
+      // ── Header bar ────────────────────────────────────────────────────────
+      doc.rect(55, 40, pageW, 54).fill(DARK);
+      doc.fillColor("#ffffff").fontSize(18).font("Helvetica-Bold")
+        .text("GUBER", 70, 51);
+      doc.fillColor("#ffffff").fontSize(9).font("Helvetica")
+        .text("Marketplace — Buyer's Order", 70, 72);
+      doc.fillColor(GREEN).fontSize(9).font("Helvetica")
+        .text(`Generated: ${generatedDate}`, 55, 61, { width: pageW, align: "right" });
+
+      // ── Disclaimer banner ─────────────────────────────────────────────────
+      doc.rect(55, 102, pageW, 22).fill(BG_LIGHT);
+      doc.fillColor(GRAY).fontSize(7.5).font("Helvetica")
+        .text(
+          "INFORMATIONAL USE ONLY — This is not financing, loan approval, a purchase contract, inspection report, or vehicle history report.",
+          60, 110, { width: pageW - 10 }
+        );
+
+      let y = 138;
+      const sectionGap = 14;
+      const rowH = 17;
+
+      function sectionHeader(label: string) {
+        doc.rect(55, y, pageW, 18).fill(DARK);
+        doc.fillColor(GREEN).fontSize(8).font("Helvetica-Bold")
+          .text(label, 62, y + 5);
+        y += 24;
+      }
+
+      function row(label: string, value: string, shade = false) {
+        if (shade) doc.rect(55, y - 2, pageW, rowH).fill(BG_LIGHT);
+        doc.fillColor(GRAY).fontSize(8).font("Helvetica")
+          .text(label, 62, y, { width: 130 });
+        doc.fillColor(DARK).fontSize(8).font("Helvetica-Bold")
+          .text(value || "—", 200, y, { width: pageW - 145 });
+        doc.moveTo(55, y + rowH - 3).lineTo(55 + pageW, y + rowH - 3).strokeColor(LINE_COLOR).lineWidth(0.5).stroke();
+        y += rowH;
+      }
+
+      // ── Section: Vehicle Information ──────────────────────────────────────
+      sectionHeader("VEHICLE INFORMATION");
+      row("Year",           String(item.year || "—"),                         false);
+      row("Make",           item.brand || "—",                                 true);
+      row("Model",          item.model || "—",                                 false);
+      row("Trim",           details.trim || details.vehicleTrim || "—",       true);
+      row("Mileage",        mileage,                                           false);
+      row("VIN",            vinDisplay,                                        true);
+      row("Engine",         details.engine || "—",                            false);
+      row("Fuel Type",      details.fuelType || "—",                          true);
+      row("Drive Type",     details.driveType || "—",                         false);
+      row("Exterior Color", details.exteriorColor || "—",                     true);
+      row("Interior Color", details.interiorColor || "—",                     false);
+      y += sectionGap;
+
+      // ── Section: Listing Information ──────────────────────────────────────
+      sectionHeader("LISTING INFORMATION");
+      row("Asking Price",   priceDisplay,    false);
+      row("Seller Type",    sellerTypeLabel, true);
+      y += sectionGap;
+
+      // ── Section: Condition Information ────────────────────────────────────
+      sectionHeader("CONDITION INFORMATION");
+      row("Title Status",        item.titleStatus || "—",    false);
+      row("Condition",           item.condition || "—",       true);
+
+      const disclosures = details.sellerDisclosures || item.description || "None provided";
+      // wrap long text
+      doc.fillColor(GRAY).fontSize(8).font("Helvetica").text("Seller Disclosures", 62, y, { width: 130 });
+      const discText = disclosures.slice(0, 300) + (disclosures.length > 300 ? "…" : "");
+      const discHeight = doc.heightOfString(discText, { width: pageW - 145, fontSize: 8 });
+      doc.fillColor(DARK).fontSize(8).font("Helvetica-Bold").text(discText, 200, y, { width: pageW - 145 });
+      y += Math.max(rowH, discHeight + 4);
+      doc.moveTo(55, y - 3).lineTo(55 + pageW, y - 3).strokeColor(LINE_COLOR).lineWidth(0.5).stroke();
+      y += sectionGap;
+
+      // ── Section: Location ─────────────────────────────────────────────────
+      sectionHeader("LOCATION");
+      row("City",  item.city  || "—", false);
+      row("State", item.state || "—", true);
+      y += sectionGap;
+
+      // ── Buyer use note ────────────────────────────────────────────────────
+      doc.rect(55, y, pageW, 52).fill(BG_LIGHT);
+      doc.fillColor(DARK).fontSize(8).font("Helvetica-Bold").text("How buyers use this document:", 62, y + 8);
+      doc.fillColor(GRAY).fontSize(7.5).font("Helvetica")
+        .text(
+          "• Email to your bank or credit union to discuss financing  • Check insurance quotes  • Share with a partner or co-buyer  • Print and review at your own pace",
+          62, y + 20, { width: pageW - 14 }
+        );
+      y += 62;
+
+      // ── Footer ────────────────────────────────────────────────────────────
+      const footerY = doc.page.height - 45;
+      doc.moveTo(55, footerY).lineTo(55 + pageW, footerY).strokeColor(LINE_COLOR).lineWidth(0.5).stroke();
+      doc.fillColor(LIGHT_GRAY).fontSize(7).font("Helvetica")
+        .text(
+          "Generated from a GUBER Marketplace listing for informational purposes only. GUBER does not guarantee accuracy, title, condition, or financing eligibility.",
+          55, footerY + 6, { width: pageW, align: "center" }
+        );
+
+      doc.end();
+    } catch (err: any) {
+      if (!res.headersSent) res.status(500).json({ message: err.message });
     }
   });
 
@@ -10639,6 +10827,31 @@ export async function registerRoutes(
           metadata: { type: "business_extra_unlocks", businessAccountId: String(acct.id), quantity: String(qty) },
           success_url: resolveSuccessUrl(options.successUrl, `${APP_BASE}/biz/dashboard?unlocks_purchased=true&purchased=1`),
           cancel_url: `${APP_BASE}/biz/dashboard`,
+        });
+        sessionUrl = stripeSession.url;
+
+      } else if (product === "marketplace_buyer_order") {
+        const itemId = parseInt(options.itemId || "0");
+        const itemSlug = options.slug || "";
+        if (!itemId) return res.redirect(`${APP_BASE}/marketplace?error=invalid_item`);
+        const listingItem = await storage.getMarketplaceItem(itemId);
+        if (!listingItem || !listingItem.vinNumber) return res.redirect(`${APP_BASE}/marketplace?error=no_vin`);
+        const returnPath = itemSlug ? `/marketplace/p/${itemSlug}` : `/marketplace/${itemId}`;
+        const stripeSession = await stripeMain.checkout.sessions.create({
+          payment_method_types: ["card"],
+          customer_email: user.email,
+          line_items: [{
+            price_data: {
+              currency: "usd",
+              product_data: { name: "GUBER Buyer's Order PDF", description: `Vehicle listing info sheet for: ${listingItem.title}` },
+              unit_amount: 100,
+            },
+            quantity: 1,
+          }],
+          mode: "payment",
+          success_url: `${APP_BASE}${returnPath}?buyer_order=paid&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${APP_BASE}${returnPath}`,
+          metadata: { type: "marketplace_buyer_order", itemId: String(itemId), userId: String(user.id) },
         });
         sessionUrl = stripeSession.url;
       }

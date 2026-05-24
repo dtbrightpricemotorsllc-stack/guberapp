@@ -9,6 +9,7 @@ const VALID_PRODUCTS = [
   "trust_box",
   "business_scout",
   "business_unlock",
+  "marketplace_buyer_order",
 ] as const;
 
 export type MobileCheckoutProduct = (typeof VALID_PRODUCTS)[number];

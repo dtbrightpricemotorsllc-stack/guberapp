@@ -18,7 +18,8 @@ export type ExternalPurchaseProduct =
   | "day1og"
   | "trust_box"
   | "business_scout"
-  | "business_unlock";
+  | "business_unlock"
+  | "marketplace_buyer_order";
 
 interface ExternalPurchaseSheetProps {
   product: ExternalPurchaseProduct;
