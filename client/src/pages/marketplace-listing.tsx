@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check } from "lucide-react";
 import { InfoHint } from "@/components/info-hint";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,7 @@ export default function MarketplaceListing() {
   const [photoIdx, setPhotoIdx] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [buyerOrderSessionId, setBuyerOrderSessionId] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -166,6 +167,7 @@ export default function MarketplaceListing() {
 
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
   const hasVin = !!item.vinNumber;
+  const isMySelling = !!user && user.id === (item as any).sellerId;
 
   const buyerOrderMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/marketplace/${item.id}/buyer-order/checkout`, { slug: item.publicSlug || slug }),
@@ -357,7 +359,76 @@ export default function MarketplaceListing() {
                 />
               </div>
 
-              {buyerOrderSessionId ? (
+              {isMySelling ? (
+                /* ── SELLER VIEW ─────────────────────────────────────── */
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Interested buyers can purchase a formatted Buyer's Order PDF of your listing for <span className="font-bold text-foreground">$1.00</span>. Share your listing link and they'll find the button right here.
+                  </p>
+
+                  {/* Copy listing link */}
+                  <Button
+                    className="w-full font-display text-sm gap-2"
+                    style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(canonicalUrl).then(() => {
+                        setLinkCopied(true);
+                        setTimeout(() => setLinkCopied(false), 2500);
+                      });
+                    }}
+                    data-testid="button-copy-listing-link"
+                  >
+                    {linkCopied ? (
+                      <><Check className="w-4 h-4" /> Link Copied!</>
+                    ) : (
+                      <><Link2 className="w-4 h-4" /> Copy Listing Link to Share</>
+                    )}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground text-center">Paste this link in a text, email, or WhatsApp — buyer pays $1 and downloads instantly.</p>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-2 py-1">
+                    <div className="flex-1 h-px" style={{ background: "rgba(0,180,80,0.18)" }} />
+                    <span className="text-[10px] text-muted-foreground">or download it yourself to forward</span>
+                    <div className="flex-1 h-px" style={{ background: "rgba(0,180,80,0.18)" }} />
+                  </div>
+
+                  {/* Seller self-download — same $1 flow */}
+                  {buyerOrderSessionId ? (
+                    <a
+                      href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`}
+                      download
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black transition-colors"
+                      style={{ background: "#00e676" }}
+                      data-testid="button-download-buyer-order"
+                    >
+                      <Download className="w-4 h-4" /> Download PDF
+                    </a>
+                  ) : isStoreBuild ? (
+                    <ExternalPurchaseSheet
+                      product="marketplace_buyer_order"
+                      options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}
+                    >
+                      {({ onPress, loading }) => (
+                        <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground"
+                          onClick={onPress} disabled={loading} data-testid="button-seller-self-download">
+                          {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" /> Opening…</span>
+                            : <><Download className="w-4 h-4" /> Download for Yourself — $1.00</>}
+                        </Button>
+                      )}
+                    </ExternalPurchaseSheet>
+                  ) : (
+                    <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground"
+                      onClick={handleBuyerOrderClick} disabled={buyerOrderMutation.isPending}
+                      data-testid="button-seller-self-download">
+                      {buyerOrderMutation.isPending
+                        ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" /> Opening…</span>
+                        : <><Download className="w-4 h-4" /> Download for Yourself — $1.00</>}
+                    </Button>
+                  )}
+                </div>
+              ) : buyerOrderSessionId ? (
+                /* ── BUYER: payment confirmed ────────────────────────── */
                 <div className="space-y-2">
                   <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Buyer's Order is ready.</p>
                   <a
@@ -372,6 +443,7 @@ export default function MarketplaceListing() {
                   <p className="text-[10px] text-muted-foreground text-center">Save the link above — you can re-download anytime using the same page URL.</p>
                 </div>
               ) : (
+                /* ── BUYER: pre-purchase ─────────────────────────────── */
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Get a clean PDF of this vehicle's information to share with your bank, insurer, or partner.
