@@ -251,3 +251,9 @@ id = "CumTdwDEOk3CpsMRP6rWy"
 uri = "file://attached_assets/roadpass-preview2.png"
 type = "image"
 title = "Updated PDF — no QR code"
+
+[[outputs]]
+id = "zAh_79I3ts5QZx5vcoXjP"
+uri = "file://attached_assets/roadpass-hq.png"
+type = "image"
+title = "250 DPI preview — actual PDF will be even sharper"
