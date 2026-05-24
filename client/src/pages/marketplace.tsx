@@ -277,11 +277,11 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
 
 function VehicleTransparency({ item }: { item: MarketplaceItem }) {
   const d = (item.details as any) || {};
-  const rows: { label: string; value: string; warn?: boolean }[] = [];
-  if (item.vinNumber) rows.push({ label: "VIN", value: item.vinNumber });
+  const rows: { label: string; value: string; warn?: boolean; hint?: { title: string; description: string } }[] = [];
+  if (item.vinNumber) rows.push({ label: "VIN", value: item.vinNumber, hint: { title: "VIN Report", description: "External vehicle history resources may be available. GUBER does not create or guarantee vehicle history reports." } });
   if (item.vehicleMileage) rows.push({ label: "Mileage", value: `${item.vehicleMileage.toLocaleString()} miles` });
-  if (item.titleStatus) rows.push({ label: "Title Status", value: item.titleStatus, warn: item.titleStatus !== "Clean Title" });
-  if (item.sellerType) rows.push({ label: "Seller Type", value: item.sellerType });
+  if (item.titleStatus) rows.push({ label: "Title Status", value: item.titleStatus, warn: item.titleStatus !== "Clean Title", hint: { title: "Title Status", description: "Indicates the seller's reported title condition. Buyers should independently verify title status before purchase." } });
+  if (item.sellerType) rows.push({ label: "Seller Type", value: item.sellerType, hint: { title: "Seller Type", description: "Private Seller = Individual owner. Dealer = Licensed business." } });
   if (item.listingType && item.listingType !== "cash_sale") {
     if (d.downPayment) rows.push({ label: "Down Payment", value: `$${d.downPayment.toLocaleString()}` });
     if (d.monthlyPayment) rows.push({ label: "Monthly Payment", value: `$${d.monthlyPayment.toLocaleString()}/mo` });
@@ -309,14 +309,20 @@ function VehicleTransparency({ item }: { item: MarketplaceItem }) {
       <div className="divide-y divide-white/5">
         {rows.map(r => (
           <div key={r.label} className="flex justify-between items-center px-3 py-2 text-xs">
-            <span className="text-muted-foreground">{r.label}</span>
+            <span className="text-muted-foreground flex items-center">
+              {r.label}
+              {r.hint && <InfoHint title={r.hint.title} description={r.hint.description} />}
+            </span>
             <span className={`font-bold ${r.warn ? "text-amber-400" : "text-foreground"}`}>{r.value}</span>
           </div>
         ))}
       </div>
       {d.conditionFlags && d.conditionFlags.length > 0 && (
         <div className="px-3 py-2 border-t border-white/5">
-          <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-2">CONDITION FLAGS</p>
+          <div className="flex items-center gap-1 mb-2">
+            <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider">CONDITION FLAGS</p>
+            <InfoHint title="Condition Flags" description="Condition flags are seller-provided statements unless separately verified through GUBER Verify & Inspect." />
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {d.conditionFlags.map((f: string) => (
               <span key={f} className="text-[10px] px-2 py-0.5 rounded-full font-bold"
@@ -1035,6 +1041,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   <div className="flex items-center gap-2 mb-1.5">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     <span className="text-sm font-display font-bold text-emerald-400">GUBER Verified Item</span>
+                    <InfoHint title="Verified" description="This item has been visually documented by a GUBER helper. Verification does not guarantee condition, ownership, authenticity, or functionality." />
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     A local GUBER helper documented this item on-site with photos
@@ -1049,6 +1056,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   <div className="flex items-center gap-2 mb-1.5">
                     <AlertCircle className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs font-display font-bold text-muted-foreground">Not Yet Verified</span>
+                    <InfoHint title="Not Yet Verified" description="This item has not been documented by a GUBER helper. Information shown was provided by the seller." />
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">No on-site visual proof on file. Request V&amp;I below to get a local helper to document this item.</p>
                 </>
@@ -1197,20 +1205,32 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     <Star className="w-3 h-3 fill-yellow-400" />
                     <span className="font-bold">{((item as any).sellerRating as number).toFixed(1)}</span>
                     <span className="text-muted-foreground">({(item as any).sellerReviewCount} reviews)</span>
+                    <InfoHint title="Marketplace Rating" description="Built from completed transactions, responsiveness, confirmations, and user feedback." />
                   </span>
                 )}
                 {(item as any).sellerCompletedJobs > 0 && (
                   <span className="text-[11px] text-muted-foreground">{(item as any).sellerCompletedJobs} jobs completed</span>
                 )}
-                {item.sellerType && <span className="text-[11px] text-muted-foreground">{item.sellerType}</span>}
-                <span className="text-[11px]" style={{ color: availabilityColor(item.sellerAvailability).color }}>{availabilityLabel(item.sellerAvailability)}</span>
+                {item.sellerType && (
+                  <span className="flex items-center text-[11px] text-muted-foreground">
+                    {item.sellerType}
+                    <InfoHint title="Seller Type" description="Private Seller = Individual owner. Dealer = Licensed business." />
+                  </span>
+                )}
+                <span className="flex items-center text-[11px]" style={{ color: availabilityColor(item.sellerAvailability).color }}>
+                  {availabilityLabel(item.sellerAvailability)}
+                  {item.sellerAvailability === "available_now" && <InfoHint title="Available Now" description="Seller indicates they are currently available to respond or coordinate." />}
+                </span>
               </div>
             </div>
 
             {/* Disclaimer */}
             <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
               style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested.
+              <span className="flex items-start gap-1">
+                <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested.</span>
+                <InfoHint title="GUBER Marketplace" description="GUBER provides visibility, coordination, and documentation tools. GUBER is not the buyer, seller, inspector, lender, or owner of listed items." />
+              </span>
             </div>
 
             {/* Actions */}
@@ -1283,20 +1303,23 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                     style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.3)", color: "#818cf8" }}
                     data-testid="button-request-viewing">
                     <Eye className="w-3.5 h-3.5" /> Request Viewing
+                    <InfoHint title="Request Viewing" description="Available only after buyer and seller agree on a price or terms. This helps reduce no-shows and wasted time." />
                   </button>
                   <button onClick={() => setModal("vi")} disabled={!isAvailable}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-display font-bold transition-all disabled:opacity-40"
                     style={{ background: "rgba(0,180,80,0.1)", border: "1px solid rgba(0,180,80,0.25)", color: "#16a34a" }}
                     data-testid="button-request-vi">
                     <ShieldCheck className="w-3.5 h-3.5" /> Verify Before Buying
+                    <InfoHint title="Verify Before Buying" description="Need extra confidence? Hire a local GUBER helper to document the item with photos, video, GPS, and timestamps before you travel or purchase." />
                   </button>
                 </div>
                 {(item.makeOfferEnabled || item.askingType === "obo") && isAvailable && (
                   <button onClick={() => setModal("offer")}
-                    className="w-full py-2.5 rounded-xl text-xs font-display font-bold transition-all"
+                    className="w-full flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-display font-bold transition-all"
                     style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "#e5e7eb" }}
                     data-testid="button-make-offer">
                     Make an Offer
+                    <InfoHint title="Offer Counter" description="Each party receives a limited number of offer exchanges to encourage serious negotiations." />
                   </button>
                 )}
                 <button onClick={() => setModal("report")}

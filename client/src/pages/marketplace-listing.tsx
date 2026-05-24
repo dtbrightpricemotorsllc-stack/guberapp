@@ -313,6 +313,7 @@ export default function MarketplaceListing() {
             {item.guberVerified && (
               <span className="inline-flex items-center gap-1.5 text-xs font-display font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                 <ShieldCheck className="w-3 h-3" /> GUBER VERIFIED
+                <InfoHint title="Verified" description="This item has been visually documented by a GUBER helper. Verification does not guarantee condition, ownership, authenticity, or functionality." />
               </span>
             )}
             {isBoostedActive && (
@@ -356,6 +357,7 @@ export default function MarketplaceListing() {
               <div className="flex items-center gap-2 mb-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 <span className="text-sm font-display font-bold text-emerald-400">GUBER Verified Item</span>
+                <InfoHint title="Verified" description="This item has been visually documented by a GUBER helper. Verification does not guarantee condition, ownership, authenticity, or functionality." />
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 A local GUBER helper documented this item on-site with photos.
@@ -527,10 +529,11 @@ export default function MarketplaceListing() {
             <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-1">SELLER</p>
             <p className="text-sm font-bold">{item.sellerName || "GUBER Seller"}</p>
             {item.sellerAvailability && (
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center">
                 {item.sellerAvailability === "available_now" ? "Available Now" :
                   item.sellerAvailability === "today" ? "Available Today" :
                     item.sellerAvailability === "this_week" ? "Available This Week" : "By Appointment"}
+                {item.sellerAvailability === "available_now" && <InfoHint title="Available Now" description="Seller indicates they are currently available to respond or coordinate." />}
               </p>
             )}
           </div>
@@ -538,7 +541,10 @@ export default function MarketplaceListing() {
           {/* Disclaimer */}
           <div className="rounded-2xl p-4 mb-6 text-xs text-muted-foreground leading-relaxed"
             style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested. Meet in a safe public location when possible.
+            <span className="flex items-start gap-1">
+              <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested. Meet in a safe public location when possible.</span>
+              <InfoHint title="GUBER Marketplace" description="GUBER provides visibility, coordination, and documentation tools. GUBER is not the buyer, seller, inspector, lender, or owner of listed items." />
+            </span>
           </div>
 
           {/* CTA */}
