@@ -799,6 +799,17 @@ export const marketplaceListingReports = pgTable("marketplace_listing_reports", 
   reviewedAt: timestamp("reviewed_at"),
 });
 
+export const marketplaceBuyerOrderRequests = pgTable("marketplace_buyer_order_requests", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  buyerUserId: integer("buyer_user_id").notNull(),
+  sellerUserId: integer("seller_user_id").notNull(),
+  status: text("status").default("pending"), // pending | fulfilled | rejected
+  rejectionNote: text("rejection_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const marketplaceDeals = pgTable("marketplace_deals", {
   id: serial("id").primaryKey(),
   listingId: integer("listing_id").notNull(),
@@ -849,6 +860,7 @@ export type MarketplaceVerificationRequest = typeof marketplaceVerificationReque
 export type MarketplaceListingReport = typeof marketplaceListingReports.$inferSelect;
 export type MarketplaceDeal = typeof marketplaceDeals.$inferSelect;
 export type MarketplaceDealMessage = typeof marketplaceDealMessages.$inferSelect;
+export type MarketplaceBuyerOrderRequest = typeof marketplaceBuyerOrderRequests.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

@@ -5534,6 +5534,112 @@ export async function registerRoutes(
     }
   });
 
+  // ── Buyer Order Requests (no-VIN flow) ───────────────────────────────────
+
+  // Buyer submits a request (free — no charge)
+  app.post("/api/marketplace/:id/buyer-order/request", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const buyerId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.vinNumber) return res.status(400).json({ message: "This listing already has a VIN — purchase directly." });
+      if (item.sellerId === buyerId) return res.status(400).json({ message: "You cannot request your own listing." });
+      // Upsert: only one pending request per buyer per listing
+      const existing = await storage.getBuyerOrderRequestByBuyer(listingId, buyerId);
+      if (existing && existing.status === "pending") return res.json(existing);
+      const boReq = await storage.createBuyerOrderRequest({
+        listingId, buyerUserId: buyerId, sellerUserId: item.sellerId, status: "pending",
+      });
+      return res.json(boReq);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Buyer checks their request status
+  app.get("/api/marketplace/:id/buyer-order/request/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const buyerId = req.session.userId!;
+      const boReq = await storage.getBuyerOrderRequestByBuyer(listingId, buyerId);
+      if (!boReq) return res.json({ status: "none" });
+      return res.json(boReq);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Seller views all requests for their listing
+  app.get("/api/marketplace/:id/buyer-order/requests", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const sellerId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item || item.sellerId !== sellerId) return res.status(403).json({ message: "Forbidden" });
+      const requests = await storage.getBuyerOrderRequestsForListing(listingId);
+      return res.json(requests);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Seller fulfills a request — enters VIN + details, updates listing, notifies buyer
+  app.post("/api/marketplace/:id/buyer-order/requests/:requestId/fulfill", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const requestId = parseInt(req.params.requestId);
+      const sellerId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item || item.sellerId !== sellerId) return res.status(403).json({ message: "Forbidden" });
+      const { vin, mileage, engine, fuelType, driveType, trim, exteriorColor, interiorColor } = req.body;
+      if (!vin || typeof vin !== "string" || vin.trim().length < 5) return res.status(400).json({ message: "A valid VIN is required." });
+      // Merge provided details into existing item details
+      const existingDetails = (item.details as Record<string, any>) || {};
+      const mergedDetails = {
+        ...existingDetails,
+        ...(engine ? { engine } : {}),
+        ...(fuelType ? { fuelType } : {}),
+        ...(driveType ? { driveType } : {}),
+        ...(trim ? { trim } : {}),
+        ...(exteriorColor ? { exteriorColor } : {}),
+        ...(interiorColor ? { interiorColor } : {}),
+      };
+      await storage.updateMarketplaceItem(listingId, {
+        vinNumber: vin.trim().toUpperCase(),
+        details: mergedDetails,
+        ...(mileage ? { vehicleMileage: parseInt(String(mileage)) } : {}),
+      });
+      await storage.updateBuyerOrderRequest(requestId, { status: "fulfilled" });
+      // Mark all other pending requests for this listing as fulfilled too
+      const allRequests = await storage.getBuyerOrderRequestsForListing(listingId);
+      for (const r of allRequests) {
+        if (r.id !== requestId && r.status === "pending") {
+          await storage.updateBuyerOrderRequest(r.id, { status: "fulfilled" });
+        }
+      }
+      return res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Seller rejects a request — buyer not charged
+  app.post("/api/marketplace/:id/buyer-order/requests/:requestId/reject", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const requestId = parseInt(req.params.requestId);
+      const sellerId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item || item.sellerId !== sellerId) return res.status(403).json({ message: "Forbidden" });
+      const { note } = req.body;
+      await storage.updateBuyerOrderRequest(requestId, { status: "rejected", rejectionNote: note || null });
+      return res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // Contact seller
   app.post("/api/marketplace/:id/contact", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {

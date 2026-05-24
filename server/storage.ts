@@ -3,7 +3,7 @@ import {
   notifications, reviews, strikeRecords, proofSubmissions, walletTransactions,
   viCategories, useCases, catalogServiceTypes, detailOptionSets,
   proofTemplates, proofChecklistItems, auditLogs, passwordResetTokens,
-  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceDeals, marketplaceDealMessages, jobStatusLogs, bountyAttempts,
+  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceDeals, marketplaceDealMessages, jobStatusLogs, bountyAttempts,
   businessProfiles, bulkJobBatches, cashDrops, cashDropAttempts, servicePricingConfig,
   workerQualifications, observations, dropSponsors,
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
@@ -21,7 +21,7 @@ import {
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
   type DetailOptionSet, type ProofTemplate, type ProofChecklistItem, type AuditLog,
-  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceDeal, type MarketplaceDealMessage, type JobStatusLog, type BountyAttempt,
+  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceDeal, type MarketplaceDealMessage, type JobStatusLog, type BountyAttempt,
   type BusinessProfile, type CashDrop, type CashDropAttempt, type ServicePricingConfig,
   type WorkerQualification, type Observation, type DropSponsor,
   type BusinessAccount, type BusinessPlan, type BusinessCandidateUnlock,
@@ -316,6 +316,11 @@ export interface IStorage {
   createPinnedFinding(adminUserId: number, content: string, note?: string, assignee?: string): Promise<PinnedFinding>;
   updatePinnedFinding(id: number, adminUserId: number, note: string, assignee: string): Promise<PinnedFinding | undefined>;
   deletePinnedFinding(id: number, adminUserId: number): Promise<void>;
+
+  createBuyerOrderRequest(data: any): Promise<MarketplaceBuyerOrderRequest>;
+  getBuyerOrderRequestByBuyer(listingId: number, buyerUserId: number): Promise<MarketplaceBuyerOrderRequest | undefined>;
+  getBuyerOrderRequestsForListing(listingId: number): Promise<MarketplaceBuyerOrderRequest[]>;
+  updateBuyerOrderRequest(id: number, data: Partial<MarketplaceBuyerOrderRequest>): Promise<MarketplaceBuyerOrderRequest | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1304,6 +1309,34 @@ export class DatabaseStorage implements IStorage {
   async updateMarketplaceListingReport(id: number, data: Partial<MarketplaceListingReport>): Promise<MarketplaceListingReport | undefined> {
     const [report] = await db.update(marketplaceListingReports).set(data).where(eq(marketplaceListingReports.id, id)).returning();
     return report;
+  }
+
+  // ── Marketplace Buyer Order Requests ──────────────────────────────────────
+  async createBuyerOrderRequest(data: any): Promise<MarketplaceBuyerOrderRequest> {
+    const [req] = await db.insert(marketplaceBuyerOrderRequests).values(data).returning();
+    return req;
+  }
+
+  async getBuyerOrderRequestByBuyer(listingId: number, buyerUserId: number): Promise<MarketplaceBuyerOrderRequest | undefined> {
+    const [req] = await db.select().from(marketplaceBuyerOrderRequests)
+      .where(and(eq(marketplaceBuyerOrderRequests.listingId, listingId), eq(marketplaceBuyerOrderRequests.buyerUserId, buyerUserId)))
+      .orderBy(desc(marketplaceBuyerOrderRequests.createdAt))
+      .limit(1);
+    return req;
+  }
+
+  async getBuyerOrderRequestsForListing(listingId: number): Promise<MarketplaceBuyerOrderRequest[]> {
+    return db.select().from(marketplaceBuyerOrderRequests)
+      .where(eq(marketplaceBuyerOrderRequests.listingId, listingId))
+      .orderBy(desc(marketplaceBuyerOrderRequests.createdAt));
+  }
+
+  async updateBuyerOrderRequest(id: number, data: Partial<MarketplaceBuyerOrderRequest>): Promise<MarketplaceBuyerOrderRequest | undefined> {
+    const [req] = await db.update(marketplaceBuyerOrderRequests)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(marketplaceBuyerOrderRequests.id, id))
+      .returning();
+    return req;
   }
 
   // ── Marketplace Deals ─────────────────────────────────────────────────────

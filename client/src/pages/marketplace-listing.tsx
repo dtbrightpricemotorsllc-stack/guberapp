@@ -168,7 +168,10 @@ export default function MarketplaceListing() {
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
   const hasVin = !!item.vinNumber;
   const isMySelling = !!user && user.id === (item as any).sellerId;
+  const isVehicleCategory = ["vehicles", "parts", "boats & marine", "trailers"].includes((item.category || "").toLowerCase());
+  const showBuyerOrderSection = hasVin || isVehicleCategory;
 
+  // ── Buyer's Order: purchase (VIN already on listing) ──────────────────────
   const buyerOrderMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/marketplace/${item.id}/buyer-order/checkout`, { slug: item.publicSlug || slug }),
     onSuccess: (data: any) => {
@@ -178,11 +181,55 @@ export default function MarketplaceListing() {
       toast({ title: "Error", description: err.message || "Could not start checkout", variant: "destructive" });
     },
   });
-
   const handleBuyerOrderClick = () => {
     if (!user) { navigate("/auth"); return; }
     buyerOrderMutation.mutate();
   };
+
+  // ── Buyer's Order: no-VIN request flow ────────────────────────────────────
+  const { data: myBuyerRequest, refetch: refetchMyRequest } = useQuery<any>({
+    queryKey: ["/api/marketplace/buyer-order-request-status", item.id],
+    queryFn: () => fetch(`/api/marketplace/${item.id}/buyer-order/request/status`).then(r => r.json()),
+    enabled: !!user && !hasVin && !isMySelling,
+  });
+  const { data: pendingRequests = [], refetch: refetchPendingRequests } = useQuery<any[]>({
+    queryKey: ["/api/marketplace/buyer-order-requests", item.id],
+    queryFn: () => fetch(`/api/marketplace/${item.id}/buyer-order/requests`).then(r => r.json()),
+    enabled: isMySelling && !hasVin,
+  });
+  const { data: itemFresh, refetch: refetchItem } = useQuery<MarketplaceItem>({
+    queryKey: ["/api/marketplace/slug-refetch", slug],
+    queryFn: () => fetch(`/api/marketplace/slug/${slug}`).then(r => r.json()),
+    enabled: false,
+  });
+  const liveItem = itemFresh ?? item;
+
+  const requestBuyerOrderMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/marketplace/${item.id}/buyer-order/request`, {}),
+    onSuccess: () => refetchMyRequest(),
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const [showFulfillForm, setShowFulfillForm] = useState<number | null>(null);
+  const [fulfillData, setFulfillData] = useState({ vin: "", mileage: "", engine: "", fuelType: "", driveType: "", trim: "", exteriorColor: "", interiorColor: "" });
+
+  const fulfillRequestMutation = useMutation({
+    mutationFn: (requestId: number) => apiRequest("POST", `/api/marketplace/${item.id}/buyer-order/requests/${requestId}/fulfill`, fulfillData),
+    onSuccess: () => {
+      setShowFulfillForm(null);
+      setFulfillData({ vin: "", mileage: "", engine: "", fuelType: "", driveType: "", trim: "", exteriorColor: "", interiorColor: "" });
+      refetchPendingRequests();
+      refetchItem();
+      toast({ title: "Done!", description: "Vehicle details saved. Buyers can now purchase the Buyer's Order." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const rejectRequestMutation = useMutation({
+    mutationFn: (requestId: number) => apiRequest("POST", `/api/marketplace/${item.id}/buyer-order/requests/${requestId}/reject`, {}),
+    onSuccess: () => refetchPendingRequests(),
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
 
   return (
     <>
@@ -341,7 +388,7 @@ export default function MarketplaceListing() {
           )}
 
           {/* ── Buyer's Order ── */}
-          {hasVin && (
+          {showBuyerOrderSection && (
             <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(0,180,80,0.05)", border: "1px solid rgba(0,180,80,0.18)" }} data-testid="section-buyer-order">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-primary shrink-0" />
@@ -359,139 +406,196 @@ export default function MarketplaceListing() {
                 />
               </div>
 
-              {isMySelling ? (
-                /* ── SELLER VIEW ─────────────────────────────────────── */
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Interested buyers can purchase a formatted Buyer's Order PDF of your listing for <span className="font-bold text-foreground">$1.00</span>. Share your listing link and they'll find the button right here.
-                  </p>
-
-                  {/* Copy listing link */}
-                  <Button
-                    className="w-full font-display text-sm gap-2"
-                    style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
-                    onClick={() => {
-                      navigator.clipboard.writeText(canonicalUrl).then(() => {
-                        setLinkCopied(true);
-                        setTimeout(() => setLinkCopied(false), 2500);
-                      });
-                    }}
-                    data-testid="button-copy-listing-link"
-                  >
-                    {linkCopied ? (
-                      <><Check className="w-4 h-4" /> Link Copied!</>
-                    ) : (
-                      <><Link2 className="w-4 h-4" /> Copy Listing Link to Share</>
-                    )}
-                  </Button>
-                  <p className="text-[10px] text-muted-foreground text-center">Paste this link in a text, email, or WhatsApp — buyer pays $1 and downloads instantly.</p>
-
-                  {/* Divider */}
-                  <div className="flex items-center gap-2 py-1">
-                    <div className="flex-1 h-px" style={{ background: "rgba(0,180,80,0.18)" }} />
-                    <span className="text-[10px] text-muted-foreground">or download it yourself to forward</span>
-                    <div className="flex-1 h-px" style={{ background: "rgba(0,180,80,0.18)" }} />
-                  </div>
-
-                  {/* Seller self-download — same $1 flow */}
-                  {buyerOrderSessionId ? (
-                    <a
-                      href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`}
-                      download
-                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black transition-colors"
-                      style={{ background: "#00e676" }}
-                      data-testid="button-download-buyer-order"
-                    >
-                      <Download className="w-4 h-4" /> Download PDF
-                    </a>
-                  ) : isStoreBuild ? (
-                    <ExternalPurchaseSheet
-                      product="marketplace_buyer_order"
-                      options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}
-                    >
-                      {({ onPress, loading }) => (
-                        <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground"
-                          onClick={onPress} disabled={loading} data-testid="button-seller-self-download">
-                          {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" /> Opening…</span>
-                            : <><Download className="w-4 h-4" /> Download for Yourself — $1.00</>}
-                        </Button>
-                      )}
-                    </ExternalPurchaseSheet>
-                  ) : (
-                    <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground"
-                      onClick={handleBuyerOrderClick} disabled={buyerOrderMutation.isPending}
-                      data-testid="button-seller-self-download">
-                      {buyerOrderMutation.isPending
-                        ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" /> Opening…</span>
-                        : <><Download className="w-4 h-4" /> Download for Yourself — $1.00</>}
-                    </Button>
-                  )}
-                </div>
-              ) : buyerOrderSessionId ? (
-                /* ── BUYER: payment confirmed ────────────────────────── */
-                <div className="space-y-2">
-                  <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Buyer's Order is ready.</p>
-                  <a
-                    href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`}
-                    download
-                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black transition-colors"
-                    style={{ background: "#00e676" }}
-                    data-testid="button-download-buyer-order"
-                  >
-                    <Download className="w-4 h-4" /> Download Buyer's Order PDF
-                  </a>
-                  <p className="text-[10px] text-muted-foreground text-center">Save the link above — you can re-download anytime using the same page URL.</p>
-                </div>
-              ) : (
-                /* ── BUYER: pre-purchase ─────────────────────────────── */
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Get a clean PDF of this vehicle's information to share with your bank, insurer, or partner.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    VIN: <span className="font-mono font-bold text-foreground/60 tracking-widest">
-                      {(item.vinNumber || "").slice(0, -4).replace(/./g, "•")}{(item.vinNumber || "").slice(-4)}
-                    </span>
-                    <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full VIN included in PDF)</span>
-                  </p>
-                  {isStoreBuild ? (
-                    <ExternalPurchaseSheet
-                      product="marketplace_buyer_order"
-                      options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}
-                    >
-                      {({ onPress, loading }) => (
-                        <Button
-                          className="w-full font-display text-sm gap-2"
-                          style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
-                          onClick={() => { if (!user) { navigate("/auth"); return; } onPress(); }}
-                          disabled={loading}
-                          data-testid="button-get-buyer-order"
-                        >
-                          {loading ? (
-                            <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Opening checkout…</span>
-                          ) : (
-                            <><Download className="w-4 h-4" /> Download Buyer's Order — $1.00</>
-                          )}
-                        </Button>
-                      )}
-                    </ExternalPurchaseSheet>
-                  ) : (
+              {hasVin ? (
+                /* ══ VIN IS PRESENT ══════════════════════════════════════ */
+                isMySelling ? (
+                  /* ── Seller: share or self-download ─────────────────── */
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Buyers can purchase a formatted Buyer's Order PDF for <span className="font-bold text-foreground">$1.00</span>. Share your listing link and they'll find the button right here.
+                    </p>
                     <Button
                       className="w-full font-display text-sm gap-2"
                       style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
-                      onClick={handleBuyerOrderClick}
-                      disabled={buyerOrderMutation.isPending}
-                      data-testid="button-get-buyer-order"
+                      onClick={() => { navigator.clipboard.writeText(canonicalUrl).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2500); }); }}
+                      data-testid="button-copy-listing-link"
                     >
-                      {buyerOrderMutation.isPending ? (
-                        <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Opening checkout…</span>
-                      ) : (
-                        <><Download className="w-4 h-4" /> Download Buyer's Order — $1.00</>
-                      )}
+                      {linkCopied ? <><Check className="w-4 h-4" /> Link Copied!</> : <><Link2 className="w-4 h-4" /> Copy Listing Link to Share</>}
                     </Button>
+                    <p className="text-[10px] text-muted-foreground text-center">Paste in a text, email, or WhatsApp — buyer pays $1 and downloads instantly.</p>
+                    <div className="flex items-center gap-2 py-1">
+                      <div className="flex-1 h-px" style={{ background: "rgba(0,180,80,0.18)" }} />
+                      <span className="text-[10px] text-muted-foreground">or download it yourself to forward</span>
+                      <div className="flex-1 h-px" style={{ background: "rgba(0,180,80,0.18)" }} />
+                    </div>
+                    {buyerOrderSessionId ? (
+                      <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`} download
+                        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black"
+                        style={{ background: "#00e676" }} data-testid="button-download-buyer-order">
+                        <Download className="w-4 h-4" /> Download PDF
+                      </a>
+                    ) : isStoreBuild ? (
+                      <ExternalPurchaseSheet product="marketplace_buyer_order" options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}>
+                        {({ onPress, loading }) => (
+                          <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground" onClick={onPress} disabled={loading} data-testid="button-seller-self-download">
+                            {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" /> Opening…</span> : <><Download className="w-4 h-4" /> Download for Yourself — $1.00</>}
+                          </Button>
+                        )}
+                      </ExternalPurchaseSheet>
+                    ) : (
+                      <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground" onClick={handleBuyerOrderClick} disabled={buyerOrderMutation.isPending} data-testid="button-seller-self-download">
+                        {buyerOrderMutation.isPending ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" /> Opening…</span> : <><Download className="w-4 h-4" /> Download for Yourself — $1.00</>}
+                      </Button>
+                    )}
+                  </div>
+                ) : buyerOrderSessionId ? (
+                  /* ── Buyer: payment confirmed ────────────────────────── */
+                  <div className="space-y-2">
+                    <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Buyer's Order is ready.</p>
+                    <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`} download
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black"
+                      style={{ background: "#00e676" }} data-testid="button-download-buyer-order">
+                      <Download className="w-4 h-4" /> Download Buyer's Order PDF
+                    </a>
+                    <p className="text-[10px] text-muted-foreground text-center">Save the link — you can re-download anytime using the same page URL.</p>
+                  </div>
+                ) : (
+                  /* ── Buyer: pre-purchase ─────────────────────────────── */
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground leading-relaxed">Get a clean PDF of this vehicle's information to share with your bank, insurer, or partner.</p>
+                    <p className="text-xs text-muted-foreground">
+                      VIN: <span className="font-mono font-bold text-foreground/60 tracking-widest">{(liveItem.vinNumber || "").slice(0, -4).replace(/./g, "•")}{(liveItem.vinNumber || "").slice(-4)}</span>
+                      <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full VIN in PDF)</span>
+                    </p>
+                    {isStoreBuild ? (
+                      <ExternalPurchaseSheet product="marketplace_buyer_order" options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}>
+                        {({ onPress, loading }) => (
+                          <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                            onClick={() => { if (!user) { navigate("/auth"); return; } onPress(); }} disabled={loading} data-testid="button-get-buyer-order">
+                            {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Opening checkout…</span> : <><Download className="w-4 h-4" /> Download Buyer's Order — $1.00</>}
+                          </Button>
+                        )}
+                      </ExternalPurchaseSheet>
+                    ) : (
+                      <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                        onClick={handleBuyerOrderClick} disabled={buyerOrderMutation.isPending} data-testid="button-get-buyer-order">
+                        {buyerOrderMutation.isPending ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Opening checkout…</span> : <><Download className="w-4 h-4" /> Download Buyer's Order — $1.00</>}
+                      </Button>
+                    )}
+                    {!user && <p className="text-[10px] text-muted-foreground text-center">Sign in required to purchase</p>}
+                  </div>
+                )
+              ) : isMySelling ? (
+                /* ══ NO VIN — SELLER VIEW ════════════════════════════════ */
+                <div className="space-y-3">
+                  {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length > 0 ? (
+                    <>
+                      <p className="text-xs text-amber-400 font-display font-bold">
+                        {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length} buyer{(pendingRequests as any[]).filter((r: any) => r.status === "pending").length > 1 ? "s have" : " has"} requested a Buyer's Order
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Fill in your vehicle details to fulfill the request — the VIN is required. Buyers can then purchase the PDF for $1.00. Or decline if you'd prefer not to share.
+                      </p>
+                      {(pendingRequests as any[]).filter((r: any) => r.status === "pending").map((req: any) => (
+                        <div key={req.id} className="rounded-xl p-3 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}>
+                          <p className="text-xs text-muted-foreground">Request #{req.id} · {new Date(req.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                          {showFulfillForm === req.id ? (
+                            <div className="space-y-2 pt-1">
+                              <p className="text-xs font-display font-bold text-foreground">Enter vehicle details</p>
+                              {[
+                                { key: "vin", label: "VIN *", placeholder: "e.g. 1HGCM82633A123456", required: true },
+                                { key: "mileage", label: "Mileage", placeholder: "e.g. 45000" },
+                                { key: "engine", label: "Engine", placeholder: "e.g. 2.5L 4-Cylinder" },
+                                { key: "fuelType", label: "Fuel Type", placeholder: "e.g. Gasoline" },
+                                { key: "driveType", label: "Drive Type", placeholder: "e.g. FWD" },
+                                { key: "trim", label: "Trim", placeholder: "e.g. EX-L" },
+                                { key: "exteriorColor", label: "Exterior Color", placeholder: "e.g. Silver" },
+                                { key: "interiorColor", label: "Interior Color", placeholder: "e.g. Black" },
+                              ].map(({ key, label, placeholder, required }) => (
+                                <div key={key}>
+                                  <label className="text-[10px] text-muted-foreground block mb-0.5">{label}</label>
+                                  <input
+                                    type={key === "mileage" ? "number" : "text"}
+                                    placeholder={placeholder}
+                                    value={(fulfillData as any)[key]}
+                                    onChange={e => setFulfillData(prev => ({ ...prev, [key]: e.target.value }))}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                                    data-testid={`input-fulfill-${key}`}
+                                  />
+                                </div>
+                              ))}
+                              <div className="flex gap-2 pt-1">
+                                <Button className="flex-1 font-display text-sm" style={{ background: "rgba(0,180,80,0.2)", border: "1px solid rgba(0,180,80,0.4)", color: "#00e676" }}
+                                  onClick={() => fulfillRequestMutation.mutate(req.id)} disabled={fulfillRequestMutation.isPending || !fulfillData.vin.trim()}
+                                  data-testid="button-submit-fulfill">
+                                  {fulfillRequestMutation.isPending ? "Saving…" : "Save & Notify Buyer"}
+                                </Button>
+                                <Button variant="ghost" className="text-xs text-muted-foreground" onClick={() => setShowFulfillForm(null)} data-testid="button-cancel-fulfill">Cancel</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Button className="flex-1 font-display text-sm gap-1.5" style={{ background: "rgba(0,180,80,0.15)", border: "1px solid rgba(0,180,80,0.3)", color: "#00e676" }}
+                                onClick={() => setShowFulfillForm(req.id)} data-testid={`button-fulfill-${req.id}`}>
+                                <FileText className="w-3.5 h-3.5" /> Fill In Details
+                              </Button>
+                              <Button variant="ghost" className="text-xs text-muted-foreground px-3"
+                                onClick={() => rejectRequestMutation.mutate(req.id)} disabled={rejectRequestMutation.isPending}
+                                data-testid={`button-reject-${req.id}`}>
+                                Decline
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      No VIN on this listing. Buyers can request a Buyer's Order and you'll be notified to fill in vehicle details.
+                    </p>
                   )}
-                  {!user && (
-                    <p className="text-[10px] text-muted-foreground text-center">Sign in required to purchase</p>
+                </div>
+              ) : (
+                /* ══ NO VIN — BUYER REQUEST FLOW ════════════════════════ */
+                <div className="space-y-2">
+                  {!user ? (
+                    <>
+                      <p className="text-xs text-muted-foreground leading-relaxed">This vehicle listing doesn't include a VIN yet. Sign in to request one from the seller — free, no charge.</p>
+                      <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                        onClick={() => navigate("/auth")} data-testid="button-sign-in-to-request">
+                        Sign In to Request
+                      </Button>
+                    </>
+                  ) : myBuyerRequest?.status === "pending" ? (
+                    <>
+                      <p className="text-xs text-amber-400 font-display font-bold">⏳ Request submitted — waiting for seller</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">The seller has been notified. Once they add the vehicle details, you'll be able to purchase the Buyer's Order for $1.00. You won't be charged until then.</p>
+                    </>
+                  ) : myBuyerRequest?.status === "rejected" ? (
+                    <>
+                      <p className="text-xs text-muted-foreground font-display font-bold">⚠ Not available for this listing</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">The seller has indicated they won't be providing a Buyer's Order for this listing. You were not charged.</p>
+                    </>
+                  ) : myBuyerRequest?.status === "fulfilled" ? (
+                    <>
+                      <p className="text-xs text-emerald-400 font-display font-bold">✓ Seller added vehicle details — you can now purchase</p>
+                      <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                        onClick={() => window.location.reload()} data-testid="button-refresh-to-purchase">
+                        <Download className="w-4 h-4" /> Refresh to Purchase — $1.00
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        This vehicle listing doesn't include a VIN yet. Request one from the seller — free to ask, and you'll only be charged $1.00 if they add the details and you download the PDF.
+                      </p>
+                      <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                        onClick={() => requestBuyerOrderMutation.mutate()} disabled={requestBuyerOrderMutation.isPending}
+                        data-testid="button-request-buyer-order">
+                        {requestBuyerOrderMutation.isPending ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" /> Sending…</span> : <><FileText className="w-4 h-4" /> Request Buyer's Order</>}
+                      </Button>
+                      <p className="text-[10px] text-muted-foreground text-center">No charge until you download. Seller can accept or decline.</p>
+                    </>
                   )}
                 </div>
               )}
