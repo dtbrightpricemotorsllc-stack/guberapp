@@ -154,6 +154,7 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
   const isSample = (item as any).isSample;
   const isVehicle = item.category === "Vehicles";
   const isProperty = item.category === "Property";
+  const hasBuyerOrder = ["Vehicles", "Boats & Marine", "Trailers"].includes(item.category || "");
 
   return (
     <div
@@ -234,6 +235,15 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
             {details.bedrooms && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Bed className="w-2.5 h-2.5" />{details.bedrooms} bed</span>}
             {details.bathrooms && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Bath className="w-2.5 h-2.5" />{details.bathrooms} bath</span>}
             {details.deposit && <span className="text-[10px] text-muted-foreground">Dep: ${details.deposit.toLocaleString()}</span>}
+          </div>
+        )}
+
+        {hasBuyerOrder && (
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
+              style={{ background: "rgba(0,180,80,0.1)", border: "1px solid rgba(0,180,80,0.25)", color: "#00b050" }}>
+              <FileText className="w-2 h-2" /> Buyer's Order available
+            </span>
           </div>
         )}
 
