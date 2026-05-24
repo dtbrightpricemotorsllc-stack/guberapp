@@ -5355,14 +5355,20 @@ export async function registerRoutes(
   app.get("/api/marketplace/:id/buyer-order/pdf", async (req: Request, res: Response) => {
     try {
       const itemId = parseInt(req.params.id);
-      const sessionId = req.query.session_id as string;
-      if (!sessionId) return res.status(400).json({ message: "Missing session_id" });
+      const isSampleRequest = req.query.sample === "1";
 
-      const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
-      if (stripeSession.payment_status !== "paid") return res.status(402).json({ message: "Payment not completed" });
-      const meta = stripeSession.metadata || {};
-      if (String(meta.itemId) !== String(itemId) || meta.type !== "marketplace_buyer_order") {
-        return res.status(403).json({ message: "Session does not match this listing" });
+      if (isSampleRequest) {
+        const isAdmin = await viewerIsAdmin(req);
+        if (!isAdmin) return res.status(403).json({ message: "Admin only" });
+      } else {
+        const sessionId = req.query.session_id as string;
+        if (!sessionId) return res.status(400).json({ message: "Missing session_id" });
+        const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
+        if (stripeSession.payment_status !== "paid") return res.status(402).json({ message: "Payment not completed" });
+        const meta = stripeSession.metadata || {};
+        if (String(meta.itemId) !== String(itemId) || meta.type !== "marketplace_buyer_order") {
+          return res.status(403).json({ message: "Session does not match this listing" });
+        }
       }
 
       const item = await storage.getMarketplaceItem(itemId);
