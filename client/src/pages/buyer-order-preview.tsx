@@ -40,7 +40,7 @@ export default function BuyerOrderPreview() {
   const generatedDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   const s: Record<string, React.CSSProperties> = {
-    body: { fontFamily: "Helvetica, Arial, sans-serif", background: "#d8d8d8", padding: "32px 16px", minHeight: "100vh" },
+    body: { fontFamily: "Helvetica, Arial, sans-serif", background: "#d8d8d8", padding: "32px 16px", paddingBottom: "calc(68px + env(safe-area-inset-bottom, 20px) + 32px)", minHeight: "100vh" },
     banner: { background: "#1a1a1a", color: "#00e676", textAlign: "center", fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", padding: "9px", marginBottom: 20, borderRadius: 4 },
     page: { background: "#fff", width: "100%", maxWidth: 760, margin: "0 auto", padding: "48px 52px 64px", boxShadow: "0 4px 32px rgba(0,0,0,0.18)", position: "relative" },
     title: { fontSize: 19, fontWeight: 700, letterSpacing: "0.02em", color: "#111" },
