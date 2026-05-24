@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Zap, MapPin, Clock, Trophy, AlertCircle } from "lucide-react";
+import { InfoHint } from "@/components/info-hint";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import type { CashDrop } from "@shared/schema";
 
@@ -205,7 +206,15 @@ export default function CashDropsList() {
             <Zap className="w-5 h-5 text-amber-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display font-black text-xl text-amber-300 leading-tight">Cash Drops</h1>
+            <h1 className="font-display font-black text-xl text-amber-300 leading-tight flex items-center">
+              Cash Drops
+              <InfoHint
+                title="Cash Drops"
+                description="Cash Drops are real-money community reward events posted by GUBER. Be first to show up at the location and claim the drop."
+                bullets={["Travel to the pinned location", "Confirm arrival via GPS check-in", "Submit proof photos to claim", "Payout via Cash App, Venmo, PayPal, bank transfer, or GUBER Credit (+20% bonus)"]}
+                warning="Cash Drops are public-area events. Never trespass or put yourself in danger to claim one."
+              />
+            </h1>
             <p className="text-[11px] text-muted-foreground">
               Active drops near you, refreshed every 5 seconds.
             </p>

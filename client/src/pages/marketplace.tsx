@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { InfoHint } from "@/components/info-hint";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -938,6 +939,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 <span className="flex items-center gap-1 text-[10px] font-display font-extrabold px-2 py-0.5 rounded-full"
                   style={{ background: "rgba(245,165,0,0.18)", border: "1.5px solid rgba(245,165,0,0.35)", color: "#f5a500" }}>
                   <Zap className="w-2.5 h-2.5" /> FEATURED
+                  <InfoHint title="Featured Listing" description="This listing has been boosted by the seller and appears higher in search results for a limited time." />
                 </span>
               )}
               {item.listingType && (
@@ -954,9 +956,9 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
             <div className="flex items-center gap-3 mb-4">
               <PriceDisplay item={item} large />
               {item.makeOfferEnabled && (
-                <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
+                <span className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-0.5"
                   style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.3)", color: "#818cf8" }}>
-                  OPEN TO OFFERS
+                  OPEN TO OFFERS<InfoHint title="Open to Offers" description="The seller is willing to accept offers below the listed price. Tap 'Make Offer' to propose your own price." />
                 </span>
               )}
             </div>
@@ -1332,7 +1334,7 @@ export default function Marketplace() {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-2xl font-display font-extrabold tracking-tight">
-              Marketplace <span className="text-xs font-normal text-primary ml-1 align-middle">BETA</span>
+              Marketplace <span className="text-xs font-normal text-primary ml-1 align-middle inline-flex items-center gap-0.5">BETA<InfoHint title="Beta Feature" description="GUBER Marketplace is currently in beta. Core features are live — some tools are still being refined based on user feedback." bullets={["List items for free", "Local buyers only", "More features rolling out soon"]} /></span>
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">List items free · Find local deals · Verify before you buy</p>
           </div>

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Shield, ShieldCheck, Award, Crown } from "lucide-react";
 import ogLogoImg from "@assets/Gubergoldday1_1772471749839.png";
+import { InfoHint } from "@/components/info-hint";
 
 const tierConfig: Record<string, { label: string; icon: typeof Shield; className: string; glowClass: string }> = {
   community: {
@@ -54,7 +55,13 @@ export function TrustProgressBar({ score, tier }: { score: number; tier: string 
   return (
     <div className="w-full space-y-1.5" data-testid="trust-progress">
       <div className="flex justify-between text-[11px]">
-        <span className="text-muted-foreground font-display">Trust Score: <span className="text-foreground font-semibold">{score}</span></span>
+        <span className="text-muted-foreground font-display flex items-center">Trust Score: <span className="text-foreground font-semibold ml-1">{score}</span>
+          <InfoHint
+            title="Trust Score"
+            description="Your Trust Score reflects your reliability and history on GUBER. It grows as you complete jobs, earn positive reviews, and verify your identity."
+            bullets={["Starts at 0 for new users", "Increases with completed jobs and good reviews", "Unlocks higher account tiers (Verified, Credentialed, Elite)"]}
+          />
+        </span>
         <span className="text-muted-foreground font-display">Next: <span className="guber-text-purple font-semibold">{t.next}</span></span>
       </div>
       <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
@@ -80,15 +87,25 @@ export function Day1OGLogo({ size = "sm" }: { size?: "sm" | "md" | "lg" | "xl" }
   );
 }
 
-export function Day1OGBadge() {
+export function Day1OGBadge({ showHint = false }: { showHint?: boolean }) {
   return (
-    <Badge
-      variant="outline"
-      className="bg-gradient-to-r from-amber-500/15 to-yellow-500/10 text-amber-400 border-amber-500/40 gap-1 font-display text-[11px] tracking-wide shadow-[0_0_12px_hsl(45_100%_50%/0.2)] pl-0.5"
-      data-testid="badge-day1og"
-    >
-      <Day1OGLogo size="sm" />
-      Day-1 OG
-    </Badge>
+    <span className="inline-flex items-center gap-1">
+      <Badge
+        variant="outline"
+        className="bg-gradient-to-r from-amber-500/15 to-yellow-500/10 text-amber-400 border-amber-500/40 gap-1 font-display text-[11px] tracking-wide shadow-[0_0_12px_hsl(45_100%_50%/0.2)] pl-0.5"
+        data-testid="badge-day1og"
+      >
+        <Day1OGLogo size="sm" />
+        Day-1 OG
+      </Badge>
+      {showHint && (
+        <InfoHint
+          title="Day-1 OG"
+          description="Day-1 OG members joined GUBER early and locked in permanent founder perks."
+          bullets={["15% platform fee (vs. standard 20%)", "Free Urgent toggle on all job posts", "+20 Studio credits every month", "Unlimited text-based ID verification"]}
+          warning="Day-1 OG is a lifetime status and cannot be transferred."
+        />
+      )}
+    </span>
   );
 }

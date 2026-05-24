@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight } from "lucide-react";
+import { InfoHint } from "@/components/info-hint";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
@@ -250,6 +251,7 @@ export default function MarketplaceListing() {
               <span className="inline-flex items-center gap-1.5 text-xs font-display font-bold px-2.5 py-1 rounded-full"
                 style={{ background: "rgba(245,165,0,0.12)", border: "1px solid rgba(245,165,0,0.3)", color: "#f5a500" }}>
                 <Zap className="w-3 h-3" /> FEATURED
+                <InfoHint title="Featured Listing" description="This listing has been boosted by the seller. It appears higher in search results for a limited time." />
               </span>
             )}
           </div>
@@ -258,7 +260,11 @@ export default function MarketplaceListing() {
           <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-1">{item.category}</p>
           <h1 className="text-2xl font-display font-extrabold leading-tight mb-2">{item.title}</h1>
           <p className="text-2xl font-display font-black text-primary mb-4">{price}
-            {(item.makeOfferEnabled || item.askingType === "obo") && <span className="text-sm font-normal text-muted-foreground ml-2">· Open to Offers</span>}
+            {(item.makeOfferEnabled || item.askingType === "obo") && (
+              <span className="text-sm font-normal text-muted-foreground ml-2 inline-flex items-center gap-0.5">· Open to Offers
+                <InfoHint title="Open to Offers" description="The seller is open to offers below the listed price. Use the 'Make Offer' button to propose a price." />
+              </span>
+            )}
           </p>
 
           {/* Details */}
