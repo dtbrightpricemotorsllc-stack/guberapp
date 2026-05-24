@@ -628,7 +628,7 @@ export default function AccountSettings() {
             style={{ background: "linear-gradient(135deg,rgba(0,229,118,0.25),rgba(0,229,118,0.15))", border: "1.5px solid rgba(0,229,118,0.4)" }}
             onClick={() => {
               if (typeof localStorage !== "undefined") {
-                localStorage.removeItem("guber_tour_complete");
+                localStorage.removeItem("guber_tour_v2_complete");
                 localStorage.removeItem("guber_tour_step");
               }
               window.location.href = "/";

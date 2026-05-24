@@ -283,7 +283,7 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const [showTour] = useState(() => !isTourComplete());
+  const [showTour, setShowTour] = useState(() => !isTourComplete());
 
   const [mode, setMode] = useState<DashboardMode>(() => {
     if (typeof window !== "undefined") {
@@ -1302,6 +1302,7 @@ export default function Dashboard() {
       {showTour && !!user && (
         <DashboardTour
           accountType={(user as any)?.accountType || "individual"}
+          onComplete={() => setShowTour(false)}
           onModeChange={(m) => setMode(m as DashboardMode)}
         />
       )}

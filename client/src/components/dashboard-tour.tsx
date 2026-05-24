@@ -2,12 +2,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
+const TOUR_KEY = "guber_tour_v2_complete";
+
 export function isTourComplete() {
   if (typeof localStorage === "undefined") return true;
-  return localStorage.getItem("guber_tour_complete") === "true";
+  return localStorage.getItem(TOUR_KEY) === "true";
 }
 export function resetTour() {
-  localStorage.removeItem("guber_tour_complete");
+  localStorage.removeItem(TOUR_KEY);
   localStorage.removeItem("guber_tour_step");
 }
 
@@ -76,6 +78,7 @@ const STEPS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardTourProps {
   accountType: string;
+  onComplete: () => void;
   onModeChange?: (mode: "hire" | "work") => void;
 }
 
@@ -90,7 +93,7 @@ interface SpotRect {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export function DashboardTour({ accountType, onModeChange }: DashboardTourProps) {
+export function DashboardTour({ accountType, onComplete, onModeChange }: DashboardTourProps) {
   const [step, setStep] = useState(0);
   const [showFinal, setShowFinal] = useState(false);
   const [spotRect, setSpotRect] = useState<SpotRect | null>(null);
@@ -101,15 +104,15 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
   const vh = window.innerHeight;
   const PAD = 10;
 
-  // ── completeTour ─────────────────────────────────────────────────────────
+  // ── completeTour — just unmounts the overlay, no reload ──────────────────
   const completeTour = useCallback((mode?: string) => {
-    localStorage.setItem("guber_tour_complete", "true");
+    localStorage.setItem(TOUR_KEY, "true");
     apiRequest("POST", "/api/users/me/onboarding-complete", {
       onboardingType: accountType,
     }).catch(() => {});
     if (mode && onModeChange) onModeChange(mode as "hire" | "work");
-    window.location.reload();
-  }, [accountType, onModeChange]);
+    onComplete();
+  }, [accountType, onModeChange, onComplete]);
 
   // keep ref in sync so event listeners can call latest version
   useEffect(() => { completeFnRef.current = completeTour; }, [completeTour]);
@@ -136,12 +139,8 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
       ) as HTMLElement | null;
       if (!el) return false;
 
-      // Programmatic scroll: target element at 35% from the top of the screen
-      // (leaves room for the floating card below it)
-      const r = el.getBoundingClientRect();
-      const desired = vh * 0.28;
-      const scrollTo = window.scrollY + r.top - desired;
-      window.scrollTo({ top: Math.max(0, scrollTo), behavior: "smooth" });
+      // Scroll element to center of viewport (works with any scroll container)
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
 
       setTimeout(() => {
         const r2 = el.getBoundingClientRect();
@@ -154,7 +153,7 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
           height: r2.height + PAD * 2,
           radius: current.radius,
         });
-      }, 400);
+      }, 500);
       return true;
     };
 
@@ -171,18 +170,19 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
     }
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Final screen: measure both toggle buttons together ────────────────────
+  // ── Final screen: scroll to top and measure both toggle buttons ───────────
   useEffect(() => {
     if (!showFinal) return;
     setSpotRect(null);
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const hEl = document.querySelector('[data-testid="button-hire-mode"]') as HTMLElement | null;
+    if (hEl) hEl.scrollIntoView({ behavior: "smooth", block: "center" });
 
     const snap = () => {
-      const hEl = document.querySelector('[data-testid="button-hire-mode"]');
+      const hEl2 = document.querySelector('[data-testid="button-hire-mode"]');
       const wEl = document.querySelector('[data-testid="button-work-mode"]');
-      if (!hEl || !wEl) return false;
-      const hr = hEl.getBoundingClientRect();
+      if (!hEl2 || !wEl) return false;
+      const hr = hEl2.getBoundingClientRect();
       const wr = wEl.getBoundingClientRect();
       const top = Math.min(hr.top, wr.top) - PAD;
       const left = Math.min(hr.left, wr.left) - PAD;
@@ -194,7 +194,7 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
 
     const t = setTimeout(() => {
       if (!snap()) setTimeout(snap, 300);
-    }, 450);
+    }, 500);
     return () => clearTimeout(t);
   }, [showFinal]);
 
@@ -233,7 +233,7 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
   const sRadius = spotRect?.radius ?? 18;
 
   // ── Tooltip card position: prefer below, fall back to above ───────────────
-  const CARD_H = 220; // estimated card height px
+  const CARD_H = 220;
   const CARD_MARGIN = 14;
   const SKIP_H = 44;
   const spaceBelow = vh - sBottom - CARD_MARGIN - SKIP_H;
@@ -245,7 +245,7 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
   const DARK = "rgba(0,0,0,0.88)";
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FINAL SCREEN — both toggles spotlighted, card below, actual btns work
+  // FINAL SCREEN — both toggles spotlighted, card below, actual btns clickable
   // ─────────────────────────────────────────────────────────────────────────
   if (showFinal) {
     return (
