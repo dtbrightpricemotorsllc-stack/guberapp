@@ -373,7 +373,7 @@ export default function MarketplaceListing() {
           <MarketplacePhotoViewer photos={photos} initialIndex={photoIdx} onClose={() => setViewerOpen(false)} />
         )}
 
-        <div className="max-w-2xl mx-auto px-4 py-6">
+        <div className="max-w-2xl mx-auto px-4 py-6" style={{ paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}>
           {/* Status badges */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <span className={`text-xs font-display font-bold px-2.5 py-1 rounded-full ${isIndexable ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-gray-500/10 text-gray-400 border border-gray-500/20"}`}>
