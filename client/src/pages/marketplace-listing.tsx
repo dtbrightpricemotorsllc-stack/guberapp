@@ -131,6 +131,26 @@ export default function MarketplaceListing() {
   const itemId = (item as any)?.id ?? 0;
   const hasVin = !!item?.vinNumber;
   const isMySelling = !!user && user.id === (item as any)?.sellerId;
+
+  // Pre-populate BO details form with existing saved data when item loads
+  useEffect(() => {
+    if (!item || boDetailsSeeded) return;
+    const d = (item as any).details as Record<string, any> || {};
+    setBoDetailsData({
+      vin:           (item as any).vinNumber             || "",
+      trim:          d.trim                              || "",
+      mileage:       (item as any).vehicleMileage != null ? String((item as any).vehicleMileage) : "",
+      engine:        d.engine                            || "",
+      fuelType:      d.fuelType                          || "",
+      driveType:     d.driveType                         || "",
+      exteriorColor: d.exteriorColor                     || "",
+      interiorColor: d.interiorColor                     || "",
+      conditionNotes: d.sellerDisclosures                || "",
+      dealerFees:    d.dealerFees                        || "",
+      titleStatus:   (item as any).titleStatus           || "",
+    });
+    setBoDetailsSeeded(true);
+  }, [item, boDetailsSeeded]);
   const isVehicleCategory = ["vehicles", "boats & marine", "trailers"].includes((item?.category || "").toLowerCase());
 
   const buyerOrderMutation = useMutation({
@@ -158,6 +178,7 @@ export default function MarketplaceListing() {
 
   const [showBoDetailsForm, setShowBoDetailsForm] = useState(false);
   const [boDetailsData, setBoDetailsData] = useState<Record<string, string>>(EMPTY_BO_DETAILS);
+  const [boDetailsSeeded, setBoDetailsSeeded] = useState(false);
   const [downPayment, setDownPayment] = useState("");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

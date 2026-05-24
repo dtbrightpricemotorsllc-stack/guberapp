@@ -12,9 +12,22 @@ export const BO_FIELDS = [
   { key: "conditionNotes", label: "Condition Notes",     placeholder: "e.g. Needs transmission work", textarea: true },
 ] as const;
 
+export const TITLE_STATUS_OPTIONS = [
+  { value: "", label: "— Select title status —" },
+  { value: "Clean Title – In Hand", label: "Clean Title – In Hand" },
+  { value: "Clean Title – Not In Hand", label: "Clean Title – Not In Hand" },
+  { value: "Rebuilt / Reconstructed", label: "Rebuilt / Reconstructed" },
+  { value: "Salvage Title", label: "Salvage Title" },
+  { value: "Lien / Loan Outstanding", label: "Lien / Loan Outstanding" },
+  { value: "Lost / Missing Title", label: "Lost / Missing Title" },
+  { value: "Bill of Sale Only", label: "Bill of Sale Only" },
+  { value: "Unknown", label: "Unknown" },
+];
+
 export const EMPTY_BO_DETAILS = {
   vin: "", trim: "", mileage: "", engine: "", fuelType: "",
   driveType: "", exteriorColor: "", interiorColor: "", conditionNotes: "", dealerFees: "",
+  titleStatus: "",
 };
 
 export function BuyerOrderDetailsForm({ data, onChange, onSubmit, isPending, isDealer }: {
@@ -41,6 +54,22 @@ export function BuyerOrderDetailsForm({ data, onChange, onSubmit, isPending, isD
           )}
         </div>
       ))}
+
+      {/* Title Status — required for PDF */}
+      <div>
+        <label className="text-[10px] text-muted-foreground block mb-0.5">Title Status *</label>
+        <select
+          value={data.titleStatus || ""}
+          onChange={e => onChange({ ...data, titleStatus: e.target.value })}
+          className={inputCls}
+          data-testid="select-bo-titleStatus"
+        >
+          {TITLE_STATUS_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
       {isDealer && (
         <div>
           <label className="text-[10px] text-muted-foreground block mb-0.5">Dealer Fees / Notes</label>
@@ -50,6 +79,7 @@ export function BuyerOrderDetailsForm({ data, onChange, onSubmit, isPending, isD
             className={inputCls + " resize-none"} data-testid="input-bo-dealerFees" />
         </div>
       )}
+
       <Button className="w-full font-display text-sm mt-1"
         style={{ background: "rgba(0,180,80,0.2)", border: "1px solid rgba(0,180,80,0.4)", color: "#00e676" }}
         onClick={onSubmit} disabled={isPending || !(data.vin || "").trim()}

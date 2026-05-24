@@ -5933,8 +5933,8 @@ export async function registerRoutes(
       });
       // Notify seller — high-urgency pull strategy framing
       sendPushToUser(item.sellerId, {
-        title: "🚨 Qualified Buyer Ready to Purchase",
-        body: `A qualified buyer wants to purchase your ${item.title || "listing"} right now. Log in and add your asset details so your buyer can generate their bank financing sheet and move forward.`,
+        title: "Buyer's Order Requested",
+        body: `A buyer is interested and requested a Buyer's Order for your "${item.title || "listing"}". Complete the missing vehicle details once so future serious buyers can download it.`,
         url: `/marketplace/p/${item.publicSlug || listingId}`,
         tag: `buyer-order-request-${listingId}`,
       }).catch(() => {});
@@ -6143,24 +6143,25 @@ export async function registerRoutes(
       const sellerId = req.session.userId!;
       const item = await storage.getMarketplaceItem(listingId);
       if (!item || item.sellerId !== sellerId) return res.status(403).json({ message: "Forbidden" });
-      const { vin, mileage, engine, fuelType, driveType, trim, exteriorColor, interiorColor, conditionNotes, dealerFees } = req.body;
+      const { vin, mileage, engine, fuelType, driveType, trim, exteriorColor, interiorColor, conditionNotes, dealerFees, titleStatus } = req.body;
       if (!vin || typeof vin !== "string" || vin.trim().length < 5) return res.status(400).json({ message: "A valid VIN is required." });
       const existingDetails = (item.details as Record<string, any>) || {};
       const mergedDetails = {
         ...existingDetails,
-        ...(engine       ? { engine }       : {}),
-        ...(fuelType     ? { fuelType }     : {}),
-        ...(driveType    ? { driveType }    : {}),
-        ...(trim         ? { trim }         : {}),
+        ...(engine        ? { engine }        : {}),
+        ...(fuelType      ? { fuelType }      : {}),
+        ...(driveType     ? { driveType }     : {}),
+        ...(trim          ? { trim }          : {}),
         ...(exteriorColor ? { exteriorColor } : {}),
         ...(interiorColor ? { interiorColor } : {}),
         ...(conditionNotes ? { sellerDisclosures: conditionNotes } : {}),
-        ...(dealerFees   ? { dealerFees }   : {}),
+        ...(dealerFees    ? { dealerFees }    : {}),
       };
       await storage.updateMarketplaceItem(listingId, {
         vinNumber: vin.trim().toUpperCase(),
         details: mergedDetails,
-        ...(mileage ? { vehicleMileage: parseInt(String(mileage)) } : {}),
+        ...(mileage     ? { vehicleMileage: parseInt(String(mileage)) } : {}),
+        ...(titleStatus ? { titleStatus: String(titleStatus) }          : {}),
       });
       // Mark any pending requests fulfilled and notify each requesting buyer
       const allRequests = await storage.getBuyerOrderRequestsForListing(listingId);
