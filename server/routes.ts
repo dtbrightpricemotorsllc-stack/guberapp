@@ -5375,10 +5375,18 @@ export async function registerRoutes(
       if (!item) return res.status(404).json({ message: "Listing not found" });
 
       const details = (item.details as Record<string, any>) || {};
-      const sellerTypeLabel = item.sellerType === "dealer" ? "Dealer" : "Private Seller";
+      const sellerTypeLabel = item.sellerType === "dealer" ? "Dealer" : item.sellerType === "Private Seller" ? "Private Seller" : item.sellerType || "Private Seller";
       const vinDisplay = item.vinNumber || "Not provided";
       const mileage = item.vehicleMileage ? `${item.vehicleMileage.toLocaleString()} miles` : "Not provided";
-      const priceDisplay = item.price ? `$${item.price.toLocaleString()}` : item.askingType === "free" ? "Free" : "Contact for price";
+      const askingLabel = item.askingType === "obo" ? " (OBO)" : item.askingType === "firm" ? " (Firm)" : item.askingType === "free" ? "" : "";
+      const priceDisplay = item.askingType === "free" ? "Free" : item.price ? `$${item.price.toLocaleString()}${askingLabel}` : "Contact for price";
+      const listingTypeMap: Record<string, string> = {
+        cash_sale: "Cash Sale", financing: "Financing Available", bhph: "Buy Here Pay Here",
+        lease: "Lease", trade: "Trade / Barter", parts_only: "Parts Only",
+        rental: "Rental", for_rent: "For Rent", owner_financing: "Owner Financing",
+      };
+      const listingTypeLabel = listingTypeMap[item.listingType || ""] || item.listingType || "Cash Sale";
+      const conditionFlags: string[] = Array.isArray(details.conditionFlags) ? details.conditionFlags : [];
       const generatedDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
       res.setHeader("Content-Type", "application/pdf");
@@ -5470,27 +5478,43 @@ export async function registerRoutes(
       row("Trim / Series",  details.trim || details.vehicleTrim || "—");
       row("Mileage",        mileage);
       row("VIN",            vinDisplay);
-      row("Engine",         details.engine || "—");
-      row("Fuel Type",      details.fuelType || "—");
-      row("Drive Type",     details.driveType || "—");
-      row("Exterior Color", details.exteriorColor || "—");
-      row("Interior Color", details.interiorColor || "—");
+      if (details.engine)       row("Engine",         details.engine);
+      if (details.transmission) row("Transmission",   details.transmission);
+      if (details.fuelType)     row("Fuel Type",      details.fuelType);
+      if (details.driveType)    row("Drive Type",     details.driveType);
+      if (details.exteriorColor) row("Exterior Color", details.exteriorColor);
+      if (details.interiorColor) row("Interior Color", details.interiorColor);
       y += secGap;
 
       // ── LISTING INFORMATION ───────────────────────────────────────────────
       sectionHead("LISTING INFORMATION");
-      row("Asking Price", priceDisplay);
-      row("Seller Type",  sellerTypeLabel);
-      row("Listing ID",   String(itemId));
+      row("Asking Price",   priceDisplay);
+      row("Purchase Type",  listingTypeLabel);
+      row("Seller Name",    item.sellerName || "—");
+      row("Seller Type",    sellerTypeLabel);
+      row("Listing ID",     String(itemId));
       y += secGap;
 
       // ── CONDITION & TITLE ─────────────────────────────────────────────────
       sectionHead("CONDITION & TITLE");
       row("Title Status", item.titleStatus || "—");
-      row("Condition",    item.condition   || "—");
+      if (item.condition) row("Condition", item.condition);
 
-      // Condition notes / disclosures — may wrap
-      const disclosures = details.sellerDisclosures || item.description || "None provided.";
+      // Condition flags
+      if (conditionFlags.length > 0) {
+        const flagsText = conditionFlags.join("  ·  ");
+        doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
+          .text("Condition Flags", L + 6, y + 1, { width: 160 });
+        const flagsH = doc.heightOfString(flagsText, { width: pageW - (COL2 - L) - 6 });
+        doc.fillColor("#b45309").fontSize(8.5).font("Helvetica-Bold")
+          .text(flagsText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
+        y += Math.max(rowH, flagsH + 6);
+        doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+      }
+
+      // Condition notes
+      const rawNotes = details.sellerDisclosures || details.conditionNotes || "";
+      const disclosures = rawNotes || (item.description ? item.description.slice(0, 300) : "None provided.");
       const discText    = disclosures.slice(0, 400) + (disclosures.length > 400 ? "…" : "");
       doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
         .text("Condition Notes", L + 6, y + 1, { width: 160 });
@@ -5499,6 +5523,7 @@ export async function registerRoutes(
         .text(discText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
       y += Math.max(rowH, discH + 6);
       doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+
       if (details.dealerFees) {
         const feesText = String(details.dealerFees).slice(0, 300);
         doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
@@ -5513,8 +5538,9 @@ export async function registerRoutes(
 
       // ── LOCATION ──────────────────────────────────────────────────────────
       sectionHead("LOCATION");
-      row("City",  item.city  || "—");
-      row("State", item.state || "—");
+      row("City",    item.city    || "—");
+      row("State",   item.state   || "—");
+      if (item.zipcode) row("ZIP Code", item.zipcode);
       y += secGap;
 
       // ── How to use box ────────────────────────────────────────────────────
@@ -5548,6 +5574,131 @@ export async function registerRoutes(
     } catch (err: any) {
       if (!res.headersSent) res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── Buyer Order HTML Preview (dev only) ──────────────────────────────────
+  app.get("/api/marketplace/:id/buyer-order/preview", async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV !== "development") return res.status(404).end();
+    try {
+      const itemId = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(itemId);
+      if (!item) return res.status(404).send("Not found");
+      const d = (item.details as Record<string, any>) || {};
+      const sellerTypeLabel = item.sellerType === "dealer" ? "Dealer" : "Private Seller";
+      const vinDisplay = item.vinNumber || "Not provided";
+      const mileage = item.vehicleMileage ? `${item.vehicleMileage.toLocaleString()} miles` : "Not provided";
+      const askingLabel = item.askingType === "obo" ? " (OBO)" : item.askingType === "firm" ? " (Firm)" : "";
+      const priceDisplay = item.askingType === "free" ? "Free" : item.price ? `$${item.price.toLocaleString()}${askingLabel}` : "Contact for price";
+      const listingTypeMap: Record<string,string> = { cash_sale:"Cash Sale", financing:"Financing Available", bhph:"Buy Here Pay Here", lease:"Lease", trade:"Trade / Barter", parts_only:"Parts Only", rental:"Rental", for_rent:"For Rent", owner_financing:"Owner Financing" };
+      const listingTypeLabel = listingTypeMap[item.listingType||""] || "Cash Sale";
+      const conditionFlags: string[] = Array.isArray(d.conditionFlags) ? d.conditionFlags : [];
+      const rawNotes = d.sellerDisclosures || d.conditionNotes || item.description || "None provided.";
+      const generatedDate = new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+
+      const row = (label: string, value: string, warn = false) =>
+        `<tr><td class="label">${label}</td><td class="${warn?"warn":"val"}">${value||"—"}</td></tr>`;
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Buyer's Order Preview — ${item.title}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Helvetica,Arial,sans-serif;background:#e8e8e8;padding:32px;color:#111}
+  .page{background:#fff;width:760px;margin:0 auto;padding:52px 55px 72px;box-shadow:0 4px 32px rgba(0,0,0,0.18);position:relative}
+  .header-title{font-size:20px;font-weight:700;letter-spacing:0.02em;color:#111}
+  .header-sub{font-size:11px;color:#666;margin-top:4px}
+  .header-right{position:absolute;top:52px;right:55px;text-align:right;font-size:8px;color:#666;line-height:1.7}
+  .rule{border:none;border-top:1.5px solid #1a1a1a;margin:12px 0 0}
+  .seller-block{margin:14px 0 10px}
+  .seller-name{font-size:14px;font-weight:700;color:#111}
+  .seller-meta{font-size:9px;color:#666;margin-top:3px}
+  .rule-thin{border:none;border-top:0.5px solid #ccc;margin:8px 0}
+  .disclaimer{background:#f4f4f4;padding:8px 10px;font-size:7.5px;color:#666;line-height:1.5;margin:10px 0 18px}
+  .section-head{background:#f4f4f4;padding:5px 8px;font-size:7px;font-weight:700;color:#666;letter-spacing:0.1em;margin-bottom:0}
+  table{width:100%;border-collapse:collapse;margin-bottom:0}
+  td{font-size:8.5px;padding:4px 6px;border-bottom:0.4px solid #ccc;vertical-align:top}
+  td.label{color:#666;width:175px;font-weight:400}
+  td.val{color:#111;font-weight:700}
+  td.warn{color:#b45309;font-weight:700}
+  .section-gap{height:16px}
+  .flags{color:#b45309;font-weight:700}
+  .use-box{background:#f4f4f4;padding:10px 12px;margin:16px 0;font-size:7.5px;color:#666;line-height:1.8}
+  .use-box strong{display:block;font-size:8px;color:#1a1a1a;margin-bottom:4px}
+  .footer{border-top:0.5px solid #ccc;padding-top:10px;margin-top:24px;font-size:6.5px;color:#999;line-height:1.6}
+  .preview-banner{background:#1a1a1a;color:#00e676;text-align:center;font-size:11px;font-weight:700;letter-spacing:0.1em;padding:8px;margin-bottom:20px;border-radius:4px}
+</style></head><body>
+<div class="preview-banner">⬇ BUYER'S ORDER PREVIEW — SAMPLE ONLY</div>
+<div class="page">
+  <div class="header-title">VEHICLE LISTING INFORMATION</div>
+  <div class="header-sub">Buyer's Reference Sheet</div>
+  <div class="header-right">Date: ${generatedDate}<br>Ref #${itemId}</div>
+  <hr class="rule">
+
+  <div class="seller-block">
+    <div style="font-size:7px;color:#666;letter-spacing:0.1em;margin-bottom:6px">SELLER INFORMATION</div>
+    <div class="seller-name">${item.sellerName||"Private Party"}</div>
+    <div class="seller-meta">${sellerTypeLabel}&nbsp;&nbsp;·&nbsp;&nbsp;${item.city||""}${item.city&&item.state?", ":""}${item.state||""}</div>
+  </div>
+  <hr class="rule-thin">
+
+  <div class="disclaimer">This Buyer's Order is an informational listing summary only. It is not a bill of sale, purchase agreement, title document, warranty, financing approval, inspection report, or guarantee from GUBER.</div>
+
+  <div class="section-head">VEHICLE INFORMATION</div>
+  <table>
+    ${row("Year", String(item.year||"—"))}
+    ${row("Make", item.brand||"—")}
+    ${row("Model", item.model||"—")}
+    ${row("Trim / Series", d.trim||d.vehicleTrim||"—")}
+    ${row("Mileage", mileage)}
+    ${row("VIN", vinDisplay)}
+    ${d.engine ? row("Engine", d.engine) : ""}
+    ${d.transmission ? row("Transmission", d.transmission) : ""}
+    ${d.fuelType ? row("Fuel Type", d.fuelType) : ""}
+    ${d.driveType ? row("Drive Type", d.driveType) : ""}
+    ${d.exteriorColor ? row("Exterior Color", d.exteriorColor) : ""}
+    ${d.interiorColor ? row("Interior Color", d.interiorColor) : ""}
+  </table>
+  <div class="section-gap"></div>
+
+  <div class="section-head">LISTING INFORMATION</div>
+  <table>
+    ${row("Asking Price", priceDisplay)}
+    ${row("Purchase Type", listingTypeLabel)}
+    ${row("Seller Name", item.sellerName||"—")}
+    ${row("Seller Type", sellerTypeLabel)}
+    ${row("Listing ID", String(itemId))}
+  </table>
+  <div class="section-gap"></div>
+
+  <div class="section-head">CONDITION &amp; TITLE</div>
+  <table>
+    ${row("Title Status", item.titleStatus||"—", !!(item.titleStatus && item.titleStatus !== "Clean Title – In Hand" && item.titleStatus !== "Clean Title"))}
+    ${item.condition ? row("Condition", item.condition) : ""}
+    ${conditionFlags.length > 0 ? `<tr><td class="label">Condition Flags</td><td class="flags">${conditionFlags.join("  ·  ")}</td></tr>` : ""}
+    <tr><td class="label">Condition Notes</td><td class="val">${rawNotes.slice(0,400)}</td></tr>
+    ${d.dealerFees ? `<tr><td class="label">Dealer Fees / Notes</td><td class="val">${d.dealerFees}</td></tr>` : ""}
+  </table>
+  <div class="section-gap"></div>
+
+  <div class="section-head">LOCATION</div>
+  <table>
+    ${row("City", item.city||"—")}
+    ${row("State", item.state||"—")}
+    ${item.zipcode ? row("ZIP Code", item.zipcode) : ""}
+  </table>
+
+  <div class="use-box">
+    <strong>How to use this document:</strong>
+    Email to your bank or credit union &nbsp;·&nbsp; Check insurance quotes &nbsp;·&nbsp; Share with a co-buyer or partner &nbsp;·&nbsp; Print and review before meeting the seller
+  </div>
+
+  <div class="footer">
+    Generated via GUBER Marketplace · guberapp.app · This document is for informational purposes only. GUBER is a marketplace platform and is not a party to the sale. GUBER makes no guarantee of accuracy, title status, vehicle condition, or financing eligibility.
+  </div>
+</div>
+</body></html>`;
+      res.setHeader("Content-Type","text/html");
+      res.send(html);
+    } catch(err:any) { res.status(500).send(err.message); }
   });
 
   // ── Buyer Order Requests (no-VIN flow) ───────────────────────────────────

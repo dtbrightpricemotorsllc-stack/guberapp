@@ -71,6 +71,7 @@ const StudioMusic = lazy(() => import("@/pages/studio-music"));
 const StudioAvatar = lazy(() => import("@/pages/studio-avatar"));
 const Investors = lazy(() => import("@/pages/investors"));
 const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
+const BuyerOrderPreview = lazy(() => import("@/pages/buyer-order-preview"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
@@ -264,6 +265,7 @@ function Router() {
       <Route path="/marketplace" component={() => <ProtectedRoute component={Marketplace} />} />
       <Route path="/marketplace/deals/:id" component={() => <ProtectedRoute component={MarketplaceDeal} />} />
       <Route path="/marketplace/p/:slug" component={() => <Suspense fallback={<PageLoader />}><MarketplaceListing /></Suspense>} />
+      <Route path="/buyer-order-preview/:id" component={() => <Suspense fallback={<PageLoader />}><BuyerOrderPreview /></Suspense>} />
       <Route path="/marketplace-preview" component={() => <Redirect to="/marketplace" />} />
       <Route path="/map" component={() => <ProtectedRoute component={MapExplore} />} />
       <Route path="/cash-drops" component={() => <ConsumerRoute component={CashDropsList} />} />
