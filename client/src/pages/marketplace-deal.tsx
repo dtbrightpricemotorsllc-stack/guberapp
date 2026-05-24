@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { GuberLayout } from "@/components/guber-layout";
 import {
   ArrowLeft, ShieldCheck, Package, Clock, CheckCircle2, XCircle,
-  AlertTriangle, MessageCircle, Send, User, ChevronDown, ChevronUp,
+  AlertTriangle, MessageCircle, Send, User, ChevronDown, ChevronUp, Star,
 } from "lucide-react";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -169,6 +169,9 @@ export default function MarketplaceDeal() {
   const [showOutcomePanel, setShowOutcomePanel] = useState(false);
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const [outcomeNote, setOutcomeNote] = useState("");
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const dealId = parseInt(id!);
@@ -216,6 +219,25 @@ export default function MarketplaceDeal() {
       setSelectedOutcome(null);
       setOutcomeNote("");
       toast({ title: "Outcome recorded", description: "Deal status has been updated." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Review query — only fetch if deal is completed
+  const { data: myReview, refetch: refetchMyReview } = useQuery<any>({
+    queryKey: ["/api/marketplace/deals", dealId, "review/mine"],
+    queryFn: () => fetch(`/api/marketplace/deals/${dealId}/review/mine`).then(r => r.json()),
+    enabled: !!dealId && !isLoading && deal?.status === "completed",
+  });
+
+  const submitReview = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/marketplace/deals/${dealId}/review`, { rating: reviewRating, comment: reviewComment.trim() || undefined }),
+    onSuccess: () => {
+      refetchMyReview();
+      toast({ title: "Review submitted", description: "Thanks for your feedback." });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -514,6 +536,82 @@ export default function MarketplaceDeal() {
             </>
           )}
         </div>
+
+        {/* ── Deal Review Prompt ── */}
+        {deal.status === "completed" && (
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+              <Star className="w-4 h-4 text-amber-400" />
+              <span className="text-sm font-display font-bold">Rate Your Experience</span>
+            </div>
+
+            {myReview ? (
+              /* Already reviewed */
+              <div className="px-4 py-5 flex flex-col items-center gap-2 text-center">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <Star
+                      key={n}
+                      className={`w-5 h-5 ${n <= myReview.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`}
+                    />
+                  ))}
+                </div>
+                <p className="text-sm font-display font-bold text-foreground">Review Submitted</p>
+                {myReview.comment && (
+                  <p className="text-xs text-muted-foreground italic max-w-xs">"{myReview.comment}"</p>
+                )}
+                <p className="text-xs text-muted-foreground">Your review of {isBuyer ? "the seller" : "the buyer"} has been recorded.</p>
+              </div>
+            ) : (
+              /* Review form */
+              <div className="px-4 py-4 space-y-4">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  How was your experience with <strong>{theirName}</strong>?
+                </p>
+
+                {/* Star picker */}
+                <div className="flex gap-1.5">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button
+                      key={n}
+                      data-testid={`button-star-${n}`}
+                      onMouseEnter={() => setReviewHover(n)}
+                      onMouseLeave={() => setReviewHover(0)}
+                      onClick={() => setReviewRating(n)}
+                      className="focus:outline-none transition-transform hover:scale-110"
+                    >
+                      <Star
+                        className={`w-7 h-7 transition-colors ${n <= (reviewHover || reviewRating) ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`}
+                      />
+                    </button>
+                  ))}
+                </div>
+
+                {/* Optional comment */}
+                {reviewRating > 0 && (
+                  <textarea
+                    data-testid="input-review-comment"
+                    value={reviewComment}
+                    onChange={e => setReviewComment(e.target.value)}
+                    placeholder="Optional — share what went well or what could be better…"
+                    rows={3}
+                    maxLength={500}
+                    className="w-full px-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                )}
+
+                <Button
+                  data-testid="button-submit-review"
+                  className="w-full premium-btn font-display"
+                  disabled={reviewRating === 0 || submitReview.isPending}
+                  onClick={() => submitReview.mutate()}
+                >
+                  {submitReview.isPending ? "Submitting…" : reviewRating === 0 ? "Select a rating to continue" : `Submit ${reviewRating}-Star Review`}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* View listing link */}
         {deal.listingSlug && (

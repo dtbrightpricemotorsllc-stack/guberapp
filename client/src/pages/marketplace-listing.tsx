@@ -1,10 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check, ScanSearch } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check, ScanSearch, Pencil, Trash2, Lock, ExternalLink, AlertTriangle } from "lucide-react";
 import { InfoHint } from "@/components/info-hint";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { MarketplacePhotoViewer } from "@/components/marketplace-photo-viewer";
+import { MarketplaceEditModal } from "@/components/marketplace-edit-modal";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -158,6 +159,32 @@ export default function MarketplaceListing() {
   const [showBoDetailsForm, setShowBoDetailsForm] = useState(false);
   const [boDetailsData, setBoDetailsData] = useState<Record<string, string>>(EMPTY_BO_DETAILS);
   const [downPayment, setDownPayment] = useState("");
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Fetch active deal if listing is pending (seller view)
+  const { data: myDeals = [] } = useQuery<any[]>({
+    queryKey: ["/api/marketplace/deals/my"],
+    queryFn: () => fetch("/api/marketplace/deals/my").then(r => r.json()),
+    enabled: isMySelling && (item as any)?.status === "pending",
+  });
+  const activeDeal = (myDeals as any[]).find((d: any) => d.listingId === itemId && d.status === "pending_completion");
+
+  // Backup offers count (seller view while pending)
+  const { data: backupOffers = [] } = useQuery<any[]>({
+    queryKey: ["/api/marketplace/backup-offers", itemId],
+    queryFn: () => fetch(`/api/marketplace/${itemId}/backup-offers`).then(r => r.json()),
+    enabled: isMySelling && (item as any)?.status === "pending" && itemId > 0,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/marketplace/${itemId}`, {}),
+    onSuccess: () => {
+      toast({ title: "Listing removed" });
+      navigate("/marketplace");
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
 
   const boDetailsMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/marketplace/${itemId}/buyer-order/details`, boDetailsData),
@@ -376,6 +403,119 @@ export default function MarketplaceListing() {
               <h2 className="text-sm font-display font-bold text-muted-foreground tracking-wider mb-3">DESCRIPTION</h2>
               <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{item.description}</p>
             </div>
+          )}
+
+          {/* ── Seller Control Panel ── */}
+          {isMySelling && (
+            <div className="mb-6 rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+              {/* Header */}
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                <ShieldCheck className="w-4 h-4 text-primary" />
+                <span className="text-sm font-display font-bold">Your Listing</span>
+                <span className="ml-auto text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
+                  style={
+                    item.status === "pending" ? { background: "rgba(245,165,0,0.12)", border: "1px solid rgba(245,165,0,0.3)", color: "#f5a500" } :
+                    item.status === "sold" ? { background: "rgba(100,100,100,0.12)", border: "1px solid rgba(100,100,100,0.25)", color: "#9ca3af" } :
+                    { background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.25)", color: "#00e676" }
+                  }
+                >
+                  {item.status === "pending" ? "DEAL PENDING" : item.status === "sold" ? "SOLD" : "LIVE"}
+                </span>
+              </div>
+
+              <div className="px-4 py-3 space-y-3">
+                {/* AVAILABLE — full edit/delete controls */}
+                {(item.status === "available" || !["pending", "sold", "removed"].includes(item.status || "")) && (
+                  <>
+                    <div className="flex gap-2">
+                      <Button
+                        data-testid="button-edit-listing"
+                        variant="outline"
+                        className="flex-1 font-display text-sm gap-2"
+                        onClick={() => setShowEditModal(true)}
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Edit Listing
+                      </Button>
+                      <Button
+                        data-testid="button-delete-listing"
+                        variant="outline"
+                        className="flex-1 font-display text-sm gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => setShowDeleteConfirm(true)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Remove
+                      </Button>
+                    </div>
+                    {showDeleteConfirm && (
+                      <div className="rounded-xl p-3 space-y-2" style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)" }}>
+                        <p className="text-xs text-red-400 font-display font-bold">Remove this listing?</p>
+                        <p className="text-xs text-muted-foreground">It will no longer appear in marketplace search results.</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1 font-display text-xs" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+                          <Button size="sm" className="flex-1 font-display text-xs bg-destructive hover:bg-destructive/90" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} data-testid="button-confirm-delete">
+                            {deleteMutation.isPending ? "Removing…" : "Yes, Remove"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* PENDING — deal lock state */}
+                {item.status === "pending" && (
+                  <>
+                    <div className="flex items-start gap-2.5 rounded-xl p-3" style={{ background: "rgba(245,165,0,0.06)", border: "1px solid rgba(245,165,0,0.2)" }}>
+                      <Lock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-display font-bold text-amber-400">Deal in Progress — Listing Locked</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                          Editing and deleting are disabled while a deal is pending. Both parties agreed on price and appointment. If the deal falls through, full controls return automatically.
+                        </p>
+                      </div>
+                    </div>
+
+                    {activeDeal && (
+                      <Button
+                        data-testid="button-view-deal"
+                        className="w-full font-display text-sm gap-2"
+                        style={{ background: "rgba(245,165,0,0.12)", border: "1px solid rgba(245,165,0,0.3)", color: "#f5a500" }}
+                        onClick={() => navigate(`/marketplace/deals/${activeDeal.id}`)}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> View Pending Deal
+                      </Button>
+                    )}
+
+                    {(backupOffers as any[]).length > 0 && (
+                      <div className="rounded-xl p-3" style={{ background: "rgba(124,58,237,0.07)", border: "1px solid rgba(124,58,237,0.2)" }}>
+                        <p className="text-xs font-display font-bold text-purple-400 mb-0.5">
+                          {(backupOffers as any[]).length} Backup Offer{(backupOffers as any[]).length > 1 ? "s" : ""} Waiting
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Best: ${Math.max(...(backupOffers as any[]).map((o: any) => o.offerAmount)).toLocaleString()}. If this deal falls through, you'll be notified automatically.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* SOLD — archived state */}
+                {item.status === "sold" && (
+                  <div className="flex items-start gap-2.5 rounded-xl p-3" style={{ background: "rgba(100,100,100,0.06)", border: "1px solid rgba(100,100,100,0.18)" }}>
+                    <AlertTriangle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-display font-bold text-muted-foreground">Listing Archived — Sold</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        This listing is marked as sold and is preserved for your records. Editing and deletion are disabled.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Edit Modal */}
+          {showEditModal && item && (
+            <MarketplaceEditModal item={item} onClose={() => setShowEditModal(false)} />
           )}
 
           {/* ── Buyer's Order ── */}

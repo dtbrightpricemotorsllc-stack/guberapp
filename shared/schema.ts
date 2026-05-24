@@ -205,6 +205,16 @@ export const users = pgTable("users", {
   mktBuyerNoShows: integer("mkt_buyer_no_shows").default(0),
   mktDealsAsSellerTotal: integer("mkt_deals_as_seller_total").default(0),
   mktDealsAsBuyerTotal: integer("mkt_deals_as_buyer_total").default(0),
+  mktListingsCreated: integer("mkt_listings_created").default(0),
+  mktAcceptedOffers: integer("mkt_accepted_offers").default(0),
+  mktCounterOffers: integer("mkt_counter_offers").default(0),
+  mktExpiredOffers: integer("mkt_expired_offers").default(0),
+  mktCanceledDeals: integer("mkt_canceled_deals").default(0),
+  mktVerifiedSales: integer("mkt_verified_sales").default(0),
+  mktSellerRatingSum: integer("mkt_seller_rating_sum").default(0),
+  mktSellerRatingCount: integer("mkt_seller_rating_count").default(0),
+  mktBuyerRatingSum: integer("mkt_buyer_rating_sum").default(0),
+  mktBuyerRatingCount: integer("mkt_buyer_rating_count").default(0),
 });
 
 export const categories = pgTable("categories", {
@@ -838,6 +848,18 @@ export const marketplaceDealMessages = pgTable("marketplace_deal_messages", {
   attachmentUrl: text("attachment_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const marketplaceDealReviews = pgTable("marketplace_deal_reviews", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull(),
+  reviewerUserId: integer("reviewer_user_id").notNull(),
+  revieweeUserId: integer("reviewee_user_id").notNull(),
+  reviewerRole: text("reviewer_role").notNull(), // "buyer" | "seller"
+  rating: integer("rating").notNull(), // 1-5
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type MarketplaceDealReview = typeof marketplaceDealReviews.$inferSelect;
 
 export const insertMarketplaceItemSchema = createInsertSchema(marketplaceItems).omit({
   id: true,

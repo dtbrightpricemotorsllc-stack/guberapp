@@ -3,7 +3,7 @@ import {
   notifications, reviews, strikeRecords, proofSubmissions, walletTransactions,
   viCategories, useCases, catalogServiceTypes, detailOptionSets,
   proofTemplates, proofChecklistItems, auditLogs, passwordResetTokens,
-  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceDeals, marketplaceDealMessages, jobStatusLogs, bountyAttempts,
+  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceDeals, marketplaceDealMessages, marketplaceDealReviews, jobStatusLogs, bountyAttempts,
   businessProfiles, bulkJobBatches, cashDrops, cashDropAttempts, servicePricingConfig,
   workerQualifications, observations, dropSponsors,
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
@@ -22,7 +22,7 @@ import {
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
   type DetailOptionSet, type ProofTemplate, type ProofChecklistItem, type AuditLog,
-  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceDeal, type MarketplaceDealMessage, type JobStatusLog, type BountyAttempt,
+  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceDeal, type MarketplaceDealMessage, type MarketplaceDealReview, type JobStatusLog, type BountyAttempt,
   type BusinessProfile, type CashDrop, type CashDropAttempt, type ServicePricingConfig,
   type WorkerQualification, type Observation, type DropSponsor,
   type BusinessAccount, type BusinessPlan, type BusinessCandidateUnlock,
@@ -1393,20 +1393,24 @@ export class DatabaseStorage implements IStorage {
     sellerNoShows: number; buyerNoShows: number;
     totalAsSellerDeals: number; totalAsBuyerDeals: number;
     sellerCompletionRate: number; buyerCompletionRate: number;
+    listingsCreated: number; acceptedOffers: number; counterOffers: number;
+    expiredOffers: number; canceledDeals: number; verifiedSales: number;
+    sellerRating: number | null; sellerRatingCount: number;
+    buyerRating: number | null; buyerRatingCount: number;
   }> {
-    const [user] = await db.select({
-      mktCompletedSales: users.mktCompletedSales,
-      mktCompletedPurchases: users.mktCompletedPurchases,
-      mktSellerBackouts: users.mktSellerBackouts,
-      mktBuyerBackouts: users.mktBuyerBackouts,
-      mktSellerNoShows: users.mktSellerNoShows,
-      mktBuyerNoShows: users.mktBuyerNoShows,
-      mktDealsAsSellerTotal: users.mktDealsAsSellerTotal,
-      mktDealsAsBuyerTotal: users.mktDealsAsBuyerTotal,
-    }).from(users).where(eq(users.id, userId));
-    if (!user) return { completedSales:0, completedPurchases:0, sellerBackouts:0, buyerBackouts:0, sellerNoShows:0, buyerNoShows:0, totalAsSellerDeals:0, totalAsBuyerDeals:0, sellerCompletionRate:100, buyerCompletionRate:100 };
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) return {
+      completedSales:0, completedPurchases:0, sellerBackouts:0, buyerBackouts:0,
+      sellerNoShows:0, buyerNoShows:0, totalAsSellerDeals:0, totalAsBuyerDeals:0,
+      sellerCompletionRate:100, buyerCompletionRate:100,
+      listingsCreated:0, acceptedOffers:0, counterOffers:0, expiredOffers:0,
+      canceledDeals:0, verifiedSales:0, sellerRating:null, sellerRatingCount:0,
+      buyerRating:null, buyerRatingCount:0,
+    };
     const s = user.mktDealsAsSellerTotal || 0;
     const b = user.mktDealsAsBuyerTotal || 0;
+    const src = user.mktSellerRatingCount || 0;
+    const brc = user.mktBuyerRatingCount || 0;
     return {
       completedSales: user.mktCompletedSales || 0,
       completedPurchases: user.mktCompletedPurchases || 0,
@@ -1418,7 +1422,33 @@ export class DatabaseStorage implements IStorage {
       totalAsBuyerDeals: b,
       sellerCompletionRate: s > 0 ? Math.round(((user.mktCompletedSales || 0) / s) * 100) : 100,
       buyerCompletionRate: b > 0 ? Math.round(((user.mktCompletedPurchases || 0) / b) * 100) : 100,
+      listingsCreated: user.mktListingsCreated || 0,
+      acceptedOffers: user.mktAcceptedOffers || 0,
+      counterOffers: user.mktCounterOffers || 0,
+      expiredOffers: user.mktExpiredOffers || 0,
+      canceledDeals: user.mktCanceledDeals || 0,
+      verifiedSales: user.mktVerifiedSales || 0,
+      sellerRating: src > 0 ? Math.round(((user.mktSellerRatingSum || 0) / src) * 10) / 10 : null,
+      sellerRatingCount: src,
+      buyerRating: brc > 0 ? Math.round(((user.mktBuyerRatingSum || 0) / brc) * 10) / 10 : null,
+      buyerRatingCount: brc,
     };
+  }
+
+  // ── Marketplace Deal Reviews ──────────────────────────────────────────────
+  async createDealReview(data: { dealId: number; reviewerUserId: number; revieweeUserId: number; reviewerRole: string; rating: number; comment?: string }): Promise<MarketplaceDealReview> {
+    const [review] = await db.insert(marketplaceDealReviews).values(data).returning();
+    return review;
+  }
+
+  async getDealReviewByReviewer(dealId: number, reviewerUserId: number): Promise<MarketplaceDealReview | undefined> {
+    const [review] = await db.select().from(marketplaceDealReviews)
+      .where(and(eq(marketplaceDealReviews.dealId, dealId), eq(marketplaceDealReviews.reviewerUserId, reviewerUserId)));
+    return review;
+  }
+
+  async getDealReviews(dealId: number): Promise<MarketplaceDealReview[]> {
+    return db.select().from(marketplaceDealReviews).where(eq(marketplaceDealReviews.dealId, dealId));
   }
 
   async createJobStatusLog(data: any): Promise<JobStatusLog> {

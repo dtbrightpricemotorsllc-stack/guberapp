@@ -5253,7 +5253,51 @@ export async function registerRoutes(
       const slug = `${slugBase}-${item.id}`;
       await storage.updateMarketplaceItem(item.id, { publicSlug: slug });
 
+      // Track listings created
+      const seller = await storage.getUser(userId);
+      if (seller) await storage.updateUser(userId, { mktListingsCreated: (seller.mktListingsCreated || 0) + 1 });
+
       res.json({ ...item, publicSlug: slug });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Edit listing (blocked if pending/sold) ────────────────────────────────
+  app.patch("/api/marketplace/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(id);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
+      if (["pending", "sold"].includes(item.status || "")) {
+        return res.status(403).json({ message: "This listing is locked and cannot be edited while " + (item.status === "pending" ? "a deal is pending" : "it is sold") + "." });
+      }
+      const allowed = ["title", "description", "price", "sellerAvailability", "condition", "makeOfferEnabled", "minOfferThreshold", "priceType", "askingType"];
+      const patch: Record<string, any> = {};
+      for (const k of allowed) {
+        if (req.body[k] !== undefined) patch[k] = req.body[k];
+      }
+      if (Object.keys(patch).length === 0) return res.status(400).json({ message: "Nothing to update" });
+      const updated = await storage.updateMarketplaceItem(id, patch);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Delete listing (blocked if pending/sold) ──────────────────────────────
+  app.delete("/api/marketplace/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(id);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
+      if (["pending", "sold"].includes(item.status || "")) {
+        return res.status(403).json({ message: "Cannot delete a listing while " + (item.status === "pending" ? "a deal is pending" : "it is sold") + ". Record is preserved." });
+      }
+      await storage.updateMarketplaceItem(id, { status: "removed" });
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -6188,7 +6232,8 @@ export async function registerRoutes(
       if (!item) return res.status(404).json({ message: "Listing not found" });
       if (!item.makeOfferEnabled) return res.status(400).json({ message: "This listing is firm price" });
       if (item.sellerId === buyerUserId) return res.status(400).json({ message: "Cannot offer on your own listing" });
-      if (!["available", "active"].includes(item.status || "available")) return res.status(400).json({ message: "Listing is not available" });
+      if (!["available", "active", "pending"].includes(item.status || "available")) return res.status(400).json({ message: "Listing is not available" });
+      const isBackupOffer = item.status === "pending";
 
       const { offerAmount, message } = req.body;
       if (!offerAmount || offerAmount <= 0) return res.status(400).json({ message: "Invalid offer amount" });
@@ -6233,13 +6278,15 @@ export async function registerRoutes(
       // Notify seller
       await storage.createNotification({
         userId: item.sellerId,
-        title: "New Offer Received",
-        body: `Someone offered $${offerAmount.toLocaleString()} on your listing: ${item.title}`,
+        title: isBackupOffer ? "New Backup Offer Received" : "New Offer Received",
+        body: isBackupOffer
+          ? `Someone submitted a backup offer of $${offerAmount.toLocaleString()} on "${item.title}" while it's pending. You'll see it if the current deal falls through.`
+          : `Someone offered $${offerAmount.toLocaleString()} on your listing: ${item.title}`,
         type: "marketplace",
         jobId: null,
       });
 
-      res.json({ offer, filtered: false });
+      res.json({ offer, filtered: false, isBackupOffer });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -6287,6 +6334,8 @@ export async function registerRoutes(
         if (action === "accept") {
           await storage.updateMarketplaceOffer(offerId, { status: "accepted", sellerRespondedAt: new Date() });
           await storage.updateMarketplaceItem(item.id, { status: "pending" });
+          const sellerForAccept = await storage.getUser(item.sellerId);
+          if (sellerForAccept) await storage.updateUser(item.sellerId, { mktAcceptedOffers: (sellerForAccept.mktAcceptedOffers || 0) + 1 });
           // Auto-create deal and unlock chat
           const deal = await storage.createMarketplaceDeal({
             listingId: item.id,
@@ -6327,6 +6376,8 @@ export async function registerRoutes(
             sellerRespondedAt: new Date(),
             expiresAt: new Date(Date.now() + 20 * 60 * 1000),
           });
+          const sellerForCounter = await storage.getUser(item.sellerId);
+          if (sellerForCounter) await storage.updateUser(item.sellerId, { mktCounterOffers: (sellerForCounter.mktCounterOffers || 0) + 1 });
           await storage.createNotification({
             userId: offer.buyerUserId,
             title: "Counter Offer Received",
@@ -6775,7 +6826,27 @@ export async function registerRoutes(
         await storage.updateUser(deal.buyerUserId, { mktBuyerNoShows: (buyer.mktBuyerNoShows || 0) + 1 });
         await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
       } else if (outcome === "mutual_cancellation") {
+        await storage.updateUser(deal.sellerUserId, { mktCanceledDeals: (seller.mktCanceledDeals || 0) + 1 });
+        await storage.updateUser(deal.buyerUserId, { mktCanceledDeals: (buyer.mktCanceledDeals || 0) + 1 });
         await storage.updateMarketplaceItem(deal.listingId, { status: "available" });
+      }
+
+      // If deal fell through, surface best backup offer to seller
+      if (outcome !== "completed") {
+        const allOffers = await storage.getMarketplaceOffersByListing(deal.listingId);
+        const backupOffers = allOffers
+          .filter(o => o.status === "pending" && o.buyerUserId !== deal.buyerUserId)
+          .sort((a, b) => (b.offerAmount - a.offerAmount) || (new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()));
+        if (backupOffers.length > 0) {
+          const best = backupOffers[0];
+          await storage.createNotification({
+            userId: deal.sellerUserId,
+            title: "Backup Offer Available",
+            body: `Your listing is live again. You have ${backupOffers.length} backup offer${backupOffers.length > 1 ? "s" : ""}. Best: $${best.offerAmount.toLocaleString()}.`,
+            type: "marketplace",
+            jobId: null,
+          });
+        }
       }
 
       // Notify other party
@@ -6863,6 +6934,97 @@ export async function registerRoutes(
       const userId = parseInt(req.params.userId);
       const stats = await storage.getUserMarketplaceStats(userId);
       res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Deal Reviews ──────────────────────────────────────────────────────────
+  app.post("/api/marketplace/deals/:dealId/review", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const reviewerUserId = req.session.userId!;
+      const deal = await storage.getMarketplaceDeal(dealId);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      if (deal.buyerUserId !== reviewerUserId && deal.sellerUserId !== reviewerUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      if (deal.status !== "completed") {
+        return res.status(400).json({ message: "Reviews are only for completed deals" });
+      }
+      const existing = await storage.getDealReviewByReviewer(dealId, reviewerUserId);
+      if (existing) return res.status(400).json({ message: "You already submitted a review for this deal" });
+
+      const { rating, comment } = req.body;
+      if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: "Rating must be 1–5" });
+
+      const isSeller = deal.sellerUserId === reviewerUserId;
+      const revieweeUserId = isSeller ? deal.buyerUserId : deal.sellerUserId;
+      const reviewerRole = isSeller ? "seller" : "buyer";
+
+      const review = await storage.createDealReview({ dealId, reviewerUserId, revieweeUserId, reviewerRole, rating, comment: comment || null });
+
+      // Update reviewee's rating stats
+      const reviewee = await storage.getUser(revieweeUserId);
+      if (reviewee) {
+        if (reviewerRole === "seller") {
+          // Seller reviews buyer → update buyer rating
+          await storage.updateUser(revieweeUserId, {
+            mktBuyerRatingSum: (reviewee.mktBuyerRatingSum || 0) + rating,
+            mktBuyerRatingCount: (reviewee.mktBuyerRatingCount || 0) + 1,
+          });
+        } else {
+          // Buyer reviews seller → update seller rating
+          await storage.updateUser(revieweeUserId, {
+            mktSellerRatingSum: (reviewee.mktSellerRatingSum || 0) + rating,
+            mktSellerRatingCount: (reviewee.mktSellerRatingCount || 0) + 1,
+          });
+        }
+      }
+
+      await storage.createNotification({
+        userId: revieweeUserId,
+        title: "New Deal Review",
+        body: `You received a ${rating}-star review from your recent marketplace deal.`,
+        type: "marketplace",
+        jobId: null,
+      });
+
+      res.json(review);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/marketplace/deals/:dealId/review/mine", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const userId = req.session.userId!;
+      const deal = await storage.getMarketplaceDeal(dealId);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      if (deal.buyerUserId !== userId && deal.sellerUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const review = await storage.getDealReviewByReviewer(dealId, userId);
+      res.json(review || null);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Get listing's backup offers (seller only, while pending)
+  app.get("/api/marketplace/:id/backup-offers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.sellerId !== req.session.userId) return res.status(403).json({ message: "Not your listing" });
+      const offers = await storage.getMarketplaceOffersByListing(listingId);
+      // Return pending offers that are not the accepted one (backup queue)
+      const backup = offers
+        .filter(o => o.status === "pending")
+        .sort((a, b) => (b.offerAmount - a.offerAmount) || (new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()));
+      res.json(backup);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
