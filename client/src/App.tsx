@@ -99,6 +99,7 @@ const BizSponsorDropCancel = lazy(() => import("@/pages/biz-sponsor-drop-cancel"
 const BizTalentExplorer = lazy(() => import("@/pages/biz-talent-explorer"));
 const BizVerification = lazy(() => import("@/pages/biz-verification"));
 const BizOffers = lazy(() => import("@/pages/biz-offers"));
+const BizVerifyInspect = lazy(() => import("@/pages/biz-verify-inspect"));
 
 
 // Universal GUBER loading splash — replaces the legacy spinner-based loaders
@@ -300,6 +301,7 @@ function Router() {
       <Route path="/biz/talent-explorer" component={() => <BizRoute component={BizTalentExplorer} />} />
       <Route path="/biz/verification" component={() => <BizRoute component={BizVerification} />} />
       <Route path="/biz/offers" component={() => <BizRoute component={BizOffers} />} />
+      <Route path="/biz/verify-inspect" component={() => <BizRoute component={BizVerifyInspect} />} />
       <Route path="/biz/account" component={() => <BizRoute component={BizAccount} />} />
       <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />

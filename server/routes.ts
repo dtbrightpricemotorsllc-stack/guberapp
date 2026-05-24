@@ -5389,8 +5389,16 @@ export async function registerRoutes(
       const conditionFlags: string[] = Array.isArray(details.conditionFlags) ? details.conditionFlags : [];
       const generatedDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
+      // Optional buyer financing inputs (passed from frontend state)
+      const downPaymentRaw = parseFloat(String(req.query.down_payment || "0")) || 0;
+      const isProperty = ["property", "real estate"].includes((item.category || "").toLowerCase());
+      const isVehicle  = ["vehicles", "boats & marine", "trailers", "parts"].includes((item.category || "").toLowerCase());
+      const identifierLabel = isProperty ? "APN / Parcel ID" : isVehicle ? "VIN" : "Identifier";
+      const identifierValue = item.vinNumber || (details.apn || details.parcelId) || "Not provided";
+      const assetSectionLabel = isProperty ? "PROPERTY INFORMATION" : isVehicle ? "VEHICLE INFORMATION" : "ASSET INFORMATION";
+
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="buyer-order-${itemId}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="roadpass-${itemId}.pdf"`);
 
       const doc = new PDFDocument({ size: "LETTER", margin: 55, bufferPages: true });
       doc.pipe(res);
@@ -5407,10 +5415,10 @@ export async function registerRoutes(
       const COL2 = L + 175;                  // value column x
 
       // ── Document title block ──────────────────────────────────────────────
-      doc.fillColor(BLACK).fontSize(20).font("Helvetica-Bold")
-        .text("VEHICLE LISTING INFORMATION", L, 48);
-      doc.fontSize(11).font("Helvetica").fillColor(LABEL_GRAY)
-        .text("Buyer's Reference Sheet", L, 72);
+      doc.fillColor(BLACK).fontSize(18).font("Helvetica-Bold")
+        .text("TRANSACTION ROADPASS & VALUATION SHEET", L, 48);
+      doc.fontSize(10).font("Helvetica").fillColor(LABEL_GRAY)
+        .text("Asset Financing Reference  ·  GUBER Marketplace", L, 70);
 
       // Date top-right
       doc.fontSize(8).fillColor(LABEL_GRAY)
@@ -5441,13 +5449,12 @@ export async function registerRoutes(
       y += 18;
 
       // ── Disclaimer box ────────────────────────────────────────────────────
-      doc.rect(L, y, pageW, 28).fill(SECTION_BG).stroke();
-      doc.fillColor(LABEL_GRAY).fontSize(7.5).font("Helvetica")
-        .text(
-          "This Buyer's Order is an informational listing summary only. It is not a bill of sale, purchase agreement, title document, warranty, financing approval, inspection report, or guarantee from GUBER.",
-          L + 8, y + 7, { width: pageW - 16 }
-        );
-      y += 38;
+      const disclaimerText = "DISCLAIMER & LIMITATION OF LIABILITY: This document is generated strictly for informational and convenience purposes to optimize transactional speed. Guber Global LLC is not a licensed financial institution, lender, loan broker, auto dealer, or insurance underwriter. Guber Global LLC does not offer credit approvals, rate guarantees, or financial underwriting services. All final transaction terms, asset valuations, lending approval metrics, and coverage terms are strictly determined by the independent financial entities or risk insurers selected entirely by the user. Guber Global LLC assumes zero legal or financial liability for transaction accuracy, physical asset conditions, title validation discrepancies, or default occurrences.";
+      const disclaimerH = doc.heightOfString(disclaimerText, { width: pageW - 16 });
+      doc.rect(L, y, pageW, disclaimerH + 16).fill(SECTION_BG);
+      doc.fillColor(LABEL_GRAY).fontSize(7).font("Helvetica")
+        .text(disclaimerText, L + 8, y + 8, { width: pageW - 16 });
+      y += disclaimerH + 24;
 
       // ── Section helpers ───────────────────────────────────────────────────
       const rowH    = 18;
@@ -5470,20 +5477,25 @@ export async function registerRoutes(
         y += rowH;
       }
 
-      // ── VEHICLE INFORMATION ───────────────────────────────────────────────
-      sectionHead("VEHICLE INFORMATION");
-      row("Year",           String(item.year || "—"));
-      row("Make",           item.brand || "—");
-      row("Model",          item.model || "—");
-      row("Trim / Series",  details.trim || details.vehicleTrim || "—");
-      row("Mileage",        mileage);
-      row("VIN",            vinDisplay);
-      if (details.engine)       row("Engine",         details.engine);
-      if (details.transmission) row("Transmission",   details.transmission);
-      if (details.fuelType)     row("Fuel Type",      details.fuelType);
-      if (details.driveType)    row("Drive Type",     details.driveType);
-      if (details.exteriorColor) row("Exterior Color", details.exteriorColor);
-      if (details.interiorColor) row("Interior Color", details.interiorColor);
+      // ── ASSET INFORMATION (vehicle / property / generic) ─────────────────
+      sectionHead(assetSectionLabel);
+      if (item.year)            row("Year",              String(item.year));
+      if (item.brand)           row("Make / Brand",      item.brand);
+      if (item.model)           row("Model",             item.model);
+      if (details.trim || details.vehicleTrim) row("Trim / Series", details.trim || details.vehicleTrim);
+      if (isVehicle)            row("Mileage",           mileage);
+      row(identifierLabel,      identifierValue);
+      if (details.engine)       row("Engine",            details.engine);
+      if (details.transmission) row("Transmission",      details.transmission);
+      if (details.fuelType)     row("Fuel Type",         details.fuelType);
+      if (details.driveType)    row("Drive Type",        details.driveType);
+      if (details.exteriorColor) row("Exterior Color",   details.exteriorColor);
+      if (details.interiorColor) row("Interior Color",   details.interiorColor);
+      if (details.sqft)         row("Square Footage",    `${details.sqft} sq ft`);
+      if (details.bedrooms)     row("Bedrooms",          String(details.bedrooms));
+      if (details.bathrooms)    row("Bathrooms",         String(details.bathrooms));
+      if (details.acreage)      row("Acreage",           `${details.acreage} acres`);
+      if (details.propertyType) row("Property Type",     details.propertyType);
       y += secGap;
 
       // ── LISTING INFORMATION ───────────────────────────────────────────────
@@ -5492,7 +5504,28 @@ export async function registerRoutes(
       row("Purchase Type",  listingTypeLabel);
       row("Seller Name",    item.sellerName || "—");
       row("Seller Type",    sellerTypeLabel);
+      row("Location",       `${item.city || ""}${item.city && item.state ? ", " : ""}${item.state || ""}`);
+      if ((item as any).zipcode) row("ZIP Code", (item as any).zipcode);
       row("Listing ID",     String(itemId));
+      y += secGap;
+
+      // ── FINANCING OVERVIEW ────────────────────────────────────────────────
+      sectionHead("FINANCING OVERVIEW");
+      const askingNum = item.price || 0;
+      const downPayment = downPaymentRaw;
+      const netLoanRequest = Math.max(askingNum - downPayment, 0);
+      row("Listing / Asking Price",  askingNum > 0 ? `$${askingNum.toLocaleString()}` : "Contact for price");
+      row("Buyer Down Payment",      downPayment > 0 ? `$${downPayment.toLocaleString()}` : "Not entered");
+      // Net loan request — prominent
+      doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
+        .text("Net Loan Request", L + 6, y + 1, { width: 160 });
+      doc.fillColor("#119900").fontSize(11).font("Helvetica-Bold")
+        .text(netLoanRequest > 0 ? `$${netLoanRequest.toLocaleString()}` : "—", COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
+      doc.moveTo(L, y + rowH + 2).lineTo(L + pageW, y + rowH + 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+      y += rowH + 6;
+      doc.fillColor(LABEL_GRAY).fontSize(6.5).font("Helvetica")
+        .text("* Net loan request is calculated from buyer-entered down payment. Final financing terms are determined solely by the lender.", L + 6, y, { width: pageW - 12 });
+      y += 18;
       y += secGap;
 
       // ── CONDITION & TITLE ─────────────────────────────────────────────────
@@ -5536,23 +5569,42 @@ export async function registerRoutes(
       }
       y += secGap;
 
-      // ── LOCATION ──────────────────────────────────────────────────────────
-      sectionHead("LOCATION");
-      row("City",    item.city    || "—");
-      row("State",   item.state   || "—");
-      if (item.zipcode) row("ZIP Code", item.zipcode);
-      y += secGap;
+      // ── CALL-WINDOW TALK-TRACK SCRIPTS ────────────────────────────────────
+      const halfW = (pageW - 8) / 2;
 
-      // ── How to use box ────────────────────────────────────────────────────
-      doc.rect(L, y, pageW, 48).fill(SECTION_BG);
-      doc.fillColor(ACCENT).fontSize(8).font("Helvetica-Bold")
-        .text("How to use this document:", L + 8, y + 8);
-      doc.fillColor(LABEL_GRAY).fontSize(7.5).font("Helvetica")
+      // Bank / Credit Union script box
+      doc.rect(L, y, halfW, 80).fill(SECTION_BG);
+      doc.fillColor(ACCENT).fontSize(7.5).font("Helvetica-Bold")
+        .text("BANK / CREDIT UNION CALL SCRIPT", L + 8, y + 7);
+      doc.fillColor(LABEL_GRAY).fontSize(6.8).font("Helvetica")
         .text(
-          "Email to your bank or credit union  ·  Check insurance quotes  ·  Share with a co-buyer or partner  ·  Print and review before meeting the seller",
-          L + 8, y + 20, { width: pageW - 16 }
+          `"Hello, I'm calling to discuss a pre-purchase financing inquiry. I have a ${isProperty ? "property" : "vehicle"} I'm interested in purchasing. The ${identifierLabel} is ${identifierValue}. The asking price is ${priceDisplay}. I have ${downPayment > 0 ? `$${downPayment.toLocaleString()}` : "a down payment"} available. Can you start a loan pre-qualification based on this information?"`,
+          L + 8, y + 19, { width: halfW - 16 }
         );
-      y += 58;
+
+      // Insurance agent script box
+      doc.rect(L + halfW + 8, y, halfW, 80).fill(SECTION_BG);
+      doc.fillColor(ACCENT).fontSize(7.5).font("Helvetica-Bold")
+        .text("INSURANCE AGENT CALL SCRIPT", L + halfW + 16, y + 7);
+      doc.fillColor(LABEL_GRAY).fontSize(6.8).font("Helvetica")
+        .text(
+          `"Hello, I need an insurance quote on a ${isProperty ? "property" : "vehicle"} I'm purchasing. The ${identifierLabel} is ${identifierValue}, listed at ${priceDisplay} in ${item.city || ""}${item.city && item.state ? ", " : ""}${item.state || ""}. Can you give me a quote and let me know what information you need to bind coverage?"`,
+          L + halfW + 16, y + 19, { width: halfW - 16 }
+        );
+      y += 88;
+
+      // ── VERIFY BEFORE YOU FUND — Business CTA ─────────────────────────────
+      doc.rect(L, y, pageW, 58).fill("#050507");
+      doc.fillColor("#00e676").fontSize(8.5).font("Helvetica-Bold")
+        .text("VERIFY BEFORE YOU FUND  ·  GUBER Business", L + 12, y + 10);
+      doc.fillColor("#aeb7c7").fontSize(7).font("Helvetica")
+        .text(
+          "Financial companies: Request GPS-verified, time-stamped visual confirmation of vehicles, property, equipment, and other assets before lending, buying, funding, or repossessing. Visual documentation only. GUBER does not certify condition, title, value, or ownership.",
+          L + 12, y + 22, { width: pageW - 80 }
+        );
+      doc.fillColor("#00e676").fontSize(7).font("Helvetica-Bold")
+        .text("guberapp.app/biz  ·  Request Verify & Inspect", L + 12, y + 46);
+      y += 66;
 
       // ── Footer ────────────────────────────────────────────────────────────
       const footerY = doc.page.height - 52;
@@ -5564,10 +5616,10 @@ export async function registerRoutes(
         doc.image(logoPath, L, footerY + 7, { height: 18 });
       } catch { /* logo not found — skip */ }
 
-      doc.fillColor(LABEL_GRAY).fontSize(6.5).font("Helvetica")
+      doc.fillColor(LABEL_GRAY).fontSize(6).font("Helvetica")
         .text(
-          "Generated via GUBER Marketplace  ·  guberapp.app  ·  This document is for informational purposes only. GUBER is a marketplace platform and is not a party to the sale. GUBER makes no guarantee of accuracy, title status, vehicle condition, or financing eligibility.",
-          L + 24, footerY + 10, { width: pageW - 24 }
+          "Generated via GUBER Marketplace · guberapp.app · Guber Global LLC is not a licensed financial institution, lender, loan broker, auto dealer, or insurance underwriter. GUBER provides visual documentation and marketplace services only. GUBER assumes zero legal or financial liability for transaction accuracy, physical asset conditions, title validation discrepancies, or default occurrences.",
+          L + 24, footerY + 8, { width: pageW - 24 }
         );
 
       doc.end();
@@ -5734,10 +5786,10 @@ export async function registerRoutes(
       await storage.createBuyerOrderRequest({
         listingId, buyerUserId: buyerId, sellerUserId: item.sellerId, status: "pending",
       });
-      // Notify seller
+      // Notify seller — high-urgency pull strategy framing
       sendPushToUser(item.sellerId, {
-        title: "Buyer's Order Requested",
-        body: `A buyer is interested and requested a Buyer's Order. Complete the missing vehicle details once so future serious buyers can download it.`,
+        title: "🚨 Qualified Buyer Ready to Purchase",
+        body: `A qualified buyer wants to purchase your ${item.title || "listing"} right now. Log in and add your asset details so your buyer can generate their bank financing sheet and move forward.`,
         url: `/marketplace/p/${item.publicSlug || listingId}`,
         tag: `buyer-order-request-${listingId}`,
       }).catch(() => {});
@@ -5828,6 +5880,112 @@ export async function registerRoutes(
       const { note } = req.body;
       await storage.updateBuyerOrderRequest(requestId, { status: "rejected", rejectionNote: note || null });
       return res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Business Verify & Inspect for Companies ──────────────────────────────
+  // POST /api/biz/verify-inspect  — create a new request
+  app.post("/api/biz/verify-inspect", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const {
+        companyName, contactName, companyType,
+        assetType, assetName, identifierType, identifierValue,
+        assetLocation, packageType, requiredProof, budget, urgency, notes,
+      } = req.body;
+      if (!companyName || !contactName || !assetType || !assetName || !assetLocation || !packageType) {
+        return res.status(400).json({ message: "Missing required fields." });
+      }
+      const rec = await storage.createBusinessVerifyRequest({
+        businessId: userId,
+        companyName: String(companyName).trim(),
+        contactName: String(contactName).trim(),
+        companyType: companyType ? String(companyType).trim() : null,
+        assetType: String(assetType).trim(),
+        assetName: String(assetName).trim(),
+        identifierType: identifierType ? String(identifierType).trim() : null,
+        identifierValue: identifierValue ? String(identifierValue).trim() : null,
+        assetLocation: String(assetLocation).trim(),
+        packageType: String(packageType).trim(),
+        requiredProof: requiredProof ? String(requiredProof).trim() : null,
+        budget: budget ? parseFloat(String(budget)) : null,
+        urgency: urgency || "standard",
+        notes: notes ? String(notes).trim() : null,
+      });
+      return res.status(201).json(rec);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/biz/verify-inspect  — list requester's own requests
+  app.get("/api/biz/verify-inspect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const recs = await storage.getBusinessVerifyRequests(userId);
+      return res.json(recs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/biz/verify-inspect/:id
+  app.get("/api/biz/verify-inspect/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const rec = await storage.getBusinessVerifyRequest(id);
+      if (!rec) return res.status(404).json({ message: "Not found" });
+      if (rec.businessId !== userId) return res.status(403).json({ message: "Forbidden" });
+      return res.json(rec);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // PATCH /api/biz/verify-inspect/:id  — cancel or edit own pending request
+  app.patch("/api/biz/verify-inspect/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const rec = await storage.getBusinessVerifyRequest(id);
+      if (!rec) return res.status(404).json({ message: "Not found" });
+      if (rec.businessId !== userId) return res.status(403).json({ message: "Forbidden" });
+      const allowed = ["admin_review", "draft"];
+      if (!allowed.includes(rec.status || "")) return res.status(400).json({ message: "Request is already in progress and cannot be edited." });
+      const updated = await storage.updateBusinessVerifyRequest(id, req.body);
+      return res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin — GET all (admin only)
+  app.get("/api/admin/biz/verify-inspect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+      const recs = await storage.getAllBusinessVerifyRequests();
+      return res.json(recs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin — PATCH status
+  app.patch("/api/admin/biz/verify-inspect/:id", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+      const id = parseInt(req.params.id);
+      const rec = await storage.getBusinessVerifyRequest(id);
+      if (!rec) return res.status(404).json({ message: "Not found" });
+      const updated = await storage.updateBusinessVerifyRequest(id, req.body);
+      return res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

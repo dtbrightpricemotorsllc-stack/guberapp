@@ -1964,3 +1964,51 @@ export const insertTaskHistorySummarySchema = createInsertSchema(taskHistorySumm
 });
 export type TaskHistorySummary = typeof taskHistorySummary.$inferSelect;
 export type InsertTaskHistorySummary = z.infer<typeof insertTaskHistorySummarySchema>;
+
+// ── Business Verify & Inspect for Companies ───────────────────────────────
+export const businessVerifyRequests = pgTable("business_verify_requests", {
+  id: serial("id").primaryKey(),
+  businessId: integer("business_id").notNull(),
+  companyName: text("company_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  companyType: text("company_type"),
+  assetType: text("asset_type").notNull(),
+  assetName: text("asset_name").notNull(),
+  identifierType: text("identifier_type"),
+  identifierValue: text("identifier_value"),
+  assetLocation: text("asset_location").notNull(),
+  packageType: text("package_type").notNull(),
+  requiredProof: text("required_proof"),
+  budget: real("budget"),
+  urgency: text("urgency").default("standard"),
+  // draft | payment_pending | admin_review | live | accepted | proof_submitted | retake_requested | completed | disputed | cancelled
+  status: text("status").default("admin_review"),
+  assignedWorkerId: integer("assigned_worker_id"),
+  proofSubmissionId: integer("proof_submission_id"),
+  notes: text("notes"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const businessProofSubmissions = pgTable("business_proof_submissions", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull(),
+  workerId: integer("worker_id").notNull(),
+  photos: text("photos").array(),
+  notes: text("notes"),
+  gpsLat: real("gps_lat"),
+  gpsLng: real("gps_lng"),
+  capturedAt: timestamp("captured_at"),
+  // submitted | approved | retake_requested | disputed
+  status: text("status").default("submitted"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+});
+
+export const insertBusinessVerifyRequestSchema = createInsertSchema(businessVerifyRequests).omit({
+  id: true, createdAt: true, updatedAt: true, status: true,
+  assignedWorkerId: true, proofSubmissionId: true, completedAt: true,
+});
+export type BusinessVerifyRequest = typeof businessVerifyRequests.$inferSelect;
+export type InsertBusinessVerifyRequest = z.infer<typeof insertBusinessVerifyRequestSchema>;
+export type BusinessProofSubmission = typeof businessProofSubmissions.$inferSelect;

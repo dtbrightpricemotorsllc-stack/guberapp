@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check } from "lucide-react";
+import { ShieldCheck, MapPin, Clock, Package, AlertCircle, ArrowLeft, Eye, MessageCircle, Zap, Expand, ChevronLeft, ChevronRight, Download, FileText, Link2, Check, ScanSearch } from "lucide-react";
 import { InfoHint } from "@/components/info-hint";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -157,6 +157,7 @@ export default function MarketplaceListing() {
 
   const [showBoDetailsForm, setShowBoDetailsForm] = useState(false);
   const [boDetailsData, setBoDetailsData] = useState<Record<string, string>>(EMPTY_BO_DETAILS);
+  const [downPayment, setDownPayment] = useState("");
 
   const boDetailsMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/marketplace/${itemId}/buyer-order/details`, boDetailsData),
@@ -211,7 +212,8 @@ export default function MarketplaceListing() {
     : "Contact for price";
 
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
-  const showBuyerOrderSection = isVehicleCategory;
+  const isPropertyCategory = ["property", "real estate"].includes((item?.category || "").toLowerCase());
+  const showBuyerOrderSection = isVehicleCategory || isPropertyCategory;
 
   const handleBuyerOrderClick = () => {
     if (!user) { navigate("/auth"); return; }
@@ -383,11 +385,11 @@ export default function MarketplaceListing() {
               <div className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-primary shrink-0" />
-                  <span className="text-sm font-display font-bold">Buyer's Order</span>
+                  <span className="text-sm font-display font-bold">Transaction Roadpass</span>
                   <InfoHint
-                    title="What is a Buyer's Order?"
-                    description="A Buyer's Order is a downloadable PDF of this vehicle listing's key information — formatted for sharing with banks, credit unions, or insurance providers."
-                    bullets={["Email to your bank or credit union","Check insurance quotes","Share with a spouse or co-buyer","Print and review before meeting the seller"]}
+                    title="What is a Transaction Roadpass?"
+                    description="A downloadable PDF of this asset's key information — formatted for sharing with banks, credit unions, or insurance providers. Includes a financing overview and pre-written call scripts."
+                    bullets={["Email to your bank or credit union","Check insurance quotes","Share with a co-buyer or partner","Print and review before meeting the seller"]}
                     warning="This is NOT a bill of sale, purchase agreement, title document, warranty, financing approval, inspection report, or guarantee from GUBER."
                   />
                 </div>
@@ -427,20 +429,44 @@ export default function MarketplaceListing() {
                 ) : buyerOrderSessionId ? (
                   /* ── Buyer + paid ── */
                   <div className="space-y-2">
-                    <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Buyer's Order is ready.</p>
-                    <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`} download
+                    <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Roadpass is ready.</p>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1.5">Optional: Enter your down payment to auto-populate the financing section</p>
+                      <input
+                        type="number" min="0" placeholder="Down payment ($)"
+                        value={downPayment}
+                        onChange={e => setDownPayment(e.target.value)}
+                        className="w-full h-9 px-3 rounded-xl text-sm outline-none mb-2"
+                        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e4e4e7" }}
+                        data-testid="input-down-payment"
+                      />
+                    </div>
+                    <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}${downPayment ? `&down_payment=${downPayment}` : ""}`} download
                       className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black"
                       style={{ background: "#00e676" }} data-testid="button-download-buyer-order">
-                      <Download className="w-4 h-4" /> Download Buyer's Order PDF
+                      <Download className="w-4 h-4" /> Download Roadpass PDF
                     </a>
                   </div>
                 ) : (
                   /* ── Buyer + VIN ready ── */
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      VIN: <span className="font-mono font-bold text-foreground/60 tracking-widest">{(item.vinNumber || "").slice(0, -4).replace(/./g, "•")}{(item.vinNumber || "").slice(-4)}</span>
-                      <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full VIN in PDF)</span>
-                    </p>
+                    {item.vinNumber && (
+                      <p className="text-xs text-muted-foreground">
+                        {isPropertyCategory ? "Identifier" : "VIN"}: <span className="font-mono font-bold text-foreground/60 tracking-widest">{(item.vinNumber || "").slice(0, -4).replace(/./g, "•")}{(item.vinNumber || "").slice(-4)}</span>
+                        <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full value in PDF)</span>
+                      </p>
+                    )}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1.5">Optional: Enter your down payment to auto-populate the financing section</p>
+                      <input
+                        type="number" min="0" placeholder="Down payment ($)"
+                        value={downPayment}
+                        onChange={e => setDownPayment(e.target.value)}
+                        className="w-full h-9 px-3 rounded-xl text-sm outline-none"
+                        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e4e4e7" }}
+                        data-testid="input-down-payment"
+                      />
+                    </div>
                     {isStoreBuild ? (
                       <ExternalPurchaseSheet product="marketplace_buyer_order" options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}>
                         {({ onPress, loading }) => (
@@ -511,6 +537,24 @@ export default function MarketplaceListing() {
               </div>
             </div>
           )}
+
+          {/* ── Verify Before You Fund — Business CTA ── */}
+          <div className="rounded-xl mb-6 overflow-hidden" style={{ border: "1px solid rgba(0,230,118,0.15)" }}>
+            <div className="px-4 py-3 flex items-start gap-3" style={{ background: "rgba(0,230,118,0.04)" }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.2)" }}>
+                <ScanSearch className="w-4 h-4" style={{ color: "#00e676" }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-display font-bold mb-0.5" style={{ color: "#00e676" }}>Funding this asset?</p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Request third-party visual verification before money moves — GPS-verified presence, time-stamped photos, {isVehicleCategory ? "VIN" : "identifier"} confirmation, and proof package.
+                </p>
+                <a href="/biz/verify-inspect" className="inline-block mt-2 text-[10px] font-bold tracking-wide" style={{ color: "#00e676" }}>
+                  Request Verify &amp; Inspect for Companies →
+                </a>
+              </div>
+            </div>
+          </div>
 
           {/* Seller */}
           <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>

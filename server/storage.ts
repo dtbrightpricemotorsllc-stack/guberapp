@@ -13,6 +13,7 @@ import {
   studioSessions, studioSessionFiles, studioGenerationLog, studioModelPricing, studioFreeQuota,
   studioFeaturedClips,
   taskHistorySummary,
+  businessVerifyRequests, businessProofSubmissions,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
   type StudioSession, type StudioSessionFile, type StudioGenerationLog, type StudioModelPricing,
@@ -31,6 +32,7 @@ import {
   type GuberDispute, type CancellationLogEntry, type FundClaimOrHold,
   type PinnedFinding,
   type TaskHistorySummary,
+  type BusinessVerifyRequest, type BusinessProofSubmission,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ne, desc, and, or, sql, isNotNull, count, inArray, lt, lte, isNull } from "drizzle-orm";
@@ -321,6 +323,12 @@ export interface IStorage {
   getBuyerOrderRequestByBuyer(listingId: number, buyerUserId: number): Promise<MarketplaceBuyerOrderRequest | undefined>;
   getBuyerOrderRequestsForListing(listingId: number): Promise<MarketplaceBuyerOrderRequest[]>;
   updateBuyerOrderRequest(id: number, data: Partial<MarketplaceBuyerOrderRequest>): Promise<MarketplaceBuyerOrderRequest | undefined>;
+
+  createBusinessVerifyRequest(data: any): Promise<BusinessVerifyRequest>;
+  getBusinessVerifyRequests(businessId: number): Promise<BusinessVerifyRequest[]>;
+  getBusinessVerifyRequest(id: number): Promise<BusinessVerifyRequest | undefined>;
+  updateBusinessVerifyRequest(id: number, data: Partial<BusinessVerifyRequest>): Promise<BusinessVerifyRequest | undefined>;
+  getAllBusinessVerifyRequests(): Promise<BusinessVerifyRequest[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2126,6 +2134,34 @@ export class DatabaseStorage implements IStorage {
   async deletePinnedFinding(id: number, adminUserId: number): Promise<void> {
     await db.delete(pinnedFindings)
       .where(and(eq(pinnedFindings.id, id), eq(pinnedFindings.adminUserId, adminUserId)));
+  }
+
+  async createBusinessVerifyRequest(data: any): Promise<BusinessVerifyRequest> {
+    const [rec] = await db.insert(businessVerifyRequests).values(data).returning();
+    return rec;
+  }
+
+  async getBusinessVerifyRequests(businessId: number): Promise<BusinessVerifyRequest[]> {
+    return db.select().from(businessVerifyRequests)
+      .where(eq(businessVerifyRequests.businessId, businessId))
+      .orderBy(desc(businessVerifyRequests.createdAt));
+  }
+
+  async getBusinessVerifyRequest(id: number): Promise<BusinessVerifyRequest | undefined> {
+    const [rec] = await db.select().from(businessVerifyRequests).where(eq(businessVerifyRequests.id, id));
+    return rec;
+  }
+
+  async updateBusinessVerifyRequest(id: number, data: Partial<BusinessVerifyRequest>): Promise<BusinessVerifyRequest | undefined> {
+    const [rec] = await db.update(businessVerifyRequests)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(businessVerifyRequests.id, id))
+      .returning();
+    return rec;
+  }
+
+  async getAllBusinessVerifyRequests(): Promise<BusinessVerifyRequest[]> {
+    return db.select().from(businessVerifyRequests).orderBy(desc(businessVerifyRequests.createdAt));
   }
 }
 

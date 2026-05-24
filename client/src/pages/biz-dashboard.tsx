@@ -14,7 +14,7 @@ import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import {
   Building2, Upload, FileText, ShoppingBag, ChevronRight, Eye, Search,
   ShieldCheck, Send, TrendingUp, Zap, CreditCard, CheckCircle2,
-  Flame, Sparkles, ArrowRight, Clock, Target, X, Loader2, Key
+  Flame, Sparkles, ArrowRight, Clock, Target, X, Loader2, Key, ScanSearch
 } from "lucide-react";
 import type { Job, BusinessProfile } from "@shared/schema";
 
@@ -354,6 +354,41 @@ export default function BizDashboard() {
             <QuickAction href="/biz/verification" icon={ShieldCheck} label="Business Verification" sub={isVerified ? "Verified" : "Required for full access"} iconColor={isVerified ? SUCCESS : "#A1A1A1"} />
           </div>
 
+        </div>
+
+        {/* ── VERIFY & INSPECT FOR COMPANIES ─────────────────────────────── */}
+        <div style={{ marginBottom: "2.75rem" }}>
+          <p className="text-[9px] font-bold tracking-[0.22em] uppercase mb-4" style={{ color: TEXT_MUTED }}>Asset Verification</p>
+
+          <Link href="/biz/verify-inspect">
+            <div
+              className="rounded-2xl overflow-hidden cursor-pointer transition-all group"
+              style={{ background: SURFACE, border: "1px solid rgba(0,230,118,0.18)" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(0,230,118,0.45)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(0,230,118,0.18)"; }}
+              data-testid="card-verify-inspect"
+            >
+              <div className="h-[1px]" style={{ background: "linear-gradient(90deg, transparent, rgba(0,230,118,0.35), transparent)" }} />
+              <div className="p-6 flex items-start gap-5">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(0,230,118,0.07)", border: "1px solid rgba(0,230,118,0.18)" }}>
+                  <ScanSearch className="w-5 h-5" style={{ color: "#00e676" }} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <p className="text-base font-black text-foreground">Verify Before You Fund</p>
+                    <span className="text-[8px] px-1.5 py-0.5 rounded font-bold tracking-[0.18em] uppercase" style={{ background: "rgba(0,230,118,0.07)", color: "#00e676", border: "1px solid rgba(0,230,118,0.18)" }}>
+                      BIZ
+                    </span>
+                  </div>
+                  <p className="text-[13px] leading-relaxed mb-1" style={{ color: TEXT_SECONDARY }}>
+                    Request GPS-verified, time-stamped visual confirmation of vehicles, property, and equipment before lending, buying, or funding.
+                  </p>
+                  <p className="text-xs" style={{ color: TEXT_MUTED }}>Physical presence + photo proof package delivered by verified GUBER workers.</p>
+                </div>
+                <ChevronRight className="w-5 h-5 flex-shrink-0 mt-1 opacity-20 group-hover:opacity-50 transition-opacity" style={{ color: "#00e676" }} />
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* iOS: buy extra profile unlocks (U.S. customers only) */}
