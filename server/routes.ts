@@ -5586,7 +5586,7 @@ export async function registerRoutes(
       // Notify seller
       sendPushToUser(item.sellerId, {
         title: "Buyer's Order Requested",
-        body: `A buyer requested a Buyer's Order for "${item.title}". Complete the vehicle details once so serious buyers can download it.`,
+        body: `A buyer is interested and requested a Buyer's Order. Complete the missing vehicle details once so future serious buyers can download it.`,
         url: `/marketplace/p/${item.publicSlug || listingId}`,
         tag: `buyer-order-request-${listingId}`,
       }).catch(() => {});
