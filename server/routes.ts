@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import PDFDocument from "pdfkit";
+import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
@@ -5400,227 +5401,347 @@ export async function registerRoutes(
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="roadpass-${itemId}.pdf"`);
 
-      const doc = new PDFDocument({ size: "LETTER", margin: 55, bufferPages: true });
+      // ── Fetch vehicle photo (best-effort) ─────────────────────────────────
+      const photos = item.photos as string[] | null;
+      let photoBuffer: Buffer | null = null;
+      if (photos && photos[0]) {
+        try {
+          const photoFetch = await fetch(photos[0]);
+          if (photoFetch.ok) photoBuffer = Buffer.from(await photoFetch.arrayBuffer());
+        } catch { /* no photo */ }
+      }
+
+      // ── QR code ───────────────────────────────────────────────────────────
+      const listingUrl = `https://guberapp.app/marketplace/p/${item.publicSlug || itemId}`;
+      let qrBuf: Buffer | null = null;
+      try {
+        qrBuf = await QRCode.toBuffer(listingUrl, {
+          width: 80, margin: 1,
+          color: { dark: "#111827", light: "#f8fafc" },
+        } as any);
+      } catch { /* no qr */ }
+
+      const doc = new PDFDocument({ size: "LETTER", margin: 0, bufferPages: true });
       doc.pipe(res);
 
-      // ── Palette — clean white document ────────────────────────────────────
-      const BLACK      = "#111111";
-      const LABEL_GRAY = "#666666";
-      const RULE_GRAY  = "#cccccc";
-      const SECTION_BG = "#f4f4f4";
-      const ACCENT     = "#1a1a1a";
+      // ── PALETTE ────────────────────────────────────────────────────────────
+      const PW = 612, PH = 792;
+      const ML = 20, IW = PW - ML * 2;               // IW = 572
+      const HALF = Math.floor((IW - 10) / 2);        // ≈ 281 each col, 10pt gap
+      const C_HDR    = "#0d0d0f";
+      const C_WHITE  = "#ffffff";
+      const C_PURPLE = "#7c3aed";
+      const C_GACC   = "#00e676";
+      const C_GREEN  = "#00c853";
+      const C_BDR    = "#e2e8f0";
+      const C_BLK    = "#111827";
+      const C_GRAY   = "#6b7280";
+      const C_LT     = "#9ca3af";
+      const C_FOOT   = "#f8fafc";
+      const C_WARN   = "#dc2626";
+      const C_AMB    = "#d97706";
+      const C_FINBX  = "#f0fdf4";
+      const C_FINBDR = "#86efac";
+      const C_YBG    = "#fefce8";
 
-      const L  = 55;                          // left margin
-      const pageW = doc.page.width - L * 2;  // usable width
-      const COL2 = L + 175;                  // value column x
+      const logoPath = `${process.cwd()}/client/public/favicon.png`;
 
-      // ── Document title block ──────────────────────────────────────────────
-      doc.fillColor(BLACK).fontSize(18).font("Helvetica-Bold")
-        .text("TRANSACTION ROADPASS & VALUATION SHEET", L, 48);
-      doc.fontSize(10).font("Helvetica").fillColor(LABEL_GRAY)
-        .text("Asset Financing Reference  ·  GUBER Marketplace", L, 70);
-
-      // Date top-right
-      doc.fontSize(8).fillColor(LABEL_GRAY)
-        .text(`Date: ${generatedDate}`, L, 60, { width: pageW, align: "right" });
-      doc.fontSize(8).fillColor(LABEL_GRAY)
-        .text(`Ref #${itemId}`, L, 71, { width: pageW, align: "right" });
-
-      // Top rule
-      doc.moveTo(L, 90).lineTo(L + pageW, 90).strokeColor(ACCENT).lineWidth(1.5).stroke();
-
-      // ── SELLER block (prominent — banks need to see who's selling) ────────
-      let y = 102;
-      doc.fillColor(LABEL_GRAY).fontSize(7).font("Helvetica")
-        .text("SELLER INFORMATION", L, y);
-      y += 12;
-
-      const sellerDisplayName = item.sellerName || "Private Party";
-      doc.fillColor(BLACK).fontSize(13).font("Helvetica-Bold")
-        .text(sellerDisplayName, L, y);
-      y += 17;
-
-      doc.fillColor(LABEL_GRAY).fontSize(9).font("Helvetica")
-        .text(`${sellerTypeLabel}  ·  ${item.city || ""}${item.city && item.state ? ", " : ""}${item.state || ""}`, L, y);
-      y += 10;
-
-      // Thin rule under seller block
-      doc.moveTo(L, y + 6).lineTo(L + pageW, y + 6).strokeColor(RULE_GRAY).lineWidth(0.5).stroke();
-      y += 18;
-
-      // ── Disclaimer box ────────────────────────────────────────────────────
-      const disclaimerText = "DISCLAIMER & LIMITATION OF LIABILITY: This document is generated strictly for informational and convenience purposes to optimize transactional speed. Guber Global LLC is not a licensed financial institution, lender, loan broker, auto dealer, or insurance underwriter. Guber Global LLC does not offer credit approvals, rate guarantees, or financial underwriting services. All final transaction terms, asset valuations, lending approval metrics, and coverage terms are strictly determined by the independent financial entities or risk insurers selected entirely by the user. Guber Global LLC assumes zero legal or financial liability for transaction accuracy, physical asset conditions, title validation discrepancies, or default occurrences.";
-      const disclaimerH = doc.heightOfString(disclaimerText, { width: pageW - 16 });
-      doc.rect(L, y, pageW, disclaimerH + 16).fill(SECTION_BG);
-      doc.fillColor(LABEL_GRAY).fontSize(7).font("Helvetica")
-        .text(disclaimerText, L + 8, y + 8, { width: pageW - 16 });
-      y += disclaimerH + 24;
-
-      // ── Section helpers ───────────────────────────────────────────────────
-      const rowH    = 18;
-      const secGap  = 16;
-
-      function sectionHead(label: string) {
-        doc.rect(L, y, pageW, 16).fill(SECTION_BG);
-        doc.fillColor(LABEL_GRAY).fontSize(7).font("Helvetica-Bold")
-          .text(label, L + 6, y + 5);
-        y += 20;
+      // ── HELPERS ────────────────────────────────────────────────────────────
+      function card(x: number, y: number, w: number, h: number, fillColor = C_WHITE, borderColor = C_BDR) {
+        doc.save();
+        doc.roundedRect(x, y, w, h, 6).fill(fillColor);
+        doc.roundedRect(x, y, w, h, 6).undash().lineWidth(0.75).stroke(borderColor);
+        doc.restore();
       }
 
-      function row(label: string, value: string) {
-        doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
-          .text(label, L + 6, y + 1, { width: 160 });
-        doc.fillColor(BLACK).fontSize(8.5).font("Helvetica-Bold")
-          .text(value || "—", COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
-        doc.moveTo(L, y + rowH - 2).lineTo(L + pageW, y + rowH - 2)
-          .strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
-        y += rowH;
+      function circleIcon(cx: number, cy: number, r: number, bgFill: string, label: string, labelColor: string) {
+        doc.circle(cx, cy, r).fill(bgFill);
+        doc.fillColor(labelColor).fontSize(r - 1).font("Helvetica-Bold")
+          .text(label, cx - r, cy - r + 2, { width: r * 2, align: "center" });
       }
 
-      // ── ASSET INFORMATION (vehicle / property / generic) ─────────────────
-      sectionHead(assetSectionLabel);
-      if (item.year)            row("Year",              String(item.year));
-      if (item.brand)           row("Make / Brand",      item.brand);
-      if (item.model)           row("Model",             item.model);
-      if (details.trim || details.vehicleTrim) row("Trim / Series", details.trim || details.vehicleTrim);
-      if (isVehicle)            row("Mileage",           mileage);
-      row(identifierLabel,      identifierValue);
-      if (details.engine)       row("Engine",            details.engine);
-      if (details.transmission) row("Transmission",      details.transmission);
-      if (details.fuelType)     row("Fuel Type",         details.fuelType);
-      if (details.driveType)    row("Drive Type",        details.driveType);
-      if (details.exteriorColor) row("Exterior Color",   details.exteriorColor);
-      if (details.interiorColor) row("Interior Color",   details.interiorColor);
-      if (details.sqft)         row("Square Footage",    `${details.sqft} sq ft`);
-      if (details.bedrooms)     row("Bedrooms",          String(details.bedrooms));
-      if (details.bathrooms)    row("Bathrooms",         String(details.bathrooms));
-      if (details.acreage)      row("Acreage",           `${details.acreage} acres`);
-      if (details.propertyType) row("Property Type",     details.propertyType);
-      y += secGap;
+      function secHead(x: number, y: number, iconBg: string, iconTxt: string, iconColor: string, label: string): number {
+        circleIcon(x + 8, y + 8, 7, iconBg, iconTxt, iconColor);
+        doc.fillColor(C_GRAY).fontSize(7.5).font("Helvetica-Bold")
+          .text(label, x + 20, y + 4);
+        return y + 22;
+      }
 
-      // ── LISTING INFORMATION ───────────────────────────────────────────────
-      sectionHead("LISTING INFORMATION");
-      row("Asking Price",   priceDisplay);
-      row("Purchase Type",  listingTypeLabel);
-      row("Seller Name",    item.sellerName || "—");
-      row("Seller Type",    sellerTypeLabel);
-      row("Location",       `${item.city || ""}${item.city && item.state ? ", " : ""}${item.state || ""}`);
-      if ((item as any).zipcode) row("ZIP Code", (item as any).zipcode);
-      row("Listing ID",     String(itemId));
-      y += secGap;
+      // ── HEADER (y = 0 → 76) ───────────────────────────────────────────────
+      doc.rect(0, 0, PW, 76).fill(C_HDR);
 
-      // ── FINANCING OVERVIEW ────────────────────────────────────────────────
-      sectionHead("FINANCING OVERVIEW");
+      // Logo
+      let logoEndX = ML;
+      try { doc.image(logoPath, ML, 14, { height: 48 }); logoEndX = ML + 54; } catch {}
+
+      // GUBER wordmark
+      doc.fillColor(C_WHITE).fontSize(15).font("Helvetica-Bold")
+        .text("GUBER", logoEndX + 4, 22);
+      doc.fillColor(C_GACC).fontSize(6.5).font("Helvetica-Bold")
+        .text("MARKETPLACE", logoEndX + 4, 40, { characterSpacing: 0.5 });
+
+      // Vertical separator
+      const sepX = logoEndX + 62;
+      doc.moveTo(sepX, 16).lineTo(sepX, 60).strokeColor("rgba(255,255,255,0.2)").lineWidth(0.75).stroke();
+
+      // Document title + subtitle
+      const titleX = sepX + 12;
+      const titleW = PW - titleX - ML - 80;
+      doc.fillColor(C_WHITE).fontSize(14).font("Helvetica-Bold")
+        .text("TRANSACTION ROADPASS & VALUATION SHEET", titleX, 19, { width: titleW, lineBreak: false });
+      doc.fillColor(C_GACC).fontSize(8.5).font("Helvetica-Bold")
+        .text("ASSET FINANCING REFERENCE", titleX, 47, { characterSpacing: 0.3 });
+
+      // Badge (top-right)
+      const badgeX = PW - ML - 66, badgeY = 13;
+      doc.roundedRect(badgeX, badgeY, 62, 50, 5).undash().lineWidth(1.5).stroke(C_PURPLE);
+      if (isSampleRequest) {
+        doc.fillColor(C_WHITE).fontSize(9).font("Helvetica-Bold")
+          .text("SAMPLE", badgeX, badgeY + 10, { width: 62, align: "center" });
+        doc.fillColor(C_WHITE).fontSize(9).font("Helvetica-Bold")
+          .text("DOCUMENT", badgeX, badgeY + 24, { width: 62, align: "center" });
+      } else {
+        doc.fillColor(C_WHITE).fontSize(7).font("Helvetica")
+          .text(generatedDate, badgeX, badgeY + 12, { width: 62, align: "center" });
+        doc.fillColor(C_LT).fontSize(6.5).font("Helvetica")
+          .text(`Ref #${itemId}`, badgeX, badgeY + 28, { width: 62, align: "center" });
+      }
+
+      // ── SECTION 1: VEHICLE INFO + SELLER INFO (y = 88) ────────────────────
+      const s1Y = 88, cardH1 = 185;
+      const c1X = ML, c2X = ML + HALF + 10;
+
+      // — LEFT: VEHICLE / ASSET INFORMATION ——
+      card(c1X, s1Y, HALF, cardH1);
+      let cy1 = secHead(c1X + 4, s1Y + 8, "#ede9fe", "◉", C_PURPLE, assetSectionLabel);
+
+      // Photo
+      if (photoBuffer) {
+        try {
+          doc.save();
+          doc.roundedRect(c1X + 8, cy1, 108, 80, 3).clip();
+          doc.image(photoBuffer, c1X + 8, cy1, { width: 108, height: 80 });
+          doc.restore();
+        } catch {}
+      }
+      const infoX = photoBuffer ? c1X + 124 : c1X + 12;
+      const infoW = photoBuffer ? HALF - 132 : HALF - 24;
+
+      const vName = [item.year, item.brand, item.model].filter(Boolean).join(" ") || item.title || "—";
+      const vFontSize = vName.length > 22 ? 10 : vName.length > 16 ? 11 : 12;
+      doc.fillColor(C_BLK).fontSize(vFontSize).font("Helvetica-Bold")
+        .text(vName, infoX, cy1, { width: infoW });
+      let iy = cy1 + doc.heightOfString(vName, { width: infoW }) + 7;
+
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text(identifierLabel, infoX, iy);
+      doc.fillColor(C_BLK).fontSize(7.5).font("Helvetica-Bold")
+        .text(identifierValue, infoX, iy + 10, { width: infoW, lineBreak: false });
+      iy += 26;
+
+      if (isVehicle && item.vehicleMileage) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Mileage", infoX, iy);
+        doc.fillColor(C_BLK).fontSize(7.5).font("Helvetica-Bold").text(mileage, infoX, iy + 10);
+        iy += 26;
+      }
+      if (details.engine) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Engine", infoX, iy);
+        doc.fillColor(C_BLK).fontSize(7.5).font("Helvetica-Bold").text(String(details.engine), infoX, iy + 10, { width: infoW });
+        iy += 26;
+      }
+
+      const loc = `${item.city || ""}${item.city && item.state ? ", " : ""}${item.state || ""}${(item as any).zipcode ? " " + (item as any).zipcode : ""}`;
+      if (loc.trim()) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Location", infoX, iy);
+        doc.fillColor(C_BLK).fontSize(7.5).font("Helvetica-Bold").text(loc, infoX, iy + 10, { width: infoW });
+      }
+
+      // — RIGHT: SELLER INFORMATION ——
+      card(c2X, s1Y, HALF, cardH1);
+      let cy2 = secHead(c2X + 4, s1Y + 8, "#dbeafe", "●", "#2563eb", "SELLER INFORMATION");
+
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Seller Name", c2X + 12, cy2);
+      cy2 += 11;
+      const snFontSize = (item.sellerName || "").length > 24 ? 12 : 14;
+      doc.fillColor(C_BLK).fontSize(snFontSize).font("Helvetica-Bold")
+        .text(item.sellerName || "Private Party", c2X + 12, cy2, { width: HALF - 24 });
+      cy2 += doc.heightOfString(item.sellerName || "Private Party", { width: HALF - 24 }) + 14;
+
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Seller Type", c2X + 12, cy2);
+      cy2 += 11;
+      doc.fillColor(C_BLK).fontSize(9).font("Helvetica-Bold").text(sellerTypeLabel, c2X + 12, cy2);
+      cy2 += 22;
+
+      if (loc.trim()) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("City, State", c2X + 12, cy2);
+        cy2 += 11;
+        doc.fillColor(C_BLK).fontSize(9).font("Helvetica-Bold")
+          .text(loc, c2X + 12, cy2, { width: HALF - 24 });
+        cy2 += 22;
+      }
+
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Purchase Type", c2X + 12, cy2);
+      cy2 += 11;
+      doc.fillColor(C_BLK).fontSize(9).font("Helvetica-Bold").text(listingTypeLabel, c2X + 12, cy2);
+      cy2 += 20;
+
+      if (details.exteriorColor) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("Exterior Color", c2X + 12, cy2);
+        cy2 += 11;
+        doc.fillColor(C_BLK).fontSize(9).font("Helvetica-Bold").text(String(details.exteriorColor), c2X + 12, cy2);
+      }
+
+      // ── SECTION 2: FINANCING OVERVIEW (y = 283) ───────────────────────────
+      const s2Y = s1Y + cardH1 + 10;
+      const finH = 110;
+      card(ML, s2Y, IW, finH);
+      secHead(ML + 4, s2Y + 8, C_YBG, "$", "#ca8a04", "FINANCING OVERVIEW");
+
       const askingNum = item.price || 0;
       const downPayment = downPaymentRaw;
       const netLoanRequest = Math.max(askingNum - downPayment, 0);
-      row("Listing / Asking Price",  askingNum > 0 ? `$${askingNum.toLocaleString()}` : "Contact for price");
-      row("Buyer Down Payment",      downPayment > 0 ? `$${downPayment.toLocaleString()}` : "Not entered");
-      // Net loan request — prominent
-      doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
-        .text("Net Loan Request", L + 6, y + 1, { width: 160 });
-      doc.fillColor("#119900").fontSize(11).font("Helvetica-Bold")
-        .text(netLoanRequest > 0 ? `$${netLoanRequest.toLocaleString()}` : "—", COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
-      doc.moveTo(L, y + rowH + 2).lineTo(L + pageW, y + rowH + 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
-      y += rowH + 6;
-      doc.fillColor(LABEL_GRAY).fontSize(6.5).font("Helvetica")
-        .text("* Net loan request is calculated from buyer-entered down payment. Final financing terms are determined solely by the lender.", L + 6, y, { width: pageW - 12 });
-      y += 18;
-      y += secGap;
 
-      // ── CONDITION & TITLE ─────────────────────────────────────────────────
-      sectionHead("CONDITION & TITLE");
-      row("Title Status", item.titleStatus || "—");
-      if (item.condition) row("Condition", item.condition);
+      // Asking price
+      doc.fillColor(C_GRAY).fontSize(7.5).font("Helvetica-Bold").text("ASKING PRICE", ML + 16, s2Y + 34);
+      doc.fillColor(C_BLK).fontSize(22).font("Helvetica-Bold")
+        .text(askingNum > 0 ? `$${askingNum.toLocaleString()}` : "—", ML + 16, s2Y + 46);
 
-      // Condition flags
+      // Down payment
+      doc.fillColor(C_GRAY).fontSize(7.5).font("Helvetica-Bold").text("DOWN PAYMENT", ML + 195, s2Y + 34);
+      doc.fillColor(C_BLK).fontSize(22).font("Helvetica-Bold")
+        .text(downPayment > 0 ? `$${downPayment.toLocaleString()}` : "—", ML + 195, s2Y + 46);
+
+      // Highlighted "estimated amount financed" box
+      const finBoxX = ML + 363, finBoxW = IW - 365;
+      doc.roundedRect(finBoxX, s2Y + 10, finBoxW, finH - 20, 6).fill(C_FINBX);
+      doc.roundedRect(finBoxX, s2Y + 10, finBoxW, finH - 20, 6).undash().lineWidth(1.5).stroke(C_FINBDR);
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica-Bold")
+        .text("ESTIMATED AMOUNT FINANCED", finBoxX + 4, s2Y + 18, { width: finBoxW - 8, align: "center" });
+      const amtStr = netLoanRequest > 0 ? `$${netLoanRequest.toLocaleString()}` : "—";
+      const amtFS = amtStr.length > 10 ? 20 : amtStr.length > 7 ? 24 : 28;
+      doc.fillColor(C_PURPLE).fontSize(amtFS).font("Helvetica-Bold")
+        .text(amtStr, finBoxX + 4, s2Y + 33, { width: finBoxW - 8, align: "center" });
+      doc.fillColor(C_LT).fontSize(5.5).font("Helvetica")
+        .text("Asking Price − Down Payment  ·  Final terms set by lender", finBoxX + 4, s2Y + 80, { width: finBoxW - 8, align: "center" });
+
+      // ── SECTION 3: TITLE & LIEN + HOW TO USE (y = 403) ───────────────────
+      const s3Y = s2Y + finH + 10;
+      const s3H = 148;
+
+      // — LEFT: TITLE & LIEN STATUS ——
+      card(c1X, s3Y, HALF, s3H);
+      let ty = secHead(c1X + 4, s3Y + 8, "#ede9fe", "◆", C_PURPLE, "TITLE & LIEN STATUS");
+
+      const isClean = (item.titleStatus || "").toLowerCase().includes("clean");
+      const titleStatusCol = isClean ? C_GREEN : (item.titleStatus ? C_WARN : C_GRAY);
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("TITLE STATUS", c1X + 12, ty);
+      ty += 12;
+      doc.fillColor(titleStatusCol).fontSize(13).font("Helvetica-Bold")
+        .text((item.titleStatus || "—").toUpperCase(), c1X + 12, ty, { width: HALF - 24 });
+      ty += 22;
+
+      if (item.condition) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("CONDITION", c1X + 12, ty);
+        ty += 12;
+        doc.fillColor(C_BLK).fontSize(9).font("Helvetica-Bold")
+          .text(item.condition, c1X + 12, ty, { width: HALF - 24 });
+        ty += 18;
+      }
+
       if (conditionFlags.length > 0) {
-        const flagsText = conditionFlags.join("  ·  ");
-        doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
-          .text("Condition Flags", L + 6, y + 1, { width: 160 });
-        const flagsH = doc.heightOfString(flagsText, { width: pageW - (COL2 - L) - 6 });
-        doc.fillColor("#b45309").fontSize(8.5).font("Helvetica-Bold")
-          .text(flagsText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
-        y += Math.max(rowH, flagsH + 6);
-        doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("CONDITION FLAGS", c1X + 12, ty);
+        ty += 12;
+        doc.fillColor(C_AMB).fontSize(8).font("Helvetica-Bold")
+          .text(conditionFlags.join("  ·  "), c1X + 12, ty, { width: HALF - 24 });
+        ty += 18;
       }
 
-      // Condition notes
-      const rawNotes = details.sellerDisclosures || details.conditionNotes || "";
-      const disclosures = rawNotes || (item.description ? item.description.slice(0, 300) : "None provided.");
-      const discText    = disclosures.slice(0, 400) + (disclosures.length > 400 ? "…" : "");
-      doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
-        .text("Condition Notes", L + 6, y + 1, { width: 160 });
-      const discH = doc.heightOfString(discText, { width: pageW - (COL2 - L) - 6 });
-      doc.fillColor(BLACK).fontSize(8.5).font("Helvetica-Bold")
-        .text(discText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
-      y += Math.max(rowH, discH + 6);
-      doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
-
-      if (details.dealerFees) {
-        const feesText = String(details.dealerFees).slice(0, 300);
-        doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
-          .text("Dealer Fees / Notes", L + 6, y + 1, { width: 160 });
-        const feesH = doc.heightOfString(feesText, { width: pageW - (COL2 - L) - 6 });
-        doc.fillColor(BLACK).fontSize(8.5).font("Helvetica-Bold")
-          .text(feesText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
-        y += Math.max(rowH, feesH + 6);
-        doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+      const rawNotes = details.sellerDisclosures || details.conditionNotes || item.description || "";
+      if (rawNotes) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica").text("SELLER NOTES", c1X + 12, ty);
+        ty += 12;
+        doc.fillColor(C_BLK).fontSize(7).font("Helvetica")
+          .text(rawNotes.slice(0, 160) + (rawNotes.length > 160 ? "…" : ""), c1X + 12, ty, { width: HALF - 24 });
       }
-      y += secGap;
 
-      // ── CALL-WINDOW TALK-TRACK SCRIPTS ────────────────────────────────────
-      const halfW = (pageW - 8) / 2;
+      // — RIGHT: HOW TO USE ——
+      card(c2X, s3Y, HALF, s3H);
+      let hy = secHead(c2X + 4, s3Y + 8, "#dcfce7", "✓", C_GREEN, "HOW TO USE THIS DOCUMENT");
 
-      // Bank / Credit Union script box
-      doc.rect(L, y, halfW, 80).fill(SECTION_BG);
-      doc.fillColor(ACCENT).fontSize(7.5).font("Helvetica-Bold")
-        .text("BANK / CREDIT UNION CALL SCRIPT", L + 8, y + 7);
-      doc.fillColor(LABEL_GRAY).fontSize(6.8).font("Helvetica")
+      const howToList = [
+        { title: "Apply for Financing",  desc: "Submit to your bank or credit union for pre-approval." },
+        { title: "Get Insurance Quotes", desc: "Provide to your insurance agent for accurate quotes." },
+        { title: "Compare Lenders",      desc: "Share with multiple lenders to compare loan options." },
+        { title: "Save or Print",        desc: "Keep for your records or print to bring with you." },
+      ];
+      for (const ht of howToList) {
+        doc.circle(c2X + 15, hy + 4, 3).fill(C_PURPLE);
+        doc.fillColor(C_BLK).fontSize(8).font("Helvetica-Bold").text(ht.title, c2X + 24, hy);
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica")
+          .text(ht.desc, c2X + 24, hy + 11, { width: HALF - 36 });
+        hy += 30;
+      }
+
+      // ── CALL SCRIPTS (y = 561) ────────────────────────────────────────────
+      const s4Y = s3Y + s3H + 8;
+      const scriptH = 58;
+      const halfS = Math.floor((IW - 8) / 2);
+
+      doc.roundedRect(ML, s4Y, halfS, scriptH, 4).fill("#f8fafc");
+      doc.roundedRect(ML, s4Y, halfS, scriptH, 4).undash().lineWidth(0.5).stroke(C_BDR);
+      doc.fillColor(C_BLK).fontSize(7.5).font("Helvetica-Bold")
+        .text("BANK / CREDIT UNION CALL SCRIPT", ML + 8, s4Y + 8);
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica")
         .text(
-          `"Hello, I'm calling to discuss a pre-purchase financing inquiry. I have a ${isProperty ? "property" : "vehicle"} I'm interested in purchasing. The ${identifierLabel} is ${identifierValue}. The asking price is ${priceDisplay}. I have ${downPayment > 0 ? `$${downPayment.toLocaleString()}` : "a down payment"} available. Can you start a loan pre-qualification based on this information?"`,
-          L + 8, y + 19, { width: halfW - 16 }
+          `"Hello — I have a ${isProperty ? "property" : "vehicle"} I'm interested in purchasing. The ${identifierLabel} is ${identifierValue}. Asking price is ${priceDisplay}${downPayment > 0 ? `, down payment $${downPayment.toLocaleString()}` : ""}. Can you start a loan pre-qualification?"`,
+          ML + 8, s4Y + 20, { width: halfS - 16 }
         );
 
-      // Insurance agent script box
-      doc.rect(L + halfW + 8, y, halfW, 80).fill(SECTION_BG);
-      doc.fillColor(ACCENT).fontSize(7.5).font("Helvetica-Bold")
-        .text("INSURANCE AGENT CALL SCRIPT", L + halfW + 16, y + 7);
-      doc.fillColor(LABEL_GRAY).fontSize(6.8).font("Helvetica")
+      doc.roundedRect(ML + halfS + 8, s4Y, halfS, scriptH, 4).fill("#f8fafc");
+      doc.roundedRect(ML + halfS + 8, s4Y, halfS, scriptH, 4).undash().lineWidth(0.5).stroke(C_BDR);
+      doc.fillColor(C_BLK).fontSize(7.5).font("Helvetica-Bold")
+        .text("INSURANCE AGENT CALL SCRIPT", ML + halfS + 16, s4Y + 8);
+      doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica")
         .text(
-          `"Hello, I need an insurance quote on a ${isProperty ? "property" : "vehicle"} I'm purchasing. The ${identifierLabel} is ${identifierValue}, listed at ${priceDisplay} in ${item.city || ""}${item.city && item.state ? ", " : ""}${item.state || ""}. Can you give me a quote and let me know what information you need to bind coverage?"`,
-          L + halfW + 16, y + 19, { width: halfW - 16 }
+          `"Hello — I need an insurance quote for a ${isProperty ? "property" : "vehicle"}. ${identifierLabel}: ${identifierValue}, listed at ${priceDisplay} in ${loc.trim() || "the U.S."}. Can you give me a quote?"`,
+          ML + halfS + 16, s4Y + 20, { width: halfS - 16 }
         );
-      y += 88;
 
-      // ── VERIFY BEFORE YOU FUND — Business CTA ─────────────────────────────
-      doc.rect(L, y, pageW, 58).fill("#050507");
-      doc.fillColor("#00e676").fontSize(8.5).font("Helvetica-Bold")
-        .text("VERIFY BEFORE YOU FUND  ·  GUBER Business", L + 12, y + 10);
-      doc.fillColor("#aeb7c7").fontSize(7).font("Helvetica")
+      // ── VERIFY BEFORE YOU FUND CTA (y = 627) ─────────────────────────────
+      const s5Y = s4Y + scriptH + 8;
+      doc.roundedRect(ML, s5Y, IW, 44, 4).fill("#050507");
+      doc.fillColor(C_GACC).fontSize(8).font("Helvetica-Bold")
+        .text("VERIFY BEFORE YOU FUND  ·  GUBER Business", ML + 12, s5Y + 9);
+      doc.fillColor("#9ca3af").fontSize(6.5).font("Helvetica")
         .text(
-          "Financial companies: Request GPS-verified, time-stamped visual confirmation of vehicles, property, equipment, and other assets before lending, buying, funding, or repossessing. Visual documentation only. GUBER does not certify condition, title, value, or ownership.",
-          L + 12, y + 22, { width: pageW - 80 }
+          "Financial companies: Request GPS-verified, time-stamped visual confirmation of assets before lending or funding. Visual documentation only. GUBER does not certify condition, title, value, or ownership.",
+          ML + 12, s5Y + 21, { width: IW - 90 }
         );
-      doc.fillColor("#00e676").fontSize(7).font("Helvetica-Bold")
-        .text("guberapp.app/biz  ·  Request Verify & Inspect", L + 12, y + 46);
-      y += 66;
+      doc.fillColor(C_GACC).fontSize(7).font("Helvetica-Bold")
+        .text("guberapp.app/biz  ·  /biz/verify-inspect", ML + 12, s5Y + 34);
 
-      // ── Footer ────────────────────────────────────────────────────────────
-      const footerY = doc.page.height - 52;
-      doc.moveTo(L, footerY).lineTo(L + pageW, footerY).strokeColor(RULE_GRAY).lineWidth(0.5).stroke();
+      // ── FOOTER (y = 679) ──────────────────────────────────────────────────
+      const footY = s5Y + 52;
+      doc.rect(0, footY, PW, PH - footY).fill(C_FOOT);
 
-      // Logo icon (small) bottom-left
-      const logoPath = `${__dirname}/../client/public/favicon.png`;
-      try {
-        doc.image(logoPath, L, footerY + 7, { height: 18 });
-      } catch { /* logo not found — skip */ }
+      // Logo + "Generated by GUBER Marketplace"
+      try { doc.image(logoPath, ML, footY + 10, { height: 34 }); } catch {}
+      doc.fillColor(C_GRAY).fontSize(7).font("Helvetica").text("Generated by", ML + 48, footY + 12);
+      doc.fillColor(C_BLK).fontSize(9).font("Helvetica-Bold").text("GUBER Marketplace", ML + 48, footY + 22);
+      doc.fillColor(C_LT).fontSize(6).font("Helvetica").text("guberapp.app", ML + 48, footY + 35);
 
-      doc.fillColor(LABEL_GRAY).fontSize(6).font("Helvetica")
-        .text(
-          "Generated via GUBER Marketplace · guberapp.app · Guber Global LLC is not a licensed financial institution, lender, loan broker, auto dealer, or insurance underwriter. GUBER provides visual documentation and marketplace services only. GUBER assumes zero legal or financial liability for transaction accuracy, physical asset conditions, title validation discrepancies, or default occurrences.",
-          L + 24, footerY + 8, { width: pageW - 24 }
-        );
+      // Disclaimer text (center column)
+      const discText = "This is a reference document generated for informational and convenience purposes only. Guber Global LLC is not a licensed financial institution, lender, loan broker, auto dealer, or insurance underwriter. Final transaction terms, asset valuations, and coverage are determined solely by the independent parties selected by the user. Guber Global LLC assumes zero legal or financial liability for transaction accuracy, asset conditions, or title discrepancies.";
+      doc.fillColor(C_GRAY).fontSize(5.8).font("Helvetica")
+        .text(discText, ML + 52, footY + 48, { width: PW - ML * 2 - 110 });
+
+      // QR code (right)
+      if (qrBuf) {
+        try {
+          doc.image(qrBuf, PW - ML - 56, footY + 8, { width: 52, height: 52 });
+          doc.fillColor(C_LT).fontSize(5.5).font("Helvetica")
+            .text("Scan to view listing", PW - ML - 60, footY + 62, { width: 60, align: "center" });
+        } catch {}
+      }
 
       doc.end();
     } catch (err: any) {
