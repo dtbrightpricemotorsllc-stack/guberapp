@@ -168,7 +168,7 @@ export default function MarketplaceListing() {
   const isBoostedActive = item.boosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
   const hasVin = !!item.vinNumber;
   const isMySelling = !!user && user.id === (item as any).sellerId;
-  const isVehicleCategory = ["vehicles", "parts", "boats & marine", "trailers"].includes((item.category || "").toLowerCase());
+  const isVehicleCategory = ["vehicles", "boats & marine", "trailers"].includes((item.category || "").toLowerCase());
   const showBuyerOrderSection = isVehicleCategory;
 
   // ── Buyer's Order: purchase (VIN already on listing) ──────────────────────
