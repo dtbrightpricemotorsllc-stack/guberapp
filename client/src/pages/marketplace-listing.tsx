@@ -169,7 +169,7 @@ export default function MarketplaceListing() {
   const hasVin = !!item.vinNumber;
   const isMySelling = !!user && user.id === (item as any).sellerId;
   const isVehicleCategory = ["vehicles", "parts", "boats & marine", "trailers"].includes((item.category || "").toLowerCase());
-  const showBuyerOrderSection = hasVin || isVehicleCategory;
+  const showBuyerOrderSection = isVehicleCategory;
 
   // ── Buyer's Order: purchase (VIN already on listing) ──────────────────────
   const buyerOrderMutation = useMutation({
