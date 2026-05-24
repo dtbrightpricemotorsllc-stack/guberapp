@@ -1093,18 +1093,6 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                   {hasVin ? (
                     isSeller ? (
                       <div className="space-y-3">
-                        <p className="text-xs text-muted-foreground">Buyers on your listing can purchase this for <span className="font-bold text-foreground">$1.00</span> and download instantly.</p>
-                        <Button className="w-full font-display text-sm gap-2"
-                          style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
-                          onClick={() => { const url = `https://guberapp.app/marketplace/p/${item.publicSlug}`; navigator.clipboard.writeText(url).then(() => { setBoLinkCopied(true); setTimeout(() => setBoLinkCopied(false), 2500); }); }}
-                          data-testid="button-copy-listing-link">
-                          {boLinkCopied ? <><Check className="w-4 h-4" /> Link Copied!</> : <><Link2 className="w-4 h-4" /> Copy Listing Link</>}
-                        </Button>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                          <span className="text-[10px] text-muted-foreground">or download it yourself</span>
-                          <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                        </div>
                         <Button variant="outline" className="w-full font-display text-sm gap-2 text-muted-foreground"
                           onClick={() => buyerOrderMutation.mutate()} disabled={buyerOrderMutation.isPending}
                           data-testid="button-seller-self-download">

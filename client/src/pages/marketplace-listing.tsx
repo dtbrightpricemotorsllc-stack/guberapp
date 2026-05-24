@@ -400,18 +400,6 @@ export default function MarketplaceListing() {
                 isMySelling ? (
                   /* ── Seller + VIN: share link or self-download ── */
                   <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Buyers on your listing can purchase this for <span className="font-bold text-foreground">$1.00</span> and download instantly.</p>
-                    <Button className="w-full font-display text-sm gap-2"
-                      style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
-                      onClick={() => { navigator.clipboard.writeText(canonicalUrl).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2500); }); }}
-                      data-testid="button-copy-listing-link">
-                      {linkCopied ? <><Check className="w-4 h-4" /> Link Copied!</> : <><Link2 className="w-4 h-4" /> Copy Listing Link</>}
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                      <span className="text-[10px] text-muted-foreground">or download it yourself</span>
-                      <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                    </div>
                     {buyerOrderSessionId ? (
                       <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`} download
                         className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black"
