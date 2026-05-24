@@ -5452,6 +5452,7 @@ export async function registerRoutes(
 
       // Optional buyer financing inputs (passed from frontend state)
       const downPaymentRaw = parseFloat(String(req.query.down_payment || "0")) || 0;
+      const buyerNameRaw = (req.query.buyer_name as string || "").trim();
       const isProperty = ["property", "real estate"].includes((item.category || "").toLowerCase());
       const isVehicle  = ["vehicles", "boats & marine", "trailers", "parts"].includes((item.category || "").toLowerCase());
       const identifierLabel = isProperty ? "APN / Parcel ID" : isVehicle ? "VIN" : "Identifier";
@@ -5645,6 +5646,11 @@ export async function registerRoutes(
       const finH = 110;
       card(ML, s2Y, IW, finH);
       secHead(ML + 4, s2Y + 8, C_YBG, "$", "#ca8a04", "FINANCING OVERVIEW");
+      if (buyerNameRaw) {
+        doc.fillColor(C_GRAY).fontSize(6.5).font("Helvetica")
+          .text("Prepared for: ", ML + 20, s2Y + 29, { continued: true })
+          .fillColor(C_BLK).font("Helvetica-Bold").text(buyerNameRaw);
+      }
 
       const askingNum = item.price || 0;
       const downPayment = downPaymentRaw;

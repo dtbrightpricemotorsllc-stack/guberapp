@@ -113,10 +113,19 @@ export default function MarketplaceListing() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("buyer_order") === "paid" && params.get("session_id")) {
-      setBuyerOrderSessionId(params.get("session_id"));
+      const sid = params.get("session_id")!;
+      setBuyerOrderSessionId(sid);
+      if (slug) localStorage.setItem(`bo_session_${slug}`, sid);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
+
+  // Restore session from localStorage after a page refresh
+  useEffect(() => {
+    if (!slug || buyerOrderSessionId) return;
+    const stored = localStorage.getItem(`bo_session_${slug}`);
+    if (stored) setBuyerOrderSessionId(stored);
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: item, isLoading, error } = useQuery<MarketplaceItem>({
     queryKey: ["/api/marketplace/slug", slug],
@@ -180,6 +189,7 @@ export default function MarketplaceListing() {
   const [boDetailsData, setBoDetailsData] = useState<Record<string, string>>(EMPTY_BO_DETAILS);
   const [boDetailsSeeded, setBoDetailsSeeded] = useState(false);
   const [downPayment, setDownPayment] = useState("");
+  const [buyerName, setBuyerName] = useState("");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -570,10 +580,13 @@ export default function MarketplaceListing() {
 
               {hasVin ? (
                 isMySelling ? (
-                  /* ── Seller + VIN: share link or self-download ── */
+                  /* ── Seller + VIN: self-download only (no editing — post data is the source) ── */
                   <div className="space-y-3">
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Buyers can purchase a Roadpass for $1.00. All details are pulled directly from your listing.
+                    </p>
                     {buyerOrderSessionId ? (
-                      <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`} download
+                      <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}`} target="_blank" rel="noopener noreferrer"
                         className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black"
                         style={{ background: "#00e676" }} data-testid="button-download-buyer-order">
                         <Download className="w-4 h-4" /> Download PDF
@@ -591,34 +604,38 @@ export default function MarketplaceListing() {
                         {buyerOrderMutation.isPending ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />Opening…</span> : <><Download className="w-4 h-4" />Download for Yourself — $1.00</>}
                       </Button>
                     )}
-                    <button className="text-[10px] text-muted-foreground underline underline-offset-2 block" onClick={() => setShowBoDetailsForm(v => !v)} data-testid="button-edit-bo-details">
-                      {showBoDetailsForm ? "Cancel editing" : "Edit vehicle details"}
-                    </button>
-                    {showBoDetailsForm && <BuyerOrderDetailsForm data={boDetailsData} onChange={setBoDetailsData} onSubmit={() => boDetailsMutation.mutate()} isPending={boDetailsMutation.isPending} isDealer={item.sellerType === "dealer"} />}
                   </div>
                 ) : buyerOrderSessionId ? (
-                  /* ── Buyer + paid ── */
+                  /* ── Buyer + paid: enter name + down payment, then download ── */
                   <div className="space-y-2">
                     <p className="text-xs text-emerald-400 font-display font-bold">✓ Payment confirmed — your Roadpass is ready.</p>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground mb-1.5">Optional: Enter your down payment to auto-populate the financing section</p>
-                      <input
-                        type="number" min="0" placeholder="Down payment ($)"
-                        value={downPayment}
-                        onChange={e => setDownPayment(e.target.value)}
-                        className="w-full h-9 px-3 rounded-xl text-sm outline-none mb-2"
-                        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e4e4e7" }}
-                        data-testid="input-down-payment"
-                      />
-                    </div>
-                    <a href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}${downPayment ? `&down_payment=${downPayment}` : ""}`} download
+                    <p className="text-[10px] text-muted-foreground">Add your name and down payment to personalise the PDF.</p>
+                    <input
+                      type="text" placeholder="Your name (optional)"
+                      value={buyerName}
+                      onChange={e => setBuyerName(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl text-sm outline-none"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e4e4e7" }}
+                      data-testid="input-buyer-name"
+                    />
+                    <input
+                      type="number" min="0" placeholder="Down payment amount ($) — optional"
+                      value={downPayment}
+                      onChange={e => setDownPayment(e.target.value)}
+                      className="w-full h-9 px-3 rounded-xl text-sm outline-none"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e4e4e7" }}
+                      data-testid="input-down-payment"
+                    />
+                    <a
+                      href={`/api/marketplace/${item.id}/buyer-order/pdf?session_id=${buyerOrderSessionId}${downPayment ? `&down_payment=${downPayment}` : ""}${buyerName ? `&buyer_name=${encodeURIComponent(buyerName)}` : ""}`}
+                      target="_blank" rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-display font-bold text-black"
                       style={{ background: "#00e676" }} data-testid="button-download-buyer-order">
                       <Download className="w-4 h-4" /> Download Roadpass PDF
                     </a>
                   </div>
                 ) : (
-                  /* ── Buyer + VIN ready ── */
+                  /* ── Buyer + VIN ready: pay to unlock download ── */
                   <div className="space-y-2">
                     {item.vinNumber && (
                       <p className="text-xs text-muted-foreground">
@@ -626,17 +643,7 @@ export default function MarketplaceListing() {
                         <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full value in PDF)</span>
                       </p>
                     )}
-                    <div>
-                      <p className="text-[10px] text-muted-foreground mb-1.5">Optional: Enter your down payment to auto-populate the financing section</p>
-                      <input
-                        type="number" min="0" placeholder="Down payment ($)"
-                        value={downPayment}
-                        onChange={e => setDownPayment(e.target.value)}
-                        className="w-full h-9 px-3 rounded-xl text-sm outline-none"
-                        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e4e4e7" }}
-                        data-testid="input-down-payment"
-                      />
-                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">After payment you'll be able to add your name and down payment before downloading.</p>
                     {isStoreBuild ? (
                       <ExternalPurchaseSheet product="marketplace_buyer_order" options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}>
                         {({ onPress, loading }) => (
@@ -656,25 +663,27 @@ export default function MarketplaceListing() {
                   </div>
                 )
               ) : isMySelling ? (
-                /* ── Seller + no VIN: fill in once ── */
+                /* ── Seller + no VIN: form only shown when a buyer has requested it ── */
                 <div className="space-y-3">
-                  {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length > 0 && (
-                    <p className="text-xs text-amber-400 font-display font-bold">
-                      {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length} buyer{(pendingRequests as any[]).filter((r: any) => r.status === "pending").length > 1 ? "s are" : " is"} waiting — complete vehicle details once to enable downloads.
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length === 0
-                      ? "Complete your vehicle details once — all interested buyers can then purchase a Buyer's Order for $1.00."
-                      : "Fill in the required details below. Buyers can purchase the PDF for $1.00 once you save."}
-                  </p>
-                  {showBoDetailsForm ? (
-                    <BuyerOrderDetailsForm data={boDetailsData} onChange={setBoDetailsData} onSubmit={() => boDetailsMutation.mutate()} isPending={boDetailsMutation.isPending} isDealer={item.sellerType === "dealer"} />
+                  {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length > 0 ? (
+                    <>
+                      <p className="text-xs text-amber-400 font-display font-bold">
+                        {(pendingRequests as any[]).filter((r: any) => r.status === "pending").length} buyer{(pendingRequests as any[]).filter((r: any) => r.status === "pending").length > 1 ? "s are" : " is"} waiting — complete the details below to enable downloads.
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">Fill in once — all serious buyers can then purchase the Roadpass PDF for $1.00.</p>
+                      {showBoDetailsForm ? (
+                        <BuyerOrderDetailsForm data={boDetailsData} onChange={setBoDetailsData} onSubmit={() => boDetailsMutation.mutate()} isPending={boDetailsMutation.isPending} isDealer={item.sellerType === "dealer"} />
+                      ) : (
+                        <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
+                          onClick={() => setShowBoDetailsForm(true)} data-testid="button-open-bo-details">
+                          <FileText className="w-4 h-4" /> Complete Vehicle Details
+                        </Button>
+                      )}
+                    </>
                   ) : (
-                    <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
-                      onClick={() => setShowBoDetailsForm(true)} data-testid="button-open-bo-details">
-                      <FileText className="w-4 h-4" /> Complete Buyer's Order Details
-                    </Button>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      No VIN on this listing. When a buyer requests a Roadpass, you'll be notified to add the required details — free for you, $1.00 for the buyer.
+                    </p>
                   )}
                 </div>
               ) : (

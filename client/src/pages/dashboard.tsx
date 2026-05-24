@@ -1207,48 +1207,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Verify & Inspect Strip ── */}
-        <Link href="/verify-inspect">
-          <div
-            className="mb-6 rounded-2xl px-4 py-3.5 cursor-pointer animate-fade-in stagger-3 relative overflow-hidden active:scale-[0.97] transition-all group"
-            style={{
-              background: "linear-gradient(135deg,#0d0820 0%,#1a0d3e 55%,#0a0520 100%)", // dark-gradient-allow: verify-inspect strip card, purple brand dark theme
-              border: "1.5px solid rgba(139,92,246,0.6)",
-              boxShadow: "0 0 40px rgba(139,92,246,0.25), inset 0 0 40px rgba(139,92,246,0.06)",
-            }}
-            data-testid="card-verify-inspect-strip"
-          >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 90% 30%,rgba(167,139,250,0.28) 0%,transparent 55%)" }} />
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 10% 80%,rgba(91,33,182,0.15) 0%,transparent 50%)" }} />
-            <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-40" style={{ background: "linear-gradient(90deg,transparent 0%,rgba(139,92,246,0.18) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
-            <div className="relative flex items-start gap-3.5">
-              <div className="shrink-0 mt-0.5 w-12 h-12 animate-pulse-glow" style={{ filter: "drop-shadow(0 0 16px rgba(167,139,250,0.9))" }}>
-                <img src={viLogoImg} alt="Verify & Inspect" className="w-full h-full object-contain" style={{ mixBlendMode: "screen" }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-display font-black tracking-[0.25em] uppercase mb-0.5" style={{ color: "#a78bfa" }}>— Book a Job —</p>
-                <p className="font-display font-black text-white leading-tight mb-1.5" style={{ fontSize: 15, letterSpacing: "-0.02em", textShadow: "0 0 20px rgba(167,139,250,0.5)" }}>
-                  Verify &amp; Inspect
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {["📸 Photos", "📍 On-site", "⚡ Same day"].map((tag) => (
-                    <span key={tag} className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: "rgba(139,92,246,0.22)", border: "1px solid rgba(167,139,250,0.45)", color: "#ddd6fe" }}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="shrink-0 flex items-center gap-2 self-center">
-                <span className="font-display font-black tracking-wider text-white uppercase px-3.5 py-2 rounded-full group-active:scale-95 transition-transform flex items-center gap-1"
-                  style={{ background: "linear-gradient(135deg,#9333ea,#6d28d9)", boxShadow: "0 0 18px rgba(139,92,246,0.55)", fontSize: 11 }}>
-                  Book Now →
-                </span>
-              </div>
-            </div>
-          </div>
-        </Link>
-
         {/* ── B2B Hint ── */}
         <div
           className="mb-4 rounded-2xl px-4 py-3.5"
