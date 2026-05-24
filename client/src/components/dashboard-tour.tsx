@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
-import { X, ChevronRight } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
-// ─── localStorage helpers ────────────────────────────────────────────────────
+// ─── localStorage helpers ─────────────────────────────────────────────────────
 export function isTourComplete() {
+  if (typeof localStorage === "undefined") return true;
   return localStorage.getItem("guber_tour_complete") === "true";
 }
 export function resetTour() {
@@ -12,328 +11,361 @@ export function resetTour() {
   localStorage.removeItem("guber_tour_step");
 }
 
-// ─── Tour step definitions ────────────────────────────────────────────────────
-
-interface TourStep {
-  id: string;
-  targetTestId: string;
-  title: string;
-  body: string;
-  position: "top" | "bottom" | "center";
-  requireTap?: boolean;      // user must tap the highlighted element to advance
-  autoAdvanceMs?: number;    // auto-advance after N ms
-}
-
-const INDIVIDUAL_STEPS: TourStep[] = [
+// ─── Steps ────────────────────────────────────────────────────────────────────
+const STEPS = [
   {
-    id: "work",
-    targetTestId: "button-work-mode",
-    title: "WORK",
-    body: "Find local opportunities and earn money. Toggle yourself available and start accepting jobs.",
-    position: "bottom",
-    requireTap: true,
+    testId: "card-category-on-demand-help",
+    title: "On-Demand Help",
+    desc: "Need something done today? Post a quick task and get matched with available locals near you in minutes.",
+    phase: "tile",
+    radius: 18,
   },
   {
-    id: "work-revealed",
-    targetTestId: "card-mode-action-work",
-    title: "WORK = Earn Money",
-    body: "Find jobs, earn, and build your reputation.",
-    position: "bottom",
-    autoAdvanceMs: 2200,
+    testId: "card-category-skilled-labor",
+    title: "Skilled Labor",
+    desc: "Find licensed pros for specialized work — plumbing, electrical, carpentry, and more.",
+    phase: "tile",
+    radius: 18,
   },
   {
-    id: "hire",
-    targetTestId: "button-hire-mode",
-    title: "HIRE",
-    body: "Need help? Post a task in minutes and let local people complete it.",
-    position: "bottom",
-    requireTap: true,
+    testId: "card-category-general-labor",
+    title: "General Labor",
+    desc: "Everyday tasks, yard work, moving help — reliable locals ready to get it done fast.",
+    phase: "tile",
+    radius: 18,
   },
   {
-    id: "hire-revealed",
-    targetTestId: "card-mode-action-hire",
-    title: "HIRE = Get Things Done",
-    body: "Post jobs, find help, move fast.",
-    position: "bottom",
-    autoAdvanceMs: 2200,
+    testId: "card-category-verify-inspect",
+    title: "Verify & Inspect",
+    desc: "Book a verified local to take photos, check on assets, or inspect a property on your behalf.",
+    phase: "tile",
+    radius: 18,
   },
   {
-    id: "vi",
-    targetTestId: "card-category-verify-inspect",
-    title: "VERIFY & INSPECT",
-    body: "Need eyes on something before spending money? Request GPS-verified photos and videos from real people — vehicle checks, property checks, marketplace items, storage units, salvage yards.",
-    position: "bottom",
+    testId: "card-category-marketplace",
+    title: "Marketplace",
+    desc: "Buy, sell, and verify local items. Every listing can be backed by a real local on the ground.",
+    phase: "tile",
+    radius: 18,
   },
   {
-    id: "map",
-    targetTestId: "section-nearby-jobs",
-    title: "LIVE MAP",
-    body: "See opportunities, jobs, inspections, and cash drops happening around you.",
-    position: "top",
+    testId: "card-category-barter-labor",
+    title: "Barter Labor",
+    desc: "No cash? No problem. Trade your skills with locals — swap services and build community.",
+    phase: "tile",
+    radius: 18,
   },
   {
-    id: "marketplace",
-    targetTestId: "card-category-marketplace",
-    title: "MARKETPLACE",
-    body: "Buy and sell vehicles, equipment, property, and more.",
-    position: "bottom",
+    testId: "button-hire-mode",
+    title: "HIRE Mode 🔵",
+    desc: "Tap HIRE when you need help. Post jobs, browse local workers, and manage all requests. Blue = you're hiring.",
+    phase: "mode",
+    mode: "hire" as const,
+    radius: 22,
   },
   {
-    id: "ai-or-not",
-    targetTestId: "card-category-ai-or-not",
-    title: "AI OR NOT",
-    body: "Test images, videos, and text to see if they appear AI-generated.",
-    position: "top",
-  },
-  {
-    id: "cash-drops",
-    targetTestId: "card-city-activation-unified",
-    title: "CASH DROPS",
-    body: "Find sponsored rewards and community challenges. Help unlock your city.",
-    position: "top",
-  },
-  {
-    id: "profile",
-    targetTestId: "tab-profile",
-    title: "PROFILE / REPUTATION",
-    body: "Every completed task builds credibility, ratings, reviews, and trust.",
-    position: "top",
+    testId: "button-work-mode",
+    title: "WORK Mode 🟢",
+    desc: "Tap WORK when you're ready to earn. Browse open jobs, clock in, and get paid locally. Green = you're working.",
+    phase: "mode",
+    mode: "work" as const,
+    radius: 22,
   },
 ];
 
-const BUSINESS_STEPS: TourStep[] = [
-  {
-    id: "hire",
-    targetTestId: "button-hire-mode",
-    title: "HIRE",
-    body: "Post jobs, find workers, and get real-world help when your business needs action.",
-    position: "bottom",
-    requireTap: true,
-  },
-  {
-    id: "hire-revealed",
-    targetTestId: "card-mode-action-hire",
-    title: "HIRE = Get Things Done",
-    body: "Post jobs, find help, move fast.",
-    position: "bottom",
-    autoAdvanceMs: 2200,
-  },
-  {
-    id: "vi",
-    targetTestId: "card-category-verify-inspect",
-    title: "VERIFY & INSPECT",
-    body: "Request visual verification of vehicles, properties, equipment, inventory, or other assets before buying, funding, or sending someone out.",
-    position: "bottom",
-  },
-  {
-    id: "marketplace",
-    targetTestId: "card-category-marketplace",
-    title: "MARKETPLACE",
-    body: "List, source, or review vehicles, property, equipment, and business-related assets.",
-    position: "bottom",
-  },
-  {
-    id: "cash-drops",
-    targetTestId: "card-city-activation-unified",
-    title: "SPONSORED CASH DROPS",
-    body: "Drive attention, foot traffic, and local engagement through sponsored GUBER cash drops.",
-    position: "top",
-  },
-  {
-    id: "biz-dashboard",
-    targetTestId: "tab-admin",
-    title: "BUSINESS DASHBOARD",
-    body: "Manage requests, jobs, verification orders, activity, and future business tools from one place.",
-    position: "top",
-  },
-];
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
+// ─── Props ────────────────────────────────────────────────────────────────────
 interface DashboardTourProps {
   accountType: string;
   onModeChange?: (mode: "hire" | "work") => void;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
 export function DashboardTour({ accountType, onModeChange }: DashboardTourProps) {
-  const isBusiness = accountType === "business";
-  const steps = isBusiness ? BUSINESS_STEPS : INDIVIDUAL_STEPS;
-
   const [step, setStep] = useState(0);
   const [showFinal, setShowFinal] = useState(false);
-  const [, navigate] = useLocation();
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const preventFnRef = useRef<((e: Event) => void) | null>(null);
 
-  const current = steps[step];
+  const current = STEPS[step];
 
-  const completeTour = useCallback(async () => {
+  // ── Lock user scroll ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fn = (e: Event) => e.preventDefault();
+    preventFnRef.current = fn;
+    document.addEventListener("touchmove", fn, { passive: false });
+    document.addEventListener("wheel", fn, { passive: false });
+    return () => {
+      document.removeEventListener("touchmove", fn);
+      document.removeEventListener("wheel", fn);
+    };
+  }, []);
+
+  // ── Scroll to target + measure its rect ────────────────────────────────────
+  useEffect(() => {
+    if (showFinal) return;
+    setTargetRect(null);
+
+    const doMeasure = () => {
+      const el = document.querySelector(`[data-testid="${current.testId}"]`) as HTMLElement | null;
+      if (!el) return false;
+
+      const r = el.getBoundingClientRect();
+      // Card height ~230px; keep element in upper 55% of screen
+      const cardH = 240;
+      const desiredTop = (window.innerHeight - cardH) * 0.30;
+      const scrollTarget = window.scrollY + r.top - desiredTop;
+      window.scrollTo({ top: Math.max(0, scrollTarget), behavior: "smooth" });
+
+      setTimeout(() => {
+        setTargetRect(el.getBoundingClientRect());
+      }, 420);
+      return true;
+    };
+
+    if (!doMeasure()) {
+      const t = setTimeout(doMeasure, 250);
+      return () => clearTimeout(t);
+    }
+  }, [step, showFinal, current?.testId]);
+
+  // ── Mode switch side-effect ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (current?.phase === "mode" && current.mode && onModeChange) {
+      onModeChange(current.mode);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  // ── Complete tour ──────────────────────────────────────────────────────────
+  const completeTour = useCallback((mode?: string) => {
     localStorage.setItem("guber_tour_complete", "true");
     apiRequest("POST", "/api/users/me/onboarding-complete", {
-      onboardingType: isBusiness ? "business" : "individual",
+      onboardingType: accountType,
     }).catch(() => {});
-    // Force a page reload so the dashboard re-renders without the tour overlay
+    if (mode && onModeChange) onModeChange(mode as "hire" | "work");
     window.location.reload();
-  }, [isBusiness]);
+  }, [accountType, onModeChange]);
 
-  const advance = useCallback(() => {
+  const handleNext = () => {
     const next = step + 1;
-    if (next >= steps.length) {
+    if (next >= STEPS.length) {
       setShowFinal(true);
     } else {
       setStep(next);
-      localStorage.setItem("guber_tour_step", String(next));
     }
-  }, [step, steps.length]);
+  };
 
-  // Auto-advance for steps with autoAdvanceMs
-  useEffect(() => {
-    if (!current?.autoAdvanceMs) return;
-    const t = setTimeout(() => advance(), current.autoAdvanceMs);
-    return () => clearTimeout(t);
-  }, [current, advance]);
-
-  // Mode switching side-effect for requireTap steps
-  useEffect(() => {
-    if (current?.requireTap && onModeChange) {
-      if (current.id === "work" || current.id === "work-revealed") {
-        onModeChange("work");
-      } else if (current.id === "hire" || current.id === "hire-revealed") {
-        onModeChange("hire");
-      }
-    }
-  }, [current, onModeChange]);
-
-  // Listen for tap on highlighted element (for requireTap steps)
-  useEffect(() => {
-    if (!current?.requireTap) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const el = document.querySelector(`[data-testid="${current.targetTestId}"]`);
-      if (el && (el === target || el.contains(target))) {
-        advance();
-      }
-    };
-    document.addEventListener("click", handler, true);
-    return () => document.removeEventListener("click", handler, true);
-  }, [current, advance]);
-
-  // ── Final screen ──────────────────────────────────────────────────────────
+  // ── Final screen ───────────────────────────────────────────────────────────
   if (showFinal) {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 px-6" data-testid="tour-final-screen">
-        <div className="w-full max-w-sm rounded-3xl p-6 text-center"
-          style={{ background: "rgba(5,5,5,0.98)", border: "1.5px solid rgba(0,229,118,0.3)" }}>
-          <p className="text-[10px] font-display font-black tracking-[0.25em] text-primary/50 mb-3 uppercase">Perfect.</p>
-          <h2 className="font-display font-black text-2xl text-white tracking-tight mb-1">
-            {isBusiness ? "Welcome to GUBER Business" : "Welcome to GUBER"}
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.94)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          padding: "0 24px",
+        }}
+        data-testid="tour-final-screen"
+      >
+        <div style={{ width: "100%", maxWidth: 360 }}>
+          <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.25em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", textAlign: "center", marginBottom: 14 }}>
+            You're all set!
+          </p>
+          <h2 style={{ fontSize: 27, fontWeight: 900, color: "#fff", textAlign: "center", lineHeight: 1.15, marginBottom: 8, letterSpacing: "-0.02em" }}>
+            Where are you<br />starting today?
           </h2>
-          <p className="text-sm text-white/50 mb-6">
-            {isBusiness ? "Hire • Verify • Promote • Grow" : "Work • Hire • Verify • Earn"}
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", textAlign: "center", marginBottom: 32, lineHeight: 1.5 }}>
+            Pick your mode — you can switch anytime.
           </p>
 
-          {!isBusiness && (
-            <div className="rounded-2xl p-4 mb-5 text-left space-y-2"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <p className="text-xs text-white/40 font-display font-bold tracking-widest uppercase mb-3">GUBER has two sides</p>
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] font-display font-black px-3 py-1 rounded-full" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>WORK</span>
-                <span className="text-sm text-white/70">= Earn Money</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] font-display font-black px-3 py-1 rounded-full" style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.3)" }}>HIRE</span>
-                <span className="text-sm text-white/70">= Get Things Done</span>
-              </div>
-              <p className="text-[10px] text-white/30 mt-2">Switch anytime from the top of your dashboard.</p>
-            </div>
-          )}
+          {/* HIRE / WORK choice */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 28 }}>
+            <button
+              onClick={() => completeTour("hire")}
+              style={{
+                flex: 1, padding: "22px 14px", borderRadius: 22, cursor: "pointer", outline: "none",
+                background: "linear-gradient(135deg,hsl(220 60% 18%),hsl(220 70% 12%))",
+                border: "2px solid rgba(59,130,246,0.75)",
+                boxShadow: "0 0 24px rgba(59,130,246,0.28)",
+              }}
+              data-testid="button-tour-hire"
+            >
+              <div style={{ color: "hsl(220 70% 78%)", fontSize: 14, fontWeight: 900, letterSpacing: "0.18em", marginBottom: 6 }}>HIRE</div>
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, lineHeight: 1.4 }}>Post jobs &amp; get help</div>
+            </button>
+            <button
+              onClick={() => completeTour("work")}
+              style={{
+                flex: 1, padding: "22px 14px", borderRadius: 22, cursor: "pointer", outline: "none",
+                background: "linear-gradient(135deg,hsl(142 60% 10%),hsl(152 70% 8%))",
+                border: "2px solid rgba(34,197,94,0.75)",
+                boxShadow: "0 0 24px rgba(34,197,94,0.28)",
+              }}
+              data-testid="button-tour-work"
+            >
+              <div style={{ color: "hsl(152 70% 70%)", fontSize: 14, fontWeight: 900, letterSpacing: "0.18em", marginBottom: 6 }}>WORK</div>
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, lineHeight: 1.4 }}>Find jobs &amp; earn</div>
+            </button>
+          </div>
 
+          {/* Divider */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>or</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+          </div>
+
+          {/* Just explore */}
           <button
-            onClick={completeTour}
-            className="w-full h-14 rounded-2xl font-display font-black text-sm tracking-[0.12em] text-black transition-all active:scale-[0.98]"
-            style={{ background: "linear-gradient(135deg,#00e676,#00c853)", boxShadow: "0 0 24px rgba(0,229,118,0.3)" }}
-            data-testid="button-tour-finish"
+            onClick={() => completeTour()}
+            style={{
+              width: "100%", padding: "15px 20px", borderRadius: 16, cursor: "pointer",
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 700, letterSpacing: "0.04em",
+            }}
+            data-testid="button-tour-explore"
           >
-            START EXPLORING →
+            Just explore the app →
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Find target element position ─────────────────────────────────────────
-  const targetEl = document.querySelector(`[data-testid="${current.targetTestId}"]`);
-  const rect = targetEl?.getBoundingClientRect();
+  // ── Spotlight geometry ─────────────────────────────────────────────────────
+  const pad = 10;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 
-  const tooltipStyle: React.CSSProperties = rect
-    ? current.position === "bottom"
-      ? { top: rect.bottom + 12, left: Math.max(12, Math.min(rect.left, window.innerWidth - 300)), position: "fixed" }
-      : { bottom: window.innerHeight - rect.top + 12, left: Math.max(12, Math.min(rect.left, window.innerWidth - 300)), position: "fixed" }
-    : { top: "50%", left: "50%", transform: "translate(-50%,-50%)", position: "fixed" };
+  const sTop = targetRect ? Math.max(0, targetRect.top - pad) : 0;
+  const sBottom = targetRect ? Math.min(vh, targetRect.bottom + pad) : vh;
+  const sLeft = targetRect ? Math.max(0, targetRect.left - pad) : 0;
+  const sRight = targetRect ? Math.min(vw, targetRect.right + pad) : vw;
+  const sW = sRight - sLeft;
+  const sH = sBottom - sTop;
+  const sRadius = current?.radius ?? 18;
+
+  const dark = "rgba(0,0,0,0.88)";
 
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-[199] pointer-events-none" style={{ background: "rgba(0,0,0,0.75)" }} />
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999 }} data-testid="tour-overlay">
 
-      {/* Spotlight ring around target */}
-      {rect && (
-        <div
-          className="fixed z-[200] pointer-events-none rounded-2xl"
-          style={{
-            top: rect.top - 4,
-            left: rect.left - 4,
-            width: rect.width + 8,
-            height: rect.height + 8,
-            boxShadow: "0 0 0 4px rgba(0,229,118,0.7), 0 0 24px rgba(0,229,118,0.4)",
-            border: "1.5px solid rgba(0,229,118,0.6)",
-          }}
-        />
+      {/* ── 4 dark panels around spotlight ────────────────────────────────── */}
+      {targetRect ? (
+        <>
+          {/* Top panel */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: sTop, background: dark, pointerEvents: "all" }} />
+          {/* Bottom panel */}
+          <div style={{ position: "absolute", top: sBottom, left: 0, right: 0, bottom: 0, background: dark, pointerEvents: "all" }} />
+          {/* Left panel */}
+          <div style={{ position: "absolute", top: sTop, left: 0, width: sLeft, height: sH, background: dark, pointerEvents: "all" }} />
+          {/* Right panel */}
+          <div style={{ position: "absolute", top: sTop, left: sRight, right: 0, height: sH, background: dark, pointerEvents: "all" }} />
+          {/* Spotlight border glow */}
+          <div style={{
+            position: "absolute", top: sTop, left: sLeft,
+            width: sW, height: sH,
+            borderRadius: sRadius,
+            border: "1.5px solid rgba(255,255,255,0.3)",
+            boxShadow: "0 0 0 1.5px rgba(255,255,255,0.08), 0 0 28px rgba(255,255,255,0.1)",
+            pointerEvents: "none",
+          }} />
+          {/* Click blocker over spotlight (tile is visible but not tappable) */}
+          <div style={{
+            position: "absolute", top: sTop, left: sLeft,
+            width: sW, height: sH,
+            borderRadius: sRadius,
+            pointerEvents: "all",
+            cursor: "default",
+          }} />
+        </>
+      ) : (
+        <div style={{ position: "absolute", inset: 0, background: dark, pointerEvents: "all" }} />
       )}
 
-      {/* Tooltip card */}
-      <div
-        className="z-[201] w-[280px] rounded-2xl p-4"
-        style={{
-          ...tooltipStyle,
-          background: "rgba(5,5,5,0.97)",
-          border: "1px solid rgba(0,229,118,0.3)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-        }}
-        data-testid="tour-tooltip"
-      >
-        <p className="font-display font-black text-sm text-white mb-1">{current.title}</p>
-        <p className="text-[11px] text-white/60 leading-snug mb-3">{current.body}</p>
-
-        {current.requireTap ? (
-          <p className="text-[10px] text-primary/70 font-display font-bold animate-pulse">
-            ↑ Tap to continue
-          </p>
-        ) : (
-          <div className="flex items-center justify-between gap-3">
-            <button
-              onClick={advance}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl font-display font-black text-xs text-black transition-all active:scale-95"
-              style={{ background: "linear-gradient(135deg,#00e676,#00c853)" }}
-              data-testid="button-tour-next"
-            >
-              Next <ChevronRight className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => setShowFinal(true)}
-              className="text-[10px] text-muted-foreground/50 font-display hover:text-muted-foreground transition-colors"
-              data-testid="button-tour-skip"
-            >
-              Skip Tour
-            </button>
-          </div>
-        )}
-
-        <div className="flex gap-1 mt-3">
-          {steps.map((_, i) => (
-            <div key={i} className="h-[3px] flex-1 rounded-full transition-all"
-              style={{ background: i === step ? "#00e676" : "rgba(255,255,255,0.12)" }} />
-          ))}
-        </div>
+      {/* ── Step progress dots (top) ───────────────────────────────────────── */}
+      <div style={{
+        position: "absolute", top: 14, left: 0, right: 0,
+        display: "flex", justifyContent: "center", gap: 5,
+        pointerEvents: "none",
+      }}>
+        {STEPS.map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width: i === step ? 20 : 6,
+              height: 6,
+              borderRadius: 3,
+              background: i === step ? "#22c55e" : "rgba(255,255,255,0.18)",
+              transition: "all 0.3s ease",
+            }}
+          />
+        ))}
       </div>
-    </>
+
+      {/* ── Bottom explanation card ────────────────────────────────────────── */}
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        padding: "0 14px 28px",
+        pointerEvents: "all",
+      }}>
+        <div style={{
+          background: "rgba(6,6,6,0.97)",
+          borderRadius: 26,
+          padding: "20px 20px 18px",
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 -10px 50px rgba(0,0,0,0.6)",
+        }}>
+          {/* Header row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.22em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase" }}>
+              {step + 1} / {STEPS.length}
+            </span>
+            <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.18em", color: current.phase === "mode" ? "rgba(34,197,94,0.6)" : "rgba(255,255,255,0.2)", textTransform: "uppercase" }}>
+              {current.phase === "tile" ? "CATEGORY" : "MODE TOGGLE"}
+            </span>
+          </div>
+
+          <h3 style={{ fontSize: 21, fontWeight: 900, color: "#fff", marginBottom: 7, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+            {current.title}
+          </h3>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.6, marginBottom: 18 }}>
+            {current.desc}
+          </p>
+
+          <button
+            onClick={handleNext}
+            style={{
+              width: "100%", height: 52, borderRadius: 16,
+              background: "linear-gradient(135deg,#16a34a,#15803d)",
+              color: "#fff", fontWeight: 900, fontSize: 14,
+              letterSpacing: "0.1em", border: "none", cursor: "pointer",
+              boxShadow: "0 4px 22px rgba(22,163,74,0.38)",
+            }}
+            data-testid="button-tour-next"
+          >
+            {step < STEPS.length - 1 ? "NEXT →" : "CONTINUE →"}
+          </button>
+        </div>
+
+        {/* Skip */}
+        <button
+          onClick={() => completeTour()}
+          style={{
+            width: "100%", marginTop: 10,
+            background: "transparent", border: "none",
+            color: "rgba(255,255,255,0.25)", fontSize: 11,
+            fontWeight: 700, letterSpacing: "0.18em",
+            cursor: "pointer", padding: "8px 0",
+            textTransform: "uppercase",
+          }}
+          data-testid="button-tour-skip"
+        >
+          skip tutorial
+        </button>
+      </div>
+    </div>
   );
 }
