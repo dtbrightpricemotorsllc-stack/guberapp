@@ -69,6 +69,9 @@ export default function BusinessSignup() {
     fullName: "",
     username: "",
     password: "",
+    businessAddress: "",
+    website: "",
+    ein: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [termsAgreed, setTermsAgreed] = useState(false);
@@ -95,7 +98,7 @@ export default function BusinessSignup() {
     try {
       await apiRequest("POST", "/api/auth/business-access-request", form);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/biz/dashboard");
+      setLocation("/");
     } catch (err: any) {
       let msg = err.message || "Please try again";
       try {
@@ -122,7 +125,7 @@ export default function BusinessSignup() {
 
       <div className="relative z-10 max-w-lg mx-auto px-6 py-12">
         <Link
-          href="/signup"
+          href="/get-started"
           className="inline-flex items-center gap-1.5 text-xs font-display tracking-wider mb-10 transition-colors"
           style={{ color: "#6B6B6B" }}
           data-testid="link-back"
@@ -175,6 +178,21 @@ export default function BusinessSignup() {
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>PHONE</Label>
                 <Input value={form.phone} onChange={updateForm("phone")} type="tel" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="555-000-0000" data-testid="input-phone" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>BUSINESS ADDRESS *</Label>
+                <Input value={form.businessAddress} onChange={updateForm("businessAddress")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="123 Main St, City, State ZIP" required data-testid="input-business-address" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>WEBSITE <span style={{ color: "#4B4B4B" }}>(optional)</span></Label>
+                <Input value={form.website} onChange={updateForm("website")} type="url" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="https://yourcompany.com" data-testid="input-website" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-display tracking-[0.12em] uppercase" style={{ color: "#6B6B6B" }}>EIN / TAX ID <span style={{ color: "#4B4B4B" }}>(optional)</span></Label>
+                <Input value={form.ein} onChange={updateForm("ein")} type="text" className="rounded-xl h-11 text-sm px-4 border-0" style={{ background: "hsl(var(--muted))", color: "hsl(var(--foreground))" }} placeholder="XX-XXXXXXX" data-testid="input-ein" />
               </div>
 
               <div className="space-y-1.5">
@@ -266,7 +284,7 @@ export default function BusinessSignup() {
 
             <Button
               type="submit"
-              disabled={loading || !passwordValid || !termsAgreed || !form.workEmail || !form.username || !form.fullName || !form.businessName || !form.industry}
+              disabled={loading || !passwordValid || !termsAgreed || !form.workEmail || !form.username || !form.fullName || !form.businessName || !form.industry || !form.businessAddress}
               size="lg"
               className="w-full h-14 font-display text-[12px] tracking-[0.2em] rounded-xl disabled:opacity-30 text-black font-bold"
               style={{ background: `linear-gradient(135deg, ${GOLD}, #A88A43)`, boxShadow: "0 4px 20px rgba(168,138,67,0.18)", border: "1px solid rgba(198,168,92,0.22)" }}

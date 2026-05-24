@@ -194,7 +194,7 @@ export default function Signup() {
       </div>
 
       <div className="w-full max-w-sm relative z-10">
-        <Link href="/" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider mb-8 transition-colors" data-testid="link-back">
+        <Link href="/get-started" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-xs font-display tracking-wider mb-8 transition-colors" data-testid="link-back">
           <ArrowLeft className="w-3.5 h-3.5" />
           BACK
         </Link>

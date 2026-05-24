@@ -619,6 +619,26 @@ export default function AccountSettings() {
           </div>
         </div>
 
+        {/* ── Restart Tutorial ── */}
+        <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
+          <h3 className="font-display font-semibold text-sm mb-1">App Tour</h3>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">Replay the onboarding walkthrough to re-learn GUBER's core features.</p>
+          <button
+            className="w-full h-10 rounded-xl font-display font-black text-xs tracking-[0.12em] text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+            style={{ background: "linear-gradient(135deg,rgba(0,229,118,0.25),rgba(0,229,118,0.15))", border: "1.5px solid rgba(0,229,118,0.4)" }}
+            onClick={() => {
+              if (typeof localStorage !== "undefined") {
+                localStorage.removeItem("guber_tour_complete");
+                localStorage.removeItem("guber_tour_step");
+              }
+              window.location.href = "/";
+            }}
+            data-testid="button-restart-tutorial"
+          >
+            ↺ Restart Tutorial
+          </button>
+        </div>
+
         {user?.accountType === "business" ? (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
             <h3 className="font-display font-semibold text-sm">Business Portal</h3>

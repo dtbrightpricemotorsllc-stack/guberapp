@@ -20,6 +20,7 @@ import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import { subscribeToPush } from "@/lib/push";
 import { buildReferralShareText } from "@/lib/referral";
+import { DashboardTour, isTourComplete } from "@/components/dashboard-tour";
 import {
   AlertPromptModal, AlertActionPrompt, MissedEventBanner,
   getAlertStatus, setAlertStatus, shouldShowAlertPrompt,
@@ -94,11 +95,13 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const WORK_CATEGORIES = [
-  { name: "On-Demand Help", icon: Zap,    color: "#F97316", bg: "linear-gradient(135deg,#78350f,#92400e,#c2410c)", href: "/browse-jobs?category=On-Demand Help" },
-  { name: "Skilled Labor",  icon: Hammer, color: "#DC2626", bg: "linear-gradient(135deg,#7f1d1d,#991b1b,#b91c1c)", href: "/browse-jobs?category=Skilled Labor" },
-  { name: "General Labor",  icon: Wrench, color: "#16A34A", bg: "linear-gradient(135deg,#14532d,#166534,#15803d)", href: "/browse-jobs?category=General Labor" },
-  { name: "Barter Labor",   icon: Repeat, color: "#0EA5E9", bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor" },
+const CORE_TILES = [
+  { name: "On-Demand Help",   sub: "Get help fast for any task",        icon: Zap,         bg: "linear-gradient(135deg,#78350f,#92400e,#c2410c)", href: "/browse-jobs?category=On-Demand Help",  testId: "on-demand-help" },
+  { name: "Skilled Labor",    sub: "Find skilled pros for the job",     icon: Hammer,      bg: "linear-gradient(135deg,#7f1d1d,#991b1b,#b91c1c)", href: "/browse-jobs?category=Skilled Labor",   testId: "skilled-labor" },
+  { name: "General Labor",    sub: "Everyday tasks, done right",        icon: Wrench,      bg: "linear-gradient(135deg,#14532d,#166534,#15803d)", href: "/browse-jobs?category=General Labor",   testId: "general-labor" },
+  { name: "Verify & Inspect", sub: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect",                       testId: "verify-inspect" },
+  { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#042f2e,#134e4a,#115e59)", href: "/marketplace",                          testId: "marketplace", badge: "BETA" },
+  { name: "Barter Labor",     sub: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor",   testId: "barter-labor" },
 ];
 
 type DashboardMode = "hire" | "work";
@@ -279,6 +282,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+
+  const [showTour] = useState(() => !isTourComplete());
 
   const [mode, setMode] = useState<DashboardMode>(() => {
     if (typeof window !== "undefined") {
@@ -679,16 +684,16 @@ export default function Dashboard() {
             className={`relative rounded-2xl p-4 flex items-center gap-3 text-left transition-all active:scale-95 ${awaitingHireAction.length > 0 ? "urgent-ring-pulse" : ""}`}
             style={{
               background: mode === "hire"
-                ? "linear-gradient(135deg,hsl(142 60% 18%),hsl(152 70% 12%))"
+                ? "linear-gradient(135deg,hsl(220 60% 18%),hsl(220 70% 12%))"
                 : "hsl(var(--card))",
               border: mode === "hire"
-                ? "2px solid hsl(152 70% 40% / 0.7)"
+                ? "2px solid hsl(220 70% 55% / 0.7)"
                 : "2px solid hsl(var(--border) / 0.3)",
-              boxShadow: mode === "hire" ? "0 0 20px hsl(152 70% 40% / 0.15)" : "none",
+              boxShadow: mode === "hire" ? "0 0 20px hsl(220 70% 55% / 0.15)" : "none",
             }}
             data-testid="button-hire-mode"
           >
-            {mode === "hire" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-primary" />}
+            {mode === "hire" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-400" />}
             {awaitingHireAction.length > 0 && (
               <span
                 className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1.5 rounded-full bg-destructive text-white text-[11px] font-display font-extrabold flex items-center justify-center ring-2 ring-background shadow-[0_0_12px_rgba(239,68,68,0.55)]"
@@ -698,12 +703,12 @@ export default function Dashboard() {
                 {awaitingHireAction.length}
               </span>
             )}
-            <div className="p-2.5 rounded-xl shrink-0" style={{ background: mode === "hire" ? "hsl(152 70% 40% / 0.2)" : "hsl(var(--muted) / 0.3)" }}>
-              <Briefcase className="w-5 h-5" style={{ color: mode === "hire" ? "hsl(152 70% 60%)" : "hsl(var(--muted-foreground))" }} />
+            <div className="p-2.5 rounded-xl shrink-0" style={{ background: mode === "hire" ? "hsl(220 70% 55% / 0.2)" : "hsl(var(--muted) / 0.3)" }}>
+              <Briefcase className="w-5 h-5" style={{ color: mode === "hire" ? "hsl(220 70% 70%)" : "hsl(var(--muted-foreground))" }} />
             </div>
             <div>
-              <p className="text-sm font-display font-black tracking-[0.08em]" style={{ color: mode === "hire" ? "hsl(152 70% 65%)" : "hsl(var(--muted-foreground))" }}>HIRE</p>
-              <p className="text-[10px] font-display mt-0.5" style={{ color: mode === "hire" ? "hsl(152 50% 50%)" : "hsl(var(--muted-foreground) / 0.5)" }}>Find help near you</p>
+              <p className="text-sm font-display font-black tracking-[0.08em]" style={{ color: mode === "hire" ? "hsl(220 70% 70%)" : "hsl(var(--muted-foreground))" }}>HIRE</p>
+              <p className="text-[10px] font-display mt-0.5" style={{ color: mode === "hire" ? "hsl(220 50% 65%)" : "hsl(var(--muted-foreground) / 0.5)" }}>Get things done</p>
             </div>
           </button>
 
@@ -718,16 +723,16 @@ export default function Dashboard() {
             className={`relative rounded-2xl p-4 flex items-center gap-3 text-left transition-all active:scale-95 ${awaitingWorkAction.length > 0 ? "urgent-ring-pulse" : ""}`}
             style={{
               background: mode === "work"
-                ? "linear-gradient(135deg,hsl(220 60% 18%),hsl(230 70% 12%))"
+                ? "linear-gradient(135deg,hsl(142 60% 10%),hsl(152 70% 8%))"
                 : "hsl(var(--card))",
               border: mode === "work"
-                ? "2px solid hsl(220 70% 55% / 0.7)"
+                ? "2px solid hsl(152 70% 45% / 0.7)"
                 : "2px solid hsl(var(--border) / 0.3)",
-              boxShadow: mode === "work" ? "0 0 20px hsl(220 70% 55% / 0.15)" : "none",
+              boxShadow: mode === "work" ? "0 0 20px hsl(152 70% 45% / 0.15)" : "none",
             }}
             data-testid="button-work-mode"
           >
-            {mode === "work" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-400" />}
+            {mode === "work" && <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-primary" />}
             {awaitingWorkAction.length > 0 && (
               <span
                 className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1.5 rounded-full bg-destructive text-white text-[11px] font-display font-extrabold flex items-center justify-center ring-2 ring-background shadow-[0_0_12px_rgba(239,68,68,0.55)]"
@@ -737,117 +742,228 @@ export default function Dashboard() {
                 {awaitingWorkAction.length}
               </span>
             )}
-            <div className="p-2.5 rounded-xl shrink-0" style={{ background: mode === "work" ? "hsl(220 70% 55% / 0.2)" : "hsl(var(--muted) / 0.3)" }}>
-              <Search className="w-5 h-5" style={{ color: mode === "work" ? "hsl(220 70% 70%)" : "hsl(var(--muted-foreground))" }} />
+            <div className="p-2.5 rounded-xl shrink-0" style={{ background: mode === "work" ? "hsl(152 70% 45% / 0.2)" : "hsl(var(--muted) / 0.3)" }}>
+              <Search className="w-5 h-5" style={{ color: mode === "work" ? "hsl(152 70% 65%)" : "hsl(var(--muted-foreground))" }} />
             </div>
             <div>
-              <p className="text-sm font-display font-black tracking-[0.08em]" style={{ color: mode === "work" ? "hsl(220 70% 70%)" : "hsl(var(--muted-foreground))" }}>WORK</p>
-              <p className="text-[10px] font-display mt-0.5" style={{ color: mode === "work" ? "hsl(220 50% 60%)" : "hsl(var(--muted-foreground) / 0.5)" }}>Complete tasks &amp; earn</p>
+              <p className="text-sm font-display font-black tracking-[0.08em]" style={{ color: mode === "work" ? "hsl(152 70% 65%)" : "hsl(var(--muted-foreground))" }}>WORK</p>
+              <p className="text-[10px] font-display mt-0.5" style={{ color: mode === "work" ? "hsl(152 50% 55%)" : "hsl(var(--muted-foreground) / 0.5)" }}>Earn money</p>
             </div>
           </button>
         </div>
 
-        {/* ── Reminders (above hero) ── */}
-        <TodoReminderBox
-          user={user}
-          isAvailable={!!(user as any)?.isAvailable}
-          referralCount={referralData?.referredCount ?? 0}
-        />
-
-        {/* ── Hero Header ── */}
-        <div className="mb-4 animate-fade-in text-center">
+        {/* ── Mode Action Card ── */}
+        <div className="mb-4 animate-fade-in stagger-1">
           {mode === "hire" ? (
-            <>
-              <h1 className="text-[1.35rem] font-display font-extrabold text-foreground tracking-tight leading-tight" data-testid="text-greeting">
-                Find help near you
-              </h1>
-              <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
-                Post a job, book help, or use verified local support.
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-[1.35rem] font-display font-extrabold text-foreground tracking-tight leading-tight" data-testid="text-greeting">
-                Complete tasks &amp; earn
-              </h1>
-              <p className="text-xs text-muted-foreground/55 mt-1.5 font-display">
-                Stay ready, build trust, and unlock more opportunities.
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* ── Primary CTA (above map) ── */}
-        {/* Use flex+gap (not space-y-*) because wouter's <Link> renders an
-            inline <a>; vertical margins don't take effect on inline elements,
-            so space-y-* leaves the buttons stacked flush together. */}
-        <div className="mb-4 animate-fade-in stagger-2 flex flex-col gap-4">
-          {mode === "hire" ? (
-            <>
+            <div
+              className="rounded-2xl p-4 relative overflow-hidden"
+              style={{ background: "linear-gradient(135deg,rgba(0,8,20,0.95),rgba(0,12,30,0.9))", border: "1.5px solid rgba(59,130,246,0.35)" }}
+              data-testid="card-mode-action-hire"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-[9px] font-display font-black tracking-[0.25em] text-blue-400/70 uppercase mb-1">HIRE MODE ACTIVE</p>
+                  <h2 className="text-[1.3rem] font-display font-black text-white leading-tight">Need help today?</h2>
+                  <p className="text-xs text-white/55 mt-1">Post a job and get help fast from trusted locals.</p>
+                </div>
+                <div className="p-3 rounded-2xl shrink-0" style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)", boxShadow: "0 0 20px rgba(59,130,246,0.2)" }}>
+                  <Briefcase className="w-6 h-6" style={{ color: "#3b82f6" }} />
+                </div>
+              </div>
               <Link href="/post-job">
-                <Button className="w-full h-14 gap-3 rounded-2xl premium-btn font-display tracking-[0.12em] text-sm font-bold shadow-lg" data-testid="button-post-job">
-                  <Plus className="w-5 h-5" />
-                  POST A JOB
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
-                </Button>
+                <button
+                  className="w-full h-12 rounded-2xl font-display font-black text-sm tracking-[0.1em] text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  style={{ background: "linear-gradient(135deg,#1d4ed8,#1e40af)" }}
+                  data-testid="button-post-a-job"
+                >
+                  POST A JOB <ChevronRight className="w-4 h-4" />
+                </button>
               </Link>
-              {user?.cashDropHostEnabled && (
-                <HostDropCta testIdSuffix="hire" />
-              )}
-            </>
+              <p className="text-[10px] text-white/30 mt-2 text-center">Fast local help in minutes</p>
+            </div>
           ) : (
-            (user as any)?.jobsCompleted === 0 ? (
+            <div
+              className="rounded-2xl p-4 relative overflow-hidden"
+              style={{ background: "linear-gradient(135deg,rgba(0,20,8,0.95),rgba(0,30,12,0.9))", border: "1.5px solid rgba(34,197,94,0.35)" }}
+              data-testid="card-mode-action-work"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-[9px] font-display font-black tracking-[0.25em] text-green-400/70 uppercase mb-1">WORK MODE ACTIVE</p>
+                  <h2 className="text-[1.3rem] font-display font-black text-white leading-tight">Ready to earn?</h2>
+                  <p className="text-xs text-white/55 mt-1">Find jobs near you and start earning today.</p>
+                </div>
+                <div className="p-3 rounded-2xl shrink-0" style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", boxShadow: "0 0 20px rgba(34,197,94,0.2)" }}>
+                  <DollarSign className="w-6 h-6" style={{ color: "#22c55e" }} />
+                </div>
+              </div>
               <Link href="/browse-jobs">
-                <Button
-                  onClick={() => triggerActionPrompt("Enable alerts to get notified when a job matches you")}
-                  className="w-full h-14 gap-2 rounded-2xl font-display tracking-[0.10em] text-sm font-bold shadow-lg"
-                  style={{ background: "linear-gradient(135deg,#16a34a,#15803d)", color: "#fff" }}
-                  data-testid="button-start-first-task"
+                <button
+                  className="w-full h-12 rounded-2xl font-display font-black text-sm tracking-[0.1em] text-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  style={{ background: "linear-gradient(135deg,#16a34a,#15803d)" }}
+                  data-testid="button-find-work-near-me"
                 >
-                  <span>🔥</span>
-                  START YOUR FIRST TASK
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-70" />
-                </Button>
+                  FIND WORK NEAR ME <ChevronRight className="w-4 h-4" />
+                </button>
               </Link>
-            ) : (
-              <Link href="/browse-jobs">
-                <Button
-                  onClick={() => triggerActionPrompt("Enable alerts so you never miss a new task")}
-                  className="w-full h-14 gap-2 rounded-2xl font-display tracking-[0.10em] text-sm font-bold shadow-lg"
-                  style={{ background: "linear-gradient(135deg,#C9A84C,#a8873c)", color: "#000" }}
-                  data-testid="button-find-live-tasks"
-                >
-                  <span>🔥</span>
-                  FIND LIVE TASKS
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
-                </Button>
-              </Link>
-            )
-          )}
-          {mode === "work" && user?.cashDropHostEnabled && (
-            <HostDropCta testIdSuffix="work" />
+              <p className="text-[10px] text-white/30 mt-2 text-center">On-Demand • General Labor • Skilled Labor • Verify &amp; Inspect</p>
+            </div>
           )}
         </div>
 
-        {/* ── Marketplace CTA ── */}
-        <Link href="/marketplace">
-          <div className="mb-4 rounded-2xl p-4 flex items-center gap-4 cursor-pointer animate-fade-in active:scale-[0.97] transition-all"
-            style={{
-              background: "linear-gradient(135deg,#0d2b1a,#0f3320,#0a2416)",
-              border: "1.5px solid rgba(0,229,118,0.22)",
-              boxShadow: "0 0 24px rgba(0,229,118,0.07)",
-            }}
-            data-testid="card-marketplace-cta">
-            <div className="p-2.5 rounded-xl shrink-0" style={{ background: "rgba(0,229,118,0.12)", border: "1px solid rgba(0,229,118,0.2)" }}>
-              <ShoppingBag className="w-5 h-5" style={{ color: "#00e676" }} strokeWidth={1.8} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-display font-bold text-white leading-tight">Marketplace <span className="text-[10px] font-normal opacity-60 ml-1">BETA</span></p>
-              <p className="text-[11px] text-white/50 mt-0.5">Buy, sell &amp; verify local items — free to list</p>
-            </div>
-            <ChevronRight className="w-4 h-4 shrink-0 opacity-40" />
+        {/* ── 6 Core Tiles ── */}
+        <div className="mb-5 animate-fade-in stagger-2">
+          <div className="grid grid-cols-2 gap-3" data-testid="section-categories">
+            {CORE_TILES.map((tile) => {
+              const Icon = tile.icon;
+              return (
+                <Link key={tile.name} href={tile.href}>
+                  <div
+                    className="rounded-2xl p-3.5 flex flex-col gap-2 cursor-pointer transition-all active:scale-95 relative overflow-hidden"
+                    style={{ background: tile.bg, border: "1px solid rgba(255,255,255,0.08)" }}
+                    data-testid={`card-category-${tile.testId}`}
+                  >
+                    {tile.badge && (
+                      <span
+                        className="absolute top-2 right-2 text-[7px] font-display font-black px-1.5 py-0.5 rounded-full"
+                        style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.75)" }}
+                      >
+                        {tile.badge}
+                      </span>
+                    )}
+                    <div className="p-2 rounded-xl self-start" style={{ background: "rgba(255,255,255,0.15)" }}>
+                      <Icon className="w-4 h-4 text-white" strokeWidth={1.8} />
+                    </div>
+                    <div className="pr-2">
+                      <p className="text-sm font-display font-bold text-white leading-tight">{tile.name}</p>
+                      <p className="text-[10px] text-white/55 mt-0.5 leading-snug">{tile.sub}</p>
+                    </div>
+                    <ChevronRight className="w-3 h-3 text-white/30 absolute bottom-3 right-3" />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-        </Link>
+        </div>
+
+        {/* ── You're early — help unlock your city ── */}
+        <div className="mb-5 animate-fade-in stagger-3">
+          <div
+            className="rounded-2xl overflow-hidden"
+            style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.2)" }}
+            data-testid="card-city-activation-unified"
+          >
+            <button
+              className="w-full flex items-center justify-between px-4 pt-3.5 pb-2 text-left"
+              onClick={() => {
+                if (oppsCollapsed) { clearOppsCollapsed(); setOppsCollapsedState(false); }
+                else { setOppsCollapsed(); setOppsCollapsedState(true); }
+              }}
+              data-testid="button-toggle-opps"
+            >
+              <div>
+                <p className="text-sm font-display font-black text-amber-400 tracking-wider leading-tight">
+                  🚀 You're early — help unlock your city
+                </p>
+                {!oppsCollapsed && (
+                  <p className="text-[11px] text-amber-400/55 font-display mt-0.5 leading-snug">
+                    More activity unlocks more drops, more jobs, and more momentum.
+                  </p>
+                )}
+              </div>
+              <span className="text-[10px] text-amber-400/40 font-display ml-3 shrink-0">{oppsCollapsed ? "▼" : "▲"}</span>
+            </button>
+            {!oppsCollapsed && (
+              <>
+                <p className="text-[10px] text-amber-400/45 font-display px-4 pb-2 leading-snug">
+                  More activity unlocks more drops, more jobs, and more momentum.
+                </p>
+                <div className="px-4 pb-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
+                    <p className="text-[9px] font-display text-muted-foreground/35">
+                      {referralData?.referredCount ?? 0} / 25 to unlock cash drops
+                    </p>
+                  </div>
+                  <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.min(100, Math.round(((referralData?.referredCount ?? 0) / 25) * 100 + 8))}%`, background: "linear-gradient(90deg,#C6A85C,#e8c97a)", transition: "width 1s ease" }}
+                      data-testid="bar-city-activation"
+                    />
+                  </div>
+                </div>
+                <button
+                  className="w-full py-3 font-display text-sm font-black flex items-center justify-center gap-2 transition-all active:opacity-80 tracking-wider border-t disabled:opacity-50"
+                  style={{ background: "rgba(201,168,76,0.1)", borderColor: "rgba(201,168,76,0.18)", color: "#C9A84C" }}
+                  data-testid="button-invite-activate-city"
+                  disabled={isSharing}
+                  onClick={() => handleReferralShare()}
+                >
+                  🚀 Invite &amp; Activate Your City
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── AI or Not ── */}
+        <div
+          onClick={() => navigate("/ai-or-not")}
+          className="mb-6 rounded-2xl p-4 cursor-pointer animate-fade-in stagger-4 overflow-hidden relative active:scale-[0.97] transition-all group"
+          style={{
+            background: "linear-gradient(135deg,hsl(190 90% 9%),hsl(220 80% 8%) 50%,hsl(175 90% 7%))",
+            border: "1.5px solid hsl(190 85% 55% / 0.45)",
+            boxShadow: "0 0 40px hsl(190 85% 50% / 0.2), inset 0 0 40px hsl(190 85% 50% / 0.04)",
+          }}
+          data-testid="card-category-ai-or-not"
+        >
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -right-2 -top-3 w-28 h-28 rounded-full opacity-25"
+              style={{ background: "radial-gradient(circle,hsl(190 85% 55%),transparent 65%)" }} />
+            <div className="absolute left-12 -bottom-5 w-20 h-20 rounded-full opacity-15"
+              style={{ background: "radial-gradient(circle,hsl(175 85% 55%),transparent 65%)" }} />
+          </div>
+          <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-30" style={{ background: "linear-gradient(90deg,transparent 0%,hsl(190 85% 55% / 0.15) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
+          <div className="relative flex items-center gap-3.5">
+            <div className="shrink-0 w-12 h-12 rounded-xl relative overflow-hidden animate-pulse-glow flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg,hsl(190 85% 35%),hsl(210 85% 25%))", boxShadow: "0 0 24px hsl(190 85% 55% / 0.5)" }}>
+              <Bot className="w-6 h-6 text-white" strokeWidth={1.5} />
+              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,transparent 40%,hsl(190 85% 55% / 0.35) 50%,transparent 60%)", animation: "shimmer 2s linear infinite" }} />
+            </div>
+            <div className="flex-1 relative min-w-0">
+              <p className="text-[9px] font-display font-black tracking-[0.25em] uppercase mb-0.5" style={{ color: "hsl(190 85% 65%)" }}>— The Game —</p>
+              <p className="font-display font-black text-white leading-none mb-1" style={{ fontSize: 17, letterSpacing: "-0.03em", textShadow: "0 0 24px hsl(190 85% 55% / 0.6)" }}>
+                AI <span style={{ color: "hsl(190 85% 60%)" }}>or</span> Not?
+              </p>
+              <p className="text-[10px] text-white/60 leading-snug">Can you tell real from fake? 🤖</p>
+            </div>
+            <span className="font-display font-black tracking-wide text-black uppercase shrink-0 px-3.5 py-2 rounded-full group-active:scale-95 transition-transform flex items-center gap-1"
+              style={{ background: "linear-gradient(135deg,hsl(190 85% 60%),hsl(175 85% 50%))", boxShadow: "0 0 18px hsl(190 85% 55% / 0.5)", fontSize: 11 }}>
+              Play →
+            </span>
+          </div>
+        </div>
+
+        {/* ── Referral Nudge ── */}
+        <div
+          className="mb-4 rounded-2xl px-4 py-3.5 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform"
+          style={{
+            background: "linear-gradient(135deg,hsl(152 60% 10%),hsl(152 60% 7%))",
+            border: "1px solid hsl(152 70% 40% / 0.2)",
+          }}
+          onClick={handleReferralShare}
+          data-testid="card-referral-nudge"
+        >
+          <div className="p-2 rounded-xl shrink-0" style={{ background: "hsl(152 70% 40% / 0.15)" }}>
+            <Users className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-display font-bold text-foreground leading-tight">Invite friends, earn together</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">You both get GUBER Credit when they complete their first job.</p>
+          </div>
+          <span className="text-[10px] font-display font-black text-primary/70 shrink-0 tracking-wide">INVITE</span>
+        </div>
 
         {/* ── Nearby Jobs / Map ── */}
         <div className="mb-5 animate-fade-in stagger-3" data-testid="section-nearby-jobs">
@@ -990,13 +1106,13 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Opportunities Near You (collapsible, work mode only) ── */}
-        {mode === "work" && (
+        {/* ── Opportunities Near You (removed — moved above map) ── */}
+        {false && (
           <div className="mb-5 animate-fade-in stagger-4">
             <div
               className="rounded-2xl overflow-hidden"
               style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.2)" }}
-              data-testid="card-city-activation-unified"
+              data-testid="card-city-activation-unified-old"
             >
               {/* Header row — tap to collapse */}
               <button
@@ -1133,99 +1249,6 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        {/* ── Work Types / Categories ── */}
-        <div className="mb-6 animate-fade-in stagger-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-display font-bold text-foreground/90 tracking-[0.15em] uppercase">Work Types</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-3" data-testid="section-categories">
-            {WORK_CATEGORIES.map((cat) => {
-              const Icon = cat.icon;
-              return (
-                <Link key={cat.name} href={cat.href}>
-                  <div
-                    className="rounded-2xl p-4 flex items-center gap-3 cursor-pointer transition-all active:scale-95"
-                    style={{ background: cat.bg, border: "1px solid rgba(255,255,255,0.08)" }}
-                    data-testid={`card-category-${cat.name.toLowerCase().replace(/[^a-z]/g, "-")}`}
-                  >
-                    <div className="p-2 rounded-xl shrink-0" style={{ background: "rgba(255,255,255,0.15)" }}>
-                      <Icon className="w-5 h-5 text-white" strokeWidth={1.8} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-display font-bold text-white leading-tight">{cat.name}</p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-
-        </div>
-
-        {/* ── AI or Not ── */}
-        <div
-          onClick={() => navigate("/ai-or-not")}
-          className="mb-6 rounded-2xl p-4 cursor-pointer animate-fade-in stagger-5 overflow-hidden relative active:scale-[0.97] transition-all group"
-          style={{
-            background: "linear-gradient(135deg,hsl(190 90% 9%),hsl(220 80% 8%) 50%,hsl(175 90% 7%))",
-            border: "1.5px solid hsl(190 85% 55% / 0.45)",
-            boxShadow: "0 0 40px hsl(190 85% 50% / 0.2), inset 0 0 40px hsl(190 85% 50% / 0.04)",
-          }}
-          data-testid="card-category-ai-or-not"
-        >
-          {/* Background orbs */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute -right-2 -top-3 w-28 h-28 rounded-full opacity-25"
-              style={{ background: "radial-gradient(circle,hsl(190 85% 55%),transparent 65%)" }} />
-            <div className="absolute left-12 -bottom-5 w-20 h-20 rounded-full opacity-15"
-              style={{ background: "radial-gradient(circle,hsl(175 85% 55%),transparent 65%)" }} />
-          </div>
-          <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-30" style={{ background: "linear-gradient(90deg,transparent 0%,hsl(190 85% 55% / 0.15) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
-
-          <div className="relative flex items-center gap-3.5">
-            {/* Icon block with split human/AI visual */}
-            <div className="shrink-0 w-12 h-12 rounded-xl relative overflow-hidden animate-pulse-glow flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,hsl(190 85% 35%),hsl(210 85% 25%))", boxShadow: "0 0 24px hsl(190 85% 55% / 0.5)" }}>
-              <Bot className="w-6 h-6 text-white" strokeWidth={1.5} />
-              {/* scan line */}
-              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,transparent 40%,hsl(190 85% 55% / 0.35) 50%,transparent 60%)", animation: "shimmer 2s linear infinite" }} />
-            </div>
-
-            <div className="flex-1 relative min-w-0">
-              <p className="text-[9px] font-display font-black tracking-[0.25em] uppercase mb-0.5" style={{ color: "hsl(190 85% 65%)" }}>— The Game —</p>
-              <p className="font-display font-black text-white leading-none mb-1" style={{ fontSize: 17, letterSpacing: "-0.03em", textShadow: "0 0 24px hsl(190 85% 55% / 0.6)" }}>
-                AI <span style={{ color: "hsl(190 85% 60%)" }}>or</span> Not?
-              </p>
-              <p className="text-[10px] text-white/60 leading-snug">Can you tell real from fake? 🤖</p>
-            </div>
-
-            <span className="font-display font-black tracking-wide text-black uppercase shrink-0 px-3.5 py-2 rounded-full group-active:scale-95 transition-transform flex items-center gap-1"
-              style={{ background: "linear-gradient(135deg,hsl(190 85% 60%),hsl(175 85% 50%))", boxShadow: "0 0 18px hsl(190 85% 55% / 0.5)", fontSize: 11 }}>
-              Play →
-            </span>
-          </div>
-        </div>
-
-        {/* ── Referral Nudge ── */}
-        <div
-          className="mb-4 rounded-2xl px-4 py-3.5 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform"
-          style={{
-            background: "linear-gradient(135deg,hsl(152 60% 10%),hsl(152 60% 7%))",
-            border: "1px solid hsl(152 70% 40% / 0.2)",
-          }}
-          onClick={handleReferralShare}
-          data-testid="card-referral-nudge"
-        >
-          <div className="p-2 rounded-xl shrink-0" style={{ background: "hsl(152 70% 40% / 0.15)" }}>
-            <Users className="w-4 h-4 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-display font-bold text-foreground leading-tight">Invite friends, earn together</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">You both get GUBER Credit when they complete their first job.</p>
-          </div>
-          <span className="text-[10px] font-display font-black text-primary/70 shrink-0 tracking-wide">INVITE</span>
-        </div>
-
         {/* ── B2B Hint ── */}
         <div
           className="mb-4 rounded-2xl px-4 py-3.5"
@@ -1316,6 +1339,14 @@ export default function Dashboard() {
 
       {/* ── Floating mascot helper (subtle, anchored bottom-right) ── */}
       <InstallMascot />
+
+      {/* ── Onboarding tour ── */}
+      {showTour && !!user && (
+        <DashboardTour
+          accountType={(user as any)?.accountType || "individual"}
+          onModeChange={(m) => setMode(m as DashboardMode)}
+        />
+      )}
 
     </GuberLayout>
   );

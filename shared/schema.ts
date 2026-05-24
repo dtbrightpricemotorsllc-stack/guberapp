@@ -129,6 +129,11 @@ export const users = pgTable("users", {
   referralDiscountExpiresAt: timestamp("referral_discount_expires_at"),
   termsAcceptedAt: timestamp("terms_accepted_at"),
   accountType: text("account_type").default("personal"),
+  onboardingComplete: boolean("onboarding_complete").default(false),
+  onboardingType: text("onboarding_type"),
+  businessAddress: text("business_address"),
+  businessWebsite: text("business_website"),
+  businessEin: text("business_ein"),
   stripeProfileType: text("stripe_profile_type"),
   createdAt: timestamp("created_at").defaultNow(),
   notifNearbyJobs: boolean("notif_nearby_jobs").default(true),
@@ -1464,6 +1469,9 @@ export const businessAccessRequestSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  businessAddress: z.string().min(5, "Business address is required"),
+  website: z.string().optional(),
+  ein: z.string().optional(),
 });
 
 export const businessVerificationSchema = z.object({

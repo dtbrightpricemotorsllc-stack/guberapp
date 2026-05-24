@@ -1329,7 +1329,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, username, password } = parsed.data;
+      const { businessName, workEmail, phone, industry, companyNeedsSummary, fullName, username, password, businessAddress, website, ein } = parsed.data;
 
       const pwError = validatePasswordStrength(password);
       if (pwError) return res.status(400).json({ message: pwError });
@@ -1369,6 +1369,9 @@ export async function registerRoutes(
           referralCode: newRefCode,
           accountType: "business",
           termsAcceptedAt: new Date(),
+          businessAddress: businessAddress || null,
+          businessWebsite: website || null,
+          businessEin: ein || null,
         });
 
         bizAccount = await storage.createBusinessAccount({
@@ -4489,6 +4492,19 @@ export async function registerRoutes(
   // standard), totals earned/voided, recent reward rows, and — if the viewer
   // is themselves a referred user — the countdown until their referrer's
   // 30-day earning window expires.
+  app.post("/api/users/me/onboarding-complete", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { onboardingType } = req.body;
+      await storage.updateUser(req.session.userId!, {
+        onboardingComplete: true,
+        onboardingType: onboardingType || "individual",
+      } as any);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/users/me/referral", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
