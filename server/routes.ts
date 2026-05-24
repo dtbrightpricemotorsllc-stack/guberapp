@@ -5433,13 +5433,13 @@ export async function registerRoutes(
       y += 18;
 
       // ── Disclaimer box ────────────────────────────────────────────────────
-      doc.rect(L, y, pageW, 24).fill(SECTION_BG).stroke();
+      doc.rect(L, y, pageW, 28).fill(SECTION_BG).stroke();
       doc.fillColor(LABEL_GRAY).fontSize(7.5).font("Helvetica")
         .text(
-          "INFORMATIONAL USE ONLY  —  This document is NOT financing, a loan approval, a purchase contract, a vehicle inspection, or a vehicle history report. It contains listing information provided by the seller.",
+          "This Buyer's Order is an informational listing summary only. It is not a bill of sale, purchase agreement, title document, warranty, financing approval, inspection report, or guarantee from GUBER.",
           L + 8, y + 7, { width: pageW - 16 }
         );
-      y += 34;
+      y += 38;
 
       // ── Section helpers ───────────────────────────────────────────────────
       const rowH    = 18;
@@ -5489,16 +5489,26 @@ export async function registerRoutes(
       row("Title Status", item.titleStatus || "—");
       row("Condition",    item.condition   || "—");
 
-      // Seller disclosures — may wrap
+      // Condition notes / disclosures — may wrap
       const disclosures = details.sellerDisclosures || item.description || "None provided.";
       const discText    = disclosures.slice(0, 400) + (disclosures.length > 400 ? "…" : "");
       doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
-        .text("Seller Disclosures", L + 6, y + 1, { width: 160 });
+        .text("Condition Notes", L + 6, y + 1, { width: 160 });
       const discH = doc.heightOfString(discText, { width: pageW - (COL2 - L) - 6 });
       doc.fillColor(BLACK).fontSize(8.5).font("Helvetica-Bold")
         .text(discText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
       y += Math.max(rowH, discH + 6);
       doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+      if (details.dealerFees) {
+        const feesText = String(details.dealerFees).slice(0, 300);
+        doc.fillColor(LABEL_GRAY).fontSize(8.5).font("Helvetica")
+          .text("Dealer Fees / Notes", L + 6, y + 1, { width: 160 });
+        const feesH = doc.heightOfString(feesText, { width: pageW - (COL2 - L) - 6 });
+        doc.fillColor(BLACK).fontSize(8.5).font("Helvetica-Bold")
+          .text(feesText, COL2, y + 1, { width: pageW - (COL2 - L) - 6 });
+        y += Math.max(rowH, feesH + 6);
+        doc.moveTo(L, y - 2).lineTo(L + pageW, y - 2).strokeColor(RULE_GRAY).lineWidth(0.4).stroke();
+      }
       y += secGap;
 
       // ── LOCATION ──────────────────────────────────────────────────────────
@@ -5542,7 +5552,23 @@ export async function registerRoutes(
 
   // ── Buyer Order Requests (no-VIN flow) ───────────────────────────────────
 
-  // Buyer submits a request (free — no charge)
+  // Public listing-level status — no auth needed
+  app.get("/api/marketplace/:id/buyer-order/status", async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Listing not found" });
+      if (item.vinNumber) return res.json({ state: "available" });
+      const requests = await storage.getBuyerOrderRequestsForListing(listingId);
+      if (requests.length === 0) return res.json({ state: "none" });
+      if (requests.every((r: any) => r.status === "rejected")) return res.json({ state: "declined" });
+      return res.json({ state: "pending" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Buyer submits a request (free — only one notification per listing)
   app.post("/api/marketplace/:id/buyer-order/request", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const listingId = parseInt(req.params.id);
@@ -5551,26 +5577,36 @@ export async function registerRoutes(
       if (!item) return res.status(404).json({ message: "Listing not found" });
       if (item.vinNumber) return res.status(400).json({ message: "This listing already has a VIN — purchase directly." });
       if (item.sellerId === buyerId) return res.status(400).json({ message: "You cannot request your own listing." });
-      // Upsert: only one pending request per buyer per listing
-      const existing = await storage.getBuyerOrderRequestByBuyer(listingId, buyerId);
-      if (existing && existing.status === "pending") return res.json(existing);
-      const boReq = await storage.createBuyerOrderRequest({
+      // One notification per listing — if any request already exists, seller already knows
+      const existing = await storage.getBuyerOrderRequestsForListing(listingId);
+      if (existing.some((r: any) => r.status === "pending")) return res.json({ alreadyNotified: true });
+      await storage.createBuyerOrderRequest({
         listingId, buyerUserId: buyerId, sellerUserId: item.sellerId, status: "pending",
       });
-      return res.json(boReq);
+      // Notify seller
+      sendPushToUser(item.sellerId, {
+        title: "Buyer's Order Requested",
+        body: `A buyer requested a Buyer's Order for "${item.title}". Complete the vehicle details once so serious buyers can download it.`,
+        url: `/marketplace/p/${item.publicSlug || listingId}`,
+        tag: `buyer-order-request-${listingId}`,
+      }).catch(() => {});
+      return res.json({ notified: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
   });
 
-  // Buyer checks their request status
+  // Legacy per-buyer status (kept for backwards compat)
   app.get("/api/marketplace/:id/buyer-order/request/status", requireAuth, async (req: Request, res: Response) => {
     try {
       const listingId = parseInt(req.params.id);
-      const buyerId = req.session.userId!;
-      const boReq = await storage.getBuyerOrderRequestByBuyer(listingId, buyerId);
-      if (!boReq) return res.json({ status: "none" });
-      return res.json(boReq);
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item) return res.status(404).json({ message: "Not found" });
+      if (item.vinNumber) return res.json({ status: "fulfilled" });
+      const requests = await storage.getBuyerOrderRequestsForListing(listingId);
+      if (requests.length === 0) return res.json({ status: "none" });
+      if (requests.every((r: any) => r.status === "rejected")) return res.json({ status: "rejected" });
+      return res.json({ status: "pending" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -5640,6 +5676,43 @@ export async function registerRoutes(
       if (!item || item.sellerId !== sellerId) return res.status(403).json({ message: "Forbidden" });
       const { note } = req.body;
       await storage.updateBuyerOrderRequest(requestId, { status: "rejected", rejectionNote: note || null });
+      return res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Seller saves Buyer's Order details to listing (no requestId needed — one-time, editable)
+  app.post("/api/marketplace/:id/buyer-order/details", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const sellerId = req.session.userId!;
+      const item = await storage.getMarketplaceItem(listingId);
+      if (!item || item.sellerId !== sellerId) return res.status(403).json({ message: "Forbidden" });
+      const { vin, mileage, engine, fuelType, driveType, trim, exteriorColor, interiorColor, conditionNotes, dealerFees } = req.body;
+      if (!vin || typeof vin !== "string" || vin.trim().length < 5) return res.status(400).json({ message: "A valid VIN is required." });
+      const existingDetails = (item.details as Record<string, any>) || {};
+      const mergedDetails = {
+        ...existingDetails,
+        ...(engine       ? { engine }       : {}),
+        ...(fuelType     ? { fuelType }     : {}),
+        ...(driveType    ? { driveType }    : {}),
+        ...(trim         ? { trim }         : {}),
+        ...(exteriorColor ? { exteriorColor } : {}),
+        ...(interiorColor ? { interiorColor } : {}),
+        ...(conditionNotes ? { sellerDisclosures: conditionNotes } : {}),
+        ...(dealerFees   ? { dealerFees }   : {}),
+      };
+      await storage.updateMarketplaceItem(listingId, {
+        vinNumber: vin.trim().toUpperCase(),
+        details: mergedDetails,
+        ...(mileage ? { vehicleMileage: parseInt(String(mileage)) } : {}),
+      });
+      // Mark any pending requests fulfilled so the listing-level status updates
+      const allRequests = await storage.getBuyerOrderRequestsForListing(listingId);
+      for (const r of allRequests) {
+        if (r.status === "pending") await storage.updateBuyerOrderRequest(r.id, { status: "fulfilled" });
+      }
       return res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
