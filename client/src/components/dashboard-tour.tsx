@@ -11,7 +11,7 @@ export function resetTour() {
   localStorage.removeItem("guber_tour_step");
 }
 
-// ─── Steps ────────────────────────────────────────────────────────────────────
+// ─── Steps (6 tiles → HIRE → WORK) ──────────────────────────────────────────
 const STEPS = [
   {
     testId: "card-category-on-demand-help",
@@ -58,85 +58,50 @@ const STEPS = [
   {
     testId: "button-hire-mode",
     title: "HIRE Mode 🔵",
-    desc: "Tap HIRE when you need help. Post jobs, browse local workers, and manage all requests. Blue = you're hiring.",
+    desc: "Tap HIRE when you need help. Post jobs, browse local workers, and manage requests. Blue means you're hiring.",
     phase: "mode",
     mode: "hire" as const,
-    radius: 22,
+    radius: 20,
   },
   {
     testId: "button-work-mode",
     title: "WORK Mode 🟢",
-    desc: "Tap WORK when you're ready to earn. Browse open jobs, clock in, and get paid locally. Green = you're working.",
+    desc: "Tap WORK when you're ready to earn. Browse open jobs, clock in, and get paid locally. Green means you're working.",
     phase: "mode",
     mode: "work" as const,
-    radius: 22,
+    radius: 20,
   },
 ];
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardTourProps {
   accountType: string;
   onModeChange?: (mode: "hire" | "work") => void;
+}
+
+interface SpotRect {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  width: number;
+  height: number;
+  radius: number;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function DashboardTour({ accountType, onModeChange }: DashboardTourProps) {
   const [step, setStep] = useState(0);
   const [showFinal, setShowFinal] = useState(false);
-  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const preventFnRef = useRef<((e: Event) => void) | null>(null);
+  const [spotRect, setSpotRect] = useState<SpotRect | null>(null);
+  const completeFnRef = useRef<((mode?: string) => void) | null>(null);
 
   const current = STEPS[step];
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const PAD = 10;
 
-  // ── Lock user scroll ────────────────────────────────────────────────────────
-  useEffect(() => {
-    const fn = (e: Event) => e.preventDefault();
-    preventFnRef.current = fn;
-    document.addEventListener("touchmove", fn, { passive: false });
-    document.addEventListener("wheel", fn, { passive: false });
-    return () => {
-      document.removeEventListener("touchmove", fn);
-      document.removeEventListener("wheel", fn);
-    };
-  }, []);
-
-  // ── Scroll to target + measure its rect ────────────────────────────────────
-  useEffect(() => {
-    if (showFinal) return;
-    setTargetRect(null);
-
-    const doMeasure = () => {
-      const el = document.querySelector(`[data-testid="${current.testId}"]`) as HTMLElement | null;
-      if (!el) return false;
-
-      const r = el.getBoundingClientRect();
-      // Card height ~230px; keep element in upper 55% of screen
-      const cardH = 240;
-      const desiredTop = (window.innerHeight - cardH) * 0.30;
-      const scrollTarget = window.scrollY + r.top - desiredTop;
-      window.scrollTo({ top: Math.max(0, scrollTarget), behavior: "smooth" });
-
-      setTimeout(() => {
-        setTargetRect(el.getBoundingClientRect());
-      }, 420);
-      return true;
-    };
-
-    if (!doMeasure()) {
-      const t = setTimeout(doMeasure, 250);
-      return () => clearTimeout(t);
-    }
-  }, [step, showFinal, current?.testId]);
-
-  // ── Mode switch side-effect ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (current?.phase === "mode" && current.mode && onModeChange) {
-      onModeChange(current.mode);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  // ── Complete tour ──────────────────────────────────────────────────────────
+  // ── completeTour ─────────────────────────────────────────────────────────
   const completeTour = useCallback((mode?: string) => {
     localStorage.setItem("guber_tour_complete", "true");
     apiRequest("POST", "/api/users/me/onboarding-complete", {
@@ -146,6 +111,109 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
     window.location.reload();
   }, [accountType, onModeChange]);
 
+  // keep ref in sync so event listeners can call latest version
+  useEffect(() => { completeFnRef.current = completeTour; }, [completeTour]);
+
+  // ── Lock user scroll ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const block = (e: Event) => e.preventDefault();
+    document.addEventListener("touchmove", block, { passive: false });
+    document.addEventListener("wheel", block, { passive: false });
+    return () => {
+      document.removeEventListener("touchmove", block);
+      document.removeEventListener("wheel", block);
+    };
+  }, []);
+
+  // ── Measure spotlight for regular steps ──────────────────────────────────
+  useEffect(() => {
+    if (showFinal) return;
+    setSpotRect(null);
+
+    const snap = () => {
+      const el = document.querySelector(
+        `[data-testid="${current.testId}"]`
+      ) as HTMLElement | null;
+      if (!el) return false;
+
+      // Programmatic scroll: target element at 35% from the top of the screen
+      // (leaves room for the floating card below it)
+      const r = el.getBoundingClientRect();
+      const desired = vh * 0.28;
+      const scrollTo = window.scrollY + r.top - desired;
+      window.scrollTo({ top: Math.max(0, scrollTo), behavior: "smooth" });
+
+      setTimeout(() => {
+        const r2 = el.getBoundingClientRect();
+        setSpotRect({
+          top: r2.top - PAD,
+          left: r2.left - PAD,
+          bottom: r2.bottom + PAD,
+          right: r2.right + PAD,
+          width: r2.width + PAD * 2,
+          height: r2.height + PAD * 2,
+          radius: current.radius,
+        });
+      }, 400);
+      return true;
+    };
+
+    if (!snap()) {
+      const t = setTimeout(snap, 250);
+      return () => clearTimeout(t);
+    }
+  }, [step, showFinal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Mode switch side-effect ───────────────────────────────────────────────
+  useEffect(() => {
+    if (current.phase === "mode" && current.mode && onModeChange) {
+      onModeChange(current.mode);
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Final screen: measure both toggle buttons together ────────────────────
+  useEffect(() => {
+    if (!showFinal) return;
+    setSpotRect(null);
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const snap = () => {
+      const hEl = document.querySelector('[data-testid="button-hire-mode"]');
+      const wEl = document.querySelector('[data-testid="button-work-mode"]');
+      if (!hEl || !wEl) return false;
+      const hr = hEl.getBoundingClientRect();
+      const wr = wEl.getBoundingClientRect();
+      const top = Math.min(hr.top, wr.top) - PAD;
+      const left = Math.min(hr.left, wr.left) - PAD;
+      const right = Math.max(hr.right, wr.right) + PAD;
+      const bottom = Math.max(hr.bottom, wr.bottom) + PAD;
+      setSpotRect({ top, left, bottom, right, width: right - left, height: bottom - top, radius: 22 });
+      return true;
+    };
+
+    const t = setTimeout(() => {
+      if (!snap()) setTimeout(snap, 300);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [showFinal]);
+
+  // ── Final screen: wire actual HIRE/WORK button clicks ────────────────────
+  useEffect(() => {
+    if (!showFinal) return;
+    const hireEl = document.querySelector('[data-testid="button-hire-mode"]');
+    const workEl = document.querySelector('[data-testid="button-work-mode"]');
+    const onHire = () => completeFnRef.current?.("hire");
+    const onWork = () => completeFnRef.current?.("work");
+    hireEl?.addEventListener("click", onHire);
+    workEl?.addEventListener("click", onWork);
+    return () => {
+      hireEl?.removeEventListener("click", onHire);
+      workEl?.removeEventListener("click", onWork);
+    };
+  }, [showFinal]);
+
+  // ── NEXT handler ──────────────────────────────────────────────────────────
   const handleNext = () => {
     const next = step + 1;
     if (next >= STEPS.length) {
@@ -155,147 +223,149 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
     }
   };
 
-  // ── Final screen ───────────────────────────────────────────────────────────
+  // ── Derived spotlight geometry ────────────────────────────────────────────
+  const sTop = spotRect?.top ?? 0;
+  const sLeft = spotRect?.left ?? 0;
+  const sBottom = spotRect?.bottom ?? vh;
+  const sRight = spotRect?.right ?? vw;
+  const sW = sRight - sLeft;
+  const sH = sBottom - sTop;
+  const sRadius = spotRect?.radius ?? 18;
+
+  // ── Tooltip card position: prefer below, fall back to above ───────────────
+  const CARD_H = 220; // estimated card height px
+  const CARD_MARGIN = 14;
+  const SKIP_H = 44;
+  const spaceBelow = vh - sBottom - CARD_MARGIN - SKIP_H;
+  const spaceAbove = sTop - CARD_MARGIN;
+  const cardBelow = spaceBelow >= CARD_H || spaceBelow >= spaceAbove;
+  const cardTop = cardBelow ? sBottom + CARD_MARGIN : undefined;
+  const cardBottom = !cardBelow ? vh - sTop + CARD_MARGIN : undefined;
+
+  const DARK = "rgba(0,0,0,0.88)";
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FINAL SCREEN — both toggles spotlighted, card below, actual btns work
+  // ─────────────────────────────────────────────────────────────────────────
   if (showFinal) {
     return (
       <div
-        style={{
-          position: "fixed", inset: 0, zIndex: 9999,
-          background: "rgba(0,0,0,0.94)",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          padding: "0 24px",
-        }}
+        style={{ position: "fixed", inset: 0, zIndex: 9999 }}
         data-testid="tour-final-screen"
       >
-        <div style={{ width: "100%", maxWidth: 360 }}>
-          <p style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.25em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", textAlign: "center", marginBottom: 14 }}>
-            You're all set!
-          </p>
-          <h2 style={{ fontSize: 27, fontWeight: 900, color: "#fff", textAlign: "center", lineHeight: 1.15, marginBottom: 8, letterSpacing: "-0.02em" }}>
-            Where are you<br />starting today?
-          </h2>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", textAlign: "center", marginBottom: 32, lineHeight: 1.5 }}>
-            Pick your mode — you can switch anytime.
-          </p>
+        {/* Dark visual panels (pointer-events: none — buttons show through) */}
+        {spotRect ? (
+          <>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(0, sTop), background: DARK, pointerEvents: "none", zIndex: 1 }} />
+            <div style={{ position: "absolute", top: Math.max(0, sBottom), left: 0, right: 0, bottom: 0, background: DARK, pointerEvents: "none", zIndex: 1 }} />
+            <div style={{ position: "absolute", top: sTop, left: 0, width: Math.max(0, sLeft), height: sH, background: DARK, pointerEvents: "none", zIndex: 1 }} />
+            <div style={{ position: "absolute", top: sTop, left: sRight, right: 0, height: sH, background: DARK, pointerEvents: "none", zIndex: 1 }} />
+            {/* Glow ring */}
+            <div style={{ position: "absolute", top: sTop, left: sLeft, width: sW, height: sH, borderRadius: sRadius, border: "1.5px solid rgba(255,255,255,0.4)", boxShadow: "0 0 0 1px rgba(255,255,255,0.1), 0 0 32px rgba(255,255,255,0.14)", pointerEvents: "none", zIndex: 2 }} />
+            {/* Click-blockers OUTSIDE the spotlight only */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(0, sTop), pointerEvents: "all", zIndex: 3 }} />
+            <div style={{ position: "absolute", top: Math.max(0, sBottom), left: 0, right: 0, bottom: 0, pointerEvents: "all", zIndex: 3 }} />
+            <div style={{ position: "absolute", top: sTop, left: 0, width: Math.max(0, sLeft), height: sH, pointerEvents: "all", zIndex: 3 }} />
+            <div style={{ position: "absolute", top: sTop, left: sRight, right: 0, height: sH, pointerEvents: "all", zIndex: 3 }} />
+          </>
+        ) : (
+          <div style={{ position: "absolute", inset: 0, background: DARK, zIndex: 1, pointerEvents: "all" }} />
+        )}
 
-          {/* HIRE / WORK choice */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 28 }}>
-            <button
-              onClick={() => completeTour("hire")}
-              style={{
-                flex: 1, padding: "22px 14px", borderRadius: 22, cursor: "pointer", outline: "none",
-                background: "linear-gradient(135deg,hsl(220 60% 18%),hsl(220 70% 12%))",
-                border: "2px solid rgba(59,130,246,0.75)",
-                boxShadow: "0 0 24px rgba(59,130,246,0.28)",
-              }}
-              data-testid="button-tour-hire"
-            >
-              <div style={{ color: "hsl(220 70% 78%)", fontSize: 14, fontWeight: 900, letterSpacing: "0.18em", marginBottom: 6 }}>HIRE</div>
-              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, lineHeight: 1.4 }}>Post jobs &amp; get help</div>
-            </button>
-            <button
-              onClick={() => completeTour("work")}
-              style={{
-                flex: 1, padding: "22px 14px", borderRadius: 22, cursor: "pointer", outline: "none",
-                background: "linear-gradient(135deg,hsl(142 60% 10%),hsl(152 70% 8%))",
-                border: "2px solid rgba(34,197,94,0.75)",
-                boxShadow: "0 0 24px rgba(34,197,94,0.28)",
-              }}
-              data-testid="button-tour-work"
-            >
-              <div style={{ color: "hsl(152 70% 70%)", fontSize: 14, fontWeight: 900, letterSpacing: "0.18em", marginBottom: 6 }}>WORK</div>
-              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, lineHeight: 1.4 }}>Find jobs &amp; earn</div>
-            </button>
+        {/* Label above spotlight */}
+        {spotRect && (
+          <div style={{ position: "absolute", top: Math.max(8, sTop - 36), left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
+            <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.22em", color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
+              tap your mode to begin ↓
+            </span>
           </div>
+        )}
 
-          {/* Divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>or</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-          </div>
-
-          {/* Just explore */}
-          <button
-            onClick={() => completeTour()}
+        {/* Floating question card — below the spotlighted buttons */}
+        {spotRect && (
+          <div
             style={{
-              width: "100%", padding: "15px 20px", borderRadius: 16, cursor: "pointer",
-              background: "transparent",
-              border: "1px solid rgba(255,255,255,0.12)",
-              color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 700, letterSpacing: "0.04em",
+              position: "absolute",
+              top: sBottom + 16,
+              left: 14,
+              right: 14,
+              zIndex: 10,
+              background: "rgba(6,6,6,0.97)",
+              borderRadius: 24,
+              padding: "20px 20px 18px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+              pointerEvents: "all",
             }}
-            data-testid="button-tour-explore"
           >
-            Just explore the app →
-          </button>
-        </div>
+            <p style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.22em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 8 }}>
+              All done!
+            </p>
+            <h3 style={{ fontSize: 20, fontWeight: 900, color: "#fff", lineHeight: 1.15, marginBottom: 7, letterSpacing: "-0.01em" }}>
+              Where are you starting today?
+            </h3>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.55, marginBottom: 18 }}>
+              Tap <strong style={{ color: "hsl(220 70% 75%)" }}>HIRE</strong> or <strong style={{ color: "hsl(152 70% 65%)" }}>WORK</strong> above to jump in — or explore first.
+            </p>
+
+            {/* Divider */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>or</span>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            </div>
+
+            <button
+              onClick={() => completeTour()}
+              style={{ width: "100%", padding: "14px 20px", borderRadius: 14, cursor: "pointer", background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: 700, letterSpacing: "0.04em" }}
+              data-testid="button-tour-explore"
+            >
+              Would you rather just explore? →
+            </button>
+          </div>
+        )}
+
+        {/* Fallback if rect not yet measured */}
+        {!spotRect && (
+          <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.3)", borderTopColor: "#22c55e", animation: "spin 0.8s linear infinite" }} />
+          </div>
+        )}
       </div>
     );
   }
 
-  // ── Spotlight geometry ─────────────────────────────────────────────────────
-  const pad = 10;
-  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-
-  const sTop = targetRect ? Math.max(0, targetRect.top - pad) : 0;
-  const sBottom = targetRect ? Math.min(vh, targetRect.bottom + pad) : vh;
-  const sLeft = targetRect ? Math.max(0, targetRect.left - pad) : 0;
-  const sRight = targetRect ? Math.min(vw, targetRect.right + pad) : vw;
-  const sW = sRight - sLeft;
-  const sH = sBottom - sTop;
-  const sRadius = current?.radius ?? 18;
-
-  const dark = "rgba(0,0,0,0.88)";
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // REGULAR STEPS (tiles + mode buttons)
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999 }} data-testid="tour-overlay">
 
-      {/* ── 4 dark panels around spotlight ────────────────────────────────── */}
-      {targetRect ? (
+      {/* Full-screen transparent click-blocker (z:1) — prevents ALL dashboard taps */}
+      <div style={{ position: "absolute", inset: 0, zIndex: 1, pointerEvents: "all" }} />
+
+      {/* Dark visual panels (z:2, pointer-events:none — pure visual) */}
+      {spotRect ? (
         <>
-          {/* Top panel */}
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: sTop, background: dark, pointerEvents: "all" }} />
-          {/* Bottom panel */}
-          <div style={{ position: "absolute", top: sBottom, left: 0, right: 0, bottom: 0, background: dark, pointerEvents: "all" }} />
-          {/* Left panel */}
-          <div style={{ position: "absolute", top: sTop, left: 0, width: sLeft, height: sH, background: dark, pointerEvents: "all" }} />
-          {/* Right panel */}
-          <div style={{ position: "absolute", top: sTop, left: sRight, right: 0, height: sH, background: dark, pointerEvents: "all" }} />
-          {/* Spotlight border glow */}
-          <div style={{
-            position: "absolute", top: sTop, left: sLeft,
-            width: sW, height: sH,
-            borderRadius: sRadius,
-            border: "1.5px solid rgba(255,255,255,0.3)",
-            boxShadow: "0 0 0 1.5px rgba(255,255,255,0.08), 0 0 28px rgba(255,255,255,0.1)",
-            pointerEvents: "none",
-          }} />
-          {/* Click blocker over spotlight (tile is visible but not tappable) */}
-          <div style={{
-            position: "absolute", top: sTop, left: sLeft,
-            width: sW, height: sH,
-            borderRadius: sRadius,
-            pointerEvents: "all",
-            cursor: "default",
-          }} />
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(0, sTop), background: DARK, pointerEvents: "none", zIndex: 2 }} />
+          <div style={{ position: "absolute", top: Math.max(0, sBottom), left: 0, right: 0, bottom: 0, background: DARK, pointerEvents: "none", zIndex: 2 }} />
+          <div style={{ position: "absolute", top: sTop, left: 0, width: Math.max(0, sLeft), height: sH, background: DARK, pointerEvents: "none", zIndex: 2 }} />
+          <div style={{ position: "absolute", top: sTop, left: sRight, right: 0, height: sH, background: DARK, pointerEvents: "none", zIndex: 2 }} />
+          {/* Glow ring */}
+          <div style={{ position: "absolute", top: sTop, left: sLeft, width: sW, height: sH, borderRadius: sRadius, border: "1.5px solid rgba(255,255,255,0.32)", boxShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 0 28px rgba(255,255,255,0.12)", pointerEvents: "none", zIndex: 3 }} />
         </>
       ) : (
-        <div style={{ position: "absolute", inset: 0, background: dark, pointerEvents: "all" }} />
+        /* No rect yet — full black cover */
+        <div style={{ position: "absolute", inset: 0, background: DARK, pointerEvents: "none", zIndex: 2 }} />
       )}
 
-      {/* ── Step progress dots (top) ───────────────────────────────────────── */}
-      <div style={{
-        position: "absolute", top: 14, left: 0, right: 0,
-        display: "flex", justifyContent: "center", gap: 5,
-        pointerEvents: "none",
-      }}>
+      {/* Progress dots (z:10) */}
+      <div style={{ position: "absolute", top: 14, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 5, pointerEvents: "none", zIndex: 10 }}>
         {STEPS.map((_, i) => (
           <div
             key={i}
             style={{
-              width: i === step ? 20 : 6,
+              width: i === step ? 22 : 6,
               height: 6,
               borderRadius: 3,
               background: i === step ? "#22c55e" : "rgba(255,255,255,0.18)",
@@ -305,67 +375,83 @@ export function DashboardTour({ accountType, onModeChange }: DashboardTourProps)
         ))}
       </div>
 
-      {/* ── Bottom explanation card ────────────────────────────────────────── */}
-      <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0,
-        padding: "0 14px 28px",
-        pointerEvents: "all",
-      }}>
-        <div style={{
-          background: "rgba(6,6,6,0.97)",
-          borderRadius: 26,
-          padding: "20px 20px 18px",
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 -10px 50px rgba(0,0,0,0.6)",
-        }}>
-          {/* Header row */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      {/* Floating explanation card — above or below the spotlight (z:10) */}
+      {spotRect && (
+        <div
+          style={{
+            position: "absolute",
+            top: cardTop,
+            bottom: cardBottom,
+            left: 14,
+            right: 14,
+            zIndex: 10,
+            pointerEvents: "all",
+            background: "rgba(6,6,6,0.97)",
+            borderRadius: 24,
+            padding: "18px 20px 16px",
+            border: "1px solid rgba(255,255,255,0.08)",
+            boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+          }}
+          data-testid="tour-tooltip"
+        >
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
             <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.22em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase" }}>
               {step + 1} / {STEPS.length}
             </span>
-            <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.18em", color: current.phase === "mode" ? "rgba(34,197,94,0.6)" : "rgba(255,255,255,0.2)", textTransform: "uppercase" }}>
-              {current.phase === "tile" ? "CATEGORY" : "MODE TOGGLE"}
+            <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.18em", textTransform: "uppercase", color: current.phase === "mode" ? "rgba(34,197,94,0.6)" : "rgba(255,255,255,0.18)" }}>
+              {current.phase === "tile" ? "CATEGORY" : "MODE"}
             </span>
           </div>
 
-          <h3 style={{ fontSize: 21, fontWeight: 900, color: "#fff", marginBottom: 7, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+          <h3 style={{ fontSize: 20, fontWeight: 900, color: "#fff", marginBottom: 6, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
             {current.title}
           </h3>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.6, marginBottom: 18 }}>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.6, marginBottom: 16 }}>
             {current.desc}
           </p>
 
           <button
             onClick={handleNext}
-            style={{
-              width: "100%", height: 52, borderRadius: 16,
-              background: "linear-gradient(135deg,#16a34a,#15803d)",
-              color: "#fff", fontWeight: 900, fontSize: 14,
-              letterSpacing: "0.1em", border: "none", cursor: "pointer",
-              boxShadow: "0 4px 22px rgba(22,163,74,0.38)",
-            }}
+            style={{ width: "100%", height: 50, borderRadius: 15, background: "linear-gradient(135deg,#16a34a,#15803d)", color: "#fff", fontWeight: 900, fontSize: 14, letterSpacing: "0.1em", border: "none", cursor: "pointer", boxShadow: "0 4px 20px rgba(22,163,74,0.35)" }}
             data-testid="button-tour-next"
           >
             {step < STEPS.length - 1 ? "NEXT →" : "CONTINUE →"}
           </button>
         </div>
+      )}
 
-        {/* Skip */}
-        <button
-          onClick={() => completeTour()}
-          style={{
-            width: "100%", marginTop: 10,
-            background: "transparent", border: "none",
-            color: "rgba(255,255,255,0.25)", fontSize: 11,
-            fontWeight: 700, letterSpacing: "0.18em",
-            cursor: "pointer", padding: "8px 0",
-            textTransform: "uppercase",
-          }}
-          data-testid="button-tour-skip"
-        >
-          skip tutorial
-        </button>
-      </div>
+      {/* Loading state — no rect yet */}
+      {!spotRect && (
+        <div style={{ position: "absolute", bottom: 60, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
+          <div style={{ width: 24, height: 24, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.25)", borderTopColor: "#22c55e" }} />
+        </div>
+      )}
+
+      {/* Skip — always at the very bottom (z:10) */}
+      <button
+        onClick={() => completeTour()}
+        style={{
+          position: "absolute",
+          bottom: 16,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          background: "transparent",
+          border: "none",
+          color: "rgba(255,255,255,0.25)",
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          cursor: "pointer",
+          padding: "8px 0",
+          textTransform: "uppercase",
+          pointerEvents: "all",
+        }}
+        data-testid="button-tour-skip"
+      >
+        skip tutorial
+      </button>
     </div>
   );
 }
