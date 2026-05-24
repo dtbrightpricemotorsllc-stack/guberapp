@@ -5708,10 +5708,18 @@ export async function registerRoutes(
         details: mergedDetails,
         ...(mileage ? { vehicleMileage: parseInt(String(mileage)) } : {}),
       });
-      // Mark any pending requests fulfilled so the listing-level status updates
+      // Mark any pending requests fulfilled and notify each requesting buyer
       const allRequests = await storage.getBuyerOrderRequestsForListing(listingId);
       for (const r of allRequests) {
-        if (r.status === "pending") await storage.updateBuyerOrderRequest(r.id, { status: "fulfilled" });
+        if (r.status === "pending") {
+          await storage.updateBuyerOrderRequest(r.id, { status: "fulfilled" });
+          sendPushToUser(r.buyerUserId, {
+            title: "Buyer's Order Ready — $1.00",
+            body: `The seller completed the vehicle details for "${item.title}". Tap to download your Buyer's Order.`,
+            url: `/marketplace/p/${item.publicSlug || listingId}`,
+            tag: `buyer-order-ready-${listingId}`,
+          }).catch(() => {});
+        }
       }
       return res.json({ success: true });
     } catch (err: any) {
