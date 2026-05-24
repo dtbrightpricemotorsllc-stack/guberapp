@@ -239,3 +239,9 @@ id = "OvJRsJNed4cTvLY_IhFQ7"
 uri = "file://attached_assets/GUBER-Investor-Deck-2026.pdf"
 type = "pdf"
 title = "GUBER Investor Deck 2026 — Final Polish"
+
+[[outputs]]
+id = "yzsPDTkfEbFNnvtx_WCUi"
+uri = "file://attached_assets/roadpass-preview.png"
+type = "image"
+title = "Transaction Roadpass PDF — live render"
