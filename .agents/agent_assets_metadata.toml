@@ -245,3 +245,9 @@ id = "yzsPDTkfEbFNnvtx_WCUi"
 uri = "file://attached_assets/roadpass-preview.png"
 type = "image"
 title = "Updated PDF — crisp logo, no QR, clean links"
+
+[[outputs]]
+id = "CumTdwDEOk3CpsMRP6rWy"
+uri = "file://attached_assets/roadpass-preview2.png"
+type = "image"
+title = "Updated PDF — no QR code"
