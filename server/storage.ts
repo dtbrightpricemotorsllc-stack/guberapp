@@ -33,6 +33,8 @@ import {
   type PinnedFinding,
   type TaskHistorySummary,
   type BusinessVerifyRequest, type BusinessProofSubmission,
+  loadBoardListings, carrierProfiles, loadBoardOffers, loadBoardAddons,
+  type LoadBoardListing, type CarrierProfile, type LoadBoardOffer, type LoadBoardAddon,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ne, desc, and, or, sql, isNotNull, count, inArray, lt, lte, isNull } from "drizzle-orm";
@@ -334,6 +336,26 @@ export interface IStorage {
   getBusinessVerifyRequest(id: number): Promise<BusinessVerifyRequest | undefined>;
   updateBusinessVerifyRequest(id: number, data: Partial<BusinessVerifyRequest>): Promise<BusinessVerifyRequest | undefined>;
   getAllBusinessVerifyRequests(): Promise<BusinessVerifyRequest[]>;
+
+  // Load Board
+  createLoadBoardListing(data: any): Promise<LoadBoardListing>;
+  getLoadBoardListing(id: number): Promise<LoadBoardListing | undefined>;
+  getLoadBoardListings(filters?: { status?: string; transportType?: string }): Promise<LoadBoardListing[]>;
+  getLoadBoardListingsByPoster(posterId: number): Promise<LoadBoardListing[]>;
+  updateLoadBoardListing(id: number, data: Partial<LoadBoardListing>): Promise<LoadBoardListing | undefined>;
+
+  getCarrierProfile(userId: number): Promise<CarrierProfile | undefined>;
+  upsertCarrierProfile(userId: number, data: any): Promise<CarrierProfile>;
+
+  createLoadBoardOffer(data: any): Promise<LoadBoardOffer>;
+  getLoadBoardOffer(id: number): Promise<LoadBoardOffer | undefined>;
+  getLoadBoardOffersByListing(listingId: number): Promise<LoadBoardOffer[]>;
+  getLoadBoardOffersByCarrier(carrierId: number): Promise<LoadBoardOffer[]>;
+  updateLoadBoardOffer(id: number, data: Partial<LoadBoardOffer>): Promise<LoadBoardOffer | undefined>;
+
+  createLoadBoardAddon(data: any): Promise<LoadBoardAddon>;
+  getLoadBoardAddonsByListing(listingId: number): Promise<LoadBoardAddon[]>;
+  updateLoadBoardAddon(id: number, data: Partial<LoadBoardAddon>): Promise<LoadBoardAddon | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1400,6 +1422,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(marketplaceDeals.createdAt));
   }
 
+  async getMarketplaceDealsByListing(listingId: number): Promise<MarketplaceDeal[]> {
+    return db.select().from(marketplaceDeals)
+      .where(eq(marketplaceDeals.listingId, listingId))
+      .orderBy(desc(marketplaceDeals.createdAt));
+  }
+
   async updateMarketplaceDeal(id: number, data: Partial<MarketplaceDeal>): Promise<MarketplaceDeal | undefined> {
     const [deal] = await db.update(marketplaceDeals).set({ ...data, updatedAt: new Date() }).where(eq(marketplaceDeals.id, id)).returning();
     return deal;
@@ -2223,6 +2251,75 @@ export class DatabaseStorage implements IStorage {
 
   async getAllBusinessVerifyRequests(): Promise<BusinessVerifyRequest[]> {
     return db.select().from(businessVerifyRequests).orderBy(desc(businessVerifyRequests.createdAt));
+  }
+
+  // ── Load Board ──────────────────────────────────────────────────────────────
+  async createLoadBoardListing(data: any): Promise<LoadBoardListing> {
+    const [rec] = await db.insert(loadBoardListings).values(data).returning();
+    return rec;
+  }
+  async getLoadBoardListing(id: number): Promise<LoadBoardListing | undefined> {
+    const [rec] = await db.select().from(loadBoardListings).where(eq(loadBoardListings.id, id));
+    return rec;
+  }
+  async getLoadBoardListings(filters?: { status?: string; transportType?: string }): Promise<LoadBoardListing[]> {
+    const conds: any[] = [];
+    if (filters?.status) conds.push(eq(loadBoardListings.status, filters.status));
+    if (filters?.transportType) conds.push(eq(loadBoardListings.transportType, filters.transportType));
+    const q = conds.length ? db.select().from(loadBoardListings).where(and(...conds)) : db.select().from(loadBoardListings);
+    return q.orderBy(desc(loadBoardListings.createdAt));
+  }
+  async getLoadBoardListingsByPoster(posterId: number): Promise<LoadBoardListing[]> {
+    return db.select().from(loadBoardListings).where(eq(loadBoardListings.posterId, posterId)).orderBy(desc(loadBoardListings.createdAt));
+  }
+  async updateLoadBoardListing(id: number, data: Partial<LoadBoardListing>): Promise<LoadBoardListing | undefined> {
+    const [rec] = await db.update(loadBoardListings).set({ ...data, updatedAt: new Date() }).where(eq(loadBoardListings.id, id)).returning();
+    return rec;
+  }
+
+  async getCarrierProfile(userId: number): Promise<CarrierProfile | undefined> {
+    const [rec] = await db.select().from(carrierProfiles).where(eq(carrierProfiles.userId, userId));
+    return rec;
+  }
+  async upsertCarrierProfile(userId: number, data: any): Promise<CarrierProfile> {
+    const existing = await this.getCarrierProfile(userId);
+    if (existing) {
+      const [rec] = await db.update(carrierProfiles).set({ ...data, updatedAt: new Date() }).where(eq(carrierProfiles.userId, userId)).returning();
+      return rec;
+    }
+    const [rec] = await db.insert(carrierProfiles).values({ ...data, userId }).returning();
+    return rec;
+  }
+
+  async createLoadBoardOffer(data: any): Promise<LoadBoardOffer> {
+    const [rec] = await db.insert(loadBoardOffers).values(data).returning();
+    return rec;
+  }
+  async getLoadBoardOffer(id: number): Promise<LoadBoardOffer | undefined> {
+    const [rec] = await db.select().from(loadBoardOffers).where(eq(loadBoardOffers.id, id));
+    return rec;
+  }
+  async getLoadBoardOffersByListing(listingId: number): Promise<LoadBoardOffer[]> {
+    return db.select().from(loadBoardOffers).where(eq(loadBoardOffers.listingId, listingId)).orderBy(desc(loadBoardOffers.createdAt));
+  }
+  async getLoadBoardOffersByCarrier(carrierId: number): Promise<LoadBoardOffer[]> {
+    return db.select().from(loadBoardOffers).where(eq(loadBoardOffers.carrierId, carrierId)).orderBy(desc(loadBoardOffers.createdAt));
+  }
+  async updateLoadBoardOffer(id: number, data: Partial<LoadBoardOffer>): Promise<LoadBoardOffer | undefined> {
+    const [rec] = await db.update(loadBoardOffers).set({ ...data, updatedAt: new Date() }).where(eq(loadBoardOffers.id, id)).returning();
+    return rec;
+  }
+
+  async createLoadBoardAddon(data: any): Promise<LoadBoardAddon> {
+    const [rec] = await db.insert(loadBoardAddons).values(data).returning();
+    return rec;
+  }
+  async getLoadBoardAddonsByListing(listingId: number): Promise<LoadBoardAddon[]> {
+    return db.select().from(loadBoardAddons).where(eq(loadBoardAddons.listingId, listingId)).orderBy(desc(loadBoardAddons.createdAt));
+  }
+  async updateLoadBoardAddon(id: number, data: Partial<LoadBoardAddon>): Promise<LoadBoardAddon | undefined> {
+    const [rec] = await db.update(loadBoardAddons).set(data).where(eq(loadBoardAddons.id, id)).returning();
+    return rec;
   }
 }
 

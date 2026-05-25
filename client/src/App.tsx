@@ -101,6 +101,10 @@ const BizTalentExplorer = lazy(() => import("@/pages/biz-talent-explorer"));
 const BizVerification = lazy(() => import("@/pages/biz-verification"));
 const BizOffers = lazy(() => import("@/pages/biz-offers"));
 const BizVerifyInspect = lazy(() => import("@/pages/biz-verify-inspect"));
+const LoadBoard = lazy(() => import("@/pages/load-board"));
+const LoadBoardPost = lazy(() => import("@/pages/load-board-post"));
+const LoadBoardDetail = lazy(() => import("@/pages/load-board-detail"));
+const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 
 // Universal GUBER loading splash — replaces the legacy spinner-based loaders
@@ -305,6 +309,10 @@ function Router() {
       <Route path="/biz/offers" component={() => <BizRoute component={BizOffers} />} />
       <Route path="/biz/verify-inspect" component={() => <BizRoute component={BizVerifyInspect} />} />
       <Route path="/biz/account" component={() => <BizRoute component={BizAccount} />} />
+      <Route path="/load-board/post" component={() => <ProtectedRoute component={LoadBoardPost} />} />
+      <Route path="/load-board/:id" component={() => <ProtectedRoute component={LoadBoardDetail} />} />
+      <Route path="/load-board" component={() => <ProtectedRoute component={LoadBoard} />} />
+      <Route path="/carrier-profile" component={() => <ProtectedRoute component={CarrierProfilePage} />} />
       <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />
       <Route path="/terms" component={Terms} />

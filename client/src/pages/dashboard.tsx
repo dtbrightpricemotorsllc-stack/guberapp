@@ -14,7 +14,7 @@ import type { Job } from "@shared/schema";
 import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
-  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign, ShoppingBag,
+  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign, ShoppingBag, Truck,
 } from "lucide-react";
 import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
@@ -102,6 +102,8 @@ const CORE_TILES = [
   { name: "Verify & Inspect", sub: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect",                       testId: "verify-inspect" },
   { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#042f2e,#134e4a,#115e59)", href: "/marketplace",                          testId: "marketplace", badge: "BETA" },
   { name: "Barter Labor",     sub: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor",   testId: "barter-labor" },
+  { name: "Load Board",       sub: "Ship vehicles & equipment",         icon: Truck,       bg: "linear-gradient(135deg,#0c4a6e,#075985,#0369a1)", href: "/load-board",                           testId: "load-board", badge: "NEW" },
+  { name: "AI or Not?",       sub: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,hsl(190 90% 9%),hsl(220 80% 8%))", href: "/ai-or-not",                  testId: "ai-or-not" },
 ];
 
 type DashboardMode = "hire" | "work";
@@ -811,7 +813,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── 6 Core Tiles ── */}
+        {/* ── 8 Core Tiles ── */}
         <div className="mb-5 animate-fade-in stagger-2">
           <div className="grid grid-cols-2 gap-3" data-testid="section-categories">
             {CORE_TILES.map((tile) => {
@@ -904,44 +906,6 @@ export default function Dashboard() {
                 </button>
               </>
             )}
-          </div>
-        </div>
-
-        {/* ── AI or Not ── */}
-        <div
-          onClick={() => navigate("/ai-or-not")}
-          className="mb-6 rounded-2xl p-4 cursor-pointer animate-fade-in stagger-4 overflow-hidden relative active:scale-[0.97] transition-all group"
-          style={{
-            background: "linear-gradient(135deg,hsl(190 90% 9%),hsl(220 80% 8%) 50%,hsl(175 90% 7%))",
-            border: "1.5px solid hsl(190 85% 55% / 0.45)",
-            boxShadow: "0 0 40px hsl(190 85% 50% / 0.2), inset 0 0 40px hsl(190 85% 50% / 0.04)",
-          }}
-          data-testid="card-category-ai-or-not"
-        >
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute -right-2 -top-3 w-28 h-28 rounded-full opacity-25"
-              style={{ background: "radial-gradient(circle,hsl(190 85% 55%),transparent 65%)" }} />
-            <div className="absolute left-12 -bottom-5 w-20 h-20 rounded-full opacity-15"
-              style={{ background: "radial-gradient(circle,hsl(175 85% 55%),transparent 65%)" }} />
-          </div>
-          <div className="absolute inset-0 pointer-events-none animate-shimmer opacity-30" style={{ background: "linear-gradient(90deg,transparent 0%,hsl(190 85% 55% / 0.15) 50%,transparent 100%)", backgroundSize: "200% 100%" }} />
-          <div className="relative flex items-center gap-3.5">
-            <div className="shrink-0 w-12 h-12 rounded-xl relative overflow-hidden animate-pulse-glow flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,hsl(190 85% 35%),hsl(210 85% 25%))", boxShadow: "0 0 24px hsl(190 85% 55% / 0.5)" }}>
-              <Bot className="w-6 h-6 text-white" strokeWidth={1.5} />
-              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,transparent 40%,hsl(190 85% 55% / 0.35) 50%,transparent 60%)", animation: "shimmer 2s linear infinite" }} />
-            </div>
-            <div className="flex-1 relative min-w-0">
-              <p className="text-[9px] font-display font-black tracking-[0.25em] uppercase mb-0.5" style={{ color: "hsl(190 85% 65%)" }}>— The Game —</p>
-              <p className="font-display font-black text-white leading-none mb-1" style={{ fontSize: 17, letterSpacing: "-0.03em", textShadow: "0 0 24px hsl(190 85% 55% / 0.6)" }}>
-                AI <span style={{ color: "hsl(190 85% 60%)" }}>or</span> Not?
-              </p>
-              <p className="text-[10px] text-white/60 leading-snug">Can you tell real from fake? 🤖</p>
-            </div>
-            <span className="font-display font-black tracking-wide text-black uppercase shrink-0 px-3.5 py-2 rounded-full group-active:scale-95 transition-transform flex items-center gap-1"
-              style={{ background: "linear-gradient(135deg,hsl(190 85% 60%),hsl(175 85% 50%))", boxShadow: "0 0 18px hsl(190 85% 55% / 0.5)", fontSize: 11 }}>
-              Play →
-            </span>
           </div>
         </div>
 

@@ -2055,3 +2055,107 @@ export const insertBusinessVerifyRequestSchema = createInsertSchema(businessVeri
 export type BusinessVerifyRequest = typeof businessVerifyRequests.$inferSelect;
 export type InsertBusinessVerifyRequest = z.infer<typeof insertBusinessVerifyRequestSchema>;
 export type BusinessProofSubmission = typeof businessProofSubmissions.$inferSelect;
+
+// ── Load Board ────────────────────────────────────────────────────────────────
+// draft | posted | offer_received | offer_accepted | connection_pending | connected | in_progress | delivered | completed | cancelled | disputed
+export const loadBoardListings = pgTable("load_board_listings", {
+  id: serial("id").primaryKey(),
+  posterId: integer("poster_id").notNull(),
+  transportType: text("transport_type").notNull(), // vehicle | equipment | boat | rv | trailer | hotshot | other
+  vin: text("vin"),
+  year: text("year"),
+  make: text("make"),
+  model: text("model"),
+  assetDescription: text("asset_description"),
+  vehicleCondition: text("vehicle_condition").array(),
+  trailerPreference: text("trailer_preference"),
+  loadingMethod: text("loading_method").array(),
+  unloadingMethod: text("unloading_method").array(),
+  pickupAccess: text("pickup_access").array(),
+  deliveryAccess: text("delivery_access").array(),
+  pickupCity: text("pickup_city").notNull(),
+  pickupState: text("pickup_state").notNull(),
+  deliveryCity: text("delivery_city").notNull(),
+  deliveryState: text("delivery_state").notNull(),
+  estimatedMiles: integer("estimated_miles"),
+  pricingMode: text("pricing_mode").notNull().default("fixed"), // fixed | open_to_offers
+  postedPrice: real("posted_price"),
+  suggestedLow: real("suggested_low"),
+  suggestedHigh: real("suggested_high"),
+  status: text("status").notNull().default("posted"),
+  urgent: boolean("urgent").default(false),
+  boosted: boolean("boosted").default(false),
+  connectedCarrierId: integer("connected_carrier_id"),
+  connectedAt: timestamp("connected_at"),
+  connectionTier: text("connection_tier"),
+  connectionFeePaid: integer("connection_fee_paid"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export const insertLoadBoardListingSchema = createInsertSchema(loadBoardListings).omit({
+  id: true, createdAt: true, updatedAt: true, status: true,
+  connectedCarrierId: true, connectedAt: true, connectionTier: true, connectionFeePaid: true,
+});
+export type LoadBoardListing = typeof loadBoardListings.$inferSelect;
+export type InsertLoadBoardListing = z.infer<typeof insertLoadBoardListingSchema>;
+
+export const carrierProfiles = pgTable("carrier_profiles", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique(),
+  equipmentTypes: text("equipment_types").array(),
+  trailerTypes: text("trailer_types").array(),
+  dotNumber: text("dot_number"),
+  mcNumber: text("mc_number"),
+  insuranceAmount: real("insurance_amount"),
+  insuranceCertUrl: text("insurance_cert_url"),
+  dlPhotoUrl: text("dl_photo_url"),
+  selfieUrl: text("selfie_url"),
+  equipmentPhotoUrls: text("equipment_photo_urls").array(),
+  acceptedPaymentMethods: text("accepted_payment_methods").array(),
+  subscriptionTier: text("subscription_tier").default("basic"),
+  subscriptionId: text("subscription_id"),
+  completedTransports: integer("completed_transports").default(0),
+  cancelledTransports: integer("cancelled_transports").default(0),
+  noShows: integer("no_shows").default(0),
+  identityVerified: boolean("identity_verified").default(false),
+  insuranceVerified: boolean("insurance_verified").default(false),
+  credentialsVerified: boolean("credentials_verified").default(false),
+  offersThisMonth: integer("offers_this_month").default(0),
+  offerMonthKey: text("offer_month_key"),
+  gpsTrackingEnabled: boolean("gps_tracking_enabled").default(false),
+  serviceArea: text("service_area"),
+  bio: text("bio"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type CarrierProfile = typeof carrierProfiles.$inferSelect;
+
+export const loadBoardOffers = pgTable("load_board_offers", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  carrierId: integer("carrier_id").notNull(),
+  status: text("status").notNull().default("pending"), // pending | countered | accepted | declined | withdrawn
+  offerAmount: real("offer_amount").notNull(),
+  counterAmount: real("counter_amount"),
+  actionCount: integer("action_count").default(1),
+  lastMovedBy: text("last_moved_by"),
+  message: text("message"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type LoadBoardOffer = typeof loadBoardOffers.$inferSelect;
+
+export const loadBoardAddons = pgTable("load_board_addons", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull(),
+  posterId: integer("poster_id").notNull(),
+  addonType: text("addon_type").notNull(),
+  status: text("status").notNull().default("requested"),
+  linkedJobId: integer("linked_job_id"),
+  amountPaid: integer("amount_paid"),
+  stripeSessionId: text("stripe_session_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type LoadBoardAddon = typeof loadBoardAddons.$inferSelect;
