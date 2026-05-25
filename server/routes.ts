@@ -16893,6 +16893,13 @@ OUTPUT STYLE:
                   type: "cash_drop_win",
                   cashDropId: dropId,
                 });
+                sendPushToUser(raUser.id, {
+                  title: "You Won a Sponsored Drop Reward!",
+                  body: `You won "${drop.rewardDescription || "a reward"}" in "${drop.title}"! Check the drop for details.`,
+                  url: `/cash-drop/${dropId}`,
+                  tag: `cashdrop-reward-win-${dropId}-${ra.id}`,
+                  sound: "guber_money.wav",
+                }).catch(() => {});
               }
             }
           }
@@ -16905,6 +16912,13 @@ OUTPUT STYLE:
           type: "cash_drop_win",
           cashDropId: dropId,
         });
+        sendPushToUser(winner.id, {
+          title: "You Won a Cash Drop!",
+          body: `You won $${drop.rewardPerWinner.toFixed(2)} in "${drop.title}"! Choose how to receive your reward.`,
+          url: `/cash-drop/${dropId}`,
+          tag: `cashdrop-cash-win-${dropId}`,
+          sound: "guber_money.wav",
+        }).catch(() => {});
       } else if (rewardCap > 0 && confirmedRewardWinners < rewardCap) {
         // Path B: Cash cap full, reward slots still open — auto-select next eligible by arrivedAt order
         // Enforce strict arrivedAt ordering: pick earliest submitted attempt (ignoring admin's arbitrary choice)
@@ -16938,6 +16952,13 @@ OUTPUT STYLE:
               type: "cash_drop_win",
               cashDropId: dropId,
             });
+            sendPushToUser(raUser.id, {
+              title: "You Won a Sponsored Drop Reward!",
+              body: `You won "${drop.rewardDescription || "a reward"}" in "${drop.title}"! Check the drop for details.`,
+              url: `/cash-drop/${dropId}`,
+              tag: `cashdrop-reward-win-${dropId}-${ra.id}`,
+              sound: "guber_money.wav",
+            }).catch(() => {});
           }
         }
       } else {
