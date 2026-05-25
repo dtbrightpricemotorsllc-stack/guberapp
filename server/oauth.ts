@@ -221,7 +221,7 @@ function decodeOAuthState(state: string): OAuthStatePayload | null {
 }
 
 export function handleGoogleAuthStart(req: Request, res: Response): void {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_WEB_CLIENT_ID;
   if (!clientId) {
     res.status(503).json({ message: "Google Sign-In not configured" });
     return;

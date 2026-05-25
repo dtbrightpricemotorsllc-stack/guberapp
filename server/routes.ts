@@ -426,8 +426,10 @@ async function checkStripeForOGStatus(email: string): Promise<{ isOG: boolean; h
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
   if (!address) return null;
 
-  // Always try Google Maps first — it returns exact street-level coordinates
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  // Always try Google Maps first — it returns exact street-level coordinates.
+  // Prefer GOOGLE_GEOCODING_API_KEY (unrestricted server key) over GOOGLE_MAPS_API_KEY
+  // which may have HTTP-referer restrictions that cause server-side calls to fail.
+  const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (apiKey) {
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&region=us&key=${apiKey}`;
@@ -1157,10 +1159,10 @@ export async function registerRoutes(
     const lng = parseFloat(req.query.lng as string);
     if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "lat and lng required" });
 
-    // Try Google Maps first (server-side). Wrapped so any failure — including the
-    // common case where GOOGLE_MAPS_API_KEY has HTTP referer restrictions and is
-    // rejected with an HTML/XML error page — falls cleanly through to Nominatim.
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    // Try Google Maps first (server-side). Prefer GOOGLE_GEOCODING_API_KEY (unrestricted
+    // server key) over GOOGLE_MAPS_API_KEY which may have HTTP-referer restrictions.
+    // Either failure falls cleanly through to Nominatim.
+    const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
     if (apiKey) {
       try {
         const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
@@ -2287,7 +2289,7 @@ export async function registerRoutes(
       return res.redirect(`/login?error=${stateResult.reason === "invalid_state" ? "invalid_state" : "google_cancelled"}`);
     }
     const code = stateResult.code;
-    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_WEB_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
       console.error("[GUBER auth] Google callback — GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured");
@@ -2452,9 +2454,9 @@ export async function registerRoutes(
   app.post(
     "/api/auth/google/native",
     handleNativeGoogleAuth({
-      webClientId: process.env.GOOGLE_CLIENT_ID || "",
+      webClientId: process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_WEB_CLIENT_ID || "",
       androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
-      iosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
+      iosClientId: process.env.GOOGLE_IOS_CLIENT_ID || process.env.Guber_iOS_Client,
       upsertGoogleUser,
       generateToken: generateJWT,
     }),

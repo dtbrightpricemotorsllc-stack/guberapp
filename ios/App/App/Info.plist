@@ -61,5 +61,16 @@
         <string>GUBER uses the microphone to record audio with video proof submissions and hands-free Verify &amp; Inspect captures.</string>
         <key>ITSAppUsesNonExemptEncryption</key>
         <false/>
+        <key>CFBundleURLTypes</key>
+        <array>
+                <dict>
+                        <key>CFBundleURLName</key>
+                        <string>com.guber.app</string>
+                        <key>CFBundleURLSchemes</key>
+                        <array>
+                                <string>guber</string>
+                        </array>
+                </dict>
+        </array>
 </dict>
 </plist>

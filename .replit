@@ -47,6 +47,7 @@ outputType = "webview"
 [userenv.shared]
 VAPID_PUBLIC_KEY = "BIDPBGWY1Ar0cylNhaYThfgDHkIGXVf-z_ZeOQF6IkGysIAsB-k9NqFE7ET8GiVuWjKUmlnbFc0JknsdtHblC2s"
 VAPID_EMAIL = "mailto:noreply@guberapp.app"
+APPLE_TEAM_ID = "7MC93QFW6Q"
 
 [userenv.production]
 APP_BASE_URL = "https://guberapp.app"
