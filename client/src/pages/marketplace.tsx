@@ -639,7 +639,7 @@ function BuyerOfferPanel({ item, currentUserId }: { item: MarketplaceItem; curre
 
   const { data: offers } = useQuery<any[]>({
     queryKey: ["/api/marketplace", item.id, "offers"],
-    queryFn: () => fetch(`/api/marketplace/${item.id}/offers`).then(r => r.json()),
+    queryFn: () => fetch(`/api/marketplace/${item.id}/offers`, { credentials: "include" }).then(r => r.json()),
     refetchInterval: 20000,
   });
 
@@ -751,7 +751,7 @@ function SellerOffersPanel({ item }: { item: MarketplaceItem }) {
 
   const { data: offers, isLoading } = useQuery<any[]>({
     queryKey: ["/api/marketplace", item.id, "offers"],
-    queryFn: () => fetch(`/api/marketplace/${item.id}/offers`).then(r => r.json()),
+    queryFn: () => fetch(`/api/marketplace/${item.id}/offers`, { credentials: "include" }).then(r => r.json()),
     refetchInterval: 30000,
   });
 
@@ -886,12 +886,12 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
   const { data: boStatus, refetch: refetchBoStatus } = useQuery<{ state: string }>({
     queryKey: ["/api/marketplace/buyer-order-status", item.id],
-    queryFn: () => fetch(`/api/marketplace/${item.id}/buyer-order/status`).then(r => r.json()),
+    queryFn: () => fetch(`/api/marketplace/${item.id}/buyer-order/status`, { credentials: "include" }).then(r => r.json()),
     enabled: isVehicleCategory,
   });
   const { data: pendingRequests = [] } = useQuery<any[]>({
     queryKey: ["/api/marketplace/buyer-order-requests", item.id],
-    queryFn: () => fetch(`/api/marketplace/${item.id}/buyer-order/requests`).then(r => r.json()),
+    queryFn: () => fetch(`/api/marketplace/${item.id}/buyer-order/requests`, { credentials: "include" }).then(r => r.json()),
     enabled: isVehicleCategory && !!isSeller && !hasVin,
   });
 
@@ -940,7 +940,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-        <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl max-h-[92vh] overflow-y-auto"
+        <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl max-h-[92vh] overflow-y-auto pb-[calc(80px+env(safe-area-inset-bottom,0px))]"
           onClick={e => e.stopPropagation()} data-testid="modal-item-detail">
 
           {/* Photo gallery */}
@@ -1367,7 +1367,7 @@ function MyDealsTab() {
 
   const { data: rawDeals, isLoading } = useQuery<DealSummary[]>({
     queryKey: ["/api/marketplace/deals/my"],
-    queryFn: () => fetch("/api/marketplace/deals/my").then(r => r.json()),
+    queryFn: () => fetch("/api/marketplace/deals/my", { credentials: "include" }).then(r => r.json()),
   });
   const deals: DealSummary[] = Array.isArray(rawDeals) ? rawDeals : [];
 
@@ -1416,7 +1416,7 @@ function MyDealsTab() {
 function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem) => void }) {
   const { data: rawListings, isLoading } = useQuery<MarketplaceItem[]>({
     queryKey: ["/api/marketplace/my-listings"],
-    queryFn: () => fetch("/api/marketplace/my-listings").then(r => r.json()),
+    queryFn: () => fetch("/api/marketplace/my-listings", { credentials: "include" }).then(r => r.json()),
   });
   const listings: MarketplaceItem[] = Array.isArray(rawListings) ? rawListings : [];
 

@@ -177,7 +177,7 @@ export default function MarketplaceListing() {
 
   const { data: ogStatus } = useQuery<{ isOG: boolean; remaining: number; used: number; limit: number }>({
     queryKey: ["/api/marketplace/buyer-order/og-status"],
-    queryFn: () => fetch("/api/marketplace/buyer-order/og-status").then(r => r.json()),
+    queryFn: () => fetch("/api/marketplace/buyer-order/og-status", { credentials: "include" }).then(r => r.json()),
     enabled: !!user && !isMySelling,
     staleTime: 60_000,
   });

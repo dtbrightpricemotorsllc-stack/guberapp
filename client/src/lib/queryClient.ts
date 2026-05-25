@@ -12,6 +12,14 @@ async function getBearerHeader(): Promise<Record<string, string>> {
 }
 
 async function handleExpiredSession() {
+  // Never redirect when the user is already on an auth page — a 401 there
+  // means "wrong credentials", not "session expired", and redirecting would
+  // swallow the real error message.
+  const onAuthPage = ["/login", "/auth", "/signup"].some(p =>
+    window.location.pathname.startsWith(p)
+  );
+  if (onAuthPage) return;
+
   const token = await getToken();
   if (token) {
     await clearToken();
