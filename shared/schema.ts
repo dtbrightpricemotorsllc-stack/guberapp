@@ -825,6 +825,18 @@ export const marketplaceBuyerOrderRequests = pgTable("marketplace_buyer_order_re
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const marketplaceBuyerOrderPurchases = pgTable("marketplace_buyer_order_purchases", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  listingId: integer("listing_id").notNull(),
+  amountPaid: real("amount_paid").notNull().default(0),
+  stripeSessionId: text("stripe_session_id"),
+  paymentStatus: text("payment_status").default("free"), // "free" | "paid"
+  monthKey: text("month_key"), // "YYYY-MM" for OG monthly tracking
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type MarketplaceBuyerOrderPurchase = typeof marketplaceBuyerOrderPurchases.$inferSelect;
+
 export const marketplaceDeals = pgTable("marketplace_deals", {
   id: serial("id").primaryKey(),
   listingId: integer("listing_id").notNull(),
@@ -888,6 +900,7 @@ export type MarketplaceListingReport = typeof marketplaceListingReports.$inferSe
 export type MarketplaceDeal = typeof marketplaceDeals.$inferSelect;
 export type MarketplaceDealMessage = typeof marketplaceDealMessages.$inferSelect;
 export type MarketplaceBuyerOrderRequest = typeof marketplaceBuyerOrderRequests.$inferSelect;
+export type MarketplaceBuyerOrderPurchaseType = typeof marketplaceBuyerOrderPurchases.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

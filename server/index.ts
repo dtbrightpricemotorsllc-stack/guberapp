@@ -334,6 +334,22 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_bg_check_user ON background_check_eligibility(user_id);
   `).catch(e => console.error("[migration] business tables error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketplace_buyer_order_purchases (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      listing_id INTEGER NOT NULL,
+      amount_paid REAL NOT NULL DEFAULT 0,
+      stripe_session_id TEXT,
+      payment_status TEXT DEFAULT 'free',
+      month_key TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_bo_purchases_user_listing ON marketplace_buyer_order_purchases(user_id, listing_id);
+    CREATE INDEX IF NOT EXISTS idx_bo_purchases_session ON marketplace_buyer_order_purchases(stripe_session_id);
+    CREATE INDEX IF NOT EXISTS idx_bo_purchases_user_month ON marketplace_buyer_order_purchases(user_id, month_key);
+  `).catch(e => console.error("[migration] marketplace_buyer_order_purchases error:", e));
+
   await registerRoutes(httpServer, app);
   startStudioToolsListener();
   startCron();

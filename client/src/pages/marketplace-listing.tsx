@@ -164,8 +164,22 @@ export default function MarketplaceListing() {
 
   const buyerOrderMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/marketplace/${itemId}/buyer-order/checkout`, { slug: item?.publicSlug || slug }),
-    onSuccess: (data: any) => { if (data.checkoutUrl) window.location.href = data.checkoutUrl; },
+    onSuccess: (data: any) => {
+      if (data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      if ((data.free || data.alreadyPaid) && data.sessionToken) {
+        setBuyerOrderSessionId(data.sessionToken);
+        if (slug) localStorage.setItem(`bo_session_${slug}`, data.sessionToken);
+        queryClient.invalidateQueries({ queryKey: ["/api/marketplace/buyer-order/og-status"] });
+      }
+    },
     onError: (err: any) => toast({ title: "Error", description: err.message || "Could not start checkout", variant: "destructive" }),
+  });
+
+  const { data: ogStatus } = useQuery<{ isOG: boolean; remaining: number; used: number; limit: number }>({
+    queryKey: ["/api/marketplace/buyer-order/og-status"],
+    queryFn: () => fetch("/api/marketplace/buyer-order/og-status").then(r => r.json()),
+    enabled: !!user && !isMySelling,
+    staleTime: 60_000,
   });
 
   const { data: boStatus, refetch: refetchBoStatus } = useQuery<{ state: string }>({
@@ -573,7 +587,13 @@ export default function MarketplaceListing() {
                     warning="This is NOT a bill of sale, purchase agreement, title document, warranty, financing approval, inspection report, or guarantee from GUBER."
                   />
                 </div>
-                <span className="text-sm font-bold text-primary">$1.00</span>
+                {ogStatus?.isOG && ogStatus.remaining > 0 ? (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,200,0,0.12)", border: "1px solid rgba(255,200,0,0.3)", color: "#ffc107" }}>
+                    {ogStatus.remaining} free left
+                  </span>
+                ) : (
+                  <span className="text-sm font-bold text-primary">$1.00</span>
+                )}
               </div>
               {/* ── Content area ── */}
               <div className="px-4 py-3">
@@ -643,20 +663,29 @@ export default function MarketplaceListing() {
                         <span className="ml-1.5 text-[10px] text-muted-foreground/60">(full value in PDF)</span>
                       </p>
                     )}
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">After payment you'll be able to add your name and down payment before downloading.</p>
+                    {ogStatus?.isOG && ogStatus.remaining > 0 ? (
+                      <p className="text-[10px] leading-relaxed" style={{ color: "#ffc107" }}>
+                        Day-1 OG perk: {ogStatus.remaining} of {ogStatus.limit} free Roadpasses remaining this month.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">After payment you'll be able to add your name and down payment before downloading.</p>
+                    )}
                     {isStoreBuild ? (
                       <ExternalPurchaseSheet product="marketplace_buyer_order" options={{ itemId: String(item.id), slug: item.publicSlug || slug || "" }}>
                         {({ onPress, loading }) => (
                           <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
                             onClick={() => { if (!user) { navigate("/auth"); return; } onPress(); }} disabled={loading} data-testid="button-get-buyer-order">
-                            {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" />Opening…</span> : <><Download className="w-4 h-4" />Download Buyer's Order — $1.00</>}
+                            {loading ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" />Opening…</span> : <><Download className="w-4 h-4" />{ogStatus?.isOG && ogStatus.remaining > 0 ? "Download Free Roadpass (OG)" : "Download Buyer's Order — $1.00"}</>}
                           </Button>
                         )}
                       </ExternalPurchaseSheet>
                     ) : (
                       <Button className="w-full font-display text-sm gap-2" style={{ background: "rgba(0,180,80,0.12)", border: "1px solid rgba(0,180,80,0.35)", color: "#00e676" }}
                         onClick={handleBuyerOrderClick} disabled={buyerOrderMutation.isPending} data-testid="button-get-buyer-order">
-                        {buyerOrderMutation.isPending ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" />Opening checkout…</span> : <><Download className="w-4 h-4" />Download Buyer's Order — $1.00</>}
+                        {buyerOrderMutation.isPending
+                          ? <span className="flex items-center gap-2"><span className="w-3.5 h-3.5 border border-primary border-t-transparent rounded-full animate-spin" />{ogStatus?.isOG && ogStatus.remaining > 0 ? "Claiming free Roadpass…" : "Opening checkout…"}</span>
+                          : <><Download className="w-4 h-4" />{ogStatus?.isOG && ogStatus.remaining > 0 ? "Download Free Roadpass (OG)" : "Download Buyer's Order — $1.00"}</>
+                        }
                       </Button>
                     )}
                     {!user && <p className="text-[10px] text-muted-foreground text-center">Sign in required to purchase</p>}

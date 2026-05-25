@@ -3583,6 +3583,21 @@ export async function registerRoutes(
             console.log(`[GUBER][webhook/main] marketplace_boost: item #${boostItemId} boosted (${boostType}) until ${expiresAt.toISOString()}`);
           }
 
+        } else if (metadata?.type === "marketplace_buyer_order") {
+          const boItemId = metadata.itemId ? parseInt(metadata.itemId) : null;
+          const boUserId = metadata.userId ? parseInt(metadata.userId) : null;
+          if (boItemId && boUserId) {
+            const monthKey = new Date().toISOString().slice(0, 7);
+            await storage.createBuyerOrderPurchase({
+              userId: boUserId,
+              listingId: boItemId,
+              amountPaid: (session.amount_total || 0) / 100,
+              stripeSessionId: session.id,
+              paymentStatus: "paid",
+              monthKey,
+            }).catch(e => console.error("[webhook] createBuyerOrderPurchase error:", e));
+            console.log(`[GUBER][webhook/main] marketplace_buyer_order: recorded purchase for item #${boItemId} user #${boUserId}`);
+          }
         } else {
           console.log(`[GUBER][webhook/main] checkout.session.completed: unhandled session type "${metadata?.type || "none"}" — ignored`);
         }
@@ -5197,6 +5212,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "For safety, phone numbers, emails, and off-platform contact info are not allowed in listings. Keep communication inside GUBER." });
       }
 
+      // Junk-value guards
+      const priceVal = price ? parseFloat(price) : null;
+      if (category === "Vehicles" && priceVal !== null && priceVal > 0 && priceVal < 100) {
+        return res.status(400).json({ message: "Price must be at least $100." });
+      }
+      const mileageVal = vehicleMileage ? parseInt(vehicleMileage) : null;
+      if (category === "Vehicles" && mileageVal !== null && mileageVal < 2) {
+        return res.status(400).json({ message: "Mileage must be at least 2 miles." });
+      }
+
       let guberVerified = false;
       let verificationDate: Date | null = null;
       let verifiedByUserId: number | null = null;
@@ -5289,10 +5314,27 @@ export async function registerRoutes(
       if (["pending", "sold"].includes(item.status || "")) {
         return res.status(403).json({ message: "This listing is locked and cannot be edited while " + (item.status === "pending" ? "a deal is pending" : "it is sold") + "." });
       }
-      const allowed = ["title", "description", "price", "sellerAvailability", "condition", "makeOfferEnabled", "minOfferThreshold", "priceType", "askingType"];
+      const allowed = [
+        "title", "description", "price", "sellerAvailability", "condition",
+        "makeOfferEnabled", "minOfferThreshold", "priceType", "askingType",
+        // Vehicle fields
+        "vinNumber", "vehicleMileage", "year", "brand", "model",
+        "titleStatus", "listingType", "sellerType", "purchaseType",
+        // Extra details
+        "details",
+      ];
       const patch: Record<string, any> = {};
       for (const k of allowed) {
         if (req.body[k] !== undefined) patch[k] = req.body[k];
+      }
+      // Junk-value guards on edit too
+      if (patch.price !== undefined && item.category === "Vehicles") {
+        const pv = parseFloat(patch.price);
+        if (!isNaN(pv) && pv > 0 && pv < 100) return res.status(400).json({ message: "Price must be at least $100." });
+      }
+      if (patch.vehicleMileage !== undefined && item.category === "Vehicles") {
+        const mv = parseInt(patch.vehicleMileage);
+        if (!isNaN(mv) && mv < 2) return res.status(400).json({ message: "Mileage must be at least 2 miles." });
       }
       if (Object.keys(patch).length === 0) return res.status(400).json({ message: "Nothing to update" });
       const updated = await storage.updateMarketplaceItem(id, patch);
@@ -5370,12 +5412,52 @@ export async function registerRoutes(
   });
 
   // ── Buyer Order: $1 Stripe checkout ──────────────────────────────────────
+  // ── Buyer Order OG status (free uses remaining this month) ──────────────
+  app.get("/api/marketplace/buyer-order/og-status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Not found" });
+      const isOG = user.day1OG === true;
+      if (!isOG) return res.json({ isOG: false, remaining: 0, used: 0 });
+      const monthKey = new Date().toISOString().slice(0, 7);
+      const used = await storage.countOGPurchasesThisMonth(userId, monthKey);
+      const OG_FREE_LIMIT = 2;
+      return res.json({ isOG: true, remaining: Math.max(0, OG_FREE_LIMIT - used), used, limit: OG_FREE_LIMIT, monthKey });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/marketplace/:id/buyer-order/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const itemId = parseInt(req.params.id);
+      const userId = req.session.userId!;
       const item = await storage.getMarketplaceItem(itemId);
       if (!item) return res.status(404).json({ message: "Listing not found" });
       if (!item.vinNumber) return res.status(400).json({ message: "This listing does not have a VIN" });
+
+      // Prevent duplicate charge: if already purchased, return existing record
+      const existing = await storage.getBuyerOrderPurchase(userId, itemId);
+      if (existing) return res.json({ alreadyPaid: true, purchaseId: existing.id, sessionToken: existing.stripeSessionId || null });
+
+      // Day-1 OG: up to 2 free Buyer's Orders per month
+      const user = await storage.getUser(userId);
+      const isOG = user?.day1OG === true;
+      if (isOG) {
+        const monthKey = new Date().toISOString().slice(0, 7);
+        const OG_FREE_LIMIT = 2;
+        const used = await storage.countOGPurchasesThisMonth(userId, monthKey);
+        if (used < OG_FREE_LIMIT) {
+          const { randomBytes } = await import("crypto");
+          const freeToken = `free_${randomBytes(12).toString("hex")}`;
+          const purchase = await storage.createBuyerOrderPurchase({
+            userId, listingId: itemId, amountPaid: 0,
+            paymentStatus: "free", monthKey, stripeSessionId: freeToken,
+          });
+          return res.json({ free: true, purchaseId: purchase.id, sessionToken: freeToken });
+        }
+      }
 
       const { slug } = req.body as { slug?: string };
       const host = req.get("host") || "localhost:5000";
@@ -5402,7 +5484,7 @@ export async function registerRoutes(
         metadata: {
           type: "marketplace_buyer_order",
           itemId: String(itemId),
-          userId: String(req.session.userId),
+          userId: String(userId),
         },
       });
 
@@ -5423,12 +5505,22 @@ export async function registerRoutes(
         if (!isAdmin) return res.status(403).json({ message: "Admin only" });
       } else {
         const sessionId = req.query.session_id as string;
-        if (!sessionId) return res.status(400).json({ message: "Missing session_id" });
-        const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
-        if (stripeSession.payment_status !== "paid") return res.status(402).json({ message: "Payment not completed" });
-        const meta = stripeSession.metadata || {};
-        if (String(meta.itemId) !== String(itemId) || meta.type !== "marketplace_buyer_order") {
-          return res.status(403).json({ message: "Session does not match this listing" });
+        if (sessionId) {
+          // Try DB record first (fast path, covers both OG-free and Stripe-paid)
+          const dbPurchase = await storage.getBuyerOrderPurchaseBySession(sessionId);
+          const dbOk = dbPurchase && String(dbPurchase.listingId) === String(itemId)
+                       && (dbPurchase.paymentStatus === "paid" || dbPurchase.paymentStatus === "free");
+          if (!dbOk) {
+            // Fall back to live Stripe check (handles sessions not yet processed by webhook)
+            const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
+            if (stripeSession.payment_status !== "paid") return res.status(402).json({ message: "Payment not completed" });
+            const meta = stripeSession.metadata || {};
+            if (String(meta.itemId) !== String(itemId) || meta.type !== "marketplace_buyer_order") {
+              return res.status(403).json({ message: "Session does not match this listing" });
+            }
+          }
+        } else {
+          return res.status(400).json({ message: "Missing session_id" });
         }
       }
 

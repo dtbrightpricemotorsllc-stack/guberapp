@@ -2025,6 +2025,34 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
       setStep(4);
       return;
     }
+
+    const isVehicleCategory = form.category === "Vehicles";
+    const priceNum = form.price ? parseFloat(form.price) : 0;
+
+    // Price floor validation
+    if (isVehicleCategory && form.priceType !== "free" && priceNum > 0 && priceNum < 100) {
+      toast({ title: "Price too low", description: "Price must be at least $100.", variant: "destructive" });
+      setStep(4);
+      return;
+    }
+
+    // Mileage floor validation
+    const mileageNum = form.vehicleMileage ? parseInt(form.vehicleMileage) : 0;
+    if (isVehicleCategory && form.vehicleMileage && mileageNum < 2) {
+      toast({ title: "Invalid mileage", description: "Mileage must be at least 2 miles.", variant: "destructive" });
+      setStep(4);
+      return;
+    }
+
+    // Required fields: VIN is optional. If no VIN, all manual vehicle fields must be filled.
+    if (isVehicleCategory && !form.vinNumber) {
+      if (!form.vehicleMake || !form.vehicleModel || !form.vehicleYear) {
+        toast({ title: "Please complete all required fields before posting.", description: "If you don't have a VIN, fill in Make, Model, and Year manually.", variant: "destructive" });
+        setStep(3);
+        return;
+      }
+    }
+
     mutation.mutate({ ...buildPayload(), city, state });
   };
 

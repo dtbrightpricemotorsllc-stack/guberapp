@@ -3,7 +3,7 @@ import {
   notifications, reviews, strikeRecords, proofSubmissions, walletTransactions,
   viCategories, useCases, catalogServiceTypes, detailOptionSets,
   proofTemplates, proofChecklistItems, auditLogs, passwordResetTokens,
-  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceDeals, marketplaceDealMessages, marketplaceDealReviews, jobStatusLogs, bountyAttempts,
+  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceBuyerOrderPurchases, marketplaceDeals, marketplaceDealMessages, marketplaceDealReviews, jobStatusLogs, bountyAttempts,
   businessProfiles, bulkJobBatches, cashDrops, cashDropAttempts, servicePricingConfig,
   workerQualifications, observations, dropSponsors,
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
@@ -22,7 +22,7 @@ import {
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
   type DetailOptionSet, type ProofTemplate, type ProofChecklistItem, type AuditLog,
-  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceDeal, type MarketplaceDealMessage, type MarketplaceDealReview, type JobStatusLog, type BountyAttempt,
+  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceBuyerOrderPurchase, type MarketplaceDeal, type MarketplaceDealMessage, type MarketplaceDealReview, type JobStatusLog, type BountyAttempt,
   type BusinessProfile, type CashDrop, type CashDropAttempt, type ServicePricingConfig,
   type WorkerQualification, type Observation, type DropSponsor,
   type BusinessAccount, type BusinessPlan, type BusinessCandidateUnlock,
@@ -323,6 +323,11 @@ export interface IStorage {
   getBuyerOrderRequestByBuyer(listingId: number, buyerUserId: number): Promise<MarketplaceBuyerOrderRequest | undefined>;
   getBuyerOrderRequestsForListing(listingId: number): Promise<MarketplaceBuyerOrderRequest[]>;
   updateBuyerOrderRequest(id: number, data: Partial<MarketplaceBuyerOrderRequest>): Promise<MarketplaceBuyerOrderRequest | undefined>;
+
+  createBuyerOrderPurchase(data: { userId: number; listingId: number; amountPaid: number; stripeSessionId?: string; paymentStatus: string; monthKey?: string }): Promise<MarketplaceBuyerOrderPurchase>;
+  getBuyerOrderPurchase(userId: number, listingId: number): Promise<MarketplaceBuyerOrderPurchase | undefined>;
+  getBuyerOrderPurchaseBySession(stripeSessionId: string): Promise<MarketplaceBuyerOrderPurchase | undefined>;
+  countOGPurchasesThisMonth(userId: number, monthKey: string): Promise<number>;
 
   createBusinessVerifyRequest(data: any): Promise<BusinessVerifyRequest>;
   getBusinessVerifyRequests(businessId: number): Promise<BusinessVerifyRequest[]>;
@@ -1345,6 +1350,32 @@ export class DatabaseStorage implements IStorage {
       .where(eq(marketplaceBuyerOrderRequests.id, id))
       .returning();
     return req;
+  }
+
+  // ── Marketplace Buyer Order Purchases ─────────────────────────────────────
+  async createBuyerOrderPurchase(data: { userId: number; listingId: number; amountPaid: number; stripeSessionId?: string; paymentStatus: string; monthKey?: string }): Promise<MarketplaceBuyerOrderPurchase> {
+    const [p] = await db.insert(marketplaceBuyerOrderPurchases).values(data).returning();
+    return p;
+  }
+
+  async getBuyerOrderPurchase(userId: number, listingId: number): Promise<MarketplaceBuyerOrderPurchase | undefined> {
+    const [p] = await db.select().from(marketplaceBuyerOrderPurchases)
+      .where(and(eq(marketplaceBuyerOrderPurchases.userId, userId), eq(marketplaceBuyerOrderPurchases.listingId, listingId)))
+      .orderBy(desc(marketplaceBuyerOrderPurchases.createdAt))
+      .limit(1);
+    return p;
+  }
+
+  async getBuyerOrderPurchaseBySession(stripeSessionId: string): Promise<MarketplaceBuyerOrderPurchase | undefined> {
+    const [p] = await db.select().from(marketplaceBuyerOrderPurchases)
+      .where(eq(marketplaceBuyerOrderPurchases.stripeSessionId, stripeSessionId));
+    return p;
+  }
+
+  async countOGPurchasesThisMonth(userId: number, monthKey: string): Promise<number> {
+    const rows = await db.select().from(marketplaceBuyerOrderPurchases)
+      .where(and(eq(marketplaceBuyerOrderPurchases.userId, userId), eq(marketplaceBuyerOrderPurchases.monthKey, monthKey)));
+    return rows.length;
   }
 
   // ── Marketplace Deals ─────────────────────────────────────────────────────
