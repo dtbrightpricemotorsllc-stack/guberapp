@@ -6175,7 +6175,48 @@ export async function registerRoutes(
         urgency: urgency || "standard",
         notes: notes ? String(notes).trim() : null,
       });
-      return res.status(201).json(rec);
+
+      // Auto-post a public V&I job so nearby workers can discover and apply
+      try {
+        const locationStr = String(assetLocation).trim();
+        const zipMatch = locationStr.match(/\b(\d{5})\b/);
+        const zip = zipMatch ? zipMatch[1] : "00000";
+        const jobBudget = budget ? parseFloat(String(budget)) : 50;
+
+        const jobLines = [
+          `Business Verify & Inspect: ${String(assetName).trim()}`,
+          `Company: ${String(companyName).trim()}`,
+          `Asset Type: ${String(assetType).trim()}`,
+          identifierType && identifierValue ? `Identifier (${String(identifierType).trim()}): ${String(identifierValue).trim()}` : null,
+          `Location: ${locationStr}`,
+          `Package: ${String(packageType).trim()}`,
+          requiredProof ? `Required proof: ${String(requiredProof).trim()}` : null,
+          urgency && urgency !== "standard" ? `Urgency: ${urgency}` : null,
+          notes ? `Notes: ${String(notes).trim()}` : null,
+          "",
+          "DISCLAIMER: Verify & Inspect provides visual proof and documentation only — not a guarantee of condition, authenticity, or ownership.",
+        ].filter((l) => l !== null).join("\n");
+
+        const job = await storage.createJob({
+          postedById: userId,
+          title: `Business V&I: ${String(assetName).trim().slice(0, 55)} (${String(companyName).trim().slice(0, 20)})`,
+          description: jobLines,
+          category: "Verify & Inspect",
+          jobType: "vi",
+          status: "open",
+          budget: jobBudget,
+          zip,
+          locationApprox: locationStr.slice(0, 100),
+          visibility: "public",
+        });
+
+        await storage.updateBusinessVerifyRequest(rec.id, { status: "live" });
+        notifyNearbyAvailableWorkers(job).catch(() => {});
+
+        return res.status(201).json({ ...rec, status: "live", generatedJobId: job.id });
+      } catch {
+        return res.status(201).json(rec);
+      }
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -6650,7 +6691,7 @@ export async function registerRoutes(
 
       const zip = item.zipcode || item.city || (buyer as any).zipcode || "00000";
 
-      // Create a hidden V&I job — category "Verify & Inspect", not visible in normal job feeds
+      // Create a public V&I job so nearby workers can discover and apply
       const job = await storage.createJob({
         postedById: buyerUserId,
         title: `Verify Marketplace Listing: ${item.title.slice(0, 60)}`,
@@ -6658,10 +6699,10 @@ export async function registerRoutes(
         category: "Verify & Inspect",
         jobType: "vi",
         status: "open",
-        budget: 0,
+        budget: 25,
         zip,
         locationApprox: item.city || zip,
-        visibility: "private",
+        visibility: "public",
       });
 
       const viRequest = await storage.createMarketplaceVerificationRequest({
@@ -6685,6 +6726,9 @@ export async function registerRoutes(
         type: "marketplace",
         jobId: job.id,
       });
+
+      // Notify nearby available workers
+      notifyNearbyAvailableWorkers(job).catch(() => {});
 
       res.json({ viRequest, jobId: job.id, checklist });
     } catch (err: any) {
