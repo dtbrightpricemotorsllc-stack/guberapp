@@ -17834,7 +17834,7 @@ OUTPUT STYLE:
       const dropPoolAmountDollars = Math.round(sponsorAmount * 0.65 * 100) / 100;
       const estimatedPrizePerWinner = Math.round((dropPoolAmountDollars / winnersCount) * 100) / 100;
 
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.host}`;
+      const baseUrl = process.env.APP_URL || `https://${req.headers.host}`;
 
       const session = await stripeMain.checkout.sessions.create({
         mode: "payment",
