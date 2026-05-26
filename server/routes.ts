@@ -21071,6 +21071,33 @@ OUTPUT STYLE:
     }
   });
 
+  // GET /api/load-board/vin-decode — proxy NHTSA VIN decode (no auth needed)
+  app.get("/api/load-board/vin-decode", async (req: Request, res: Response) => {
+    try {
+      const { vin } = req.query;
+      if (!vin || typeof vin !== "string" || vin.length < 11) {
+        return res.status(400).json({ message: "VIN must be at least 11 characters" });
+      }
+      const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
+      const response = await fetch(url);
+      const json = await response.json() as any;
+      const r = json?.Results?.[0];
+      if (!r || r.ErrorCode !== "0") {
+        return res.json({ found: false });
+      }
+      return res.json({
+        found: true,
+        year:  r.ModelYear || "",
+        make:  r.Make      || "",
+        model: r.Model     || "",
+        body:  r.BodyClass || "",
+        vehicleType: r.VehicleType || "",
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // GET /api/load-board/rate-suggest — rate suggestion tool (no auth needed)
   app.get("/api/load-board/rate-suggest", async (req: Request, res: Response) => {
     try {
@@ -21414,8 +21441,32 @@ OUTPUT STYLE:
   // GET /api/carrier-profile — get own carrier profile
   app.get("/api/carrier-profile", requireAuth, async (req: Request, res: Response) => {
     try {
-      const profile = await storage.getCarrierProfile(req.session.userId!);
-      res.json({ profile: profile || null });
+      const userId = req.session.userId!;
+      const profile = await storage.getCarrierProfile(userId);
+
+      // Fetch credential statuses for this carrier
+      let credentials: any[] = [];
+      if (profile) {
+        try {
+          const result = await pool.query(
+            `SELECT credential_type, status, document_url, reviewed_at, expires_at, notes
+             FROM carrier_credentials WHERE carrier_id = $1 ORDER BY created_at DESC`,
+            [profile.id]
+          );
+          credentials = result.rows.map((r: any) => ({
+            credentialType: r.credential_type,
+            status:         r.status,
+            documentUrl:    r.document_url,
+            reviewedAt:     r.reviewed_at,
+            expiresAt:      r.expires_at,
+            notes:          r.notes,
+          }));
+        } catch {
+          credentials = [];
+        }
+      }
+
+      res.json({ profile: profile || null, credentials });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

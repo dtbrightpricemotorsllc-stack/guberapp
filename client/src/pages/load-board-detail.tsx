@@ -1,41 +1,62 @@
 import { useState } from "react";
+import type { ReactNode, CSSProperties } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
-  Truck, MapPin, DollarSign, Loader2, ShieldCheck,
-  ChevronRight, Zap, Lock, Check, X,
+  Truck, MapPin, Loader2, ShieldCheck,
+  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info,
 } from "lucide-react";
 
-const STATUS_LABEL: Record<string, string> = {
-  posted: "Open for Offers",
-  offer_received: "Offer Received",
-  offer_accepted: "Offer Accepted",
-  connected: "Connected",
-  cancelled: "Cancelled",
+// ── constants ──────────────────────────────────────────────────────────────────
+
+const CYAN_ACTIVE = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
+
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  posted:         { label: "Open for Offers",  color: "text-cyan-400" },
+  offer_received: { label: "Offer Received",   color: "text-amber-400" },
+  offer_accepted: { label: "Offer Accepted",   color: "text-sky-400" },
+  connected:      { label: "Connected",         color: "text-violet-400" },
+  cancelled:      { label: "Cancelled",         color: "text-muted-foreground" },
 };
 
-const ADDON_INFO: Record<string, { label: string; price: string; desc: string }> = {
-  verified_filter:            { label: "Verified Carriers Only",       price: "$10", desc: "Restrict offers to credential-verified carriers" },
-  urgent_boost:               { label: "Urgent Boost",                 price: "$10", desc: "Mark your listing urgent for priority placement" },
-  pre_transport_verification: { label: "Pre-Transport Verification",   price: "$25", desc: "GUBER worker inspects vehicle before transport" },
-  loading_witness:            { label: "Loading Witness",              price: "$25", desc: "GUBER worker witnesses and documents loading" },
-  unloading_witness:          { label: "Unloading Witness",            price: "$25", desc: "GUBER worker witnesses and documents unloading" },
-  load_assistance:            { label: "Load Assistance",              price: "$10", desc: "Help moving the vehicle onto the carrier" },
-  premium_bundle:             { label: "Premium Bundle",               price: "$75", desc: "All 5 add-ons at a bundled price" },
+const PROOF_LABEL: Record<string, string> = {
+  title_in_hand:   "Title In Hand",
+  bill_of_sale:    "Bill of Sale",
+  auction_invoice: "Auction Invoice",
+  dealer_owned:    "Dealer Owned",
+  lienholder:      "Lienholder",
+  not_ready:       "Proof Pending",
 };
+
+const ADDON_PRICES: Record<string, { label: string; price: number; hint: string }> = {
+  urgent_boost:         { label: "Urgent Boost",             price: 10,  hint: "Priority placement" },
+  premium_carrier_only: { label: "Verified Carriers Only",   price: 10,  hint: "Credential-gated" },
+  photo_proof:          { label: "Photo Proof at Pickup",    price: 25,  hint: "GUBER documents asset" },
+  loading_help:         { label: "Loading Assistance",       price: 10,  hint: "GUBER worker helps load" },
+  unloading_help:       { label: "Unloading Assistance",     price: 10,  hint: "GUBER worker helps unload" },
+  vin_verification:     { label: "VIN Verification",         price: 15,  hint: "Confirms VIN matches vehicle" },
+  gps_tracking:         { label: "GPS Tracking",             price: 15,  hint: "Real-time transport updates" },
+};
+
+const STANDALONE_ADDONS: { key: string; label: string; price: number; desc: string }[] = [
+  { key: "pre_transport_verification", label: "Pre-Transport Verification", price: 25, desc: "GUBER worker inspects vehicle before transport" },
+  { key: "loading_witness",            label: "Loading Witness",            price: 25, desc: "GUBER witnesses and documents loading" },
+  { key: "unloading_witness",          label: "Unloading Witness",          price: 25, desc: "GUBER witnesses and documents unloading" },
+  { key: "premium_bundle",             label: "Premium Bundle (all 3)",     price: 65, desc: "All 3 GUBER field services at once" },
+];
 
 const CONNECTION_TIERS = [
-  { value: "standard", label: "Standard",  price: "$19", desc: "Shipper contact info + direct message" },
-  { value: "verified", label: "Verified",  price: "$29", desc: "Above + carrier credentials revealed" },
-  { value: "premium",  label: "Premium",   price: "$99", desc: "Full profile + phone + priority match" },
+  { value: "standard", label: "Standard",  price: 19, desc: "Shipper contact info + direct message" },
+  { value: "verified",  label: "Verified",  price: 29, desc: "Above + carrier credentials revealed" },
+  { value: "premium",   label: "Premium",   price: 99, desc: "Full profile + phone + priority match" },
 ];
+
+// ── main ──────────────────────────────────────────────────────────────────────
 
 export default function LoadBoardDetail() {
   const [, params] = useRoute("/load-board/:id");
@@ -43,18 +64,15 @@ export default function LoadBoardDetail() {
   const { toast } = useToast();
   const listingId = params?.id ? parseInt(params.id) : 0;
 
-  const [offerAmount, setOfferAmount] = useState("");
-  const [offerMessage, setOfferMessage] = useState("");
-  const [counterAmount, setCounterAmount] = useState("");
-  const [selectedTier, setSelectedTier] = useState("standard");
-  const [showAddonMenu, setShowAddonMenu] = useState(false);
+  const [offerAmount,    setOfferAmount]    = useState("");
+  const [counterAmount,  setCounterAmount]  = useState("");
+  const [selectedTier,   setSelectedTier]   = useState("standard");
+  const [showAddons,     setShowAddons]     = useState(false);
+  const [addonCart,      setAddonCart]      = useState<string[]>([]);
+  const [showCheckout,   setShowCheckout]   = useState(false);
 
-  const { data, isLoading, refetch } = useQuery<{
-    listing: any;
-    offers: any[];
-    myOffer: any;
-    isPoster: boolean;
-    addons: any[];
+  const { data, isLoading } = useQuery<{
+    listing: any; offers: any[]; myOffer: any; isPoster: boolean; addons: any[];
   }>({
     queryKey: ["/api/load-board", listingId],
     queryFn: async () => {
@@ -70,7 +88,6 @@ export default function LoadBoardDetail() {
       toast({ title: "Offer submitted!", description: "The shipper will be notified." });
       queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
       setOfferAmount("");
-      setOfferMessage("");
     },
     onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
   });
@@ -95,7 +112,7 @@ export default function LoadBoardDetail() {
     onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
   });
 
-  const addonMutation = useMutation({
+  const addonCheckoutMutation = useMutation({
     mutationFn: (addonType: string) => apiRequest("POST", `/api/load-board/${listingId}/addons/checkout`, { addonType }),
     onSuccess: async (res: any) => {
       const json = await res.json();
@@ -116,7 +133,7 @@ export default function LoadBoardDetail() {
     return (
       <GuberLayout title="Load Detail" showBack backHref="/load-board">
         <div className="flex justify-center py-20">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
         </div>
       </GuberLayout>
     );
@@ -131,142 +148,311 @@ export default function LoadBoardDetail() {
   }
 
   const { listing, offers, myOffer, isPoster, addons } = data;
-  const isConnected = listing.status === "connected";
-  const isOpen = ["posted", "offer_received"].includes(listing.status);
+  const sc = STATUS_CONFIG[listing.status];
+  const isConnected   = listing.status === "connected";
+  const isOpen        = ["posted", "offer_received"].includes(listing.status);
   const offerAccepted = listing.status === "offer_accepted";
+
+  const assetTitle = listing.year && listing.make
+    ? `${listing.year} ${listing.make}${listing.model ? " " + listing.model : ""}`.trim()
+    : listing.assetDescription || "Transport Load";
+
+  const paidAddonKeys = (addons || []).map((a: any) => a.addonType);
+
+  // ── checkout breakdown panel ───────────────────────────────────────────────
+
+  if (showCheckout && !isPoster) {
+    const tier = CONNECTION_TIERS.find(t => t.value === selectedTier)!;
+    return (
+      <GuberLayout title="Checkout" showBack backHref={`/load-board/${listingId}`}>
+        <div className="px-4 pb-32 pt-4 space-y-5">
+          <div
+            className="rounded-2xl p-4"
+            style={{ background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))", border: "1px solid rgba(6,182,212,0.25)" }}
+          >
+            <p className="text-xs font-display font-black text-cyan-400/70 uppercase tracking-wider mb-3">Order Summary</p>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground/60">Connection Fee — {tier.label}</span>
+                <span className="font-display font-black text-foreground">${tier.price}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground/60">Platform Fee</span>
+                <span className="font-display font-bold text-muted-foreground/50">Included</span>
+              </div>
+              <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+              <div className="flex justify-between text-base">
+                <span className="font-display font-black text-foreground">Total</span>
+                <span className="font-display font-black text-cyan-300">${tier.price}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What unlocks</p>
+            <FeatureRow text="Shipper's full name" />
+            <FeatureRow text="Direct contact details (phone / email)" />
+            <FeatureRow text="Exact pickup & delivery address" />
+            {tier.value !== "standard" && <FeatureRow text="Carrier credentials revealed to shipper" />}
+            {tier.value === "premium" && <FeatureRow text="Priority match — listed at top of shipper inbox" />}
+          </div>
+
+          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
+              🔒 Payment is processed securely via Stripe. Address and contact info are revealed immediately after successful payment. GUBER does not store payment card details.
+            </p>
+          </div>
+
+          <Button
+            className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
+            style={CYAN_ACTIVE}
+            onClick={() => connectMutation.mutate(selectedTier)}
+            disabled={connectMutation.isPending}
+            data-testid="button-pay-connect"
+          >
+            {connectMutation.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : `Pay $${tier.price} · Connect`
+            }
+          </Button>
+          <button
+            className="w-full text-xs text-muted-foreground/40 font-display font-bold"
+            onClick={() => setShowCheckout(false)}
+          >
+            ← Back to load
+          </button>
+        </div>
+      </GuberLayout>
+    );
+  }
+
+  // ── main detail view ───────────────────────────────────────────────────────
 
   return (
     <GuberLayout title="Load Detail" showBack backHref="/load-board">
       <div className="px-4 pb-28 pt-2 space-y-4">
 
-        {/* Header card */}
-        <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        {/* ── Header card ── */}
+        <div
+          className="rounded-2xl p-4"
+          style={{
+            background: "linear-gradient(135deg,rgba(8,145,178,0.1),rgba(14,116,144,0.05))",
+            border: "1px solid rgba(6,182,212,0.2)",
+            boxShadow: "0 0 24px rgba(6,182,212,0.06)",
+          }}
+        >
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                <span className="text-xs font-display font-black uppercase tracking-wider px-2 py-0.5 rounded-full"
-                  style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}>
+                <span
+                  className="text-[10px] font-display font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                  style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
+                >
                   {listing.transportType}
                 </span>
-                {listing.urgent && <span className="text-xs font-display font-black text-amber-400 flex items-center gap-0.5"><Zap className="w-3 h-3" /> URGENT</span>}
-                <span className="text-xs font-display font-bold text-emerald-400">{STATUS_LABEL[listing.status] || listing.status}</span>
+                {listing.urgent && (
+                  <span className="text-[10px] font-display font-black text-amber-400 flex items-center gap-0.5">
+                    <Zap className="w-2.5 h-2.5" /> URGENT
+                  </span>
+                )}
+                {sc && <span className={`text-[10px] font-display font-bold ${sc.color}`}>{sc.label}</span>}
               </div>
-              <p className="text-base font-display font-black text-foreground leading-tight">
-                {listing.year && listing.make
-                  ? `${listing.year} ${listing.make} ${listing.model || ""}`.trim()
-                  : listing.assetDescription || "Transport Load"}
-              </p>
-              {listing.vin && <p className="text-[10px] text-muted-foreground/40 mt-0.5 font-mono">VIN: {listing.vin}</p>}
+              <p className="text-base font-display font-black text-foreground leading-tight">{assetTitle}</p>
+              {listing.vinVerified && listing.vin && (
+                <p className="text-[9px] text-cyan-400/60 mt-0.5 font-mono flex items-center gap-1">
+                  <Check className="w-2.5 h-2.5" /> VIN verified: {listing.vin}
+                </p>
+              )}
+              {listing.ownershipProofStatus && (
+                <span
+                  className="inline-block text-[9px] font-display font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1.5"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}
+                >
+                  {PROOF_LABEL[listing.ownershipProofStatus] || listing.ownershipProofStatus}
+                </span>
+              )}
             </div>
             <div className="text-right shrink-0">
               {listing.postedPrice ? (
-                <p className="text-xl font-display font-black text-emerald-400">${listing.postedPrice.toLocaleString()}</p>
+                <p className="text-xl font-display font-black text-cyan-300">${listing.postedPrice.toLocaleString()}</p>
               ) : (
                 <p className="text-sm font-display font-bold text-amber-400/80">Open to Offers</p>
+              )}
+              {listing.suggestedLow && listing.suggestedHigh && !listing.postedPrice && (
+                <p className="text-[9px] text-muted-foreground/30 mt-0.5">
+                  Est. ${listing.suggestedLow}–${listing.suggestedHigh}
+                </p>
               )}
             </div>
           </div>
 
           {/* Route */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground/70 mb-3">
-            <MapPin className="w-3.5 h-3.5 shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60 mb-3">
+            <MapPin className="w-3 h-3 shrink-0 text-cyan-500/50" />
             <span className="font-display font-bold">{listing.pickupCity}, {listing.pickupState}</span>
-            <span className="text-muted-foreground/30">→</span>
+            <span className="text-muted-foreground/30 mx-0.5">→</span>
             <span className="font-display font-bold">{listing.deliveryCity}, {listing.deliveryState}</span>
             {listing.estimatedMiles && (
-              <span className="text-muted-foreground/40 text-xs ml-1">({listing.estimatedMiles.toLocaleString()} mi)</span>
+              <span className="text-muted-foreground/30 text-[10px] ml-1">({listing.estimatedMiles.toLocaleString()} mi)</span>
             )}
           </div>
 
-          {/* Poster identity — masked */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-display font-black" style={{ background: "rgba(255,255,255,0.08)" }}>
+          {/* Poster identity */}
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground/40">
+            <div
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-display font-black"
+              style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
+            >
               {listing.poster?.guberId?.slice(0, 2) || "G"}
             </div>
             <span className="font-display font-bold tracking-wide">{listing.poster?.guberId || "GUBER Member"}</span>
-            {listing.poster?.rating > 0 && <span>⭐ {listing.poster.rating.toFixed(1)} ({listing.poster.reviewCount})</span>}
+            {listing.poster?.rating > 0 && <span>⭐ {Number(listing.poster.rating).toFixed(1)} ({listing.poster.reviewCount})</span>}
             {isConnected && listing.poster?.fullName && (
               <span className="text-foreground/80 font-bold">· {listing.poster.fullName}</span>
             )}
           </div>
         </div>
 
-        {/* Conditions / details */}
-        {(listing.vehicleCondition?.length || listing.trailerPreference) && (
+        {/* ── Asset requirements card ── */}
+        {(listing.vehicleCondition?.length || listing.trailerPreference || listing.weightRange ||
+          listing.loadingMethod?.length || listing.pickupAccess?.length) && (
           <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-3">Requirements</p>
+            <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Requirements</p>
             {listing.vehicleCondition?.length > 0 && (
-              <div className="mb-2">
-                <p className="text-[10px] text-muted-foreground/40 mb-1.5">Condition</p>
+              <div className="mb-2.5">
+                <p className="text-[9px] text-muted-foreground/30 mb-1.5">Condition</p>
                 <div className="flex flex-wrap gap-1.5">
                   {listing.vehicleCondition.map((c: string) => (
-                    <span key={c} className="text-[10px] font-display font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)" }}>
-                      {c.replace(/_/g, " ")}
-                    </span>
+                    <ChipBadge key={c}>{c.replace(/_/g, " ")}</ChipBadge>
                   ))}
                 </div>
               </div>
             )}
+            {listing.weightRange && (
+              <DetailRow label="Weight" value={listing.weightRange.replace(/_/g, " ")} />
+            )}
             {listing.trailerPreference && listing.trailerPreference !== "any" && (
-              <div className="flex justify-between text-sm mt-2">
-                <span className="text-muted-foreground/60">Trailer needed</span>
-                <span className="font-display font-bold capitalize">{listing.trailerPreference.replace(/_/g, " ")}</span>
-              </div>
+              <DetailRow label="Trailer" value={listing.trailerPreference.replace(/_/g, " ")} />
             )}
             {listing.loadingMethod?.length > 0 && (
-              <div className="flex justify-between text-sm mt-1">
-                <span className="text-muted-foreground/60">Loading</span>
-                <span className="font-display font-bold">{listing.loadingMethod.map((m: string) => m.replace(/_/g, " ")).join(", ")}</span>
+              <DetailRow label="Loading" value={listing.loadingMethod.map((m: string) => m.replace(/_/g, " ")).join(", ")} />
+            )}
+            {listing.unloadingMethod?.length > 0 && (
+              <DetailRow label="Unloading" value={listing.unloadingMethod.map((m: string) => m.replace(/_/g, " ")).join(", ")} />
+            )}
+            {listing.loadingAssistAvailable && (
+              <DetailRow label="Loading assist" value={listing.loadingAssistAvailable} />
+            )}
+            {listing.pickupFlexibility && (
+              <DetailRow label="Pickup window" value={listing.pickupFlexibility.replace(/_/g, " ")} />
+            )}
+            {listing.dockAvailable && (
+              <DetailRow label="Dock available" value={listing.dockAvailable} />
+            )}
+            {listing.pickupAccess?.length > 0 && (
+              <div className="mt-2">
+                <p className="text-[9px] text-muted-foreground/30 mb-1.5">Pickup site</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {listing.pickupAccess.map((a: string) => <ChipBadge key={a}>{a.replace(/_/g, " ")}</ChipBadge>)}
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Notes */}
-        {listing.notes && (
-          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">Notes</p>
-            <p className="text-sm text-muted-foreground/80 leading-relaxed">{listing.notes}</p>
+        {/* ── Active add-on flags (from listing creation) ── */}
+        {listing.addonFlags && listing.addonFlags.length > 0 && (
+          <div className="rounded-2xl p-3.5" style={{ background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.12)" }}>
+            <p className="text-[10px] font-display font-black text-cyan-400/60 uppercase tracking-wider mb-2.5">Load Add-ons</p>
+            <div className="flex flex-wrap gap-1.5">
+              {listing.addonFlags.map((f: string) => {
+                const info = ADDON_PRICES[f];
+                return (
+                  <div
+                    key={f}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-display font-bold"
+                    style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
+                  >
+                    {info?.label || f.replace(/_/g, " ")}
+                    {info?.price > 0 && <span className="text-cyan-400/50">(${info.price})</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
-        {/* ── POSTER VIEW ── */}
+        {/* ── Address lock notice (non-connected) ── */}
+        {!isConnected && (
+          <div
+            className="rounded-2xl p-3.5 flex items-center gap-3"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <Lock className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+            <div>
+              <p className="text-xs font-display font-bold text-muted-foreground/50">Exact address hidden</p>
+              <p className="text-[9px] text-muted-foreground/30 mt-0.5">
+                Full pickup &amp; delivery address unlocks after carrier connects via paid checkout.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Connected: show address ── */}
+        {isConnected && (listing.pickupAddress || listing.deliveryAddress) && (
+          <div className="rounded-2xl p-4" style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.2)" }}>
+            <p className="text-[10px] font-display font-black text-cyan-400/70 uppercase tracking-wider mb-2">Full Addresses</p>
+            {listing.pickupAddress && <p className="text-xs text-foreground/80 mb-1">📍 Pickup: {listing.pickupAddress}</p>}
+            {listing.deliveryAddress && <p className="text-xs text-foreground/80">📍 Delivery: {listing.deliveryAddress}</p>}
+          </div>
+        )}
+
+        {/* ════════ POSTER VIEW ════════ */}
         {isPoster && (
           <>
-            {/* Add-ons section */}
+            {/* Add-on services (purchasable) */}
             <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
               <button
                 className="w-full flex items-center justify-between px-4 py-3 text-left"
                 style={{ background: "rgba(255,255,255,0.04)" }}
-                onClick={() => setShowAddonMenu(!showAddonMenu)}
+                onClick={() => setShowAddons(!showAddons)}
                 data-testid="button-toggle-addons"
               >
                 <div>
-                  <p className="text-sm font-display font-bold text-foreground">Add-On Services</p>
-                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">Verification, witnesses, boost &amp; more</p>
+                  <p className="text-sm font-display font-bold text-foreground">Field Services</p>
+                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER workers — verification, witnesses</p>
                 </div>
-                <ChevronRight className={`w-4 h-4 text-muted-foreground/40 transition-transform ${showAddonMenu ? "rotate-90" : ""}`} />
+                <ChevronRight className={`w-4 h-4 text-muted-foreground/30 transition-transform ${showAddons ? "rotate-90" : ""}`} />
               </button>
-              {showAddonMenu && (
-                <div className="divide-y divide-border/30">
-                  {Object.entries(ADDON_INFO).map(([key, info]) => (
-                    <div key={key} className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.02)" }}>
-                      <div className="flex-1 min-w-0 mr-3">
-                        <p className="text-sm font-display font-bold text-foreground">{info.label}</p>
-                        <p className="text-[10px] text-muted-foreground/50 mt-0.5">{info.desc}</p>
+              {showAddons && (
+                <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                  {STANDALONE_ADDONS.map(a => {
+                    const alreadyPurchased = paidAddonKeys.includes(a.key);
+                    return (
+                      <div key={a.key} className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.02)" }}>
+                        <div className="flex-1 min-w-0 mr-3">
+                          <p className="text-sm font-display font-bold text-foreground">{a.label}</p>
+                          <p className="text-[9px] text-muted-foreground/40 mt-0.5">{a.desc}</p>
+                        </div>
+                        {alreadyPurchased ? (
+                          <span className="text-xs font-display font-bold text-cyan-400 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Ordered
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="shrink-0 rounded-xl h-8 px-3 font-display font-black text-xs"
+                            style={CYAN_ACTIVE}
+                            onClick={() => addonCheckoutMutation.mutate(a.key)}
+                            disabled={addonCheckoutMutation.isPending}
+                            data-testid={`button-addon-${a.key}`}
+                          >
+                            ${a.price}
+                          </Button>
+                        )}
                       </div>
-                      <Button
-                        size="sm"
-                        className="shrink-0 rounded-xl h-8 px-3 font-display font-black text-xs"
-                        style={{ background: "rgba(22,163,74,0.15)", color: "#86efac" }}
-                        onClick={() => addonMutation.mutate(key)}
-                        disabled={addonMutation.isPending}
-                        data-testid={`button-addon-${key}`}
-                      >
-                        {info.price}
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -275,43 +461,39 @@ export default function LoadBoardDetail() {
             {offers.length > 0 && (
               <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
                 <div className="px-4 py-3" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <p className="text-sm font-display font-bold text-foreground">Carrier Offers ({offers.length})</p>
+                  <p className="text-sm font-display font-bold text-foreground">
+                    Carrier Offers ({offers.length})
+                  </p>
                 </div>
-                <div className="divide-y divide-border/30">
+                <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
                   {offers.map((o: any) => (
                     <div key={o.id} className="px-4 py-3" style={{ background: "rgba(255,255,255,0.02)" }} data-testid={`card-offer-${o.id}`}>
-                      <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-start justify-between gap-3 mb-2.5">
                         <div>
                           <p className="text-base font-display font-black text-foreground">${o.offerAmount.toLocaleString()}</p>
-                          <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                            Carrier ID #{o.carrierId} · Round {o.actionCount}/3
+                          <p className="text-[9px] text-muted-foreground/40 mt-0.5">
+                            Carrier #{o.carrierId} · Round {o.actionCount}/3
                           </p>
                           {o.status === "countered" && o.counterAmount && (
-                            <p className="text-xs text-amber-400 font-bold mt-1">Your counter: ${o.counterAmount.toLocaleString()}</p>
+                            <p className="text-xs text-amber-400 font-bold mt-1">
+                              Your counter: ${o.counterAmount.toLocaleString()}
+                            </p>
                           )}
                         </div>
-                        <span className={`text-xs font-display font-bold px-2 py-0.5 rounded-full ${
-                          o.status === "pending" ? "text-emerald-400 bg-emerald-400/10" :
-                          o.status === "countered" ? "text-amber-400 bg-amber-400/10" :
-                          o.status === "accepted" ? "text-sky-400 bg-sky-400/10" :
-                          "text-muted-foreground bg-muted/20"
-                        }`}>
-                          {o.status}
-                        </span>
+                        <OfferStatusBadge status={o.status} />
                       </div>
-                      {o.message && <p className="text-xs text-muted-foreground/60 mb-2 italic">"{o.message}"</p>}
 
                       {o.status === "pending" && (
                         <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
                             className="rounded-xl h-8 px-3 font-display font-black text-xs"
-                            style={{ background: "linear-gradient(135deg,#16a34a,#15803d)" }}
+                            style={CYAN_ACTIVE}
                             onClick={() => respondMutation.mutate({ offerId: o.id, action: "accept" })}
                             disabled={respondMutation.isPending}
                             data-testid={`button-accept-offer-${o.id}`}
                           >
-                            <Check className="w-3 h-3 mr-1" /> Accept
+                            <Check className="w-3 h-3 mr-1" /> Accept ${o.offerAmount.toLocaleString()}
                           </Button>
                           {o.actionCount < 3 && (
                             <div className="flex gap-1.5 items-center">
@@ -354,9 +536,9 @@ export default function LoadBoardDetail() {
             )}
 
             {/* Cancel listing */}
-            {["posted", "offer_received"].includes(listing.status) && (
+            {isOpen && (
               <button
-                className="w-full text-xs text-destructive/60 font-display font-bold py-2"
+                className="w-full text-xs text-destructive/50 font-display font-bold py-2"
                 onClick={() => {
                   if (confirm("Cancel this listing?")) cancelMutation.mutate();
                 }}
@@ -369,33 +551,29 @@ export default function LoadBoardDetail() {
           </>
         )}
 
-        {/* ── CARRIER VIEW ── */}
+        {/* ════════ CARRIER VIEW ════════ */}
         {!isPoster && (
           <>
             {/* My existing offer */}
             {myOffer && (
               <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="card-my-offer">
-                <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-3">Your Offer</p>
+                <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Your Offer</p>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xl font-display font-black text-foreground">${myOffer.offerAmount.toLocaleString()}</p>
-                  <span className={`text-xs font-display font-bold px-2 py-0.5 rounded-full ${
-                    myOffer.status === "pending" ? "text-emerald-400 bg-emerald-400/10" :
-                    myOffer.status === "countered" ? "text-amber-400 bg-amber-400/10" :
-                    myOffer.status === "accepted" ? "text-sky-400 bg-sky-400/10" :
-                    "text-muted-foreground bg-muted/20"
-                  }`}>
-                    {myOffer.status}
-                  </span>
+                  <OfferStatusBadge status={myOffer.status} />
                 </div>
+
                 {myOffer.status === "countered" && myOffer.counterAmount && (
                   <div className="rounded-xl p-3 mb-3" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
-                    <p className="text-xs text-amber-400 font-bold mb-1">Shipper countered: ${myOffer.counterAmount.toLocaleString()}</p>
+                    <p className="text-xs text-amber-400 font-bold mb-2">
+                      Shipper countered: ${myOffer.counterAmount.toLocaleString()}
+                    </p>
                     {myOffer.actionCount < 3 ? (
                       <div className="flex gap-2">
                         <Button
                           size="sm"
                           className="rounded-xl h-8 px-3 font-display font-black text-xs"
-                          style={{ background: "linear-gradient(135deg,#16a34a,#15803d)" }}
+                          style={CYAN_ACTIVE}
                           onClick={() => respondMutation.mutate({ offerId: myOffer.id, action: "accept_counter" })}
                           disabled={respondMutation.isPending}
                           data-testid="button-accept-counter"
@@ -424,13 +602,14 @@ export default function LoadBoardDetail() {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-muted-foreground/50">Max rounds reached — accept or walk away</p>
+                      <p className="text-[10px] text-muted-foreground/40">Max rounds reached — accept or walk away</p>
                     )}
                   </div>
                 )}
+
                 {myOffer.status === "pending" && (
                   <button
-                    className="text-xs text-destructive/60 font-display font-bold"
+                    className="text-xs text-destructive/50 font-display font-bold"
                     onClick={() => respondMutation.mutate({ offerId: myOffer.id, action: "withdraw" })}
                     disabled={respondMutation.isPending}
                     data-testid="button-withdraw-offer"
@@ -441,115 +620,164 @@ export default function LoadBoardDetail() {
               </div>
             )}
 
-            {/* Connection section (offer accepted) */}
-            {offerAccepted && myOffer?.status === "accepted" && (
-              <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg,rgba(14,165,233,0.1),rgba(59,130,246,0.05))", border: "1.5px solid rgba(59,130,246,0.25)" }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <Lock className="w-4 h-4 text-sky-400" />
-                  <p className="text-sm font-display font-black text-sky-400">Your offer was accepted — Connect Now</p>
+            {/* Submit an offer (no previous offer, listing open) */}
+            {!myOffer && isOpen && (
+              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Submit Your Offer</p>
+                <div className="relative mb-3">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <Input
+                    value={offerAmount}
+                    onChange={e => setOfferAmount(e.target.value)}
+                    placeholder="Enter amount"
+                    type="number"
+                    className="rounded-xl h-12 bg-background/50 border-border/50 text-base pl-7"
+                    data-testid="input-offer-amount"
+                  />
                 </div>
-                <p className="text-xs text-muted-foreground/60 mb-4">Pay the one-time connection fee to unlock the shipper's contact details and finalize the job.</p>
+                {listing.suggestedLow && listing.suggestedHigh && (
+                  <p className="text-[9px] text-muted-foreground/30 mb-3">
+                    Market est. ${listing.suggestedLow}–${listing.suggestedHigh}
+                  </p>
+                )}
+                <Button
+                  className="w-full rounded-xl h-10 font-display font-black text-sm"
+                  style={CYAN_ACTIVE}
+                  onClick={() => {
+                    if (!offerAmount || parseFloat(offerAmount) <= 0) {
+                      toast({ variant: "destructive", title: "Enter a valid amount" });
+                      return;
+                    }
+                    offerMutation.mutate({ offerAmount: parseFloat(offerAmount) });
+                  }}
+                  disabled={offerMutation.isPending || !offerAmount}
+                  data-testid="button-submit-offer"
+                >
+                  {offerMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Submit $${offerAmount || "—"} Offer`}
+                </Button>
+                <div className="flex items-start gap-1.5 mt-2.5">
+                  <Info className="w-3 h-3 text-muted-foreground/25 shrink-0 mt-0.5" />
+                  <p className="text-[9px] text-muted-foreground/30">
+                    No payment now. You'll pay the connection fee only if the shipper accepts and you choose to connect.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Connection section — offer accepted */}
+            {offerAccepted && myOffer?.status === "accepted" && (
+              <div
+                className="rounded-2xl p-4"
+                style={{
+                  background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))",
+                  border: "1.5px solid rgba(6,182,212,0.3)",
+                  boxShadow: "0 0 24px rgba(6,182,212,0.08)",
+                }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="w-4 h-4 text-cyan-400" />
+                  <p className="text-sm font-display font-black text-cyan-300">Your offer was accepted — Connect Now</p>
+                </div>
+                <p className="text-[10px] text-muted-foreground/50 mb-4">
+                  Pay the one-time connection fee to unlock the shipper's exact address and contact details.
+                </p>
+
+                {/* Tier picker */}
                 <div className="space-y-2 mb-4">
                   {CONNECTION_TIERS.map(t => (
                     <button
                       key={t.value}
                       type="button"
                       onClick={() => setSelectedTier(t.value)}
-                      className="w-full rounded-xl p-3 text-left transition-all"
+                      className="w-full rounded-xl p-3 text-left transition-all flex items-center justify-between"
                       style={selectedTier === t.value
-                        ? { background: "rgba(14,165,233,0.15)", border: "1.5px solid rgba(14,165,233,0.4)" }
+                        ? { background: "linear-gradient(135deg,rgba(8,145,178,0.2),rgba(14,116,144,0.12))", border: "1.5px solid rgba(6,182,212,0.4)" }
                         : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
                       data-testid={`select-tier-${t.value}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-display font-bold text-foreground">{t.label}</p>
-                          <p className="text-[10px] text-muted-foreground/50 mt-0.5">{t.desc}</p>
-                        </div>
-                        <p className="text-base font-display font-black text-sky-400 shrink-0">{t.price}</p>
+                      <div>
+                        <p className="text-sm font-display font-bold text-foreground">{t.label}</p>
+                        <p className="text-[9px] text-muted-foreground/40 mt-0.5">{t.desc}</p>
                       </div>
+                      <p className={`text-base font-display font-black ${selectedTier === t.value ? "text-cyan-300" : "text-muted-foreground/50"}`}>
+                        ${t.price}
+                      </p>
                     </button>
                   ))}
                 </div>
-                <Button
-                  className="w-full rounded-2xl h-12 font-display font-black text-sm"
-                  style={{ background: "linear-gradient(135deg,#0ea5e9,#2563eb)" }}
-                  onClick={() => connectMutation.mutate(selectedTier)}
-                  disabled={connectMutation.isPending}
-                  data-testid="button-pay-connection-fee"
-                >
-                  {connectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Connect — ${CONNECTION_TIERS.find(t => t.value === selectedTier)?.price}`}
-                </Button>
-              </div>
-            )}
 
-            {/* Submit offer (open load) */}
-            {isOpen && !myOffer && (
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-3">Submit Your Offer</p>
-                {listing.suggestedLow && listing.suggestedHigh && (
-                  <p className="text-[10px] text-muted-foreground/40 mb-3">
-                    Market range: <span className="text-foreground/60 font-bold">${listing.suggestedLow.toLocaleString()} – ${listing.suggestedHigh.toLocaleString()}</span>
-                  </p>
-                )}
-                <div className="mb-3">
-                  <Label className="text-xs text-muted-foreground/60">Your Price ($)</Label>
-                  <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                    <Input
-                      value={offerAmount}
-                      onChange={e => setOfferAmount(e.target.value)}
-                      placeholder="0"
-                      type="number"
-                      className="rounded-xl h-12 bg-background/50 border-border/50 text-base pl-7"
-                      data-testid="input-offer-amount"
-                    />
-                  </div>
-                </div>
-                <div className="mb-4">
-                  <Label className="text-xs text-muted-foreground/60">Message (optional)</Label>
-                  <Textarea
-                    value={offerMessage}
-                    onChange={e => setOfferMessage(e.target.value)}
-                    placeholder="Tell the shipper about your equipment and ETA..."
-                    className="mt-1 rounded-xl bg-background/50 border-border/50 text-sm resize-none"
-                    rows={2}
-                    data-testid="input-offer-message"
-                  />
-                </div>
                 <Button
                   className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
-                  style={{ background: "linear-gradient(135deg,#16a34a,#15803d)" }}
-                  onClick={() => offerMutation.mutate({ offerAmount: parseFloat(offerAmount), message: offerMessage || undefined })}
-                  disabled={!offerAmount || offerMutation.isPending}
-                  data-testid="button-submit-offer"
+                  style={CYAN_ACTIVE}
+                  onClick={() => setShowCheckout(true)}
+                  data-testid="button-review-checkout"
                 >
-                  {offerMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Offer →"}
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Review Checkout · ${CONNECTION_TIERS.find(t => t.value === selectedTier)?.price}
                 </Button>
-                <p className="text-[9px] text-muted-foreground/30 text-center mt-2">
-                  Max 3 negotiation rounds · GUBER ID privacy until connected
-                </p>
               </div>
             )}
 
-            {/* Setup carrier profile prompt */}
-            <div
-              className="rounded-2xl p-3.5 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-all"
-              style={{ background: "rgba(30,58,138,0.15)", border: "1px solid rgba(59,130,246,0.2)" }}
-              onClick={() => navigate("/carrier-profile")}
-              data-testid="banner-setup-profile"
-            >
-              <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-display font-bold text-blue-300">Set up your carrier profile</p>
-                <p className="text-[10px] text-blue-400/50 mt-0.5">Verified carriers get more offers &amp; faster connections</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-blue-400/30 shrink-0" />
-            </div>
+            {/* Carrier profile CTA */}
+            {!myOffer && isOpen && (
+              <button
+                className="w-full text-[10px] text-cyan-400/50 font-display font-bold py-1 flex items-center justify-center gap-1"
+                onClick={() => navigate("/carrier-profile")}
+                data-testid="button-setup-carrier"
+              >
+                <Truck className="w-3 h-3" /> Set up your carrier profile for faster acceptance
+              </button>
+            )}
           </>
         )}
-
       </div>
     </GuberLayout>
+  );
+}
+
+// ── small helpers ─────────────────────────────────────────────────────────────
+
+function OfferStatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, { label: string; style: CSSProperties }> = {
+    pending:   { label: "Pending",   style: { background: "rgba(6,182,212,0.1)",   color: "#67e8f9" } },
+    countered: { label: "Countered", style: { background: "rgba(245,158,11,0.1)",  color: "#fbbf24" } },
+    accepted:  { label: "Accepted",  style: { background: "rgba(6,182,212,0.1)",   color: "#67e8f9" } },
+    declined:  { label: "Declined",  style: { background: "rgba(239,68,68,0.08)",  color: "#f87171" } },
+    withdrawn: { label: "Withdrawn", style: { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.3)" } },
+  };
+  const c = cfg[status] || { label: status, style: {} };
+  return (
+    <span className="text-xs font-display font-bold px-2 py-0.5 rounded-full" style={c.style}>
+      {c.label}
+    </span>
+  );
+}
+
+function ChipBadge({ children }: { children: ReactNode }) {
+  return (
+    <span
+      className="text-[9px] font-display font-bold px-2 py-0.5 rounded-full capitalize"
+      style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center text-xs mt-1.5">
+      <span className="text-muted-foreground/40">{label}</span>
+      <span className="font-display font-bold text-foreground/70 capitalize">{value}</span>
+    </div>
+  );
+}
+
+function FeatureRow({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <ShieldCheck className="w-3 h-3 text-cyan-400 shrink-0" />
+      <span className="text-foreground/70">{text}</span>
+    </div>
   );
 }

@@ -2063,16 +2063,32 @@ export const loadBoardListings = pgTable("load_board_listings", {
   posterId: integer("poster_id").notNull(),
   transportType: text("transport_type").notNull(), // vehicle | equipment | boat | rv | trailer | hotshot | other
   vin: text("vin"),
+  vinVerified: boolean("vin_verified").default(false),
   year: text("year"),
   make: text("make"),
   model: text("model"),
+  vehicleType: text("vehicle_type"), // car | truck | suv | van | motorcycle | atv_utv | other
   assetDescription: text("asset_description"),
   vehicleCondition: text("vehicle_condition").array(),
+  ownershipProofStatus: text("ownership_proof_status"), // title_in_hand | bill_of_sale | auction_invoice | dealer_owned | lienholder | not_ready
+  equipmentType: text("equipment_type"), // skid_steer | tractor | forklift | excavator | loader | generator | other
+  boatType: text("boat_type"), // powerboat | sailboat | pontoon | jet_ski | fishing | other
+  rvClass: text("rv_class"), // class_a | class_b | class_c | travel_trailer | fifth_wheel | other
+  trailerType: text("trailer_type"), // utility | enclosed | car_hauler | dump | flatbed | boat_trailer | other
+  freightType: text("freight_type").array(), // for hotshot: machinery | auto_parts | building_materials | pallets | oversized | other
+  palletized: text("palletized"), // palletized | loose | mixed
+  weightRange: text("weight_range"), // under_1k | 1k_5k | 5k_10k | 10k_20k | 20k_plus
+  trailerIncluded: boolean("trailer_included").default(false),
   trailerPreference: text("trailer_preference"),
   loadingMethod: text("loading_method").array(),
   unloadingMethod: text("unloading_method").array(),
   pickupAccess: text("pickup_access").array(),
   deliveryAccess: text("delivery_access").array(),
+  pickupFlexibility: text("pickup_flexibility"), // asap | today | this_week | scheduled
+  deliveryFlexibility: text("delivery_flexibility"),
+  loadingAssistAvailable: text("loading_assist_available"), // yes | no | unknown
+  unloadingAssistAvailable: text("unloading_assist_available"),
+  dockAvailable: text("dock_available"), // yes | no | unknown
   pickupCity: text("pickup_city").notNull(),
   pickupState: text("pickup_state").notNull(),
   deliveryCity: text("delivery_city").notNull(),
@@ -2082,6 +2098,7 @@ export const loadBoardListings = pgTable("load_board_listings", {
   postedPrice: real("posted_price"),
   suggestedLow: real("suggested_low"),
   suggestedHigh: real("suggested_high"),
+  addonFlags: text("addon_flags").array(), // urgent_boost | enclosed_transport | winch_required | liftgate | forklift | loading_help | unloading_help | photo_proof | vin_verification | gps_tracking | premium_carrier_only
   status: text("status").notNull().default("posted"),
   urgent: boolean("urgent").default(false),
   boosted: boolean("boosted").default(false),
@@ -2159,3 +2176,18 @@ export const loadBoardAddons = pgTable("load_board_addons", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 export type LoadBoardAddon = typeof loadBoardAddons.$inferSelect;
+
+export const carrierCredentials = pgTable("carrier_credentials", {
+  id: serial("id").primaryKey(),
+  carrierId: integer("carrier_id").notNull(),
+  credentialType: text("credential_type").notNull(), // cdl | dot | mc | insurance | cargo_insurance | equipment_photo | vehicle_registration | w9
+  status: text("status").notNull().default("not_submitted"), // not_submitted | pending | approved | rejected | expired
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  reviewedBy: integer("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type CarrierCredential = typeof carrierCredentials.$inferSelect;
