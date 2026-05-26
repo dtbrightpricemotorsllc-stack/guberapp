@@ -62,13 +62,20 @@ export async function apiRequest(
     ...(data ? { "Content-Type": "application/json" } : {}),
     ...(extraHeaders || {}),
   };
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+  } catch (err: any) {
+    console.error("[GUBER] Network request failed:", err);
+    const friendly: ApiError = new Error("Connection issue. Please check your internet and try again.");
+    friendly.name = "NetworkError";
+    throw friendly;
+  }
   await throwIfResNotOk(res);
   return res;
 }
@@ -79,10 +86,16 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
-      headers: await getBearerHeader(),
-      credentials: "include",
-    });
+    let res: Response;
+    try {
+      res = await fetch(queryKey.join("/") as string, {
+        headers: await getBearerHeader(),
+        credentials: "include",
+      });
+    } catch (err: any) {
+      console.error("[GUBER] Query network error:", err);
+      throw new Error("Connection issue. Please check your internet and try again.");
+    }
 
     if (res.status === 401) {
       await handleExpiredSession();
@@ -90,7 +103,7 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    return res.json();
   };
 
 // ── Cache strategy ─────────────────────────────────────────────────────────

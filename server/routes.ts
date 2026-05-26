@@ -20983,8 +20983,10 @@ OUTPUT STYLE:
       const {
         transportType, vin, year, make, model, assetDescription,
         vehicleCondition, trailerPreference, loadingMethod, unloadingMethod,
-        pickupAccess, deliveryAccess, pickupCity, pickupState, deliveryCity,
-        deliveryState, estimatedMiles, pricingMode, postedPrice, notes, urgent,
+        pickupAccess, deliveryAccess,
+        pickupZip, pickupCity, pickupState,
+        deliveryZip, deliveryCity, deliveryState,
+        estimatedMiles, pricingMode, postedPrice, notes, urgent,
       } = req.body;
 
       if (!transportType || !pickupCity || !pickupState || !deliveryCity || !deliveryState) {
@@ -21008,8 +21010,10 @@ OUTPUT STYLE:
         unloadingMethod: unloadingMethod || null,
         pickupAccess: pickupAccess || null,
         deliveryAccess: deliveryAccess || null,
+        pickupZip: pickupZip || null,
         pickupCity,
         pickupState,
+        deliveryZip: deliveryZip || null,
         deliveryCity,
         deliveryState,
         estimatedMiles: miles || null,

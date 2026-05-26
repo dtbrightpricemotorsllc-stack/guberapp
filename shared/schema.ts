@@ -2089,8 +2089,10 @@ export const loadBoardListings = pgTable("load_board_listings", {
   loadingAssistAvailable: text("loading_assist_available"), // yes | no | unknown
   unloadingAssistAvailable: text("unloading_assist_available"),
   dockAvailable: text("dock_available"), // yes | no | unknown
+  pickupZip: text("pickup_zip"),
   pickupCity: text("pickup_city").notNull(),
   pickupState: text("pickup_state").notNull(),
+  deliveryZip: text("delivery_zip"),
   deliveryCity: text("delivery_city").notNull(),
   deliveryState: text("delivery_state").notNull(),
   estimatedMiles: integer("estimated_miles"),

@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Truck, MapPin, Loader2, ShieldCheck,
-  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star,
+  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil,
 } from "lucide-react";
 
 // ── constants ──────────────────────────────────────────────────────────────────
@@ -640,6 +640,28 @@ export default function LoadBoardDetail() {
         {/* ════════ POSTER VIEW ════════ */}
         {isPoster && (
           <>
+            {/* Edit / lock status */}
+            {listing.status === "posted" || listing.status === "offer_received" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full rounded-xl h-9 font-display font-black text-xs mb-1"
+                onClick={() => navigate(`/load-board/${listingId}/edit`)}
+                data-testid="button-edit-listing"
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Listing
+              </Button>
+            ) : (
+              <div
+                className="w-full rounded-xl p-2.5 text-center mb-1"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                data-testid="notice-editing-disabled"
+              >
+                <p className="text-xs font-display font-bold text-muted-foreground/40">Editing Disabled</p>
+                <p className="text-[9px] text-muted-foreground/25 mt-0.5">Cannot edit while a transaction is active</p>
+              </div>
+            )}
+
             {/* Field services cart */}
             <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
               <button

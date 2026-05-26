@@ -1,0 +1,2 @@
+- [Load Board ZIP migration](load-board-zip.md) — pickup_zip/delivery_zip columns added to load_board_listings; use `pg` (not @neondatabase/serverless) for raw SQL migrations in this project.
+- [Load Board PATCH route](load-board-patch-route.md) — PATCH /api/load-board/:id already exists and accepts postedPrice, notes, urgent, pricingMode, trailerPreference, status edits from the poster.

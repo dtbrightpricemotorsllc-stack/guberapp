@@ -100,10 +100,10 @@ const CORE_TILES = [
   { name: "Skilled Labor",    sub: "Find skilled pros for the job",     icon: Hammer,      bg: "linear-gradient(135deg,#7f1d1d,#991b1b,#b91c1c)", href: "/browse-jobs?category=Skilled Labor",   testId: "skilled-labor" },
   { name: "General Labor",    sub: "Everyday tasks, done right",        icon: Wrench,      bg: "linear-gradient(135deg,#14532d,#166534,#15803d)", href: "/browse-jobs?category=General Labor",   testId: "general-labor" },
   { name: "Verify & Inspect", sub: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect",                       testId: "verify-inspect" },
-  { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#042f2e,#134e4a,#115e59)", href: "/marketplace",                          testId: "marketplace", badge: "BETA" },
+  { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#422006,#7c4a15,#ca8a04)", href: "/marketplace",                          testId: "marketplace", badge: "BETA" },
   { name: "Barter Labor",     sub: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor",   testId: "barter-labor" },
-  { name: "Load Board",       sub: "Ship vehicles & equipment",         icon: Truck,       bg: "linear-gradient(135deg,#0c4a6e,#075985,#0369a1)", href: "/load-board",                           testId: "load-board", badge: "NEW" },
-  { name: "AI or Not?",       sub: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,hsl(190 90% 9%),hsl(220 80% 8%))", href: "/ai-or-not",                  testId: "ai-or-not" },
+  { name: "Load Board",       sub: "Ship vehicles & equipment",         icon: Truck,       bg: "linear-gradient(135deg,#042f2e,#0c5252,#0891b2)", href: "/load-board",                           testId: "load-board", badge: "NEW" },
+  { name: "AI or Not?",       sub: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,#060606,#111116,#1c1c26)", href: "/ai-or-not",                            testId: "ai-or-not" },
 ];
 
 type DashboardMode = "hire" | "work";

@@ -234,14 +234,17 @@ export default function LoadBoardPost() {
   const [palletized,          setPalletized]          = useState("");
 
   // Step 3 — route
+  const [pickupZip,          setPickupZip]          = useState("");
   const [pickupCity,         setPickupCity]         = useState("");
   const [pickupState,        setPickupState]        = useState("TX");
   const [pickupAccess,       setPickupAccess]       = useState<string[]>([]);
   const [pickupFlexibility,  setPickupFlexibility]  = useState("");
+  const [deliveryZip,        setDeliveryZip]        = useState("");
   const [deliveryCity,       setDeliveryCity]       = useState("");
   const [deliveryState,      setDeliveryState]      = useState("CA");
   const [deliveryAccess,     setDeliveryAccess]     = useState<string[]>([]);
   const [deliveryFlexibility,setDeliveryFlexibility]= useState("");
+  const [geoLocating,        setGeoLocating]        = useState<"pickup"|"delivery"|null>(null);
   const [estimatedMiles,     setEstimatedMiles]     = useState("");
   const [trailerPreference,  setTrailerPreference]  = useState("any");
   const [loadingMethod,      setLoadingMethod]      = useState<string[]>([]);
@@ -257,6 +260,67 @@ export default function LoadBoardPost() {
   const [pricingMode,  setPricingMode]  = useState("fixed");
   const [postedPrice,  setPostedPrice]  = useState("");
   const [urgent,       setUrgent]       = useState(false);
+
+  // ZIP → city/state auto-fill
+  const lookupZip = useCallback(async (zip: string, target: "pickup" | "delivery") => {
+    if (zip.length !== 5) return;
+    try {
+      const res = await fetch(`https://api.zippopotam.us/us/${zip}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const city  = data.places?.[0]?.["place name"] || "";
+      const state = data.places?.[0]?.["state abbreviation"] || "";
+      if (!city) return;
+      if (target === "pickup")   { setPickupCity(city);   setPickupState(state); }
+      if (target === "delivery") { setDeliveryCity(city); setDeliveryState(state); }
+    } catch {}
+  }, []);
+
+  // "Use My Location" geolocation → fill ZIP + city/state
+  const useMyLocation = useCallback((target: "pickup" | "delivery") => {
+    if (!navigator.geolocation) {
+      toast({ variant: "destructive", title: "Location unavailable", description: "Your browser doesn't support geolocation." });
+      return;
+    }
+    setGeoLocating(target);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `/api/places/reverse-geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`,
+            { credentials: "include" }
+          );
+          if (res.ok) {
+            const d = await res.json();
+            const addr = d.address || "";
+            const zipMatch = addr.match(/\b(\d{5})\b/);
+            const zip = zipMatch?.[1] || "";
+            const parts = addr.split(",");
+            const city  = parts.length >= 3 ? (parts[parts.length - 3]?.trim() || "") : "";
+            const stateZip = parts.length >= 2 ? (parts[parts.length - 2]?.trim() || "") : "";
+            const stateMatch = stateZip.match(/^([A-Z]{2})/);
+            const state = stateMatch?.[1] || "";
+            if (target === "pickup") {
+              if (zip)   setPickupZip(zip);
+              if (city)  setPickupCity(city);
+              if (state) setPickupState(state);
+            } else {
+              if (zip)   setDeliveryZip(zip);
+              if (city)  setDeliveryCity(city);
+              if (state) setDeliveryState(state);
+            }
+            if (zip) toast({ title: "Location detected", description: `ZIP ${zip}` });
+          }
+        } catch {}
+        setGeoLocating(null);
+      },
+      () => {
+        setGeoLocating(null);
+        toast({ variant: "destructive", title: "Location denied", description: "Allow location access and try again." });
+      },
+      { timeout: 8000 }
+    );
+  }, [toast]);
 
   // VIN decode
   const handleVinDecode = useCallback(async () => {
@@ -306,8 +370,10 @@ export default function LoadBoardPost() {
   });
 
   function handleSubmit() {
-    if (!transportType || !pickupCity || !pickupState || !deliveryCity || !deliveryState) {
-      toast({ variant: "destructive", title: "Required fields missing" });
+    const hasPickup   = pickupZip.length === 5 || (pickupCity && pickupState);
+    const hasDelivery = deliveryZip.length === 5 || (deliveryCity && deliveryState);
+    if (!transportType || !hasPickup || !hasDelivery) {
+      toast({ variant: "destructive", title: "Required fields missing", description: "Enter pickup and delivery ZIP codes." });
       return;
     }
     mutation.mutate({
@@ -338,10 +404,12 @@ export default function LoadBoardPost() {
       loadingAssistAvailable:   loadingAssist || undefined,
       unloadingAssistAvailable: unloadingAssist || undefined,
       dockAvailable:        dockAvailable || undefined,
-      pickupCity,
-      pickupState,
-      deliveryCity,
-      deliveryState,
+      pickupZip:    pickupZip || undefined,
+      pickupCity:   pickupCity || (pickupZip ? `ZIP ${pickupZip}` : ""),
+      pickupState:  pickupState || "US",
+      deliveryZip:  deliveryZip || undefined,
+      deliveryCity: deliveryCity || (deliveryZip ? `ZIP ${deliveryZip}` : ""),
+      deliveryState: deliveryState || "US",
       estimatedMiles:  estimatedMiles ? parseInt(estimatedMiles) : undefined,
       pricingMode,
       postedPrice:     postedPrice ? parseFloat(postedPrice) : undefined,
@@ -370,7 +438,10 @@ export default function LoadBoardPost() {
       if (transportType === "hotshot") return freightType.length > 0;
       return true;
     }
-    if (step === 3) return !!(pickupCity && pickupState && deliveryCity && deliveryState);
+    if (step === 3) return !!(
+      (pickupZip.length === 5 || (pickupCity && pickupState)) &&
+      (deliveryZip.length === 5 || (deliveryCity && deliveryState))
+    );
     return true;
   }
 
@@ -642,14 +713,45 @@ export default function LoadBoardPost() {
           <div className="space-y-5">
             {/* Pickup */}
             <div>
-              <SectionLabel>Pickup Location *</SectionLabel>
+              <SectionLabel>Pickup ZIP Code *</SectionLabel>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  value={pickupZip}
+                  onChange={e => {
+                    const z = e.target.value.replace(/\D/g, "").slice(0, 5);
+                    setPickupZip(z);
+                    lookupZip(z, "pickup");
+                  }}
+                  placeholder="e.g. 75201"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={5}
+                  className="rounded-xl h-11 bg-background/50 border-border/50 text-base font-mono flex-1"
+                  data-testid="input-pickup-zip"
+                />
+                <button
+                  type="button"
+                  onClick={() => useMyLocation("pickup")}
+                  disabled={geoLocating === "pickup"}
+                  className="shrink-0 h-11 px-3 rounded-xl text-xs font-display font-black transition-all"
+                  style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  data-testid="button-pickup-use-location"
+                >
+                  {geoLocating === "pickup" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "📍 My Location"}
+                </button>
+              </div>
+              {(pickupCity || pickupState) && (
+                <p className="text-[10px] text-cyan-400/70 flex items-center gap-1.5 mb-2">
+                  <Check className="w-3 h-3" /> {pickupCity}{pickupCity && pickupState ? `, ${pickupState}` : pickupState}
+                </p>
+              )}
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <div className="col-span-2">
-                  <Label className="text-[10px] text-muted-foreground/50">City</Label>
+                  <Label className="text-[10px] text-muted-foreground/30">City (auto-filled from ZIP)</Label>
                   <Input value={pickupCity} onChange={e => setPickupCity(e.target.value)} placeholder="Dallas" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-pickup-city" />
                 </div>
                 <div>
-                  <Label className="text-[10px] text-muted-foreground/50">State</Label>
+                  <Label className="text-[10px] text-muted-foreground/30">State</Label>
                   <select
                     value={pickupState}
                     onChange={e => setPickupState(e.target.value)}
@@ -671,14 +773,45 @@ export default function LoadBoardPost() {
 
             {/* Delivery */}
             <div>
-              <SectionLabel>Delivery Location *</SectionLabel>
+              <SectionLabel>Delivery ZIP Code *</SectionLabel>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  value={deliveryZip}
+                  onChange={e => {
+                    const z = e.target.value.replace(/\D/g, "").slice(0, 5);
+                    setDeliveryZip(z);
+                    lookupZip(z, "delivery");
+                  }}
+                  placeholder="e.g. 90001"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={5}
+                  className="rounded-xl h-11 bg-background/50 border-border/50 text-base font-mono flex-1"
+                  data-testid="input-delivery-zip"
+                />
+                <button
+                  type="button"
+                  onClick={() => useMyLocation("delivery")}
+                  disabled={geoLocating === "delivery"}
+                  className="shrink-0 h-11 px-3 rounded-xl text-xs font-display font-black transition-all"
+                  style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  data-testid="button-delivery-use-location"
+                >
+                  {geoLocating === "delivery" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "📍 My Location"}
+                </button>
+              </div>
+              {(deliveryCity || deliveryState) && (
+                <p className="text-[10px] text-cyan-400/70 flex items-center gap-1.5 mb-2">
+                  <Check className="w-3 h-3" /> {deliveryCity}{deliveryCity && deliveryState ? `, ${deliveryState}` : deliveryState}
+                </p>
+              )}
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <div className="col-span-2">
-                  <Label className="text-[10px] text-muted-foreground/50">City</Label>
+                  <Label className="text-[10px] text-muted-foreground/30">City (auto-filled from ZIP)</Label>
                   <Input value={deliveryCity} onChange={e => setDeliveryCity(e.target.value)} placeholder="Los Angeles" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-delivery-city" />
                 </div>
                 <div>
-                  <Label className="text-[10px] text-muted-foreground/50">State</Label>
+                  <Label className="text-[10px] text-muted-foreground/30">State</Label>
                   <select
                     value={deliveryState}
                     onChange={e => setDeliveryState(e.target.value)}
@@ -948,7 +1081,7 @@ export default function LoadBoardPost() {
               {ownershipProofStatus && <Row label="Ownership Proof" value={OWNERSHIP_PROOF.find(p => p.value === ownershipProofStatus)?.label || ownershipProofStatus} />}
               {vinVerified && <Row label="VIN" value={<span className="font-mono text-cyan-400 text-[10px]">{vin} ✓</span>} />}
               <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-              <Row label="Route" value={`${pickupCity}, ${pickupState} → ${deliveryCity}, ${deliveryState}`} />
+              <Row label="Route" value={`${pickupZip ? `${pickupZip} ` : ""}${pickupCity}${pickupCity && pickupState ? `, ${pickupState}` : pickupState} → ${deliveryZip ? `${deliveryZip} ` : ""}${deliveryCity}${deliveryCity && deliveryState ? `, ${deliveryState}` : deliveryState}`} />
               {estimatedMiles && <Row label="Miles" value={`${parseInt(estimatedMiles).toLocaleString()} mi`} />}
               {pickupFlexibility && <Row label="Pickup" value={pickupFlexibility.replace(/_/g, " ")} />}
               {trailerPreference !== "any" && <Row label="Trailer" value={trailerPreference.replace(/_/g, " ")} />}
