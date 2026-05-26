@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode, CSSProperties } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Truck, MapPin, Loader2, ShieldCheck,
-  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info,
+  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star,
 } from "lucide-react";
 
 // ── constants ──────────────────────────────────────────────────────────────────
@@ -33,6 +33,7 @@ const PROOF_LABEL: Record<string, string> = {
   not_ready:       "Proof Pending",
 };
 
+// Add-on flags (attached to listing at creation — informational pricing hints)
 const ADDON_PRICES: Record<string, { label: string; price: number; hint: string }> = {
   urgent_boost:         { label: "Urgent Boost",             price: 10,  hint: "Priority placement" },
   premium_carrier_only: { label: "Verified Carriers Only",   price: 10,  hint: "Credential-gated" },
@@ -43,7 +44,8 @@ const ADDON_PRICES: Record<string, { label: string; price: number; hint: string 
   gps_tracking:         { label: "GPS Tracking",             price: 15,  hint: "Real-time transport updates" },
 };
 
-const STANDALONE_ADDONS: { key: string; label: string; price: number; desc: string }[] = [
+// Field services (purchasable after posting via cart)
+const FIELD_SERVICES: { key: string; label: string; price: number; desc: string }[] = [
   { key: "pre_transport_verification", label: "Pre-Transport Verification", price: 25, desc: "GUBER worker inspects vehicle before transport" },
   { key: "loading_witness",            label: "Loading Witness",            price: 25, desc: "GUBER witnesses and documents loading" },
   { key: "unloading_witness",          label: "Unloading Witness",          price: 25, desc: "GUBER witnesses and documents unloading" },
@@ -51,25 +53,37 @@ const STANDALONE_ADDONS: { key: string; label: string; price: number; desc: stri
 ];
 
 const CONNECTION_TIERS = [
-  { value: "standard", label: "Standard",  price: 19, desc: "Shipper contact info + direct message" },
-  { value: "verified",  label: "Verified",  price: 29, desc: "Above + carrier credentials revealed" },
-  { value: "premium",   label: "Premium",   price: 99, desc: "Full profile + phone + priority match" },
+  { value: "standard", label: "Standard", price: 19, desc: "Shipper contact info + direct message" },
+  { value: "verified",  label: "Verified", price: 29, desc: "Above + carrier credentials revealed" },
+  { value: "premium",   label: "Premium",  price: 99, desc: "Full profile + phone + priority match" },
 ];
+
+const PLATFORM_FEE_RATE = 0.08; // 8%
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
 export default function LoadBoardDetail() {
-  const [, params] = useRoute("/load-board/:id");
+  const [, params]  = useRoute("/load-board/:id");
   const [, navigate] = useLocation();
-  const { toast } = useToast();
-  const listingId = params?.id ? parseInt(params.id) : 0;
+  const { toast }   = useToast();
+  const listingId   = params?.id ? parseInt(params.id) : 0;
 
-  const [offerAmount,    setOfferAmount]    = useState("");
-  const [counterAmount,  setCounterAmount]  = useState("");
-  const [selectedTier,   setSelectedTier]   = useState("standard");
-  const [showAddons,     setShowAddons]     = useState(false);
-  const [addonCart,      setAddonCart]      = useState<string[]>([]);
-  const [showCheckout,   setShowCheckout]   = useState(false);
+  // Offer flow
+  const [offerAmount,   setOfferAmount]   = useState("");
+  const [counterAmount, setCounterAmount] = useState("");
+  const [selectedTier,  setSelectedTier]  = useState("standard");
+
+  // Carrier connection checkout
+  const [showCheckout, setShowCheckout] = useState(false);
+
+  // Poster accepts-offer checkout
+  const [showPosterCheckout, setShowPosterCheckout] = useState(false);
+  const [pendingOffer,       setPendingOffer]       = useState<any>(null);
+  const [posterAddonCart,    setPosterAddonCart]    = useState<string[]>([]);
+
+  // Field services cart (for poster standalone purchases)
+  const [fieldCart, setFieldCart] = useState<string[]>([]);
+  const [showFieldCart, setShowFieldCart] = useState(false);
 
   const { data, isLoading } = useQuery<{
     listing: any; offers: any[]; myOffer: any; isPoster: boolean; addons: any[];
@@ -82,6 +96,38 @@ export default function LoadBoardDetail() {
     enabled: !!listingId,
   });
 
+  // ── Detect Stripe redirect back (accept offer or addon) ──
+  const confirmAcceptMutation = useMutation({
+    mutationFn: ({ sessionId, offerId }: { sessionId: string; offerId: string }) =>
+      apiRequest("POST", `/api/load-board/${listingId}/confirm-accept`, { sessionId, offerId }),
+    onSuccess: () => {
+      toast({ title: "Offer accepted!", description: "The carrier will be notified to connect." });
+      queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
+      window.history.replaceState({}, "", `/load-board/${listingId}`);
+    },
+    onError: (err: any) => toast({ variant: "destructive", title: "Confirmation error", description: err.message }),
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const acceptSession = params.get("accept_session");
+    const offerId       = params.get("offer_id");
+    if (acceptSession && offerId && listingId) {
+      confirmAcceptMutation.mutate({ sessionId: acceptSession, offerId });
+    }
+    if (params.get("connect_success")) {
+      toast({ title: "Connected!", description: "You can now view the shipper's contact info." });
+      queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
+      window.history.replaceState({}, "", `/load-board/${listingId}`);
+    }
+    if (params.get("addon_success")) {
+      toast({ title: "Add-on confirmed!", description: "Your field service has been scheduled." });
+      queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
+      window.history.replaceState({}, "", `/load-board/${listingId}`);
+    }
+  }, [listingId]);
+
+  // ── Mutations ──
   const offerMutation = useMutation({
     mutationFn: (d: any) => apiRequest("POST", `/api/load-board/${listingId}/offer`, d),
     onSuccess: () => {
@@ -103,6 +149,17 @@ export default function LoadBoardDetail() {
     onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
   });
 
+  const acceptOfferCheckoutMutation = useMutation({
+    mutationFn: async (d: { offerId: number; addonTypes: string[] }) => {
+      const res = await apiRequest("POST", `/api/load-board/${listingId}/accept-offer-checkout`, d);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
+    },
+    onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
+  });
+
   const connectMutation = useMutation({
     mutationFn: (tier: string) => apiRequest("POST", `/api/load-board/${listingId}/connect/checkout`, { tier }),
     onSuccess: async (res: any) => {
@@ -112,11 +169,13 @@ export default function LoadBoardDetail() {
     onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
   });
 
-  const addonCheckoutMutation = useMutation({
-    mutationFn: (addonType: string) => apiRequest("POST", `/api/load-board/${listingId}/addons/checkout`, { addonType }),
-    onSuccess: async (res: any) => {
-      const json = await res.json();
-      if (json.checkoutUrl) window.location.href = json.checkoutUrl;
+  const fieldCartCheckoutMutation = useMutation({
+    mutationFn: async (addonTypes: string[]) => {
+      const res = await apiRequest("POST", `/api/load-board/${listingId}/addons/checkout`, { addonTypes });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
     },
     onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
   });
@@ -129,6 +188,7 @@ export default function LoadBoardDetail() {
     },
   });
 
+  // ── Loading / not found ──
   if (isLoading) {
     return (
       <GuberLayout title="Load Detail" showBack backHref="/load-board">
@@ -148,9 +208,9 @@ export default function LoadBoardDetail() {
   }
 
   const { listing, offers, myOffer, isPoster, addons } = data;
-  const sc = STATUS_CONFIG[listing.status];
-  const isConnected   = listing.status === "connected";
-  const isOpen        = ["posted", "offer_received"].includes(listing.status);
+  const sc           = STATUS_CONFIG[listing.status];
+  const isConnected  = listing.status === "connected";
+  const isOpen       = ["posted", "offer_received"].includes(listing.status);
   const offerAccepted = listing.status === "offer_accepted";
 
   const assetTitle = listing.year && listing.make
@@ -159,47 +219,157 @@ export default function LoadBoardDetail() {
 
   const paidAddonKeys = (addons || []).map((a: any) => a.addonType);
 
-  // ── checkout breakdown panel ───────────────────────────────────────────────
+  // ── Poster checkout panel (accept-offer flow) ──────────────────────────────
+
+  if (showPosterCheckout && pendingOffer) {
+    const offerAmt       = pendingOffer.offerAmount;
+    const platformFee    = Math.max(5, Math.round(offerAmt * PLATFORM_FEE_RATE * 100) / 100);
+    const addonSubtotal  = posterAddonCart.reduce((sum, k) => {
+      const a = ADDON_PRICES[k];
+      return sum + (a?.price || 0);
+    }, 0);
+    const grandTotal = platformFee + addonSubtotal;
+
+    return (
+      <GuberLayout title="Checkout Review" showBack backHref={`/load-board/${listingId}`}>
+        <div className="px-4 pb-32 pt-4 space-y-5">
+
+          {/* No surprise charges notice */}
+          <div className="rounded-xl p-3 flex items-start gap-2.5" style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.15)" }}>
+            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-cyan-400/70 leading-relaxed">
+              <strong>No hidden charges.</strong> Review everything below before paying. Nothing is charged until you tap "Confirm & Pay."
+            </p>
+          </div>
+
+          {/* Order summary */}
+          <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))", border: "1px solid rgba(6,182,212,0.25)" }}>
+            <p className="text-xs font-display font-black text-cyan-400/70 uppercase tracking-wider mb-3">Order Summary</p>
+            <div className="space-y-2.5">
+              <Row label={`Transport price (carrier offer)`} value={`$${offerAmt.toLocaleString()}`} muted />
+              <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+              <Row label={`GUBER Platform Fee (${(PLATFORM_FEE_RATE * 100).toFixed(0)}%, min $5.00)`} value={`$${platformFee.toFixed(2)}`} />
+              {posterAddonCart.map(k => {
+                const a = ADDON_PRICES[k];
+                return a ? <Row key={k} label={a.label} value={`$${a.price.toFixed(2)}`} /> : null;
+              })}
+              <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+              <div className="flex justify-between items-center">
+                <span className="text-base font-display font-black text-foreground">Total Due Today</span>
+                <span className="text-xl font-display font-black text-cyan-300">${grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Optional add-ons cart */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="px-4 py-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+              <p className="text-sm font-display font-bold text-foreground">Add-ons (optional)</p>
+              <p className="text-[9px] text-muted-foreground/40 mt-0.5">These activate when this load goes live — price added to total</p>
+            </div>
+            {Object.entries(ADDON_PRICES).map(([key, info]) => {
+              const selected = posterAddonCart.includes(key);
+              return (
+                <div key={key} className="flex items-center justify-between px-4 py-2.5" style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div>
+                    <p className="text-xs font-display font-bold text-foreground">{info.label}</p>
+                    <p className="text-[9px] text-muted-foreground/40">{info.hint}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPosterAddonCart(prev => selected ? prev.filter(k => k !== key) : [...prev, key])}
+                    className="shrink-0 text-[10px] font-display font-black px-2.5 py-1.5 rounded-lg ml-3 transition-all"
+                    style={selected ? CYAN_ACTIVE : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)" }}
+                    data-testid={`addon-toggle-${key}`}
+                  >
+                    {selected ? <><Check className="w-3 h-3 inline mr-0.5" />${info.price}</> : `+$${info.price}`}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* What unlocks */}
+          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What happens after payment</p>
+            <FeatureRow text="Offer is officially accepted — carrier notified" />
+            <FeatureRow text="Carrier can now pay to unlock your contact details" />
+            <FeatureRow text="Load status moves to Offer Accepted" />
+            <FeatureRow text="Platform fee covers GUBER dispute protection" />
+          </div>
+
+          {/* Refund note */}
+          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
+              🔒 Payment via Stripe. Platform fee is non-refundable once the carrier views your contact info.
+              If the carrier does not connect within 7 days, you may request a credit. Add-on charges are processed separately.
+            </p>
+          </div>
+
+          <Button
+            className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
+            style={CYAN_ACTIVE}
+            onClick={() => acceptOfferCheckoutMutation.mutate({ offerId: pendingOffer.id, addonTypes: posterAddonCart })}
+            disabled={acceptOfferCheckoutMutation.isPending}
+            data-testid="button-confirm-pay-accept"
+          >
+            {acceptOfferCheckoutMutation.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : `Confirm & Pay $${grandTotal.toFixed(2)}`
+            }
+          </Button>
+          <button
+            className="w-full text-xs text-muted-foreground/40 font-display font-bold"
+            onClick={() => { setShowPosterCheckout(false); setPendingOffer(null); setPosterAddonCart([]); }}
+          >
+            ← Back to load
+          </button>
+        </div>
+      </GuberLayout>
+    );
+  }
+
+  // ── Carrier connection checkout panel ──────────────────────────────────────
 
   if (showCheckout && !isPoster) {
     const tier = CONNECTION_TIERS.find(t => t.value === selectedTier)!;
     return (
-      <GuberLayout title="Checkout" showBack backHref={`/load-board/${listingId}`}>
+      <GuberLayout title="Checkout Review" showBack backHref={`/load-board/${listingId}`}>
         <div className="px-4 pb-32 pt-4 space-y-5">
-          <div
-            className="rounded-2xl p-4"
-            style={{ background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))", border: "1px solid rgba(6,182,212,0.25)" }}
-          >
+
+          <div className="rounded-xl p-3 flex items-start gap-2.5" style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.15)" }}>
+            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-cyan-400/70 leading-relaxed">
+              <strong>No hidden charges.</strong> Nothing is charged until you tap "Confirm & Pay."
+            </p>
+          </div>
+
+          <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))", border: "1px solid rgba(6,182,212,0.25)" }}>
             <p className="text-xs font-display font-black text-cyan-400/70 uppercase tracking-wider mb-3">Order Summary</p>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground/60">Connection Fee — {tier.label}</span>
-                <span className="font-display font-black text-foreground">${tier.price}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground/60">Platform Fee</span>
-                <span className="font-display font-bold text-muted-foreground/50">Included</span>
-              </div>
+            <div className="space-y-2.5">
+              <Row label={`Connection Fee — ${tier.label}`} value={`$${tier.price}.00`} />
+              <Row label="Platform Fee" value="Included" muted />
               <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-              <div className="flex justify-between text-base">
-                <span className="font-display font-black text-foreground">Total</span>
-                <span className="font-display font-black text-cyan-300">${tier.price}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-base font-display font-black text-foreground">Total Due Today</span>
+                <span className="text-xl font-display font-black text-cyan-300">${tier.price}.00</span>
               </div>
             </div>
           </div>
 
           <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What unlocks</p>
+            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What unlocks immediately</p>
             <FeatureRow text="Shipper's full name" />
             <FeatureRow text="Direct contact details (phone / email)" />
             <FeatureRow text="Exact pickup & delivery address" />
-            {tier.value !== "standard" && <FeatureRow text="Carrier credentials revealed to shipper" />}
-            {tier.value === "premium" && <FeatureRow text="Priority match — listed at top of shipper inbox" />}
+            {tier.value !== "standard" && <FeatureRow text="Your carrier credentials revealed to shipper" />}
+            {tier.value === "premium"   && <FeatureRow text="Priority match — top of shipper inbox" />}
           </div>
 
           <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
             <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
-              🔒 Payment is processed securely via Stripe. Address and contact info are revealed immediately after successful payment. GUBER does not store payment card details.
+              🔒 Payment via Stripe. Shipper address and contact info are revealed immediately after successful payment.
+              GUBER does not store payment card details. Connection fee is non-refundable once contact info is revealed.
             </p>
           </div>
 
@@ -212,13 +382,10 @@ export default function LoadBoardDetail() {
           >
             {connectMutation.isPending
               ? <Loader2 className="w-4 h-4 animate-spin" />
-              : `Pay $${tier.price} · Connect`
+              : `Confirm & Pay $${tier.price} · Connect`
             }
           </Button>
-          <button
-            className="w-full text-xs text-muted-foreground/40 font-display font-bold"
-            onClick={() => setShowCheckout(false)}
-          >
+          <button className="w-full text-xs text-muted-foreground/40 font-display font-bold" onClick={() => setShowCheckout(false)}>
             ← Back to load
           </button>
         </div>
@@ -226,7 +393,93 @@ export default function LoadBoardDetail() {
     );
   }
 
-  // ── main detail view ───────────────────────────────────────────────────────
+  // ── Field services cart review ─────────────────────────────────────────────
+
+  if (showFieldCart && fieldCart.length > 0) {
+    const cartTotal = fieldCart.reduce((sum, k) => {
+      const s = FIELD_SERVICES.find(f => f.key === k);
+      return sum + (s?.price || 0);
+    }, 0);
+
+    return (
+      <GuberLayout title="Cart Review" showBack backHref={`/load-board/${listingId}`}>
+        <div className="px-4 pb-32 pt-4 space-y-5">
+
+          <div className="rounded-xl p-3 flex items-start gap-2.5" style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.15)" }}>
+            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-cyan-400/70 leading-relaxed">
+              <strong>Review your cart.</strong> Nothing is charged until you tap "Confirm & Pay."
+            </p>
+          </div>
+
+          <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))", border: "1px solid rgba(6,182,212,0.25)" }}>
+            <p className="text-xs font-display font-black text-cyan-400/70 uppercase tracking-wider mb-3">Field Services Cart</p>
+            <div className="space-y-2.5">
+              {fieldCart.map(k => {
+                const s = FIELD_SERVICES.find(f => f.key === k);
+                if (!s) return null;
+                return (
+                  <div key={k} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-display font-bold text-foreground">{s.label}</p>
+                      <p className="text-[9px] text-muted-foreground/40">{s.desc}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-display font-black text-cyan-300">${s.price}</span>
+                      <button
+                        onClick={() => setFieldCart(prev => prev.filter(x => x !== k))}
+                        className="text-muted-foreground/30 hover:text-muted-foreground/60"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+              <div className="flex justify-between items-center">
+                <span className="text-base font-display font-black text-foreground">Total Due Today</span>
+                <span className="text-xl font-display font-black text-cyan-300">${cartTotal}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What you get</p>
+            {fieldCart.map(k => {
+              const s = FIELD_SERVICES.find(f => f.key === k);
+              return s ? <FeatureRow key={k} text={`${s.label} — ${s.desc}`} /> : null;
+            })}
+          </div>
+
+          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
+              🔒 GUBER field service workers are dispatched after payment. Services are non-refundable once dispatched.
+              If GUBER cannot fulfill the service, a full refund is issued automatically.
+            </p>
+          </div>
+
+          <Button
+            className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
+            style={CYAN_ACTIVE}
+            onClick={() => fieldCartCheckoutMutation.mutate(fieldCart)}
+            disabled={fieldCartCheckoutMutation.isPending}
+            data-testid="button-pay-field-cart"
+          >
+            {fieldCartCheckoutMutation.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : `Confirm & Pay $${cartTotal}`
+            }
+          </Button>
+          <button className="w-full text-xs text-muted-foreground/40 font-display font-bold" onClick={() => setShowFieldCart(false)}>
+            ← Back to load
+          </button>
+        </div>
+      </GuberLayout>
+    );
+  }
+
+  // ── Main detail view ───────────────────────────────────────────────────────
 
   return (
     <GuberLayout title="Load Detail" showBack backHref="/load-board">
@@ -244,10 +497,8 @@ export default function LoadBoardDetail() {
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                <span
-                  className="text-[10px] font-display font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
-                  style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
-                >
+                <span className="text-[10px] font-display font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                  style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}>
                   {listing.transportType}
                 </span>
                 {listing.urgent && (
@@ -264,10 +515,8 @@ export default function LoadBoardDetail() {
                 </p>
               )}
               {listing.ownershipProofStatus && (
-                <span
-                  className="inline-block text-[9px] font-display font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1.5"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}
-                >
+                <span className="inline-block text-[9px] font-display font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1.5"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}>
                   {PROOF_LABEL[listing.ownershipProofStatus] || listing.ownershipProofStatus}
                 </span>
               )}
@@ -279,9 +528,7 @@ export default function LoadBoardDetail() {
                 <p className="text-sm font-display font-bold text-amber-400/80">Open to Offers</p>
               )}
               {listing.suggestedLow && listing.suggestedHigh && !listing.postedPrice && (
-                <p className="text-[9px] text-muted-foreground/30 mt-0.5">
-                  Est. ${listing.suggestedLow}–${listing.suggestedHigh}
-                </p>
+                <p className="text-[9px] text-muted-foreground/30 mt-0.5">Est. ${listing.suggestedLow}–${listing.suggestedHigh}</p>
               )}
             </div>
           </div>
@@ -299,10 +546,8 @@ export default function LoadBoardDetail() {
 
           {/* Poster identity */}
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground/40">
-            <div
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-display font-black"
-              style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
-            >
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-display font-black"
+              style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}>
               {listing.poster?.guberId?.slice(0, 2) || "G"}
             </div>
             <span className="font-display font-bold tracking-wide">{listing.poster?.guberId || "GUBER Member"}</span>
@@ -313,7 +558,7 @@ export default function LoadBoardDetail() {
           </div>
         </div>
 
-        {/* ── Asset requirements card ── */}
+        {/* ── Asset requirements ── */}
         {(listing.vehicleCondition?.length || listing.trailerPreference || listing.weightRange ||
           listing.loadingMethod?.length || listing.pickupAccess?.length) && (
           <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -322,15 +567,11 @@ export default function LoadBoardDetail() {
               <div className="mb-2.5">
                 <p className="text-[9px] text-muted-foreground/30 mb-1.5">Condition</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {listing.vehicleCondition.map((c: string) => (
-                    <ChipBadge key={c}>{c.replace(/_/g, " ")}</ChipBadge>
-                  ))}
+                  {listing.vehicleCondition.map((c: string) => <ChipBadge key={c}>{c.replace(/_/g, " ")}</ChipBadge>)}
                 </div>
               </div>
             )}
-            {listing.weightRange && (
-              <DetailRow label="Weight" value={listing.weightRange.replace(/_/g, " ")} />
-            )}
+            {listing.weightRange && <DetailRow label="Weight" value={listing.weightRange.replace(/_/g, " ")} />}
             {listing.trailerPreference && listing.trailerPreference !== "any" && (
               <DetailRow label="Trailer" value={listing.trailerPreference.replace(/_/g, " ")} />
             )}
@@ -340,15 +581,9 @@ export default function LoadBoardDetail() {
             {listing.unloadingMethod?.length > 0 && (
               <DetailRow label="Unloading" value={listing.unloadingMethod.map((m: string) => m.replace(/_/g, " ")).join(", ")} />
             )}
-            {listing.loadingAssistAvailable && (
-              <DetailRow label="Loading assist" value={listing.loadingAssistAvailable} />
-            )}
-            {listing.pickupFlexibility && (
-              <DetailRow label="Pickup window" value={listing.pickupFlexibility.replace(/_/g, " ")} />
-            )}
-            {listing.dockAvailable && (
-              <DetailRow label="Dock available" value={listing.dockAvailable} />
-            )}
+            {listing.loadingAssistAvailable && <DetailRow label="Loading assist" value={listing.loadingAssistAvailable} />}
+            {listing.pickupFlexibility && <DetailRow label="Pickup window" value={listing.pickupFlexibility.replace(/_/g, " ")} />}
+            {listing.dockAvailable && <DetailRow label="Dock available" value={listing.dockAvailable} />}
             {listing.pickupAccess?.length > 0 && (
               <div className="mt-2">
                 <p className="text-[9px] text-muted-foreground/30 mb-1.5">Pickup site</p>
@@ -360,7 +595,7 @@ export default function LoadBoardDetail() {
           </div>
         )}
 
-        {/* ── Active add-on flags (from listing creation) ── */}
+        {/* ── Active add-on flags ── */}
         {listing.addonFlags && listing.addonFlags.length > 0 && (
           <div className="rounded-2xl p-3.5" style={{ background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.12)" }}>
             <p className="text-[10px] font-display font-black text-cyan-400/60 uppercase tracking-wider mb-2.5">Load Add-ons</p>
@@ -368,11 +603,8 @@ export default function LoadBoardDetail() {
               {listing.addonFlags.map((f: string) => {
                 const info = ADDON_PRICES[f];
                 return (
-                  <div
-                    key={f}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-display font-bold"
-                    style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
-                  >
+                  <div key={f} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-display font-bold"
+                    style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}>
                     {info?.label || f.replace(/_/g, " ")}
                     {info?.price > 0 && <span className="text-cyan-400/50">(${info.price})</span>}
                   </div>
@@ -382,17 +614,15 @@ export default function LoadBoardDetail() {
           </div>
         )}
 
-        {/* ── Address lock notice (non-connected) ── */}
+        {/* ── Address lock notice ── */}
         {!isConnected && (
-          <div
-            className="rounded-2xl p-3.5 flex items-center gap-3"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-          >
+          <div className="rounded-2xl p-3.5 flex items-center gap-3"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
             <Lock className="w-4 h-4 text-muted-foreground/30 shrink-0" />
             <div>
               <p className="text-xs font-display font-bold text-muted-foreground/50">Exact address hidden</p>
               <p className="text-[9px] text-muted-foreground/30 mt-0.5">
-                Full pickup &amp; delivery address unlocks after carrier connects via paid checkout.
+                Full pickup &amp; delivery address unlocks only after payment is confirmed.
               </p>
             </div>
           </div>
@@ -410,49 +640,71 @@ export default function LoadBoardDetail() {
         {/* ════════ POSTER VIEW ════════ */}
         {isPoster && (
           <>
-            {/* Add-on services (purchasable) */}
+            {/* Field services cart */}
             <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
               <button
                 className="w-full flex items-center justify-between px-4 py-3 text-left"
                 style={{ background: "rgba(255,255,255,0.04)" }}
-                onClick={() => setShowAddons(!showAddons)}
-                data-testid="button-toggle-addons"
+                onClick={() => setFieldCart(prev => prev.length > 0 ? prev : [])}
+                data-testid="section-field-services"
               >
                 <div>
                   <p className="text-sm font-display font-bold text-foreground">Field Services</p>
-                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER workers — verification, witnesses</p>
+                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER workers — add to cart, pay together</p>
                 </div>
-                <ChevronRight className={`w-4 h-4 text-muted-foreground/30 transition-transform ${showAddons ? "rotate-90" : ""}`} />
+                {fieldCart.length > 0 && (
+                  <span className="text-[10px] font-display font-black px-2 py-0.5 rounded-full text-cyan-400"
+                    style={{ background: "rgba(6,182,212,0.12)" }}>
+                    {fieldCart.length} in cart
+                  </span>
+                )}
               </button>
-              {showAddons && (
-                <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                  {STANDALONE_ADDONS.map(a => {
-                    const alreadyPurchased = paidAddonKeys.includes(a.key);
-                    return (
-                      <div key={a.key} className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.02)" }}>
-                        <div className="flex-1 min-w-0 mr-3">
-                          <p className="text-sm font-display font-bold text-foreground">{a.label}</p>
-                          <p className="text-[9px] text-muted-foreground/40 mt-0.5">{a.desc}</p>
-                        </div>
-                        {alreadyPurchased ? (
-                          <span className="text-xs font-display font-bold text-cyan-400 flex items-center gap-1">
-                            <Check className="w-3 h-3" /> Ordered
-                          </span>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="shrink-0 rounded-xl h-8 px-3 font-display font-black text-xs"
-                            style={CYAN_ACTIVE}
-                            onClick={() => addonCheckoutMutation.mutate(a.key)}
-                            disabled={addonCheckoutMutation.isPending}
-                            data-testid={`button-addon-${a.key}`}
-                          >
-                            ${a.price}
-                          </Button>
-                        )}
+              <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                {FIELD_SERVICES.map(s => {
+                  const inCart       = fieldCart.includes(s.key);
+                  const alreadyPaid  = paidAddonKeys.includes(s.key);
+                  return (
+                    <div key={s.key} className="flex items-center justify-between px-4 py-3"
+                      style={{ background: "rgba(255,255,255,0.02)" }}>
+                      <div className="flex-1 min-w-0 mr-3">
+                        <p className="text-sm font-display font-bold text-foreground">{s.label}</p>
+                        <p className="text-[9px] text-muted-foreground/40 mt-0.5">{s.desc}</p>
                       </div>
-                    );
-                  })}
+                      {alreadyPaid ? (
+                        <span className="text-xs font-display font-bold text-cyan-400 flex items-center gap-1 shrink-0">
+                          <Check className="w-3 h-3" /> Ordered
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="shrink-0 text-[10px] font-display font-black px-3 py-1.5 rounded-lg transition-all"
+                          style={inCart ? CYAN_ACTIVE : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)" }}
+                          onClick={() => setFieldCart(prev => inCart ? prev.filter(k => k !== s.key) : [...prev, s.key])}
+                          data-testid={`button-field-service-${s.key}`}
+                        >
+                          {inCart ? <><Check className="w-3 h-3 inline mr-0.5" /> Added</> : `$${s.price}`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {fieldCart.length > 0 && (
+                <div className="px-4 py-3" style={{ background: "rgba(6,182,212,0.06)", borderTop: "1px solid rgba(6,182,212,0.15)" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-display font-bold text-foreground">
+                      Cart total: ${fieldCart.reduce((s, k) => s + (FIELD_SERVICES.find(f => f.key === k)?.price || 0), 0)}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground/40">{fieldCart.length} service{fieldCart.length > 1 ? "s" : ""}</span>
+                  </div>
+                  <Button
+                    className="w-full rounded-xl h-9 font-display font-black text-xs"
+                    style={CYAN_ACTIVE}
+                    onClick={() => setShowFieldCart(true)}
+                    data-testid="button-review-field-cart"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5 mr-1.5" /> Review Cart & Pay
+                  </Button>
                 </div>
               )}
             </div>
@@ -461,22 +713,23 @@ export default function LoadBoardDetail() {
             {offers.length > 0 && (
               <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
                 <div className="px-4 py-3" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <p className="text-sm font-display font-bold text-foreground">
-                    Carrier Offers ({offers.length})
-                  </p>
+                  <p className="text-sm font-display font-bold text-foreground">Carrier Offers ({offers.length})</p>
                 </div>
                 <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
                   {offers.map((o: any) => (
-                    <div key={o.id} className="px-4 py-3" style={{ background: "rgba(255,255,255,0.02)" }} data-testid={`card-offer-${o.id}`}>
+                    <div key={o.id} className="px-4 py-3" style={{ background: "rgba(255,255,255,0.02)" }}
+                      data-testid={`card-offer-${o.id}`}>
                       <div className="flex items-start justify-between gap-3 mb-2.5">
                         <div>
                           <p className="text-base font-display font-black text-foreground">${o.offerAmount.toLocaleString()}</p>
-                          <p className="text-[9px] text-muted-foreground/40 mt-0.5">
-                            Carrier #{o.carrierId} · Round {o.actionCount}/3
-                          </p>
+                          <p className="text-[9px] text-muted-foreground/40 mt-0.5">Carrier #{o.carrierId} · Round {o.actionCount}/3</p>
                           {o.status === "countered" && o.counterAmount && (
-                            <p className="text-xs text-amber-400 font-bold mt-1">
-                              Your counter: ${o.counterAmount.toLocaleString()}
+                            <p className="text-xs text-amber-400 font-bold mt-1">Your counter: ${o.counterAmount.toLocaleString()}</p>
+                          )}
+                          {/* Platform fee preview */}
+                          {o.status === "pending" && (
+                            <p className="text-[9px] text-muted-foreground/30 mt-1">
+                              Platform fee if accepted: ~${Math.max(5, Math.round(o.offerAmount * PLATFORM_FEE_RATE * 100) / 100).toFixed(2)}
                             </p>
                           )}
                         </div>
@@ -485,15 +738,18 @@ export default function LoadBoardDetail() {
 
                       {o.status === "pending" && (
                         <div className="flex gap-2 flex-wrap">
+                          {/* Accept → go to checkout review first */}
                           <Button
                             size="sm"
                             className="rounded-xl h-8 px-3 font-display font-black text-xs"
                             style={CYAN_ACTIVE}
-                            onClick={() => respondMutation.mutate({ offerId: o.id, action: "accept" })}
-                            disabled={respondMutation.isPending}
+                            onClick={() => {
+                              setPendingOffer(o);
+                              setShowPosterCheckout(true);
+                            }}
                             data-testid={`button-accept-offer-${o.id}`}
                           >
-                            <Check className="w-3 h-3 mr-1" /> Accept ${o.offerAmount.toLocaleString()}
+                            <ShoppingCart className="w-3 h-3 mr-1" /> Accept — Review Checkout
                           </Button>
                           {o.actionCount < 3 && (
                             <div className="flex gap-1.5 items-center">
@@ -539,9 +795,7 @@ export default function LoadBoardDetail() {
             {isOpen && (
               <button
                 className="w-full text-xs text-destructive/50 font-display font-bold py-2"
-                onClick={() => {
-                  if (confirm("Cancel this listing?")) cancelMutation.mutate();
-                }}
+                onClick={() => { if (confirm("Cancel this listing?")) cancelMutation.mutate(); }}
                 disabled={cancelMutation.isPending}
                 data-testid="button-cancel-listing"
               >
@@ -556,7 +810,8 @@ export default function LoadBoardDetail() {
           <>
             {/* My existing offer */}
             {myOffer && (
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="card-my-offer">
+              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                data-testid="card-my-offer">
                 <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Your Offer</p>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xl font-display font-black text-foreground">${myOffer.offerAmount.toLocaleString()}</p>
@@ -565,38 +820,22 @@ export default function LoadBoardDetail() {
 
                 {myOffer.status === "countered" && myOffer.counterAmount && (
                   <div className="rounded-xl p-3 mb-3" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
-                    <p className="text-xs text-amber-400 font-bold mb-2">
-                      Shipper countered: ${myOffer.counterAmount.toLocaleString()}
-                    </p>
+                    <p className="text-xs text-amber-400 font-bold mb-2">Shipper countered: ${myOffer.counterAmount.toLocaleString()}</p>
                     {myOffer.actionCount < 3 ? (
                       <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="rounded-xl h-8 px-3 font-display font-black text-xs"
-                          style={CYAN_ACTIVE}
+                        <Button size="sm" className="rounded-xl h-8 px-3 font-display font-black text-xs" style={CYAN_ACTIVE}
                           onClick={() => respondMutation.mutate({ offerId: myOffer.id, action: "accept_counter" })}
-                          disabled={respondMutation.isPending}
-                          data-testid="button-accept-counter"
-                        >
+                          disabled={respondMutation.isPending} data-testid="button-accept-counter">
                           Accept ${myOffer.counterAmount.toLocaleString()}
                         </Button>
                         <div className="flex gap-1.5">
-                          <Input
-                            value={counterAmount}
-                            onChange={e => setCounterAmount(e.target.value)}
-                            placeholder="Counter $"
-                            type="number"
+                          <Input value={counterAmount} onChange={e => setCounterAmount(e.target.value)}
+                            placeholder="Counter $" type="number"
                             className="h-8 w-24 rounded-xl bg-background/50 border-border/50 text-xs"
-                            data-testid="input-counter-back"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="rounded-xl h-8 px-3 font-display font-black text-xs"
+                            data-testid="input-counter-back" />
+                          <Button size="sm" variant="outline" className="rounded-xl h-8 px-3 font-display font-black text-xs"
                             onClick={() => respondMutation.mutate({ offerId: myOffer.id, action: "counter_back", counterAmount: parseFloat(counterAmount) })}
-                            disabled={!counterAmount || respondMutation.isPending}
-                            data-testid="button-counter-back"
-                          >
+                            disabled={!counterAmount || respondMutation.isPending} data-testid="button-counter-back">
                             Counter
                           </Button>
                         </div>
@@ -608,37 +847,28 @@ export default function LoadBoardDetail() {
                 )}
 
                 {myOffer.status === "pending" && (
-                  <button
-                    className="text-xs text-destructive/50 font-display font-bold"
+                  <button className="text-xs text-destructive/50 font-display font-bold"
                     onClick={() => respondMutation.mutate({ offerId: myOffer.id, action: "withdraw" })}
-                    disabled={respondMutation.isPending}
-                    data-testid="button-withdraw-offer"
-                  >
+                    disabled={respondMutation.isPending} data-testid="button-withdraw-offer">
                     Withdraw offer
                   </button>
                 )}
               </div>
             )}
 
-            {/* Submit an offer (no previous offer, listing open) */}
+            {/* Submit new offer */}
             {!myOffer && isOpen && (
               <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Submit Your Offer</p>
                 <div className="relative mb-3">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                  <Input
-                    value={offerAmount}
-                    onChange={e => setOfferAmount(e.target.value)}
-                    placeholder="Enter amount"
-                    type="number"
+                  <Input value={offerAmount} onChange={e => setOfferAmount(e.target.value)}
+                    placeholder="Enter amount" type="number"
                     className="rounded-xl h-12 bg-background/50 border-border/50 text-base pl-7"
-                    data-testid="input-offer-amount"
-                  />
+                    data-testid="input-offer-amount" />
                 </div>
                 {listing.suggestedLow && listing.suggestedHigh && (
-                  <p className="text-[9px] text-muted-foreground/30 mb-3">
-                    Market est. ${listing.suggestedLow}–${listing.suggestedHigh}
-                  </p>
+                  <p className="text-[9px] text-muted-foreground/30 mb-3">Market est. ${listing.suggestedLow}–${listing.suggestedHigh}</p>
                 )}
                 <Button
                   className="w-full rounded-xl h-10 font-display font-black text-sm"
@@ -658,7 +888,7 @@ export default function LoadBoardDetail() {
                 <div className="flex items-start gap-1.5 mt-2.5">
                   <Info className="w-3 h-3 text-muted-foreground/25 shrink-0 mt-0.5" />
                   <p className="text-[9px] text-muted-foreground/30">
-                    No payment now. You'll pay the connection fee only if the shipper accepts and you choose to connect.
+                    No payment now. If the shipper accepts, you'll see a full checkout before paying the connection fee.
                   </p>
                 </div>
               </div>
@@ -679,22 +909,18 @@ export default function LoadBoardDetail() {
                   <p className="text-sm font-display font-black text-cyan-300">Your offer was accepted — Connect Now</p>
                 </div>
                 <p className="text-[10px] text-muted-foreground/50 mb-4">
-                  Pay the one-time connection fee to unlock the shipper's exact address and contact details.
+                  Pay the one-time connection fee to unlock the shipper's exact address and contact details. Nothing is charged until you review and confirm.
                 </p>
 
                 {/* Tier picker */}
                 <div className="space-y-2 mb-4">
                   {CONNECTION_TIERS.map(t => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => setSelectedTier(t.value)}
+                    <button key={t.value} type="button" onClick={() => setSelectedTier(t.value)}
                       className="w-full rounded-xl p-3 text-left transition-all flex items-center justify-between"
                       style={selectedTier === t.value
                         ? { background: "linear-gradient(135deg,rgba(8,145,178,0.2),rgba(14,116,144,0.12))", border: "1.5px solid rgba(6,182,212,0.4)" }
                         : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-                      data-testid={`select-tier-${t.value}`}
-                    >
+                      data-testid={`select-tier-${t.value}`}>
                       <div>
                         <p className="text-sm font-display font-bold text-foreground">{t.label}</p>
                         <p className="text-[9px] text-muted-foreground/40 mt-0.5">{t.desc}</p>
@@ -739,10 +965,10 @@ export default function LoadBoardDetail() {
 
 function OfferStatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; style: CSSProperties }> = {
-    pending:   { label: "Pending",   style: { background: "rgba(6,182,212,0.1)",   color: "#67e8f9" } },
-    countered: { label: "Countered", style: { background: "rgba(245,158,11,0.1)",  color: "#fbbf24" } },
-    accepted:  { label: "Accepted",  style: { background: "rgba(6,182,212,0.1)",   color: "#67e8f9" } },
-    declined:  { label: "Declined",  style: { background: "rgba(239,68,68,0.08)",  color: "#f87171" } },
+    pending:   { label: "Pending",   style: { background: "rgba(6,182,212,0.1)",    color: "#67e8f9" } },
+    countered: { label: "Countered", style: { background: "rgba(245,158,11,0.1)",   color: "#fbbf24" } },
+    accepted:  { label: "Accepted",  style: { background: "rgba(6,182,212,0.1)",    color: "#67e8f9" } },
+    declined:  { label: "Declined",  style: { background: "rgba(239,68,68,0.08)",   color: "#f87171" } },
     withdrawn: { label: "Withdrawn", style: { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.3)" } },
   };
   const c = cfg[status] || { label: status, style: {} };
@@ -755,10 +981,8 @@ function OfferStatusBadge({ status }: { status: string }) {
 
 function ChipBadge({ children }: { children: ReactNode }) {
   return (
-    <span
-      className="text-[9px] font-display font-bold px-2 py-0.5 rounded-full capitalize"
-      style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)" }}
-    >
+    <span className="text-[9px] font-display font-bold px-2 py-0.5 rounded-full capitalize"
+      style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)" }}>
       {children}
     </span>
   );
@@ -778,6 +1002,15 @@ function FeatureRow({ text }: { text: string }) {
     <div className="flex items-center gap-2 text-xs">
       <ShieldCheck className="w-3 h-3 text-cyan-400 shrink-0" />
       <span className="text-foreground/70">{text}</span>
+    </div>
+  );
+}
+
+function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
+  return (
+    <div className="flex justify-between items-center text-sm">
+      <span className="text-muted-foreground/60">{label}</span>
+      <span className={`font-display font-bold ${muted ? "text-muted-foreground/40" : "text-foreground"}`}>{value}</span>
     </div>
   );
 }

@@ -21403,9 +21403,26 @@ OUTPUT STYLE:
         premium_bundle:         { label: "Premium Bundle (All Add-Ons)",     amount: 7500 },
       };
 
-      const { addonType } = req.body;
-      const addon = ADDON_PRICES[addonType];
-      if (!addon) return res.status(400).json({ message: "Invalid addon type" });
+      // Support both single addonType and array addonTypes
+      const rawTypes: string[] = Array.isArray(req.body.addonTypes)
+        ? req.body.addonTypes
+        : req.body.addonType ? [req.body.addonType] : [];
+
+      if (!rawTypes.length) return res.status(400).json({ message: "addonType or addonTypes required" });
+
+      const lineItems: any[] = [];
+      for (const key of rawTypes) {
+        const a = ADDON_PRICES[key];
+        if (!a) return res.status(400).json({ message: `Invalid addon type: ${key}` });
+        lineItems.push({
+          price_data: {
+            currency: "usd",
+            product_data: { name: `GUBER — ${a.label}`, description: `Field service for load #${listingId}` },
+            unit_amount: a.amount,
+          },
+          quantity: 1,
+        });
+      }
 
       const host = req.get("host") || "localhost:5000";
       const protocol = req.get("x-forwarded-proto") || "http";
@@ -21413,22 +21430,15 @@ OUTPUT STYLE:
 
       const session = await stripeMain.checkout.sessions.create({
         payment_method_types: ["card"],
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            product_data: { name: `GUBER Load Board — ${addon.label}`, description: `Add-on for load #${listingId}` },
-            unit_amount: addon.amount,
-          },
-          quantity: 1,
-        }],
+        line_items: lineItems,
         mode: "payment",
-        success_url: `${baseUrl}/load-board/${listingId}?addon_success=1&addon=${addonType}`,
+        success_url: `${baseUrl}/load-board/${listingId}?addon_success=1`,
         cancel_url: `${baseUrl}/load-board/${listingId}`,
         metadata: {
           type: "load_board_addon",
           listingId: String(listingId),
           posterId: String(posterId),
-          addonType,
+          addonTypes: rawTypes.join(","),
         },
       });
 
@@ -21456,7 +21466,7 @@ OUTPUT STYLE:
           credentials = result.rows.map((r: any) => ({
             credentialType: r.credential_type,
             status:         r.status,
-            documentUrl:    r.document_url,
+            // documentUrl intentionally omitted from own-profile response (stored privately)
             reviewedAt:     r.reviewed_at,
             expiresAt:      r.expires_at,
             notes:          r.notes,
@@ -21526,6 +21536,247 @@ OUTPUT STYLE:
         } : null,
         isConnected,
       });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/carrier-profile/credentials/:type/upload — upload credential doc to Cloudinary (private)
+  app.post("/api/carrier-profile/credentials/:type/upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const credType = req.params.type;
+      const VALID_TYPES = [
+        "cdl", "dot", "mc", "insurance", "cargo_insurance",
+        "equipment_photo", "vehicle_registration", "w9",
+        "experience_letter", "dealer_license", "oversize_permit",
+      ];
+      if (!VALID_TYPES.includes(credType)) return res.status(400).json({ message: "Invalid credential type" });
+
+      const { dataUrl } = req.body;
+      if (!dataUrl || typeof dataUrl !== "string") return res.status(400).json({ message: "dataUrl required" });
+      if (dataUrl.length > 20_000_000) return res.status(400).json({ message: "File too large (max ~15 MB)" });
+
+      const profile = await storage.getCarrierProfile(userId);
+      if (!profile) return res.status(400).json({ message: "Save your carrier profile first before uploading credentials." });
+
+      let documentUrl = "pending_review"; // placeholder if Cloudinary unavailable
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        try {
+          const cloudinary = (await import("./cloudinary.js")).default;
+          const up = await cloudinary.uploader.upload(dataUrl, {
+            folder: "guber-carrier-docs",
+            resource_type: "auto",
+            type: "authenticated",
+            access_mode: "authenticated",
+          });
+          documentUrl = up.secure_url;
+        } catch (e: any) {
+          console.error("Cloudinary carrier-doc upload failed:", e.message);
+          documentUrl = "upload_error"; // still create the record so admin can follow up
+        }
+      }
+
+      // Upsert: no unique constraint on (carrier_id, credential_type), so SELECT + UPDATE/INSERT
+      const existing = await pool.query(
+        `SELECT id FROM carrier_credentials WHERE carrier_id = $1 AND credential_type = $2 LIMIT 1`,
+        [profile.id, credType]
+      );
+      if (existing.rows.length > 0) {
+        await pool.query(
+          `UPDATE carrier_credentials SET status = 'pending', document_url = $1, notes = NULL, updated_at = NOW() WHERE id = $2`,
+          [documentUrl, existing.rows[0].id]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO carrier_credentials (carrier_id, credential_type, status, document_url, created_at, updated_at)
+           VALUES ($1, $2, 'pending', $3, NOW(), NOW())`,
+          [profile.id, credType, documentUrl]
+        );
+      }
+
+      res.json({ success: true, status: "pending" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/carrier-profile/subscription/checkout — carrier subscribes to Pro or Business tier
+  app.post("/api/carrier-profile/subscription/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { tier } = req.body;
+      const CARRIER_TIERS: Record<string, { label: string; monthlyAmount: number; features: string[] }> = {
+        pro:      { label: "Carrier Pro",      monthlyAmount: 2900, features: ["Priority load access", "GPS tracking", "20 offers/month", "Pro badge"] },
+        business: { label: "Carrier Business", monthlyAmount: 7900, features: ["Unlimited offers", "Premium badge", "Business tools", "Higher-value load access", "GPS tracking"] },
+      };
+      const tierConfig = CARRIER_TIERS[tier];
+      if (!tierConfig) return res.status(400).json({ message: "Invalid tier" });
+
+      const carrier = await storage.getUser(userId);
+      const host = req.get("host") || "localhost:5000";
+      const protocol = req.get("x-forwarded-proto") || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      let customerId = carrier?.stripeCustomerId;
+      if (!customerId && carrier?.email) {
+        const stripeCustomer = await stripeMain.customers.create({ email: carrier.email, name: carrier.fullName || undefined });
+        customerId = stripeCustomer.id;
+        await storage.updateUser(userId, { stripeCustomerId: stripeCustomer.id });
+      }
+
+      const session = await stripeMain.checkout.sessions.create({
+        payment_method_types: ["card"],
+        ...(customerId ? { customer: customerId } : {}),
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `GUBER ${tierConfig.label}`,
+              description: tierConfig.features.join(" · "),
+            },
+            unit_amount: tierConfig.monthlyAmount,
+            recurring: { interval: "month" },
+          },
+          quantity: 1,
+        }],
+        mode: "subscription",
+        success_url: `${baseUrl}/carrier-profile?sub_success=1&tier=${tier}`,
+        cancel_url: `${baseUrl}/carrier-profile`,
+        metadata: { type: "carrier_subscription", userId: String(userId), tier },
+      });
+
+      res.json({ checkoutUrl: session.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/load-board/:id/accept-offer-checkout — poster pays platform fee when accepting a carrier offer
+  app.post("/api/load-board/:id/accept-offer-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const posterId = req.session.userId!;
+      const { offerId, addonTypes } = req.body;
+
+      const listing = await storage.getLoadBoardListing(listingId);
+      if (!listing) return res.status(404).json({ message: "Listing not found" });
+      if (listing.posterId !== posterId) return res.status(403).json({ message: "Unauthorized" });
+
+      const offerResult = await pool.query(
+        `SELECT * FROM load_board_offers WHERE id = $1 AND listing_id = $2 AND status = 'pending'`,
+        [offerId, listingId]
+      );
+      if (!offerResult.rows.length) return res.status(404).json({ message: "Offer not found or already responded to" });
+
+      const offer = offerResult.rows[0];
+      const offerAmount = parseFloat(offer.offer_amount);
+      const platformFeeCents = Math.max(500, Math.round(offerAmount * 0.08 * 100));
+
+      const poster = await storage.getUser(posterId);
+      const host = req.get("host") || "localhost:5000";
+      const protocol = req.get("x-forwarded-proto") || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      let customerId = poster?.stripeCustomerId;
+      if (!customerId && poster?.email) {
+        const stripeCustomer = await stripeMain.customers.create({ email: poster.email, name: poster.fullName || undefined });
+        customerId = stripeCustomer.id;
+        await storage.updateUser(posterId, { stripeCustomerId: stripeCustomer.id });
+      }
+
+      const ADDON_PRICES: Record<string, { label: string; amount: number }> = {
+        urgent_boost:         { label: "Urgent Listing Boost",          amount: 1000 },
+        premium_carrier_only: { label: "Verified Carriers Only Filter", amount: 1000 },
+        photo_proof:          { label: "Photo Proof at Pickup",         amount: 2500 },
+        loading_help:         { label: "Loading Assistance",            amount: 1000 },
+        unloading_help:       { label: "Unloading Assistance",          amount: 1000 },
+        vin_verification:     { label: "VIN Verification",              amount: 1500 },
+        gps_tracking:         { label: "GPS Tracking",                  amount: 1500 },
+      };
+
+      const lineItems: any[] = [{
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: "GUBER Platform Fee",
+            description: `8% of $${offerAmount.toLocaleString()} accepted offer (min $5.00)`,
+          },
+          unit_amount: platformFeeCents,
+        },
+        quantity: 1,
+      }];
+
+      const selectedAddons: string[] = Array.isArray(addonTypes) ? addonTypes : [];
+      for (const key of selectedAddons) {
+        const a = ADDON_PRICES[key];
+        if (a) {
+          lineItems.push({
+            price_data: {
+              currency: "usd",
+              product_data: { name: `Add-on — ${a.label}` },
+              unit_amount: a.amount,
+            },
+            quantity: 1,
+          });
+        }
+      }
+
+      // Build a temporary session to get the ID, then recreate — Stripe doesn't allow
+      // session ID in success_url at create time, so we use a "CHECKOUT_SESSION_ID" template variable
+      const session = await stripeMain.checkout.sessions.create({
+        payment_method_types: ["card"],
+        ...(customerId ? { customer: customerId } : {}),
+        line_items: lineItems,
+        mode: "payment",
+        success_url: `${baseUrl}/load-board/${listingId}?accept_session={CHECKOUT_SESSION_ID}&offer_id=${offerId}`,
+        cancel_url: `${baseUrl}/load-board/${listingId}`,
+        metadata: {
+          type: "load_board_accept_offer",
+          listingId: String(listingId),
+          offerId: String(offerId),
+          posterId: String(posterId),
+          addonTypes: selectedAddons.join(","),
+        },
+      });
+
+      res.json({ checkoutUrl: session.url, sessionId: session.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/load-board/:id/confirm-accept — verify Stripe payment then accept offer (called after Stripe success redirect)
+  app.post("/api/load-board/:id/confirm-accept", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const posterId = req.session.userId!;
+      const { sessionId, offerId } = req.body;
+
+      const listing = await storage.getLoadBoardListing(listingId);
+      if (!listing || listing.posterId !== posterId) return res.status(403).json({ message: "Unauthorized" });
+
+      const stripeSession = await stripeMain.checkout.sessions.retrieve(sessionId);
+      if (stripeSession.payment_status !== "paid") return res.status(400).json({ message: "Payment not completed" });
+      if (stripeSession.metadata?.offerId !== String(offerId)) return res.status(400).json({ message: "Session mismatch" });
+
+      // Accept the offer
+      await pool.query(
+        `UPDATE load_board_offers SET status = 'accepted', updated_at = NOW() WHERE id = $1 AND listing_id = $2`,
+        [offerId, listingId]
+      );
+      // Decline all other pending offers
+      await pool.query(
+        `UPDATE load_board_offers SET status = 'declined', updated_at = NOW()
+         WHERE listing_id = $1 AND id != $2 AND status = 'pending'`,
+        [listingId, offerId]
+      );
+      await pool.query(
+        `UPDATE load_board_listings SET status = 'offer_accepted', updated_at = NOW() WHERE id = $1`,
+        [listingId]
+      );
+
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -5,7 +5,7 @@ import { GuberLayout } from "@/components/guber-layout";
 import { Button } from "@/components/ui/button";
 import {
   Truck, ChevronRight, Plus, MapPin, Zap, Loader2,
-  ShieldCheck, Package, Anchor, Caravan, Container, Bolt,
+  ShieldCheck, Package, Anchor, Caravan, Container, Bolt, Lock,
 } from "lucide-react";
 
 const TRANSPORT_TYPES = [
@@ -141,10 +141,14 @@ export default function LoadBoard() {
               return (
                 <Link key={l.id} href={`/load-board/${l.id}`}>
                   <div
-                    className="rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-all"
+                    className="rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden"
                     style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(6,182,212,0.12)",
+                      background: l.addonFlags?.includes("premium_carrier_only")
+                        ? "rgba(139,92,246,0.06)"
+                        : "rgba(255,255,255,0.04)",
+                      border: l.addonFlags?.includes("premium_carrier_only")
+                        ? "1px solid rgba(139,92,246,0.2)"
+                        : "1px solid rgba(6,182,212,0.12)",
                       boxShadow: "0 0 0 0 transparent",
                     }}
                     data-testid={`card-load-${l.id}`}
