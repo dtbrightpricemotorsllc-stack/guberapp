@@ -144,7 +144,7 @@ export default function BrowseJobs() {
     : `/post-job${category !== "All" ? `?category=${encodeURIComponent(category)}` : ""}`;
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/dashboard">
       <div className="max-w-3xl mx-auto px-4 py-6" data-testid="page-browse-jobs">
         {CATEGORY_IMAGES[category] && (
           <div className="relative mb-4 rounded-2xl overflow-hidden h-28 animate-fade-in" data-testid="banner-category-image">

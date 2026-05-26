@@ -652,7 +652,7 @@ export default function PostJob() {
   }
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/dashboard" title="Post a Job">
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-post-job">
         <h1 className="text-xl font-display font-bold mb-1 tracking-tight animate-fade-in">Post a Job</h1>
         <p className="text-sm text-muted-foreground mb-5 animate-fade-in">Fill in the details below to create your job listing</p>

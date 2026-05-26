@@ -29,15 +29,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch("/api/auth/me", { headers, credentials: "include" });
         if (res.status === 401) return null;
-        if (!res.ok) return null;
+        if (!res.ok) throw new Error(`auth/me ${res.status}`);
         return await res.json();
-      } catch {
-        return null;
+      } catch (err) {
+        throw err;
       }
     },
     staleTime: 60_000,
-    gcTime: 300_000,
-    retry: false,
+    gcTime: 5 * 60_000,
+    retry: 1,
+    retryDelay: 2000,
   });
 
   const loginMutation = useMutation({

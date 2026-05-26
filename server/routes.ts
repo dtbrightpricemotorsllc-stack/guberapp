@@ -693,6 +693,7 @@ export async function registerRoutes(
         ? (process.env.SESSION_SECRET as string)
         : (process.env.SESSION_SECRET || "dev-only-insecure-session-secret"),
       resave: false,
+      rolling: true,
       saveUninitialized: false,
       cookie: {
         secure: process.env.NODE_ENV === "production",

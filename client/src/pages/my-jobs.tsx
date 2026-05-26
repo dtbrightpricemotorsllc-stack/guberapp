@@ -438,7 +438,7 @@ export default function MyJobs() {
     activeTab && validTabValues.includes(activeTab) ? activeTab : defaultTab;
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/dashboard" title="My Jobs">
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-my-jobs">
         <div className="flex items-center justify-between gap-2 mb-5 flex-wrap animate-fade-in">
           <h1 className="text-xl font-display font-bold tracking-tight">My Jobs</h1>

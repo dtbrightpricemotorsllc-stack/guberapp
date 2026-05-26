@@ -65,7 +65,7 @@ export default function NotificationsPage() {
   const total = notifications?.length || 0;
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/dashboard" title="Notifications">
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-notifications">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">

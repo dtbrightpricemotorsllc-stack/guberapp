@@ -36,6 +36,7 @@ import {
   Zap,
   Download,
   ShoppingBag,
+  ArrowLeft,
 } from "lucide-react";
 
 const SOUND_PRIORITY: SoundType[] = ["money", "nearby", "action", "closed", "default"];
@@ -76,7 +77,13 @@ function classifyPush(tag: string, title: string): SoundType {
   return "default";
 }
 
-export function GuberLayout({ children, hideHeader }: { children: React.ReactNode; hideHeader?: boolean }) {
+export function GuberLayout({ children, hideHeader, showBack, backHref, title }: {
+  children: React.ReactNode;
+  hideHeader?: boolean;
+  showBack?: boolean;
+  backHref?: string;
+  title?: string;
+}) {
   const { user, logout } = useAuth();
   const [location, navigate] = useLocation();
   const isAdmin = user?.role === "admin";
@@ -293,13 +300,24 @@ export function GuberLayout({ children, hideHeader }: { children: React.ReactNod
       {!hideHeader && (
         <header className="sticky top-0 z-50 glass-header" style={{ paddingTop: statusBarHeight ? `${statusBarHeight}px` : 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center justify-between px-5 h-[56px]">
-            <div
-              onClick={handleLogoTap}
-              className="focus:outline-none active:opacity-80 transition-opacity cursor-pointer select-none"
-              data-testid="button-logo"
-            >
-              <GuberLogo size="sm" />
-            </div>
+            {showBack ? (
+              <button
+                onClick={() => backHref ? navigate(backHref) : history.back()}
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors -ml-1 px-1 py-1 rounded-lg hover:bg-white/[0.04] active:scale-95"
+                data-testid="button-header-back"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                {title && <span className="text-sm font-display font-bold text-foreground ml-1">{title}</span>}
+              </button>
+            ) : (
+              <div
+                onClick={handleLogoTap}
+                className="focus:outline-none active:opacity-80 transition-opacity cursor-pointer select-none"
+                data-testid="button-logo"
+              >
+                <GuberLogo size="sm" />
+              </div>
+            )}
 
             <div className="flex items-center gap-0.5">
               <Link href="/notifications">

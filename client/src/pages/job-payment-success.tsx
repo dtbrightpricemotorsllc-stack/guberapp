@@ -36,7 +36,7 @@ export default function JobPaymentSuccess() {
   }, [sessionId, jobId]);
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/my-jobs" title="Payment">
       <div className="max-w-lg mx-auto px-4 py-16 text-center" data-testid="page-payment-success">
         {confirmMutation.isPending ? (
           <div className="space-y-4">

@@ -256,7 +256,7 @@ export default function AccountSettings() {
   });
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/profile" title="Settings">
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-account-settings">
         <h1 className="text-xl font-display font-bold mb-4">Settings</h1>
 

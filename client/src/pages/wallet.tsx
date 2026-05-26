@@ -204,7 +204,7 @@ export default function WalletPage() {
   const hasPendingConfirms = (pendingConfirms?.length ?? 0) > 0;
 
   return (
-    <GuberLayout>
+    <GuberLayout showBack backHref="/dashboard" title="Wallet">
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-wallet">
         <h1 className="text-xl font-display font-bold mb-4">Wallet</h1>
 
