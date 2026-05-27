@@ -77,11 +77,12 @@ function classifyPush(tag: string, title: string): SoundType {
   return "default";
 }
 
-export function GuberLayout({ children, hideHeader, showBack, backHref, title }: {
+export function GuberLayout({ children, hideHeader, showBack, backHref, onBack, title }: {
   children: React.ReactNode;
   hideHeader?: boolean;
   showBack?: boolean;
   backHref?: string;
+  onBack?: () => void;
   title?: string;
 }) {
   const { user, logout } = useAuth();
@@ -302,7 +303,7 @@ export function GuberLayout({ children, hideHeader, showBack, backHref, title }:
           <div className="flex items-center justify-between px-5 h-[56px]">
             {showBack ? (
               <button
-                onClick={() => backHref ? navigate(backHref) : history.back()}
+                onClick={() => onBack ? onBack() : backHref ? navigate(backHref) : history.back()}
                 className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors -ml-1 px-1 py-1 rounded-lg hover:bg-white/[0.04] active:scale-95"
                 data-testid="button-header-back"
               >

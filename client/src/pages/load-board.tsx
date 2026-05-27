@@ -5,21 +5,23 @@ import { GuberLayout } from "@/components/guber-layout";
 import { Button } from "@/components/ui/button";
 import {
   Truck, ChevronRight, Plus, MapPin, Zap, Loader2,
-  ShieldCheck, Package, Anchor, Caravan, Container, Bolt,
-  Map as MapIcon, List, User2,
+  ShieldCheck, Map as MapIcon, List, User2, Star,
 } from "lucide-react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
-const TRANSPORT_TYPES = [
-  { value: "all",       label: "All" },
-  { value: "vehicle",   label: "Vehicle" },
-  { value: "equipment", label: "Equipment" },
-  { value: "boat",      label: "Boat" },
-  { value: "rv",        label: "RV" },
-  { value: "trailer",   label: "Trailer" },
-  { value: "hotshot",   label: "Hotshot" },
-];
+// ── Category definitions ───────────────────────────────────────────────────────
+const CATEGORIES = [
+  { value: "vehicle",   label: "Vehicles",        emoji: "🚗", desc: "Cars, trucks, motorcycles" },
+  { value: "boat",      label: "Boats",            emoji: "⛵", desc: "Sailboats, motorboats, PWCs" },
+  { value: "rv",        label: "RVs & Campers",    emoji: "🚐", desc: "Motorhomes, travel trailers" },
+  { value: "equipment", label: "Heavy Equipment",  emoji: "🏗️", desc: "Construction, farm, industrial" },
+  { value: "trailer",   label: "Trailers",         emoji: "🚛", desc: "Flatbed, enclosed, utility" },
+  { value: "hotshot",   label: "Hotshot Loads",    emoji: "⚡", desc: "Time-critical, LTL freight" },
+] as const;
 
+type CategoryValue = typeof CATEGORIES[number]["value"] | "all";
+
+// ── Status config ──────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
   posted:         { label: "Open",           color: "text-cyan-400",   dot: "bg-cyan-400" },
   offer_received: { label: "Offer In",       color: "text-amber-400",  dot: "bg-amber-400" },
@@ -38,34 +40,35 @@ const PROOF_LABEL: Record<string, string> = {
 };
 
 function transportEmoji(type: string) {
-  const m: Record<string, string> = {
-    vehicle:"🚗", equipment:"🏗️", boat:"⛵", rv:"🚐", trailer:"🔧", hotshot:"⚡",
+  const map: Record<string, string> = {
+    vehicle: "🚗", boat: "⛵", rv: "🚐",
+    equipment: "🏗️", trailer: "🚛", hotshot: "⚡",
   };
-  return m[type] || "📦";
+  return map[type] ?? "📦";
 }
 
-// ── US state approximate centers for map (no geocoding API calls needed) ──────
+// ── US State centers for map (no geocoding needed) ─────────────────────────────
 const STATE_CENTERS: Record<string, { lat: number; lng: number }> = {
-  AL:{lat:32.3,lng:-86.9},AK:{lat:64.2,lng:-153.4},AZ:{lat:34.0,lng:-111.1},
-  AR:{lat:34.8,lng:-92.2},CA:{lat:36.8,lng:-119.4},CO:{lat:39.1,lng:-105.4},
-  CT:{lat:41.6,lng:-72.7},DE:{lat:39.3,lng:-75.5},FL:{lat:27.8,lng:-81.7},
-  GA:{lat:32.2,lng:-82.9},HI:{lat:20.3,lng:-156.4},ID:{lat:44.2,lng:-114.5},
-  IL:{lat:40.3,lng:-89.0},IN:{lat:39.9,lng:-86.3},IA:{lat:42.0,lng:-93.5},
-  KS:{lat:38.5,lng:-98.4},KY:{lat:37.7,lng:-85.0},LA:{lat:31.1,lng:-91.8},
-  ME:{lat:45.4,lng:-69.0},MD:{lat:39.0,lng:-76.8},MA:{lat:42.3,lng:-71.8},
-  MI:{lat:44.7,lng:-85.4},MN:{lat:46.4,lng:-93.1},MS:{lat:32.7,lng:-89.7},
-  MO:{lat:38.5,lng:-92.5},MT:{lat:47.0,lng:-110.5},NE:{lat:41.5,lng:-99.9},
-  NV:{lat:39.3,lng:-116.6},NH:{lat:44.0,lng:-71.6},NJ:{lat:40.1,lng:-74.5},
-  NM:{lat:34.4,lng:-106.1},NY:{lat:42.2,lng:-74.9},NC:{lat:35.6,lng:-79.4},
-  ND:{lat:47.5,lng:-100.5},OH:{lat:40.4,lng:-82.8},OK:{lat:35.6,lng:-97.5},
-  OR:{lat:44.1,lng:-120.5},PA:{lat:40.6,lng:-77.2},RI:{lat:41.7,lng:-71.5},
+  AL:{lat:32.8,lng:-86.8},AK:{lat:61.4,lng:-152.0},AZ:{lat:34.3,lng:-111.1},
+  AR:{lat:34.9,lng:-92.4},CA:{lat:36.8,lng:-119.4},CO:{lat:39.1,lng:-105.4},
+  CT:{lat:41.6,lng:-72.7},DE:{lat:39.0,lng:-75.5},FL:{lat:27.8,lng:-81.8},
+  GA:{lat:32.2,lng:-83.4},HI:{lat:20.3,lng:-156.4},ID:{lat:44.4,lng:-114.6},
+  IL:{lat:40.0,lng:-89.2},IN:{lat:39.9,lng:-86.3},IA:{lat:42.1,lng:-93.5},
+  KS:{lat:38.5,lng:-98.4},KY:{lat:37.7,lng:-84.9},LA:{lat:31.2,lng:-92.1},
+  ME:{lat:45.4,lng:-69.0},MD:{lat:39.1,lng:-76.8},MA:{lat:42.2,lng:-71.5},
+  MI:{lat:43.3,lng:-84.5},MN:{lat:46.4,lng:-93.1},MS:{lat:32.7,lng:-89.7},
+  MO:{lat:38.3,lng:-92.5},MT:{lat:46.9,lng:-110.5},NE:{lat:41.1,lng:-98.3},
+  NV:{lat:39.5,lng:-116.9},NH:{lat:43.7,lng:-71.6},NJ:{lat:40.1,lng:-74.5},
+  NM:{lat:34.8,lng:-106.2},NY:{lat:42.2,lng:-74.9},NC:{lat:35.6,lng:-79.4},
+  ND:{lat:47.5,lng:-100.5},OH:{lat:40.4,lng:-82.8},OK:{lat:35.6,lng:-96.9},
+  OR:{lat:43.9,lng:-120.6},PA:{lat:40.6,lng:-77.2},RI:{lat:41.7,lng:-71.5},
   SC:{lat:33.9,lng:-80.9},SD:{lat:44.4,lng:-100.2},TN:{lat:35.9,lng:-86.7},
-  TX:{lat:31.1,lng:-97.6},UT:{lat:39.4,lng:-111.1},VT:{lat:44.1,lng:-72.7},
+  TX:{lat:31.5,lng:-99.3},UT:{lat:39.3,lng:-111.1},VT:{lat:44.1,lng:-72.7},
   VA:{lat:37.8,lng:-78.2},WA:{lat:47.4,lng:-120.6},WV:{lat:38.9,lng:-80.5},
   WI:{lat:44.3,lng:-89.6},WY:{lat:42.9,lng:-107.6},DC:{lat:38.9,lng:-77.0},
 };
 
-// ── Dedicated Load Board Map ───────────────────────────────────────────────────
+// ── Load Board Map ─────────────────────────────────────────────────────────────
 function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -73,7 +76,6 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
   useEffect(() => {
     if (!apiKey || !mapRef.current) return;
     let cancelled = false;
-
     setOptions({ key: apiKey, version: "weekly" } as any);
 
     (async () => {
@@ -95,7 +97,7 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
             { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#374151" }] },
             { featureType: "water", elementType: "geometry",        stylers: [{ color: "#0f172a" }] },
             { featureType: "landscape", elementType: "geometry",    stylers: [{ color: "#111827" }] },
-            { featureType: "poi", stylers: [{ visibility: "off" }] },
+            { featureType: "poi",     stylers: [{ visibility: "off" }] },
             { featureType: "transit", stylers: [{ visibility: "off" }] },
           ],
         });
@@ -109,7 +111,6 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
           const delivery = STATE_CENTERS[l.deliveryState];
           if (!pickup) continue;
 
-          // Draw route lane between pickup and delivery states
           if (delivery && l.pickupState !== l.deliveryState) {
             new g.Polyline({
               path: [pickup, delivery],
@@ -121,7 +122,6 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
             });
           }
 
-          // Pickup marker using classic Marker API (no mapId required)
           const priceStr = l.pricingMode === "fixed" && l.postedPrice
             ? `$${Number(l.postedPrice).toLocaleString()}`
             : "Open to offers";
@@ -158,7 +158,7 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
           });
         }
       } catch {
-        // Map load failure — list view still works fine
+        // silent — list view still works
       }
     })();
 
@@ -172,16 +172,330 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2"
           style={{ background: "rgba(17,24,39,0.9)" }}>
           <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
-          <p className="text-xs text-muted-foreground/50 font-display font-bold">Loading load board map…</p>
+          <p className="text-xs text-muted-foreground/50 font-display font-bold">Loading map…</p>
         </div>
       )}
-      {/* Legend */}
       {mapReady && (
-        <div className="absolute bottom-3 left-3 rounded-xl px-3 py-2 flex items-center gap-3"
-          style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)" }}>
-          <span className="text-[10px] font-display font-bold text-cyan-400/70">📍 Pickup location · Line = route lane</span>
+        <div className="absolute bottom-3 left-3 rounded-xl px-3 py-2"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}>
+          <span className="text-[10px] font-display font-bold text-cyan-400/70">📍 Pickup · line = route lane</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Categories Hub ─────────────────────────────────────────────────────────────
+function CategoriesScreen({
+  allListings,
+  myCount,
+  isLoading,
+  onSelect,
+  onMyPostings,
+}: {
+  allListings: any[];
+  myCount: number;
+  isLoading: boolean;
+  onSelect: (cat: CategoryValue) => void;
+  onMyPostings: () => void;
+}) {
+  // Count open loads per category
+  const open = allListings.filter(l => l.status === "posted" || l.status === "offer_received");
+  const counts: Record<string, number> = {};
+  for (const l of open) counts[l.transportType] = (counts[l.transportType] || 0) + 1;
+  const totalOpen = open.length;
+
+  return (
+    <div className="space-y-4">
+      {/* Hero */}
+      <div className="rounded-2xl p-4 relative overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg,rgba(8,145,178,0.15),rgba(14,116,144,0.06))",
+          border: "1px solid rgba(6,182,212,0.2)",
+        }}>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[10px] font-display font-black text-cyan-400/60 uppercase tracking-widest mb-1">
+              Transport Marketplace
+            </p>
+            <h2 className="text-2xl font-display font-black text-foreground leading-none">
+              Load Board
+            </h2>
+            <p className="text-xs text-muted-foreground/50 mt-1">
+              {isLoading ? "…" : `${totalOpen} open load${totalOpen !== 1 ? "s" : ""} available`}
+            </p>
+          </div>
+          <Link href="/load-board/post">
+            <Button
+              size="sm"
+              className="rounded-xl font-display font-black text-xs h-9 px-4 gap-1.5 shrink-0"
+              style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}
+              data-testid="button-post-load"
+            >
+              <Plus className="w-3.5 h-3.5" /> Post Load
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Category grid */}
+      <div>
+        <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-widest mb-3">
+          Browse by Category
+        </p>
+        <div className="grid grid-cols-2 gap-2.5">
+          {CATEGORIES.map(cat => {
+            const count = counts[cat.value] || 0;
+            return (
+              <button
+                key={cat.value}
+                onClick={() => onSelect(cat.value)}
+                className="rounded-2xl p-4 text-left relative overflow-hidden active:scale-[0.97] transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}
+                data-testid={`category-${cat.value}`}
+              >
+                <div className="text-3xl mb-2 leading-none">{cat.emoji}</div>
+                <p className="text-sm font-display font-black text-foreground leading-tight">{cat.label}</p>
+                <p className="text-[10px] text-muted-foreground/40 mt-0.5 leading-tight">{cat.desc}</p>
+                <div className="flex items-center justify-between mt-3">
+                  {isLoading ? (
+                    <span className="text-[10px] text-muted-foreground/30 font-display font-bold">—</span>
+                  ) : count > 0 ? (
+                    <span
+                      className="text-[10px] font-display font-black px-2 py-0.5 rounded-full"
+                      style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
+                    >
+                      {count} open
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/25 font-display font-bold">None posted</span>
+                  )}
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* All Loads */}
+      <button
+        onClick={() => onSelect("all")}
+        className="w-full rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all"
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+        data-testid="category-all"
+      >
+        <div className="text-2xl">📦</div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-display font-bold text-foreground">All Loads</p>
+          <p className="text-[10px] text-muted-foreground/40">Every open transport listing</p>
+        </div>
+        {!isLoading && totalOpen > 0 && (
+          <span
+            className="text-[10px] font-display font-black px-2 py-0.5 rounded-full shrink-0"
+            style={{ background: "rgba(6,182,212,0.10)", color: "#67e8f9" }}
+          >
+            {totalOpen}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground/25 shrink-0" />
+      </button>
+
+      {/* My Postings */}
+      <button
+        onClick={onMyPostings}
+        className="w-full rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all"
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+        data-testid="button-my-postings"
+      >
+        <div className="p-2.5 rounded-xl shrink-0" style={{ background: "rgba(139,92,246,0.12)" }}>
+          <User2 className="w-4 h-4 text-violet-400" />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-display font-bold text-foreground">My Postings</p>
+          <p className="text-[10px] text-muted-foreground/40">Loads you've posted</p>
+        </div>
+        {myCount > 0 && (
+          <span
+            className="text-[10px] font-display font-black px-2 py-0.5 rounded-full shrink-0"
+            style={{ background: "rgba(139,92,246,0.12)", color: "#c4b5fd" }}
+          >
+            {myCount}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground/25 shrink-0" />
+      </button>
+
+      {/* Carrier CTA */}
+      <button
+        onClick={() => window.location.href = "/carrier-profile"}
+        className="w-full rounded-2xl p-3.5 flex items-center gap-3 active:scale-[0.98] transition-all"
+        style={{
+          background: "linear-gradient(135deg,rgba(8,145,178,0.08),rgba(14,116,144,0.04))",
+          border: "1px solid rgba(6,182,212,0.15)",
+        }}
+        data-testid="banner-carrier-signup"
+      >
+        <div className="p-2 rounded-xl shrink-0" style={{ background: "rgba(6,182,212,0.12)" }}>
+          <Truck className="w-4 h-4 text-cyan-400" strokeWidth={1.8} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-display font-bold text-cyan-300">Are you a carrier?</p>
+          <p className="text-[10px] text-cyan-400/50 mt-0.5">Set up your profile · submit offers · get paid</p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-cyan-400/30 shrink-0" />
+      </button>
+    </div>
+  );
+}
+
+// ── Load List (filtered) ───────────────────────────────────────────────────────
+function LoadList({ listings, isLoading }: { listings: any[]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+      </div>
+    );
+  }
+  if (listings.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <Truck className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" strokeWidth={1.2} />
+        <p className="text-sm font-display font-bold text-muted-foreground">No open loads right now</p>
+        <p className="text-xs text-muted-foreground/40 mt-1">Be the first — post a load</p>
+        <Link href="/load-board/post">
+          <Button className="mt-5 rounded-xl font-display font-black text-sm gap-2"
+            style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}>
+            <Plus className="w-4 h-4" /> Post a Load
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3" data-testid="list-load-board">
+      {listings.map((l) => {
+        const sc = STATUS_CONFIG[l.status] || STATUS_CONFIG.posted;
+        const title = l.year && l.make
+          ? `${l.year} ${l.make}${l.model ? " " + l.model : ""}`.trim()
+          : l.assetDescription || "Transport Load";
+        return (
+          <Link key={l.id} href={`/load-board/${l.id}`}>
+            <div
+              className="rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-all"
+              style={{
+                background: l.addonFlags?.includes("premium_carrier_only")
+                  ? "rgba(139,92,246,0.06)"
+                  : "rgba(255,255,255,0.04)",
+                border: l.addonFlags?.includes("premium_carrier_only")
+                  ? "1px solid rgba(139,92,246,0.2)"
+                  : "1px solid rgba(6,182,212,0.12)",
+              }}
+              data-testid={`card-load-${l.id}`}
+            >
+              {/* Top row */}
+              <div className="flex items-start justify-between gap-3 mb-2.5">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-base">{transportEmoji(l.transportType)}</span>
+                    <span
+                      className="text-[10px] font-display font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                      style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
+                    >
+                      {l.transportType}
+                    </span>
+                    {l.urgent && (
+                      <span className="text-[10px] font-display font-black text-amber-400 flex items-center gap-0.5">
+                        <Zap className="w-2.5 h-2.5" /> URGENT
+                      </span>
+                    )}
+                    {l.addonFlags?.includes("premium_carrier_only") && (
+                      <span className="text-[10px] font-display font-black text-violet-400 flex items-center gap-0.5">
+                        <ShieldCheck className="w-2.5 h-2.5" /> VERIFIED ONLY
+                      </span>
+                    )}
+                    {sc && (
+                      <span className={`text-[10px] font-display font-bold ${sc.color} flex items-center gap-1`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} inline-block`} />
+                        {sc.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-display font-bold text-foreground leading-tight">{title}</p>
+                  {l.ownershipProofStatus && (
+                    <span
+                      className="inline-block text-[9px] font-display font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1"
+                      style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}
+                    >
+                      {PROOF_LABEL[l.ownershipProofStatus] || l.ownershipProofStatus}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  {l.postedPrice ? (
+                    <p className="text-base font-display font-black text-cyan-300">
+                      ${Number(l.postedPrice).toLocaleString()}
+                    </p>
+                  ) : l.pricingMode === "open_to_offers" ? (
+                    <p className="text-xs font-display font-bold text-amber-400/80">Open to offers</p>
+                  ) : null}
+                  {l.suggestedLow && l.suggestedHigh && (
+                    <p className="text-[9px] text-muted-foreground/30 mt-0.5">
+                      Est. ${l.suggestedLow}–${l.suggestedHigh}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Route */}
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 mb-2">
+                <MapPin className="w-3 h-3 shrink-0 text-cyan-500/60" />
+                <span className="font-display font-bold">{l.pickupCity}, {l.pickupState}</span>
+                <span className="text-cyan-400/40 mx-0.5">→</span>
+                <span className="font-display font-bold">{l.deliveryCity}, {l.deliveryState}</span>
+                {l.estimatedMiles && (
+                  <span className="ml-1 text-muted-foreground/30">· {Number(l.estimatedMiles).toLocaleString()} mi</span>
+                )}
+              </div>
+
+              {/* Add-on chips */}
+              {l.addonFlags && l.addonFlags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {l.addonFlags.slice(0, 4).map((f: string) => (
+                    <span key={f}
+                      className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-md"
+                      style={{ background: "rgba(6,182,212,0.08)", color: "rgba(6,182,212,0.7)" }}>
+                      {f.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[9px] text-muted-foreground/30">
+                  {l.poster?.guberId && (
+                    <span className="font-display font-bold tracking-wide">{l.poster.guberId}</span>
+                  )}
+                  {l.poster?.rating > 0 && (
+                    <span className="flex items-center gap-0.5">
+                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                      {Number(l.poster.rating).toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[9px] text-muted-foreground/30">
+                  {new Date(l.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -189,285 +503,123 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function LoadBoard() {
   const [, navigate] = useLocation();
-  const [tab, setTab] = useState<"browse" | "mine">("browse");
-  const [typeFilter, setTypeFilter] = useState("all");
+  // null = categories screen; "all"|"vehicle"|… = list screen; "mine" = my postings
+  const [screen, setScreen] = useState<CategoryValue | "mine" | null>(null);
   const [view, setView] = useState<"list" | "map">("list");
 
   const { data: configData } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
   const apiKey = configData?.googleMapsApiKey ?? "";
 
-  const { data: browseData, isLoading: browseLoading } = useQuery<{ listings: any[] }>({
-    queryKey: ["/api/load-board", typeFilter],
-    queryFn: async () => {
-      const url = typeFilter !== "all"
-        ? `/api/load-board?transportType=${typeFilter}`
-        : `/api/load-board`;
-      const res = await fetch(url, { credentials: "include" });
-      return res.json();
-    },
-    enabled: tab === "browse",
+  // Always fetch all listings (for counts on categories screen)
+  const { data: allData, isLoading: allLoading } = useQuery<{ listings: any[] }>({
+    queryKey: ["/api/load-board"],
+    queryFn: () => fetch("/api/load-board", { credentials: "include" }).then(r => r.json()),
     staleTime: 30_000,
   });
 
+  // My postings
   const { data: myData, isLoading: myLoading } = useQuery<{ listings: any[] }>({
     queryKey: ["/api/load-board/my"],
     queryFn: () => fetch("/api/load-board/my", { credentials: "include" }).then(r => r.json()),
-    enabled: tab === "mine",
     staleTime: 30_000,
   });
 
-  const listings: any[] = tab === "browse"
-    ? (browseData?.listings ?? [])
-    : (myData?.listings ?? []);
-  const isLoading = tab === "browse" ? browseLoading : myLoading;
+  const allListings = allData?.listings ?? [];
+  const myListings  = myData?.listings ?? [];
 
+  // Filtered list for selected category
+  const filteredListings = screen === "mine"
+    ? myListings
+    : screen === "all" || screen === null
+    ? allListings
+    : allListings.filter(l => l.transportType === screen);
+
+  const isLoading = screen === "mine" ? myLoading : allLoading;
+
+  // Category label for the list header
+  const catLabel = screen === "mine"
+    ? "My Postings"
+    : screen === "all"
+    ? "All Loads"
+    : CATEGORIES.find(c => c.value === screen)?.label ?? "";
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <GuberLayout title="Load Board" showBack backHref="/dashboard">
+    <GuberLayout
+      title={screen ? catLabel : "Load Board"}
+      showBack
+      backHref={screen ? undefined : "/dashboard"}
+      onBack={screen ? () => setScreen(null) : undefined}
+    >
       <div className="px-4 pt-2" style={{ paddingBottom: "calc(68px + env(safe-area-inset-bottom,0px) + 16px)" }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-display font-black text-foreground tracking-tight leading-none flex items-center gap-2">
-              <Truck className="w-6 h-6 text-cyan-400" strokeWidth={1.8} />
-              Load Board
-            </h1>
-            <p className="text-xs text-muted-foreground/50 mt-0.5">Vehicle &amp; freight transport marketplace</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setView(v => v === "list" ? "map" : "list")}
-              className="p-2 rounded-xl transition-all active:scale-95"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
-              data-testid="button-toggle-view"
-              title={view === "list" ? "Switch to map" : "Switch to list"}
-            >
-              {view === "list"
-                ? <MapIcon className="w-4 h-4 text-cyan-400" />
-                : <List className="w-4 h-4 text-cyan-400" />
-              }
-            </button>
-            <Link href="/load-board/post">
-              <Button
-                size="sm"
-                className="rounded-xl font-display font-black text-xs tracking-wide h-9 px-4 gap-1.5"
-                style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}
-                data-testid="button-post-load"
-              >
-                <Plus className="w-3.5 h-3.5" /> Post Load
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* Tabs: Browse / My Postings */}
-        <div className="flex gap-1 mb-4 rounded-xl p-1" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-          {(["browse", "mine"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="flex-1 rounded-lg py-2 text-xs font-display font-bold transition-all flex items-center justify-center gap-1.5"
-              style={tab === t
-                ? { background: "rgba(8,145,178,0.2)", color: "#06b6d4", border: "1px solid rgba(6,182,212,0.3)" }
-                : { color: "rgba(255,255,255,0.35)" }
-              }
-              data-testid={`tab-${t}`}
-            >
-              {t === "browse" ? <><Truck className="w-3 h-3" /> Browse Loads</> : <><User2 className="w-3 h-3" /> My Postings</>}
-            </button>
-          ))}
-        </div>
-
-        {/* Transport type filter pills (browse only) */}
-        {tab === "browse" && (
-          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-hide -mx-4 px-4" data-testid="filter-transport-type">
-            {TRANSPORT_TYPES.map(t => {
-              const sel = typeFilter === t.value;
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setTypeFilter(t.value)}
-                  className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-display font-bold transition-all"
-                  style={sel
-                    ? { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" }
-                    : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)" }
-                  }
-                  data-testid={`filter-type-${t.value}`}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
+        {/* ── Categories screen ── */}
+        {screen === null && (
+          <CategoriesScreen
+            allListings={allListings}
+            myCount={myListings.length}
+            isLoading={allLoading}
+            onSelect={cat => { setScreen(cat); setView("list"); }}
+            onMyPostings={() => setScreen("mine")}
+          />
         )}
 
-        {/* Carrier CTA (browse tab only) */}
-        {tab === "browse" && (
-          <div
-            className="rounded-2xl p-3.5 mb-5 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-all"
-            style={{
-              background: "linear-gradient(135deg,rgba(8,145,178,0.12),rgba(14,116,144,0.06))",
-              border: "1px solid rgba(6,182,212,0.2)",
-            }}
-            onClick={() => navigate("/carrier-profile")}
-            data-testid="banner-carrier-signup"
-          >
-            <div className="p-2 rounded-xl shrink-0" style={{ background: "rgba(6,182,212,0.12)" }}>
-              <Truck className="w-4 h-4 text-cyan-400" strokeWidth={1.8} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-display font-bold text-cyan-300 leading-tight">Are you a carrier?</p>
-              <p className="text-[10px] text-cyan-400/50 mt-0.5">Set up your profile · submit offers · get paid</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-cyan-400/40 shrink-0" />
-          </div>
-        )}
-
-        {/* Content */}
-        {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
-          </div>
-        ) : listings.length === 0 ? (
-          <div className="text-center py-16">
-            <Truck className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" strokeWidth={1.2} />
-            <p className="text-sm font-display font-bold text-muted-foreground">
-              {tab === "mine" ? "No loads posted yet" : "No open loads right now"}
-            </p>
-            <p className="text-xs text-muted-foreground/40 mt-1">
-              {tab === "mine" ? "Post your first load to get carrier offers" : "Be the first — post a load above"}
-            </p>
-            <Link href="/load-board/post">
-              <Button className="mt-5 rounded-xl font-display font-black text-sm gap-2"
-                style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}>
-                <Plus className="w-4 h-4" /> Post a Load
-              </Button>
-            </Link>
-          </div>
-        ) : view === "map" ? (
-          <LoadBoardMap listings={listings} apiKey={apiKey} />
-        ) : (
-          <div className="space-y-3" data-testid="list-load-board">
-            {listings.map((l) => {
-              const sc = STATUS_CONFIG[l.status] || STATUS_CONFIG.posted;
-              const title = l.year && l.make
-                ? `${l.year} ${l.make}${l.model ? " " + l.model : ""}`.trim()
-                : l.assetDescription || "Transport Load";
-              return (
-                <Link key={l.id} href={`/load-board/${l.id}`}>
-                  <div
-                    className="rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden"
-                    style={{
-                      background: l.addonFlags?.includes("premium_carrier_only")
-                        ? "rgba(139,92,246,0.06)"
-                        : "rgba(255,255,255,0.04)",
-                      border: l.addonFlags?.includes("premium_carrier_only")
-                        ? "1px solid rgba(139,92,246,0.2)"
-                        : "1px solid rgba(6,182,212,0.12)",
-                    }}
-                    data-testid={`card-load-${l.id}`}
+        {/* ── List / map screen ── */}
+        {screen !== null && (
+          <>
+            {/* Sub-header: category info + view toggle */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                {screen !== "mine" && (
+                  <span className="text-2xl leading-none">
+                    {screen === "all" ? "📦" : CATEGORIES.find(c => c.value === screen)?.emoji}
+                  </span>
+                )}
+                {screen === "mine" && <User2 className="w-5 h-5 text-violet-400" />}
+                <div>
+                  <p className="text-base font-display font-black text-foreground leading-tight">{catLabel}</p>
+                  <p className="text-[10px] text-muted-foreground/40">
+                    {isLoading ? "…" : `${filteredListings.filter(l => l.status === "posted" || l.status === "offer_received").length} open`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {screen !== "mine" && (
+                  <button
+                    onClick={() => setView(v => v === "list" ? "map" : "list")}
+                    className="p-2 rounded-xl transition-all active:scale-95"
+                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                    data-testid="button-toggle-view"
+                    title={view === "list" ? "Switch to map" : "Switch to list"}
                   >
-                    {/* Top row */}
-                    <div className="flex items-start justify-between gap-3 mb-2.5">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="text-base">{transportEmoji(l.transportType)}</span>
-                          <span
-                            className="text-[10px] font-display font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
-                            style={{ background: "rgba(6,182,212,0.12)", color: "#67e8f9" }}
-                          >
-                            {l.transportType}
-                          </span>
-                          {l.urgent && (
-                            <span className="text-[10px] font-display font-black text-amber-400 flex items-center gap-0.5">
-                              <Zap className="w-2.5 h-2.5" /> URGENT
-                            </span>
-                          )}
-                          {l.addonFlags?.includes("premium_carrier_only") && (
-                            <span className="text-[10px] font-display font-black text-violet-400 flex items-center gap-0.5">
-                              <ShieldCheck className="w-2.5 h-2.5" /> VERIFIED ONLY
-                            </span>
-                          )}
-                          {sc && (
-                            <span className={`text-[10px] font-display font-bold ${sc.color} flex items-center gap-1`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${sc.dot} inline-block`} />
-                              {sc.label}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm font-display font-bold text-foreground leading-tight">{title}</p>
-                        {l.ownershipProofStatus && (
-                          <span
-                            className="inline-block text-[9px] font-display font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1"
-                            style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}
-                          >
-                            {PROOF_LABEL[l.ownershipProofStatus] || l.ownershipProofStatus}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-right shrink-0">
-                        {l.postedPrice ? (
-                          <p className="text-base font-display font-black text-cyan-300">
-                            ${Number(l.postedPrice).toLocaleString()}
-                          </p>
-                        ) : l.pricingMode === "open_to_offers" ? (
-                          <p className="text-xs font-display font-bold text-amber-400/80">Open to offers</p>
-                        ) : null}
-                        {l.suggestedLow && l.suggestedHigh && (
-                          <p className="text-[9px] text-muted-foreground/30 mt-0.5">
-                            Est. ${l.suggestedLow}–${l.suggestedHigh}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Route row */}
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 mb-2">
-                      <MapPin className="w-3 h-3 shrink-0 text-cyan-500/60" />
-                      <span className="font-display font-bold">{l.pickupCity}, {l.pickupState}</span>
-                      <span className="text-cyan-400/40 mx-0.5">→</span>
-                      <span className="font-display font-bold">{l.deliveryCity}, {l.deliveryState}</span>
-                      {l.estimatedMiles && (
-                        <span className="ml-1 text-muted-foreground/30">· {Number(l.estimatedMiles).toLocaleString()} mi</span>
-                      )}
-                    </div>
-
-                    {/* Add-on chips */}
-                    {l.addonFlags && l.addonFlags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {l.addonFlags.slice(0, 4).map((f: string) => (
-                          <span
-                            key={f}
-                            className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-md"
-                            style={{ background: "rgba(6,182,212,0.08)", color: "rgba(6,182,212,0.7)" }}
-                          >
-                            {f.replace(/_/g, " ")}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-[9px] text-muted-foreground/30">
-                        {l.poster?.guberId && (
-                          <span className="font-display font-bold tracking-wide">{l.poster.guberId}</span>
-                        )}
-                        {l.poster?.rating > 0 && (
-                          <span>⭐ {Number(l.poster.rating).toFixed(1)}</span>
-                        )}
-                      </div>
-                      <span className="text-[9px] text-muted-foreground/30">
-                        {new Date(l.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
+                    {view === "list"
+                      ? <MapIcon className="w-4 h-4 text-cyan-400" />
+                      : <List className="w-4 h-4 text-cyan-400" />
+                    }
+                  </button>
+                )}
+                <Link href="/load-board/post">
+                  <Button size="sm"
+                    className="rounded-xl font-display font-black text-xs h-9 px-3 gap-1.5"
+                    style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}
+                    data-testid="button-post-load"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
                 </Link>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            {view === "map" && screen !== "mine" ? (
+              <LoadBoardMap listings={filteredListings} apiKey={apiKey} />
+            ) : (
+              <LoadList listings={filteredListings} isLoading={isLoading} />
+            )}
+          </>
         )}
       </div>
+
     </GuberLayout>
   );
 }
