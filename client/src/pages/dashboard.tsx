@@ -102,7 +102,7 @@ const CORE_TILES = [
   { name: "Verify & Inspect", sub: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect",                       testId: "verify-inspect" },
   { name: "Marketplace",      sub: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#5C3E07,#8B6010,#A87418)", href: "/marketplace",                          testId: "marketplace", badge: "BETA" },
   { name: "Barter Labor",     sub: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor",   testId: "barter-labor" },
-  { name: "Load Board",       sub: "Ship vehicles & equipment",         icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",                           testId: "load-board", badge: "NEW" },
+  { name: "Load Board",       sub: "Cars, boats, RVs, equipment & more",         icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",                           testId: "load-board", badge: "NEW" },
   { name: "AI or Not?",       sub: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,#0E0E0F,#141417,#1A1A1F)", href: "/ai-or-not",                            testId: "ai-or-not", tileBorder: "1.5px solid rgba(255,255,255,0.22)" },
 ];
 

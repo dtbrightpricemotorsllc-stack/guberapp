@@ -216,7 +216,7 @@ function CategoriesScreen({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-[10px] font-display font-black text-cyan-400/60 uppercase tracking-widest mb-1">
-              Transport Marketplace
+              Vehicles · Boats · RVs · Equipment · Trailers · Hotshot
             </p>
             <h2 className="text-2xl font-display font-black text-foreground leading-none">
               Load Board
