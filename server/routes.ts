@@ -738,11 +738,10 @@ export async function registerRoutes(
           (req as any).currentUser = u;
         }
       } catch (err) {
-        // Fail closed on DB errors — clear the session so we can never
-        // accidentally honor a stale id for a soft-deleted account during
-        // a transient outage. The user will get 401s and can retry.
-        console.error("[soft-delete-gate] user lookup failed; clearing session:", err);
-        req.session.userId = undefined;
+        // Transient DB error — leave the session intact so users are not
+        // randomly logged out during momentary connection hiccups.
+        // The soft-delete check will re-run on the next request.
+        console.error("[soft-delete-gate] user lookup failed (transient); session preserved:", err);
       }
     }
     next();

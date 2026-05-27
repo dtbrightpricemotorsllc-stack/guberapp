@@ -419,17 +419,21 @@ export default function LoadBoardPost() {
   }
 
   const STEPS = [
-    { num: 1, label: "Type" },
-    { num: 2, label: "Details" },
-    { num: 3, label: "Route" },
+    { num: 1, label: "Route" },
+    { num: 2, label: "Type" },
+    { num: 3, label: "Details" },
     { num: 4, label: "Add-ons" },
     { num: 5, label: "Pricing" },
     { num: 6, label: "Review" },
   ];
 
   function canAdvance() {
-    if (step === 1) return !!transportType;
-    if (step === 2) {
+    if (step === 1) return !!(
+      (pickupZip.length === 5 || (pickupCity && pickupState)) &&
+      (deliveryZip.length === 5 || (deliveryCity && deliveryState))
+    );
+    if (step === 2) return !!transportType;
+    if (step === 3) {
       if (transportType === "vehicle") return !!(vehicleType && ownershipProofStatus);
       if (transportType === "equipment") return !!equipmentType;
       if (transportType === "boat") return !!boatType;
@@ -438,10 +442,6 @@ export default function LoadBoardPost() {
       if (transportType === "hotshot") return freightType.length > 0;
       return true;
     }
-    if (step === 3) return !!(
-      (pickupZip.length === 5 || (pickupCity && pickupState)) &&
-      (deliveryZip.length === 5 || (deliveryCity && deliveryState))
-    );
     return true;
   }
 
@@ -491,8 +491,8 @@ export default function LoadBoardPost() {
           ))}
         </div>
 
-        {/* ── Step 1: Asset Type ─────────────────────────────────────────────── */}
-        {step === 1 && (
+        {/* ── Step 2: Asset Type ─────────────────────────────────────────────── */}
+        {step === 2 && (
           <div className="space-y-5">
             <div>
               <SectionLabel>What needs to move?</SectionLabel>
@@ -515,8 +515,8 @@ export default function LoadBoardPost() {
           </div>
         )}
 
-        {/* ── Step 2: Asset Details ─────────────────────────────────────────── */}
-        {step === 2 && (
+        {/* ── Step 3: Asset Details ─────────────────────────────────────────── */}
+        {step === 3 && (
           <div className="space-y-5">
 
             {/* VEHICLE */}
@@ -708,8 +708,8 @@ export default function LoadBoardPost() {
           </div>
         )}
 
-        {/* ── Step 3: Route ─────────────────────────────────────────────────── */}
-        {step === 3 && (
+        {/* ── Step 1: Route ─────────────────────────────────────────────────── */}
+        {step === 1 && (
           <div className="space-y-5">
             {/* Pickup */}
             <div>
