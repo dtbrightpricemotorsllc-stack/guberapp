@@ -338,6 +338,16 @@ export default function MarketplaceListing() {
               <Zap className="w-2.5 h-2.5" /> FEATURED
             </span>
           )}
+          {isMySelling && !["pending", "sold"].includes(item.status || "") && (
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="flex items-center gap-1.5 text-[11px] font-display font-bold px-2.5 py-1 rounded-full flex-shrink-0 transition-colors hover:bg-white/10"
+              style={{ border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.75)" }}
+              data-testid="button-edit-listing-header"
+            >
+              <Pencil className="w-3 h-3" /> Edit
+            </button>
+          )}
         </div>
 
         {/* Photo gallery */}

@@ -86,8 +86,10 @@ const LOADING_METHODS = [
 const UNLOADING_METHODS = [
   { value: "drive_off", label: "Drive Off" },
   { value: "winch",     label: "Winch" },
-  { value: "rollback",  label: "Rollback" },
+  { value: "forklift",  label: "Forklift" },
+  { value: "crane",     label: "Crane" },
   { value: "liftgate",  label: "Liftgate" },
+  { value: "rollback",  label: "Rollback" },
 ];
 
 const FLEXIBILITY_OPTIONS = [
@@ -1135,8 +1137,8 @@ export default function LoadBoardPost() {
 
       {/* ── Sticky footer ────────────────────────────────────────────────────── */}
       <div
-        className="fixed bottom-0 left-0 right-0 px-4 pb-safe-or-6 pt-3"
-        style={{ background: "linear-gradient(to top, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.95) 70%, transparent 100%)" }}
+        className="fixed left-0 right-0 px-4 pt-3 pb-3 z-[60]"
+        style={{ bottom: "calc(68px + env(safe-area-inset-bottom, 0px))", background: "linear-gradient(to top, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.95) 70%, transparent 100%)" }}
       >
         <div className="flex gap-2 max-w-lg mx-auto">
           {step > 1 && (
