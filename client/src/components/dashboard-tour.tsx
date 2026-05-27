@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
-const TOUR_KEY = "guber_tour_v2_complete";
+const TOUR_KEY = "guber_tour_v3_complete";
 
 export function isTourComplete() {
   if (typeof localStorage === "undefined") return true;
@@ -10,6 +10,7 @@ export function isTourComplete() {
 }
 export function resetTour() {
   localStorage.removeItem(TOUR_KEY);
+  localStorage.removeItem("guber_tour_v2_complete");
   localStorage.removeItem("guber_tour_step");
 }
 
@@ -54,6 +55,20 @@ const STEPS = [
     testId: "card-category-barter-labor",
     title: "Barter Labor",
     desc: "No cash? No problem. Trade your skills with locals — swap services and build community.",
+    phase: "tile",
+    radius: 18,
+  },
+  {
+    testId: "card-category-load-board",
+    title: "Load Board 🚛",
+    desc: "Ship vehicles, boats, RVs, and equipment across the country. Post a load and get carrier offers — or bid as a carrier to earn.",
+    phase: "tile",
+    radius: 18,
+  },
+  {
+    testId: "card-category-ai-or-not",
+    title: "AI or Not? 🤖",
+    desc: "Think you can spot AI-generated content? Play the game, build your Trust Score, and earn rewards for sharp eyes.",
     phase: "tile",
     radius: 18,
   },
