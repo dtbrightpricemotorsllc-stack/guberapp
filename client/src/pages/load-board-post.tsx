@@ -421,8 +421,8 @@ export default function LoadBoardPost() {
   }
 
   const STEPS = [
-    { num: 1, label: "Route" },
-    { num: 2, label: "Type" },
+    { num: 1, label: "Type" },
+    { num: 2, label: "Route" },
     { num: 3, label: "Details" },
     { num: 4, label: "Add-ons" },
     { num: 5, label: "Pricing" },
@@ -430,11 +430,11 @@ export default function LoadBoardPost() {
   ];
 
   function canAdvance() {
-    if (step === 1) return !!(
+    if (step === 1) return !!transportType;
+    if (step === 2) return !!(
       (pickupZip.length === 5 || (pickupCity && pickupState)) &&
       (deliveryZip.length === 5 || (deliveryCity && deliveryState))
     );
-    if (step === 2) return !!transportType;
     if (step === 3) {
       if (transportType === "vehicle") return !!(vehicleType && ownershipProofStatus);
       if (transportType === "equipment") return !!equipmentType;
@@ -493,8 +493,8 @@ export default function LoadBoardPost() {
           ))}
         </div>
 
-        {/* ── Step 2: Asset Type ─────────────────────────────────────────────── */}
-        {step === 2 && (
+        {/* ── Step 1: Asset Type ─────────────────────────────────────────────── */}
+        {step === 1 && (
           <div className="space-y-5">
             <div>
               <SectionLabel>What needs to move?</SectionLabel>
@@ -710,8 +710,8 @@ export default function LoadBoardPost() {
           </div>
         )}
 
-        {/* ── Step 1: Route ─────────────────────────────────────────────────── */}
-        {step === 1 && (
+        {/* ── Step 2: Route ─────────────────────────────────────────────────── */}
+        {step === 2 && (
           <div className="space-y-5">
             {/* Pickup */}
             <div>
