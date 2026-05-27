@@ -154,8 +154,8 @@ export function DashboardTour({ accountType, onComplete, onModeChange }: Dashboa
       ) as HTMLElement | null;
       if (!el) return false;
 
-      // Scroll element to center of viewport (works with any scroll container)
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Instant scroll so position is stable before we measure
+      el.scrollIntoView({ behavior: "auto", block: "center" });
 
       setTimeout(() => {
         const r2 = el.getBoundingClientRect();
@@ -168,7 +168,7 @@ export function DashboardTour({ accountType, onComplete, onModeChange }: Dashboa
           height: r2.height + PAD * 2,
           radius: current.radius,
         });
-      }, 500);
+      }, 120);
       return true;
     };
 
@@ -191,7 +191,7 @@ export function DashboardTour({ accountType, onComplete, onModeChange }: Dashboa
     setSpotRect(null);
 
     const hEl = document.querySelector('[data-testid="button-hire-mode"]') as HTMLElement | null;
-    if (hEl) hEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (hEl) hEl.scrollIntoView({ behavior: "auto", block: "center" });
 
     const snap = () => {
       const hEl2 = document.querySelector('[data-testid="button-hire-mode"]');
@@ -208,8 +208,8 @@ export function DashboardTour({ accountType, onComplete, onModeChange }: Dashboa
     };
 
     const t = setTimeout(() => {
-      if (!snap()) setTimeout(snap, 300);
-    }, 500);
+      if (!snap()) setTimeout(snap, 200);
+    }, 120);
     return () => clearTimeout(t);
   }, [showFinal]);
 
