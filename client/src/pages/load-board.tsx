@@ -565,7 +565,7 @@ function CategoriesScreen({
                 className="rounded-2xl p-4 text-left relative overflow-hidden active:scale-[0.97] transition-all"
                 style={{
                   background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(0,229,118,0.22)",
                 }}
                 data-testid={`category-${cat.value}`}
               >
@@ -597,7 +597,7 @@ function CategoriesScreen({
       <button
         onClick={() => onSelect("all")}
         className="w-full rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}
         data-testid="category-all"
       >
         <div className="text-2xl">📦</div>
@@ -620,7 +620,7 @@ function CategoriesScreen({
       <button
         onClick={onMyPostings}
         className="w-full rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(139,92,246,0.35)" }}
         data-testid="button-my-postings"
       >
         <div className="p-2.5 rounded-xl shrink-0" style={{ background: "rgba(139,92,246,0.12)" }}>
