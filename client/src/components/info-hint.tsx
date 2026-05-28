@@ -43,7 +43,7 @@ export function InfoHint({
         >
           <div
             className="w-full max-w-lg rounded-t-3xl p-5 pb-8 space-y-3"
-            style={{ background: "#111", border: "1px solid rgba(255,255,255,0.08)", borderBottom: "none" }}
+            style={{ background: "#111", border: "1px solid rgba(0,229,118,0.22)", borderBottom: "none" }}
             onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}

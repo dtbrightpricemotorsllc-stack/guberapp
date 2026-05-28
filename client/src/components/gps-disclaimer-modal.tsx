@@ -35,7 +35,7 @@ export function GpsDisclaimerModal() {
         style={{
           // dark-gradient-allow: modal card surface, dark theme chrome
           background: "linear-gradient(135deg, #0d1117 0%, #161b22 100%)",
-          border: "1.5px solid rgba(255,255,255,0.08)",
+          border: "1.5px solid rgba(0,229,118,0.22)",
         }}
       >
         <div className="flex items-center gap-3">
@@ -48,7 +48,7 @@ export function GpsDisclaimerModal() {
           </div>
         </div>
 
-        <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
           <div className="flex items-start gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
             <p className="text-xs text-foreground/90 leading-relaxed">

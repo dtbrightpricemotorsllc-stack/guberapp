@@ -900,7 +900,7 @@ export default function LoadBoard() {
                   <button
                     onClick={() => setView(v => v === "list" ? "map" : "list")}
                     className="p-2 rounded-xl transition-all active:scale-95"
-                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(0,229,118,0.22)" }}
                     data-testid="button-toggle-view"
                     title={view === "list" ? "Switch to map" : "Switch to list"}
                   >

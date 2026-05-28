@@ -822,7 +822,7 @@ export default function Dashboard() {
                 <Link key={tile.name} href={tile.href}>
                   <div
                     className="rounded-2xl p-3.5 flex flex-col gap-2 cursor-pointer transition-all active:scale-95 relative overflow-hidden"
-                    style={{ background: tile.bg, border: tile.tileBorder ?? "1px solid rgba(255,255,255,0.08)" }}
+                    style={{ background: tile.bg, border: tile.tileBorder ?? "1px solid rgba(0,229,118,0.22)" }}
                     data-testid={`card-category-${tile.testId}`}
                   >
                     {tile.badge && (

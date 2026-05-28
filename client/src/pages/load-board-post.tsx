@@ -15,7 +15,7 @@ import { ChevronRight, ChevronLeft, Loader2, TrendingUp, Zap, Info, ShoppingCart
 const CYAN_ACTIVE = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
 const CYAN_INACTIVE = { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" };
 const CYAN_TILE_ACTIVE = { background: "linear-gradient(135deg,rgba(8,145,178,0.25),rgba(14,116,144,0.15))", border: "1.5px solid rgba(6,182,212,0.5)" };
-const CYAN_TILE_INACTIVE = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" };
+const CYAN_TILE_INACTIVE = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" };
 
 const TRANSPORT_TYPES = [
   { value: "vehicle",   label: "🚗 Vehicle",       sub: "Car, truck, SUV, van" },
@@ -1046,7 +1046,7 @@ export default function LoadBoardPost() {
 
             {/* Urgent toggle */}
             {!addonFlags.includes("urgent_boost") && (
-              <div className="flex items-center justify-between rounded-2xl p-3.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div className="flex items-center justify-between rounded-2xl p-3.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
                 <div>
                   <p className="text-sm font-display font-bold text-foreground">Mark as Urgent</p>
                   <p className="text-[10px] text-muted-foreground/40 mt-0.5">Shown prominently — faster response</p>
@@ -1126,7 +1126,7 @@ export default function LoadBoardPost() {
             )}
 
             {/* Privacy notice */}
-            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
               <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
                 🔒 Your exact address and contact info are hidden until a carrier connects via paid checkout. Carriers see city/state only.
               </p>

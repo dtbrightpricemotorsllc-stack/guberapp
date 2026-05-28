@@ -230,7 +230,7 @@ export default function BizAccount() {
           {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin inline" /> : existing ? "UPDATE PROFILE" : "CREATE BUSINESS ACCOUNT"}
         </button>
 
-        <div className="rounded-xl p-5 space-y-3" style={{ border: `1px solid rgba(255,255,255,0.05)`, background: "rgba(255,255,255,0.02)" }}>
+        <div className="rounded-xl p-5 space-y-3" style={{ border: "1px solid rgba(0,229,118,0.22)", background: "rgba(255,255,255,0.02)" }}>
           <p style={{ color: TEXT_SECONDARY, fontSize: "10px", letterSpacing: "0.14em", fontWeight: 700 }} className="uppercase">What you get</p>
           {[
             "Post bulk verification jobs via CSV upload",

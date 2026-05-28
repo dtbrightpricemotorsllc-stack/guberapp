@@ -352,7 +352,7 @@ export default function VIRequests() {
                         <button
                           onClick={() => navigate(`/jobs/${job.id}`)}
                           className="flex-1 h-10 rounded-xl font-display font-bold text-xs tracking-wider flex items-center justify-center gap-1 transition-all active:scale-95"
-                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#9ca3af" }}
+                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#9ca3af" }}
                           data-testid={`button-view-request-${job.id}`}
                         >
                           VIEW DETAILS

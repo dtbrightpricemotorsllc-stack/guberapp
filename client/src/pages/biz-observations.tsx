@@ -253,7 +253,7 @@ export default function BizObservations() {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSelectedObs(null)} />
           <div
             className="relative w-full lg:max-w-lg rounded-t-2xl lg:rounded-2xl p-6 space-y-5"
-            style={{ background: "#131316", border: `1px solid rgba(255,255,255,0.1)`, maxHeight: "90vh", overflowY: "auto" }}
+            style={{ background: "#131316", border: "1px solid rgba(0,229,118,0.22)", maxHeight: "90vh", overflowY: "auto" }}
           >
             <div className="flex items-center justify-between">
               <div>

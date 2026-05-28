@@ -366,7 +366,7 @@ function MultiChip({ options, values, onChange }: {
             className="text-[11px] px-2.5 py-1 rounded-full font-bold transition-all"
             style={active
               ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-              : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#6b7280" }}>
+              : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#6b7280" }}>
             {active && "✓ "}{opt}
           </button>
         );
@@ -383,7 +383,7 @@ function YesNo({ value, onChange }: { value: boolean; onChange: (v: boolean) => 
           className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
           style={value === v
             ? { background: v ? "rgba(0,229,118,0.15)" : "rgba(239,68,68,0.1)", border: `1.5px solid ${v ? "rgba(0,229,118,0.4)" : "rgba(239,68,68,0.3)"}`, color: v ? "#00e676" : "#f87171" }
-            : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#6b7280" }}>
+            : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#6b7280" }}>
           {v ? "Yes" : "No"}
         </button>
       ))}
@@ -466,7 +466,7 @@ function CategoryStep({ form, setForm, onNext }: { form: WizardForm; setForm: an
             <button key={cat.name} type="button"
               onClick={() => { setForm((f: WizardForm) => ({ ...f, category: cat.name })); onNext(); }}
               className="flex flex-col items-start gap-2 p-3.5 rounded-2xl text-left transition-all active:scale-[0.97]"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
               data-testid={`cat-card-${cat.name.replace(/\s/g, "-").toLowerCase()}`}>
               <div className="w-9 h-9 rounded-xl flex items-center justify-center"
                 style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)" }}>
@@ -708,7 +708,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
 
       {/* ── SECTION 1: VIN (Vehicles only, first) ─────────────────── */}
       {isVehicle && (
-        <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+        <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
           <div>
             <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">VIN LOOKUP</p>
             <p className="text-[10px] text-gray-600 mt-0.5">Scan or enter to auto-fill year, make, model, trim & more</p>
@@ -732,7 +732,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
               </button>
               <button type="button" onClick={() => setForm((f: WizardForm) => ({ ...f, hasVin: "no" }))}
                 className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}
                 data-testid="button-vin-skip-photo">
                 <SkipForward className="w-5 h-5 text-gray-500" />
                 <span className="text-[10px] font-display font-bold text-gray-500">No VIN</span>
@@ -784,7 +784,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
       )}
 
       {/* ── SECTION 2: PHOTOS ─────────────────────────────────────── */}
-      <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+      <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
         <div>
           <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">PHOTOS ({photos.length}/10)</p>
           <p className="text-[10px] text-gray-600 mt-0.5">At least 1 photo required — live camera photos are trusted more by buyers</p>
@@ -839,7 +839,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
             </button>
             <button type="button" onClick={() => galleryRef.current?.click()} disabled={uploading}
               className="flex flex-col items-center gap-2 py-4 rounded-xl transition-all active:scale-[0.97] disabled:opacity-50"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
               data-testid="button-upload-gallery">
               <ImagePlus className="w-6 h-6 text-gray-400" />
               <span className="text-xs font-display font-bold text-gray-300">From Gallery</span>
@@ -852,7 +852,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
         {!isVehicle && form.category !== "Property" && (
           <button type="button" onClick={scanBarcode} disabled={scanningBarcode || uploading}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-all active:scale-[0.98] disabled:opacity-50"
-            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}
+            style={{ border: "1px solid rgba(0,229,118,0.22)", background: "rgba(255,255,255,0.03)" }}
             data-testid="button-scan-barcode">
             {scanningBarcode ? <><RefreshCw className="w-4 h-4 animate-spin" /> Looking up item…</> : <><ScanLine className="w-4 h-4" /> Scan Barcode — Auto-Fill Details</>}
           </button>
@@ -868,7 +868,7 @@ function PhotosStep({ form, setForm, photos, setPhotos, photoMeta, setPhotoMeta,
       </div>
 
       {/* ── SECTION 3: TITLE & NOTES ──────────────────────────────── */}
-      <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+      <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
         <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">LISTING BASICS</p>
 
         <div>
@@ -1031,7 +1031,7 @@ function VehicleBuilder({ form, setForm }: { form: WizardForm; setForm: any }) {
             <button type="button"
               onClick={() => set("hasVin", "no")}
               className="flex flex-col items-center gap-1.5 py-4 rounded-2xl transition-all active:scale-95"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}
               data-testid="button-vin-skip">
               <SkipForward className="w-5 h-5 text-gray-500" />
               <span className="text-[10px] font-display font-bold text-gray-500">Skip VIN</span>
@@ -1694,7 +1694,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
                   className="flex-1 py-2 rounded-xl text-[11px] font-display font-bold transition-all"
                   style={form.priceType === v
                     ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                    : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#6b7280" }}>
+                    : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#6b7280" }}>
                   {l}
                 </button>
               ))}
@@ -1774,7 +1774,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
       </Section>
 
       {/* Review summary */}
-      <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
         <div className="px-3 py-2" style={{ background: "rgba(255,255,255,0.04)" }}>
           <p className="text-[11px] font-display font-bold text-gray-400 tracking-wider">LISTING SUMMARY</p>
         </div>
@@ -1790,7 +1790,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
       </div>
 
       <div className="rounded-xl p-3 text-[11px] text-gray-500 leading-relaxed"
-        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.22)" }}>
         GUBER does not process sales. All transactions are between buyer and seller. Listings expire after 30 days.
       </div>
 
@@ -2116,13 +2116,13 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
             <div className="flex gap-2">
               <button type="button" onClick={() => setStep(s => s - 1)}
                 className="flex items-center gap-1 px-3 py-3 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors shrink-0"
-                style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+                style={{ border: "1px solid rgba(0,229,118,0.22)" }}
                 data-testid="button-wizard-back">
                 <ChevronLeft className="w-3.5 h-3.5" /> Back
               </button>
               <button type="button" onClick={handleSaveDraft}
                 className="px-3 py-3 rounded-xl text-xs font-display font-bold text-gray-400 hover:text-white transition-colors shrink-0"
-                style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+                style={{ border: "1px solid rgba(0,229,118,0.22)" }}
                 data-testid="button-save-draft">
                 Save Draft
               </button>

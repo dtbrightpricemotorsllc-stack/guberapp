@@ -262,7 +262,7 @@ export default function LoadBoardDetail() {
           </div>
 
           {/* Optional add-ons cart */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
             <div className="px-4 py-3" style={{ background: "rgba(255,255,255,0.04)" }}>
               <p className="text-sm font-display font-bold text-foreground">Add-ons (optional)</p>
               <p className="text-[9px] text-muted-foreground/40 mt-0.5">These activate when this load goes live — price added to total</p>
@@ -270,7 +270,7 @@ export default function LoadBoardDetail() {
             {Object.entries(ADDON_PRICES).map(([key, info]) => {
               const selected = posterAddonCart.includes(key);
               return (
-                <div key={key} className="flex items-center justify-between px-4 py-2.5" style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                <div key={key} className="flex items-center justify-between px-4 py-2.5" style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(0,229,118,0.14)" }}>
                   <div>
                     <p className="text-xs font-display font-bold text-foreground">{info.label}</p>
                     <p className="text-[9px] text-muted-foreground/40">{info.hint}</p>
@@ -290,7 +290,7 @@ export default function LoadBoardDetail() {
           </div>
 
           {/* What unlocks */}
-          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What happens after payment</p>
             <FeatureRow text="Offer is officially accepted — carrier notified" />
             <FeatureRow text="Carrier can now pay to unlock your contact details" />
@@ -299,7 +299,7 @@ export default function LoadBoardDetail() {
           </div>
 
           {/* Refund note */}
-          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
               🔒 Payment via Stripe. Platform fee is non-refundable once the carrier views your contact info.
               If the carrier does not connect within 7 days, you may request a credit. Add-on charges are processed separately.
@@ -357,7 +357,7 @@ export default function LoadBoardDetail() {
             </div>
           </div>
 
-          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What unlocks immediately</p>
             <FeatureRow text="Shipper's full name" />
             <FeatureRow text="Direct contact details (phone / email)" />
@@ -366,7 +366,7 @@ export default function LoadBoardDetail() {
             {tier.value === "premium"   && <FeatureRow text="Priority match — top of shipper inbox" />}
           </div>
 
-          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
               🔒 Payment via Stripe. Shipper address and contact info are revealed immediately after successful payment.
               GUBER does not store payment card details. Connection fee is non-refundable once contact info is revealed.
@@ -444,7 +444,7 @@ export default function LoadBoardDetail() {
             </div>
           </div>
 
-          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl p-4 space-y-2" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-xs font-display font-black text-muted-foreground/50 uppercase tracking-wider mb-2">What you get</p>
             {fieldCart.map(k => {
               const s = FIELD_SERVICES.find(f => f.key === k);
@@ -452,7 +452,7 @@ export default function LoadBoardDetail() {
             })}
           </div>
 
-          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+          <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
               🔒 GUBER field service workers are dispatched after payment. Services are non-refundable once dispatched.
               If GUBER cannot fulfill the service, a full refund is issued automatically.
@@ -561,7 +561,7 @@ export default function LoadBoardDetail() {
         {/* ── Asset requirements ── */}
         {(listing.vehicleCondition?.length || listing.trailerPreference || listing.weightRange ||
           listing.loadingMethod?.length || listing.pickupAccess?.length) && (
-          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Requirements</p>
             {listing.vehicleCondition?.length > 0 && (
               <div className="mb-2.5">
@@ -617,7 +617,7 @@ export default function LoadBoardDetail() {
         {/* ── Address lock notice ── */}
         {!isConnected && (
           <div className="rounded-2xl p-3.5 flex items-center gap-3"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
             <Lock className="w-4 h-4 text-muted-foreground/30 shrink-0" />
             <div>
               <p className="text-xs font-display font-bold text-muted-foreground/50">Exact address hidden</p>
@@ -654,7 +654,7 @@ export default function LoadBoardDetail() {
             ) : (
               <div
                 className="w-full rounded-xl p-2.5 text-center mb-1"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}
                 data-testid="notice-editing-disabled"
               >
                 <p className="text-xs font-display font-bold text-muted-foreground/40">Editing Disabled</p>
@@ -663,7 +663,7 @@ export default function LoadBoardDetail() {
             )}
 
             {/* Field services cart */}
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
               <button
                 className="w-full flex items-center justify-between px-4 py-3 text-left"
                 style={{ background: "rgba(255,255,255,0.04)" }}
@@ -733,7 +733,7 @@ export default function LoadBoardDetail() {
 
             {/* Offers list */}
             {offers.length > 0 && (
-              <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
                 <div className="px-4 py-3" style={{ background: "rgba(255,255,255,0.04)" }}>
                   <p className="text-sm font-display font-bold text-foreground">Carrier Offers ({offers.length})</p>
                 </div>
@@ -832,7 +832,7 @@ export default function LoadBoardDetail() {
           <>
             {/* My existing offer */}
             {myOffer && (
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
                 data-testid="card-my-offer">
                 <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Your Offer</p>
                 <div className="flex items-center justify-between mb-2">
@@ -880,7 +880,7 @@ export default function LoadBoardDetail() {
 
             {/* Submit new offer */}
             {!myOffer && isOpen && (
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
                 <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Submit Your Offer</p>
                 <div className="relative mb-3">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
@@ -941,7 +941,7 @@ export default function LoadBoardDetail() {
                       className="w-full rounded-xl p-3 text-left transition-all flex items-center justify-between"
                       style={selectedTier === t.value
                         ? { background: "linear-gradient(135deg,rgba(8,145,178,0.2),rgba(14,116,144,0.12))", border: "1.5px solid rgba(6,182,212,0.4)" }
-                        : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
                       data-testid={`select-tier-${t.value}`}>
                       <div>
                         <p className="text-sm font-display font-bold text-foreground">{t.label}</p>

@@ -90,7 +90,7 @@ export function MarketplaceEditModal({ item, onClose }: Props) {
     >
       <div
         className="w-full max-w-lg rounded-2xl overflow-hidden"
-        style={{ background: "#111113", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "#111113", border: "1px solid rgba(0,229,118,0.22)" }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
           <h2 className="text-base font-display font-bold">Edit Listing</h2>

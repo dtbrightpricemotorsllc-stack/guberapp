@@ -98,7 +98,7 @@ export default function LoadBoardEdit() {
                 className="rounded-2xl p-3.5 text-left transition-all"
                 style={pricingMode === p.value
                   ? CYAN_ACTIVE
-                  : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
                 data-testid={`select-edit-pricing-${p.value}`}
               >
                 <p className="text-sm font-display font-bold">{p.label}</p>
@@ -129,7 +129,7 @@ export default function LoadBoardEdit() {
         {/* Urgent toggle */}
         <div
           className="flex items-center justify-between rounded-2xl p-3.5"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
         >
           <div>
             <p className="text-sm font-display font-bold text-foreground flex items-center gap-1.5">

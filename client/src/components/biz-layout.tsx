@@ -41,7 +41,7 @@ function BizSidebar({ onClose }: { onClose?: () => void }) {
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: "#000000", width: "100%", borderRight: "1px solid rgba(255,255,255,0.06)" }}
+      style={{ background: "#000000", width: "100%", borderRight: "1px solid rgba(0,229,118,0.18)" }}
     >
       <div className="flex items-center justify-between px-5 pb-5" style={{ paddingTop: "max(1.75rem, env(safe-area-inset-top, 1.75rem))" }}>
         <Link href="/biz/dashboard">

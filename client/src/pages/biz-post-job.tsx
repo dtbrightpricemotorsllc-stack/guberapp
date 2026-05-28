@@ -278,7 +278,7 @@ export default function BizPostJob() {
                 value={form.category}
                 onChange={e => handleCategoryChange(e.target.value)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm outline-none appearance-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                 data-testid="select-biz-job-category"
               >
                 {CATEGORY_OPTIONS.map(cat => (
@@ -297,7 +297,7 @@ export default function BizPostJob() {
                   value={serviceType}
                   onChange={e => handleServiceTypeChange(e.target.value)}
                   className="w-full rounded-xl px-3 py-2.5 text-sm outline-none appearance-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                   data-testid="select-biz-job-service-type"
                 >
                   <option value="" style={{ background: "#141417" }}>
@@ -324,7 +324,7 @@ export default function BizPostJob() {
                     onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                     placeholder="e.g. Office Move — 3 Hours Needed"
                     className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                     data-testid="input-biz-job-title"
                   />
                 </div>
@@ -337,7 +337,7 @@ export default function BizPostJob() {
                     placeholder="Describe the work, requirements, and any helpful context..."
                     rows={4}
                     className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors resize-none"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                     data-testid="input-biz-job-description"
                   />
                 </div>
@@ -356,7 +356,7 @@ export default function BizPostJob() {
                   min="0"
                   step="0.01"
                   className="w-full rounded-xl pl-8 pr-3 py-2.5 text-sm outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                   data-testid="input-biz-job-budget"
                 />
               </div>
@@ -404,7 +404,7 @@ export default function BizPostJob() {
                   onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                   placeholder="e.g. Downtown Greensboro, NC"
                   className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                   data-testid="input-biz-job-location"
                 />
               </div>
@@ -416,7 +416,7 @@ export default function BizPostJob() {
                   placeholder="27401"
                   maxLength={10}
                   className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: TEXT_PRIMARY }}
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: TEXT_PRIMARY }}
                   data-testid="input-biz-job-zip"
                 />
               </div>
