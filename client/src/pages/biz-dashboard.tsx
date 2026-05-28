@@ -532,7 +532,7 @@ export default function BizDashboard() {
               ))}
             </div>
           ) : filteredJobs.length > 0 ? (
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
+            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.55)" }}>
               {filteredJobs.slice(0, 50).map((job, idx) => {
                 const ss = statusStyle(job.status);
                 return (
@@ -541,7 +541,7 @@ export default function BizDashboard() {
                     className="flex items-center gap-4 px-4 py-3.5 cursor-pointer transition-colors"
                     style={{
                       background: "transparent",
-                      borderBottom: idx < filteredJobs.length - 1 ? `1px solid rgba(0,229,118,0.12)` : "none",
+                      borderBottom: idx < filteredJobs.length - 1 ? `1px solid rgba(0,229,118,0.7)` : "none",
                     }}
                     onClick={() => navigate(`/jobs/${job.id}`)}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
@@ -580,7 +580,7 @@ export default function BizDashboard() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(0,229,118,0.18)" }}>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(0,229,118,0.45)" }}>
                 <FileText className="w-5 h-5" style={{ color: "#3F3F46" }} />
               </div>
               <p className="text-sm font-semibold" style={{ color: "#52525B" }}>

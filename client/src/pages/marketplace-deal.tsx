@@ -321,7 +321,7 @@ export default function MarketplaceDeal() {
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
 
         {/* Deal summary card */}
-        <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+        <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
           {deal.listingPhoto && (
             <div className="h-40 bg-black overflow-hidden">
               <img src={deal.listingPhoto} alt={deal.listingTitle} className="w-full h-full object-cover opacity-80" />
@@ -382,7 +382,7 @@ export default function MarketplaceDeal() {
 
         {/* Outcome resolution panel — only for pending deals */}
         {isPending && (
-          <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.22)" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.55)" }}>
             <button
               data-testid="button-toggle-outcome"
               className="w-full flex items-center justify-between px-4 py-3 text-sm font-display font-bold hover:bg-white/5 transition-colors"
@@ -452,7 +452,7 @@ export default function MarketplaceDeal() {
         )}
 
         {/* Gated chat — only available while deal is pending */}
-        <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
+        <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.55)" }}>
           <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
             <MessageCircle className="w-4 h-4 text-primary" />
             <span className="text-sm font-display font-bold">Deal Chat</span>
@@ -493,7 +493,7 @@ export default function MarketplaceDeal() {
                         className="max-w-[78%] rounded-2xl px-3 py-2 text-sm"
                         style={isMe
                           ? { background: "rgba(57,255,20,0.15)", border: "1px solid rgba(57,255,20,0.2)" }
-                          : { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(0,229,118,0.22)" }}
+                          : { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(0,229,118,0.55)" }}
                       >
                         <p className="leading-relaxed">{msg.message}</p>
                         <p className="text-[10px] text-muted-foreground mt-1 text-right">{timeAgo(msg.createdAt)}</p>
@@ -539,7 +539,7 @@ export default function MarketplaceDeal() {
 
         {/* ── Deal Review Prompt ── */}
         {deal.status === "completed" && (
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(0,229,118,0.55)" }}>
             <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
               <Star className="w-4 h-4 text-amber-400" />
               <span className="text-sm font-display font-bold">Rate Your Experience</span>

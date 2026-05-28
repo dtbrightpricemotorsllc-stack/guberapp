@@ -572,7 +572,7 @@ export default function InstallPrompt() {
           data-testid="button-copy-chrome-link"
           style={{
             marginTop: 10, width: "100%", background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(0,229,118,0.22)", borderRadius: 12,
+            border: "1px solid rgba(0,229,118,0.55)", borderRadius: 12,
             padding: "10px 0", fontWeight: 700, fontSize: 13,
             fontFamily: "Oxanium, sans-serif", color: copied ? "#22C55E" : "rgba(255,255,255,0.5)",
             cursor: "pointer", letterSpacing: "0.04em", transition: "color 0.2s",

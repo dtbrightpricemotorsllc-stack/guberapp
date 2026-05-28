@@ -584,7 +584,7 @@ export default function MarketplaceListing() {
 
           {/* ── Buyer's Order ── */}
           {showBuyerOrderSection && (
-            <div className="rounded-xl overflow-hidden mb-6" style={{ border: "1px solid rgba(0,229,118,0.22)" }} data-testid="section-buyer-order">
+            <div className="rounded-xl overflow-hidden mb-6" style={{ border: "1px solid rgba(0,229,118,0.55)" }} data-testid="section-buyer-order">
               {/* ── Header row ── */}
               <div className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="flex items-center gap-2">
@@ -775,7 +775,7 @@ export default function MarketplaceListing() {
           </div>
 
           {/* Seller */}
-          <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+          <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
             <p className="text-xs font-display font-bold text-muted-foreground tracking-wider mb-2">SELLER</p>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -823,7 +823,7 @@ export default function MarketplaceListing() {
 
           {/* Disclaimer */}
           <div className="rounded-2xl p-4 mb-6 text-xs text-muted-foreground leading-relaxed"
-            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.22)" }}>
+            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.55)" }}>
             <span className="flex items-start gap-1">
               <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested. Meet in a safe public location when possible.</span>
               <InfoHint title="GUBER Marketplace" description="GUBER provides visibility, coordination, and documentation tools. GUBER is not the buyer, seller, inspector, lender, or owner of listed items." />

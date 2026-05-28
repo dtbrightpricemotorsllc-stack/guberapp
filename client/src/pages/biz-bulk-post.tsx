@@ -182,7 +182,7 @@ export default function BizBulkPost() {
                   onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
               </div>
 
-              <div className="rounded-lg p-4" style={{ background: "#0a0a0c", border: "1px solid rgba(0,229,118,0.18)" }}>
+              <div className="rounded-lg p-4" style={{ background: "#0a0a0c", border: "1px solid rgba(0,229,118,0.45)" }}>
                 <p style={{ color: TEXT_SECONDARY, fontSize: "10px", letterSpacing: "0.12em", fontWeight: 700, marginBottom: "8px" }} className="uppercase">
                   Example CSV
                 </p>
@@ -212,7 +212,7 @@ export default function BizBulkPost() {
                     <div
                       key={i}
                       className="flex items-start gap-3 p-3 rounded-lg"
-                      style={{ background: "#0f0f11", border: "1px solid rgba(0,229,118,0.18)" }}
+                      style={{ background: "#0f0f11", border: "1px solid rgba(0,229,118,0.45)" }}
                       data-testid={`preview-row-${i}`}
                     >
                       <span style={{ color: "#333", fontSize: "10px", fontFamily: "monospace", marginTop: "2px", flexShrink: 0 }}>

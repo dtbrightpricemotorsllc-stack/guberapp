@@ -2123,7 +2123,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
               {(job as any).helperObservationNotes && (
                 <p className="text-xs text-muted-foreground italic">"{(job as any).helperObservationNotes}"</p>
               )}
-              <div className="mt-3 p-3 rounded-xl text-[10px] text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+              <div className="mt-3 p-3 rounded-xl text-[10px] text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
                 Verification confirms visual presence only at the time of capture. GUBER does not guarantee ownership, pricing, fitment, compatibility, future availability, or mechanical condition. This is visual proof — eyes on the ground, not an inspection or appraisal.
               </div>
             </div>
@@ -2159,7 +2159,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
             {showBountyForm && (
               <div className="border-t border-border/20 p-4 space-y-4">
-                <div className="p-3 rounded-xl text-xs text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+                <div className="p-3 rounded-xl text-xs text-muted-foreground" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
                   <p className="font-semibold text-foreground mb-1">Required proof (3 photos minimum):</p>
                   <ol className="space-y-1 list-decimal list-inside">
                     <li>Location ID — yard sign, building sign, row marker</li>
@@ -3243,7 +3243,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       {showCancelModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowCancelModal(false)}>
           <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
-            style={{ border: "1px solid rgba(0,229,118,0.22)" }}
+            style={{ border: "1px solid rgba(0,229,118,0.55)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-cancel-job">
             <div className="flex items-center justify-between mb-4">
@@ -3309,7 +3309,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       {showPosterCancelModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowPosterCancelModal(false)}>
           <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
-            style={{ border: "1px solid rgba(0,229,118,0.22)" }}
+            style={{ border: "1px solid rgba(0,229,118,0.55)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-poster-cancel-job">
             <div className="flex items-center justify-between mb-4">
@@ -3382,7 +3382,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center"
           onClick={() => setShowSellModal(false)}>
           <div className="w-full max-w-lg bg-card rounded-t-3xl p-5"
-            style={{ border: "1px solid rgba(0,229,118,0.22)" }}
+            style={{ border: "1px solid rgba(0,229,118,0.55)" }}
             onClick={e => e.stopPropagation()}
             data-testid="modal-sell-vi-item">
             <div className="flex items-center justify-between mb-4">

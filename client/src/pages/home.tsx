@@ -263,7 +263,7 @@ export default function Home() {
           <div className="flex flex-col gap-2 p-2 rounded-2xl"
             style={{
               background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(0,229,118,0.22)",
+              border: "1px solid rgba(0,229,118,0.55)",
               backdropFilter: "blur(8px)",
             }}>
             <div className="flex flex-col sm:flex-row gap-2">

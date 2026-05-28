@@ -90,7 +90,7 @@ export function InAppBrowserGate({ children }: { children: React.ReactNode }) {
             </p>
             <div
               className="w-full rounded-xl px-3 py-2.5"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}
             >
               <p
                 className="text-left text-xs text-muted-foreground select-all break-all"

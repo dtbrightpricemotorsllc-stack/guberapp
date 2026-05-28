@@ -16,7 +16,7 @@ import {
 // ── constants ──────────────────────────────────────────────────────────────────
 
 const CYAN_ACTIVE   = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
-const CYAN_INACTIVE = { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(0,229,118,0.2)" };
+const CYAN_INACTIVE = { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(0,229,118,0.55)" };
 
 const EQUIPMENT_TYPES = [
   { value: "open",      label: "Open Trailer" },
@@ -76,7 +76,7 @@ const CARRIER_TIERS = [
     icon: Truck,
     color: "text-muted-foreground/60",
     bg: "rgba(255,255,255,0.04)",
-    border: "rgba(0,229,118,0.22)",
+    border: "rgba(0,229,118,0.55)",
   },
   {
     value: "pro",
@@ -405,7 +405,7 @@ export default function CarrierProfilePage() {
               <MultiChip options={PAYMENT_METHODS} value={acceptedPaymentMethods} onChange={setAcceptedPaymentMethods} />
             </Section>
 
-            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <p className="text-[9px] text-muted-foreground/35 leading-relaxed">
                 🔒 <strong className="text-muted-foreground/50">Privacy</strong> — Real name, DOT/MC, insurance cert, and payment methods are never shown publicly.
                 Shippers see only your GUBER ID, rating, equipment types, and coverage amount. Full details unlock after they pay the connection fee.
@@ -445,7 +445,7 @@ export default function CarrierProfilePage() {
 
             {/* Approved badges row */}
             {approvedCredentials.length > 0 && (
-              <div className="rounded-xl p-3 mb-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+              <div className="rounded-xl p-3 mb-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
                 <p className="text-[9px] font-display font-black text-muted-foreground/30 uppercase tracking-widest mb-2">Your Active Badges</p>
                 <div className="flex flex-wrap gap-1.5">
                   {CREDENTIAL_TYPES.filter(c => approvedCredentials.includes(c.key) && c.grantsBadge).map(c => (
@@ -542,7 +542,7 @@ export default function CarrierProfilePage() {
               );
             })}
 
-            <div className="rounded-xl p-3 mt-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+            <div className="rounded-xl p-3 mt-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <p className="text-[9px] text-muted-foreground/35 leading-relaxed">
                 📋 <strong className="text-muted-foreground/50">Admin review</strong> — All submitted documents are reviewed by GUBER staff within 1–2 business days.
                 Documents are stored privately and never shared with shippers. Approved credentials earn public badges visible to shippers.
@@ -570,7 +570,7 @@ export default function CarrierProfilePage() {
                   className="rounded-2xl p-4"
                   style={{
                     background: isCurrent ? tier.bg : "rgba(255,255,255,0.03)",
-                    border: `1.5px solid ${isCurrent ? tier.border : "rgba(0,229,118,0.2)"}`,
+                    border: `1.5px solid ${isCurrent ? tier.border : "rgba(0,229,118,0.55)"}`,
                     boxShadow: isCurrent ? `0 0 20px ${tier.bg}` : "none",
                   }}
                   data-testid={`card-tier-${tier.value}`}
@@ -636,7 +636,7 @@ export default function CarrierProfilePage() {
               );
             })}
 
-            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <p className="text-[9px] text-muted-foreground/35 leading-relaxed">
                 💳 <strong className="text-muted-foreground/50">Billing</strong> — Subscriptions are processed securely via Stripe and renew monthly.
                 Cancel anytime. Premium carrier badge and priority placement activate immediately after payment.
@@ -654,7 +654,7 @@ export default function CarrierProfilePage() {
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)" }}>
+    <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}>
       <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-widest">{label}</p>
       {children}
     </div>

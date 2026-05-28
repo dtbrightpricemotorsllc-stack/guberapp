@@ -222,7 +222,7 @@ export default function VIRequests() {
                 className="shrink-0 h-8 px-3 rounded-full font-display font-bold text-[10px] tracking-wider transition-all"
                 style={{
                   background: filter === f ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${filter === f ? "rgba(139,92,246,0.35)" : "rgba(255,255,255,0.08)"}`,
+                  border: `1px solid ${filter === f ? "rgba(139,92,246,0.65)" : "rgba(255,255,255,0.08)"}`,
                   color: filter === f ? "#a78bfa" : "#6b7280",
                 }}
                 data-testid={`filter-${f.toLowerCase().replace(/\s+/g, "-")}`}
@@ -352,7 +352,7 @@ export default function VIRequests() {
                         <button
                           onClick={() => navigate(`/jobs/${job.id}`)}
                           className="flex-1 h-10 rounded-xl font-display font-bold text-xs tracking-wider flex items-center justify-center gap-1 transition-all active:scale-95"
-                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#9ca3af" }}
+                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)", color: "#9ca3af" }}
                           data-testid={`button-view-request-${job.id}`}
                         >
                           VIEW DETAILS

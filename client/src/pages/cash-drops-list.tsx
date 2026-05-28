@@ -224,7 +224,7 @@ export default function CashDropsList() {
         {/* Filters */}
         <div
           className="rounded-2xl p-4 space-y-4"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}
           data-testid="section-filters"
         >
           <div className="flex flex-wrap gap-2">
@@ -238,7 +238,7 @@ export default function CashDropsList() {
                   style={{
                     background: active ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.05)",
                     color: active ? "#fbbf24" : "#9ca3af",
-                    border: active ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(0,229,118,0.2)",
+                    border: active ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(0,229,118,0.55)",
                   }}
                   data-testid={`chip-type-${chip.key}`}
                 >
@@ -317,7 +317,7 @@ export default function CashDropsList() {
         ) : enriched.length === 0 ? (
           <div
             className="rounded-2xl p-8 text-center space-y-3"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(0,229,118,0.2)" }}
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(0,229,118,0.55)" }}
             data-testid="empty-cash-drops"
           >
             <Zap className="w-10 h-10 text-amber-400/40 mx-auto" />

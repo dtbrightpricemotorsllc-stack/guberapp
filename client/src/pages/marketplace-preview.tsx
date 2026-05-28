@@ -166,7 +166,7 @@ function FakeListingCard({ listing }: { listing: typeof ALL_LISTINGS[0] }) {
   return (
     <div
       className="glass-card rounded-2xl overflow-hidden select-none"
-      style={{ border: "1px solid rgba(0,229,118,0.22)", pointerEvents: "none" }}
+      style={{ border: "1px solid rgba(0,229,118,0.55)", pointerEvents: "none" }}
       data-testid={`card-preview-listing-${listing.id}`}
     >
       <div className="relative h-44 bg-muted/20 overflow-hidden">

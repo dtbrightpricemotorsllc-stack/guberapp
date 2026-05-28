@@ -43,7 +43,7 @@ export function InfoHint({
         >
           <div
             className="w-full max-w-lg rounded-t-3xl p-5 pb-8 space-y-3"
-            style={{ background: "#111", border: "1px solid rgba(0,229,118,0.22)", borderBottom: "none" }}
+            style={{ background: "#111", border: "1px solid rgba(0,229,118,0.55)", borderBottom: "none" }}
             onClick={e => e.stopPropagation()}
           >
             {/* Drag handle */}
@@ -55,7 +55,7 @@ export function InfoHint({
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                  style={{ background: "rgba(0,229,118,0.12)", border: "1px solid rgba(0,229,118,0.25)" }}>
+                  style={{ background: "rgba(0,229,118,0.7)", border: "1px solid rgba(0,229,118,0.25)" }}>
                   <Info className="w-3.5 h-3.5 text-primary" />
                 </div>
                 <h3 className="font-display font-bold text-white text-sm">{title}</h3>

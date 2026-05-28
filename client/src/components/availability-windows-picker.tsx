@@ -89,7 +89,7 @@ export function AvailabilityWindowsPicker({
     ? "w-full rounded-xl px-3 py-2 text-sm outline-none"
     : "w-full bg-background border border-border/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500/50";
   const cellInputStyle = isBiz
-    ? { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#F4F4F5" }
+    ? { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)", color: "#F4F4F5" }
     : undefined;
 
   if (value.length === 0) {
@@ -142,7 +142,7 @@ export function AvailabilityWindowsPicker({
           <div
             key={i}
             className="rounded-lg p-3 space-y-2"
-            style={{ background: "rgba(0,0,0,0.18)", border: "1px solid rgba(0,229,118,0.22)" }}
+            style={{ background: "rgba(0,0,0,0.18)", border: "1px solid rgba(0,229,118,0.55)" }}
             data-testid={`window-row-${i}`}
           >
             <div className="flex items-center justify-between">

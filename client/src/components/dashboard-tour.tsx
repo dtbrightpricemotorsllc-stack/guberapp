@@ -308,7 +308,7 @@ export function DashboardTour({ accountType, onComplete, onModeChange }: Dashboa
               background: "rgba(6,6,6,0.97)",
               borderRadius: 24,
               padding: "20px 20px 18px",
-              border: "1px solid rgba(0,229,118,0.22)",
+              border: "1px solid rgba(0,229,118,0.55)",
               boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
               pointerEvents: "all",
             }}
@@ -404,7 +404,7 @@ export function DashboardTour({ accountType, onComplete, onModeChange }: Dashboa
             background: "rgba(6,6,6,0.97)",
             borderRadius: 24,
             padding: "18px 20px 16px",
-            border: "1px solid rgba(0,229,118,0.22)",
+            border: "1px solid rgba(0,229,118,0.55)",
             boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
           }}
           data-testid="tour-tooltip"

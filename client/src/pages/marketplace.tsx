@@ -63,7 +63,7 @@ function availabilityLabel(val: string | null | undefined) {
 }
 
 function availabilityColor(val: string | null | undefined) {
-  if (val === "available_now") return { bg: "rgba(0,229,118,0.12)", border: "rgba(0,229,118,0.3)", color: "#00e676" };
+  if (val === "available_now") return { bg: "rgba(0,229,118,0.7)", border: "rgba(0,229,118,0.3)", color: "#00e676" };
   if (val === "today") return { bg: "rgba(245,165,0,0.1)", border: "rgba(245,165,0,0.3)", color: "#f5a500" };
   if (val === "this_week") return { bg: "rgba(99,102,241,0.1)", border: "rgba(99,102,241,0.3)", color: "#818cf8" };
   return { bg: "rgba(107,114,128,0.1)", border: "rgba(107,114,128,0.2)", color: "#9ca3af" };
@@ -162,7 +162,7 @@ function ItemCard({ item, onClick }: { item: MarketplaceItem; onClick: () => voi
       className="glass-card rounded-2xl overflow-hidden cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
       style={isBoosted
         ? { border: "1.5px solid rgba(245,165,0,0.4)", boxShadow: "0 0 16px rgba(245,165,0,0.08)" }
-        : { border: "1px solid rgba(0,229,118,0.22)" }}
+        : { border: "1px solid rgba(0,229,118,0.55)" }}
       onClick={onClick}
       data-testid={`card-marketplace-${item.id}`}
     >
@@ -301,7 +301,7 @@ function VehicleTransparency({ item }: { item: MarketplaceItem }) {
 
   if (rows.length === 0) return null;
   return (
-    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
+    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.55)" }}>
       <div className="px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
         <Car className="w-3.5 h-3.5 text-primary" />
         <p className="text-[11px] font-display font-bold text-muted-foreground tracking-wider">VEHICLE DETAILS</p>
@@ -326,7 +326,7 @@ function VehicleTransparency({ item }: { item: MarketplaceItem }) {
           <div className="flex flex-wrap gap-1.5">
             {d.conditionFlags.map((f: string) => (
               <span key={f} className="text-[10px] px-2 py-0.5 rounded-full font-bold"
-                style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.2)", color: "#4ade80" }}>
+                style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.55)", color: "#4ade80" }}>
                 ✓ {f}
               </span>
             ))}
@@ -369,7 +369,7 @@ function PropertyTransparency({ item }: { item: MarketplaceItem }) {
 
   if (rows.length === 0) return null;
   return (
-    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
+    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.55)" }}>
       <div className="px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
         <Home className="w-3.5 h-3.5 text-primary" />
         <p className="text-[11px] font-display font-bold text-muted-foreground tracking-wider">PROPERTY DETAILS</p>
@@ -388,7 +388,7 @@ function PropertyTransparency({ item }: { item: MarketplaceItem }) {
           <div className="flex flex-wrap gap-1.5">
             {d.features.map((f: string) => (
               <span key={f} className="text-[10px] px-2 py-0.5 rounded-full font-bold"
-                style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.2)", color: "#4ade80" }}>
+                style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.55)", color: "#4ade80" }}>
                 ✓ {f}
               </span>
             ))}
@@ -440,7 +440,7 @@ function GenericDetailsPanel({ item }: { item: MarketplaceItem }) {
 
   if (rows.length === 0) return null;
   return (
-    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.22)" }}>
+    <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.55)" }}>
       <div className="px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
         <Info className="w-3.5 h-3.5 text-primary" />
         <p className="text-[11px] font-display font-bold text-muted-foreground tracking-wider">ITEM DETAILS</p>
@@ -497,7 +497,7 @@ function MakeOfferModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
           </div>
         </div>
         <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
           Accepted offers do not complete a purchase through GUBER. Buyer and seller are responsible for completing the transaction safely.
         </div>
         <Button onClick={() => { const a = parseFloat(amount); if (!a || a <= 0) { toast({ title: "Enter a valid amount", variant: "destructive" }); return; } mutation.mutate({ offerAmount: a, message }); }}
@@ -580,7 +580,7 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
           </ul>
         </div>
         <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
           Verify &amp; Inspect provides visual proof and documentation only. It is not a guarantee of condition, authenticity, ownership, functionality, or future performance.
         </div>
         <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full premium-btn font-display" data-testid="button-confirm-vi-request">
@@ -1073,9 +1073,9 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
             {/* Buyer's Order */}
             {isVehicleCategory && (
-              <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.22)" }} data-testid="section-buyer-order">
+              <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid rgba(0,229,118,0.55)" }} data-testid="section-buyer-order">
                 {/* Header row */}
-                <div className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(0,229,118,0.18)" }}>
+                <div className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(0,229,118,0.45)" }}>
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-primary shrink-0" />
                     <span className="text-sm font-display font-bold">Buyer's Order</span>
@@ -1170,7 +1170,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
             )}
 
             {/* Seller credibility */}
-            <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+            <div className="rounded-xl p-3 mb-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs font-display font-bold text-foreground">{item.sellerName || "Seller"}</p>
                 <div className="flex items-center gap-1.5">
@@ -1214,7 +1214,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
 
             {/* Disclaimer */}
             <div className="rounded-xl p-3 mb-4 text-[11px] text-muted-foreground leading-relaxed"
-              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.22)" }}>
+              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(0,229,118,0.55)" }}>
               <span className="flex items-start gap-1">
                 <span>GUBER helps users list, discover, and verify items. GUBER does not own, inspect, guarantee, or process the sale of listed items unless a separate GUBER Verify &amp; Inspect service is requested.</span>
                 <InfoHint title="GUBER Marketplace" description="GUBER provides visibility, coordination, and documentation tools. GUBER is not the buyer, seller, inspector, lender, or owner of listed items." />
@@ -1304,7 +1304,7 @@ function ItemDetailModal({ item, onClose, currentUser }: { item: MarketplaceItem
                 {(item.makeOfferEnabled || item.askingType === "obo") && isAvailable && (
                   <button onClick={() => setModal("offer")}
                     className="w-full flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-display font-bold transition-all"
-                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,229,118,0.22)", color: "#e5e7eb" }}
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,229,118,0.55)", color: "#e5e7eb" }}
                     data-testid="button-make-offer">
                     Make an Offer
                     <InfoHint title="Offer Counter" description="Each party receives a limited number of offer exchanges to encourage serious negotiations." />
@@ -1388,7 +1388,7 @@ function MyDealsTab() {
         return (
           <div key={deal.id}
             className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer hover:bg-white/5 transition-all"
-            style={{ border: "1px solid rgba(0,229,118,0.22)" }}
+            style={{ border: "1px solid rgba(0,229,118,0.55)" }}
             onClick={() => navigate(`/marketplace/deals/${deal.id}`)}
             data-testid={`deal-card-${deal.id}`}>
             <div className="w-14 h-14 rounded-xl overflow-hidden bg-muted/30 shrink-0">
@@ -1437,7 +1437,7 @@ function MyListingsTab({ onSelectItem }: { onSelectItem: (item: MarketplaceItem)
         const isSample = (item as any).isSample;
         return (
           <div key={item.id} className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer hover:bg-white/5 transition-all"
-            style={{ border: "1px solid rgba(0,229,118,0.22)" }} onClick={() => onSelectItem(item)}
+            style={{ border: "1px solid rgba(0,229,118,0.55)" }} onClick={() => onSelectItem(item)}
             data-testid={`my-listing-${item.id}`}>
             <div className="w-14 h-14 rounded-xl overflow-hidden bg-muted/30 shrink-0">
               {photos && photos[0] ? <img src={photos[0]} alt="" className="w-full h-full object-cover" /> : <Package className="w-6 h-6 text-muted-foreground m-auto mt-4" />}
@@ -1522,8 +1522,8 @@ export default function Marketplace() {
             <button key={k} onClick={() => setTab(k as any)}
               className="flex-1 py-2 rounded-xl text-xs font-display font-bold transition-all"
               style={tab === k
-                ? { background: "rgba(0,229,118,0.12)", border: "1.5px solid rgba(0,229,118,0.3)", color: "#00e676" }
-                : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#6b7280" }}
+                ? { background: "rgba(0,229,118,0.7)", border: "1.5px solid rgba(0,229,118,0.3)", color: "#00e676" }
+                : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)", color: "#6b7280" }}
               data-testid={`tab-${k}`}>
               {l}
             </button>
@@ -1551,14 +1551,14 @@ export default function Marketplace() {
               </div>
               <button onClick={() => setSearch(searchInput)}
                 className="px-3 py-2 rounded-xl text-xs font-display font-bold transition-all"
-                style={{ background: "rgba(0,229,118,0.12)", border: "1px solid rgba(0,229,118,0.25)", color: "#00e676" }}>
+                style={{ background: "rgba(0,229,118,0.7)", border: "1px solid rgba(0,229,118,0.25)", color: "#00e676" }}>
                 Search
               </button>
               <button onClick={() => setShowFilters(f => !f)}
                 className="px-3 py-2 rounded-xl text-xs font-display font-bold transition-all relative"
                 style={hasActiveFilters
-                  ? { background: "rgba(0,229,118,0.12)", border: "1.5px solid rgba(0,229,118,0.35)", color: "#00e676" }
-                  : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,229,118,0.2)", color: "#6b7280" }}
+                  ? { background: "rgba(0,229,118,0.7)", border: "1.5px solid rgba(0,229,118,0.7)", color: "#00e676" }
+                  : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,229,118,0.55)", color: "#6b7280" }}
                 data-testid="button-toggle-filters">
                 <Filter className="w-3.5 h-3.5" />
                 {hasActiveFilters && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
@@ -1567,7 +1567,7 @@ export default function Marketplace() {
 
             {/* Filters panel */}
             {showFilters && (
-              <div className="rounded-2xl p-4 mb-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.22)" }}>
+              <div className="rounded-2xl p-4 mb-4 space-y-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <p className="text-[10px] font-display font-bold text-muted-foreground tracking-wider mb-1">MIN PRICE</p>
@@ -1637,7 +1637,7 @@ export default function Marketplace() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-display font-bold whitespace-nowrap transition-all shrink-0"
                     style={active
                       ? { background: "rgba(0,229,118,0.15)", border: "1.5px solid rgba(0,229,118,0.4)", color: "#00e676" }
-                      : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.22)", color: "#6b7280" }}
+                      : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)", color: "#6b7280" }}
                     data-testid={`chip-category-${cat.name.replace(/\s/g, "-").toLowerCase()}`}>
                     <Icon className="w-3 h-3" />{cat.name}
                   </button>
