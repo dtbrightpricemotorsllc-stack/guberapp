@@ -819,9 +819,9 @@ export default function Dashboard() {
             {CORE_TILES.map((tile) => {
               const Icon = tile.icon;
               return (
-                <Link key={tile.name} href={tile.href}>
+                <Link key={tile.name} href={tile.href} className="block h-full">
                   <div
-                    className="rounded-2xl p-3.5 flex flex-col gap-2 cursor-pointer transition-all active:scale-95 relative overflow-hidden min-h-[110px]"
+                    className="rounded-2xl p-3.5 flex flex-col gap-2 cursor-pointer transition-all active:scale-95 relative overflow-hidden h-full min-h-[110px]"
                     style={{ background: tile.bg, border: tile.tileBorder ?? "1px solid rgba(0,229,118,0.55)" }}
                     data-testid={`card-category-${tile.testId}`}
                   >
