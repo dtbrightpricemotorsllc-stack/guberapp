@@ -217,46 +217,46 @@ const TEMPLATES: Template[] = [
     wizard: "mirror_motion",
   },
   {
-    slug: "create-ad", label: "Create Ad", tag: "Brand", kind: "video",
+    slug: "gig-ad", label: "Gig Ad", tag: "Promote Yourself", kind: "video",
+    prompt: "High-energy self-promo clip, confident subject center-frame, bold on-screen text intro, neon accent lighting, vertical format, scroll-stopping first second.",
+    gradient: "from-emerald-500 via-teal-500 to-cyan-600",
+    icon: Zap,
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/rafting.mp4",
+  },
+  {
+    slug: "create-ad", label: "Brand Ad", tag: "30-sec Spot", kind: "video",
     prompt: "Punchy 6-second product ad, bold typography reveal, energetic close-up, modern brand aesthetic, vibrant cinematic lighting.",
     gradient: "from-fuchsia-500 via-pink-500 to-orange-400",
     icon: Megaphone,
-    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dance.mp4",
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/kitten_fighting.mp4",
   },
   {
-    slug: "movie-trailer", label: "Movie Trailer", tag: "Cinematic", kind: "video",
+    slug: "movie-trailer", label: "Cinematic", tag: "Epic Scale", kind: "video",
     prompt: "Epic movie trailer scene, anamorphic lens flares, slow push-in, dramatic orchestral mood, deep contrast cinematography.",
     gradient: "from-amber-500 via-rose-600 to-purple-700",
     icon: Film,
     videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/elephants.mp4",
   },
   {
-    slug: "luxury-promo", label: "Luxury Promo", tag: "Premium", kind: "video",
+    slug: "luxury-promo", label: "Luxury Promo", tag: "Premium Feel", kind: "video",
     prompt: "Luxury product reveal, glossy black surfaces, gold accents, slow rotation, soft rim light, ultra-high-end commercial feel.",
     gradient: "from-yellow-400 via-amber-600 to-neutral-900",
     icon: Crown,
-    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/bored.mp4",
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sea_turtle.mp4",
   },
   {
-    slug: "anime-intro", label: "Anime Intro", tag: "Stylized", kind: "video",
-    prompt: "Anime-style intro, dynamic pan, vivid cel-shading, cherry blossoms swirling, motion-blur action lines, J-pop energy.",
-    gradient: "from-pink-400 via-rose-400 to-indigo-500",
-    icon: Sparkles,
-    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/kitten_fighting.mp4",
-  },
-  {
-    slug: "tiktok-reel", label: "TikTok Reel", tag: "Viral", kind: "video",
-    prompt: "Vertical 9:16 reel, fast hook, hand-held camera energy, bold caption flash, trending color grade, scroll-stopping first frame.",
+    slug: "tiktok-reel", label: "Viral Reel", tag: "Hook-First", kind: "video",
+    prompt: "Vertical 9:16 reel, fast hook in first 2 seconds, hand-held camera energy, bold caption flash, trending color grade, scroll-stopping first frame.",
     gradient: "from-cyan-400 via-violet-500 to-fuchsia-600",
     icon: Flame,
     videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/dog.mp4",
   },
   {
-    slug: "real-estate", label: "Real Estate", tag: "Listing", kind: "video",
-    prompt: "Cinematic real estate walkthrough, golden-hour exterior, smooth dolly through entry, warm interior reveal, drone pull-back finale.",
+    slug: "listing-spotlight", label: "Listing Spotlight", tag: "Sell It", kind: "video",
+    prompt: "Cinematic product showcase, dramatic reveal from black, rotating 360 close-up, clean studio lighting, premium feel, ends with bold price reveal.",
     gradient: "from-emerald-400 via-teal-500 to-sky-600",
     icon: Building2,
-    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/sea_turtle.mp4",
+    videoUrl: "https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_400/cld-sample-video.mp4",
   },
   {
     slug: "music-track", label: "Music Track", tag: "Audio", kind: "audio",
@@ -818,9 +818,16 @@ export default function StudioPageV2() {
             </span>
           </h1>
           <p className="text-sm text-white/70 mt-4 max-w-md">
-            Pick a template, type a moment, hit generate. Your AI clip lands in seconds —
-            ready for a reel, an ad, or a listing.
+            No crew. No editing. Type a prompt and get a professional-grade clip — ready for socials, ads, or listings in seconds.
           </p>
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            {["Video", "Image", "Music", "Ads", "Motion"].map((cap) => (
+              <span key={cap} className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full"
+                style={{ background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.25)", color: "rgba(0,230,118,0.9)" }}>
+                {cap}
+              </span>
+            ))}
+          </div>
 
           {/* Phase-2.5: Hero promo banner. Free users see an upgrade nudge
               with the cheapest plan's effective per-credit price. Paid
@@ -855,9 +862,27 @@ export default function StudioPageV2() {
           )}
 
           {!heroOutput && !generateMutation.isPending && (
-            <div className="mt-8 flex items-center gap-2 text-[11px] text-white/50">
-              <Play className="w-3.5 h-3.5" />
-              <span>Your first clip will play right here.</span>
+            <div className="mt-8 relative rounded-2xl overflow-hidden" style={{ height: "158px" }}>
+              <video
+                autoPlay loop muted playsInline
+                className="absolute inset-0 w-full h-full object-cover opacity-40"
+                src="https://res.cloudinary.com/demo/video/upload/q_auto:eco,w_640/rafting.mp4"
+                onError={(e) => { (e.target as HTMLVideoElement).style.display = "none"; }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[10px] uppercase tracking-[0.22em] font-bold text-emerald-400">AI Studio</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+                <p className="text-base font-black text-white leading-snug">Your creation lands here</p>
+                <p className="text-[11px] text-white/50">Pick a tool below or tap a template to start</p>
+              </div>
+              <Link href="/studio/explore"
+                className="absolute bottom-3 right-3 flex items-center gap-1 text-[10px] font-bold text-white/40 hover:text-white/70 transition">
+                See examples <ChevronRight className="w-3 h-3" />
+              </Link>
             </div>
           )}
 
