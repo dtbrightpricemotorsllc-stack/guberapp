@@ -1461,6 +1461,91 @@ export default function PostJob() {
           <NoEmploymentStatement />
           <PaymentSafetyStatement />
 
+          {/* ── Cost summary receipt — shown right before the post button ── */}
+          {(budgetNum > 0 || isBarter) && (
+            <div
+              className="rounded-xl p-4 space-y-2.5 text-sm"
+              style={{ background: "rgba(0,230,118,0.04)", border: "1px solid rgba(0,230,118,0.22)" }}
+              data-testid="cost-summary-card"
+            >
+              <p className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-emerald-400/70 mb-3">
+                Cost Summary
+              </p>
+
+              {isBarter ? (
+                <>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-muted-foreground">Platform fee</span>
+                    <span className="font-display font-semibold">
+                      {isDemoUser ? "Included" : "$10.00"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-muted-foreground">At worker confirmation</span>
+                    <span className="font-display font-semibold text-emerald-400">$0.00</span>
+                  </div>
+                  <div className="pt-2 border-t flex justify-between items-center gap-2 font-bold" style={{ borderColor: "rgba(0,230,118,0.15)" }}>
+                    <span>Total due now</span>
+                    <span className="text-emerald-400 font-display text-base">
+                      {isDemoUser ? "$0.00" : "$10.00"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 pt-1">
+                    No additional payment required when you confirm a helper.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-muted-foreground">Worker payout</span>
+                    <span className="font-display font-semibold">${budgetNum.toFixed(2)}</span>
+                  </div>
+
+                  {urgentSwitch && (
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-amber-400" /> Urgent surcharge
+                      </span>
+                      {isOG ? (
+                        <span className="font-display font-semibold text-emerald-400">FREE (OG)</span>
+                      ) : isDemoUser ? (
+                        <span className="font-display font-semibold text-muted-foreground">Included</span>
+                      ) : (
+                        <span className="font-display font-semibold">$10.00</span>
+                      )}
+                    </div>
+                  )}
+
+                  {autoIncreaseEnabled && autoIncreaseMax && parseFloat(autoIncreaseMax) > budgetNum && (
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-muted-foreground">Max auto-increase cap</span>
+                      <span className="font-display font-semibold">${parseFloat(autoIncreaseMax).toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t flex justify-between items-center gap-2 font-bold" style={{ borderColor: "rgba(0,230,118,0.15)" }}>
+                    <span>Total at confirmation</span>
+                    <span className="text-emerald-400 font-display text-base" data-testid="text-cost-summary-total">
+                      {isDemoUser ? `$${budgetNum.toFixed(2)}` : `$${totalCharge.toFixed(2)}`}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60 pt-1">
+                    Nothing is charged now — your card is only billed when you confirm a worker.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {!isBarter && budgetNum === 0 && (
+            <div
+              className="rounded-xl p-4 text-center text-xs text-muted-foreground/50"
+              style={{ border: "1px dashed rgba(255,255,255,0.08)" }}
+            >
+              Set a budget above to see your cost summary
+            </div>
+          )}
+
           <Button onClick={handleSubmitClick}
             disabled={checkoutMutation.isPending || !canSubmit || (category === "Verify & Inspect" && !isVIJob)}
             className="w-full font-display tracking-wider premium-btn bg-secondary text-secondary-foreground border border-secondary-border rounded-md gap-2"
