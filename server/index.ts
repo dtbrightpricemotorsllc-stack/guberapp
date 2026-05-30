@@ -34,12 +34,8 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later." },
   skip: (req) =>
-    req.path.startsWith("/api/webhooks") ||
-    // When mounted at /api the router strips the prefix so req.path is /test/…
-    (process.env.NODE_ENV !== "production" && (req.path.startsWith("/test/") || req.path.startsWith("/api/test/"))) ||
-    // In dev/test environments allow the auth/login endpoint to be called
-    // freely so Playwright test suites are not blocked by the general cap.
-    (process.env.NODE_ENV !== "production" && (req.path === "/auth/login" || req.path === "/api/auth/login")),
+    process.env.NODE_ENV !== "production" ||
+    req.path.startsWith("/api/webhooks"),
 });
 
 const loginLimiter = rateLimit({
