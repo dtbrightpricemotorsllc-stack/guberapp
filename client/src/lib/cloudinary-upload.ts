@@ -1,3 +1,10 @@
+import {
+  notifyUploadStart,
+  notifyUploadProgress,
+  notifyUploadDone,
+  notifyUploadError,
+} from "./upload-events";
+
 const PER_ATTEMPT_TIMEOUT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 800;
@@ -128,9 +135,19 @@ export async function uploadToCloudinarySigned(
         ? "image"
         : (blob.type?.startsWith("video/") ? "video" : "image");
 
+  notifyUploadStart();
+
+  const wrappedOpts: UploadOptions = {
+    ...opts,
+    onProgress: (pct: number) => {
+      notifyUploadProgress(pct);
+      opts.onProgress?.(pct);
+    },
+  };
+
   let lastErr: any = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (opts.signal?.aborted) throw new Error("Upload cancelled");
+    if (wrappedOpts.signal?.aborted) { notifyUploadError("Upload cancelled"); throw new Error("Upload cancelled"); }
     try {
       const sig = await getSignature(kind);
 
@@ -149,8 +166,10 @@ export async function uploadToCloudinarySigned(
       // back to the caller's preference.
       const effectiveResourceType = sig.resource_type || (requestedType === "auto" ? kind : requestedType);
 
-      opts.onProgress?.(0);
-      return await uploadOnce(blob, sig, opts, effectiveResourceType);
+      wrappedOpts.onProgress?.(0);
+      const result = await uploadOnce(blob, sig, wrappedOpts, effectiveResourceType);
+      notifyUploadDone();
+      return result;
     } catch (err: any) {
       lastErr = err;
       const retriable = err?.retriable === true;
@@ -160,6 +179,7 @@ export async function uploadToCloudinarySigned(
       await new Promise((r) => setTimeout(r, wait));
     }
   }
+  notifyUploadError((lastErr as any)?.message);
   throw lastErr || new Error("Upload failed");
 }
 

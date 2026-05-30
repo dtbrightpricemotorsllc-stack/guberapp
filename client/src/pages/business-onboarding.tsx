@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { notifyUploadStart, notifyUploadDone, notifyUploadError } from "@/lib/upload-events";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
@@ -80,6 +81,7 @@ export default function BusinessOnboarding() {
 
   const handleLogoUpload = async (file: File) => {
     setUploading(true);
+    notifyUploadStart();
     try {
       const formData = new FormData();
       formData.append("photo", file);
@@ -87,7 +89,9 @@ export default function BusinessOnboarding() {
       const data = await res.json();
       setForm((f) => ({ ...f, companyLogo: data.url }));
       setLogoPreview(data.url);
+      notifyUploadDone();
     } catch {
+      notifyUploadError("Logo upload failed");
       toast({ title: "Upload failed", variant: "destructive" });
     } finally {
       setUploading(false);

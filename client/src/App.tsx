@@ -4,6 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { parsePurchaseUrl } from "@/lib/purchase-toast";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { UploadProgressPill } from "@/components/upload-progress-pill";
 import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
@@ -485,6 +486,7 @@ function App() {
         <TooltipProvider>
           <AuthProvider>
             <Toaster />
+            <UploadProgressPill />
             <GoogleAuthOverlay />
             {!splashDone && <SplashWrapper onDone={() => setSplashDone(true)} />}
             <InstallPrompt />
