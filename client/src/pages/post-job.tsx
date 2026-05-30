@@ -1468,36 +1468,41 @@ export default function PostJob() {
               style={{ background: "rgba(0,230,118,0.04)", border: "1px solid rgba(0,230,118,0.22)" }}
               data-testid="cost-summary-card"
             >
-              <p className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-emerald-400/70 mb-3">
-                Cost Summary
-              </p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-display font-bold uppercase tracking-[0.18em] text-emerald-400/70">
+                  What You'll Pay
+                </p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-emerald-400" style={{ background: "rgba(0,230,118,0.12)", border: "1px solid rgba(0,230,118,0.25)" }}>
+                  Posting is FREE
+                </span>
+              </div>
 
               {isBarter ? (
                 <>
                   <div className="flex justify-between items-center gap-2">
-                    <span className="text-muted-foreground">Platform fee</span>
+                    <span className="text-muted-foreground">Barter listing fee</span>
                     <span className="font-display font-semibold">
                       {isDemoUser ? "Included" : "$10.00"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center gap-2">
-                    <span className="text-muted-foreground">At worker confirmation</span>
+                    <span className="text-muted-foreground">When worker is confirmed</span>
                     <span className="font-display font-semibold text-emerald-400">$0.00</span>
                   </div>
                   <div className="pt-2 border-t flex justify-between items-center gap-2 font-bold" style={{ borderColor: "rgba(0,230,118,0.15)" }}>
-                    <span>Total due now</span>
+                    <span>Estimated total</span>
                     <span className="text-emerald-400 font-display text-base">
                       {isDemoUser ? "$0.00" : "$10.00"}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted-foreground/60 pt-1">
-                    No additional payment required when you confirm a helper.
+                    The listing fee is charged when you post. No additional charge at confirmation.
                   </p>
                 </>
               ) : (
                 <>
                   <div className="flex justify-between items-center gap-2">
-                    <span className="text-muted-foreground">Worker payout</span>
+                    <span className="text-muted-foreground">Service price</span>
                     <span className="font-display font-semibold">${budgetNum.toFixed(2)}</span>
                   </div>
 
@@ -1518,19 +1523,19 @@ export default function PostJob() {
 
                   {autoIncreaseEnabled && autoIncreaseMax && parseFloat(autoIncreaseMax) > budgetNum && (
                     <div className="flex justify-between items-center gap-2">
-                      <span className="text-muted-foreground">Max auto-increase cap</span>
+                      <span className="text-muted-foreground">Auto-increase ceiling</span>
                       <span className="font-display font-semibold">${parseFloat(autoIncreaseMax).toFixed(2)}</span>
                     </div>
                   )}
 
                   <div className="pt-2 border-t flex justify-between items-center gap-2 font-bold" style={{ borderColor: "rgba(0,230,118,0.15)" }}>
-                    <span>Total at confirmation</span>
+                    <span>Estimated total</span>
                     <span className="text-emerald-400 font-display text-base" data-testid="text-cost-summary-total">
                       {isDemoUser ? `$${budgetNum.toFixed(2)}` : `$${totalCharge.toFixed(2)}`}
                     </span>
                   </div>
                   <p className="text-[10px] text-muted-foreground/60 pt-1">
-                    Nothing is charged now — your card is only billed when you confirm a worker.
+                    Charged only when you confirm a worker — posting costs nothing.
                   </p>
                 </>
               )}
