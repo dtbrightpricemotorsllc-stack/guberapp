@@ -632,7 +632,7 @@ export default function AccountSettings() {
                 localStorage.removeItem("guber_tour_v2_complete");
                 localStorage.removeItem("guber_tour_step");
               }
-              window.location.href = "/";
+              window.location.href = "/dashboard";
             }}
             data-testid="button-restart-tutorial"
           >
