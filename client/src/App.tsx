@@ -196,7 +196,7 @@ function ConsumerRoute({ component: Component }: { component: React.ComponentTyp
 function RootRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
-  if (!user) return <Redirect to="/login" />;
+  if (!user) return <Home />;
   if (user.accountType === "business") return <Redirect to="/biz/dashboard" />;
   return <Redirect to="/dashboard" />;
 }
