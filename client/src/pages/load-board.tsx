@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button";
 import {
   Truck, ChevronRight, Plus, MapPin, Zap, Loader2,
   ShieldCheck, Map as MapIcon, List, User2, Star,
-  Car, Anchor, Bus, HardHat, Package, type LucideIcon,
+  Car, Anchor, Bus, HardHat, Package,
 } from "lucide-react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 // ── Category definitions ───────────────────────────────────────────────────────
+type IconComponent = React.FC<React.SVGAttributes<SVGElement> & { className?: string }>;
+
 const CATEGORIES: {
-  value: string; label: string; icon: LucideIcon; desc: string;
+  value: string; label: string; icon: IconComponent; desc: string;
 }[] = [
   { value: "vehicle",   label: "Vehicles",        icon: Car,      desc: "Cars, trucks, motorcycles" },
   { value: "boat",      label: "Boats",            icon: Anchor,   desc: "Sailboats, motorboats, PWCs" },
