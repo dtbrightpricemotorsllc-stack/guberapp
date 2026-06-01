@@ -11,13 +11,14 @@ import {
   directOffers, guberPayments, moneyLedger, guberDisputes, cancellationLog, fundClaimsOrHolds,
   pinnedFindings,
   studioSessions, studioSessionFiles, studioGenerationLog, studioModelPricing, studioFreeQuota,
-  studioFeaturedClips,
+  studioFeaturedClips, studioPromptTemplates,
   taskHistorySummary,
   businessVerifyRequests, businessProofSubmissions,
   pushSubscriptions, apnsDeviceTokens, fcmDeviceTokens,
   type User, type InsertUser, type Job, type InsertJob,
   type StudioSession, type StudioSessionFile, type StudioGenerationLog, type StudioModelPricing,
   type StudioFreeQuota, type StudioFeaturedClip, type InsertStudioFeaturedClip,
+  type StudioPromptTemplate, type InsertStudioPromptTemplate,
   type Category, type ServiceType, type Assignment, type Timesheet,
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
@@ -88,6 +89,11 @@ export interface IStorage {
   createStudioFeaturedClip(data: InsertStudioFeaturedClip): Promise<StudioFeaturedClip>;
   updateStudioFeaturedClip(id: number, patch: Partial<InsertStudioFeaturedClip>): Promise<StudioFeaturedClip | undefined>;
   deleteStudioFeaturedClip(id: number): Promise<boolean>;
+  // Prompt Templates carousel (admin-managed, replaces hardcoded TEMPLATES).
+  listStudioPromptTemplates(activeOnly: boolean): Promise<StudioPromptTemplate[]>;
+  createStudioPromptTemplate(data: InsertStudioPromptTemplate): Promise<StudioPromptTemplate>;
+  updateStudioPromptTemplate(id: number, patch: Partial<InsertStudioPromptTemplate>): Promise<StudioPromptTemplate | undefined>;
+  deleteStudioPromptTemplate(id: number): Promise<boolean>;
 
   getJobs(onlyPublished?: boolean): Promise<Job[]>;
   getJob(id: number): Promise<Job | undefined>;
@@ -681,6 +687,58 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStudioFeaturedClip(id: number): Promise<boolean> {
     const rows = await db.delete(studioFeaturedClips).where(eq(studioFeaturedClips.id, id)).returning();
+    return rows.length > 0;
+  }
+
+  async listStudioPromptTemplates(activeOnly: boolean): Promise<StudioPromptTemplate[]> {
+    const q = db.select().from(studioPromptTemplates);
+    const rows = activeOnly
+      ? await q.where(eq(studioPromptTemplates.active, true))
+      : await q;
+    return rows.sort((a, b) => a.position - b.position || a.id - b.id);
+  }
+
+  async createStudioPromptTemplate(data: InsertStudioPromptTemplate): Promise<StudioPromptTemplate> {
+    const existing = await db
+      .select({ id: studioPromptTemplates.id })
+      .from(studioPromptTemplates)
+      .where(eq(studioPromptTemplates.slug, data.slug))
+      .limit(1);
+    if (existing.length > 0) throw new DuplicateSlugError(data.slug);
+    try {
+      const [row] = await db.insert(studioPromptTemplates).values(data).returning();
+      return row;
+    } catch (e: any) {
+      if (e?.code === "23505") throw new DuplicateSlugError(data.slug);
+      throw e;
+    }
+  }
+
+  async updateStudioPromptTemplate(
+    id: number,
+    patch: Partial<InsertStudioPromptTemplate>,
+  ): Promise<StudioPromptTemplate | undefined> {
+    try {
+      const [row] = await db.select().from(studioPromptTemplates).where(eq(studioPromptTemplates.id, id)).limit(1);
+      if (!row) return undefined;
+      if (patch.slug && patch.slug !== row.slug) {
+        const conflict = await db
+          .select({ id: studioPromptTemplates.id })
+          .from(studioPromptTemplates)
+          .where(and(eq(studioPromptTemplates.slug, patch.slug), ne(studioPromptTemplates.id, id)))
+          .limit(1);
+        if (conflict.length > 0) throw new DuplicateSlugError(patch.slug);
+      }
+      const [updated] = await db.update(studioPromptTemplates).set(patch).where(eq(studioPromptTemplates.id, id)).returning();
+      return updated;
+    } catch (e: any) {
+      if (e?.code === "23505") throw new DuplicateSlugError(patch.slug ?? "");
+      throw e;
+    }
+  }
+
+  async deleteStudioPromptTemplate(id: number): Promise<boolean> {
+    const rows = await db.delete(studioPromptTemplates).where(eq(studioPromptTemplates.id, id)).returning();
     return rows.length > 0;
   }
 

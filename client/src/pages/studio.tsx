@@ -47,8 +47,16 @@ import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
   Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
-  Repeat, ChevronRight, UserRound,
+  Repeat, ChevronRight, UserRound, Settings, Rocket, Camera, Video, Cpu, Layers, Star,
 } from "lucide-react";
+
+// Map icon key strings (stored in DB) to lucide components
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  zap: Zap, film: Film, music: Music, flame: Flame, megaphone: Megaphone,
+  image: ImageIcon, gamepad2: Gamepad2, repeat: Repeat, crown: Crown,
+  building2: Building2, star: Star, sparkles: Sparkles, wand2: Wand2,
+  rocket: Rocket, camera: Camera, video: Video, cpu: Cpu, layers: Layers, bolt: Zap,
+};
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type StudioMe = {
@@ -402,6 +410,16 @@ export default function StudioPageV2() {
     queryKey: ["/api/studio/featured"],
     refetchOnWindowFocus: false,
   });
+  // Admin-managed prompt templates. If non-empty, overrides the hardcoded
+  // TEMPLATES array so admins can update the carousel without a deploy.
+  const dbTemplatesQuery = useQuery<Array<{
+    id: number; slug: string; label: string; tag: string; prompt: string;
+    gradientKey: string; iconKey: string; kind: string; videoUrl: string | null;
+    posterUrl: string | null; wizardKey: string | null; position: number; active: boolean;
+  }>>({
+    queryKey: ["/api/studio/templates"],
+    refetchOnWindowFocus: false,
+  });
 
   // Phase-3 prefill from /studio/explore "Recreate this" — runs once.
   const prefillConsumedRef = useRef(false);
@@ -497,12 +515,31 @@ export default function StudioPageV2() {
   // sets are populated by TemplateVideoLoop's onUnavailable callback.
   const [failedTemplateSlugs, setFailedTemplateSlugs] = useState<Set<string>>(new Set());
   const [failedFeaturedIds, setFailedFeaturedIds] = useState<Set<number>>(new Set());
+
+  // Build the effective templates list: DB rows if any, otherwise hardcoded TEMPLATES.
+  const effectiveTemplates = useMemo<Template[]>(() => {
+    const dbRows = dbTemplatesQuery.data;
+    if (!dbRows || dbRows.length === 0) return TEMPLATES;
+    return dbRows.map((r) => ({
+      slug: r.slug,
+      label: r.label,
+      tag: r.tag,
+      prompt: r.prompt,
+      gradient: r.gradientKey,
+      icon: ICON_MAP[r.iconKey] ?? Zap,
+      kind: r.kind as Template["kind"],
+      wizard: (r.wizardKey as Template["wizard"]) ?? undefined,
+      videoUrl: r.videoUrl ?? undefined,
+      posterUrl: r.posterUrl ?? undefined,
+    }));
+  }, [dbTemplatesQuery.data]);
+
   const visibleTemplates = useMemo(
-    () => TEMPLATES.filter((t) =>
+    () => effectiveTemplates.filter((t) =>
       (t.slug !== "quick-pic" || freeQuickPicEnabled) &&
       !failedTemplateSlugs.has(t.slug),
     ),
-    [freeQuickPicEnabled, failedTemplateSlugs],
+    [effectiveTemplates, freeQuickPicEnabled, failedTemplateSlugs],
   );
 
   // Low-credit nudge — fire once per page-load when balance drops to ≤3.
@@ -1120,12 +1157,23 @@ export default function StudioPageV2() {
 
         {/* ─── TRENDING TEMPLATES (CapCut-style cinematic carousel) ───── */}
         <section>
-          <div className="flex items-baseline justify-between mb-4">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
               <Flame className="w-5 h-5 text-orange-400" />
               Trending templates
             </h2>
-            <span className="text-[10px] uppercase tracking-widest text-white/40">tap to start</span>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={() => navigate("/admin/studio")}
+                  className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-emerald-400/70 hover:text-emerald-400 transition-colors bg-emerald-400/10 hover:bg-emerald-400/20 px-2 py-1 rounded-lg"
+                  data-testid="button-admin-studio-manage"
+                >
+                  <Settings className="w-3 h-3" /> Manage
+                </button>
+              )}
+              <span className="text-[10px] uppercase tracking-widest text-white/40">tap to start</span>
+            </div>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x snap-mandatory scrollbar-hide">
             {visibleTemplates.map((t) => {

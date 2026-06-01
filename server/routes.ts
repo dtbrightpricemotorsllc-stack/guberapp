@@ -11942,6 +11942,98 @@ export async function registerRoutes(
     })));
   });
 
+  // Public prompt templates — active only, for the /studio carousel.
+  app.get("/api/studio/templates", async (_req: Request, res: Response) => {
+    const rows = await storage.listStudioPromptTemplates(true);
+    res.json(rows);
+  });
+
+  // ── Admin: Featured Clips CRUD ────────────────────────────────────────────
+  app.get("/api/admin/studio/featured", requireAdmin, async (_req: Request, res: Response) => {
+    const rows = await storage.listStudioFeaturedClips(false);
+    res.json(rows);
+  });
+
+  app.post("/api/admin/studio/featured", requireAdmin, async (req: Request, res: Response) => {
+    const { slug, label, caption, videoUrl, posterUrl, position, active } = req.body;
+    if (!slug || !label || !caption || !videoUrl) return res.status(400).json({ message: "slug, label, caption, videoUrl required" });
+    try {
+      const row = await storage.createStudioFeaturedClip({ slug, label, caption, videoUrl, posterUrl: posterUrl ?? null, position: position ?? 100, active: active ?? true });
+      res.json(row);
+    } catch (e: any) {
+      if (e?.name === "DuplicateSlugError") return res.status(409).json({ message: `Slug "${slug}" is already taken` });
+      throw e;
+    }
+  });
+
+  app.patch("/api/admin/studio/featured/:id", requireAdmin, async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    try {
+      const row = await storage.updateStudioFeaturedClip(id, req.body);
+      if (!row) return res.status(404).json({ message: "Not found" });
+      res.json(row);
+    } catch (e: any) {
+      if (e?.name === "DuplicateSlugError") return res.status(409).json({ message: `Slug "${req.body.slug}" is already taken` });
+      throw e;
+    }
+  });
+
+  app.delete("/api/admin/studio/featured/:id", requireAdmin, async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    const ok = await storage.deleteStudioFeaturedClip(id);
+    if (!ok) return res.status(404).json({ message: "Not found" });
+    res.json({ ok: true });
+  });
+
+  // ── Admin: Prompt Templates CRUD ──────────────────────────────────────────
+  app.get("/api/admin/studio/templates", requireAdmin, async (_req: Request, res: Response) => {
+    const rows = await storage.listStudioPromptTemplates(false);
+    res.json(rows);
+  });
+
+  app.post("/api/admin/studio/templates", requireAdmin, async (req: Request, res: Response) => {
+    const { slug, label, tag, prompt, gradientKey, iconKey, kind, videoUrl, posterUrl, wizardKey, position, active } = req.body;
+    if (!slug || !label || !prompt) return res.status(400).json({ message: "slug, label, prompt required" });
+    try {
+      const row = await storage.createStudioPromptTemplate({
+        slug, label, tag: tag ?? "", prompt,
+        gradientKey: gradientKey ?? "from-emerald-400 via-teal-500 to-cyan-500",
+        iconKey: iconKey ?? "zap",
+        kind: kind ?? "video",
+        videoUrl: videoUrl ?? null, posterUrl: posterUrl ?? null,
+        wizardKey: wizardKey ?? null,
+        position: position ?? 100, active: active ?? true,
+      });
+      res.json(row);
+    } catch (e: any) {
+      if (e?.name === "DuplicateSlugError") return res.status(409).json({ message: `Slug "${slug}" is already taken` });
+      throw e;
+    }
+  });
+
+  app.patch("/api/admin/studio/templates/:id", requireAdmin, async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    try {
+      const row = await storage.updateStudioPromptTemplate(id, req.body);
+      if (!row) return res.status(404).json({ message: "Not found" });
+      res.json(row);
+    } catch (e: any) {
+      if (e?.name === "DuplicateSlugError") return res.status(409).json({ message: `Slug "${req.body.slug}" is already taken` });
+      throw e;
+    }
+  });
+
+  app.delete("/api/admin/studio/templates/:id", requireAdmin, async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    const ok = await storage.deleteStudioPromptTemplate(id);
+    if (!ok) return res.status(404).json({ message: "Not found" });
+    res.json({ ok: true });
+  });
+
   app.get("/api/studio/tools", async (_req: Request, res: Response) => {
     let tools = getStudioToolsCache();
     if (!tools) {

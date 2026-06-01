@@ -84,6 +84,7 @@ const AdminQaCashdropDebug = lazy(() => import("@/pages/admin-qa-cashdrop-debug"
 const AdminQaFlags = lazy(() => import("@/pages/admin-qa-flags"));
 const AdminQaPush = lazy(() => import("@/pages/admin-qa-push"));
 const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
+const AdminStudio = lazy(() => import("@/pages/admin-studio"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
@@ -265,6 +266,7 @@ function Router() {
       <Route path="/admin/qa/cashdrops/:id/debug" component={() => <AdminRoute component={AdminQaCashdropDebug} />} />
       <Route path="/admin/qa/inspect/:type/:id" component={() => <AdminRoute component={AdminQaInspect} />} />
       <Route path="/admin/users/:id" component={() => <AdminRoute component={AdminUserProfile} />} />
+      <Route path="/admin/studio" component={() => <AdminRoute component={AdminStudio} />} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />
       <Route path="/wallet" component={() => <ConsumerRoute component={WalletPage} />} />

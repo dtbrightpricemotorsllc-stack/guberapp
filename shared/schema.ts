@@ -1934,6 +1934,28 @@ export const studioFeaturedClips = pgTable("studio_featured_clips", {
 export type StudioFeaturedClip = typeof studioFeaturedClips.$inferSelect;
 export type InsertStudioFeaturedClip = Omit<StudioFeaturedClip, "id" | "createdAt">;
 
+// studio_prompt_templates — admin-managed "Trending Templates" carousel on /studio.
+// Replaces the hardcoded TEMPLATES array; if the table is empty the frontend
+// falls back to its built-in defaults so the page is never blank.
+export const studioPromptTemplates = pgTable("studio_prompt_templates", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  tag: text("tag").notNull().default(""),
+  prompt: text("prompt").notNull(),
+  gradientKey: text("gradient_key").notNull().default("from-emerald-400 via-teal-500 to-cyan-500"),
+  iconKey: text("icon_key").notNull().default("zap"),
+  kind: text("kind").notNull().default("video"), // video | audio | image
+  videoUrl: text("video_url"),
+  posterUrl: text("poster_url"),
+  wizardKey: text("wizard_key"), // mirror_motion | commercial_builder | null
+  position: integer("position").notNull().default(100),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type StudioPromptTemplate = typeof studioPromptTemplates.$inferSelect;
+export type InsertStudioPromptTemplate = Omit<StudioPromptTemplate, "id" | "createdAt">;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // QA DASHBOARD (task-462) — feature flags, tester allowlist, cash-drop events
 // ─────────────────────────────────────────────────────────────────────────────
