@@ -42,7 +42,7 @@ const CATEGORIES = [
   { label: "Verify & Inspect", desc: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect" },
   { label: "Marketplace",      desc: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#5C3E07,#8B6010,#A87418)", href: "/marketplace",  badge: "BETA" },
   { label: "Barter Labor",     desc: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor" },
-  { label: "Load Board",       desc: "Cars, boats, RVs & equipment",      icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",   badge: "NEW" },
+  { label: "Load Board",       desc: "Cars, boats, RVs, equipment & more", icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",   badge: "NEW" },
   { label: "AI or Not?",       desc: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,#0E0E0F,#141417,#1A1A1F)", href: "/ai-or-not",    border: "1.5px solid rgba(0,229,118,0.55)" },
 ];
 
