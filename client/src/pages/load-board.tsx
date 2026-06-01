@@ -569,7 +569,7 @@ function CategoriesScreen({
             return (
               <button
                 key={cat.value}
-                onClick={() => onSelect(cat.value)}
+                onClick={() => onSelect(cat.value as CategoryValue)}
                 className="rounded-2xl p-4 text-left relative overflow-hidden active:scale-[0.97] transition-all"
                 style={{
                   background: "rgba(255,255,255,0.04)",
@@ -858,6 +858,8 @@ export default function LoadBoard() {
     ? myListings
     : screen === "all" || screen === null
     ? allListings
+    : screen === "freight"
+    ? allListings.filter(l => (FREIGHT_TRAILER_TYPES as readonly string[]).includes(l.transportType))
     : allListings.filter(l => l.transportType === screen);
 
   const isLoading = screen === "mine" ? myLoading : allLoading;
