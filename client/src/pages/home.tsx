@@ -8,19 +8,14 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, X,
   Briefcase, ShieldCheck, Zap, Users, Star, ArrowRight, Lock,
-  Search, Globe,
+  Search, Globe, Hammer, Wrench, ShoppingBag, Repeat, Truck, Bot,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
 
 import logoImg   from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
-import generalLaborImg  from "@assets/category-images/general_labor.png";
-import skilledLaborImg  from "@assets/category-images/skilled_labor.png";
-import onDemandHelpImg  from "@assets/category-images/on_demand_help.png";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
-import marketplaceImg   from "@assets/category-images/marketplace.png";
-import barterLaborImg   from "@assets/category-images/barter_labor.png";
 
 interface PublicJob {
   id: number;
@@ -41,12 +36,14 @@ interface PublicJob {
 }
 
 const CATEGORIES = [
-  { label: "General Labor",   img: generalLaborImg,  desc: "Moving, loading, clean-up — show up and earn." },
-  { label: "Skilled Labor",   img: skilledLaborImg,  desc: "Trades, repairs, installs — your craft pays." },
-  { label: "On-Demand Help",  img: onDemandHelpImg,  desc: "Errands, delivery, quick tasks near you." },
-  { label: "Barter Labor",    img: barterLaborImg,   desc: "Trade skills for goods. No cash required." },
-  { label: "Verify & Inspect",img: verifyInspectImg, desc: "Visual proof — eyes on the ground, not inspectors." },
-  { label: "Marketplace",     img: marketplaceImg,   desc: "Buy, sell, and trade local items." },
+  { label: "On-Demand Help",   desc: "Get help fast for any task",        icon: Zap,         bg: "linear-gradient(135deg,#78350f,#92400e,#c2410c)", href: "/browse-jobs?category=On-Demand Help" },
+  { label: "Skilled Labor",    desc: "Find skilled pros for the job",     icon: Hammer,      bg: "linear-gradient(135deg,#7f1d1d,#991b1b,#b91c1c)", href: "/browse-jobs?category=Skilled Labor" },
+  { label: "General Labor",    desc: "Everyday tasks, done right",        icon: Wrench,      bg: "linear-gradient(135deg,#14532d,#166534,#15803d)", href: "/browse-jobs?category=General Labor" },
+  { label: "Verify & Inspect", desc: "Verify assets & inspections",       icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect" },
+  { label: "Marketplace",      desc: "Buy, sell & verify local items",    icon: ShoppingBag, bg: "linear-gradient(135deg,#5C3E07,#8B6010,#A87418)", href: "/marketplace",  badge: "BETA" },
+  { label: "Barter Labor",     desc: "Trade skills. No cash needed",      icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor" },
+  { label: "Load Board",       desc: "Cars, boats, RVs & equipment",      icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",   badge: "NEW" },
+  { label: "AI or Not?",       desc: "Can you spot the fake? 🤖",         icon: Bot,         bg: "linear-gradient(135deg,#0E0E0F,#141417,#1A1A1F)", href: "/ai-or-not",    border: "1.5px solid rgba(0,229,118,0.55)" },
 ];
 
 const QUOTES = [
@@ -433,32 +430,25 @@ export default function Home() {
           <p className="text-muted-foreground text-sm">Whatever your skills — there's a job waiting.</p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {CATEGORIES.map(({ label, img, desc }) => (
+        <div className="grid grid-cols-2 gap-3">
+          {CATEGORIES.map(({ label, desc, icon: Icon, bg, href, badge, border }) => (
             <Link
               key={label}
-              href="/browse-jobs"
-              className="group relative overflow-hidden rounded-2xl aspect-[4/3] block"
+              href={href}
+              className="relative rounded-2xl p-4 flex flex-col gap-1 active:scale-[0.97] transition-transform overflow-hidden"
+              style={{ background: bg, border: border ?? "1px solid rgba(255,255,255,0.06)" }}
               data-testid={`card-category-${label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`}
             >
-              <img
-                src={img}
-                alt={label}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              {label === "Verify & Inspect" && (
-                <img
-                  src={viLogoImg}
-                  alt="V&I"
-                  className="absolute top-2 right-2 w-10 h-10 object-contain"
-                  style={{ mixBlendMode: "screen" }}
-                />
+              {badge && (
+                <span className="absolute top-2.5 right-2.5 text-[9px] font-display font-black px-1.5 py-0.5 rounded-md"
+                  style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)" }}>
+                  {badge}
+                </span>
               )}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <p className="text-[11px] font-display font-black tracking-widest text-white mb-0.5">{label}</p>
-                <p className="text-[10px] text-white/85 leading-tight">{desc}</p>
-              </div>
+              <Icon className="w-5 h-5 mb-1 text-white/80" />
+              <p className="text-sm font-display font-black text-white leading-tight">{label}</p>
+              <p className="text-[10px] text-white/60 leading-tight">{desc}</p>
+              <ChevronRight className="w-3.5 h-3.5 text-white/30 mt-1" />
             </Link>
           ))}
         </div>
