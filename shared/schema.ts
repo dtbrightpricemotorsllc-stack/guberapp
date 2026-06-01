@@ -2108,6 +2108,37 @@ export const loadBoardListings = pgTable("load_board_listings", {
   connectedAt: timestamp("connected_at"),
   connectionTier: text("connection_tier"),
   connectionFeePaid: integer("connection_fee_paid"),
+  // Freight trailer type system
+  freightTrailerType: text("freight_trailer_type"), // dry_van | reefer | flatbed | conestoga | hotshot | power_only | step_deck | lowboy_rgn | car_hauler | other
+  commodityType: text("commodity_type"),
+  palletCount: integer("pallet_count"),
+  dockPickup: boolean("dock_pickup"),
+  dockDelivery: boolean("dock_delivery"),
+  liftgateRequired: boolean("liftgate_required"),
+  tempRequired: text("temp_required"), // frozen | chilled | fresh | custom
+  tempValue: text("temp_value"),
+  tarpRequired: boolean("tarp_required"),
+  chainsRequired: boolean("chains_required"),
+  strapsRequired: boolean("straps_required"),
+  oversized: boolean("oversized"),
+  permitRequired: boolean("permit_required"),
+  escortRequired: boolean("escort_required"),
+  vehicleCount: integer("vehicle_count"),
+  carrierType: text("carrier_type"), // open | enclosed
+  trailerNumber: text("trailer_number"),
+  weatherSensitive: boolean("weather_sensitive"),
+  sideLoadRequired: boolean("side_load_required"),
+  hotshotTrailerType: text("hotshot_trailer_type"), // bumper_pull | gooseneck
+  powerOnlyTrailerType: text("power_only_trailer_type"),
+  customFreightType: text("custom_freight_type"),
+  pickupDate: text("pickup_date"),
+  deliveryDate: text("delivery_date"),
+  weightLbs: real("weight_lbs"),
+  dimensionsLength: real("dimensions_length"),
+  dimensionsWidth: real("dimensions_width"),
+  dimensionsHeight: real("dimensions_height"),
+  activationFeePaid: boolean("activation_fee_paid").default(false),
+  activationFeeSessionId: text("activation_fee_session_id"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -2115,6 +2146,7 @@ export const loadBoardListings = pgTable("load_board_listings", {
 export const insertLoadBoardListingSchema = createInsertSchema(loadBoardListings).omit({
   id: true, createdAt: true, updatedAt: true, status: true,
   connectedCarrierId: true, connectedAt: true, connectionTier: true, connectionFeePaid: true,
+  activationFeePaid: true, activationFeeSessionId: true,
 });
 export type LoadBoardListing = typeof loadBoardListings.$inferSelect;
 export type InsertLoadBoardListing = z.infer<typeof insertLoadBoardListingSchema>;

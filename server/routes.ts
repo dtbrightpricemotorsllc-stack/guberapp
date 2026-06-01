@@ -3600,6 +3600,30 @@ export async function registerRoutes(
             }).catch(e => console.error("[webhook] createBuyerOrderPurchase error:", e));
             console.log(`[GUBER][webhook/main] marketplace_buyer_order: recorded purchase for item #${boItemId} user #${boUserId}`);
           }
+        } else if (metadata?.type === "load_board_activation") {
+          const lbListingId = metadata.listingId ? parseInt(metadata.listingId) : null;
+          if (lbListingId) {
+            await storage.updateLoadBoardListing(lbListingId, {
+              activationFeePaid: true,
+              activationFeeSessionId: session.id,
+              status: "offer_accepted",
+            });
+            console.log(`[GUBER][webhook/main] load_board_activation: listing #${lbListingId} activated, session ${session.id}`);
+          }
+        } else if (metadata?.type === "load_board_connection") {
+          const lbListingId = metadata.listingId ? parseInt(metadata.listingId) : null;
+          const lbCarrierId = metadata.carrierId ? parseInt(metadata.carrierId) : null;
+          const lbTier = metadata.tier || "standard";
+          if (lbListingId && lbCarrierId) {
+            await storage.updateLoadBoardListing(lbListingId, {
+              connectedCarrierId: lbCarrierId,
+              connectedAt: new Date(),
+              connectionTier: lbTier,
+              connectionFeePaid: session.amount_total || 0,
+              status: "connected",
+            });
+            console.log(`[GUBER][webhook/main] load_board_connection: listing #${lbListingId} connected to carrier #${lbCarrierId}`);
+          }
         } else {
           console.log(`[GUBER][webhook/main] checkout.session.completed: unhandled session type "${metadata?.type || "none"}" — ignored`);
         }
@@ -20961,6 +20985,7 @@ OUTPUT STYLE:
   // Rate suggestion helper (per mile, based on transport type)
   function suggestLoadRate(transportType: string, miles: number): { low: number; high: number } {
     const baseRates: Record<string, { low: number; high: number }> = {
+      // Legacy asset transport
       vehicle: { low: 0.55, high: 0.85 },
       equipment: { low: 0.65, high: 1.1 },
       boat: { low: 0.70, high: 1.2 },
@@ -20968,62 +20993,109 @@ OUTPUT STYLE:
       trailer: { low: 0.50, high: 0.80 },
       hotshot: { low: 0.75, high: 1.3 },
       other: { low: 0.55, high: 0.90 },
+      // Freight trailer types (per-mile rates, USD)
+      dry_van:    { low: 1.50, high: 2.50 },
+      reefer:     { low: 2.00, high: 3.50 },
+      flatbed:    { low: 2.00, high: 3.50 },
+      conestoga:  { low: 2.50, high: 4.00 },
+      power_only: { low: 0.75, high: 1.25 },
+      step_deck:  { low: 2.25, high: 3.75 },
+      lowboy_rgn: { low: 3.00, high: 5.00 },
+      car_hauler: { low: 0.60, high: 1.10 },
     };
     const rate = baseRates[transportType] || baseRates.other;
     const min = Math.round(miles * rate.low);
     const max = Math.round(miles * rate.high);
-    // Add fuel/handling floor
-    return { low: Math.max(min, 250), high: Math.max(max, 350) };
+    return { low: Math.max(min, 250), high: Math.max(max, 400) };
   }
 
   // POST /api/load-board — create listing
   app.post("/api/load-board", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const {
-        transportType, vin, year, make, model, assetDescription,
-        vehicleCondition, trailerPreference, loadingMethod, unloadingMethod,
-        pickupAccess, deliveryAccess,
-        pickupZip, pickupCity, pickupState,
-        deliveryZip, deliveryCity, deliveryState,
-        estimatedMiles, pricingMode, postedPrice, notes, urgent,
-      } = req.body;
+      const b = req.body;
 
-      if (!transportType || !pickupCity || !pickupState || !deliveryCity || !deliveryState) {
+      const transportType = b.transportType || b.freightTrailerType;
+      if (!transportType || !b.pickupCity || !b.pickupState || !b.deliveryCity || !b.deliveryState) {
         return res.status(400).json({ message: "transportType, pickup, and delivery locations are required" });
       }
 
-      const miles = estimatedMiles || 0;
+      const miles = b.estimatedMiles || 0;
       const suggested = miles > 0 ? suggestLoadRate(transportType, miles) : null;
 
       const listing = await storage.createLoadBoardListing({
         posterId: userId,
         transportType,
-        vin: vin || null,
-        year: year || null,
-        make: make || null,
-        model: model || null,
-        assetDescription: assetDescription || null,
-        vehicleCondition: vehicleCondition || null,
-        trailerPreference: trailerPreference || null,
-        loadingMethod: loadingMethod || null,
-        unloadingMethod: unloadingMethod || null,
-        pickupAccess: pickupAccess || null,
-        deliveryAccess: deliveryAccess || null,
-        pickupZip: pickupZip || null,
-        pickupCity,
-        pickupState,
-        deliveryZip: deliveryZip || null,
-        deliveryCity,
-        deliveryState,
+        freightTrailerType: b.freightTrailerType || null,
+        commodityType: b.commodityType || null,
+        vin: b.vin || null,
+        vinVerified: b.vinVerified || false,
+        year: b.year || null,
+        make: b.make || null,
+        model: b.model || null,
+        assetDescription: b.assetDescription || null,
+        vehicleType: b.vehicleType || null,
+        vehicleCondition: b.vehicleCondition || null,
+        equipmentType: b.equipmentType || null,
+        boatType: b.boatType || null,
+        rvClass: b.rvClass || null,
+        trailerType: b.trailerType || null,
+        freightType: b.freightType || null,
+        weightRange: b.weightRange || null,
+        weightLbs: b.weightLbs || null,
+        palletized: b.palletized || null,
+        palletCount: b.palletCount || null,
+        dockPickup: b.dockPickup ?? null,
+        dockDelivery: b.dockDelivery ?? null,
+        liftgateRequired: b.liftgateRequired ?? null,
+        tempRequired: b.tempRequired || null,
+        tempValue: b.tempValue || null,
+        dimensionsLength: b.dimensionsLength || null,
+        dimensionsWidth: b.dimensionsWidth || null,
+        dimensionsHeight: b.dimensionsHeight || null,
+        tarpRequired: b.tarpRequired ?? null,
+        chainsRequired: b.chainsRequired ?? null,
+        strapsRequired: b.strapsRequired ?? null,
+        oversized: b.oversized ?? null,
+        permitRequired: b.permitRequired ?? null,
+        escortRequired: b.escortRequired ?? null,
+        weatherSensitive: b.weatherSensitive ?? null,
+        sideLoadRequired: b.sideLoadRequired ?? null,
+        hotshotTrailerType: b.hotshotTrailerType || null,
+        powerOnlyTrailerType: b.powerOnlyTrailerType || null,
+        trailerNumber: b.trailerNumber || null,
+        vehicleCount: b.vehicleCount || null,
+        carrierType: b.carrierType || null,
+        customFreightType: b.customFreightType || null,
+        pickupDate: b.pickupDate || null,
+        deliveryDate: b.deliveryDate || null,
+        trailerIncluded: b.trailerIncluded || false,
+        trailerPreference: b.trailerPreference || null,
+        loadingMethod: b.loadingMethod || null,
+        unloadingMethod: b.unloadingMethod || null,
+        loadingAssistAvailable: b.loadingAssistAvailable || null,
+        unloadingAssistAvailable: b.unloadingAssistAvailable || null,
+        dockAvailable: b.dockAvailable || null,
+        pickupAccess: b.pickupAccess || null,
+        deliveryAccess: b.deliveryAccess || null,
+        pickupFlexibility: b.pickupFlexibility || null,
+        deliveryFlexibility: b.deliveryFlexibility || null,
+        pickupZip: b.pickupZip || null,
+        pickupCity: b.pickupCity,
+        pickupState: b.pickupState,
+        deliveryZip: b.deliveryZip || null,
+        deliveryCity: b.deliveryCity,
+        deliveryState: b.deliveryState,
         estimatedMiles: miles || null,
-        pricingMode: pricingMode || "fixed",
-        postedPrice: postedPrice || null,
+        pricingMode: b.pricingMode || "fixed",
+        postedPrice: b.postedPrice || null,
         suggestedLow: suggested?.low || null,
         suggestedHigh: suggested?.high || null,
+        addonFlags: b.addonFlags || null,
+        ownershipProofStatus: b.ownershipProofStatus || null,
         status: "posted",
-        urgent: urgent || false,
-        notes: notes || null,
+        urgent: b.urgent || false,
+        notes: b.notes || null,
       });
       res.json({ listing });
     } catch (err: any) {
@@ -21383,6 +21455,103 @@ OUTPUT STYLE:
       });
 
       res.json({ checkoutUrl: session.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/load-board/:id/activate/checkout — shipper pays carrier rate + $10 activation fee
+  app.post("/api/load-board/:id/activate/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      const posterId = req.session.userId!;
+      const listing = await storage.getLoadBoardListing(listingId);
+      if (!listing) return res.status(404).json({ message: "Listing not found" });
+      if (listing.posterId !== posterId) return res.status(403).json({ message: "Unauthorized" });
+      if (listing.activationFeePaid) return res.status(400).json({ message: "Already activated" });
+      if (!listing.connectedCarrierId) return res.status(400).json({ message: "No accepted carrier yet" });
+
+      // Get the accepted offer to determine the carrier rate
+      const offers = await storage.getLoadBoardOffersByListing(listingId);
+      const acceptedOffer = offers.find(o => o.carrierId === listing.connectedCarrierId && o.status === "accepted");
+      const carrierRateDollars = acceptedOffer?.offerAmount ?? listing.postedPrice ?? 0;
+      if (carrierRateDollars <= 0) return res.status(400).json({ message: "No valid rate on this load" });
+
+      const poster = await storage.getUser(posterId);
+      const host = req.get("host") || "localhost:5000";
+      const protocol = req.get("x-forwarded-proto") || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      let customerId: string | undefined;
+      if (poster?.stripeCustomerId) {
+        customerId = poster.stripeCustomerId;
+      } else if (poster?.email) {
+        const stripeCustomer = await stripeMain.customers.create({ email: poster.email, name: poster.fullName || undefined });
+        customerId = stripeCustomer.id;
+        await storage.updateUser(posterId, { stripeCustomerId: stripeCustomer.id });
+      }
+
+      const carrierRateCents = Math.round(carrierRateDollars * 100);
+      const platformFeeCents = Math.round(carrierRateCents * 0.05); // 5%
+      const activationFeeCents = 1000; // $10
+      const guberRevenueCents = activationFeeCents + platformFeeCents;
+      const carrierPayoutCents = carrierRateCents - platformFeeCents;
+
+      const freightLabel = listing.freightTrailerType
+        ? listing.freightTrailerType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+        : "Freight";
+
+      const session = await stripeMain.checkout.sessions.create({
+        payment_method_types: ["card"],
+        ...(customerId ? { customer: customerId } : {}),
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: `GUBER Load Board — ${freightLabel} Transport`,
+                description: `Carrier rate for load #${listingId} · ${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}`,
+              },
+              unit_amount: carrierRateCents,
+            },
+            quantity: 1,
+          },
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "GUBER Load Activation Fee",
+                description: "One-time activation fee per load match",
+              },
+              unit_amount: activationFeeCents,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: `${baseUrl}/load-board/${listingId}?activated=1`,
+        cancel_url: `${baseUrl}/load-board/${listingId}`,
+        metadata: {
+          type: "load_board_activation",
+          listingId: String(listingId),
+          posterId: String(posterId),
+          carrierId: String(listing.connectedCarrierId),
+          carrierRateCents: String(carrierRateCents),
+          carrierPayoutCents: String(carrierPayoutCents),
+          guberRevenueCents: String(guberRevenueCents),
+        },
+      });
+
+      res.json({
+        checkoutUrl: session.url,
+        breakdown: {
+          carrierRate: carrierRateDollars,
+          activationFee: 10,
+          totalCharged: (carrierRateCents + activationFeeCents) / 100,
+          carrierReceives: carrierPayoutCents / 100,
+          guberReceives: guberRevenueCents / 100,
+        },
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

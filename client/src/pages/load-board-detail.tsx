@@ -148,6 +148,11 @@ export default function LoadBoardDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
       window.history.replaceState({}, "", `/load-board/${listingId}`);
     }
+    if (params.get("activated")) {
+      toast({ title: "Load Activated! 🚛", description: "Carrier has been notified. Transport is confirmed." });
+      queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
+      window.history.replaceState({}, "", `/load-board/${listingId}`);
+    }
     if (params.get("addon_success")) {
       toast({ title: "Add-on confirmed!", description: "Your field service has been scheduled." });
       queryClient.invalidateQueries({ queryKey: ["/api/load-board", listingId] });
@@ -193,6 +198,17 @@ export default function LoadBoardDetail() {
     onSuccess: async (res: any) => {
       const json = await res.json();
       if (json.checkoutUrl) window.location.href = json.checkoutUrl;
+    },
+    onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/load-board/${listingId}/activate/checkout`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.checkoutUrl) window.location.href = data.checkoutUrl;
     },
     onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.message }),
   });
@@ -673,9 +689,96 @@ export default function LoadBoardDetail() {
           </div>
         )}
 
+        {/* ════════ FREIGHT FIELDS ════════ */}
+        {listing.freightTrailerType && (
+          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">
+              {listing.freightTrailerType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} Details
+            </p>
+            {listing.commodityType && <DetailRow label="Commodity" value={listing.commodityType} />}
+            {listing.weightLbs && <DetailRow label="Weight" value={`${listing.weightLbs.toLocaleString()} lbs`} />}
+            {(listing.dimensionsLength || listing.dimensionsWidth || listing.dimensionsHeight) && (
+              <DetailRow label="Dimensions" value={`${listing.dimensionsLength || "?"}L × ${listing.dimensionsWidth || "?"}W × ${listing.dimensionsHeight || "?"}H ft`} />
+            )}
+            {listing.palletCount && <DetailRow label="Pallets" value={String(listing.palletCount)} />}
+            {listing.dockPickup != null && <DetailRow label="Dock Pickup" value={listing.dockPickup ? "Yes" : "No"} />}
+            {listing.dockDelivery != null && <DetailRow label="Dock Delivery" value={listing.dockDelivery ? "Yes" : "No"} />}
+            {listing.liftgateRequired != null && <DetailRow label="Liftgate" value={listing.liftgateRequired ? "Required" : "Not Required"} />}
+            {listing.tempRequired && <DetailRow label="Temperature" value={listing.tempRequired.charAt(0).toUpperCase() + listing.tempRequired.slice(1)} />}
+            {listing.tempValue && <DetailRow label="Temp Value" value={listing.tempValue} />}
+            {listing.tarpRequired != null && <DetailRow label="Tarp" value={listing.tarpRequired ? "Required" : "Not Required"} />}
+            {listing.chainsRequired != null && <DetailRow label="Chains" value={listing.chainsRequired ? "Required" : "Not Required"} />}
+            {listing.strapsRequired != null && <DetailRow label="Straps" value={listing.strapsRequired ? "Required" : "Not Required"} />}
+            {listing.oversized != null && <DetailRow label="Oversized" value={listing.oversized ? "⚠️ Yes" : "No"} />}
+            {listing.permitRequired != null && <DetailRow label="Permit" value={listing.permitRequired ? "⚠️ Required" : "Not Required"} />}
+            {listing.escortRequired != null && <DetailRow label="Escort" value={listing.escortRequired ? "⚠️ Required" : "Not Required"} />}
+            {listing.hotshotTrailerType && <DetailRow label="Hotshot Trailer" value={listing.hotshotTrailerType.replace(/_/g, " ")} />}
+            {listing.powerOnlyTrailerType && <DetailRow label="Trailer Type" value={listing.powerOnlyTrailerType.replace(/_/g, " ")} />}
+            {listing.trailerNumber && <DetailRow label="Trailer #" value={listing.trailerNumber} />}
+            {listing.vehicleCount && <DetailRow label="Vehicles" value={String(listing.vehicleCount)} />}
+            {listing.carrierType && <DetailRow label="Carrier Type" value={listing.carrierType === "open" ? "Open Carrier" : "Enclosed Carrier"} />}
+            {listing.pickupDate && <DetailRow label="Pickup Date" value={listing.pickupDate} />}
+            {listing.deliveryDate && <DetailRow label="Delivery Date" value={listing.deliveryDate} />}
+            {listing.customFreightType && <DetailRow label="Freight Type" value={listing.customFreightType} />}
+          </div>
+        )}
+
         {/* ════════ POSTER VIEW ════════ */}
         {isPoster && (
           <>
+            {/* Freight activation banner */}
+            {listing.freightTrailerType && listing.status === "offer_accepted" && !listing.activationFeePaid && listing.connectedCarrierId && (
+              <div className="rounded-2xl p-4 space-y-3" style={{ background: "linear-gradient(135deg,rgba(34,197,94,0.14),rgba(21,128,61,0.08))", border: "1.5px solid rgba(34,197,94,0.4)" }}>
+                <div>
+                  <p className="text-sm font-display font-black text-green-400">🚛 Carrier Selected — Pay to Activate</p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-1 leading-relaxed">
+                    You've selected a carrier. Complete payment to officially confirm this load and notify the carrier to proceed.
+                  </p>
+                </div>
+                <div className="rounded-xl p-3 space-y-1" style={{ background: "rgba(255,255,255,0.04)" }}>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-muted-foreground/50">Carrier Rate</span>
+                    <span className="font-display font-bold text-foreground">
+                      ${(listing.postedPrice || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-muted-foreground/50">Load Activation Fee</span>
+                    <span className="font-display font-bold text-foreground">$10.00</span>
+                  </div>
+                  <div className="h-px my-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+                  <div className="flex justify-between text-xs">
+                    <span className="font-display font-black text-foreground">Customer Pays</span>
+                    <span className="font-display font-black text-green-400">
+                      ${((listing.postedPrice || 0) + 10).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground/30 pt-0.5">
+                    Carrier receives 95% of rate · GUBER keeps $10 + 5%
+                  </p>
+                </div>
+                <Button
+                  className="w-full rounded-2xl h-11 font-display font-black text-sm tracking-wide"
+                  style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)" }}
+                  onClick={() => activateMutation.mutate()}
+                  disabled={activateMutation.isPending}
+                  data-testid="button-activate-load"
+                >
+                  {activateMutation.isPending
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : `Pay & Activate · $${((listing.postedPrice || 0) + 10).toLocaleString()}`
+                  }
+                </Button>
+              </div>
+            )}
+
+            {listing.freightTrailerType && listing.activationFeePaid && (
+              <div className="rounded-xl p-3 flex items-center gap-2.5" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)" }}>
+                <Check className="w-4 h-4 text-green-400 shrink-0" />
+                <p className="text-xs font-display font-bold text-green-400">Load activated — carrier confirmed & notified</p>
+              </div>
+            )}
+
             {/* Edit / lock status */}
             {listing.status === "posted" || listing.status === "offer_received" ? (
               <Button

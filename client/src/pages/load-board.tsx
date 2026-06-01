@@ -13,6 +13,8 @@ import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 // ── Category definitions ───────────────────────────────────────────────────────
 type IconComponent = React.FC<React.SVGAttributes<SVGElement> & { className?: string }>;
 
+const FREIGHT_TRAILER_TYPES = ["dry_van","reefer","flatbed","conestoga","hotshot","power_only","step_deck","lowboy_rgn","car_hauler","other"] as const;
+
 const CATEGORIES: {
   value: string; label: string; icon: IconComponent; desc: string;
 }[] = [
@@ -22,9 +24,10 @@ const CATEGORIES: {
   { value: "equipment", label: "Heavy Equipment",  icon: HardHat,  desc: "Construction, farm, industrial" },
   { value: "trailer",   label: "Trailers",         icon: Truck,    desc: "Flatbed, enclosed, utility" },
   { value: "hotshot",   label: "Hotshot Loads",    icon: Zap,      desc: "Time-critical, LTL freight" },
+  { value: "freight",   label: "Freight",          icon: Package,  desc: "Dry van, reefer, flatbed & more" },
 ];
 
-type CategoryValue = "vehicle" | "boat" | "rv" | "equipment" | "trailer" | "hotshot" | "all";
+type CategoryValue = "vehicle" | "boat" | "rv" | "equipment" | "trailer" | "hotshot" | "freight" | "all";
 
 // ── Status config ──────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {

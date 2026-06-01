@@ -10,125 +10,134 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ChevronRight, ChevronLeft, Loader2, TrendingUp, Zap, Info, ShoppingCart, Check } from "lucide-react";
 
-// ── constants ──────────────────────────────────────────────────────────────────
+// ── style constants ────────────────────────────────────────────────────────────
 
-const CYAN_ACTIVE = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
+const CYAN_ACTIVE   = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
 const CYAN_INACTIVE = { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" };
-const CYAN_TILE_ACTIVE = { background: "linear-gradient(135deg,rgba(8,145,178,0.25),rgba(14,116,144,0.15))", border: "1.5px solid rgba(6,182,212,0.5)" };
-const CYAN_TILE_INACTIVE = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" };
+const CYAN_TILE_ACTIVE   = { background: "linear-gradient(135deg,rgba(8,145,178,0.25),rgba(14,116,144,0.15))", border: "1.5px solid rgba(6,182,212,0.5)" };
+const CYAN_TILE_INACTIVE = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" };
 
-const TRANSPORT_TYPES = [
-  { value: "vehicle",   label: "🚗 Vehicle",       sub: "Car, truck, SUV, van" },
-  { value: "equipment", label: "🏗️ Equipment",      sub: "Heavy machinery, tools" },
-  { value: "boat",      label: "⛵ Boat",            sub: "Powerboat, pontoon, jet ski" },
-  { value: "rv",        label: "🚐 RV",             sub: "Class A/B/C, 5th wheel" },
-  { value: "trailer",   label: "🔧 Trailer",        sub: "Utility, cargo, flatbed" },
-  { value: "hotshot",   label: "⚡ Hotshot",         sub: "Time-sensitive freight" },
+// ── trailer types with neon color system ───────────────────────────────────────
+
+const FREIGHT_TRAILER_TYPES = [
+  {
+    value: "dry_van",
+    label: "Dry Van",
+    icon: "🚚",
+    sub: "Standard enclosed freight",
+    accent: "#22c55e",
+    activeBg: "linear-gradient(135deg,rgba(34,197,94,0.22),rgba(21,128,61,0.12))",
+    activeBorder: "1.5px solid rgba(34,197,94,0.55)",
+  },
+  {
+    value: "reefer",
+    label: "Reefer",
+    icon: "❄️",
+    sub: "Temperature-controlled loads",
+    accent: "#3b82f6",
+    activeBg: "linear-gradient(135deg,rgba(59,130,246,0.22),rgba(37,99,235,0.12))",
+    activeBorder: "1.5px solid rgba(59,130,246,0.55)",
+  },
+  {
+    value: "flatbed",
+    label: "Flatbed",
+    icon: "🏗️",
+    sub: "Open deck — oversize, steel",
+    accent: "#f97316",
+    activeBg: "linear-gradient(135deg,rgba(249,115,22,0.22),rgba(234,88,12,0.12))",
+    activeBorder: "1.5px solid rgba(249,115,22,0.55)",
+  },
+  {
+    value: "conestoga",
+    label: "Conestoga",
+    icon: "📦",
+    sub: "Rolling tarp system",
+    accent: "#a78bfa",
+    activeBg: "linear-gradient(135deg,rgba(139,92,246,0.22),rgba(124,58,237,0.12))",
+    activeBorder: "1.5px solid rgba(139,92,246,0.55)",
+  },
+  {
+    value: "hotshot",
+    label: "Hotshot",
+    icon: "🔥",
+    sub: "Time-sensitive partial loads",
+    accent: "#ef4444",
+    activeBg: "linear-gradient(135deg,rgba(239,68,68,0.22),rgba(220,38,38,0.12))",
+    activeBorder: "1.5px solid rgba(239,68,68,0.55)",
+  },
+  {
+    value: "power_only",
+    label: "Power Only",
+    icon: "🚛",
+    sub: "Carrier hooks to your trailer",
+    accent: "#22d3ee",
+    activeBg: "linear-gradient(135deg,rgba(6,182,212,0.22),rgba(8,145,178,0.12))",
+    activeBorder: "1.5px solid rgba(6,182,212,0.55)",
+  },
+  {
+    value: "step_deck",
+    label: "Step Deck",
+    icon: "📏",
+    sub: "Tall or oversized freight",
+    accent: "#facc15",
+    activeBg: "linear-gradient(135deg,rgba(234,179,8,0.22),rgba(202,138,4,0.12))",
+    activeBorder: "1.5px solid rgba(234,179,8,0.55)",
+  },
+  {
+    value: "lowboy_rgn",
+    label: "Lowboy / RGN",
+    icon: "🏋️",
+    sub: "Heavy haul & tall equipment",
+    accent: "#fbbf24",
+    activeBg: "linear-gradient(135deg,rgba(245,158,11,0.22),rgba(217,119,6,0.12))",
+    activeBorder: "1.5px solid rgba(245,158,11,0.55)",
+  },
+  {
+    value: "car_hauler",
+    label: "Car Hauler",
+    icon: "🚗",
+    sub: "Vehicle transport",
+    accent: "#f472b6",
+    activeBg: "linear-gradient(135deg,rgba(236,72,153,0.22),rgba(219,39,119,0.12))",
+    activeBorder: "1.5px solid rgba(236,72,153,0.55)",
+  },
+  {
+    value: "other",
+    label: "Other",
+    icon: "📦",
+    sub: "Custom or specialty freight",
+    accent: "#9ca3af",
+    activeBg: "linear-gradient(135deg,rgba(107,114,128,0.22),rgba(75,85,99,0.12))",
+    activeBorder: "1.5px solid rgba(107,114,128,0.55)",
+  },
 ];
 
-const VEHICLE_TYPES = [
-  "car", "truck", "suv", "van", "motorcycle", "atv_utv",
-];
-const EQUIPMENT_TYPES = [
-  "skid_steer", "tractor", "forklift", "excavator", "loader", "generator", "other",
-];
-const BOAT_TYPES = [
-  "powerboat", "sailboat", "pontoon", "jet_ski", "fishing", "other",
-];
-const RV_CLASSES = [
-  "class_a", "class_b", "class_c", "travel_trailer", "fifth_wheel", "other",
-];
-const TRAILER_TYPES = [
-  "utility", "enclosed", "car_hauler", "dump", "flatbed", "boat_trailer", "other",
-];
-const FREIGHT_TYPES = [
-  "machinery", "auto_parts", "building_materials", "pallets", "oversized", "livestock", "other",
+// ── commodity types ────────────────────────────────────────────────────────────
+
+const COMMODITY_TYPES = [
+  "Auto Parts", "Building Materials", "Chemicals", "Consumer Goods",
+  "Electronics", "Food & Beverage", "Furniture", "Hazmat",
+  "Industrial Equipment", "Lumber", "Machinery", "Medical Supplies",
+  "Metal / Steel", "Paper / Cardboard", "Produce", "Retail Goods",
+  "Textiles", "Tools", "Other",
 ];
 
-const CONDITIONS = [
-  { value: "runs_drives",    label: "Runs & Drives" },
-  { value: "inop",           label: "Inoperable" },
-  { value: "no_brakes",      label: "No Brakes" },
-  { value: "flat_tires",     label: "Flat Tires" },
-  { value: "locked_wheels",  label: "Locked Wheels" },
-  { value: "no_keys",        label: "No Keys" },
-  { value: "rolls_no_start", label: "Rolls, Won't Start" },
-  { value: "does_not_roll",  label: "Does Not Roll" },
-];
-
-const OWNERSHIP_PROOF = [
-  { value: "title_in_hand",   label: "Title In Hand",   hint: "Clean title, ready to go" },
-  { value: "bill_of_sale",    label: "Bill of Sale",    hint: "Purchased, title pending" },
-  { value: "auction_invoice", label: "Auction Invoice", hint: "Won at auction" },
-  { value: "dealer_owned",    label: "Dealer Owned",    hint: "Commercial dealer" },
-  { value: "lienholder",      label: "Lienholder",      hint: "Bank/lender holds title" },
-  { value: "not_ready",       label: "Proof Pending",   hint: "Will have before pickup" },
-];
-
-const TRAILER_PREFS = [
-  { value: "any",      label: "Any Trailer" },
-  { value: "open",     label: "Open" },
-  { value: "enclosed", label: "Enclosed" },
-  { value: "rollback", label: "Rollback" },
-  { value: "hotshot",  label: "Hotshot" },
-  { value: "lowboy",   label: "Lowboy" },
-  { value: "multi_car",label: "Multi-Car" },
-];
-
-const LOADING_METHODS = [
-  { value: "drive_on", label: "Drive On" },
-  { value: "winch",    label: "Winch" },
-  { value: "forklift", label: "Forklift" },
-  { value: "crane",    label: "Crane" },
-  { value: "liftgate", label: "Liftgate" },
-];
-
-const UNLOADING_METHODS = [
-  { value: "drive_off", label: "Drive Off" },
-  { value: "winch",     label: "Winch" },
-  { value: "forklift",  label: "Forklift" },
-  { value: "crane",     label: "Crane" },
-  { value: "liftgate",  label: "Liftgate" },
-  { value: "rollback",  label: "Rollback" },
-];
-
-const FLEXIBILITY_OPTIONS = [
-  { value: "asap",      label: "ASAP" },
-  { value: "today",     label: "Today" },
-  { value: "this_week", label: "This Week" },
-  { value: "scheduled", label: "Scheduled" },
-];
-
-const ACCESS_OPTIONS = [
-  { value: "residential",  label: "Residential" },
-  { value: "commercial",   label: "Commercial" },
-  { value: "gated",        label: "Gated" },
-  { value: "rural",        label: "Rural" },
-  { value: "auction",      label: "Auction Lot" },
-  { value: "dealership",   label: "Dealership" },
-  { value: "port",         label: "Port / Marina" },
-  { value: "storage",      label: "Storage Unit" },
-];
-
-const WEIGHT_RANGES = [
-  { value: "under_1k",  label: "< 1,000 lbs" },
-  { value: "1k_5k",     label: "1K – 5K lbs" },
-  { value: "5k_10k",    label: "5K – 10K lbs" },
-  { value: "10k_20k",   label: "10K – 20K lbs" },
-  { value: "20k_plus",  label: "20K+ lbs" },
+const VEHICLE_TYPES_HAULER = [
+  { value: "car",       label: "Car" },
+  { value: "truck",     label: "Truck" },
+  { value: "suv",       label: "SUV" },
+  { value: "motorcycle",label: "Motorcycle" },
+  { value: "atv",       label: "ATV" },
+  { value: "equipment", label: "Equipment" },
 ];
 
 const ADDON_OPTIONS: { key: string; label: string; price: number; hint: string }[] = [
-  { key: "urgent_boost",          label: "⚡ Urgent Boost",              price: 10,  hint: "Pin your listing at the top for faster responses" },
-  { key: "premium_carrier_only",  label: "🛡️ Verified Carriers Only",    price: 10,  hint: "Restrict offers to GUBER-credentialed carriers" },
-  { key: "enclosed_transport",    label: "🔒 Enclosed Transport",         price: 0,   hint: "Request enclosed trailer (may raise carrier rates)" },
-  { key: "winch_required",        label: "🪝 Winch Required",             price: 0,   hint: "Signal winch capability is needed" },
-  { key: "liftgate",              label: "🏋️ Liftgate Required",          price: 0,   hint: "Carrier must have a working liftgate" },
-  { key: "photo_proof",           label: "📸 Photo Proof at Pickup",      price: 25,  hint: "GUBER worker documents asset before transport" },
-  { key: "loading_help",          label: "🤝 Loading Assistance",         price: 10,  hint: "GUBER worker helps load the asset onto carrier" },
-  { key: "unloading_help",        label: "🤝 Unloading Assistance",       price: 10,  hint: "GUBER worker helps unload at destination" },
-  { key: "vin_verification",      label: "🔍 VIN Verification",           price: 15,  hint: "GUBER confirms VIN matches vehicle before pickup" },
-  { key: "gps_tracking",          label: "📡 GPS Tracking",               price: 15,  hint: "Real-time location updates during transport" },
+  { key: "urgent_boost",         label: "⚡ Urgent Boost",           price: 10, hint: "Pin your listing at the top for faster responses" },
+  { key: "premium_carrier_only", label: "🛡️ Verified Carriers Only", price: 10, hint: "Restrict offers to GUBER-credentialed carriers" },
+  { key: "photo_proof",          label: "📸 Photo Proof at Pickup",   price: 25, hint: "GUBER worker documents freight before transport" },
+  { key: "loading_help",         label: "🤝 Loading Assistance",      price: 10, hint: "GUBER worker helps load freight onto carrier" },
+  { key: "unloading_help",       label: "🤝 Unloading Assistance",    price: 10, hint: "GUBER worker helps unload at destination" },
+  { key: "gps_tracking",         label: "📡 GPS Tracking",            price: 15, hint: "Real-time location updates during transport" },
 ];
 
 const US_STATES = [
@@ -138,7 +147,7 @@ const US_STATES = [
   "VA","WA","WV","WI","WY",
 ];
 
-// ── shared components ──────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────────
 
 function ChipGrid({ options, value, multi, onChange }: {
   options: (string | { value: string; label: string })[];
@@ -147,7 +156,7 @@ function ChipGrid({ options, value, multi, onChange }: {
   onChange: (v: any) => void;
 }) {
   const normalize = (o: string | { value: string; label: string }) =>
-    typeof o === "string" ? { value: o, label: o.replace(/_/g, " ") } : o;
+    typeof o === "string" ? { value: o, label: o } : o;
   return (
     <div className="flex flex-wrap gap-2">
       {options.map(o => {
@@ -165,7 +174,7 @@ function ChipGrid({ options, value, multi, onChange }: {
                 onChange(v);
               }
             }}
-            className="rounded-xl px-3 py-1.5 text-xs font-display font-bold transition-all capitalize"
+            className="rounded-xl px-3 py-1.5 text-xs font-display font-bold transition-all"
             style={sel ? CYAN_ACTIVE : CYAN_INACTIVE}
           >
             {label}
@@ -184,24 +193,66 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-// ── VIN decode helper ──────────────────────────────────────────────────────────
+function YesNoToggle({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <SectionLabel>{label}</SectionLabel>
+      <div className="flex gap-2">
+        {["Yes", "No"].map(opt => {
+          const v = opt.toLowerCase();
+          return (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onChange(v)}
+              className="flex-1 rounded-xl py-2.5 text-sm font-display font-black transition-all"
+              style={value === v ? CYAN_ACTIVE : CYAN_INACTIVE}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NumInput({ label, value, onChange, placeholder, unit }: {
+  label: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; unit?: string;
+}) {
+  return (
+    <div>
+      <Label className="text-[10px] text-muted-foreground/50">{label}</Label>
+      <div className="relative mt-1">
+        <Input
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder || "0"}
+          type="number"
+          className="rounded-xl h-11 bg-background/50 border-border/50 text-sm"
+          style={unit ? { paddingRight: "2.5rem" } : {}}
+        />
+        {unit && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/40 font-display font-bold">
+            {unit}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── VIN decode ─────────────────────────────────────────────────────────────────
 
 async function decodeVin(vin: string) {
   try {
-    const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
-    const res = await fetch(url);
+    const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
     const json = await res.json();
     const r = json?.Results?.[0];
     if (!r || r.ErrorCode !== "0") return null;
-    return {
-      year:  r.ModelYear || "",
-      make:  r.Make      || "",
-      model: r.Model     || "",
-      body:  r.BodyClass || "",
-    };
-  } catch {
-    return null;
-  }
+    return { year: r.ModelYear || "", make: r.Make || "", model: r.Model || "" };
+  } catch { return null; }
 }
 
 // ── main component ─────────────────────────────────────────────────────────────
@@ -213,57 +264,82 @@ export default function LoadBoardPost() {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>(1);
 
-  // Step 1 — asset type
-  const [transportType, setTransportType] = useState("");
+  // Step 1 — trailer type
+  const [freightTrailerType, setFreightTrailerType] = useState("");
 
-  // Step 2 — asset details
-  const [vehicleType,         setVehicleType]         = useState("");
-  const [vin,                 setVin]                 = useState("");
-  const [vinDecoding,         setVinDecoding]         = useState(false);
-  const [vinVerified,         setVinVerified]         = useState(false);
-  const [year,                setYear]                = useState("");
-  const [make,                setMake]                = useState("");
-  const [model,               setModel]               = useState("");
-  const [vehicleCondition,    setVehicleCondition]    = useState<string[]>([]);
-  const [ownershipProofStatus,setOwnershipProofStatus]= useState("");
-  const [equipmentType,       setEquipmentType]       = useState("");
-  const [boatType,            setBoatType]            = useState("");
-  const [trailerIncluded,     setTrailerIncluded]     = useState(false);
-  const [rvClass,             setRvClass]             = useState("");
-  const [trailerType,         setTrailerType]         = useState("");
-  const [freightType,         setFreightType]         = useState<string[]>([]);
-  const [weightRange,         setWeightRange]         = useState("");
-  const [palletized,          setPalletized]          = useState("");
+  // Step 2 — route
+  const [pickupZip,    setPickupZip]    = useState("");
+  const [pickupCity,   setPickupCity]   = useState("");
+  const [pickupState,  setPickupState]  = useState("TX");
+  const [deliveryZip,  setDeliveryZip]  = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("");
+  const [deliveryState,setDeliveryState]= useState("CA");
+  const [pickupDate,   setPickupDate]   = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [geoLocating,  setGeoLocating]  = useState<"pickup"|"delivery"|null>(null);
+  const [estimatedMiles, setEstimatedMiles] = useState("");
 
-  // Step 3 — route
-  const [pickupZip,          setPickupZip]          = useState("");
-  const [pickupCity,         setPickupCity]         = useState("");
-  const [pickupState,        setPickupState]        = useState("TX");
-  const [pickupAccess,       setPickupAccess]       = useState<string[]>([]);
-  const [pickupFlexibility,  setPickupFlexibility]  = useState("");
-  const [deliveryZip,        setDeliveryZip]        = useState("");
-  const [deliveryCity,       setDeliveryCity]       = useState("");
-  const [deliveryState,      setDeliveryState]      = useState("CA");
-  const [deliveryAccess,     setDeliveryAccess]     = useState<string[]>([]);
-  const [deliveryFlexibility,setDeliveryFlexibility]= useState("");
-  const [geoLocating,        setGeoLocating]        = useState<"pickup"|"delivery"|null>(null);
-  const [estimatedMiles,     setEstimatedMiles]     = useState("");
-  const [trailerPreference,  setTrailerPreference]  = useState("any");
-  const [loadingMethod,      setLoadingMethod]      = useState<string[]>([]);
-  const [unloadingMethod,    setUnloadingMethod]    = useState<string[]>([]);
-  const [loadingAssist,      setLoadingAssist]      = useState("");
-  const [unloadingAssist,    setUnloadingAssist]    = useState("");
-  const [dockAvailable,      setDockAvailable]      = useState("");
+  // Step 3 — common fields
+  const [commodityType, setCommodityType] = useState("");
+  const [weightLbs,     setWeightLbs]     = useState("");
+  const [notes,         setNotes]         = useState("");
 
-  // Step 4 — add-ons cart
+  // Dry Van fields
+  const [palletCount,       setPalletCount]       = useState("");
+  const [dockPickup,        setDockPickup]        = useState("");
+  const [dockDelivery,      setDockDelivery]      = useState("");
+  const [liftgateRequired,  setLiftgateRequired]  = useState("");
+
+  // Reefer fields
+  const [tempRequired, setTempRequired] = useState("");
+  const [tempValue,    setTempValue]    = useState("");
+
+  // Flatbed / Step Deck / Conestoga / Lowboy fields
+  const [dimLength,    setDimLength]    = useState("");
+  const [dimWidth,     setDimWidth]     = useState("");
+  const [dimHeight,    setDimHeight]    = useState("");
+  const [tarpRequired, setTarpRequired] = useState("");
+  const [chainsRequired,setChains]      = useState("");
+  const [strapsRequired,setStraps]      = useState("");
+  const [oversized,    setOversized]    = useState("");
+  const [permitRequired,setPermit]      = useState("");
+  const [escortRequired,setEscort]      = useState("");
+  const [weatherSensitive,setWeather]   = useState("");
+  const [sideLoadRequired,setSideLoad]  = useState("");
+  const [dockLoad,     setDockLoad]     = useState("");
+
+  // Hotshot fields
+  const [hotshotTrailerType, setHotshotTrailerType] = useState("");
+
+  // Power Only fields
+  const [powerOnlyTrailerType, setPowerOnlyTrailerType] = useState("");
+  const [trailerNumber,        setTrailerNumber]         = useState("");
+
+  // Car Hauler fields
+  const [vehicleCount,  setVehicleCount]  = useState("");
+  const [carrierType,   setCarrierType]   = useState("");
+  const [vehicleType,   setVehicleType]   = useState("");
+  const [vin,           setVin]           = useState("");
+  const [vinDecoding,   setVinDecoding]   = useState(false);
+  const [vinVerified,   setVinVerified]   = useState(false);
+  const [year,          setYear]          = useState("");
+  const [make,          setMake]          = useState("");
+  const [model,         setModel]         = useState("");
+  const [vehicleRunning,setVehicleRunning]= useState("");
+
+  // Other fields
+  const [customFreightType, setCustomFreightType] = useState("");
+
+  // Step 4 — add-ons
   const [addonFlags, setAddonFlags] = useState<string[]>([]);
 
   // Step 5 — pricing
-  const [pricingMode,  setPricingMode]  = useState("fixed");
-  const [postedPrice,  setPostedPrice]  = useState("");
-  const [urgent,       setUrgent]       = useState(false);
+  const [pricingMode, setPricingMode] = useState("fixed");
+  const [postedPrice, setPostedPrice] = useState("");
+  const [urgent,      setUrgent]      = useState(false);
 
-  // ZIP → city/state auto-fill
+  // ── ZIP lookup ──────────────────────────────────────────────────────────────
+
   const lookupZip = useCallback(async (zip: string, target: "pickup" | "delivery") => {
     if (zip.length !== 5) return;
     try {
@@ -278,10 +354,9 @@ export default function LoadBoardPost() {
     } catch {}
   }, []);
 
-  // "Use My Location" geolocation → fill ZIP + city/state
   const useMyLocation = useCallback((target: "pickup" | "delivery") => {
     if (!navigator.geolocation) {
-      toast({ variant: "destructive", title: "Location unavailable", description: "Your browser doesn't support geolocation." });
+      toast({ variant: "destructive", title: "Location unavailable" });
       return;
     }
     setGeoLocating(target);
@@ -324,7 +399,8 @@ export default function LoadBoardPost() {
     );
   }, [toast]);
 
-  // VIN decode
+  // ── VIN decode ──────────────────────────────────────────────────────────────
+
   const handleVinDecode = useCallback(async () => {
     if (vin.length < 11) return;
     setVinDecoding(true);
@@ -337,27 +413,33 @@ export default function LoadBoardPost() {
       setVinVerified(true);
       toast({ title: "VIN decoded", description: `${decoded.year} ${decoded.make} ${decoded.model}` });
     } else {
-      toast({ variant: "destructive", title: "VIN not found", description: "Enter year/make/model manually." });
+      toast({ variant: "destructive", title: "VIN not found" });
     }
   }, [vin, toast]);
 
-  // Rate suggestion
+  // ── rate suggestion ─────────────────────────────────────────────────────────
+
   const { data: rateData } = useQuery<{ low: number | null; high: number | null }>({
-    queryKey: ["/api/load-board/rate-suggest", transportType, estimatedMiles],
+    queryKey: ["/api/load-board/rate-suggest", freightTrailerType, estimatedMiles],
     queryFn: async () => {
       const m = parseInt(estimatedMiles) || 0;
-      if (!transportType || m <= 0) return { low: null, high: null };
-      const res = await fetch(`/api/load-board/rate-suggest?transportType=${transportType}&miles=${m}`);
+      if (!freightTrailerType || m <= 0) return { low: null, high: null };
+      const res = await fetch(`/api/load-board/rate-suggest?transportType=${freightTrailerType}&miles=${m}`);
       return res.json();
     },
-    enabled: !!transportType && parseInt(estimatedMiles) > 0,
+    enabled: !!freightTrailerType && parseInt(estimatedMiles) > 0,
   });
 
-  // Computed add-on cost
+  // ── computed ────────────────────────────────────────────────────────────────
+
   const addonTotal = addonFlags.reduce((sum, key) => {
     const a = ADDON_OPTIONS.find(x => x.key === key);
     return sum + (a?.price || 0);
   }, 0);
+
+  const activeType = FREIGHT_TRAILER_TYPES.find(t => t.value === freightTrailerType);
+
+  // ── submit ──────────────────────────────────────────────────────────────────
 
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/load-board", data),
@@ -374,38 +456,47 @@ export default function LoadBoardPost() {
   function handleSubmit() {
     const hasPickup   = pickupZip.length === 5 || (pickupCity && pickupState);
     const hasDelivery = deliveryZip.length === 5 || (deliveryCity && deliveryState);
-    if (!transportType || !hasPickup || !hasDelivery) {
-      toast({ variant: "destructive", title: "Required fields missing", description: "Enter pickup and delivery ZIP codes." });
+    if (!freightTrailerType || !hasPickup || !hasDelivery) {
+      toast({ variant: "destructive", title: "Required fields missing", description: "Select trailer type and enter pickup/delivery locations." });
       return;
     }
     mutation.mutate({
-      transportType,
+      transportType: freightTrailerType,
+      freightTrailerType,
+      commodityType:        commodityType || undefined,
+      weightLbs:            weightLbs ? parseFloat(weightLbs) : undefined,
+      palletCount:          palletCount ? parseInt(palletCount) : undefined,
+      dockPickup:           dockPickup === "yes" ? true : dockPickup === "no" ? false : undefined,
+      dockDelivery:         dockDelivery === "yes" ? true : dockDelivery === "no" ? false : undefined,
+      liftgateRequired:     liftgateRequired === "yes" ? true : liftgateRequired === "no" ? false : undefined,
+      tempRequired:         tempRequired || undefined,
+      tempValue:            tempValue || undefined,
+      dimensionsLength:     dimLength ? parseFloat(dimLength) : undefined,
+      dimensionsWidth:      dimWidth ? parseFloat(dimWidth) : undefined,
+      dimensionsHeight:     dimHeight ? parseFloat(dimHeight) : undefined,
+      tarpRequired:         tarpRequired === "yes" ? true : tarpRequired === "no" ? false : undefined,
+      chainsRequired:       chainsRequired === "yes" ? true : chainsRequired === "no" ? false : undefined,
+      strapsRequired:       strapsRequired === "yes" ? true : strapsRequired === "no" ? false : undefined,
+      oversized:            oversized === "yes" ? true : oversized === "no" ? false : undefined,
+      permitRequired:       permitRequired === "yes" ? true : permitRequired === "no" ? false : undefined,
+      escortRequired:       escortRequired === "yes" ? true : escortRequired === "no" ? false : undefined,
+      weatherSensitive:     weatherSensitive === "yes" ? true : weatherSensitive === "no" ? false : undefined,
+      sideLoadRequired:     sideLoadRequired === "yes" ? true : sideLoadRequired === "no" ? false : undefined,
+      hotshotTrailerType:   hotshotTrailerType || undefined,
+      powerOnlyTrailerType: powerOnlyTrailerType || undefined,
+      trailerNumber:        trailerNumber || undefined,
+      vehicleCount:         vehicleCount ? parseInt(vehicleCount) : undefined,
+      carrierType:          carrierType || undefined,
+      vehicleType:          vehicleType || undefined,
       vin:                  vin || undefined,
       vinVerified,
       year:                 year || undefined,
       make:                 make || undefined,
       model:                model || undefined,
-      vehicleType:          vehicleType || undefined,
-      vehicleCondition:     vehicleCondition.length ? vehicleCondition : undefined,
-      ownershipProofStatus: ownershipProofStatus || undefined,
-      equipmentType:        equipmentType || undefined,
-      boatType:             boatType || undefined,
-      trailerIncluded,
-      rvClass:              rvClass || undefined,
-      trailerType:          trailerType || undefined,
-      freightType:          freightType.length ? freightType : undefined,
-      weightRange:          weightRange || undefined,
-      palletized:           palletized || undefined,
-      trailerPreference,
-      loadingMethod:        loadingMethod.length ? loadingMethod : undefined,
-      unloadingMethod:      unloadingMethod.length ? unloadingMethod : undefined,
-      pickupAccess:         pickupAccess.length ? pickupAccess : undefined,
-      deliveryAccess:       deliveryAccess.length ? deliveryAccess : undefined,
-      pickupFlexibility:    pickupFlexibility || undefined,
-      deliveryFlexibility:  deliveryFlexibility || undefined,
-      loadingAssistAvailable:   loadingAssist || undefined,
-      unloadingAssistAvailable: unloadingAssist || undefined,
-      dockAvailable:        dockAvailable || undefined,
+      vehicleCondition:     vehicleRunning ? [vehicleRunning === "yes" ? "runs_drives" : "inop"] : undefined,
+      customFreightType:    customFreightType || undefined,
+      pickupDate:           pickupDate || undefined,
+      deliveryDate:         deliveryDate || undefined,
       pickupZip:    pickupZip || undefined,
       pickupCity:   pickupCity || (pickupZip ? `ZIP ${pickupZip}` : ""),
       pickupState:  pickupState || "US",
@@ -417,8 +508,30 @@ export default function LoadBoardPost() {
       postedPrice:     postedPrice ? parseFloat(postedPrice) : undefined,
       addonFlags:      addonFlags.length ? addonFlags : undefined,
       urgent:          urgent || addonFlags.includes("urgent_boost"),
+      notes:           notes || undefined,
     });
   }
+
+  // ── step validation ──────────────────────────────────────────────────────────
+
+  function canAdvance() {
+    if (step === 1) return !!freightTrailerType;
+    if (step === 2) return !!(
+      (pickupZip.length === 5 || (pickupCity && pickupState)) &&
+      (deliveryZip.length === 5 || (deliveryCity && deliveryState))
+    );
+    return true;
+  }
+
+  function advance() {
+    if (!canAdvance()) {
+      toast({ variant: "destructive", title: "Please complete required fields" });
+      return;
+    }
+    setStep(s => Math.min(6, s + 1) as Step);
+  }
+
+  // ── step config ──────────────────────────────────────────────────────────────
 
   const STEPS = [
     { num: 1, label: "Type" },
@@ -428,44 +541,6 @@ export default function LoadBoardPost() {
     { num: 5, label: "Pricing" },
     { num: 6, label: "Review" },
   ];
-
-  function canAdvance() {
-    if (step === 1) return !!transportType;
-    if (step === 2) return !!(
-      (pickupZip.length === 5 || (pickupCity && pickupState)) &&
-      (deliveryZip.length === 5 || (deliveryCity && deliveryState))
-    );
-    if (step === 3) {
-      if (transportType === "vehicle") return !!(vehicleType && ownershipProofStatus);
-      if (transportType === "equipment") return !!equipmentType;
-      if (transportType === "boat") return !!boatType;
-      if (transportType === "rv") return !!rvClass;
-      if (transportType === "trailer") return !!trailerType;
-      if (transportType === "hotshot") return freightType.length > 0;
-      return true;
-    }
-    return true;
-  }
-
-  function advance() {
-    if (!canAdvance()) {
-      toast({ variant: "destructive", title: "Please complete the required fields" });
-      return;
-    }
-    setStep(s => Math.min(6, s + 1) as Step);
-  }
-
-  // ── summary helpers ──────────────────────────────────────────────────────────
-
-  function assetSummary() {
-    if (transportType === "vehicle") return [year, make, model].filter(Boolean).join(" ") || vehicleType || "Vehicle";
-    if (transportType === "equipment") return equipmentType?.replace(/_/g, " ") || "Equipment";
-    if (transportType === "boat") return boatType?.replace(/_/g, " ") || "Boat";
-    if (transportType === "rv") return rvClass?.replace(/_/g, " ") || "RV";
-    if (transportType === "trailer") return trailerType?.replace(/_/g, " ") || "Trailer";
-    if (transportType === "hotshot") return "Hotshot — " + freightType.join(", ");
-    return transportType;
-  }
 
   // ── render ────────────────────────────────────────────────────────────────────
 
@@ -479,234 +554,61 @@ export default function LoadBoardPost() {
             <div key={s.num} className="flex items-center gap-1 flex-1">
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-display font-black shrink-0"
-                style={step >= s.num ? CYAN_ACTIVE : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.25)" }}
+                style={step >= s.num
+                  ? (activeType ? { background: `linear-gradient(135deg,${activeType.accent}cc,${activeType.accent}88)`, color: "#fff" } : CYAN_ACTIVE)
+                  : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.25)" }
+                }
               >
                 {step > s.num ? <Check className="w-3 h-3" /> : s.num}
               </div>
-              <span className={`text-[9px] font-display font-bold hidden sm:block ${step >= s.num ? "text-cyan-300/70" : "text-muted-foreground/20"}`}>
+              <span className={`text-[9px] font-display font-bold hidden sm:block ${step >= s.num ? "text-white/50" : "text-muted-foreground/20"}`}>
                 {s.label}
               </span>
               {i < STEPS.length - 1 && (
-                <div className="flex-1 h-px" style={{ background: step > s.num ? "rgba(6,182,212,0.3)" : "rgba(255,255,255,0.06)" }} />
+                <div className="flex-1 h-px" style={{ background: step > s.num ? (activeType ? `${activeType.accent}44` : "rgba(6,182,212,0.3)") : "rgba(255,255,255,0.06)" }} />
               )}
             </div>
           ))}
         </div>
 
-        {/* ── Step 1: Asset Type ─────────────────────────────────────────────── */}
+        {/* ── Step 1: Trailer Type ──────────────────────────────────────────── */}
         {step === 1 && (
-          <div className="space-y-5">
-            <div>
-              <SectionLabel>What needs to move?</SectionLabel>
-              <div className="grid grid-cols-2 gap-2">
-                {TRANSPORT_TYPES.map(t => (
+          <div className="space-y-3">
+            <SectionLabel>What type of trailer is needed?</SectionLabel>
+            <div className="grid grid-cols-2 gap-2.5">
+              {FREIGHT_TRAILER_TYPES.map(t => {
+                const sel = freightTrailerType === t.value;
+                return (
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => setTransportType(t.value)}
+                    onClick={() => setFreightTrailerType(t.value)}
                     className="rounded-2xl p-3.5 text-left transition-all active:scale-95"
-                    style={transportType === t.value ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
-                    data-testid={`select-transport-${t.value}`}
+                    style={sel
+                      ? { background: t.activeBg, border: t.activeBorder }
+                      : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }
+                    }
+                    data-testid={`select-trailer-${t.value}`}
                   >
-                    <p className="text-sm font-display font-bold text-foreground">{t.label}</p>
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">{t.sub}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Step 3: Asset Details ─────────────────────────────────────────── */}
-        {step === 3 && (
-          <div className="space-y-5">
-
-            {/* VEHICLE */}
-            {transportType === "vehicle" && (
-              <>
-                <div>
-                  <SectionLabel>Vehicle Type *</SectionLabel>
-                  <ChipGrid options={VEHICLE_TYPES} value={vehicleType} onChange={setVehicleType} />
-                </div>
-
-                <div>
-                  <SectionLabel>VIN (optional — auto-fills year/make/model)</SectionLabel>
-                  <div className="flex gap-2">
-                    <Input
-                      value={vin}
-                      onChange={e => { setVin(e.target.value.toUpperCase()); setVinVerified(false); }}
-                      placeholder="17-digit VIN"
-                      maxLength={17}
-                      className="rounded-xl h-10 bg-background/50 border-border/50 text-sm font-mono flex-1"
-                      data-testid="input-vin"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-xl h-10 px-3 font-display font-black text-xs shrink-0"
-                      style={CYAN_ACTIVE}
-                      onClick={handleVinDecode}
-                      disabled={vin.length < 11 || vinDecoding}
-                      data-testid="button-decode-vin"
-                    >
-                      {vinDecoding ? <Loader2 className="w-3 h-3 animate-spin" /> : "Decode"}
-                    </Button>
-                  </div>
-                  {vinVerified && (
-                    <p className="text-[10px] text-cyan-400 mt-1 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> VIN verified
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xl">{t.icon}</span>
+                      {sel && (
+                        <div
+                          className="ml-auto w-4 h-4 rounded-full flex items-center justify-center"
+                          style={{ background: t.accent }}
+                        >
+                          <Check className="w-2.5 h-2.5 text-white" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm font-display font-black text-foreground" style={sel ? { color: t.accent } : {}}>
+                      {t.label}
                     </p>
-                  )}
-                </div>
-
-                <div>
-                  <SectionLabel>Year / Make / Model</SectionLabel>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground/50">Year</Label>
-                      <Input value={year} onChange={e => setYear(e.target.value)} placeholder="2019" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-year" />
-                    </div>
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground/50">Make</Label>
-                      <Input value={make} onChange={e => setMake(e.target.value)} placeholder="Ford" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-make" />
-                    </div>
-                    <div>
-                      <Label className="text-[10px] text-muted-foreground/50">Model</Label>
-                      <Input value={model} onChange={e => setModel(e.target.value)} placeholder="F-150" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-model" />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <SectionLabel>Condition</SectionLabel>
-                  <ChipGrid options={CONDITIONS} value={vehicleCondition} multi onChange={setVehicleCondition} />
-                </div>
-
-                <div>
-                  <SectionLabel>Ownership Proof Status *</SectionLabel>
-                  <div className="grid grid-cols-2 gap-2">
-                    {OWNERSHIP_PROOF.map(p => (
-                      <button
-                        key={p.value}
-                        type="button"
-                        onClick={() => setOwnershipProofStatus(p.value)}
-                        className="rounded-xl p-3 text-left transition-all"
-                        style={ownershipProofStatus === p.value ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
-                        data-testid={`select-proof-${p.value}`}
-                      >
-                        <p className="text-xs font-display font-bold text-foreground">{p.label}</p>
-                        <p className="text-[9px] text-muted-foreground/40 mt-0.5">{p.hint}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* EQUIPMENT */}
-            {transportType === "equipment" && (
-              <>
-                <div>
-                  <SectionLabel>Equipment Type *</SectionLabel>
-                  <ChipGrid options={EQUIPMENT_TYPES} value={equipmentType} onChange={setEquipmentType} />
-                </div>
-                <div>
-                  <SectionLabel>Weight Range</SectionLabel>
-                  <ChipGrid options={WEIGHT_RANGES} value={weightRange} onChange={setWeightRange} />
-                </div>
-              </>
-            )}
-
-            {/* BOAT */}
-            {transportType === "boat" && (
-              <>
-                <div>
-                  <SectionLabel>Boat Type *</SectionLabel>
-                  <ChipGrid options={BOAT_TYPES} value={boatType} onChange={setBoatType} />
-                </div>
-                <div>
-                  <SectionLabel>Trailer Situation</SectionLabel>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setTrailerIncluded(true)}
-                      className="flex-1 rounded-xl p-3 text-left transition-all"
-                      style={trailerIncluded ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
-                    >
-                      <p className="text-xs font-display font-bold">Has a Trailer</p>
-                      <p className="text-[9px] text-muted-foreground/40 mt-0.5">Boat sits on trailer already</p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTrailerIncluded(false)}
-                      className="flex-1 rounded-xl p-3 text-left transition-all"
-                      style={!trailerIncluded ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
-                    >
-                      <p className="text-xs font-display font-bold">No Trailer</p>
-                      <p className="text-[9px] text-muted-foreground/40 mt-0.5">Carrier must provide</p>
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <SectionLabel>Weight Range</SectionLabel>
-                  <ChipGrid options={WEIGHT_RANGES} value={weightRange} onChange={setWeightRange} />
-                </div>
-              </>
-            )}
-
-            {/* RV */}
-            {transportType === "rv" && (
-              <>
-                <div>
-                  <SectionLabel>RV Class *</SectionLabel>
-                  <ChipGrid options={RV_CLASSES} value={rvClass} onChange={setRvClass} />
-                </div>
-                <div>
-                  <SectionLabel>Vehicle Condition</SectionLabel>
-                  <ChipGrid options={CONDITIONS} value={vehicleCondition} multi onChange={setVehicleCondition} />
-                </div>
-              </>
-            )}
-
-            {/* TRAILER */}
-            {transportType === "trailer" && (
-              <>
-                <div>
-                  <SectionLabel>Trailer Type *</SectionLabel>
-                  <ChipGrid options={TRAILER_TYPES} value={trailerType} onChange={setTrailerType} />
-                </div>
-                <div>
-                  <SectionLabel>Weight Range</SectionLabel>
-                  <ChipGrid options={WEIGHT_RANGES} value={weightRange} onChange={setWeightRange} />
-                </div>
-              </>
-            )}
-
-            {/* HOTSHOT */}
-            {transportType === "hotshot" && (
-              <>
-                <div>
-                  <SectionLabel>Freight Type (select all that apply) *</SectionLabel>
-                  <ChipGrid options={FREIGHT_TYPES} value={freightType} multi onChange={setFreightType} />
-                </div>
-                <div>
-                  <SectionLabel>Packaging / Palletized</SectionLabel>
-                  <ChipGrid
-                    options={[
-                      { value: "palletized", label: "Palletized" },
-                      { value: "loose",      label: "Loose / Strapped" },
-                      { value: "mixed",      label: "Mixed" },
-                    ]}
-                    value={palletized}
-                    onChange={setPalletized}
-                  />
-                </div>
-                <div>
-                  <SectionLabel>Total Weight</SectionLabel>
-                  <ChipGrid options={WEIGHT_RANGES} value={weightRange} onChange={setWeightRange} />
-                </div>
-              </>
-            )}
+                    <p className="text-[10px] text-muted-foreground/40 mt-0.5 leading-tight">{t.sub}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -743,13 +645,13 @@ export default function LoadBoardPost() {
                 </button>
               </div>
               {(pickupCity || pickupState) && (
-                <p className="text-[10px] text-cyan-400/70 flex items-center gap-1.5 mb-2">
+                <p className="text-[10px] text-cyan-400/70 flex items-center gap-1.5 mb-3">
                   <Check className="w-3 h-3" /> {pickupCity}{pickupCity && pickupState ? `, ${pickupState}` : pickupState}
                 </p>
               )}
-              <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <Label className="text-[10px] text-muted-foreground/30">City (auto-filled from ZIP)</Label>
+                  <Label className="text-[10px] text-muted-foreground/30">City (auto-filled)</Label>
                   <Input value={pickupCity} onChange={e => setPickupCity(e.target.value)} placeholder="Dallas" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-pickup-city" />
                 </div>
                 <div>
@@ -764,13 +666,6 @@ export default function LoadBoardPost() {
                   </select>
                 </div>
               </div>
-              <SectionLabel>Pickup Site Type</SectionLabel>
-              <ChipGrid options={ACCESS_OPTIONS} value={pickupAccess} multi onChange={setPickupAccess} />
-            </div>
-
-            <div>
-              <SectionLabel>Pickup Availability</SectionLabel>
-              <ChipGrid options={FLEXIBILITY_OPTIONS} value={pickupFlexibility} onChange={setPickupFlexibility} />
             </div>
 
             {/* Delivery */}
@@ -803,13 +698,13 @@ export default function LoadBoardPost() {
                 </button>
               </div>
               {(deliveryCity || deliveryState) && (
-                <p className="text-[10px] text-cyan-400/70 flex items-center gap-1.5 mb-2">
+                <p className="text-[10px] text-cyan-400/70 flex items-center gap-1.5 mb-3">
                   <Check className="w-3 h-3" /> {deliveryCity}{deliveryCity && deliveryState ? `, ${deliveryState}` : deliveryState}
                 </p>
               )}
-              <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <Label className="text-[10px] text-muted-foreground/30">City (auto-filled from ZIP)</Label>
+                  <Label className="text-[10px] text-muted-foreground/30">City (auto-filled)</Label>
                   <Input value={deliveryCity} onChange={e => setDeliveryCity(e.target.value)} placeholder="Los Angeles" className="mt-1 rounded-xl h-10 bg-background/50 border-border/50 text-sm" data-testid="input-delivery-city" />
                 </div>
                 <div>
@@ -824,15 +719,33 @@ export default function LoadBoardPost() {
                   </select>
                 </div>
               </div>
-              <SectionLabel>Delivery Site Type</SectionLabel>
-              <ChipGrid options={ACCESS_OPTIONS} value={deliveryAccess} multi onChange={setDeliveryAccess} />
             </div>
 
-            <div>
-              <SectionLabel>Delivery Availability</SectionLabel>
-              <ChipGrid options={FLEXIBILITY_OPTIONS} value={deliveryFlexibility} onChange={setDeliveryFlexibility} />
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[10px] text-muted-foreground/50">Pickup Date</Label>
+                <Input
+                  value={pickupDate}
+                  onChange={e => setPickupDate(e.target.value)}
+                  type="date"
+                  className="mt-1 rounded-xl h-11 bg-background/50 border-border/50 text-sm"
+                  data-testid="input-pickup-date"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] text-muted-foreground/50">Delivery Date</Label>
+                <Input
+                  value={deliveryDate}
+                  onChange={e => setDeliveryDate(e.target.value)}
+                  type="date"
+                  className="mt-1 rounded-xl h-11 bg-background/50 border-border/50 text-sm"
+                  data-testid="input-delivery-date"
+                />
+              </div>
             </div>
 
+            {/* Estimated miles */}
             <div>
               <Label className="text-[10px] text-muted-foreground/50">Estimated Miles (optional)</Label>
               <Input
@@ -844,56 +757,291 @@ export default function LoadBoardPost() {
                 data-testid="input-estimated-miles"
               />
             </div>
+          </div>
+        )}
 
-            {/* Trailer preference */}
+        {/* ── Step 3: Load Details ──────────────────────────────────────────── */}
+        {step === 3 && (
+          <div className="space-y-5">
+
+            {/* Commodity — all types */}
             <div>
-              <SectionLabel>Trailer Preference</SectionLabel>
-              <ChipGrid options={TRAILER_PREFS} value={trailerPreference} onChange={setTrailerPreference} />
+              <SectionLabel>Commodity Type</SectionLabel>
+              <ChipGrid options={COMMODITY_TYPES} value={commodityType} onChange={setCommodityType} />
             </div>
 
-            {/* Loading / unloading */}
+            {/* ── DRY VAN ── */}
+            {freightTrailerType === "dry_van" && (
+              <>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 42000" unit="lbs" />
+                <NumInput label="Pallet Count" value={palletCount} onChange={setPalletCount} placeholder="e.g. 26" unit="pallets" />
+                <YesNoToggle label="Dock Pickup?" value={dockPickup} onChange={setDockPickup} />
+                <YesNoToggle label="Dock Delivery?" value={dockDelivery} onChange={setDockDelivery} />
+                <YesNoToggle label="Liftgate Required?" value={liftgateRequired} onChange={setLiftgateRequired} />
+              </>
+            )}
+
+            {/* ── REEFER ── */}
+            {freightTrailerType === "reefer" && (
+              <>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 38000" unit="lbs" />
+                <NumInput label="Pallet Count" value={palletCount} onChange={setPalletCount} placeholder="e.g. 22" unit="pallets" />
+                <div>
+                  <SectionLabel>Temperature Required</SectionLabel>
+                  <ChipGrid
+                    options={[
+                      { value: "frozen",  label: "❄️ Frozen" },
+                      { value: "chilled", label: "🧊 Chilled" },
+                      { value: "fresh",   label: "🥬 Fresh" },
+                      { value: "custom",  label: "🌡️ Custom" },
+                    ]}
+                    value={tempRequired}
+                    onChange={setTempRequired}
+                  />
+                </div>
+                {tempRequired === "custom" && (
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground/50">Temperature Value (°F)</Label>
+                    <Input
+                      value={tempValue}
+                      onChange={e => setTempValue(e.target.value)}
+                      placeholder="e.g. 34°F"
+                      className="mt-1 rounded-xl h-11 bg-background/50 border-border/50 text-sm"
+                      data-testid="input-temp-value"
+                    />
+                  </div>
+                )}
+                <YesNoToggle label="Dock Pickup?" value={dockPickup} onChange={setDockPickup} />
+                <YesNoToggle label="Dock Delivery?" value={dockDelivery} onChange={setDockDelivery} />
+              </>
+            )}
+
+            {/* ── FLATBED ── */}
+            {freightTrailerType === "flatbed" && (
+              <>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 44000" unit="lbs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <NumInput label='Length (ft)' value={dimLength} onChange={setDimLength} placeholder="48" unit="ft" />
+                  <NumInput label='Width (ft)'  value={dimWidth}  onChange={setDimWidth}  placeholder="8.5" unit="ft" />
+                  <NumInput label='Height (ft)' value={dimHeight} onChange={setDimHeight} placeholder="8.5" unit="ft" />
+                </div>
+                <YesNoToggle label="Tarp Required?" value={tarpRequired} onChange={setTarpRequired} />
+                <YesNoToggle label="Chains Required?" value={chainsRequired} onChange={setChains} />
+                <YesNoToggle label="Straps Required?" value={strapsRequired} onChange={setStraps} />
+                <YesNoToggle label="Oversized Load?" value={oversized} onChange={setOversized} />
+              </>
+            )}
+
+            {/* ── CONESTOGA ── */}
+            {freightTrailerType === "conestoga" && (
+              <>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 44000" unit="lbs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <NumInput label='Length (ft)' value={dimLength} onChange={setDimLength} placeholder="48" unit="ft" />
+                  <NumInput label='Width (ft)'  value={dimWidth}  onChange={setDimWidth}  placeholder="8.5" unit="ft" />
+                  <NumInput label='Height (ft)' value={dimHeight} onChange={setDimHeight} placeholder="8.5" unit="ft" />
+                </div>
+                <YesNoToggle label="Weather Sensitive?" value={weatherSensitive} onChange={setWeather} />
+                <YesNoToggle label="Side Load Required?" value={sideLoadRequired} onChange={setSideLoad} />
+                <YesNoToggle label="Dock Load?" value={dockLoad} onChange={setDockLoad} />
+              </>
+            )}
+
+            {/* ── HOTSHOT ── */}
+            {freightTrailerType === "hotshot" && (
+              <>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 16500" unit="lbs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <NumInput label='Length (ft)' value={dimLength} onChange={setDimLength} placeholder="40" unit="ft" />
+                  <NumInput label='Width (ft)'  value={dimWidth}  onChange={setDimWidth}  placeholder="8" unit="ft" />
+                  <NumInput label='Height (ft)' value={dimHeight} onChange={setDimHeight} placeholder="6" unit="ft" />
+                </div>
+                <div>
+                  <SectionLabel>Trailer Type</SectionLabel>
+                  <ChipGrid
+                    options={[
+                      { value: "bumper_pull", label: "Bumper Pull" },
+                      { value: "gooseneck",   label: "Gooseneck" },
+                    ]}
+                    value={hotshotTrailerType}
+                    onChange={setHotshotTrailerType}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ── POWER ONLY ── */}
+            {freightTrailerType === "power_only" && (
+              <>
+                <div
+                  className="rounded-xl p-3 flex items-center gap-2"
+                  style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.2)" }}
+                >
+                  <p className="text-xs text-cyan-300 font-display font-bold">✅ Trailer provided — carrier needs power unit only</p>
+                </div>
+                <div>
+                  <SectionLabel>Trailer Type</SectionLabel>
+                  <ChipGrid
+                    options={[
+                      { value: "dry_van",   label: "Dry Van" },
+                      { value: "reefer",    label: "Reefer" },
+                      { value: "flatbed",   label: "Flatbed" },
+                      { value: "conestoga", label: "Conestoga" },
+                      { value: "step_deck", label: "Step Deck" },
+                      { value: "lowboy",    label: "Lowboy" },
+                    ]}
+                    value={powerOnlyTrailerType}
+                    onChange={setPowerOnlyTrailerType}
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground/50">Trailer Number (optional)</Label>
+                  <Input
+                    value={trailerNumber}
+                    onChange={e => setTrailerNumber(e.target.value)}
+                    placeholder="e.g. TR-48291"
+                    className="mt-1 rounded-xl h-11 bg-background/50 border-border/50 text-sm font-mono"
+                    data-testid="input-trailer-number"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ── STEP DECK ── */}
+            {freightTrailerType === "step_deck" && (
+              <>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 46000" unit="lbs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <NumInput label='Length (ft)' value={dimLength} onChange={setDimLength} placeholder="48" unit="ft" />
+                  <NumInput label='Width (ft)'  value={dimWidth}  onChange={setDimWidth}  placeholder="8.5" unit="ft" />
+                  <NumInput label='Height (ft)' value={dimHeight} onChange={setDimHeight} placeholder="10" unit="ft" />
+                </div>
+                <YesNoToggle label="Oversized Load?" value={oversized} onChange={setOversized} />
+                <YesNoToggle label="Chains Required?" value={chainsRequired} onChange={setChains} />
+                <YesNoToggle label="Tarp Required?" value={tarpRequired} onChange={setTarpRequired} />
+              </>
+            )}
+
+            {/* ── LOWBOY / RGN ── */}
+            {freightTrailerType === "lowboy_rgn" && (
+              <>
+                <div>
+                  <SectionLabel>Equipment Type</SectionLabel>
+                  <ChipGrid
+                    options={[
+                      "Excavator", "Bulldozer", "Crane", "Forklift",
+                      "Generator", "Transformer", "Other Heavy",
+                    ]}
+                    value={customFreightType}
+                    onChange={setCustomFreightType}
+                  />
+                </div>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 80000" unit="lbs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <NumInput label='Length (ft)' value={dimLength} onChange={setDimLength} placeholder="53" unit="ft" />
+                  <NumInput label='Width (ft)'  value={dimWidth}  onChange={setDimWidth}  placeholder="8.5" unit="ft" />
+                  <NumInput label='Height (ft)' value={dimHeight} onChange={setDimHeight} placeholder="11" unit="ft" />
+                </div>
+                <YesNoToggle label="Oversized Load?" value={oversized} onChange={setOversized} />
+                <YesNoToggle label="Permit Required?" value={permitRequired} onChange={setPermit} />
+                <YesNoToggle label="Escort Required?" value={escortRequired} onChange={setEscort} />
+              </>
+            )}
+
+            {/* ── CAR HAULER ── */}
+            {freightTrailerType === "car_hauler" && (
+              <>
+                <NumInput label="Number of Vehicles" value={vehicleCount} onChange={setVehicleCount} placeholder="1" unit="vehicles" />
+                <div>
+                  <SectionLabel>Carrier Type</SectionLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "open",     label: "🔓 Open Carrier",    sub: "Standard, cost-effective" },
+                      { value: "enclosed", label: "🔒 Enclosed Carrier", sub: "Full protection" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setCarrierType(opt.value)}
+                        className="rounded-2xl p-3 text-left transition-all"
+                        style={carrierType === opt.value ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
+                        data-testid={`select-carrier-type-${opt.value}`}
+                      >
+                        <p className="text-sm font-display font-bold text-foreground">{opt.label}</p>
+                        <p className="text-[9px] text-muted-foreground/40 mt-0.5">{opt.sub}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <SectionLabel>Vehicle Type</SectionLabel>
+                  <ChipGrid options={VEHICLE_TYPES_HAULER} value={vehicleType} onChange={setVehicleType} />
+                </div>
+                <div>
+                  <SectionLabel>VIN (optional)</SectionLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      value={vin}
+                      onChange={e => { setVin(e.target.value.toUpperCase()); setVinVerified(false); }}
+                      placeholder="17-digit VIN"
+                      maxLength={17}
+                      className="rounded-xl h-10 bg-background/50 border-border/50 text-sm font-mono flex-1"
+                      data-testid="input-vin"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-xl h-10 px-3 font-display font-black text-xs shrink-0"
+                      style={CYAN_ACTIVE}
+                      onClick={handleVinDecode}
+                      disabled={vin.length < 11 || vinDecoding}
+                      data-testid="button-decode-vin"
+                    >
+                      {vinDecoding ? <Loader2 className="w-3 h-3 animate-spin" /> : "Decode"}
+                    </Button>
+                  </div>
+                  {vinVerified && (
+                    <p className="text-[10px] text-cyan-400 mt-1 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> {year} {make} {model}
+                    </p>
+                  )}
+                </div>
+                <YesNoToggle label="Vehicle Running?" value={vehicleRunning} onChange={setVehicleRunning} />
+              </>
+            )}
+
+            {/* ── OTHER ── */}
+            {freightTrailerType === "other" && (
+              <>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground/50">Custom Freight Type</Label>
+                  <Input
+                    value={customFreightType}
+                    onChange={e => setCustomFreightType(e.target.value)}
+                    placeholder="Describe your freight"
+                    className="mt-1 rounded-xl h-11 bg-background/50 border-border/50 text-sm"
+                    data-testid="input-custom-freight-type"
+                  />
+                </div>
+                <NumInput label="Weight (lbs)" value={weightLbs} onChange={setWeightLbs} placeholder="e.g. 20000" unit="lbs" />
+                <div className="grid grid-cols-3 gap-2">
+                  <NumInput label='Length (ft)' value={dimLength} onChange={setDimLength} placeholder="40" unit="ft" />
+                  <NumInput label='Width (ft)'  value={dimWidth}  onChange={setDimWidth}  placeholder="8" unit="ft" />
+                  <NumInput label='Height (ft)' value={dimHeight} onChange={setDimHeight} placeholder="8" unit="ft" />
+                </div>
+              </>
+            )}
+
+            {/* Notes — all types */}
             <div>
-              <SectionLabel>Loading Method</SectionLabel>
-              <ChipGrid options={LOADING_METHODS} value={loadingMethod} multi onChange={setLoadingMethod} />
-            </div>
-            <div>
-              <SectionLabel>Loading Assistance Available at Pickup</SectionLabel>
-              <ChipGrid
-                options={[
-                  { value: "yes",     label: "Yes" },
-                  { value: "no",      label: "No" },
-                  { value: "unknown", label: "Unknown" },
-                ]}
-                value={loadingAssist}
-                onChange={setLoadingAssist}
-              />
-            </div>
-            <div>
-              <SectionLabel>Unloading Method</SectionLabel>
-              <ChipGrid options={UNLOADING_METHODS} value={unloadingMethod} multi onChange={setUnloadingMethod} />
-            </div>
-            <div>
-              <SectionLabel>Unloading Assistance Available at Delivery</SectionLabel>
-              <ChipGrid
-                options={[
-                  { value: "yes",     label: "Yes" },
-                  { value: "no",      label: "No" },
-                  { value: "unknown", label: "Unknown" },
-                ]}
-                value={unloadingAssist}
-                onChange={setUnloadingAssist}
-              />
-            </div>
-            <div>
-              <SectionLabel>Dock / Ramp Available</SectionLabel>
-              <ChipGrid
-                options={[
-                  { value: "yes",     label: "Yes" },
-                  { value: "no",      label: "No" },
-                  { value: "unknown", label: "Unknown" },
-                ]}
-                value={dockAvailable}
-                onChange={setDockAvailable}
+              <SectionLabel>Additional Notes (optional)</SectionLabel>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Any special requirements or instructions..."
+                rows={3}
+                className="w-full rounded-xl bg-background/50 border border-border/50 text-sm p-3 text-foreground resize-none"
+                data-testid="input-notes"
               />
             </div>
           </div>
@@ -912,17 +1060,11 @@ export default function LoadBoardPost() {
                   {addonFlags.length === 0 ? "No add-ons selected" : `${addonFlags.length} add-on${addonFlags.length > 1 ? "s" : ""} selected`}
                 </p>
                 {addonTotal > 0 && (
-                  <p className="text-[10px] text-cyan-400/70 mt-0.5">
-                    +${addonTotal} added to posting fee
-                  </p>
+                  <p className="text-[10px] text-cyan-400/70 mt-0.5">+${addonTotal} added to posting fee</p>
                 )}
               </div>
               {addonFlags.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setAddonFlags([])}
-                  className="text-[10px] font-display font-bold text-muted-foreground/40"
-                >
+                <button type="button" onClick={() => setAddonFlags([])} className="text-[10px] font-display font-bold text-muted-foreground/40">
                   Clear
                 </button>
               )}
@@ -935,9 +1077,7 @@ export default function LoadBoardPost() {
                   <button
                     key={a.key}
                     type="button"
-                    onClick={() => {
-                      setAddonFlags(f => sel ? f.filter(x => x !== a.key) : [...f, a.key]);
-                    }}
+                    onClick={() => setAddonFlags(f => sel ? f.filter(x => x !== a.key) : [...f, a.key])}
                     className="w-full rounded-2xl p-3.5 text-left transition-all flex items-center gap-3"
                     style={sel ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
                     data-testid={`addon-${a.key}`}
@@ -951,9 +1091,7 @@ export default function LoadBoardPost() {
                     </div>
                     <div className="shrink-0 text-right">
                       {a.price > 0 ? (
-                        <p className={`text-sm font-display font-black ${sel ? "text-cyan-300" : "text-muted-foreground/50"}`}>
-                          +${a.price}
-                        </p>
+                        <p className={`text-sm font-display font-black ${sel ? "text-cyan-300" : "text-muted-foreground/50"}`}>+${a.price}</p>
                       ) : (
                         <p className="text-[10px] font-display font-bold text-muted-foreground/30">free signal</p>
                       )}
@@ -977,7 +1115,7 @@ export default function LoadBoardPost() {
               <SectionLabel>Pricing Mode</SectionLabel>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { value: "fixed",          label: "Fixed Price",     sub: "You set the rate" },
+                  { value: "fixed",          label: "Fixed Rate",      sub: "You set the rate" },
                   { value: "open_to_offers", label: "Open to Offers",  sub: "Carriers bid" },
                 ].map(p => (
                   <button
@@ -1012,7 +1150,7 @@ export default function LoadBoardPost() {
                   ${rateData.high.toLocaleString()}
                 </p>
                 <p className="text-[9px] text-muted-foreground/40 mt-0.5">
-                  Based on {estimatedMiles} mi · {transportType} market rates
+                  Based on {estimatedMiles} mi · {activeType?.label || freightTrailerType} market rates
                 </p>
                 {pricingMode === "fixed" && (
                   <button
@@ -1029,7 +1167,7 @@ export default function LoadBoardPost() {
 
             {pricingMode === "fixed" && (
               <div>
-                <Label className="text-[10px] text-muted-foreground/50">Your Price ($)</Label>
+                <Label className="text-[10px] text-muted-foreground/50">Rate Offered ($)</Label>
                 <div className="relative mt-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                   <Input
@@ -1044,12 +1182,25 @@ export default function LoadBoardPost() {
               </div>
             )}
 
+            {/* Activation fee notice */}
+            <div
+              className="rounded-xl p-3.5 space-y-1"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <p className="text-[10px] font-display font-black text-muted-foreground/60 uppercase tracking-wider">Payment Flow</p>
+              <div className="space-y-1 text-[10px] text-muted-foreground/50 leading-relaxed">
+                <p>✅ Posting is free — carriers submit offers at no cost</p>
+                <p>✅ When you accept a carrier, pay: <span className="text-foreground/70 font-bold">carrier rate + $10 activation fee</span></p>
+                <p>✅ GUBER distributes: carrier receives 95%, GUBER keeps 5% + $10</p>
+              </div>
+            </div>
+
             {/* Urgent toggle */}
             {!addonFlags.includes("urgent_boost") && (
-              <div className="flex items-center justify-between rounded-2xl p-3.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}>
+              <div className="flex items-center justify-between rounded-2xl p-3.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <div>
                   <p className="text-sm font-display font-bold text-foreground">Mark as Urgent</p>
-                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">Shown prominently — faster response</p>
+                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">Shown prominently — faster carrier response</p>
                 </div>
                 <button
                   type="button"
@@ -1076,17 +1227,41 @@ export default function LoadBoardPost() {
           <div className="space-y-4">
             <p className="text-xs font-display font-bold text-muted-foreground/50 uppercase tracking-wider">Review Your Load</p>
 
-            {/* Summary card */}
+            {/* Type badge */}
+            {activeType && (
+              <div
+                className="rounded-2xl p-3 flex items-center gap-3"
+                style={{ background: activeType.activeBg, border: activeType.activeBorder }}
+              >
+                <span className="text-2xl">{activeType.icon}</span>
+                <div>
+                  <p className="text-sm font-display font-black" style={{ color: activeType.accent }}>{activeType.label}</p>
+                  <p className="text-[10px] text-muted-foreground/50">{activeType.sub}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
             <div className="rounded-2xl p-4 space-y-2.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(6,182,212,0.15)" }}>
-              <Row label="Type" value={<span className="capitalize">{transportType}</span>} />
-              <Row label="Asset" value={assetSummary()} />
-              {ownershipProofStatus && <Row label="Ownership Proof" value={OWNERSHIP_PROOF.find(p => p.value === ownershipProofStatus)?.label || ownershipProofStatus} />}
-              {vinVerified && <Row label="VIN" value={<span className="font-mono text-cyan-400 text-[10px]">{vin} ✓</span>} />}
-              <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-              <Row label="Route" value={`${pickupZip ? `${pickupZip} ` : ""}${pickupCity}${pickupCity && pickupState ? `, ${pickupState}` : pickupState} → ${deliveryZip ? `${deliveryZip} ` : ""}${deliveryCity}${deliveryCity && deliveryState ? `, ${deliveryState}` : deliveryState}`} />
+              <Row label="Route" value={`${pickupZip ? `${pickupZip} ` : ""}${pickupCity}${pickupState ? `, ${pickupState}` : ""} → ${deliveryZip ? `${deliveryZip} ` : ""}${deliveryCity}${deliveryState ? `, ${deliveryState}` : ""}`} />
               {estimatedMiles && <Row label="Miles" value={`${parseInt(estimatedMiles).toLocaleString()} mi`} />}
-              {pickupFlexibility && <Row label="Pickup" value={pickupFlexibility.replace(/_/g, " ")} />}
-              {trailerPreference !== "any" && <Row label="Trailer" value={trailerPreference.replace(/_/g, " ")} />}
+              {pickupDate && <Row label="Pickup Date" value={pickupDate} />}
+              {deliveryDate && <Row label="Delivery Date" value={deliveryDate} />}
+              {commodityType && <Row label="Commodity" value={commodityType} />}
+              {weightLbs && <Row label="Weight" value={`${parseFloat(weightLbs).toLocaleString()} lbs`} />}
+              {(dimLength || dimWidth || dimHeight) && (
+                <Row label="Dimensions" value={`${dimLength || "?"}L × ${dimWidth || "?"}W × ${dimHeight || "?"}H ft`} />
+              )}
+              {palletCount && <Row label="Pallets" value={palletCount} />}
+              {vehicleCount && <Row label="Vehicles" value={vehicleCount} />}
+              {carrierType && <Row label="Carrier" value={carrierType === "open" ? "Open Carrier" : "Enclosed Carrier"} />}
+              {tempRequired && <Row label="Temp" value={tempRequired.charAt(0).toUpperCase() + tempRequired.slice(1)} />}
+              {hotshotTrailerType && <Row label="Hotshot Trailer" value={hotshotTrailerType.replace("_", " ")} />}
+              {powerOnlyTrailerType && <Row label="Trailer Type" value={powerOnlyTrailerType.replace("_", " ")} />}
+              {trailerNumber && <Row label="Trailer #" value={trailerNumber} />}
+              {oversized === "yes" && <Row label="Oversized" value={<span className="text-amber-400">⚠️ Yes</span>} />}
+              {permitRequired === "yes" && <Row label="Permit" value={<span className="text-amber-400">Required</span>} />}
+              {escortRequired === "yes" && <Row label="Escort" value={<span className="text-amber-400">Required</span>} />}
               <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
               <Row
                 label="Pricing"
@@ -1097,7 +1272,7 @@ export default function LoadBoardPost() {
               )}
             </div>
 
-            {/* Add-ons summary */}
+            {/* Add-ons */}
             {addonFlags.length > 0 && (
               <div className="rounded-2xl p-4" style={{ background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.15)" }}>
                 <p className="text-[10px] font-display font-black text-cyan-400/70 uppercase tracking-wider mb-2">Add-ons</p>
@@ -1126,16 +1301,17 @@ export default function LoadBoardPost() {
             )}
 
             {/* Privacy notice */}
-            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}>
+            <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
               <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
-                🔒 Your exact address and contact info are hidden until a carrier connects via paid checkout. Carriers see city/state only.
+                🔒 Your contact info is hidden until carrier accepts and payment is completed. When you accept a carrier offer, you'll pay the carrier rate + $10 activation fee via Stripe checkout. Carrier receives 95% of rate.
               </p>
             </div>
           </div>
         )}
+
       </div>
 
-      {/* ── Sticky footer ────────────────────────────────────────────────────── */}
+      {/* ── Sticky footer ─────────────────────────────────────────────────────── */}
       <div
         className="fixed left-0 right-0 px-4 pt-3 pb-3 z-[60]"
         style={{ bottom: "calc(68px + env(safe-area-inset-bottom, 0px))", background: "linear-gradient(to top, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.95) 70%, transparent 100%)" }}
@@ -1156,7 +1332,10 @@ export default function LoadBoardPost() {
             <Button
               type="button"
               className="flex-1 rounded-2xl h-12 font-display font-black text-sm tracking-wide"
-              style={canAdvance() ? { background: "linear-gradient(135deg,#0891b2,#0e7490)" } : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)" }}
+              style={canAdvance()
+                ? (activeType ? { background: `linear-gradient(135deg,${activeType.accent}dd,${activeType.accent}99)` } : CYAN_ACTIVE)
+                : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)" }
+              }
               onClick={advance}
               data-testid="button-next"
             >
@@ -1170,7 +1349,7 @@ export default function LoadBoardPost() {
             <Button
               type="button"
               className="flex-1 rounded-2xl h-12 font-display font-black text-sm tracking-wide"
-              style={{ background: "linear-gradient(135deg,#0891b2,#0e7490)" }}
+              style={activeType ? { background: `linear-gradient(135deg,${activeType.accent}dd,${activeType.accent}88)` } : CYAN_ACTIVE}
               onClick={handleSubmit}
               disabled={mutation.isPending}
               data-testid="button-post-load"
@@ -1187,7 +1366,7 @@ export default function LoadBoardPost() {
   );
 }
 
-// ── helper ────────────────────────────────────────────────────────────────────
+// ── Row helper ─────────────────────────────────────────────────────────────────
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
