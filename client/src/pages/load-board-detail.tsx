@@ -12,28 +12,33 @@ import {
   Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil,
 } from "lucide-react";
 
-// ── Route mini-map ────────────────────────────────────────────────────────────
-function RouteMap({ pickupCity, pickupState, deliveryCity, deliveryState, apiKey }: {
+// ── Route card (replaces embed map — no Maps Embed API dependency) ────────────
+function RouteMap({ pickupCity, pickupState, deliveryCity, deliveryState }: {
   pickupCity: string; pickupState: string;
   deliveryCity: string; deliveryState: string;
-  apiKey: string;
+  apiKey?: string;
 }) {
-  if (!apiKey || !pickupCity || !deliveryCity) return null;
+  if (!pickupCity || !deliveryCity) return null;
   const origin = encodeURIComponent(`${pickupCity}, ${pickupState}`);
   const destination = encodeURIComponent(`${deliveryCity}, ${deliveryState}`);
-  const src = `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${origin}&destination=${destination}&mode=driving`;
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
   return (
-    <div className="rounded-2xl overflow-hidden mb-3" style={{ height: 180, border: "1px solid rgba(0,229,118,0.55)" }}>
-      <iframe
-        title="Route map"
-        width="100%"
-        height="100%"
-        style={{ border: 0, display: "block" }}
-        loading="lazy"
-        referrerPolicy="no-referrer-when-downgrade"
-        src={src}
-      />
-    </div>
+    <a
+      href={mapsUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 rounded-2xl mb-3 px-4 py-3 transition-opacity hover:opacity-80 active:opacity-60"
+      style={{ background: "rgba(0,229,118,0.07)", border: "1px solid rgba(0,229,118,0.3)" }}
+      data-testid="link-route-map"
+    >
+      <MapPin className="w-4 h-4 shrink-0" style={{ color: "#00e576" }} />
+      <div className="flex-1 min-w-0 text-sm">
+        <span className="font-bold">{pickupCity}, {pickupState}</span>
+        <span className="mx-2 text-muted-foreground">→</span>
+        <span className="font-bold">{deliveryCity}, {deliveryState}</span>
+      </div>
+      <span className="text-[11px] shrink-0" style={{ color: "#00e576" }}>View route ↗</span>
+    </a>
   );
 }
 
