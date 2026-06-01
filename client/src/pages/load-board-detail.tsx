@@ -12,6 +12,31 @@ import {
   Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil,
 } from "lucide-react";
 
+// ── Route mini-map ────────────────────────────────────────────────────────────
+function RouteMap({ pickupCity, pickupState, deliveryCity, deliveryState, apiKey }: {
+  pickupCity: string; pickupState: string;
+  deliveryCity: string; deliveryState: string;
+  apiKey: string;
+}) {
+  if (!apiKey || !pickupCity || !deliveryCity) return null;
+  const origin = encodeURIComponent(`${pickupCity}, ${pickupState}`);
+  const destination = encodeURIComponent(`${deliveryCity}, ${deliveryState}`);
+  const src = `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${origin}&destination=${destination}&mode=driving`;
+  return (
+    <div className="rounded-2xl overflow-hidden mb-3" style={{ height: 180, border: "1px solid rgba(0,229,118,0.55)" }}>
+      <iframe
+        title="Route map"
+        width="100%"
+        height="100%"
+        style={{ border: 0, display: "block" }}
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+        src={src}
+      />
+    </div>
+  );
+}
+
 // ── constants ──────────────────────────────────────────────────────────────────
 
 const CYAN_ACTIVE = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
@@ -95,6 +120,9 @@ export default function LoadBoardDetail() {
     },
     enabled: !!listingId,
   });
+
+  const { data: configData } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
+  const mapsApiKey = configData?.googleMapsApiKey ?? "";
 
   // ── Detect Stripe redirect back (accept offer or addon) ──
   const confirmAcceptMutation = useMutation({
@@ -534,7 +562,7 @@ export default function LoadBoardDetail() {
           </div>
 
           {/* Route */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60 mb-3">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60 mb-2">
             <MapPin className="w-3 h-3 shrink-0 text-cyan-500/50" />
             <span className="font-display font-bold">{listing.pickupCity}, {listing.pickupState}</span>
             <span className="text-muted-foreground/30 mx-0.5">→</span>
@@ -543,6 +571,14 @@ export default function LoadBoardDetail() {
               <span className="text-muted-foreground/30 text-[10px] ml-1">({listing.estimatedMiles.toLocaleString()} mi)</span>
             )}
           </div>
+
+          <RouteMap
+            pickupCity={listing.pickupCity}
+            pickupState={listing.pickupState}
+            deliveryCity={listing.deliveryCity}
+            deliveryState={listing.deliveryState}
+            apiKey={mapsApiKey}
+          />
 
           {/* Poster identity */}
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground/40">
