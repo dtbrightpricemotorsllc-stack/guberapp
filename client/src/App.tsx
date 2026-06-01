@@ -13,6 +13,7 @@ import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
 import { Capacitor } from "@capacitor/core";
+import { isStoreBuild } from "@/lib/platform";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import {
@@ -196,7 +197,7 @@ function ConsumerRoute({ component: Component }: { component: React.ComponentTyp
 function RootRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
-  if (!user) return <Home />;
+  if (!user) return isStoreBuild ? <Redirect to="/login" /> : <Home />;
   if (user.accountType === "business") return <Redirect to="/biz/dashboard" />;
   return <Redirect to="/dashboard" />;
 }
