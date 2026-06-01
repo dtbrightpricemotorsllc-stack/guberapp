@@ -6,20 +6,23 @@ import { Button } from "@/components/ui/button";
 import {
   Truck, ChevronRight, Plus, MapPin, Zap, Loader2,
   ShieldCheck, Map as MapIcon, List, User2, Star,
+  Car, Anchor, Bus, HardHat, Package, type LucideIcon,
 } from "lucide-react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 // ── Category definitions ───────────────────────────────────────────────────────
-const CATEGORIES = [
-  { value: "vehicle",   label: "Vehicles",        emoji: "🚗", desc: "Cars, trucks, motorcycles" },
-  { value: "boat",      label: "Boats",            emoji: "⛵", desc: "Sailboats, motorboats, PWCs" },
-  { value: "rv",        label: "RVs & Campers",    emoji: "🚐", desc: "Motorhomes, travel trailers" },
-  { value: "equipment", label: "Heavy Equipment",  emoji: "🏗️", desc: "Construction, farm, industrial" },
-  { value: "trailer",   label: "Trailers",         emoji: "🚛", desc: "Flatbed, enclosed, utility" },
-  { value: "hotshot",   label: "Hotshot Loads",    emoji: "⚡", desc: "Time-critical, LTL freight" },
-] as const;
+const CATEGORIES: {
+  value: string; label: string; icon: LucideIcon; desc: string;
+}[] = [
+  { value: "vehicle",   label: "Vehicles",        icon: Car,      desc: "Cars, trucks, motorcycles" },
+  { value: "boat",      label: "Boats",            icon: Anchor,   desc: "Sailboats, motorboats, PWCs" },
+  { value: "rv",        label: "RVs & Campers",    icon: Bus,      desc: "Motorhomes, travel trailers" },
+  { value: "equipment", label: "Heavy Equipment",  icon: HardHat,  desc: "Construction, farm, industrial" },
+  { value: "trailer",   label: "Trailers",         icon: Truck,    desc: "Flatbed, enclosed, utility" },
+  { value: "hotshot",   label: "Hotshot Loads",    icon: Zap,      desc: "Time-critical, LTL freight" },
+];
 
-type CategoryValue = typeof CATEGORIES[number]["value"] | "all";
+type CategoryValue = "vehicle" | "boat" | "rv" | "equipment" | "trailer" | "hotshot" | "all";
 
 // ── Status config ──────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
@@ -569,7 +572,10 @@ function CategoriesScreen({
                 }}
                 data-testid={`category-${cat.value}`}
               >
-                <div className="text-3xl mb-2 leading-none">{cat.emoji}</div>
+                <div className="mb-3 w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: "rgba(0,229,118,0.10)", border: "1px solid rgba(0,229,118,0.25)" }}>
+                  <cat.icon className="w-5 h-5" style={{ color: "#00e576" }} />
+                </div>
                 <p className="text-sm font-display font-black text-foreground leading-tight">{cat.label}</p>
                 <p className="text-[10px] text-muted-foreground/40 mt-0.5 leading-tight">{cat.desc}</p>
                 <div className="flex items-center justify-between mt-3">
@@ -600,7 +606,10 @@ function CategoriesScreen({
         style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}
         data-testid="category-all"
       >
-        <div className="text-2xl">📦</div>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: "rgba(0,229,118,0.10)", border: "1px solid rgba(0,229,118,0.25)" }}>
+          <Package className="w-5 h-5" style={{ color: "#00e576" }} />
+        </div>
         <div className="flex-1 min-w-0 text-left">
           <p className="text-sm font-display font-bold text-foreground">All Loads</p>
           <p className="text-[10px] text-muted-foreground/40">Every open transport listing</p>
@@ -882,11 +891,15 @@ export default function LoadBoard() {
             {/* Sub-header: category info + view toggle */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                {screen !== "mine" && (
-                  <span className="text-2xl leading-none">
-                    {screen === "all" ? "📦" : CATEGORIES.find(c => c.value === screen)?.emoji}
-                  </span>
-                )}
+                {screen !== "mine" && (() => {
+                  const CatIcon = screen === "all" ? Package : CATEGORIES.find(c => c.value === screen)?.icon;
+                  return CatIcon ? (
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                      style={{ background: "rgba(0,229,118,0.10)", border: "1px solid rgba(0,229,118,0.20)" }}>
+                      <CatIcon className="w-3.5 h-3.5" style={{ color: "#00e576" }} />
+                    </div>
+                  ) : null;
+                })()}
                 {screen === "mine" && <User2 className="w-5 h-5 text-violet-400" />}
                 <div>
                   <p className="text-base font-display font-black text-foreground leading-tight">{catLabel}</p>
