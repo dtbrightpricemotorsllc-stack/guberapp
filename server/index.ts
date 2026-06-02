@@ -10,6 +10,7 @@ import { invalidateDemoIdCache } from "./demo-guard";
 import { pool } from "./db";
 import { setNonceStore, PgNonceStore } from "./oauth";
 import { startStudioToolsListener } from "./studio-tools-notify";
+import { startOSRuntime } from "./os/index";
 
 const app = express();
 const httpServer = createServer(app);
@@ -347,6 +348,7 @@ app.use((req, res, next) => {
   `).catch(e => console.error("[migration] marketplace_buyer_order_purchases error:", e));
 
   await registerRoutes(httpServer, app);
+  await startOSRuntime(app);
   startStudioToolsListener();
   startCron();
   await seedReferralExpiry().catch(e => console.error("[seed] Referral expiry column error:", e));

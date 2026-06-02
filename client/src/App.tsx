@@ -79,6 +79,13 @@ const Investors = lazy(() => import("@/pages/investors"));
 const MobileCheckout = lazy(() => import("@/pages/mobile-checkout"));
 const BuyerOrderPreview = lazy(() => import("@/pages/buyer-order-preview"));
 
+// GUBER OS pages — lazy loaded, admin-only
+const OSDashboard = lazy(() => import("@/pages/os/os-dashboard"));
+const OSApprove = lazy(() => import("@/pages/os/os-approve"));
+const OSMemory = lazy(() => import("@/pages/os/os-memory"));
+const OSAgents = lazy(() => import("@/pages/os/os-agents"));
+const OSLogs = lazy(() => import("@/pages/os/os-logs"));
+
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
 const AdminQa = lazy(() => import("@/pages/admin-qa"));
@@ -263,6 +270,11 @@ function Router() {
       <Route path="/profile/:id" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
+      <Route path="/os/dashboard" component={() => <AdminRoute component={OSDashboard} />} />
+      <Route path="/os/approve" component={() => <AdminRoute component={OSApprove} />} />
+      <Route path="/os/memory" component={() => <AdminRoute component={OSMemory} />} />
+      <Route path="/os/agents" component={() => <AdminRoute component={OSAgents} />} />
+      <Route path="/os/logs" component={() => <AdminRoute component={OSLogs} />} />
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
       <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
