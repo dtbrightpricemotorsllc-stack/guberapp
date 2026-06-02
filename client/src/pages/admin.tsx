@@ -6162,14 +6162,15 @@ return (
       </p>
       <p className="text-[10px] text-muted-foreground">Critical Alerts</p>
     </div>
-    <div className="bg-card/50 rounded-lg border border-border/20 p-2 text-center" data-testid="os-metric-health">
-      <p className={`text-lg font-display font-bold ${
+    <div className="bg-card/50 rounded-lg border border-border/20 p-2 text-center" data-testid="os-metric-health" title="OS Foundation health only — measures DB connectivity and OS action queue. Full platform health (Stripe, payments, jobs) is not yet wired.">
+      <p className={`text-sm font-display font-bold ${
         osStatus?.status === "green" ? "guber-text-green" :
         osStatus?.status === "yellow" ? "text-amber-400" : "text-red-400"
       }`}>
-        {osStatus?.status === "green" ? "100%" : osStatus?.status === "yellow" ? "80%" : "60%"}
+        {osStatus?.status === "green" ? "Nominal" : osStatus?.status === "yellow" ? "Warning" : "Degraded"}
       </p>
-      <p className="text-[10px] text-muted-foreground">Health Score</p>
+      <p className="text-[10px] text-muted-foreground">OS Foundation</p>
+      <p className="text-[9px] text-muted-foreground/40 mt-0.5">DB only · not full platform</p>
     </div>
   </div>
 </div>
