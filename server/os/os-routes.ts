@@ -82,6 +82,45 @@ export function registerOSRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  // ── Platform service health (honest — only DB gets a real check) ─────────
+
+  app.get("/api/os/platform-health", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+
+    type ServiceStatus = "unknown" | "healthy" | "warning" | "critical";
+    type ServiceResult = { key: string; name: string; status: ServiceStatus; detail: string };
+
+    const services: ServiceResult[] = [];
+    const now = new Date().toISOString();
+
+    // Database — real check
+    try {
+      await db.execute(drizzleSql`SELECT 1`);
+      services.push({ key: "database", name: "Database", status: "healthy", detail: "SELECT 1 passed" });
+    } catch (e: any) {
+      services.push({ key: "database", name: "Database", status: "critical", detail: e?.message ?? "Query failed" });
+    }
+
+    // All others — no monitoring wired yet
+    const unmonitored: Array<[string, string]> = [
+      ["google_login", "Google Login"],
+      ["apple_login", "Apple Login"],
+      ["stripe", "Stripe"],
+      ["push_notifications", "Push Notifications"],
+      ["cloudinary", "Cloudinary"],
+      ["r2_storage", "R2 Storage"],
+      ["marketplace", "Marketplace"],
+      ["verify_inspect", "Verify & Inspect"],
+      ["load_board", "Load Board"],
+      ["ai_or_not", "AI or Not"],
+    ];
+    for (const [key, name] of unmonitored) {
+      services.push({ key, name, status: "unknown", detail: "No live check wired" });
+    }
+
+    res.json({ services, checkedAt: now });
+  });
+
   // ── System Health ─────────────────────────────────────────────────────────
 
   app.get("/api/os/health", async (req, res) => {

@@ -5962,6 +5962,18 @@ const { data: osStatus } = useQuery<{
   retry: false,
 });
 
+type ServiceStatus = "unknown" | "healthy" | "warning" | "critical";
+type PlatformService = { key: string; name: string; status: ServiceStatus; detail: string };
+const { data: platformHealth, isLoading: platformLoading } = useQuery<{
+  services: PlatformService[];
+  checkedAt: string;
+}>({
+  queryKey: ["/api/os/platform-health"],
+  enabled: user?.role === "admin",
+  refetchInterval: 60_000,
+  retry: false,
+});
+
 const [userSearch, setUserSearch] = useState("");
 const [disclaimerFilter, setDisclaimerFilter] = useState(false);
 const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -6169,11 +6181,68 @@ return (
       }`}>
         {osStatus?.status === "green" ? "Nominal" : osStatus?.status === "yellow" ? "Warning" : "Degraded"}
       </p>
-      <p className="text-[10px] text-muted-foreground">OS Foundation</p>
+      <p className="text-[10px] text-muted-foreground">OS Foundation Score</p>
       <p className="text-[9px] text-muted-foreground/40 mt-0.5">DB only · not full platform</p>
     </div>
   </div>
 </div>
+
+{/* ── GUBER Platform Health ─────────────────────────────────────────────── */}
+{(() => {
+  const STATUS_CONFIG: Record<ServiceStatus, { label: string; dot: string; text: string; bg: string }> = {
+    unknown:  { label: "Unknown",  dot: "bg-muted-foreground/40",    text: "text-muted-foreground",   bg: "bg-muted/10 border-border/15" },
+    healthy:  { label: "Healthy",  dot: "bg-emerald-400",            text: "text-emerald-400",         bg: "bg-emerald-500/5 border-emerald-500/15" },
+    warning:  { label: "Warning",  dot: "bg-amber-400 animate-pulse",text: "text-amber-400",           bg: "bg-amber-500/5 border-amber-500/15" },
+    critical: { label: "Critical", dot: "bg-red-400 animate-pulse",  text: "text-red-400",             bg: "bg-red-500/5 border-red-500/15" },
+  };
+  const services = platformHealth?.services ?? [];
+  const unknownCount = services.filter(s => s.status === "unknown").length;
+  const checkedAt = platformHealth?.checkedAt;
+  return (
+    <div className="rounded-xl border border-border/20 bg-card p-4 mb-6" data-testid="platform-health-block">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold font-display">GUBER Platform Health</h3>
+        {checkedAt && (
+          <span className="text-[10px] text-muted-foreground/40">
+            checked {new Date(checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground/50 mb-4">
+        {unknownCount === services.length
+          ? "No live monitoring wired yet — all signals are unknown until real checks are connected."
+          : "Partial monitoring active. Unknown services have no live check connected."}
+      </p>
+      {platformLoading ? (
+        <div className="grid grid-cols-2 gap-1.5">
+          {Array.from({ length: 11 }).map((_, i) => (
+            <div key={i} className="h-9 rounded-lg bg-muted/10 animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5" data-testid="platform-services-grid">
+          {services.map((svc) => {
+            const cfg = STATUS_CONFIG[svc.status];
+            return (
+              <div
+                key={svc.key}
+                title={svc.detail}
+                data-testid={`svc-${svc.key}`}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg border ${cfg.bg}`}
+              >
+                <span className="text-xs text-foreground/80 font-medium">{svc.name}</span>
+                <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${cfg.text}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                  {cfg.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+})()}
 
 <Tabs value={activeTab} onValueChange={setActiveTab}>
 <div className="overflow-x-auto scrollbar-none mb-4 -mx-4 px-4">
