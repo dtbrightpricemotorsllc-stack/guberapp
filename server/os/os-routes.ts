@@ -21,6 +21,7 @@ import { runAllHealthChecks } from "./health-checks";
 import { getOperationsData, getBusinessData, getGrowthData, getAdminData } from "./command-center";
 import { runCOOAnalysis, getLatestCOOBriefing, queueRecommendation, type COOFinding } from "./coo-agent";
 import { runCFOAnalysis, getLatestCFOBriefing } from "./cfo-agent";
+import { runGrowthAnalysis, getLatestGrowthBriefing } from "./growth-agent";
 import { seedSimulation, cleanupSimulation, runPostSeedAnalysis } from "./simulation";
 import { getPlatformHealth, getRevenueStats, getUserGrowthStats } from "./platform-read";
 
@@ -435,6 +436,24 @@ export function registerOSRoutes(app: Express): void {
       res.json({ briefing });
     } catch (e: any) {
       res.status(500).json({ message: e?.message ?? "Failed to fetch CFO briefing" });
+    }
+  });
+
+  // ── Growth Agent ──────────────────────────────────────────────────────────
+
+  app.get("/api/os/growth/briefing", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    const briefing = await getLatestGrowthBriefing();
+    res.json({ briefing });
+  });
+
+  app.post("/api/os/growth/generate", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const briefing = await runGrowthAnalysis();
+      res.json(briefing);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Growth analysis failed" });
     }
   });
 

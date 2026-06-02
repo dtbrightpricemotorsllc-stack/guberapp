@@ -19,6 +19,12 @@ async function upsertAgentRows(): Promise<void> {
       description: "Financial intelligence — GMV, platform fees, payouts, refund rate, failed captures, Stripe balance. Production-only data.",
       schedule:    "0 7 * * *",
     },
+    {
+      key:         "growth",
+      label:       "Growth Agent",
+      description: "Market development — zip-level supply/demand, Cash Drop proposals, worker recruitment outreach, user funnel health. Production-only data.",
+      schedule:    "0 9 * * *",
+    },
   ];
   for (const a of agents) {
     await pool

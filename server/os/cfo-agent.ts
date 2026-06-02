@@ -15,6 +15,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { osBriefings } from "@shared/os-schema";
 import { desc, eq } from "drizzle-orm";
+import { proposeAction } from "./approval-engine";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -570,6 +571,62 @@ export async function runCFOAnalysis(): Promise<CFOBriefing> {
   const dateLabel = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const title = `CFO Briefing — ${dateLabel}`;
   const body  = executiveSummary;
+
+  // ── Propose actions for critical findings ────────────────────────────────
+  // Run in background — failures must not block briefing storage
+  setImmediate(async () => {
+    try {
+      // 1. Propose release.payout for each unpaid completed job
+      if (jobs.unpaidCompleted > 0) {
+        const unpaidJobs = await db.execute(sql`
+          SELECT j.id, j.title, j.final_price, j.assigned_helper_id,
+                 u.full_name AS worker_name
+          FROM jobs j
+          JOIN users u ON u.id = j.assigned_helper_id
+          WHERE j.status = 'completed'
+            AND j.is_paid = false
+            AND j.is_test_job = false
+            AND j.is_demo = false
+            AND u.is_test_user = false
+          LIMIT 10
+        `);
+        for (const uj of unpaidJobs.rows as any[]) {
+          const payout = parseFloat(((uj.final_price ?? 0) * 0.80).toFixed(2));
+          await proposeAction({
+            agentKey: "cfo",
+            actionType: "release.payout",
+            payload: {
+              jobId: uj.id,
+              jobTitle: uj.title,
+              workerId: uj.assigned_helper_id,
+              workerName: uj.worker_name,
+              grossAmount: uj.final_price,
+              payoutAmount: payout,
+            },
+            rationale: `Job "${uj.title}" (ID ${uj.id}) is marked completed but payment was not captured — worker ${uj.worker_name} is owed $${payout}.`,
+          }).catch(() => {});
+        }
+      }
+
+      // 2. Propose escalate.dispute if refund rate is high
+      if (revenue.gmv30d > 0) {
+        const rr = (revenue.refunds30d / revenue.gmv30d) * 100;
+        if (rr > 8) {
+          await proposeAction({
+            agentKey: "cfo",
+            actionType: "escalate.dispute",
+            payload: {
+              reason: "high_refund_rate",
+              refundRate: parseFloat(rr.toFixed(1)),
+              refunds30d: revenue.refunds30d,
+              gmv30d: revenue.gmv30d,
+            },
+            rationale: `Refund rate is ${rr.toFixed(1)}% of GMV ($${revenue.refunds30d.toFixed(2)} refunded). Dispute review required to identify root cause.`,
+          }).catch(() => {});
+        }
+      }
+    } catch { /* non-fatal — briefing already stored */ }
+  });
 
   const [row] = await db
     .insert(osBriefings)

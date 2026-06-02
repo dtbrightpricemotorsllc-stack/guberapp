@@ -12,14 +12,19 @@ const ACTION_TIER_MAP: Record<string, RiskTier> = {
   "update.memory": "read",
   "flag.user_for_review": "medium",
   "issue.refund": "high",
+  "release.payout": "high",
   "suspend.user": "high",
   "grant.studio_credits": "medium",
   "update.feature_flag": "high",
   "create.support_response": "low",
   "escalate.dispute": "medium",
+  "resolve.dispute": "high",
   "generate.report": "read",
   "update.faq": "low",
   "alert.founder": "low",
+  "schedule.cash_drop": "medium",
+  "queue.outreach": "medium",
+  "patch.infrastructure": "founder",
 };
 
 export function classifyRiskTier(actionType: string): RiskTier {

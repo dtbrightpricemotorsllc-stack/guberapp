@@ -66,6 +66,8 @@ const NAV = [
   { label: "Command Center", path: "/os/command-center" },
   { label: "Daily Briefing",  path: "/os/briefing" },
   { label: "COO Agent",       path: "/os/coo", active: true },
+  { label: "CFO Agent",       path: "/os/cfo" },
+  { label: "Growth Agent",    path: "/os/growth" },
   { label: "Dashboard",       path: "/os/dashboard" },
   { label: "Approvals",       path: "/os/approve" },
   { label: "Memory",          path: "/os/memory" },

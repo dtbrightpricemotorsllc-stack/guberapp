@@ -215,12 +215,14 @@ export default function OSCommandCenter() {
     { label: "Command Center", path: "/os/command-center", active: true },
     { label: "Daily Briefing",  path: "/os/briefing" },
     { label: "COO Agent",       path: "/os/coo" },
-    { label: "Dashboard", path: "/os/dashboard" },
-    { label: "Approvals", path: "/os/approve" },
-    { label: "Memory", path: "/os/memory" },
-    { label: "Agents", path: "/os/agents" },
-    { label: "Audit Log", path: "/os/logs" },
-    { label: "Events", path: "/os/events" },
+    { label: "CFO Agent",       path: "/os/cfo" },
+    { label: "Growth Agent",    path: "/os/growth" },
+    { label: "Dashboard",       path: "/os/dashboard" },
+    { label: "Approvals",       path: "/os/approve" },
+    { label: "Memory",          path: "/os/memory" },
+    { label: "Agents",          path: "/os/agents" },
+    { label: "Audit Log",       path: "/os/logs" },
+    { label: "Events",          path: "/os/events" },
   ];
 
   return (

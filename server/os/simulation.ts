@@ -11,8 +11,11 @@
  */
 
 import { pool } from "../db";
+import { db } from "../db";
+import { osEvents } from "@shared/os-schema";
 import { runCFOAnalysis } from "./cfo-agent";
 import { runCOOAnalysis } from "./coo-agent";
+import { runGrowthAnalysis } from "./growth-agent";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -234,16 +237,48 @@ export async function seedSimulation(): Promise<Record<string, any>> {
     `, [userId, toolKey, credits, createdAt]);
   }
 
-  // ── 8. Stuck job (COO: helper_confirmed > 48h, not completed) ─────────────
-  await pool.query(`
-    INSERT INTO jobs
-      (title, category, budget, status, visibility,
-       posted_by_id, assigned_helper_id, is_test_job, is_demo, is_paid,
-       is_published, helper_confirmed, locked_at, pay_type, zip)
-    VALUES ('Electrical Panel Audit','Skilled Labor',175,'helper_confirmed','public',
-            $1,$2,false,false,false,
-            true,true,$3,'Flat Rate','27401')
-  `, [h5, w3, daysAgo(3)]);
+  // ── 8. Stuck jobs (COO: helper_confirmed > 48h, not completed) ─────────────
+  const stuckJobDefs = [
+    ['Electrical Panel Audit',   'Skilled Labor',  175, h5, w3, 3],
+    ['Pre-Purchase Home Walkthrough', 'Verify & Inspect', 130, h6, w2, 4],
+  ];
+  for (const [title, cat, budget, poster, helper, days] of stuckJobDefs) {
+    await pool.query(`
+      INSERT INTO jobs
+        (title, category, budget, status, visibility,
+         posted_by_id, assigned_helper_id, is_test_job, is_demo, is_paid,
+         is_published, helper_confirmed, locked_at, pay_type, zip)
+      VALUES ($1,$2,$3,'helper_confirmed','public',
+              $4,$5,false,false,false,
+              true,true,$6,'Flat Rate','27401')
+    `, [title, cat, budget, poster, helper, daysAgo(days as number)]);
+  }
+
+  // ── 9. Latency spike event (tests Platform Health + COO alert threshold) ──
+  await db.insert(osEvents).values({
+    eventType: "health.degradation",
+    source: "platform-health",
+    payload: {
+      service: "twilio",
+      latencyMs: 4200,
+      threshold: 2000,
+      message: "Twilio SMS latency spike: 4.2s avg (threshold 2s). Simulated for health-score testing.",
+      simulated: true,
+    },
+  });
+
+  // ── 10. Additional wallet transactions for 7d / 24h windows ──────────────
+  // Ensures gmv7d and gmv24h show non-zero values in CFO briefing
+  if (insertedJobs.length >= 3) {
+    const recentJob = insertedJobs.find(j => j.isPaid && (jobRows[insertedJobs.indexOf(j)][5] as number) <= 7);
+    if (recentJob) {
+      // Add a same-day transaction so gmv24h > 0
+      await pool.query(`
+        INSERT INTO wallet_transactions (user_id, job_id, type, amount, status, description, created_at)
+        VALUES ($1,$2,'job_payment',$3,'completed','Same-day job — sim',$4)
+      `, [recentJob.postedById, recentJob.id, recentJob.finalPrice * 0.4, hoursAgo(3)]);
+    }
+  }
 
   return {
     hirers:      hirers.length || 6,
@@ -251,9 +286,10 @@ export async function seedSimulation(): Promise<Record<string, any>> {
     jobs:        insertedJobs.length,
     paidJobs:    insertedJobs.filter(j => j.isPaid).length,
     unpaidJobs:  insertedJobs.filter(j => !j.isPaid).length,
+    transactions: (insertedJobs.filter(j => j.isPaid).length * 2) + 2, // payments + payouts + refund + 24h
     disputes:    1,
     studioLogs:  studioEntries.length,
-    stuckJobs:   1,
+    stuckJobs:   stuckJobDefs.length,
   };
 }
 
@@ -309,12 +345,24 @@ export async function cleanupSimulation(): Promise<Record<string, number>> {
 // ── Run analysis after seed ────────────────────────────────────────────────────
 
 export async function runPostSeedAnalysis() {
-  const [cfo, coo] = await Promise.allSettled([
+  const [cfo, coo, growth] = await Promise.allSettled([
     runCFOAnalysis(),
     runCOOAnalysis(),
+    runGrowthAnalysis(),
   ]);
   return {
-    cfo: cfo.status === "fulfilled" ? { title: cfo.value.title, healthScore: cfo.value.metrics.healthScore } : { error: (cfo as any).reason?.message },
-    coo: coo.status === "fulfilled" ? { title: coo.value.title, score: coo.value.platformHealthScore } : { error: (coo as any).reason?.message },
+    cfo: cfo.status === "fulfilled"
+      ? { title: cfo.value.title, healthScore: cfo.value.metrics.healthScore,
+          gmv: cfo.value.metrics.revenue.gmv30d,
+          platformFees: cfo.value.metrics.revenue.platformFees30d,
+          workerPayouts: cfo.value.metrics.revenue.workerPayouts30d,
+          activeJobs: cfo.value.metrics.jobs.completed30d }
+      : { error: (cfo as any).reason?.message },
+    coo: coo.status === "fulfilled"
+      ? { title: coo.value.title, score: coo.value.platformHealthScore, findings: coo.value.totalFindings }
+      : { error: (coo as any).reason?.message },
+    growth: growth.status === "fulfilled"
+      ? { title: growth.value.title, score: growth.value.metrics.growthScore, actions: growth.value.metrics.proposedActions.length }
+      : { error: (growth as any).reason?.message },
   };
 }

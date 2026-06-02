@@ -114,12 +114,14 @@ export default function OSApprove() {
             { label: "Command Center", path: "/os/command-center" },
             { label: "Daily Briefing",  path: "/os/briefing" },
             { label: "COO Agent",       path: "/os/coo" },
-            { label: "Dashboard", path: "/os/dashboard" },
-            { label: "Approvals", path: "/os/approve", active: true },
-            { label: "Memory", path: "/os/memory" },
-            { label: "Agents", path: "/os/agents" },
-            { label: "Audit Log", path: "/os/logs" },
-            { label: "Events", path: "/os/events" },
+            { label: "CFO Agent",       path: "/os/cfo" },
+            { label: "Growth Agent",    path: "/os/growth" },
+            { label: "Dashboard",       path: "/os/dashboard" },
+            { label: "Approvals",       path: "/os/approve", active: true },
+            { label: "Memory",          path: "/os/memory" },
+            { label: "Agents",          path: "/os/agents" },
+            { label: "Audit Log",       path: "/os/logs" },
+            { label: "Events",          path: "/os/events" },
           ].map((item) => (
             <button
               key={item.path}
