@@ -241,15 +241,26 @@ async function checkCloudinary(): Promise<CheckResult> {
 
 async function checkR2Storage(): Promise<CheckResult> {
   const key = "r2_storage";
-  // Try multiple common naming conventions
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? process.env.R2_ACCOUNT_ID;
   const accessKey = process.env.R2_ACCESS_KEY_ID ?? process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
   const secretKey = process.env.R2_SECRET_ACCESS_KEY ?? process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
-  if (!accountId && !accessKey) {
-    return unk(key, "R2 Storage",
-      "No R2 credentials detected (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). Set if R2 is in use.");
+  const bucket = process.env.R2_BUCKET_NAME ?? process.env.CLOUDFLARE_R2_BUCKET;
+  if (!accountId && !accessKey && !secretKey) {
+    // R2 is not configured — this deployment uses Cloudinary for media storage.
+    // This is not an error; mark informational.
+    return {
+      key, name: "R2 Storage", status: "unknown", value: "Not in use",
+      detail: "No R2 credentials configured — this deployment uses Cloudinary for media storage",
+      lastSuccess: null, lastFailure: null, failureReason: null,
+      recommendedAction: "Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY if you add R2.",
+    };
   }
-  return ok(key, "R2 Storage", "Configured", "R2 credentials present");
+  if (!accessKey || !secretKey) {
+    const reason = "Partial R2 config — access key or secret key missing";
+    return crit(key, "R2 Storage", null, reason, "Set all R2 credentials.", reason);
+  }
+  return ok(key, "R2 Storage", "Configured",
+    `R2 credentials present · bucket: ${bucket ?? "not specified"}`);
 }
 
 async function checkGuberStudio(): Promise<CheckResult> {
@@ -265,14 +276,21 @@ async function checkGuberStudio(): Promise<CheckResult> {
     const r = await db.execute(sql`
       SELECT
         COUNT(*)::int AS sessions_24h,
-        COUNT(*) FILTER (WHERE status = 'active')::int AS active_now,
-        COALESCE(SUM(credits_used),0)::int AS credits_24h
+        COUNT(*) FILTER (WHERE status = 'active')::int AS active_now
       FROM studio_sessions
-      WHERE created_at > NOW() - INTERVAL '24 hours'
+      WHERE started_at > NOW() - INTERVAL '24 hours'
+    `);
+    const g = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS gens_24h,
+        COALESCE(SUM(credits_cost),0)::int AS credits_24h
+      FROM studio_generation_log
+      WHERE created_at > NOW() - INTERVAL '24 hours' AND status = 'succeeded'
     `);
     const row = r.rows[0] as any;
+    const gRow = g.rows[0] as any;
     return ok(key, "GUBER Studio", `${row.sessions_24h ?? 0} sessions`,
-      `${row.sessions_24h ?? 0} sessions (24h) · ${row.active_now ?? 0} active · ${row.credits_24h ?? 0} credits used`);
+      `${row.sessions_24h ?? 0} sessions (24h) · ${row.active_now ?? 0} active · ${gRow.gens_24h ?? 0} generations · ${gRow.credits_24h ?? 0} credits used`);
   } catch (e: any) {
     return warn(key, "GUBER Studio", "DB error", "FAL_KEY set but studio_sessions query failed",
       "Check studio_sessions table.", e?.message);

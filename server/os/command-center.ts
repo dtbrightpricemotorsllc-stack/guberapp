@@ -143,12 +143,20 @@ export async function getOperationsData(): Promise<MetricItem[]> {
       SELECT
         COUNT(*)::int AS sessions_24h,
         COUNT(*) FILTER (WHERE status = 'active')::int AS active_now
-      FROM studio_sessions WHERE created_at > NOW() - INTERVAL '24 hours'
+      FROM studio_sessions WHERE started_at > NOW() - INTERVAL '24 hours'
+    `);
+    const g = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS gens_24h,
+        COALESCE(SUM(credits_cost),0)::int AS credits_24h
+      FROM studio_generation_log
+      WHERE created_at > NOW() - INTERVAL '24 hours' AND status = 'succeeded'
     `);
     const row = r.rows[0] as any;
+    const gRow = g.rows[0] as any;
     const falOk = !!process.env.FAL_KEY;
     const item = good("studio", "GUBER Studio", `${row.sessions_24h ?? 0} sessions`,
-      `${row.sessions_24h ?? 0} sessions (24h) · ${row.active_now ?? 0} active · FAL.ai: ${falOk ? "configured" : "NOT SET"}`);
+      `${row.sessions_24h ?? 0} sessions · ${row.active_now ?? 0} active · ${gRow.gens_24h ?? 0} generations (24h) · ${gRow.credits_24h ?? 0} credits used · FAL.ai: ${falOk ? "configured" : "NOT SET"}`);
     if (!falOk) { item.status = "critical"; item.recommendedAction = "Set FAL_KEY — generation returns 503 without it."; }
     items.push(item);
   } catch (e: any) { items.push(err("studio", "GUBER Studio", e?.message ?? "Unknown")); }
