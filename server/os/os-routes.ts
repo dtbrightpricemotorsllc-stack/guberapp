@@ -513,6 +513,201 @@ export function registerOSRoutes(app: Express): void {
     }
   });
 
+  // ── Mission Control endpoints ──────────────────────────────────────────────
+
+  app.get("/api/admin/growth-snapshot", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const { pool } = await import("../db");
+      const [usersRes, zipsRes, ogsRes, trustBoxRes] = await Promise.all([
+        pool.query<{ total: string; today: string; week: string }>(`
+          SELECT
+            COUNT(*)::text                                                             AS total,
+            COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '1 day')::text      AS today,
+            COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::text     AS week
+          FROM users
+          WHERE is_test_user = false AND email NOT ILIKE '%@guberapp.internal'
+        `),
+        pool.query<{ active: string; dead: string }>(`
+          SELECT
+            COUNT(*) FILTER (WHERE u_count >= 1)::text AS active,
+            COUNT(*) FILTER (WHERE u_count = 0)::text  AS dead
+          FROM (
+            SELECT z.zip, COUNT(DISTINCT u.id) AS u_count
+            FROM (
+              SELECT DISTINCT SUBSTRING(zip_code, 1, 5) AS zip
+              FROM users
+              WHERE zip_code IS NOT NULL AND is_test_user = false
+            ) z
+            LEFT JOIN users u ON SUBSTRING(u.zip_code, 1, 5) = z.zip AND u.is_test_user = false
+            GROUP BY z.zip
+          ) t
+        `),
+        pool.query<{ cnt: string }>(
+          `SELECT COUNT(*)::text AS cnt FROM users WHERE day1_og = true AND is_test_user = false`
+        ),
+        pool.query<{ cnt: string }>(
+          `SELECT COUNT(*)::text AS cnt FROM users WHERE trust_box_purchased = true AND is_test_user = false`
+        ),
+      ]);
+      res.json({
+        totalUsers:               parseInt(usersRes.rows[0].total),
+        newUsersToday:            parseInt(usersRes.rows[0].today),
+        newUsersThisWeek:         parseInt(usersRes.rows[0].week),
+        activeZipCodes:           parseInt(zipsRes.rows[0].active),
+        deadZipCodes:             parseInt(zipsRes.rows[0].dead),
+        day1OgCount:              parseInt(ogsRes.rows[0].cnt),
+        trustToolboxSubscriptions: parseInt(trustBoxRes.rows[0].cnt),
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/admin/zip-health", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const { pool } = await import("../db");
+      const { rows } = await pool.query<{
+        zip: string;
+        users: string;
+        workers: string;
+        open_jobs: string;
+        completed_jobs: string;
+        businesses: string;
+      }>(`
+        WITH zips AS (
+          SELECT DISTINCT SUBSTRING(zip_code, 1, 5) AS zip
+          FROM users
+          WHERE zip_code IS NOT NULL AND is_test_user = false
+        )
+        SELECT
+          z.zip,
+          COUNT(DISTINCT u.id)::text                                                                     AS users,
+          COUNT(DISTINCT u.id) FILTER (WHERE u.role = 'helper')::text                                    AS workers,
+          COUNT(DISTINCT j.id) FILTER (WHERE j.status NOT IN ('completed','expired','cancelled'))::text  AS open_jobs,
+          COUNT(DISTINCT j.id) FILTER (WHERE j.status = 'completed')::text                              AS completed_jobs,
+          COUNT(DISTINCT bp.id)::text                                                                    AS businesses
+        FROM zips z
+        LEFT JOIN users u         ON SUBSTRING(u.zip_code, 1, 5) = z.zip AND u.is_test_user = false
+        LEFT JOIN jobs j          ON j.posted_by_id = u.id
+        LEFT JOIN business_profiles bp ON bp.user_id = u.id
+        GROUP BY z.zip
+        ORDER BY COUNT(DISTINCT u.id) DESC
+        LIMIT 100
+      `);
+
+      const result = rows.map(r => {
+        const users    = parseInt(r.users);
+        const workers  = parseInt(r.workers);
+        const openJobs = parseInt(r.open_jobs);
+        let healthStatus = "Healthy";
+        if (users === 0)                              healthStatus = "Needs Users";
+        else if (workers === 0)                       healthStatus = "Needs Workers";
+        else if (openJobs >= 5 && workers <= 2)       healthStatus = "Hot Zone";
+        else if (openJobs === 0)                      healthStatus = "Needs Jobs";
+        return {
+          code:           r.zip,
+          users,
+          workers,
+          openJobs,
+          completedJobs:  parseInt(r.completed_jobs),
+          businesses:     parseInt(r.businesses),
+          listings:       0,
+          healthStatus,
+        };
+      });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/admin/ai-recommendations", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const actions = await db
+        .select()
+        .from(osActions)
+        .where(and(eq(osActions.agentKey, "growth"), eq(osActions.status, "pending")))
+        .orderBy(desc(osActions.createdAt))
+        .limit(20);
+
+      const result = actions.map(a => {
+        const p = (a.payload ?? {}) as Record<string, any>;
+        return {
+          id:         a.id,
+          zipCode:    p.zip ?? (p.targetZips as string[] | undefined)?.[0] ?? "—",
+          category:   a.actionType.replace(".", " / "),
+          guidance:   a.rationale ?? "",
+          actionType: a.actionType,
+          targetType: a.riskTier,
+        };
+      });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/admin/marketing-queue", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const actions = await db
+        .select()
+        .from(osActions)
+        .where(and(eq(osActions.agentKey, "growth"), eq(osActions.status, "pending")))
+        .orderBy(desc(osActions.createdAt))
+        .limit(10);
+
+      const PLATFORM_MAP: Record<string, string> = {
+        "schedule.cash_drop": "All Channels",
+        "queue.outreach":     "Email",
+        "alert.founder":      "Internal",
+      };
+      const TIMESLOT_MAP: Record<string, string> = {
+        "schedule.cash_drop": "ASAP",
+        "queue.outreach":     "Next Batch",
+        "alert.founder":      "Immediate",
+      };
+
+      const result = actions.map(a => {
+        const p = (a.payload ?? {}) as Record<string, any>;
+        const headline =
+          a.actionType === "schedule.cash_drop"
+            ? `Cash Drop — ZIP ${p.zip}`
+            : a.actionType === "queue.outreach"
+            ? `Worker Recruitment — ${(p.targetZips as string[] | undefined)?.join(", ") ?? "multiple ZIPs"}`
+            : "Founder Alert — Growth Stall Detected";
+        return {
+          id:              a.id,
+          platform:        PLATFORM_MAP[a.actionType] ?? "All Channels",
+          timeSlot:        TIMESLOT_MAP[a.actionType] ?? "Scheduled",
+          targetCityOrZip: p.zip ?? (p.targetZips as string[] | undefined)?.[0] ?? null,
+          reasonGenerated: a.rationale ?? "Growth Agent analysis",
+          headline,
+          body: p.message ?? p.reason ?? a.rationale ?? "",
+        };
+      });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed" });
+    }
+  });
+
+  app.post("/api/admin/marketing/publish/:id", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    const actionId = parseInt(req.params.id, 10);
+    if (isNaN(actionId)) return res.status(400).json({ message: "Invalid action ID" });
+    const userId = (req as any).session.userId;
+    try {
+      await decideAction(actionId, userId, "approved", "Approved via Mission Control");
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ message: e?.message ?? "Failed" });
+    }
+  });
+
   // ── Audit Log ─────────────────────────────────────────────────────────────
 
   app.get("/api/os/audit-log", async (req, res) => {

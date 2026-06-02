@@ -116,6 +116,7 @@ export default function OSApprove() {
             { label: "COO Agent",       path: "/os/coo" },
             { label: "CFO Agent",       path: "/os/cfo" },
             { label: "Growth Agent",    path: "/os/growth" },
+            { label: "Mission Control", path: "/os/mission-control" },
             { label: "Dashboard",       path: "/os/dashboard" },
             { label: "Approvals",       path: "/os/approve", active: true },
             { label: "Memory",          path: "/os/memory" },

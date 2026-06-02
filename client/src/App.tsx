@@ -91,6 +91,7 @@ const OSBriefing = lazy(() => import("@/pages/os/os-briefing"));
 const OSCOOAgent = lazy(() => import("@/pages/os/os-coo"));
 const OSCFOAgent = lazy(() => import("@/pages/os/os-cfo"));
 const OSGrowthAgent = lazy(() => import("@/pages/os/os-growth"));
+const OSMissionControl = lazy(() => import("@/pages/os/os-mission-control"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
@@ -307,6 +308,7 @@ function Router() {
       <Route path="/os/coo" component={() => <OSAdminRoute component={OSCOOAgent} />} />
       <Route path="/os/cfo" component={() => <OSAdminRoute component={OSCFOAgent} />} />
       <Route path="/os/growth" component={() => <OSAdminRoute component={OSGrowthAgent} />} />
+      <Route path="/os/mission-control" component={() => <OSAdminRoute component={OSMissionControl} />} />
       <Route path="/os/dashboard" component={() => <OSAdminRoute component={OSDashboard} />} />
       <Route path="/os/approve" component={() => <OSAdminRoute component={OSApprove} />} />
       <Route path="/os/memory" component={() => <OSAdminRoute component={OSMemory} />} />
