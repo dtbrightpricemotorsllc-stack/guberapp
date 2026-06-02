@@ -132,6 +132,18 @@ uri = "file://attached_assets/category-images/vi_drone_aerial.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "PbGvqS3dKloewsMT1D9P3"
+uri = "file://client/src/assets/load-board-hero-lambo.png"
+type = "image"
+title = "lamborghini on car hauler transport"
+
+[[generated]]
+id = "h0_CAA-5IRFuEvqCs2ny2"
+uri = "file://client/src/assets/load-board-hero-wideload.png"
+type = "image"
+title = "wide load oversized transport highway"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
@@ -257,3 +269,15 @@ id = "zAh_79I3ts5QZx5vcoXjP"
 uri = "file://attached_assets/roadpass-hq.png"
 type = "image"
 title = "250 DPI preview — actual PDF will be even sharper"
+
+[[outputs]]
+id = "mLtfvL0WPsQoNZzMLbXBQ"
+uri = "file://client/src/assets/load-board-hero-lambo.png"
+type = "image"
+title = "Hero left — Lamborghini on car hauler"
+
+[[outputs]]
+id = "weVG0umHgkFnjh4jgJU-u"
+uri = "file://client/src/assets/load-board-hero-wideload.png"
+type = "image"
+title = "Hero right — Wide load transport"

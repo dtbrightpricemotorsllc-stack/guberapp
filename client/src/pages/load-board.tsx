@@ -9,6 +9,8 @@ import {
   Car, Anchor, Bus, HardHat, Package,
 } from "lucide-react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
+import heroLambo    from "@assets/load-board-hero-lambo.png";
+import heroWideLoad from "@assets/load-board-hero-wideload.png";
 
 // ── Category definitions ───────────────────────────────────────────────────────
 type IconComponent = React.FC<React.SVGAttributes<SVGElement> & { className?: string }>;
@@ -528,20 +530,34 @@ function CategoriesScreen({
   return (
     <div className="space-y-4">
       {/* Hero */}
-      <div className="rounded-2xl p-4 relative overflow-hidden"
-        style={{
-          background: "linear-gradient(135deg,rgba(8,145,178,0.15),rgba(14,116,144,0.06))",
-          border: "1px solid rgba(6,182,212,0.2)",
-        }}>
-        <div className="flex items-start justify-between">
+      <div className="rounded-2xl relative overflow-hidden"
+        style={{ border: "1px solid rgba(6,182,212,0.25)" }}>
+        {/* Photo strip */}
+        <div className="flex h-36 gap-0.5">
+          <img
+            src={heroLambo}
+            alt="Lamborghini on car hauler"
+            className="w-[58%] h-full object-cover"
+          />
+          <img
+            src={heroWideLoad}
+            alt="Wide load transport"
+            className="w-[42%] h-full object-cover"
+          />
+        </div>
+        {/* Gradient overlay + text */}
+        <div
+          className="absolute inset-0 flex items-end justify-between px-4 pb-3 pt-10"
+          style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 40%, transparent 100%)" }}
+        >
           <div>
-            <p className="text-[10px] font-display font-black text-cyan-400/60 uppercase tracking-widest mb-1">
+            <p className="text-[9px] font-display font-black text-cyan-400/70 uppercase tracking-widest mb-0.5">
               Vehicles · Boats · RVs · Equipment · Trailers · Hotshot
             </p>
-            <h2 className="text-2xl font-display font-black text-foreground leading-none">
+            <h2 className="text-xl font-display font-black text-white leading-none">
               Load Board
             </h2>
-            <p className="text-xs text-muted-foreground/50 mt-1">
+            <p className="text-[10px] text-white/50 mt-0.5">
               {isLoading ? "…" : `${totalOpen} open load${totalOpen !== 1 ? "s" : ""} available`}
             </p>
           </div>
