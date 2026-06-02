@@ -113,6 +113,7 @@ export default function OSApprove() {
           {[
             { label: "Command Center", path: "/os/command-center" },
             { label: "Daily Briefing",  path: "/os/briefing" },
+            { label: "COO Agent",       path: "/os/coo" },
             { label: "Dashboard", path: "/os/dashboard" },
             { label: "Approvals", path: "/os/approve", active: true },
             { label: "Memory", path: "/os/memory" },

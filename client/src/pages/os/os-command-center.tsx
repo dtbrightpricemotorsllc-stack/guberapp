@@ -214,6 +214,7 @@ export default function OSCommandCenter() {
   const nav_items = [
     { label: "Command Center", path: "/os/command-center", active: true },
     { label: "Daily Briefing",  path: "/os/briefing" },
+    { label: "COO Agent",       path: "/os/coo" },
     { label: "Dashboard", path: "/os/dashboard" },
     { label: "Approvals", path: "/os/approve" },
     { label: "Memory", path: "/os/memory" },

@@ -129,6 +129,7 @@ export default function OSDashboard() {
           {[
             { label: "Command Center", path: "/os/command-center" },
             { label: "Daily Briefing",  path: "/os/briefing" },
+            { label: "COO Agent",       path: "/os/coo" },
             { label: "Dashboard", path: "/os/dashboard", active: true },
             { label: "Approvals", path: "/os/approve" },
             { label: "Memory", path: "/os/memory" },

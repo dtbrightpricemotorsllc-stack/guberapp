@@ -19,6 +19,7 @@ import { emitOSEvent } from "./event-bus";
 import { writeAuditLog } from "./logger";
 import { runAllHealthChecks } from "./health-checks";
 import { getOperationsData, getBusinessData, getGrowthData, getAdminData } from "./command-center";
+import { runCOOAnalysis, getLatestCOOBriefing, queueRecommendation, type COOFinding } from "./coo-agent";
 import { getPlatformHealth, getRevenueStats, getUserGrowthStats } from "./platform-read";
 
 async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
@@ -409,6 +410,45 @@ export function registerOSRoutes(app: Express): void {
       .orderBy(desc(osAgentRuns.startedAt))
       .limit(50);
     res.json(runs);
+  });
+
+  // ── COO Agent ─────────────────────────────────────────────────────────────
+
+  // GET latest saved briefing (fast — no DB analysis, just reads last stored row)
+  app.get("/api/os/coo/briefing", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const briefing = await getLatestCOOBriefing();
+      res.json({ briefing }); // null if never generated
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to fetch COO briefing" });
+    }
+  });
+
+  // POST generate a fresh briefing (runs all 8 analyses, stores to DB)
+  app.post("/api/os/coo/generate", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const briefing = await runCOOAnalysis();
+      res.json({ briefing });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "COO analysis failed" });
+    }
+  });
+
+  // POST queue a finding as a founder-review recommendation (creates osAction)
+  app.post("/api/os/coo/queue", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    const finding: COOFinding = req.body.finding;
+    if (!finding?.id || !finding?.issue) {
+      return res.status(400).json({ message: "finding required" });
+    }
+    try {
+      const actionId = await queueRecommendation(finding);
+      res.json({ actionId, message: "Queued for founder review" });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to queue recommendation" });
+    }
   });
 
   // ── Audit Log ─────────────────────────────────────────────────────────────
