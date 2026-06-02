@@ -13676,59 +13676,87 @@ export async function registerRoutes(
     try {
       const r = await db.execute(sql`
         SELECT
-          -- Real users (non-test, non-deleted)
+          -- ── Core counts ────────────────────────────────────────────────────
           (SELECT COUNT(*)::int FROM users
             WHERE is_test_user = false AND deleted_at IS NULL
-              AND email NOT ILIKE '%@guberapp.internal')                     AS users,
-          -- Real jobs (non-demo, posted by real users)
+              AND email NOT ILIKE '%@guberapp.internal')                           AS users,
           (SELECT COUNT(*)::int FROM jobs j
             JOIN users u ON u.id = j.posted_by_id
             WHERE j.is_demo = false AND j.is_test_job = false
               AND u.is_test_user = false
-              AND u.email NOT ILIKE '%@guberapp.internal')                   AS jobs,
-          -- Real open jobs
+              AND u.email NOT ILIKE '%@guberapp.internal')                         AS jobs,
           (SELECT COUNT(*)::int FROM jobs j
             JOIN users u ON u.id = j.posted_by_id
             WHERE j.status = 'posted_public'
               AND j.is_demo = false AND j.is_test_job = false
               AND u.is_test_user = false
-              AND u.email NOT ILIKE '%@guberapp.internal')                   AS open_jobs,
-          -- Real active disputes
+              AND u.email NOT ILIKE '%@guberapp.internal')                         AS open_jobs,
           (SELECT COUNT(*)::int FROM guber_disputes d
             JOIN users u ON u.id = d.opened_by_user_id
             WHERE d.status = 'open' AND u.is_test_user = false
-              AND u.email NOT ILIKE '%@guberapp.internal')                   AS disputes,
-          -- Real marketplace listings
+              AND u.email NOT ILIKE '%@guberapp.internal')                         AS disputes,
           (SELECT COUNT(*)::int FROM marketplace_items m
             JOIN users u ON u.id = m.seller_id
             WHERE m.status = 'available' AND m.is_sample = false
               AND u.is_test_user = false
-              AND u.email NOT ILIKE '%@guberapp.internal')                   AS marketplace,
-          -- Real load board listings
+              AND u.email NOT ILIKE '%@guberapp.internal')                         AS marketplace,
           (SELECT COUNT(*)::int FROM load_board_listings l
             JOIN users u ON u.id = l.poster_id
             WHERE l.status = 'posted'
               AND u.is_test_user = false
-              AND u.email NOT ILIKE '%@guberapp.internal')                   AS load_board,
-          -- Safety queue: users with ID submitted, Stripe active, pending review
+              AND u.email NOT ILIKE '%@guberapp.internal')                         AS load_board,
+
+          -- ── Activation Funnel ──────────────────────────────────────────────
+          -- Identity: not submitted
+          (SELECT COUNT(*)::int FROM users
+            WHERE id_document_type IS NULL AND id_verified = false
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS identity_not_submitted,
+          -- Identity: submitted but pending admin review
+          (SELECT COUNT(*)::int FROM users
+            WHERE id_document_type IS NOT NULL AND id_verified = false
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS identity_submitted,
+          -- Identity: approved by admin
+          (SELECT COUNT(*)::int FROM users
+            WHERE id_verified = true
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS identity_approved,
+          -- Stripe: not connected (any real user)
+          (SELECT COUNT(*)::int FROM users
+            WHERE (stripe_account_status IS NULL OR stripe_account_status != 'active')
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS stripe_not_connected,
+          -- Stripe: connected
+          (SELECT COUNT(*)::int FROM users
+            WHERE stripe_account_status = 'active'
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS stripe_connected,
+          -- Eligible to work: ID approved + Stripe active + registry clear
+          (SELECT COUNT(*)::int FROM users
+            WHERE id_verified = true
+              AND stripe_account_status = 'active'
+              AND background_check_status = 'clear'
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS eligible_to_work,
+          -- Eligible to hire: ID approved (hirers don't need Stripe or BG check)
+          (SELECT COUNT(*)::int FROM users
+            WHERE id_verified = true
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS eligible_to_hire,
+
+          -- ── Safety Queue (legacy fields kept for compatibility) ─────────────
           (SELECT COUNT(*)::int FROM users
             WHERE background_check_status = 'none'
               AND id_document_type IS NOT NULL
-              AND is_test_user = false
-              AND deleted_at IS NULL
-              AND email NOT ILIKE '%@guberapp.internal')                     AS safety_queue_pending,
-          -- ID submitted but Stripe not connected
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                           AS safety_queue_pending,
           (SELECT COUNT(*)::int FROM users
             WHERE background_check_status = 'none'
               AND id_document_type IS NOT NULL
               AND (stripe_account_status IS NULL OR stripe_account_status != 'active')
               AND is_test_user = false AND deleted_at IS NULL
-              AND email NOT ILIKE '%@guberapp.internal')                     AS queue_stripe_missing,
-          -- No ID submitted at all
-          (SELECT COUNT(*)::int FROM users
-            WHERE id_document_type IS NULL
-              AND is_test_user = false AND deleted_at IS NULL
-              AND email NOT ILIKE '%@guberapp.internal')                     AS identity_not_submitted
+              AND email NOT ILIKE '%@guberapp.internal')                           AS queue_stripe_missing
       `);
       res.json({ stats: r.rows[0], source: "production", generatedAt: new Date().toISOString() });
     } catch (err: any) {

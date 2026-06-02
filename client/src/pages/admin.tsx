@@ -24,7 +24,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronLeft, ChevronRight, 
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles, Cpu
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles, Cpu, TrendingUp
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import {
@@ -5925,7 +5925,7 @@ return (
 {/* Verification flags */}
 <div className="py-3 border-b border-border/20">
   <p className="text-[10px] text-muted-foreground font-semibold tracking-wider uppercase mb-2">Verification Status</p>
-  <div className="flex flex-wrap gap-1.5">
+  <div className="flex flex-wrap gap-1.5 mb-3">
     {[
       { label: "ID Verified", ok: !!(localUser as any).idVerified },
       { label: "Credential", ok: !!(localUser as any).credentialVerified },
@@ -5938,6 +5938,87 @@ return (
       </span>
     ))}
   </div>
+
+  {/* Why Restricted? */}
+  {(() => {
+    const u = localUser as any;
+    const idVerified: boolean = !!u.idVerified;
+    const idSubmitted: boolean = !!(u.idDocumentType || idVerified);
+    const stripeActive: boolean = u.stripeAccountStatus === "active";
+    const bgClear: boolean = u.backgroundCheckStatus === "clear";
+    const bgFlagged: boolean = u.backgroundCheckStatus === "flagged";
+
+    let status: { label: string; color: string; bg: string; border: string; dot: string; desc: string };
+
+    if (idVerified && stripeActive && bgClear) {
+      status = {
+        label: "Eligible",
+        color: "text-emerald-400",
+        bg: "bg-emerald-500/10",
+        border: "border-emerald-500/25",
+        dot: "bg-emerald-400",
+        desc: "ID approved · Stripe connected · Registry clear",
+      };
+    } else if (bgFlagged) {
+      status = {
+        label: "Identity Rejected",
+        color: "text-red-400",
+        bg: "bg-red-500/10",
+        border: "border-red-500/25",
+        dot: "bg-red-400",
+        desc: "Flagged during background registry review",
+      };
+    } else if (!idSubmitted) {
+      status = {
+        label: "Identity Not Submitted",
+        color: "text-red-400",
+        bg: "bg-red-500/10",
+        border: "border-red-500/25",
+        dot: "bg-red-500",
+        desc: "No government ID uploaded yet",
+      };
+    } else if (!idVerified) {
+      status = {
+        label: "Identity Pending Review",
+        color: "text-amber-400",
+        bg: "bg-amber-500/10",
+        border: "border-amber-500/25",
+        dot: "bg-amber-400 animate-pulse",
+        desc: "ID submitted — awaiting admin approval",
+      };
+    } else if (!stripeActive) {
+      status = {
+        label: "Stripe Not Connected",
+        color: "text-orange-400",
+        bg: "bg-orange-500/10",
+        border: "border-orange-500/25",
+        dot: "bg-orange-400",
+        desc: "ID approved but Stripe Connect setup incomplete",
+      };
+    } else {
+      status = {
+        label: "Background Review Pending",
+        color: "text-yellow-400",
+        bg: "bg-yellow-500/10",
+        border: "border-yellow-500/25",
+        dot: "bg-yellow-400 animate-pulse",
+        desc: "ID approved + Stripe connected — registry review not yet run",
+      };
+    }
+
+    return (
+      <div className={`flex items-start gap-2.5 rounded-lg px-3 py-2 border ${status.bg} ${status.border}`} data-testid="user-restriction-status">
+        <div className="flex items-center gap-1.5 mt-0.5 shrink-0">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${status.dot}`} />
+          <span className={`text-[10px] font-bold ${status.color}`}>Why Restricted?</span>
+        </div>
+        <div className="min-w-0">
+          <p className={`text-xs font-semibold ${status.color}`}>{status.label}</p>
+          <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">{status.desc}</p>
+        </div>
+      </div>
+    );
+  })()}
 </div>
 
 {/* Milestone Badges */}
@@ -6113,7 +6194,10 @@ const { data: prodStats } = useQuery<{
   stats: {
     users: number; jobs: number; open_jobs: number; disputes: number;
     marketplace: number; load_board: number;
-    safety_queue_pending: number; queue_stripe_missing: number; identity_not_submitted: number;
+    safety_queue_pending: number; queue_stripe_missing: number;
+    identity_not_submitted: number; identity_submitted: number; identity_approved: number;
+    stripe_not_connected: number; stripe_connected: number;
+    eligible_to_work: number; eligible_to_hire: number;
   };
   source: string; generatedAt: string;
 }>({
@@ -6286,6 +6370,70 @@ return (
 </div>
 ))}
 </div>
+
+{/* ── Activation Funnel ──────────────────────────────────────────────── */}
+{prodStats && (() => {
+  const s = prodStats.stats;
+  const total = s.users || 1;
+  const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
+  const rows: { label: string; value: number; pct: number; status: "blocked" | "warn" | "ok" | "neutral" }[] = [
+    { label: "Total Users",              value: s.users,                 pct: 100,         status: "neutral" },
+    { label: "Identity Not Submitted",   value: s.identity_not_submitted, pct: pct(s.identity_not_submitted), status: "blocked" },
+    { label: "Identity Submitted",       value: s.identity_submitted,    pct: pct(s.identity_submitted),    status: "warn" },
+    { label: "Identity Approved",        value: s.identity_approved,     pct: pct(s.identity_approved),     status: "ok" },
+    { label: "Stripe Not Connected",     value: s.stripe_not_connected,  pct: pct(s.stripe_not_connected),  status: "blocked" },
+    { label: "Stripe Connected",         value: s.stripe_connected,      pct: pct(s.stripe_connected),      status: "ok" },
+    { label: "Eligible To Work",         value: s.eligible_to_work,      pct: pct(s.eligible_to_work),      status: "ok" },
+    { label: "Eligible To Hire",         value: s.eligible_to_hire,      pct: pct(s.eligible_to_hire),      status: "ok" },
+  ];
+  return (
+    <div className="rounded-xl border border-border/20 bg-card p-4 mb-6" data-testid="activation-funnel-card">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-6 h-6 rounded-lg bg-[#00E5E5]/10 border border-[#00E5E5]/20 flex items-center justify-center">
+          <TrendingUp className="w-3.5 h-3.5 text-[#00E5E5]" />
+        </div>
+        <span className="text-sm font-display font-bold">Activation Funnel</span>
+        <span className="text-[10px] text-muted-foreground">production users · where are they stuck?</span>
+      </div>
+      <div className="space-y-2">
+        {rows.map(r => (
+          <div key={r.label} className="flex items-center gap-2" data-testid={`funnel-row-${r.label.toLowerCase().replace(/\s+/g, "-")}`}>
+            <div className="w-36 shrink-0">
+              <p className="text-[11px] text-muted-foreground leading-tight">{r.label}</p>
+            </div>
+            <div className="flex-1 h-2 rounded-full bg-muted/20 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  r.status === "blocked" ? "bg-red-500/60" :
+                  r.status === "warn"    ? "bg-amber-400/70" :
+                  r.status === "ok"      ? "bg-emerald-500/70" :
+                  "bg-white/20"
+                }`}
+                style={{ width: `${Math.max(r.pct, r.value > 0 ? 2 : 0)}%` }}
+              />
+            </div>
+            <div className="w-20 text-right shrink-0">
+              <span className={`text-xs font-display font-bold ${
+                r.status === "blocked" ? "text-red-400" :
+                r.status === "warn"    ? "text-amber-400" :
+                r.status === "ok"      ? "text-emerald-400" :
+                "text-foreground/70"
+              }`}>{r.value}</span>
+              {r.status !== "neutral" && (
+                <span className="text-[9px] text-muted-foreground ml-1">({r.pct}%)</span>
+              )}
+            </div>
+            <div className="w-14 shrink-0">
+              {r.status === "blocked" && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">blocked</span>}
+              {r.status === "warn"    && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">pending</span>}
+              {r.status === "ok" && r.label.startsWith("Eligible") && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ ready</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+})()}
 
 {/* ── GUBER OS ─────────────────────────────────────────────────────────── */}
 <div className="rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/5 to-transparent p-4 mb-6" data-testid="guber-os-block">
