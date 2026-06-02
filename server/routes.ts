@@ -21229,6 +21229,47 @@ OUTPUT STYLE:
     }
   });
 
+  // GET /api/load-board/carrier/my-loads — carrier's organizer (all loads they've offered on or connected to)
+  app.get("/api/load-board/carrier/my-loads", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const carrierId = req.session.userId!;
+      // All offers this carrier has made
+      const offers = await storage.getLoadBoardOffersByCarrier(carrierId);
+      // Fetch listings for each unique offer
+      const listingIds = [...new Set(offers.map(o => o.listingId))];
+      const listings = await Promise.all(listingIds.map(id => storage.getLoadBoardListing(id)));
+      // Also grab any listings where carrier is connected but may not have an offer record (edge case)
+      const allListings = listings.filter(Boolean) as any[];
+      // Build combined records
+      const records = allListings.map(listing => {
+        const carrierOffers = offers.filter(o => o.listingId === listing.id).sort((a, b) =>
+          new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime()
+        );
+        const latestOffer = carrierOffers[0] ?? null;
+        const isConnected = listing.connectedCarrierId === carrierId;
+        return { listing, offer: latestOffer, isConnected };
+      });
+      // Sort: action-needed first, then by pickup date, then by updated
+      records.sort((a, b) => {
+        const priority = (r: typeof records[0]) => {
+          if (r.listing.status === "offer_accepted" && !r.isConnected) return 0; // need to pay connection fee
+          if (r.isConnected && !r.listing.activationFeePaid) return 1;           // connected, awaiting activation
+          if (r.offer?.status === "pending" || r.offer?.status === "countered") return 2;
+          if (r.isConnected && r.listing.activationFeePaid) return 3;
+          return 4;
+        };
+        const pa = priority(a), pb = priority(b);
+        if (pa !== pb) return pa - pb;
+        const da = a.listing.pickupDate ?? a.listing.updatedAt ?? "";
+        const db2 = b.listing.pickupDate ?? b.listing.updatedAt ?? "";
+        return String(da) < String(db2) ? -1 : 1;
+      });
+      res.json({ records });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // GET /api/load-board/my — poster's own listings
   app.get("/api/load-board/my", requireAuth, async (req: Request, res: Response) => {
     try {

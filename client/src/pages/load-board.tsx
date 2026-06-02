@@ -671,6 +671,24 @@ function CategoriesScreen({
         <ChevronRight className="w-4 h-4 text-muted-foreground/25 shrink-0" />
       </button>
 
+      {/* Carrier Hub */}
+      <Link href="/load-board/carrier">
+        <button
+          className="w-full rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-all"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,229,118,0.55)" }}
+          data-testid="button-carrier-hub"
+        >
+          <div className="p-2.5 rounded-xl shrink-0" style={{ background: "rgba(0,229,118,0.10)" }}>
+            <Truck className="w-4 h-4" style={{ color: "#00e576" }} strokeWidth={1.8} />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-display font-bold text-foreground">Carrier Hub</p>
+            <p className="text-[10px] text-muted-foreground/40">Your offers, active loads & schedule</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-muted-foreground/25 shrink-0" />
+        </button>
+      </Link>
+
       {/* Carrier CTA */}
       <button
         onClick={() => window.location.href = "/carrier-profile"}
