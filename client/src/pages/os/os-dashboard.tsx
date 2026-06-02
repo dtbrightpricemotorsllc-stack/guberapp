@@ -132,6 +132,7 @@ export default function OSDashboard() {
             { label: "Memory", path: "/os/memory" },
             { label: "Agents", path: "/os/agents" },
             { label: "Audit Log", path: "/os/logs" },
+            { label: "Events", path: "/os/events" },
           ].map((item) => (
             <button
               key={item.path}

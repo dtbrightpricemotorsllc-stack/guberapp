@@ -12,7 +12,7 @@ import {
   osFounderMemory,
   osAgentMemory,
 } from "@shared/os-schema";
-import { eq, desc, sql as drizzleSql } from "drizzle-orm";
+import { eq, desc, and, inArray, sql as drizzleSql } from "drizzle-orm";
 import { proposeAction, decideAction } from "./approval-engine";
 import { executeAction } from "./action-executor";
 import { emitOSEvent } from "./event-bus";
@@ -34,6 +34,53 @@ async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
 }
 
 export function registerOSRoutes(app: Express): void {
+
+  // ── Lightweight status (used by Admin page indicator) ─────────────────────
+
+  app.get("/api/os/status", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const [health, pendingRows, criticalRows] = await Promise.all([
+        getPlatformHealth(),
+        db.select({ count: drizzleSql<number>`COUNT(*)::int` })
+          .from(osActions)
+          .where(eq(osActions.status, "pending")),
+        db.select({ count: drizzleSql<number>`COUNT(*)::int` })
+          .from(osActions)
+          .where(and(eq(osActions.status, "pending"), inArray(osActions.riskTier, ["high", "founder"]))),
+      ]);
+      const pending = pendingRows[0]?.count ?? 0;
+      const critical = criticalRows[0]?.count ?? 0;
+
+      let status: "green" | "yellow" | "red" = "green";
+      let reason = "";
+      if (health.systemStatus === "degraded" || critical > 0) {
+        status = "red";
+        reason = health.systemStatus === "degraded"
+          ? "Platform degraded"
+          : `${critical} critical action${critical > 1 ? "s" : ""} need attention`;
+      } else if (pending > 0) {
+        status = "yellow";
+        reason = `${pending} action${pending > 1 ? "s" : ""} awaiting approval`;
+      }
+
+      res.json({ status, reason, pendingActions: pending, criticalActions: critical, platformHealth: health.systemStatus });
+    } catch {
+      res.json({ status: "red", reason: "Status check failed", pendingActions: 0, criticalActions: 0, platformHealth: "unknown" });
+    }
+  });
+
+  // ── Unauthorized attempt logger (called by frontend OSAdminRoute) ──────────
+
+  app.post("/api/os/unauthorized", async (req, res) => {
+    const userId = (req as any).session?.userId;
+    const { path, role } = req.body;
+    await writeAuditLog({
+      eventType: "os.unauthorized_access_attempt",
+      description: `Unauthorized OS access: path="${path ?? "unknown"}" role="${role ?? "none"}" userId=${userId ?? "anonymous"}`,
+    });
+    res.json({ ok: true });
+  });
 
   // ── System Health ─────────────────────────────────────────────────────────
 

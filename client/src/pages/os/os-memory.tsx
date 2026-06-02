@@ -135,6 +135,7 @@ export default function OSMemory() {
             { label: "Memory", path: "/os/memory", active: true },
             { label: "Agents", path: "/os/agents" },
             { label: "Audit Log", path: "/os/logs" },
+            { label: "Events", path: "/os/events" },
           ].map((item) => (
             <button
               key={item.path}

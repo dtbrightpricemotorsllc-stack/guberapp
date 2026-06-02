@@ -89,6 +89,7 @@ export default function OSLogs() {
             { label: "Memory", path: "/os/memory" },
             { label: "Agents", path: "/os/agents" },
             { label: "Audit Log", path: "/os/logs", active: true },
+            { label: "Events", path: "/os/events" },
           ].map((item) => (
             <button
               key={item.path}

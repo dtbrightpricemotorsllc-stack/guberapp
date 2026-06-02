@@ -24,7 +24,7 @@ Shield, Users, Briefcase, AlertTriangle, Gavel, Ban, ChevronLeft, ChevronRight, 
 CheckCircle, Lock, Camera, Video, MapPin, Image, Edit, Save, X, ScrollText,
 FileText, Clock, Eye, ShieldCheck, UserCheck, RefreshCw, Mail, Loader2, Trash2, Navigation,
 DollarSign, Zap, MessageSquare, Bell, Brain, CalendarDays, BadgeCheck, AlertCircle, Info,
-ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles
+ExternalLink, ThumbsUp, ThumbsDown, Flame, Building2, XCircle, Search, Download, Sparkles, Cpu
 } from "lucide-react";
 import type { User, Job, VICategory, UseCase, CatalogServiceType, DetailOptionSet, ProofTemplate, ProofChecklistItem, AuditLog, ProofSubmission, WalletTransaction } from "@shared/schema";
 import {
@@ -5950,6 +5950,18 @@ queryKey: ["/api/admin/feedback/unread-count"], enabled: user?.role === "admin",
 });
 const feedbackUnread = feedbackUnreadData?.count ?? 0;
 
+const { data: osStatus } = useQuery<{
+  status: "green" | "yellow" | "red";
+  reason: string;
+  pendingActions: number;
+  criticalActions: number;
+}>({
+  queryKey: ["/api/os/status"],
+  enabled: user?.role === "admin",
+  refetchInterval: 30_000,
+  retry: false,
+});
+
 const [userSearch, setUserSearch] = useState("");
 const [disclaimerFilter, setDisclaimerFilter] = useState(false);
 const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -6074,6 +6086,92 @@ return (
 <p className="text-[10px] text-muted-foreground">{s.label}</p>
 </div>
 ))}
+</div>
+
+{/* ── GUBER OS ─────────────────────────────────────────────────────────── */}
+<div className="rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/5 to-transparent p-4 mb-6" data-testid="guber-os-block">
+  <div className="flex items-center justify-between mb-3">
+    <div className="flex items-center gap-2.5">
+      <div className="w-7 h-7 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
+        <Cpu className="w-3.5 h-3.5 text-violet-400" />
+      </div>
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold font-display">GUBER OS</span>
+          <span className="text-[10px] text-muted-foreground">Phase 1 · Active</span>
+          <span className={`flex items-center gap-1 text-[10px] font-medium ${
+            osStatus?.status === "red" ? "text-red-400" :
+            osStatus?.status === "yellow" ? "text-amber-400" :
+            "text-emerald-400"
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              osStatus?.status === "red" ? "bg-red-400" :
+              osStatus?.status === "yellow" ? "bg-amber-400 animate-pulse" :
+              "bg-emerald-400"
+            }`} />
+            {osStatus?.status === "red" ? "🔴 Critical" : osStatus?.status === "yellow" ? "🟡 Warning" : "🟢 Online"}
+          </span>
+        </div>
+        {osStatus?.reason && (
+          <p className="text-[10px] text-muted-foreground">{osStatus.reason}</p>
+        )}
+      </div>
+    </div>
+    <Button asChild size="sm" className="bg-violet-600 hover:bg-violet-500 text-white h-7 text-xs" data-testid="link-open-os">
+      <a href="/os/dashboard">Open OS ↗</a>
+    </Button>
+  </div>
+
+  {/* Quick links */}
+  <div className="flex flex-wrap gap-1.5 mb-3">
+    {[
+      { label: "Dashboard", path: "/os/dashboard" },
+      { label: "Approvals", path: "/os/approve", badge: osStatus?.pendingActions ?? 0 },
+      { label: "Memory", path: "/os/memory" },
+      { label: "Agents", path: "/os/agents" },
+      { label: "Logs", path: "/os/logs" },
+      { label: "Events", path: "/os/events" },
+    ].map((link) => (
+      <a
+        key={link.path}
+        href={link.path}
+        data-testid={`os-link-${link.label.toLowerCase()}`}
+        className="relative flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border/20 bg-card text-xs text-muted-foreground hover:text-foreground hover:border-violet-500/30 transition-colors"
+      >
+        {link.label}
+        {link.badge ? (
+          <span className="ml-0.5 min-w-[16px] h-4 rounded-full bg-amber-500 text-[9px] font-black text-white flex items-center justify-center px-1">
+            {link.badge}
+          </span>
+        ) : null}
+      </a>
+    ))}
+  </div>
+
+  {/* Founder shortcut metrics */}
+  <div className="grid grid-cols-3 gap-2">
+    <div className="bg-card/50 rounded-lg border border-border/20 p-2 text-center" data-testid="os-metric-pending">
+      <p className={`text-lg font-display font-bold ${(osStatus?.pendingActions ?? 0) > 0 ? "text-amber-400" : "text-foreground"}`}>
+        {osStatus?.pendingActions ?? 0}
+      </p>
+      <p className="text-[10px] text-muted-foreground">Pending Approvals</p>
+    </div>
+    <div className="bg-card/50 rounded-lg border border-border/20 p-2 text-center" data-testid="os-metric-critical">
+      <p className={`text-lg font-display font-bold ${(osStatus?.criticalActions ?? 0) > 0 ? "text-red-400" : "text-foreground"}`}>
+        {osStatus?.criticalActions ?? 0}
+      </p>
+      <p className="text-[10px] text-muted-foreground">Critical Alerts</p>
+    </div>
+    <div className="bg-card/50 rounded-lg border border-border/20 p-2 text-center" data-testid="os-metric-health">
+      <p className={`text-lg font-display font-bold ${
+        osStatus?.status === "green" ? "guber-text-green" :
+        osStatus?.status === "yellow" ? "text-amber-400" : "text-red-400"
+      }`}>
+        {osStatus?.status === "green" ? "100%" : osStatus?.status === "yellow" ? "80%" : "60%"}
+      </p>
+      <p className="text-[10px] text-muted-foreground">Health Score</p>
+    </div>
+  </div>
 </div>
 
 <Tabs value={activeTab} onValueChange={setActiveTab}>

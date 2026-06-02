@@ -85,6 +85,7 @@ const OSApprove = lazy(() => import("@/pages/os/os-approve"));
 const OSMemory = lazy(() => import("@/pages/os/os-memory"));
 const OSAgents = lazy(() => import("@/pages/os/os-agents"));
 const OSLogs = lazy(() => import("@/pages/os/os-logs"));
+const OSEvents = lazy(() => import("@/pages/os/os-events"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
@@ -166,6 +167,32 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
     return <Redirect to={`/login?returnTo=${returnTo}`} />;
   }
   if (user.role !== "admin") return <Redirect to="/dashboard" />;
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Component />
+    </Suspense>
+  );
+}
+
+function OSAdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  const [currentPath] = useLocation();
+
+  if (isLoading) return <PageLoader />;
+  if (!user) {
+    const returnTo = encodeURIComponent(currentPath);
+    return <Redirect to={`/login?returnTo=${returnTo}`} />;
+  }
+  if (user.role !== "admin") {
+    fetch("/api/os/unauthorized", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: currentPath, role: user.role }),
+      credentials: "include",
+    }).catch(() => {});
+    return <Redirect to="/dashboard" />;
+  }
 
   return (
     <Suspense fallback={<PageLoader />}>
@@ -270,11 +297,12 @@ function Router() {
       <Route path="/profile/:id" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
-      <Route path="/os/dashboard" component={() => <AdminRoute component={OSDashboard} />} />
-      <Route path="/os/approve" component={() => <AdminRoute component={OSApprove} />} />
-      <Route path="/os/memory" component={() => <AdminRoute component={OSMemory} />} />
-      <Route path="/os/agents" component={() => <AdminRoute component={OSAgents} />} />
-      <Route path="/os/logs" component={() => <AdminRoute component={OSLogs} />} />
+      <Route path="/os/dashboard" component={() => <OSAdminRoute component={OSDashboard} />} />
+      <Route path="/os/approve" component={() => <OSAdminRoute component={OSApprove} />} />
+      <Route path="/os/memory" component={() => <OSAdminRoute component={OSMemory} />} />
+      <Route path="/os/agents" component={() => <OSAdminRoute component={OSAgents} />} />
+      <Route path="/os/logs" component={() => <OSAdminRoute component={OSLogs} />} />
+      <Route path="/os/events" component={() => <OSAdminRoute component={OSEvents} />} />
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
       <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
