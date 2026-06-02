@@ -18,7 +18,10 @@ export type ReminderType =
   | "drop_expiring"
   // Task #317 — Dispute & Payout Protection.
   | "auto_confirm_midpoint"
-  | "helper_response_buffer";
+  | "helper_response_buffer"
+  // Automation gaps — credential expiry + payout setup nudge.
+  | "credential_expiry_warning"
+  | "payout_setup_nudge";
 
 export interface ReminderKey {
   jobId?: number | null;

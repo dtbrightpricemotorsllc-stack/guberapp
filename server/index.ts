@@ -210,6 +210,10 @@ app.use((req, res, next) => {
   `).catch(e => console.error("[migration] jobs stuck_acknowledged columns error:", e));
 
   await pool.query(`
+    ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS expiry_warning_sent_at TIMESTAMP;
+  `).catch(e => console.error("[migration] worker_qualifications expiry_warning_sent_at error:", e));
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS business_accounts (
       id SERIAL PRIMARY KEY,
       owner_user_id INTEGER NOT NULL UNIQUE,

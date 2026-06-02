@@ -1444,6 +1444,7 @@ export const workerQualifications = pgTable("worker_qualifications", {
   aiExtracted: boolean("ai_extracted").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
+  expiryWarningSentAt: timestamp("expiry_warning_sent_at"),
 });
 
 export type WorkerQualification = typeof workerQualifications.$inferSelect;

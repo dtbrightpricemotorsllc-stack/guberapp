@@ -1235,6 +1235,112 @@ export async function purgeViProofMedia(): Promise<number> {
   return purged;
 }
 
+// ── Credential expiry warning sweep ──────────────────────────────────────────
+// Finds verified credentials expiring within 14 days that haven't been warned
+// yet. Sets expiry_warning_sent_at so the sweep is idempotent.
+async function credentialExpiryWarningSweep(): Promise<number> {
+  const { rows } = await pool.query<{
+    id: number;
+    user_id: number;
+    qualification_name: string;
+    credential_type: string | null;
+    expiration_date: Date;
+  }>(`
+    SELECT wq.id, wq.user_id, wq.qualification_name, wq.credential_type, wq.expiration_date
+    FROM worker_qualifications wq
+    JOIN users u ON u.id = wq.user_id
+    WHERE wq.verification_status = 'verified'
+      AND wq.expiration_date IS NOT NULL
+      AND wq.expiration_date > NOW()
+      AND wq.expiration_date <= NOW() + INTERVAL '14 days'
+      AND wq.expiry_warning_sent_at IS NULL
+      AND u.is_test_user = false
+      AND u.email NOT ILIKE '%@guberapp.internal'
+    ORDER BY wq.expiration_date ASC
+    LIMIT 50
+  `);
+
+  let sent = 0;
+  for (const cred of rows) {
+    try {
+      const user = await storage.getUser(cred.user_id);
+      if (!user) continue;
+      if (isUserInQuietHours(user)) continue;
+
+      const daysLeft = Math.ceil(
+        (new Date(cred.expiration_date).getTime() - Date.now()) / 86_400_000,
+      );
+      const name = cred.credential_type || cred.qualification_name;
+      const title = daysLeft <= 1 ? "Credential expires tomorrow!" : `Credential expiring in ${daysLeft} days`;
+      const body = `Your ${name} expires ${daysLeft <= 1 ? "tomorrow" : `in ${daysLeft} days`}. Upload a renewal to stay eligible for skilled jobs.`;
+
+      await storage.createNotification({ userId: user.id, title, body, type: "credential" });
+      sendPushToUser(user.id, {
+        title, body,
+        url: "/resume",
+        tag: `credential-expiry-${cred.id}`,
+        priority: "high",
+      }).catch(() => {});
+
+      await pool.query(
+        `UPDATE worker_qualifications SET expiry_warning_sent_at = NOW() WHERE id = $1`,
+        [cred.id],
+      );
+      sent++;
+    } catch (_) { /* non-fatal */ }
+  }
+  return sent;
+}
+
+// ── Payout setup nudge sweep ──────────────────────────────────────────────────
+// Workers who have available earnings but haven't completed Stripe Connect
+// setup. Dedup-gated via claimReminder so each worker gets nudged once.
+async function payoutSetupNudgeSweep(): Promise<number> {
+  const { rows } = await pool.query<{
+    user_id: number;
+    total_available: number;
+  }>(`
+    SELECT wt.user_id, SUM(wt.amount) AS total_available
+    FROM wallet_transactions wt
+    JOIN users u ON u.id = wt.user_id
+    WHERE wt.type = 'earning'
+      AND wt.status = 'available'
+      AND wt.stripe_transfer_id IS NULL
+      AND u.stripe_account_status IS DISTINCT FROM 'active'
+      AND u.is_test_user = false
+      AND u.email NOT ILIKE '%@guberapp.internal'
+      AND u.created_at < NOW() - INTERVAL '7 days'
+    GROUP BY wt.user_id
+    HAVING SUM(wt.amount) > 0
+    ORDER BY total_available DESC
+    LIMIT 50
+  `);
+
+  let sent = 0;
+  for (const row of rows) {
+    try {
+      const user = await storage.getUser(row.user_id);
+      if (!user) continue;
+      if (isUserInQuietHours(user)) continue;
+      if (!(await claimReminder({ userId: row.user_id, type: "payout_setup_nudge" }))) continue;
+
+      const amount = Number(row.total_available).toFixed(2);
+      const title = "You have earnings waiting";
+      const body = `$${amount} is ready in your GUBER wallet. Set up your payout account to transfer it to your bank.`;
+
+      await storage.createNotification({ userId: user.id, title, body, type: "wallet" });
+      sendPushToUser(user.id, {
+        title, body,
+        url: "/wallet",
+        tag: `payout-setup-nudge-${user.id}`,
+        priority: "high",
+      }).catch(() => {});
+      sent++;
+    } catch (_) { /* non-fatal */ }
+  }
+  return sent;
+}
+
 // Public single-shot runner used by /api/internal/cron/run when this app is
 // driven by a Replit Scheduled Deployment (DISABLE_BACKGROUND_JOBS=true).
 // Runs the union of every periodic sweep that used to live inside the two
@@ -1352,6 +1458,22 @@ export async function runAllScheduledSweeps(): Promise<void> {
       }
     } catch (err: any) {
       console.error("[cron] studio refund alert check failed:", err?.message || err);
+    }
+
+    // Credential expiry warnings — 14-day heads-up to renew before gate blocks them.
+    try {
+      const credWarn = await credentialExpiryWarningSweep();
+      if (credWarn > 0) console.log(`[cron] sent ${credWarn} credential expiry warning(s)`);
+    } catch (err: any) {
+      console.error("[cron] credential expiry sweep failed:", err?.message || err);
+    }
+
+    // Payout setup nudge — workers with available earnings but no Stripe Connect.
+    try {
+      const payoutNudge = await payoutSetupNudgeSweep();
+      if (payoutNudge > 0) console.log(`[cron] sent ${payoutNudge} payout-setup nudge(s)`);
+    } catch (err: any) {
+      console.error("[cron] payout setup nudge sweep failed:", err?.message || err);
     }
 
     // OS health monitor — auto-recover stuck payouts + stage founder alerts
