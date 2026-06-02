@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   Plus, Pencil, Trash2, ChevronUp, ChevronDown, Eye, EyeOff,
   ArrowLeft, Video, Layers, Play, Check, X, GripVertical, Coins,
+  TrendingDown, Users, Zap, BarChart3, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -710,6 +711,184 @@ function ClipsSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// COSTS & SYSTEM STATS
+// ═══════════════════════════════════════════════════════════════════════════
+type StudioStats = {
+  summary: {
+    totalCreditsInSystem: number;
+    creditsSpentAllTime: number;
+    creditsRefundedAllTime: number;
+    generationCountAllTime: number;
+    usersWithCredits: number;
+    estimatedUsdSpentAllTime: number;
+    estimatedUsdLiability: number;
+  };
+  toolBreakdown: { toolKey: string; runs: number; creditsSpent: number; estimatedUsd: number }[];
+  recentDays: { day: string; creditsSpent: number; runs: number }[];
+};
+
+function CostsSection() {
+  const statsQuery = useQuery<StudioStats>({
+    queryKey: ["/api/admin/studio/stats"],
+    refetchInterval: 60_000,
+  });
+
+  const s = statsQuery.data?.summary;
+  const tools = statsQuery.data?.toolBreakdown ?? [];
+  const days = statsQuery.data?.recentDays ?? [];
+
+  const TOOL_LABELS: Record<string, string> = {
+    flux_quick_pic: "Quick Pic (free)",
+    wan_motion_5s: "Text → Video 5s",
+    wan_motion_10s: "Text → Video 10s",
+    kling_motion_control: "Mirror Motion",
+    minimax_music: "Music",
+    commercial_builder: "Build Ad",
+    avatar: "Avatar",
+    listing_video: "Listing Video",
+    promo_clip: "Promo Clip",
+  };
+
+  const statCard = (label: string, value: string | number, sub?: string, icon?: React.ReactNode, color = "text-white") => (
+    <div className="rounded-xl bg-white/[0.04] border border-white/10 p-4 space-y-1">
+      <div className="flex items-center gap-1.5 text-xs text-white/40 uppercase tracking-widest">
+        {icon} {label}
+      </div>
+      <p className={`text-2xl font-black ${color}`}>{value}</p>
+      {sub && <p className="text-xs text-white/30">{sub}</p>}
+    </div>
+  );
+
+  return (
+    <section>
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-sky-400" /> Studio Costs &amp; Credits
+          </h2>
+          <p className="text-xs text-white/40 mt-0.5">Real-time view of system credits and AI generation spend.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/studio/stats"] })}
+          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+          data-testid="btn-refresh-stats"
+        >
+          <RefreshCw className={`w-4 h-4 ${statsQuery.isFetching ? "animate-spin text-sky-400" : "text-white/40"}`} />
+        </button>
+      </div>
+
+      {statsQuery.isLoading ? (
+        <div className="flex items-center justify-center py-12 text-white/30 text-sm">Loading stats…</div>
+      ) : statsQuery.isError ? (
+        <div className="text-red-400 text-sm p-4">Failed to load stats.</div>
+      ) : s ? (
+        <div className="space-y-5">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-3">
+            {statCard(
+              "Credits in system",
+              s.totalCreditsInSystem.toLocaleString(),
+              `~$${s.estimatedUsdLiability.toFixed(2)} liability`,
+              <Coins className="w-3 h-3" />,
+              "text-amber-400",
+            )}
+            {statCard(
+              "Credits spent (AI)",
+              s.creditsSpentAllTime.toLocaleString(),
+              `~$${s.estimatedUsdSpentAllTime.toFixed(2)} AI cost`,
+              <TrendingDown className="w-3 h-3" />,
+              "text-red-400",
+            )}
+            {statCard(
+              "Generations run",
+              s.generationCountAllTime.toLocaleString(),
+              "all time, succeeded",
+              <Zap className="w-3 h-3" />,
+            )}
+            {statCard(
+              "Users with credits",
+              s.usersWithCredits.toLocaleString(),
+              "accounts holding credits",
+              <Users className="w-3 h-3" />,
+              "text-sky-400",
+            )}
+          </div>
+
+          {/* Cost note */}
+          <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 px-4 py-3 text-xs text-sky-300 space-y-1">
+            <p className="font-bold">How costs are estimated</p>
+            <p className="text-sky-300/70">Each credit costs GUBER ~$0.01515 in Fal.ai compute (Kling economy basis). "Credits in system" is your outstanding liability — what users hold but haven't spent yet. "Credits spent" is what's been consumed generating content.</p>
+          </div>
+
+          {/* Per-tool breakdown */}
+          {tools.length > 0 && (
+            <div>
+              <p className="text-xs text-white/40 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <BarChart3 className="w-3 h-3" /> By tool (all time)
+              </p>
+              <div className="space-y-2">
+                {tools.map((t) => {
+                  const maxSpent = Math.max(...tools.map((x) => x.creditsSpent), 1);
+                  const pct = Math.round((t.creditsSpent / maxSpent) * 100);
+                  return (
+                    <div key={t.toolKey} className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-semibold">{TOOL_LABELS[t.toolKey] ?? t.toolKey}</span>
+                        <span className="text-xs text-white/50">{t.runs} run{t.runs !== 1 ? "s" : ""} · ~${t.estimatedUsd.toFixed(2)}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                        <div className="h-full rounded-full bg-sky-400/70" style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-xs text-white/30 mt-1">{t.creditsSpent.toLocaleString()} credits consumed</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Recent 30-day activity */}
+          {days.length > 0 && (
+            <div>
+              <p className="text-xs text-white/40 uppercase tracking-widest mb-3">Last 30 days</p>
+              <div className="rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left px-4 py-2.5 text-xs text-white/40 font-semibold">Date</th>
+                      <th className="text-right px-4 py-2.5 text-xs text-white/40 font-semibold">Runs</th>
+                      <th className="text-right px-4 py-2.5 text-xs text-white/40 font-semibold">Credits</th>
+                      <th className="text-right px-4 py-2.5 text-xs text-white/40 font-semibold">Est. $</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {days.map((d) => (
+                      <tr key={String(d.day)} className="border-b border-white/5 last:border-0">
+                        <td className="px-4 py-2.5 text-white/70">
+                          {new Date(d.day).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-white/50">{d.runs}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-white/70">{d.creditsSpent.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-red-400/80">${(d.creditsSpent * 0.01515).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tools.length === 0 && days.length === 0 && (
+            <p className="text-center text-white/30 text-sm py-6">No generation data yet. Stats will appear once users start creating.</p>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // GRANT CREDITS
 // ═══════════════════════════════════════════════════════════════════════════
 function GrantCreditsSection() {
@@ -859,6 +1038,12 @@ function AdminStudioInner() {
             <p className="text-sm text-white/40">Admin — manage demo templates and explore clips</p>
           </div>
         </div>
+
+        {/* Costs & System Stats */}
+        <CostsSection />
+
+        {/* Divider */}
+        <div className="border-t border-white/10" />
 
         {/* Grant Credits */}
         <GrantCreditsSection />

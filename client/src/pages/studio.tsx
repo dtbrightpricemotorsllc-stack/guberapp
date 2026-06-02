@@ -146,7 +146,7 @@ const TOOL_TILES: ToolTile[] = [
     key: "quick-pic", label: "Quick Pic", blurb: "AI image",
     kind: "image", icon: ImageIcon, costToolKey: null, dbKey: "flux_quick_pic", badge: "Free",
     accent: "#00e676",
-    href: "/studio",
+    href: "/studio/quick-pic",
   },
   {
     key: "text-to-video", label: "Text → Video", blurb: "Motion clip",
@@ -663,6 +663,7 @@ export default function StudioPageV2() {
     if (t.wizard === "commercial_builder") { navigate(`/studio/commercial${q}`); return; }
     if (t.kind === "audio") { navigate(`/studio/music${q}`); return; }
     if (t.kind === "video") { navigate(`/studio/text-to-video${q}`); return; }
+    if (t.kind === "image") { navigate(`/studio/quick-pic${q}`); return; }
     setActiveTemplate(t.slug);
     setOutputKind(t.kind);
     setPrompt(t.prompt);

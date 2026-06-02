@@ -11987,6 +11987,83 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ── Admin: Studio system-wide stats / cost dashboard ─────────────────────
+  app.get("/api/admin/studio/stats", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const [
+        totalCreditsRow,
+        spentRow,
+        refundedRow,
+        generationCountRow,
+        toolBreakdownRows,
+        recentGenerationsRows,
+        userCountRow,
+      ] = await Promise.all([
+        // Total credits held by all users right now (liability)
+        db.execute(sql`SELECT COALESCE(SUM(studio_credits), 0) AS total FROM users`),
+        // Credits consumed by successful generations (all time)
+        db.execute(sql`SELECT COALESCE(SUM(credits_cost), 0) AS total FROM studio_generation_log WHERE status = 'succeeded'`),
+        // Credits refunded
+        db.execute(sql`SELECT COALESCE(SUM(credits_cost), 0) AS total FROM studio_generation_log WHERE status = 'refunded'`),
+        // Total generation count (succeeded)
+        db.execute(sql`SELECT COUNT(*) AS total FROM studio_generation_log WHERE status = 'succeeded'`),
+        // Per-tool breakdown (all time, succeeded)
+        db.execute(sql`
+          SELECT tool_key, COUNT(*) AS runs, COALESCE(SUM(credits_cost), 0) AS credits_spent
+          FROM studio_generation_log
+          WHERE status = 'succeeded'
+          GROUP BY tool_key
+          ORDER BY credits_spent DESC
+        `),
+        // Last 30 days daily spend
+        db.execute(sql`
+          SELECT DATE(created_at) AS day, COALESCE(SUM(credits_cost), 0) AS credits_spent, COUNT(*) AS runs
+          FROM studio_generation_log
+          WHERE status = 'succeeded' AND created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY DATE(created_at)
+          ORDER BY day DESC
+          LIMIT 30
+        `),
+        // How many users have any studio credits
+        db.execute(sql`SELECT COUNT(*) AS total FROM users WHERE studio_credits > 0`),
+      ]);
+
+      const CREDIT_USD_COST = 0.01515; // ~$0.01515 per credit (Kling economy cost basis)
+
+      const totalCredits = Number((totalCreditsRow.rows?.[0] as any)?.total ?? 0);
+      const creditsSpent = Number((spentRow.rows?.[0] as any)?.total ?? 0);
+      const creditsRefunded = Number((refundedRow.rows?.[0] as any)?.total ?? 0);
+      const generationCount = Number((generationCountRow.rows?.[0] as any)?.total ?? 0);
+      const usersWithCredits = Number((userCountRow.rows?.[0] as any)?.total ?? 0);
+
+      res.json({
+        summary: {
+          totalCreditsInSystem: totalCredits,
+          creditsSpentAllTime: creditsSpent,
+          creditsRefundedAllTime: creditsRefunded,
+          generationCountAllTime: generationCount,
+          usersWithCredits,
+          estimatedUsdSpentAllTime: +(creditsSpent * CREDIT_USD_COST).toFixed(2),
+          estimatedUsdLiability: +(totalCredits * CREDIT_USD_COST).toFixed(2),
+        },
+        toolBreakdown: (toolBreakdownRows.rows ?? []).map((r: any) => ({
+          toolKey: r.tool_key,
+          runs: Number(r.runs),
+          creditsSpent: Number(r.credits_spent),
+          estimatedUsd: +(Number(r.credits_spent) * CREDIT_USD_COST).toFixed(2),
+        })),
+        recentDays: (recentGenerationsRows.rows ?? []).map((r: any) => ({
+          day: r.day,
+          creditsSpent: Number(r.credits_spent),
+          runs: Number(r.runs),
+        })),
+      });
+    } catch (err: any) {
+      console.error("[GUBER][admin/studio/stats]", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Admin: Grant Studio Credits ───────────────────────────────────────────
   app.post("/api/admin/studio/grant-credits", requireAdmin, async (req: Request, res: Response) => {
     const { email, amount } = req.body;
