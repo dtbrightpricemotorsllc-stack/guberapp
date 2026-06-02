@@ -46,7 +46,7 @@ import { MobileReturnBanner } from "@/components/mobile-return-banner";
 import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
-  Building2, Megaphone, Zap, Crown, Check, ShoppingCart, RotateCcw, Gamepad2,
+  Building2, Megaphone, Zap, Crown, Check, ShoppingCart, ShoppingBag, RotateCcw, Gamepad2,
   Repeat, ChevronRight, UserRound, Settings, Rocket, Camera, Video, Cpu, Layers, Star,
 } from "lucide-react";
 
@@ -179,6 +179,13 @@ const TOOL_TILES: ToolTile[] = [
     badge: "New",
     accent: "#38bdf8",
     href: "/studio/avatar",
+  },
+  {
+    key: "listing-video", label: "Listing Video", blurb: "Sell faster",
+    kind: "video", icon: ShoppingBag, costToolKey: "listing_video", dbKey: "listing_video",
+    badge: "New",
+    accent: "#34d399",
+    href: "/studio/listing-video",
   },
 ];
 

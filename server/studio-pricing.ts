@@ -73,6 +73,7 @@ export const STUDIO_TOOL_CREDIT_COSTS = {
   wan_motion_5s: 30,
   wan_motion_10s: 60,
   minimax_music: 5,
+  listing_video: 35,
 } as const;
 
 export const STUDIO_CREDIT_REPRICE_MULTIPLIER_V519 = 41.25;

@@ -12854,6 +12854,191 @@ export async function registerRoutes(
     }
   });
 
+  // ── Listing Video: animate a marketplace listing photo + music ────────────
+  // POST /api/studio/generate/listing-video
+  // Body: { listingId: number, photoUrl: string, ctaText?: string }
+  // Cost: 35 credits (wan_motion_5s 30 + minimax_music 5).
+  app.post("/api/studio/generate/listing-video", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    let creditsDebited = 0;
+    let postDebitSessionId: number | null = null;
+    let postDebitPrompt = "";
+    const TOOL_KEY = "listing_video";
+    const CREDITS_COST = 35;
+
+    const { createCloudinaryCleanup } = await import("./studio/cloudinary-cleanup");
+    let listingCleanup = createCloudinaryCleanup(null);
+    const cleanupCloudinaryAssets = async () => { await listingCleanup.cleanup("listing-video"); };
+
+    try {
+      const listingId = req.body?.listingId ? parseInt(String(req.body.listingId), 10) : null;
+      const photoUrl = typeof req.body?.photoUrl === "string" ? req.body.photoUrl.trim() : "";
+      const ctaText = typeof req.body?.ctaText === "string" ? req.body.ctaText.trim().slice(0, 80) : "";
+
+      if (!listingId || isNaN(listingId)) return res.status(400).json({ message: "listingId is required." });
+      if (!photoUrl) return res.status(400).json({ message: "photoUrl is required." });
+
+      const listing = await storage.getMarketplaceItem(listingId);
+      if (!listing) return res.status(404).json({ message: "Listing not found." });
+      if ((listing as any).sellerId !== userId && (listing as any).userId !== userId) {
+        return res.status(403).json({ message: "You can only create videos for your own listings." });
+      }
+
+      const session = await ensureStudioSession(userId);
+
+      // Auto-seed listing_video pricing row on first use (no separate migration needed).
+      const { studioModelPricing: studioModelPricingTable } = await import("../shared/schema");
+      await db.insert(studioModelPricingTable).values({
+        toolKey: TOOL_KEY,
+        label: "Listing Video",
+        description: "5-second cinematic product showcase + backing music for marketplace listings.",
+        providerEndpoint: "fal-ai/wan/v2/image-to-video/720p",
+        creditsCost: CREDITS_COST,
+        durationSeconds: 5,
+        active: true,
+      }).onConflictDoNothing();
+
+      const pricing = await storage.getStudioModelPricing(TOOL_KEY);
+      if (!pricing) return res.status(400).json({ message: "Listing Video pricing unavailable — contact support." });
+
+      const newBalance = await storage.decrementStudioCredits(userId, pricing.creditsCost);
+      if (newBalance === null) {
+        return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
+      }
+      creditsDebited = pricing.creditsCost;
+      postDebitSessionId = session.id;
+
+      let cloudinary: any = null;
+      try {
+        if (process.env.CLOUDINARY_CLOUD_NAME) cloudinary = (await import("./cloudinary.js")).default;
+      } catch {}
+      listingCleanup = createCloudinaryCleanup(cloudinary);
+
+      const reHost = async (url: string, resourceType: "video" | "image", folder: string): Promise<{ url: string; publicId: string | null }> => {
+        if (!cloudinary) return { url, publicId: null };
+        try {
+          const up = await cloudinary.uploader.upload(url, { resource_type: resourceType === "image" ? "image" : "video", folder });
+          listingCleanup.track(up.public_id, resourceType === "image" ? "image" : "video");
+          return { url: up.secure_url, publicId: up.public_id };
+        } catch (err: any) {
+          console.warn(`[GUBER][studio][listing-video] cloudinary re-host failed: ${err.message}`);
+          return { url, publicId: null };
+        }
+      };
+
+      const title = (listing as any).title ?? "Item for sale";
+      const description = (listing as any).description ?? "";
+      const category = (listing as any).category ?? "";
+      const priceRaw = (listing as any).price;
+      const priceStr = priceRaw != null ? `$${Math.round(Number(priceRaw)).toLocaleString()}` : "";
+
+      const motionPrompt = [
+        `Smooth cinematic product showcase of ${title}.`,
+        description ? `${description.slice(0, 120)}.` : "",
+        priceStr ? `Priced at ${priceStr}.` : "",
+        ctaText ? `${ctaText}.` : "",
+        `${category ? `${category} item. ` : ""}High-end retail aesthetic, elegant motion, warm studio lighting. Perfect for a social media ad.`,
+      ].filter(Boolean).join(" ").trim();
+
+      postDebitPrompt = motionPrompt;
+
+      const musicPrompt = `Upbeat modern background music for a ${category || "product"} sale ad. Polished, energetic, retail-ready.`;
+
+      const refundAndAbort = async (httpStatus: number, message: string, providerJobId: string | null = null) => {
+        await cleanupCloudinaryAssets();
+        const refunded = await storage.incrementStudioCredits(userId, pricing.creditsCost);
+        await storage.logStudioGeneration({
+          userId, sessionId: session.id, toolKey: TOOL_KEY,
+          prompt: motionPrompt.slice(0, 500), creditsCost: pricing.creditsCost,
+          durationSeconds: pricing.durationSeconds ?? null,
+          providerJobId, status: "refunded",
+          errorReason: message.slice(0, 500),
+        });
+        return res.status(httpStatus).json({ message: `Generation failed and your credits were returned: ${message}`, balance: refunded });
+      };
+
+      // Step 1: wan_motion_5s — animate the listing photo.
+      const { generateWanMotion, generateMiniMaxMusic } = await import("./fal");
+      let motionUrl = "", motionJobId = "", motionPublicId: string | null = null;
+      try {
+        const r = await generateWanMotion({ prompt: motionPrompt, imageUrl: photoUrl, durationSeconds: 5 });
+        motionJobId = r.jobId;
+        const reh = await reHost(r.videoUrl, "video", "guber-studio-v2-listing-video");
+        motionUrl = reh.url; motionPublicId = reh.publicId;
+      } catch (err: any) {
+        return refundAndAbort(502, `Motion render failed: ${err.message}`, null);
+      }
+
+      // Step 2: minimax_music — one retry allowed.
+      let musicUrl: string | null = null, musicJobId: string | null = null, musicPublicId: string | null = null;
+      let musicError: string | null = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const r = await generateMiniMaxMusic({ prompt: musicPrompt });
+          musicJobId = r.jobId;
+          const reh = await reHost(r.audioUrl, "video", "guber-studio-v2-listing-music");
+          musicUrl = reh.url; musicPublicId = reh.publicId;
+          break;
+        } catch (err: any) {
+          musicError = err.message;
+          console.warn(`[GUBER][studio][listing-video] music attempt ${attempt} failed: ${err.message}`);
+        }
+      }
+      if (!musicUrl) {
+        return refundAndAbort(502, `Music render failed twice: ${musicError || "unknown"}`, motionJobId);
+      }
+
+      const baseMeta = { toolKey: TOOL_KEY, creditsCost: pricing.creditsCost, listingId, title, ctaText };
+
+      const videoFile = await storage.addStudioSessionFile({
+        sessionId: session.id, userId,
+        fileType: "output_video",
+        providerUrl: motionUrl,
+        cloudinaryPublicId: motionPublicId,
+        resourceType: "video",
+        meta: { ...baseMeta, kind: "listing_video_motion", prompt: motionPrompt, providerJobId: motionJobId },
+      });
+      const audioFile = await storage.addStudioSessionFile({
+        sessionId: session.id, userId,
+        fileType: "output_audio",
+        providerUrl: musicUrl,
+        cloudinaryPublicId: musicPublicId,
+        resourceType: "video",
+        meta: { ...baseMeta, kind: "listing_video_music", prompt: musicPrompt, providerJobId: musicJobId },
+      });
+
+      listingCleanup.clear();
+
+      await storage.touchStudioSession(session.id);
+      await storage.logStudioGeneration({
+        userId, sessionId: session.id, toolKey: TOOL_KEY,
+        prompt: motionPrompt.slice(0, 500), creditsCost: pricing.creditsCost,
+        durationSeconds: pricing.durationSeconds ?? null,
+        providerJobId: motionJobId, status: "succeeded",
+        errorReason: null,
+      });
+
+      res.json({ videoFile, audioFile, balance: newBalance });
+    } catch (err: any) {
+      console.error("[GUBER][studio][listing-video] unexpected:", err);
+      let refundedBalance: number | null = null;
+      if (creditsDebited > 0) {
+        try { refundedBalance = await storage.incrementStudioCredits(userId, creditsDebited); } catch {}
+        await cleanupCloudinaryAssets();
+        try {
+          await storage.logStudioGeneration({
+            userId, sessionId: postDebitSessionId ?? 0, toolKey: TOOL_KEY,
+            prompt: postDebitPrompt.slice(0, 500), creditsCost: creditsDebited,
+            durationSeconds: null, providerJobId: null, status: "refunded",
+            errorReason: `unexpected: ${(err.message || "unknown").slice(0, 480)}`,
+          });
+        } catch {}
+      }
+      const note = creditsDebited > 0 ? "Generation failed and your credits were returned." : "Unexpected error";
+      res.status(500).json({ message: `${note} ${err.message || ""}`.trim(), balance: refundedBalance });
+    }
+  });
+
   app.post("/api/stripe/trust-box-checkout", requireAuth, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
