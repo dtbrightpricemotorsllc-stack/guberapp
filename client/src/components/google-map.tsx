@@ -141,7 +141,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       const map = new mapsLib.Map(mapDivRef.current, {
         center: mapCenter,
         zoom: denied ? US_DENIED_ZOOM : 11,
-        maxZoom: 14,
+        maxZoom: 12,
         styles: DAYLIGHT_STYLES as google.maps.MapTypeStyle[],
         zoomControl: true,
         mapTypeControl: false,

@@ -225,7 +225,7 @@ export default function MapExplore() {
         const map = new mapsLib.Map(mapDivRef.current!, {
           center: mapCenter,
           zoom: denied ? US_DENIED_ZOOM : 10,
-          maxZoom: 13,
+          maxZoom: 12,
           styles: LIGHT_MAP_STYLES,
           zoomControl: false,
           mapTypeControl: false,
