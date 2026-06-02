@@ -21,6 +21,7 @@ import { runAllHealthChecks } from "./health-checks";
 import { getOperationsData, getBusinessData, getGrowthData, getAdminData } from "./command-center";
 import { runCOOAnalysis, getLatestCOOBriefing, queueRecommendation, type COOFinding } from "./coo-agent";
 import { runCFOAnalysis, getLatestCFOBriefing } from "./cfo-agent";
+import { seedSimulation, cleanupSimulation, runPostSeedAnalysis } from "./simulation";
 import { getPlatformHealth, getRevenueStats, getUserGrowthStats } from "./platform-read";
 
 async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
@@ -444,6 +445,39 @@ export function registerOSRoutes(app: Express): void {
       res.json({ briefing });
     } catch (e: any) {
       res.status(500).json({ message: e?.message ?? "CFO analysis failed" });
+    }
+  });
+
+  // ── Simulation (dev/test data injection) ─────────────────────────────────
+
+  app.post("/api/os/simulation/seed", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const summary = await seedSimulation();
+      const analysis = await runPostSeedAnalysis();
+      await writeAuditLog({
+        eventType: "simulation.seeded",
+        description: `Simulation data seeded: ${summary.jobs} jobs, ${summary.hirers + summary.workers} users, ${summary.disputes} dispute`,
+        afterState: { summary, analysis },
+      });
+      res.json({ ok: true, summary, analysis });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Seed failed" });
+    }
+  });
+
+  app.delete("/api/os/simulation/cleanup", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const deleted = await cleanupSimulation();
+      await writeAuditLog({
+        eventType: "simulation.cleaned",
+        description: `Simulation data removed: ${deleted.users} users, ${deleted.jobs} jobs`,
+        afterState: deleted,
+      });
+      res.json({ ok: true, deleted });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Cleanup failed" });
     }
   });
 

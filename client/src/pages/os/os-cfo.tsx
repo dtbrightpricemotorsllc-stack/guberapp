@@ -4,8 +4,8 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   RefreshCw, DollarSign, AlertTriangle, XCircle, CheckCircle2,
-  Info, TrendingUp, TrendingDown, Loader2, Activity,
-  CreditCard, BarChart3, Zap, ShieldAlert,
+  Info, TrendingUp, Loader2, Activity,
+  CreditCard, BarChart3, Zap, ShieldAlert, FlaskConical, Trash2,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -154,6 +154,8 @@ export default function OSCFOAgent() {
   const qc = useQueryClient();
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
+  const [simResult, setSimResult] = useState<Record<string, any> | null>(null);
+
   const { data, isLoading, error } = useQuery<{ briefing: CFOBriefing | null }>({
     queryKey: ["/api/os/cfo/briefing"],
   });
@@ -166,6 +168,30 @@ export default function OSCFOAgent() {
     },
     onError: (e: any) => {
       toast({ title: "Generation failed", description: e?.message ?? "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const seedMut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/os/simulation/seed", {}),
+    onSuccess: (data: any) => {
+      setSimResult(data);
+      qc.invalidateQueries({ queryKey: ["/api/os/cfo/briefing"] });
+      toast({ title: "Simulation seeded", description: `${data.summary?.jobs} jobs, ${(data.summary?.hirers ?? 0) + (data.summary?.workers ?? 0)} users. Fresh briefing generated.` });
+    },
+    onError: (e: any) => {
+      toast({ title: "Seed failed", description: e?.message ?? "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const cleanupMut = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/os/simulation/cleanup"),
+    onSuccess: (data: any) => {
+      setSimResult(null);
+      qc.invalidateQueries({ queryKey: ["/api/os/cfo/briefing"] });
+      toast({ title: "Simulation cleaned up", description: `Removed ${data.deleted?.users ?? 0} users, ${data.deleted?.jobs ?? 0} jobs.` });
+    },
+    onError: (e: any) => {
+      toast({ title: "Cleanup failed", description: e?.message ?? "Unknown error", variant: "destructive" });
     },
   });
 
@@ -506,6 +532,69 @@ export default function OSCFOAgent() {
             )}
           </>
         )}
+
+        {/* Simulation Controls */}
+        <div className="rounded-xl border border-white/10 bg-white/5 p-5 mt-2">
+          <div className="flex items-center gap-2 mb-4">
+            <FlaskConical className="w-4 h-4 text-violet-400" />
+            <span className="text-sm font-medium text-white/70">Simulation Data</span>
+            <span className="ml-auto text-xs text-white/30">Injects realistic test transactions for agent verification</span>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <Button
+              data-testid="button-sim-seed"
+              size="sm"
+              variant="outline"
+              className="border-violet-500/40 text-violet-300 hover:bg-violet-500/10 gap-2"
+              disabled={seedMut.isPending || cleanupMut.isPending}
+              onClick={() => seedMut.mutate()}
+            >
+              {seedMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <FlaskConical className="w-3 h-3" />}
+              Seed Simulation
+            </Button>
+            <Button
+              data-testid="button-sim-cleanup"
+              size="sm"
+              variant="outline"
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10 gap-2"
+              disabled={seedMut.isPending || cleanupMut.isPending}
+              onClick={() => cleanupMut.mutate()}
+            >
+              {cleanupMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              Cleanup
+            </Button>
+          </div>
+          {simResult && (
+            <div className="mt-4 rounded-lg bg-black/30 border border-violet-500/20 p-4 space-y-2">
+              <p className="text-xs font-medium text-violet-300">Seed complete — post-seed analysis</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                <span className="text-xs text-white/40">Hirers</span>
+                <span className="text-xs text-white/80">{simResult.summary?.hirers}</span>
+                <span className="text-xs text-white/40">Workers</span>
+                <span className="text-xs text-white/80">{simResult.summary?.workers}</span>
+                <span className="text-xs text-white/40">Jobs</span>
+                <span className="text-xs text-white/80">{simResult.summary?.jobs}</span>
+                <span className="text-xs text-white/40">Transactions</span>
+                <span className="text-xs text-white/80">{simResult.summary?.transactions}</span>
+                <span className="text-xs text-white/40">Disputes</span>
+                <span className="text-xs text-white/80">{simResult.summary?.disputes}</span>
+              </div>
+              {simResult.analysis && (
+                <div className="pt-2 border-t border-white/10 grid grid-cols-2 gap-x-6 gap-y-1">
+                  <span className="text-xs text-white/40">GMV</span>
+                  <span className="text-xs text-emerald-400">${Number(simResult.analysis.gmv ?? 0).toFixed(2)}</span>
+                  <span className="text-xs text-white/40">Platform fees</span>
+                  <span className="text-xs text-emerald-400">${Number(simResult.analysis.platformFees ?? 0).toFixed(2)}</span>
+                  <span className="text-xs text-white/40">Payouts</span>
+                  <span className="text-xs text-white/80">${Number(simResult.analysis.workerPayouts ?? 0).toFixed(2)}</span>
+                  <span className="text-xs text-white/40">Active jobs</span>
+                  <span className="text-xs text-white/80">{simResult.analysis.activeJobs}</span>
+                </div>
+              )}
+              <p className="text-xs text-white/30 pt-1">Regenerate CFO briefing to see these figures reflected above.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
