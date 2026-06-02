@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Plus, Pencil, Trash2, ChevronUp, ChevronDown, Eye, EyeOff,
-  ArrowLeft, Video, Layers, Play, Check, X, GripVertical,
+  ArrowLeft, Video, Layers, Play, Check, X, GripVertical, Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -710,6 +710,88 @@ function ClipsSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// GRANT CREDITS
+// ═══════════════════════════════════════════════════════════════════════════
+function GrantCreditsSection() {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [amount, setAmount] = useState("500");
+
+  const grantMut = useMutation({
+    mutationFn: (body: { email: string; amount: number }) =>
+      apiRequest("POST", "/api/admin/studio/grant-credits", body).then((r) => r.json()),
+    onSuccess: (data) => {
+      toast({ title: `✓ Granted ${data.granted} credits`, description: `${data.email} — new balance: ${data.newBalance}` });
+      setEmail("");
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const QUICK = [100, 500, 1000, 5000];
+
+  return (
+    <section>
+      <div className="mb-4">
+        <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
+          <Coins className="w-5 h-5 text-amber-400" /> Grant Studio Credits
+        </h2>
+        <p className="text-xs text-white/40 mt-0.5">Add credits to any user account instantly.</p>
+      </div>
+      <div className="rounded-2xl bg-white/[0.04] border border-amber-500/20 p-5 space-y-4">
+        <div>
+          <label className="text-[10px] text-white/40 uppercase tracking-widest block mb-1">User email</label>
+          <Input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="user@example.com"
+            className="rounded-xl h-10 bg-background/50 border-border/50 text-sm"
+            data-testid="input-grant-email"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-white/40 uppercase tracking-widest block mb-1">Amount</label>
+          <div className="flex gap-2 flex-wrap mb-2">
+            {QUICK.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setAmount(String(n))}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition border ${
+                  amount === String(n)
+                    ? "bg-amber-400/20 border-amber-400/60 text-amber-300"
+                    : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                }`}
+                data-testid={`btn-quick-${n}`}
+              >
+                +{n}
+              </button>
+            ))}
+          </div>
+          <Input
+            type="number"
+            min={1}
+            max={100000}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="rounded-xl h-10 bg-background/50 border-border/50 text-sm w-36"
+            data-testid="input-grant-amount"
+          />
+        </div>
+        <Button
+          onClick={() => grantMut.mutate({ email: email.trim(), amount: parseInt(amount, 10) })}
+          disabled={!email.trim() || !parseInt(amount, 10) || grantMut.isPending}
+          className="bg-amber-500 hover:bg-amber-400 text-black font-bold"
+          data-testid="button-grant-credits"
+        >
+          <Coins className="w-4 h-4 mr-1.5" />
+          {grantMut.isPending ? "Granting…" : `Grant ${parseInt(amount, 10) || 0} Credits`}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PAGE ROOT
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Error boundary so a render crash shows a message instead of blank ──────
@@ -777,6 +859,12 @@ function AdminStudioInner() {
             <p className="text-sm text-white/40">Admin — manage demo templates and explore clips</p>
           </div>
         </div>
+
+        {/* Grant Credits */}
+        <GrantCreditsSection />
+
+        {/* Divider */}
+        <div className="border-t border-white/10" />
 
         {/* Templates */}
         <TemplatesSection />

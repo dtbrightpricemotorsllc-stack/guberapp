@@ -11987,6 +11987,19 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ── Admin: Grant Studio Credits ───────────────────────────────────────────
+  app.post("/api/admin/studio/grant-credits", requireAdmin, async (req: Request, res: Response) => {
+    const { email, amount } = req.body;
+    if (!email || typeof email !== "string") return res.status(400).json({ message: "email required" });
+    const amt = parseInt(amount, 10);
+    if (!amt || amt <= 0 || amt > 100000) return res.status(400).json({ message: "amount must be 1–100000" });
+    const [target] = await db.select({ id: usersTable.id, email: usersTable.email, studioCredits: usersTable.studioCredits })
+      .from(usersTable).where(sqlEq(usersTable.email, email.trim().toLowerCase())).limit(1);
+    if (!target) return res.status(404).json({ message: "No user found with that email." });
+    const newBalance = await storage.incrementStudioCredits(target.id, amt);
+    res.json({ ok: true, userId: target.id, email: target.email, granted: amt, newBalance });
+  });
+
   // ── Admin: Prompt Templates CRUD ──────────────────────────────────────────
   app.get("/api/admin/studio/templates", requireAdmin, async (_req: Request, res: Response) => {
     const rows = await storage.listStudioPromptTemplates(false);
