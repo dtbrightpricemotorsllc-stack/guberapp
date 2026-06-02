@@ -20,6 +20,7 @@ import { writeAuditLog } from "./logger";
 import { runAllHealthChecks } from "./health-checks";
 import { getOperationsData, getBusinessData, getGrowthData, getAdminData } from "./command-center";
 import { runCOOAnalysis, getLatestCOOBriefing, queueRecommendation, type COOFinding } from "./coo-agent";
+import { runCFOAnalysis, getLatestCFOBriefing } from "./cfo-agent";
 import { getPlatformHealth, getRevenueStats, getUserGrowthStats } from "./platform-read";
 
 async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
@@ -106,43 +107,16 @@ export function registerOSRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
-  // ── Platform service health (honest — only DB gets a real check) ─────────
+  // ── Platform service health — real checks via health-checks.ts ──────────
 
   app.get("/api/os/platform-health", async (req, res) => {
     if (!(await requireOSAdmin(req, res))) return;
-
-    type ServiceStatus = "unknown" | "healthy" | "warning" | "critical";
-    type ServiceResult = { key: string; name: string; status: ServiceStatus; detail: string };
-
-    const services: ServiceResult[] = [];
-    const now = new Date().toISOString();
-
-    // Database — real check
     try {
-      await db.execute(drizzleSql`SELECT 1`);
-      services.push({ key: "database", name: "Database", status: "healthy", detail: "SELECT 1 passed" });
+      const results = await runAllHealthChecks();
+      res.json({ services: results, checkedAt: new Date().toISOString() });
     } catch (e: any) {
-      services.push({ key: "database", name: "Database", status: "critical", detail: e?.message ?? "Query failed" });
+      res.status(500).json({ message: e?.message ?? "Health check failed" });
     }
-
-    // All others — no monitoring wired yet
-    const unmonitored: Array<[string, string]> = [
-      ["google_login", "Google Login"],
-      ["apple_login", "Apple Login"],
-      ["stripe", "Stripe"],
-      ["push_notifications", "Push Notifications"],
-      ["cloudinary", "Cloudinary"],
-      ["r2_storage", "R2 Storage"],
-      ["marketplace", "Marketplace"],
-      ["verify_inspect", "Verify & Inspect"],
-      ["load_board", "Load Board"],
-      ["ai_or_not", "AI or Not"],
-    ];
-    for (const [key, name] of unmonitored) {
-      services.push({ key, name, status: "unknown", detail: "No live check wired" });
-    }
-
-    res.json({ services, checkedAt: now });
   });
 
   // ── System Health ─────────────────────────────────────────────────────────
@@ -448,6 +422,28 @@ export function registerOSRoutes(app: Express): void {
       res.json({ actionId, message: "Queued for founder review" });
     } catch (e: any) {
       res.status(500).json({ message: e?.message ?? "Failed to queue recommendation" });
+    }
+  });
+
+  // ── CFO Agent ─────────────────────────────────────────────────────────────
+
+  app.get("/api/os/cfo/briefing", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const briefing = await getLatestCFOBriefing();
+      res.json({ briefing });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to fetch CFO briefing" });
+    }
+  });
+
+  app.post("/api/os/cfo/generate", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const briefing = await runCFOAnalysis();
+      res.json({ briefing });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "CFO analysis failed" });
     }
   });
 

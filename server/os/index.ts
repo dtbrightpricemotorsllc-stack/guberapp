@@ -5,6 +5,36 @@ import { startAgentRunner } from "./agent-runner";
 import { registerOSRoutes } from "./os-routes";
 import { writeAuditLog } from "./logger";
 
+async function upsertAgentRows(): Promise<void> {
+  const agents = [
+    {
+      key:         "coo",
+      label:       "COO Agent",
+      description: "Operations intelligence — disputes, stuck jobs, cancellations, V&I bottlenecks, load board. Production-only data.",
+      schedule:    "0 8 * * *",
+    },
+    {
+      key:         "cfo",
+      label:       "CFO Agent",
+      description: "Financial intelligence — GMV, platform fees, payouts, refund rate, failed captures, Stripe balance. Production-only data.",
+      schedule:    "0 7 * * *",
+    },
+  ];
+  for (const a of agents) {
+    await pool
+      .query(
+        `INSERT INTO os_agents (key, label, description, schedule_cron)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (key) DO UPDATE
+           SET label = EXCLUDED.label,
+               description = EXCLUDED.description,
+               schedule_cron = EXCLUDED.schedule_cron`,
+        [a.key, a.label, a.description, a.schedule],
+      )
+      .catch((e: Error) => console.error(`[os] upsert agent "${a.key}" error:`, e.message));
+  }
+}
+
 async function setupOSTables(): Promise<void> {
   await pool
     .query(`
@@ -139,6 +169,7 @@ export async function startOSRuntime(app: Express): Promise<void> {
   console.log("[os] Initializing GUBER OS Phase 1 Foundation...");
 
   await setupOSTables();
+  await upsertAgentRows();
 
   registerOSRoutes(app);
 
