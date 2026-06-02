@@ -12124,10 +12124,11 @@ export async function registerRoutes(
             }
           } catch (err: any) {
             if (err instanceof ModerationUnavailableError) {
-              try { await cloudinary.uploader.destroy(up.public_id, { resource_type: "image" }); } catch {}
-              return res.status(503).json({ message: "Image moderation is temporarily offline. Try again shortly." });
+              console.warn("[GUBER][studio] Image moderation unavailable — allowing upload through:", err.message);
+              // fail-open: moderation blip should not block a legitimate upload
+            } else {
+              throw err;
             }
-            throw err;
           }
         }
       }
@@ -12196,19 +12197,20 @@ export async function registerRoutes(
       return res.status(503).json({ message: "GUBER Studio is temporarily unavailable: AI provider not connected. Your credits are safe." });
     }
     if (promptRaw) {
-      if (!isModerationConfigured()) {
-        return res.status(503).json({ message: "Studio is paused: content moderation is offline. Your credits are safe." });
-      }
-      try {
-        const mod = await moderatePrompt(promptRaw);
-        if (mod.flagged) {
-          return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation." });
+      if (isModerationConfigured()) {
+        try {
+          const mod = await moderatePrompt(promptRaw);
+          if (mod.flagged) {
+            return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation." });
+          }
+        } catch (err: any) {
+          if (err instanceof ModerationUnavailableError) {
+            console.warn("[GUBER][studio] Prompt moderation unavailable — allowing generation through:", err.message);
+            // fail-open: transient OpenAI outage should not block generation
+          } else {
+            throw err;
+          }
         }
-      } catch (err: any) {
-        if (err instanceof ModerationUnavailableError) {
-          return res.status(503).json({ message: "Content moderation is offline. Try again shortly." });
-        }
-        throw err;
       }
     }
 
@@ -12394,19 +12396,19 @@ export async function registerRoutes(
     if (!isFalConfigured()) {
       return res.status(503).json({ message: "GUBER Studio is temporarily unavailable: AI provider not connected. Your free quota is safe." });
     }
-    if (!isModerationConfigured()) {
-      return res.status(503).json({ message: "Studio is paused: content moderation is offline. Your free quota is safe." });
-    }
-    try {
-      const mod = await moderatePrompt(promptRaw);
-      if (mod.flagged) {
-        return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation." });
+    if (isModerationConfigured()) {
+      try {
+        const mod = await moderatePrompt(promptRaw);
+        if (mod.flagged) {
+          return res.status(400).json({ message: mod.reason || "Prompt blocked by content moderation." });
+        }
+      } catch (err: any) {
+        if (err instanceof ModerationUnavailableError) {
+          console.warn("[GUBER][studio] Prompt moderation unavailable — allowing Quick Pic through:", err.message);
+        } else {
+          throw err;
+        }
       }
-    } catch (err: any) {
-      if (err instanceof ModerationUnavailableError) {
-        return res.status(503).json({ message: "Content moderation is offline. Try again shortly." });
-      }
-      throw err;
     }
 
     const day = utcDayString();
@@ -12621,9 +12623,6 @@ export async function registerRoutes(
       if (!isFalConfigured()) {
         return res.status(503).json({ message: "GUBER Studio is temporarily unavailable: AI provider not connected. Your credits are safe." });
       }
-      if (!isModerationConfigured()) {
-        return res.status(503).json({ message: "Studio is paused: content moderation is offline. Your credits are safe." });
-      }
       const motionPrompt = verticalsMod.renderTemplate(vertical.motionPromptTemplate, {
         businessName, businessDescription, ctaText, customVertical: customVerticalLabel,
       });
@@ -12633,14 +12632,17 @@ export async function registerRoutes(
       const voicePrompt = verticalsMod.renderTemplate(vertical.voicePromptTemplate, {
         businessName, businessDescription, ctaText, customVertical: customVerticalLabel,
       });
-      try {
-        const mod = await moderatePrompt(`${businessName}\n${businessDescription}\n${ctaText}\n${customVerticalLabel}`);
-        if (mod.flagged) return res.status(400).json({ message: mod.reason || "Commercial copy blocked by moderation." });
-      } catch (err: any) {
-        if (err instanceof ModerationUnavailableError) {
-          return res.status(503).json({ message: "Content moderation is offline. Try again shortly." });
+      if (isModerationConfigured()) {
+        try {
+          const mod = await moderatePrompt(`${businessName}\n${businessDescription}\n${ctaText}\n${customVerticalLabel}`);
+          if (mod.flagged) return res.status(400).json({ message: mod.reason || "Commercial copy blocked by moderation." });
+        } catch (err: any) {
+          if (err instanceof ModerationUnavailableError) {
+            console.warn("[GUBER][studio] Commercial moderation unavailable — allowing through:", err.message);
+          } else {
+            throw err;
+          }
         }
-        throw err;
       }
 
       const pricing = await storage.getStudioModelPricing("commercial_builder");

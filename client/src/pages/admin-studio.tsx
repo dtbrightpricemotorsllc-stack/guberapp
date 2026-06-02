@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Component } from "react";
+import type { ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -711,11 +712,53 @@ function ClipsSection() {
 // ═══════════════════════════════════════════════════════════════════════════
 // PAGE ROOT
 // ═══════════════════════════════════════════════════════════════════════════
-export default function AdminStudio() {
-  const { user } = useAuth();
+// ── Error boundary so a render crash shows a message instead of blank ──────
+class AdminStudioErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(err: Error) {
+    return { error: err.message || "Unknown error" };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-[#090e14] text-white flex flex-col items-center justify-center gap-4 p-8">
+          <p className="text-red-400 font-bold">Something went wrong loading Studio Admin.</p>
+          <p className="text-white/40 text-sm font-mono">{this.state.error}</p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="px-4 py-2 rounded-xl bg-white/10 text-sm hover:bg-white/20 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AdminStudioInner() {
+  const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
 
-  if (user?.role !== "admin") return null;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#090e14] text-white flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-[#090e14] text-white flex items-center justify-center">
+        <p className="text-white/40">Access denied.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#090e14] text-white">
@@ -745,5 +788,13 @@ export default function AdminStudio() {
         <ClipsSection />
       </div>
     </div>
+  );
+}
+
+export default function AdminStudio() {
+  return (
+    <AdminStudioErrorBoundary>
+      <AdminStudioInner />
+    </AdminStudioErrorBoundary>
   );
 }
