@@ -12854,60 +12854,84 @@ export async function registerRoutes(
     }
   });
 
-  // ── Listing Video: animate a marketplace listing photo + music ────────────
+  // ── Listing Video: slideshow + narration + music + fantasy ending ────────
   // POST /api/studio/generate/listing-video
-  // Body: { listingId: number, photoUrl: string, ctaText?: string }
-  // Cost: 35 credits (wan_motion_5s 30 + minimax_music 5).
+  // Body: { listingId, selectedPhotoUrls[], narrationText, voiceId?, musicGenre, fantasyPrompt }
+  // Cost: photoCount×30 + 30 (fantasy) + 5 (music) + 5 (narration if voiceId set).
+  // All fal.ai calls run in parallel — total wall time ~60–90s regardless of count.
   app.post("/api/studio/generate/listing-video", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
     let creditsDebited = 0;
     let postDebitSessionId: number | null = null;
     let postDebitPrompt = "";
     const TOOL_KEY = "listing_video";
-    const CREDITS_COST = 35;
+
+    const MUSIC_GENRE_PROMPTS: Record<string, string> = {
+      luxury:   "Cinematic luxury orchestral background music, smooth and elegant, premium product advertisement",
+      upbeat:   "Upbeat energetic background music, modern retail vibe, positive energy, commercial",
+      chill:    "Chill lofi background music, warm relaxing vibes, mellow and comfortable",
+      dramatic: "Epic dramatic cinematic background music, powerful and inspiring, adventure",
+      romantic: "Romantic warm background music, emotional and heartfelt, soft piano and strings",
+      hype:     "Urban hype background music, modern trap beats, street energy, bold and confident",
+    };
 
     const { createCloudinaryCleanup } = await import("./studio/cloudinary-cleanup");
     let listingCleanup = createCloudinaryCleanup(null);
     const cleanupCloudinaryAssets = async () => { await listingCleanup.cleanup("listing-video"); };
 
     try {
+      // ── Parse inputs ─────────────────────────────────────────────────────
       const listingId = req.body?.listingId ? parseInt(String(req.body.listingId), 10) : null;
-      const photoUrl = typeof req.body?.photoUrl === "string" ? req.body.photoUrl.trim() : "";
-      const ctaText = typeof req.body?.ctaText === "string" ? req.body.ctaText.trim().slice(0, 80) : "";
+      const rawPhotos: unknown = req.body?.selectedPhotoUrls;
+      const selectedPhotoUrls: string[] = Array.isArray(rawPhotos)
+        ? (rawPhotos as unknown[]).filter((u) => typeof u === "string").slice(0, 3) as string[]
+        : [];
+      const narrationText = typeof req.body?.narrationText === "string" ? req.body.narrationText.trim().slice(0, 500) : "";
+      const voiceId = typeof req.body?.voiceId === "string" ? req.body.voiceId : null;
+      const musicGenre = typeof req.body?.musicGenre === "string" ? req.body.musicGenre : "luxury";
+      const fantasyPrompt = typeof req.body?.fantasyPrompt === "string" ? req.body.fantasyPrompt.trim().slice(0, 300) : "";
 
       if (!listingId || isNaN(listingId)) return res.status(400).json({ message: "listingId is required." });
-      if (!photoUrl) return res.status(400).json({ message: "photoUrl is required." });
+      if (selectedPhotoUrls.length === 0) return res.status(400).json({ message: "At least one photo URL is required." });
+      if (!fantasyPrompt) return res.status(400).json({ message: "fantasyPrompt is required." });
 
+      // ── Validate listing ownership ────────────────────────────────────────
       const listing = await storage.getMarketplaceItem(listingId);
       if (!listing) return res.status(404).json({ message: "Listing not found." });
       if ((listing as any).sellerId !== userId && (listing as any).userId !== userId) {
         return res.status(403).json({ message: "You can only create videos for your own listings." });
       }
 
+      // ── Validate voice ───────────────────────────────────────────────────
+      const VALID_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
+      if (voiceId && !VALID_VOICES.includes(voiceId)) return res.status(400).json({ message: "Invalid voice id." });
+
       const session = await ensureStudioSession(userId);
 
-      // Auto-seed listing_video pricing row on first use (no separate migration needed).
+      // ── Dynamic credit cost ───────────────────────────────────────────────
+      // Each slideshow photo = 30cr, fantasy clip = 30cr, music = 5cr, narration = 5cr
+      const creditsCost = selectedPhotoUrls.length * 30 + 30 + 5 + (voiceId ? 5 : 0);
+
+      // Auto-seed listing_video pricing metadata row on first use.
       const { studioModelPricing: studioModelPricingTable } = await import("../shared/schema");
       await db.insert(studioModelPricingTable).values({
         toolKey: TOOL_KEY,
         label: "Listing Video",
-        description: "5-second cinematic product showcase + backing music for marketplace listings.",
-        providerEndpoint: "fal-ai/wan/v2/image-to-video/720p",
-        creditsCost: CREDITS_COST,
+        description: "Animated slideshow + narration + music + fantasy ending for marketplace listings.",
+        providerEndpoint: "fal-ai/wan-motion",
+        creditsCost: 65,
         durationSeconds: 5,
         active: true,
       }).onConflictDoNothing();
 
-      const pricing = await storage.getStudioModelPricing(TOOL_KEY);
-      if (!pricing) return res.status(400).json({ message: "Listing Video pricing unavailable — contact support." });
-
-      const newBalance = await storage.decrementStudioCredits(userId, pricing.creditsCost);
+      const newBalance = await storage.decrementStudioCredits(userId, creditsCost);
       if (newBalance === null) {
         return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
       }
-      creditsDebited = pricing.creditsCost;
+      creditsDebited = creditsCost;
       postDebitSessionId = session.id;
 
+      // ── Cloudinary helper ─────────────────────────────────────────────────
       let cloudinary: any = null;
       try {
         if (process.env.CLOUDINARY_CLOUD_NAME) cloudinary = (await import("./cloudinary.js")).default;
@@ -12927,98 +12951,121 @@ export async function registerRoutes(
       };
 
       const title = (listing as any).title ?? "Item for sale";
-      const description = (listing as any).description ?? "";
       const category = (listing as any).category ?? "";
-      const priceRaw = (listing as any).price;
-      const priceStr = priceRaw != null ? `$${Math.round(Number(priceRaw)).toLocaleString()}` : "";
+      const slidePrompt = `Smooth cinematic product showcase of ${title}. ${category ? `${category} item. ` : ""}High-end retail aesthetic, elegant motion, warm studio lighting, social media ad.`;
+      const musicPrompt = MUSIC_GENRE_PROMPTS[musicGenre] ?? MUSIC_GENRE_PROMPTS["luxury"];
 
-      const motionPrompt = [
-        `Smooth cinematic product showcase of ${title}.`,
-        description ? `${description.slice(0, 120)}.` : "",
-        priceStr ? `Priced at ${priceStr}.` : "",
-        ctaText ? `${ctaText}.` : "",
-        `${category ? `${category} item. ` : ""}High-end retail aesthetic, elegant motion, warm studio lighting. Perfect for a social media ad.`,
-      ].filter(Boolean).join(" ").trim();
+      postDebitPrompt = slidePrompt;
 
-      postDebitPrompt = motionPrompt;
-
-      const musicPrompt = `Upbeat modern background music for a ${category || "product"} sale ad. Polished, energetic, retail-ready.`;
-
-      const refundAndAbort = async (httpStatus: number, message: string, providerJobId: string | null = null) => {
+      const refundAndAbort = async (httpStatus: number, message: string) => {
         await cleanupCloudinaryAssets();
-        const refunded = await storage.incrementStudioCredits(userId, pricing.creditsCost);
+        const refunded = await storage.incrementStudioCredits(userId, creditsCost);
         await storage.logStudioGeneration({
           userId, sessionId: session.id, toolKey: TOOL_KEY,
-          prompt: motionPrompt.slice(0, 500), creditsCost: pricing.creditsCost,
-          durationSeconds: pricing.durationSeconds ?? null,
-          providerJobId, status: "refunded",
+          prompt: slidePrompt.slice(0, 500), creditsCost,
+          durationSeconds: 5, providerJobId: null, status: "refunded",
           errorReason: message.slice(0, 500),
         });
         return res.status(httpStatus).json({ message: `Generation failed and your credits were returned: ${message}`, balance: refunded });
       };
 
-      // Step 1: wan_motion_5s — animate the listing photo.
-      const { generateWanMotion, generateMiniMaxMusic } = await import("./fal");
-      let motionUrl = "", motionJobId = "", motionPublicId: string | null = null;
-      try {
-        const r = await generateWanMotion({ prompt: motionPrompt, imageUrl: photoUrl, durationSeconds: 5 });
-        motionJobId = r.jobId;
-        const reh = await reHost(r.videoUrl, "video", "guber-studio-v2-listing-video");
-        motionUrl = reh.url; motionPublicId = reh.publicId;
-      } catch (err: any) {
-        return refundAndAbort(502, `Motion render failed: ${err.message}`, null);
+      const { generateWanMotion, generateMiniMaxMusic, generateOpenAITts, isOpenAITtsConfigured, OpenAITtsUnavailableError } = await import("./fal");
+
+      // ── Parallel generation ───────────────────────────────────────────────
+      // All fal.ai calls fire simultaneously. Wall time ≈ max(individual_times) ≈ 60–90s.
+      const [slideResults, fantasyResult, musicResult, ttsResult] = await Promise.allSettled([
+        Promise.all(selectedPhotoUrls.map((imgUrl) =>
+          generateWanMotion({ prompt: slidePrompt, imageUrl: imgUrl, durationSeconds: 5 })
+        )),
+        generateWanMotion({ prompt: fantasyPrompt, durationSeconds: 5 }),
+        (async () => {
+          let lastErr: string = "";
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try { return await generateMiniMaxMusic({ prompt: musicPrompt }); } catch (e: any) { lastErr = e.message; }
+          }
+          throw new Error(`Music failed twice: ${lastErr}`);
+        })(),
+        voiceId && narrationText && isOpenAITtsConfigured()
+          ? generateOpenAITts({ text: narrationText, voice: voiceId as any })
+          : Promise.resolve(null),
+      ]);
+
+      if (slideResults.status === "rejected") return refundAndAbort(502, `Slideshow render failed: ${slideResults.reason?.message || "unknown"}`);
+      if (fantasyResult.status === "rejected") return refundAndAbort(502, `Fantasy clip failed: ${fantasyResult.reason?.message || "unknown"}`);
+      if (musicResult.status === "rejected") return refundAndAbort(502, `Music render failed: ${musicResult.reason?.message || "unknown"}`);
+      if (voiceId && ttsResult.status === "rejected") {
+        const reason = ttsResult.reason instanceof OpenAITtsUnavailableError ? "narration provider offline" : (ttsResult.reason?.message || "unknown");
+        return refundAndAbort(502, `Narration failed: ${reason}`);
       }
 
-      // Step 2: minimax_music — one retry allowed.
-      let musicUrl: string | null = null, musicJobId: string | null = null, musicPublicId: string | null = null;
-      let musicError: string | null = null;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const r = await generateMiniMaxMusic({ prompt: musicPrompt });
-          musicJobId = r.jobId;
-          const reh = await reHost(r.audioUrl, "video", "guber-studio-v2-listing-music");
-          musicUrl = reh.url; musicPublicId = reh.publicId;
-          break;
-        } catch (err: any) {
-          musicError = err.message;
-          console.warn(`[GUBER][studio][listing-video] music attempt ${attempt} failed: ${err.message}`);
-        }
-      }
-      if (!musicUrl) {
-        return refundAndAbort(502, `Music render failed twice: ${musicError || "unknown"}`, motionJobId);
-      }
+      // ── Re-host all assets to Cloudinary (best-effort) ───────────────────
+      const slideClipRaw = slideResults.value;
+      const fantasyRaw = fantasyResult.value;
+      const musicRaw = musicResult.value;
+      const ttsRaw = ttsResult.status === "fulfilled" ? ttsResult.value : null;
 
-      const baseMeta = { toolKey: TOOL_KEY, creditsCost: pricing.creditsCost, listingId, title, ctaText };
+      const slideRehosted = await Promise.all(
+        slideClipRaw.map((r) => reHost(r.videoUrl, "video", "guber-studio-v2-listing-slide"))
+      );
+      const fantasyRehosted = await reHost(fantasyRaw.videoUrl, "video", "guber-studio-v2-listing-fantasy");
+      const musicRehosted = await reHost(musicRaw.audioUrl, "video", "guber-studio-v2-listing-music");
+      const ttsRehosted = ttsRaw ? await reHost(ttsRaw.dataUrl, "video", "guber-studio-v2-listing-narration") : null;
 
-      const videoFile = await storage.addStudioSessionFile({
+      // ── Persist session files ─────────────────────────────────────────────
+      const baseMeta = { toolKey: TOOL_KEY, creditsCost, listingId, title, musicGenre, voiceId };
+
+      const slideFiles = await Promise.all(slideRehosted.map((reh, i) =>
+        storage.addStudioSessionFile({
+          sessionId: session.id, userId,
+          fileType: "output_video",
+          providerUrl: reh.url,
+          cloudinaryPublicId: reh.publicId,
+          resourceType: "video",
+          meta: { ...baseMeta, kind: "listing_slide", index: i, prompt: slidePrompt, providerJobId: slideClipRaw[i].jobId },
+        })
+      ));
+
+      const fantasyFile = await storage.addStudioSessionFile({
         sessionId: session.id, userId,
         fileType: "output_video",
-        providerUrl: motionUrl,
-        cloudinaryPublicId: motionPublicId,
+        providerUrl: fantasyRehosted.url,
+        cloudinaryPublicId: fantasyRehosted.publicId,
         resourceType: "video",
-        meta: { ...baseMeta, kind: "listing_video_motion", prompt: motionPrompt, providerJobId: motionJobId },
+        meta: { ...baseMeta, kind: "listing_fantasy", prompt: fantasyPrompt, providerJobId: fantasyRaw.jobId },
       });
-      const audioFile = await storage.addStudioSessionFile({
+
+      const musicFile = await storage.addStudioSessionFile({
         sessionId: session.id, userId,
         fileType: "output_audio",
-        providerUrl: musicUrl,
-        cloudinaryPublicId: musicPublicId,
+        providerUrl: musicRehosted.url,
+        cloudinaryPublicId: musicRehosted.publicId,
         resourceType: "video",
-        meta: { ...baseMeta, kind: "listing_video_music", prompt: musicPrompt, providerJobId: musicJobId },
+        meta: { ...baseMeta, kind: "listing_music", prompt: musicPrompt, providerJobId: musicRaw.jobId },
       });
+
+      const narrationFile = ttsRehosted
+        ? await storage.addStudioSessionFile({
+            sessionId: session.id, userId,
+            fileType: "output_audio",
+            providerUrl: ttsRehosted.url,
+            cloudinaryPublicId: ttsRehosted.publicId,
+            resourceType: "video",
+            meta: { ...baseMeta, kind: "listing_narration", voiceId },
+          })
+        : null;
 
       listingCleanup.clear();
 
       await storage.touchStudioSession(session.id);
       await storage.logStudioGeneration({
         userId, sessionId: session.id, toolKey: TOOL_KEY,
-        prompt: motionPrompt.slice(0, 500), creditsCost: pricing.creditsCost,
-        durationSeconds: pricing.durationSeconds ?? null,
-        providerJobId: motionJobId, status: "succeeded",
+        prompt: slidePrompt.slice(0, 500), creditsCost,
+        durationSeconds: 5, providerJobId: slideClipRaw[0]?.jobId ?? null, status: "succeeded",
         errorReason: null,
       });
 
-      res.json({ videoFile, audioFile, balance: newBalance });
+      res.json({ slideClips: slideFiles, fantasyFile, musicFile, narrationFile, balance: newBalance });
+
     } catch (err: any) {
       console.error("[GUBER][studio][listing-video] unexpected:", err);
       let refundedBalance: number | null = null;
