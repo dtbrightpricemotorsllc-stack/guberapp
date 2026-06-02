@@ -4745,10 +4745,28 @@ function SafetyQueueTab({ allUsers, usersLoading, bgCheckMutation }: {
   bgCheckMutation: { mutate: (args: { id: number; status: string; restrictions: string[] }) => void; isPending: boolean };
 }) {
   const [searches, setSearches] = useState<Record<number, { loading: boolean; results: unknown[]; searchUrl: string; done: boolean; error: string | null }>>({});
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const pendingUsers = (allUsers ?? [])
-    .filter(u => !u.backgroundCheckStatus || u.backgroundCheckStatus === "none")
+  const isIdSubmitted = (u: any) => !!(u.idDocumentType || u.idVerified);
+  const isStripeActive = (u: any) => (u as any).stripeAccountStatus === "active";
+  const isPendingReview = (u: any) => !u.backgroundCheckStatus || u.backgroundCheckStatus === "none";
+
+  const basePool = (allUsers ?? []).filter(isPendingReview);
+
+  // Priority 1: ID submitted + Stripe active → review immediately
+  const priority1 = basePool
+    .filter(u => isIdSubmitted(u) && isStripeActive(u))
     .sort((a, b) => new Date((b as any).createdAt ?? 0).getTime() - new Date((a as any).createdAt ?? 0).getTime());
+
+  // Priority 2: ID submitted, Stripe missing → review but flag Stripe gap
+  const priority2 = basePool
+    .filter(u => isIdSubmitted(u) && !isStripeActive(u))
+    .sort((a, b) => new Date((b as any).createdAt ?? 0).getTime() - new Date((a as any).createdAt ?? 0).getTime());
+
+  // Priority 3: No ID submitted — NOT in queue, shown as info panel only
+  const noId = basePool.filter(u => !isIdSubmitted(u));
+
+  const queueUsers = [...priority1, ...priority2];
 
   const searchNSOPW = async (userId: number, fullName: string) => {
     const parts = (fullName || "").trim().split(/\s+/);
@@ -4766,108 +4784,254 @@ function SafetyQueueTab({ allUsers, usersLoading, bgCheckMutation }: {
 
   if (usersLoading) return <div className="p-6"><Skeleton className="h-32 w-full" /></div>;
 
+  const renderCard = (u: any, priority: 1 | 2) => {
+    const s = searches[u.id];
+    const legalName = u.fullName || u.username || "Unknown";
+    const initials = legalName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+    const isExpanded = expandedId === u.id;
+    const joined = u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+    const stripeStatus = (u as any).stripeAccountStatus || "none";
+    const bgStatus = u.backgroundCheckStatus || "none";
+    const idType = u.idDocumentType || (u.idVerified ? "Verified" : null);
+
+    return (
+      <div key={u.id} className={`rounded-xl border bg-card overflow-hidden ${
+        priority === 1 ? "border-emerald-500/25" : "border-amber-500/25"
+      }`} data-testid={`safety-card-${u.id}`}>
+        {/* Priority banner */}
+        <div className={`px-4 py-1.5 flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase ${
+          priority === 1
+            ? "bg-emerald-500/10 text-emerald-400 border-b border-emerald-500/15"
+            : "bg-amber-500/10 text-amber-400 border-b border-amber-500/15"
+        }`}>
+          {priority === 1 ? (
+            <><CheckCircle className="w-3 h-3" /> Priority 1 — ID + Stripe complete</>
+          ) : (
+            <><AlertTriangle className="w-3 h-3" /> Priority 2 — ID submitted, Stripe missing</>
+          )}
+        </div>
+
+        <div className="p-4 space-y-3">
+          {/* Card header: Legal name + status chips */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Avatar className="w-10 h-10 shrink-0">
+                <AvatarFallback className={`font-bold text-sm ${priority === 1 ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm leading-tight">{legalName}</p>
+                {/* Status chips */}
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {/* ID status */}
+                  <span className={`flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                    u.idVerified
+                      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                      : idType
+                        ? "bg-blue-500/10 border-blue-500/25 text-blue-400"
+                        : "bg-white/5 border-white/15 text-muted-foreground"
+                  }`}>
+                    {u.idVerified ? "ID Verified" : idType ? `ID Submitted (${idType})` : "ID Pending"}
+                  </span>
+                  {/* Stripe status */}
+                  <span className={`flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                    stripeStatus === "active"
+                      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                      : stripeStatus === "pending"
+                        ? "bg-amber-500/10 border-amber-500/25 text-amber-400"
+                        : "bg-red-500/10 border-red-500/25 text-red-400"
+                  }`}>
+                    {stripeStatus === "active" ? "Stripe Connected" : stripeStatus === "pending" ? "Stripe Pending" : "Stripe Not Connected"}
+                  </span>
+                  {/* Background check */}
+                  <span className={`flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                    bgStatus === "clear"
+                      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                      : bgStatus === "flagged"
+                        ? "bg-red-500/10 border-red-500/25 text-red-400"
+                        : "bg-yellow-500/10 border-yellow-500/25 text-yellow-400"
+                  }`}>
+                    {bgStatus === "none" ? "Pending Registry Review" : bgStatus === "clear" ? "Registry Clear" : "Registry Flagged"}
+                  </span>
+                </div>
+                {/* Metadata row */}
+                <div className="flex flex-wrap gap-x-3 mt-1">
+                  <p className="text-[10px] text-muted-foreground">Joined {joined}</p>
+                  {u.zipcode && <p className="text-[10px] text-muted-foreground">ZIP {u.zipcode}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 items-end shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-[#00E5E5]/40 text-[#00E5E5] hover:bg-[#00E5E5]/10 h-7 text-xs"
+                disabled={s?.loading}
+                onClick={() => searchNSOPW(u.id, legalName)}
+                data-testid={`btn-nsopw-search-${u.id}`}
+              >
+                {s?.loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Search className="w-3 h-3 mr-1" />}
+                Search Registry
+              </Button>
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : u.id)}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                data-testid={`btn-expand-safety-${u.id}`}
+              >
+                {isExpanded ? "Hide details" : "Show email & details"}
+              </button>
+            </div>
+          </div>
+
+          {/* Expanded: email + extra details */}
+          {isExpanded && (
+            <div className="rounded-lg bg-background/50 border border-border/15 p-3 space-y-1 text-xs text-muted-foreground">
+              <div className="flex gap-2"><span className="text-white/40 w-20 shrink-0">Email</span><span>{u.email}</span></div>
+              <div className="flex gap-2"><span className="text-white/40 w-20 shrink-0">User ID</span><span>{u.id}</span></div>
+              <div className="flex gap-2"><span className="text-white/40 w-20 shrink-0">Account Type</span><span>{u.accountType || "personal"}</span></div>
+              {u.stripeAccountId && <div className="flex gap-2"><span className="text-white/40 w-20 shrink-0">Stripe ID</span><span className="font-mono text-[10px]">{(u as any).stripeAccountId}</span></div>}
+              <div className="flex gap-2"><span className="text-white/40 w-20 shrink-0">Strikes</span><span>{u.strikes ?? 0}</span></div>
+              <a href={`/admin/users/${u.id}`} className="inline-flex items-center gap-1 text-primary hover:underline mt-1" data-testid={`link-full-profile-${u.id}`}>
+                <ExternalLink className="w-3 h-3" /> Open full profile
+              </a>
+            </div>
+          )}
+
+          {/* NSOPW result */}
+          {s?.done && (
+            <div className="rounded-lg bg-background/50 border border-border/20 p-3 space-y-2">
+              {s.results.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-primary">
+                  <CheckCircle className="w-4 h-4" /> No registry matches found
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-red-400 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" /> {s.results.length} match{s.results.length !== 1 ? "es" : ""} found — review carefully
+                  </p>
+                  {(s.results as Record<string, string>[]).slice(0, 3).map((r, i) => (
+                    <div key={i} className="text-xs text-muted-foreground pl-2 border-l border-red-500/30">
+                      {r.name || ((r.firstName ?? "") + " " + (r.lastName ?? "")).trim() || "Match"}
+                      {r.state ? ` — ${r.state}` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {s.searchUrl && (
+                <a href={s.searchUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                  <ExternalLink className="w-3 h-3" /> View full results on NSOPW.gov
+                </a>
+              )}
+            </div>
+          )}
+          {s?.error && <p className="text-xs text-amber-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{s.error}</p>}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <Button
+              size="sm"
+              className="flex-1 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30"
+              disabled={bgCheckMutation.isPending}
+              onClick={() => bgCheckMutation.mutate({ id: u.id, status: "clear", restrictions: [] })}
+              data-testid={`btn-mark-clear-${u.id}`}
+            >
+              <CheckCircle className="w-3 h-3 mr-1" /> Mark Clear
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="flex-1"
+              disabled={bgCheckMutation.isPending}
+              onClick={() => bgCheckMutation.mutate({ id: u.id, status: "flagged", restrictions: [] })}
+              data-testid={`btn-flag-user-${u.id}`}
+            >
+              <XCircle className="w-3 h-3 mr-1" /> Flag
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4 p-4">
-      <div className="flex items-center gap-2 mb-2">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-1">
         <Shield className="w-5 h-5 text-[#00E5E5]" />
         <h2 className="text-lg font-display font-bold">Safety Queue</h2>
-        <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">{pendingUsers.length} pending</Badge>
+        {queueUsers.length > 0 && (
+          <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">{queueUsers.length} pending</Badge>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground mb-4">New signups not yet reviewed. Search the federal sex offender registry, then mark each user clear or flag them.</p>
-      {pendingUsers.length === 0 ? (
+      <p className="text-xs text-muted-foreground mb-3">
+        Only users who have submitted a Government ID appear here. Search the federal sex offender registry, then mark each user clear or flag them.
+      </p>
+
+      {/* Summary pills */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+          <CheckCircle className="w-3 h-3" /> {priority1.length} Priority 1 (ID + Stripe)
+        </span>
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium border border-amber-500/20">
+          <AlertTriangle className="w-3 h-3" /> {priority2.length} Priority 2 (Stripe missing)
+        </span>
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-muted-foreground text-xs font-medium border border-white/10">
+          {noId.length} Identity Not Submitted
+        </span>
+      </div>
+
+      {/* Queue */}
+      {queueUsers.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <CheckCircle className="w-10 h-10 mx-auto mb-2 text-primary" />
-          <p className="font-display">Queue is clear — all users reviewed</p>
+          <p className="font-display font-semibold">Queue is clear</p>
+          <p className="text-xs mt-1">No users with submitted ID are pending registry review.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {pendingUsers.map(u => {
-            const s = searches[u.id];
-            const name = (u as any).fullName || u.username || "Unknown";
-            return (
-              <div key={u.id} className="rounded-xl border border-border/30 bg-card p-4 space-y-3" data-testid={`safety-card-${u.id}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10">
-                      <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-sm">{name}</p>
-                      <p className="text-xs text-muted-foreground">{u.email}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Joined {(u as any).createdAt ? new Date((u as any).createdAt).toLocaleDateString() : "—"}
-                        {(u as any).zip ? ` · ZIP ${(u as any).zip}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0 border-[#00E5E5]/40 text-[#00E5E5] hover:bg-[#00E5E5]/10"
-                    disabled={s?.loading}
-                    onClick={() => searchNSOPW(u.id, name)}
-                    data-testid={`btn-nsopw-search-${u.id}`}
-                  >
-                    {s?.loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Search className="w-3 h-3 mr-1" />}
-                    Search Registry
-                  </Button>
+          {priority1.length > 0 && (
+            <>
+              <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase px-1">Priority 1 — Review First</p>
+              {priority1.map(u => renderCard(u as any, 1))}
+            </>
+          )}
+          {priority2.length > 0 && (
+            <>
+              <p className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase px-1 mt-4">Priority 2 — Stripe Setup Needed</p>
+              {priority2.map(u => renderCard(u as any, 2))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Identity Not Submitted — informational, not actionable */}
+      {noId.length > 0 && (
+        <div className="mt-6 rounded-xl border border-border/20 bg-muted/10 p-4">
+          <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5" /> {noId.length} user{noId.length !== 1 ? "s" : ""} — Identity Not Submitted
+          </p>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            These users have not submitted a Government ID. They remain restricted from accepting jobs, V&I requests, and loads. No registry check needed until ID is submitted.
+          </p>
+          <div className="space-y-1.5">
+            {noId.map((u: any) => (
+              <div key={u.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-border/10 last:border-0">
+                <div>
+                  <p className="text-xs font-medium">{u.fullName || u.username}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Joined {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+                    {" · "}
+                    Stripe: {(u as any).stripeAccountStatus || "none"}
+                  </p>
                 </div>
-
-                {s?.done && (
-                  <div className="rounded-lg bg-background/50 border border-border/20 p-3 space-y-2">
-                    {s.results.length === 0 ? (
-                      <div className="flex items-center gap-2 text-sm text-primary">
-                        <CheckCircle className="w-4 h-4" /> No registry matches found
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-red-400 flex items-center gap-1">
-                          <AlertTriangle className="w-4 h-4" /> {s.results.length} match{s.results.length !== 1 ? "es" : ""} found — review carefully
-                        </p>
-                        {(s.results as Record<string, string>[]).slice(0, 3).map((r, i) => (
-                          <div key={i} className="text-xs text-muted-foreground pl-2 border-l border-red-500/30">
-                            {r.name || ((r.firstName ?? "") + " " + (r.lastName ?? "")).trim() || "Match"}
-                            {r.state ? ` — ${r.state}` : ""}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {s.searchUrl && (
-                      <a href={s.searchUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
-                        <ExternalLink className="w-3 h-3" /> View full results on NSOPW.gov
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                {s?.error && (
-                  <p className="text-xs text-amber-400 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{s.error}</p>
-                )}
-
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    className="flex-1 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30"
-                    disabled={bgCheckMutation.isPending}
-                    onClick={() => bgCheckMutation.mutate({ id: u.id, status: "clear", restrictions: [] })}
-                    data-testid={`btn-mark-clear-${u.id}`}
-                  >
-                    <CheckCircle className="w-3 h-3 mr-1" /> Mark Clear
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="flex-1"
-                    disabled={bgCheckMutation.isPending}
-                    onClick={() => bgCheckMutation.mutate({ id: u.id, status: "flagged", restrictions: [] })}
-                    data-testid={`btn-flag-user-${u.id}`}
-                  >
-                    <XCircle className="w-3 h-3 mr-1" /> Flag
-                  </Button>
-                </div>
+                <a href={`/admin/users/${u.id}`} className="text-[10px] text-primary hover:underline shrink-0" data-testid={`link-no-id-profile-${u.id}`}>
+                  View →
+                </a>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -5945,6 +6109,22 @@ queryKey: ["/api/admin/users"], enabled: user?.role === "admin",
 const { data: allJobs, isLoading: jobsLoading } = useQuery<Job[]>({
 queryKey: ["/api/admin/jobs"], enabled: user?.role === "admin",
 });
+const { data: prodStats } = useQuery<{
+  stats: {
+    users: number; jobs: number; open_jobs: number; disputes: number;
+    marketplace: number; load_board: number;
+    safety_queue_pending: number; queue_stripe_missing: number; identity_not_submitted: number;
+  };
+  source: string; generatedAt: string;
+}>({
+  queryKey: ["/api/admin/production-stats"],
+  enabled: user?.role === "admin",
+  staleTime: 60_000,
+  queryFn: async () => {
+    const r = await fetch("/api/admin/production-stats", { credentials: "include" });
+    return r.json();
+  },
+});
 const { data: feedbackUnreadData } = useQuery<{ count: number }>({
 queryKey: ["/api/admin/feedback/unread-count"], enabled: user?.role === "admin",
 });
@@ -6086,12 +6266,19 @@ return (
 </Button>
 </div>
 
+<div className="mb-1 flex items-center gap-1.5">
+  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase bg-emerald-500/10 border border-emerald-500/25 text-emerald-400">
+    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+    PRODUCTION
+  </span>
+  <span className="text-[10px] text-muted-foreground">demo, test &amp; sample records excluded</span>
+</div>
 <div className="grid grid-cols-4 gap-2 mb-6">
 {[
-{ label: "Users", value: stats.users, icon: Users, color: "guber-text-green" },
-{ label: "Jobs", value: stats.jobs, icon: Briefcase, color: "guber-text-purple" },
-{ label: "Open", value: stats.open, icon: Briefcase, color: "text-yellow-500" },
-{ label: "Disputes", value: stats.disputes, icon: AlertTriangle, color: "text-destructive" },
+  { label: "Users",     value: prodStats?.stats.users     ?? "—", icon: Users,         color: "guber-text-green" },
+  { label: "Jobs",      value: prodStats?.stats.jobs      ?? "—", icon: Briefcase,     color: "guber-text-purple" },
+  { label: "Live Jobs", value: prodStats?.stats.open_jobs ?? "—", icon: Briefcase,     color: "text-yellow-500" },
+  { label: "Disputes",  value: prodStats?.stats.disputes  ?? "—", icon: AlertTriangle, color: "text-destructive" },
 ].map((s) => (
 <div key={s.label} className="bg-card rounded-xl border border-border/20 p-3 text-center">
 <p className={`text-xl font-display font-bold ${s.color}`}>{s.value}</p>

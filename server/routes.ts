@@ -3143,7 +3143,9 @@ export async function registerRoutes(
 
       const visibleWorkers = workers
         .filter(w => w.lat && w.lng && w.id !== currentUserId && (w as any).role !== "admin")
-        .filter(w => callerIsDemoUser || !demoIds.has(w.id));
+        .filter(w => callerIsDemoUser || !demoIds.has(w.id))
+        // Only surface workers who have completed Stripe setup — unready workers cannot accept jobs
+        .filter(w => callerIsDemoUser || (w as any).stripeAccountStatus === "active");
 
       const droneCertifiedIds = new Set<number>();
       if (visibleWorkers.length > 0) {
@@ -13669,6 +13671,71 @@ export async function registerRoutes(
     res.json(filtered.map(u => sanitizeUser(u)));
   });
 
+  // ── Production-only stats (excludes demo/test/sample records) ─────────────
+  app.get("/api/admin/production-stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await db.execute(sql`
+        SELECT
+          -- Real users (non-test, non-deleted)
+          (SELECT COUNT(*)::int FROM users
+            WHERE is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                     AS users,
+          -- Real jobs (non-demo, posted by real users)
+          (SELECT COUNT(*)::int FROM jobs j
+            JOIN users u ON u.id = j.posted_by_id
+            WHERE j.is_demo = false AND j.is_test_job = false
+              AND u.is_test_user = false
+              AND u.email NOT ILIKE '%@guberapp.internal')                   AS jobs,
+          -- Real open jobs
+          (SELECT COUNT(*)::int FROM jobs j
+            JOIN users u ON u.id = j.posted_by_id
+            WHERE j.status = 'posted_public'
+              AND j.is_demo = false AND j.is_test_job = false
+              AND u.is_test_user = false
+              AND u.email NOT ILIKE '%@guberapp.internal')                   AS open_jobs,
+          -- Real active disputes
+          (SELECT COUNT(*)::int FROM guber_disputes d
+            JOIN users u ON u.id = d.opened_by_user_id
+            WHERE d.status = 'open' AND u.is_test_user = false
+              AND u.email NOT ILIKE '%@guberapp.internal')                   AS disputes,
+          -- Real marketplace listings
+          (SELECT COUNT(*)::int FROM marketplace_items m
+            JOIN users u ON u.id = m.seller_id
+            WHERE m.status = 'available' AND m.is_sample = false
+              AND u.is_test_user = false
+              AND u.email NOT ILIKE '%@guberapp.internal')                   AS marketplace,
+          -- Real load board listings
+          (SELECT COUNT(*)::int FROM load_board_listings l
+            JOIN users u ON u.id = l.poster_id
+            WHERE l.status = 'posted'
+              AND u.is_test_user = false
+              AND u.email NOT ILIKE '%@guberapp.internal')                   AS load_board,
+          -- Safety queue: users with ID submitted, Stripe active, pending review
+          (SELECT COUNT(*)::int FROM users
+            WHERE background_check_status = 'none'
+              AND id_document_type IS NOT NULL
+              AND is_test_user = false
+              AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                     AS safety_queue_pending,
+          -- ID submitted but Stripe not connected
+          (SELECT COUNT(*)::int FROM users
+            WHERE background_check_status = 'none'
+              AND id_document_type IS NOT NULL
+              AND (stripe_account_status IS NULL OR stripe_account_status != 'active')
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                     AS queue_stripe_missing,
+          -- No ID submitted at all
+          (SELECT COUNT(*)::int FROM users
+            WHERE id_document_type IS NULL
+              AND is_test_user = false AND deleted_at IS NULL
+              AND email NOT ILIKE '%@guberapp.internal')                     AS identity_not_submitted
+      `);
+      res.json({ stats: r.rows[0], source: "production", generatedAt: new Date().toISOString() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/jobs", requireAdmin, async (req: Request, res: Response) => {
     const allJobs = await storage.getJobs(false);
     const includeDemo = req.query.includeDemo === "1" || req.query.includeDemo === "true";
@@ -21882,6 +21949,19 @@ OUTPUT STYLE:
       if (listing.posterId === carrierId) return res.status(400).json({ message: "Cannot offer on your own listing" });
       if (listing.status !== "posted" && listing.status !== "offer_received") {
         return res.status(400).json({ message: "Listing is not accepting offers" });
+      }
+
+      // ID + Stripe required before submitting load board offers
+      const carrierUser = await storage.getUser(carrierId);
+      if (!carrierUser) return res.status(401).json({ message: "User not found" });
+      const carrierIsDemo = await isDemoUser(carrierId);
+      if (!carrierIsDemo) {
+        if (!carrierUser.idVerified) {
+          return res.status(403).json({ message: "ID_REQUIRED", detail: "You must verify your ID before submitting load board offers. Go to Profile → Trust & Credentials." });
+        }
+        if ((carrierUser as any).stripeAccountStatus !== "active") {
+          return res.status(403).json({ message: "STRIPE_CONNECT_REQUIRED", detail: "You must complete payment setup before accepting loads." });
+        }
       }
 
       const { offerAmount, message } = req.body;
