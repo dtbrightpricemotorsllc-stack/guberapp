@@ -12,36 +12,6 @@ import {
   Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil,
 } from "lucide-react";
 
-// ── Route card (replaces embed map — no Maps Embed API dependency) ────────────
-function RouteMap({ pickupCity, pickupState, deliveryCity, deliveryState }: {
-  pickupCity: string; pickupState: string;
-  deliveryCity: string; deliveryState: string;
-  apiKey?: string;
-}) {
-  if (!pickupCity || !deliveryCity) return null;
-  const origin = encodeURIComponent(`${pickupCity}, ${pickupState}`);
-  const destination = encodeURIComponent(`${deliveryCity}, ${deliveryState}`);
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
-  return (
-    <a
-      href={mapsUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-2xl mb-3 px-4 py-3 transition-opacity hover:opacity-80 active:opacity-60"
-      style={{ background: "rgba(0,229,118,0.07)", border: "1px solid rgba(0,229,118,0.3)" }}
-      data-testid="link-route-map"
-    >
-      <MapPin className="w-4 h-4 shrink-0" style={{ color: "#00e576" }} />
-      <div className="flex-1 min-w-0 text-sm">
-        <span className="font-bold">{pickupCity}, {pickupState}</span>
-        <span className="mx-2 text-muted-foreground">→</span>
-        <span className="font-bold">{deliveryCity}, {deliveryState}</span>
-      </div>
-      <span className="text-[11px] shrink-0" style={{ color: "#00e576" }}>View route ↗</span>
-    </a>
-  );
-}
-
 // ── constants ──────────────────────────────────────────────────────────────────
 
 const CYAN_ACTIVE = { background: "linear-gradient(135deg,#0891b2,#0e7490)", color: "#fff" };
@@ -126,8 +96,6 @@ export default function LoadBoardDetail() {
     enabled: !!listingId,
   });
 
-  const { data: configData } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
-  const mapsApiKey = configData?.googleMapsApiKey ?? "";
 
   // ── Detect Stripe redirect back (accept offer or addon) ──
   const confirmAcceptMutation = useMutation({
@@ -583,7 +551,7 @@ export default function LoadBoardDetail() {
           </div>
 
           {/* Route */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60 mb-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60 mb-2 flex-wrap">
             <MapPin className="w-3 h-3 shrink-0 text-cyan-500/50" />
             <span className="font-display font-bold">{listing.pickupCity}, {listing.pickupState}</span>
             <span className="text-muted-foreground/30 mx-0.5">→</span>
@@ -591,15 +559,19 @@ export default function LoadBoardDetail() {
             {listing.estimatedMiles && (
               <span className="text-muted-foreground/30 text-[10px] ml-1">({listing.estimatedMiles.toLocaleString()} mi)</span>
             )}
+            {listing.pickupCity && listing.deliveryCity && (
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${listing.pickupCity}, ${listing.pickupState}`)}&destination=${encodeURIComponent(`${listing.deliveryCity}, ${listing.deliveryState}`)}&travelmode=driving`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto text-[10px] font-display font-black shrink-0 px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(0,229,118,0.12)", color: "#00e576" }}
+                data-testid="link-route-map"
+              >
+                View Route ↗
+              </a>
+            )}
           </div>
-
-          <RouteMap
-            pickupCity={listing.pickupCity}
-            pickupState={listing.pickupState}
-            deliveryCity={listing.deliveryCity}
-            deliveryState={listing.deliveryState}
-            apiKey={mapsApiKey}
-          />
 
           {/* Poster identity */}
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground/40">
