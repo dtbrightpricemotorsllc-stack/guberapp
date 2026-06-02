@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/lib/auth-context";
 import {
   Plus, Pencil, Trash2, ChevronUp, ChevronDown, Eye, EyeOff,
   ArrowLeft, Video, Layers, Play, Check, X, GripVertical, Coins,
