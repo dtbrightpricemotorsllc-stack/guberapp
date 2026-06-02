@@ -187,6 +187,13 @@ const TOOL_TILES: ToolTile[] = [
     accent: "#34d399",
     href: "/studio/listing-video",
   },
+  {
+    key: "promo-clip", label: "Promo Clip", blurb: "5-sec promo",
+    kind: "video", icon: Star, costToolKey: "promo_clip", dbKey: "promo_clip",
+    badge: "New",
+    accent: "#f59e0b",
+    href: "/studio/promo-clip",
+  },
 ];
 
 // ── Cinematic templates (CapCut-style starter prompts) ────────────────────
