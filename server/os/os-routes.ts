@@ -23,6 +23,7 @@ import { runCOOAnalysis, getLatestCOOBriefing, queueRecommendation, type COOFind
 import { runCFOAnalysis, getLatestCFOBriefing } from "./cfo-agent";
 import { runGrowthAnalysis, getLatestGrowthBriefing } from "./growth-agent";
 import { seedSimulation, cleanupSimulation, runPostSeedAnalysis } from "./simulation";
+import { runHealthMonitor } from "./health-monitor";
 import { getPlatformHealth, getRevenueStats, getUserGrowthStats } from "./platform-read";
 
 async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
@@ -497,6 +498,18 @@ export function registerOSRoutes(app: Express): void {
       res.json({ ok: true, deleted });
     } catch (e: any) {
       res.status(500).json({ message: e?.message ?? "Cleanup failed" });
+    }
+  });
+
+  // ── Health Monitor ────────────────────────────────────────────────────────
+
+  app.post("/api/os/health/run", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const result = await runHealthMonitor();
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Health monitor failed" });
     }
   });
 

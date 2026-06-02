@@ -1353,6 +1353,19 @@ export async function runAllScheduledSweeps(): Promise<void> {
     } catch (err: any) {
       console.error("[cron] studio refund alert check failed:", err?.message || err);
     }
+
+    // OS health monitor — auto-recover stuck payouts + stage founder alerts
+    // for capture_expired / orphaned payouts. Internally dedup-gated so
+    // firing on every 5-min cadence is safe.
+    try {
+      const { runHealthMonitor } = await import("./os/health-monitor.js");
+      const hm = await runHealthMonitor();
+      if (hm.autoRecovered > 0 || hm.alertsStaged > 0) {
+        console.log(`[cron] health-monitor: ${hm.summary}`);
+      }
+    } catch (err: any) {
+      console.error("[cron] health-monitor failed:", err?.message || err);
+    }
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Cpu, RefreshCw, ChevronDown, ChevronRight,
   Circle, CheckCircle2, AlertTriangle, XCircle, HelpCircle,
-  Zap, Activity, TrendingUp, Shield, Server,
+  Zap, Activity, TrendingUp, Shield, Server, HeartPulse,
 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Status = "healthy" | "warning" | "critical" | "unknown";
@@ -186,6 +187,15 @@ function Section({ id, items, defaultOpen = true }: { id: string; items: Service
 export default function OSCommandCenter() {
   const [, nav] = useLocation();
   const [countdown, setCountdown] = useState(60);
+  const [hmResult, setHmResult] = useState<{ summary: string; autoRecovered: number; alertsStaged: number } | null>(null);
+
+  const healthMonitorMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/os/health/run"),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      setHmResult(data);
+    },
+  });
 
   const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useQuery<CommandCenterData>({
     queryKey: ["/api/os/command-center"],
@@ -265,18 +275,59 @@ export default function OSCommandCenter() {
                 : "Loading all systems…"}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isFetching}
-            className="border-white/20 text-white/60 hover:text-white h-8 text-xs"
-            data-testid="btn-cc-refresh"
-          >
-            <RefreshCw className={`w-3 h-3 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
-            {isFetching ? "Refreshing…" : "Refresh now"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => healthMonitorMutation.mutate()}
+              disabled={healthMonitorMutation.isPending}
+              className="border-emerald-500/30 text-emerald-400/80 hover:text-emerald-300 hover:border-emerald-400/50 h-8 text-xs"
+              data-testid="btn-health-monitor"
+              title="Auto-recover stuck payouts and stage alerts for unresolvable issues"
+            >
+              <HeartPulse className={`w-3 h-3 mr-1.5 ${healthMonitorMutation.isPending ? "animate-pulse" : ""}`} />
+              {healthMonitorMutation.isPending ? "Running…" : "Health Monitor"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isFetching}
+              className="border-white/20 text-white/60 hover:text-white h-8 text-xs"
+              data-testid="btn-cc-refresh"
+            >
+              <RefreshCw className={`w-3 h-3 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
+              {isFetching ? "Refreshing…" : "Refresh now"}
+            </Button>
+          </div>
         </div>
+
+        {/* Health monitor result toast */}
+        {hmResult && (
+          <div className={`mb-5 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
+            hmResult.autoRecovered > 0 || hmResult.alertsStaged > 0
+              ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-300"
+              : "border-white/10 bg-white/3 text-white/50"
+          }`}>
+            <HeartPulse className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">{hmResult.summary}</p>
+              {(hmResult.autoRecovered > 0 || hmResult.alertsStaged > 0) && (
+                <p className="text-xs opacity-70 mt-0.5">
+                  {hmResult.autoRecovered > 0 && `${hmResult.autoRecovered} payout(s) transferred automatically. `}
+                  {hmResult.alertsStaged > 0 && `${hmResult.alertsStaged} alert(s) staged in `}
+                  {hmResult.alertsStaged > 0 && (
+                    <button onClick={() => nav("/os/approve")} className="underline hover:no-underline">
+                      Approvals
+                    </button>
+                  )}
+                  {hmResult.alertsStaged > 0 && "."}
+                </p>
+              )}
+            </div>
+            <button onClick={() => setHmResult(null)} className="ml-auto text-white/30 hover:text-white/60 text-xs">✕</button>
+          </div>
+        )}
 
         {isLoading && (
           <div className="space-y-3">

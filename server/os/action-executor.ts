@@ -1,7 +1,12 @@
-import { db } from "../db";
+import Stripe from "stripe";
+import { db, pool } from "../db";
 import { osActions } from "@shared/os-schema";
 import { eq } from "drizzle-orm";
 import { writeAuditLog } from "./logger";
+
+const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, {
+  apiVersion: "2025-01-27.acacia" as any,
+});
 
 /**
  * Execute an approved action.
@@ -112,8 +117,65 @@ async function dispatchAction(
     // ── High-tier ─────────────────────────────────────────────────────────────
     case "release.payout": {
       const { jobId, workerId, amount } = payload;
-      // In production Phase 2 this triggers Stripe Connect payout
-      return { ok: true, jobId, workerId, amount, note: "payout release logged — Stripe transfer Phase 2" };
+
+      const jobRes = await pool.query<{
+        id: number; title: string; helper_payout: number; payout_status: string;
+        stripe_payment_intent_id: string | null; charged_at: Date | null;
+        stripe_transfer_id: string | null;
+        stripe_account_id: string | null; stripe_account_status: string | null;
+      }>(`
+        SELECT j.id, j.title, j.helper_payout, j.payout_status,
+               j.stripe_payment_intent_id, j.charged_at, j.stripe_transfer_id,
+               u.stripe_account_id, u.stripe_account_status
+        FROM jobs j
+        JOIN users u ON u.id = j.assigned_helper_id
+        WHERE j.id = $1
+      `, [jobId]);
+
+      const job = jobRes.rows[0];
+      if (!job) return { ok: false, error: `Job ${jobId} not found` };
+
+      // Idempotency — already transferred
+      if (job.stripe_transfer_id) {
+        return { ok: true, jobId, note: "already paid — idempotent skip", transferId: job.stripe_transfer_id };
+      }
+
+      if (!job.stripe_account_id || job.stripe_account_status !== "active") {
+        return { ok: false, jobId, error: "Worker has no active Stripe Connect account" };
+      }
+
+      // Safety: never transfer against an uncaptured PI
+      if (job.stripe_payment_intent_id && !job.charged_at) {
+        return { ok: false, jobId, error: "Stripe PI not yet captured — cannot transfer unfunded job" };
+      }
+
+      const workerShare = job.helper_payout ?? amount;
+      if (!workerShare || workerShare <= 0) {
+        return { ok: false, jobId, error: "No payout amount on job" };
+      }
+
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(workerShare * 100),
+        currency: "usd",
+        destination: job.stripe_account_id,
+        transfer_group: `job_${jobId}`,
+        description: `GUBER OS payout: ${job.title}`,
+        metadata: { jobId: String(jobId), userId: String(workerId), source: "os_agent" },
+      });
+
+      await pool.query(
+        `UPDATE jobs SET payout_status = 'sent', stripe_transfer_id = $1, paid_out_at = NOW() WHERE id = $2`,
+        [transfer.id, jobId],
+      );
+      await pool.query(
+        `UPDATE wallet_transactions
+         SET stripe_transfer_id = $1,
+             description = 'OS-released payout: $' || $2::text || ' for "' || $3 || '"'
+         WHERE job_id = $4 AND user_id = $5 AND type = 'earning' AND stripe_transfer_id IS NULL`,
+        [transfer.id, workerShare.toFixed(2), job.title, jobId, workerId],
+      );
+
+      return { ok: true, jobId, workerId, amount: workerShare, transferId: transfer.id };
     }
 
     case "issue.refund":
