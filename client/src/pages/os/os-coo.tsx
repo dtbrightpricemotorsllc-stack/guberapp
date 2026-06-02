@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import {
   RefreshCw, Cpu, AlertTriangle, XCircle, CheckCircle2, Info,
   TrendingDown, Inbox, Send, ChevronDown, ChevronUp, ShieldAlert,
-  Activity, BarChart3, Loader2,
+  Activity, BarChart3, Loader2, Database, FlaskConical, HelpCircle,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type ImpactLevel = "critical" | "high" | "medium" | "low";
+type ImpactLevel    = "critical" | "high" | "medium" | "low";
+type DataSourceBadge = "PRODUCTION" | "MIXED" | "UNKNOWN";
 
 interface COOFinding {
   id: string;
@@ -22,6 +23,10 @@ interface COOFinding {
   recommendation: string;
   data: Record<string, any>;
   score: number;
+  // provenance
+  dataSource: DataSourceBadge;
+  dataSourceFilters: string[];
+  dataSourceCounts: Record<string, number>;
 }
 
 interface COOBriefing {
@@ -33,6 +38,7 @@ interface COOBriefing {
   allFindings: COOFinding[];
   categoryCounts: Record<string, number>;
   totalFindings: number;
+  productionOnly: boolean;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -67,6 +73,71 @@ const NAV = [
   { label: "Audit Log",       path: "/os/logs" },
   { label: "Events",          path: "/os/events" },
 ];
+
+// ── Data Source Badge ──────────────────────────────────────────────────────────
+function DataBadge({ source, filters, counts }: {
+  source: DataSourceBadge;
+  filters?: string[];
+  counts?: Record<string, number>;
+}) {
+  const [open, setOpen] = useState(false);
+  const cfg = {
+    PRODUCTION: { bg: "bg-emerald-500/10", border: "border-emerald-500/25", text: "text-emerald-400", Icon: Database,      dot: "bg-emerald-400" },
+    MIXED:      { bg: "bg-amber-500/10",   border: "border-amber-500/25",   text: "text-amber-400",  Icon: FlaskConical,  dot: "bg-amber-400 animate-pulse" },
+    UNKNOWN:    { bg: "bg-white/5",        border: "border-white/15",       text: "text-white/40",   Icon: HelpCircle,    dot: "bg-white/25" },
+  }[source];
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase border ${cfg.bg} ${cfg.border} ${cfg.text} hover:brightness-125 transition-all`}
+        data-testid={`badge-datasource-${source.toLowerCase()}`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+        {source}
+      </button>
+      {open && (
+        <div
+          className="absolute z-30 top-full mt-1.5 right-0 w-64 rounded-xl border border-white/10 bg-[#0d0d14] shadow-2xl p-3 text-left"
+          onClick={e => e.stopPropagation()}
+        >
+          <p className="text-[9px] font-bold tracking-widest text-white/30 uppercase mb-2">Data Provenance</p>
+          {source === "PRODUCTION" && (
+            <p className="text-[10px] text-emerald-400/80 mb-2">All records verified as real production data. Test, demo, and sample records excluded.</p>
+          )}
+          {source === "MIXED" && (
+            <p className="text-[10px] text-amber-400/80 mb-2">Some records may include test or demo data. Review counts below.</p>
+          )}
+          {filters && filters.length > 0 && (
+            <>
+              <p className="text-[9px] font-bold tracking-widest text-white/20 uppercase mb-1">Filters Applied</p>
+              <div className="space-y-0.5 mb-2">
+                {filters.map(f => (
+                  <p key={f} className="text-[10px] text-white/40 font-mono">{f}</p>
+                ))}
+              </div>
+            </>
+          )}
+          {counts && Object.keys(counts).length > 0 && (
+            <>
+              <p className="text-[9px] font-bold tracking-widest text-white/20 uppercase mb-1">Record Counts</p>
+              <div className="space-y-0.5">
+                {Object.entries(counts).map(([k, v]) => (
+                  <div key={k} className="flex justify-between text-[10px]">
+                    <span className="text-white/35">{k.replace(/_/g, " ")}</span>
+                    <span className={k.startsWith("excluded") && v > 0 ? "text-amber-400 font-bold" : "text-white/60"}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <button onClick={() => setOpen(false)} className="mt-2 text-[9px] text-white/20 hover:text-white/50">close</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function healthColor(score: number) {
@@ -121,7 +192,7 @@ function FindingCard({
           )}
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="text-[10px] font-semibold tracking-widest text-white/30 uppercase">
                 {finding.categoryLabel}
               </span>
@@ -129,6 +200,13 @@ function FindingCard({
                 <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                 {cfg.label}
               </span>
+              {finding.dataSource && (
+                <DataBadge
+                  source={finding.dataSource}
+                  filters={finding.dataSourceFilters}
+                  counts={finding.dataSourceCounts}
+                />
+              )}
             </div>
             <p className="text-sm font-semibold text-white/90 leading-snug">{finding.issue}</p>
             <p className="text-xs text-white/35 mt-0.5 font-mono">{finding.detail}</p>
@@ -346,6 +424,16 @@ export default function OSCOOAgent() {
                   <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-white/40 text-xs font-medium border border-white/10">
                     {Object.keys(briefing.categoryCounts).length} area{Object.keys(briefing.categoryCounts).length !== 1 ? "s" : ""} flagged
                   </span>
+                  {briefing.productionOnly != null && (
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                      briefing.productionOnly
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    }`}>
+                      <Database className="w-3 h-3" />
+                      {briefing.productionOnly ? "Production data only" : "Mixed data sources"}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
