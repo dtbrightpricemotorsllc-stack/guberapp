@@ -130,6 +130,7 @@ export default function OSMemory() {
         </div>
         <div className="max-w-5xl mx-auto px-6 flex gap-1 pb-0">
           {[
+            { label: "Command Center", path: "/os/command-center" },
             { label: "Dashboard", path: "/os/dashboard" },
             { label: "Approvals", path: "/os/approve" },
             { label: "Memory", path: "/os/memory", active: true },

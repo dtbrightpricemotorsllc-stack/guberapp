@@ -17,6 +17,8 @@ import { proposeAction, decideAction } from "./approval-engine";
 import { executeAction } from "./action-executor";
 import { emitOSEvent } from "./event-bus";
 import { writeAuditLog } from "./logger";
+import { runAllHealthChecks } from "./health-checks";
+import { getOperationsData, getBusinessData, getGrowthData, getAdminData } from "./command-center";
 import { getPlatformHealth, getRevenueStats, getUserGrowthStats } from "./platform-read";
 
 async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
@@ -34,6 +36,27 @@ async function requireOSAdmin(req: Request, res: Response): Promise<boolean> {
 }
 
 export function registerOSRoutes(app: Express): void {
+
+  // ── Command Center — all live data in one shot ─────────────────────────────
+
+  app.get("/api/os/command-center", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    const [technical, operations, business, growth, admin] = await Promise.allSettled([
+      runAllHealthChecks(),
+      getOperationsData(),
+      getBusinessData(),
+      getGrowthData(),
+      getAdminData(),
+    ]);
+    res.json({
+      technical:  technical.status  === "fulfilled" ? technical.value  : [],
+      operations: operations.status === "fulfilled" ? operations.value : [],
+      business:   business.status   === "fulfilled" ? business.value   : [],
+      growth:     growth.status     === "fulfilled" ? growth.value     : [],
+      admin:      admin.status      === "fulfilled" ? admin.value      : [],
+      generatedAt: new Date().toISOString(),
+    });
+  });
 
   // ── Lightweight status (used by Admin page indicator) ─────────────────────
 
