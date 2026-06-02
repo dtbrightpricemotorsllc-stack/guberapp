@@ -326,6 +326,7 @@ export default function LoadBoardPost() {
   const [make,          setMake]          = useState("");
   const [model,         setModel]         = useState("");
   const [vehicleRunning,setVehicleRunning]= useState("");
+  const [ownershipProofStatus, setOwnershipProofStatus] = useState("");
 
   // Other fields
   const [customFreightType, setCustomFreightType] = useState("");
@@ -494,6 +495,7 @@ export default function LoadBoardPost() {
       make:                 make || undefined,
       model:                model || undefined,
       vehicleCondition:     vehicleRunning ? [vehicleRunning === "yes" ? "runs_drives" : "inop"] : undefined,
+      ownershipProofStatus: ownershipProofStatus || undefined,
       customFreightType:    customFreightType || undefined,
       pickupDate:           pickupDate || undefined,
       deliveryDate:         deliveryDate || undefined,
@@ -1007,6 +1009,33 @@ export default function LoadBoardPost() {
                   )}
                 </div>
                 <YesNoToggle label="Vehicle Running?" value={vehicleRunning} onChange={setVehicleRunning} />
+
+                {/* Ownership proof */}
+                <div>
+                  <SectionLabel>Proof of Ownership</SectionLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "title_in_hand",   label: "📄 Title In Hand",      sub: "Original title available" },
+                      { value: "bill_of_sale",    label: "🧾 Bill of Sale",        sub: "Recent purchase doc" },
+                      { value: "auction_invoice", label: "🏷️ Auction Invoice",     sub: "Auction house paperwork" },
+                      { value: "dealer_owned",    label: "🏢 Dealer Owned",        sub: "Dealership vehicle" },
+                      { value: "lienholder",      label: "🏦 Lienholder",          sub: "Bank or finance company" },
+                      { value: "not_ready",       label: "⏳ Proof Pending",       sub: "Docs not yet in hand" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setOwnershipProofStatus(prev => prev === opt.value ? "" : opt.value)}
+                        className="rounded-2xl p-3 text-left transition-all"
+                        style={ownershipProofStatus === opt.value ? CYAN_TILE_ACTIVE : CYAN_TILE_INACTIVE}
+                        data-testid={`select-proof-${opt.value}`}
+                      >
+                        <p className="text-sm font-display font-bold text-foreground">{opt.label}</p>
+                        <p className="text-[9px] text-muted-foreground/40 mt-0.5">{opt.sub}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </>
             )}
 
