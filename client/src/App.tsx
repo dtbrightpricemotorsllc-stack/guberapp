@@ -87,6 +87,7 @@ const OSAgents = lazy(() => import("@/pages/os/os-agents"));
 const OSLogs = lazy(() => import("@/pages/os/os-logs"));
 const OSEvents = lazy(() => import("@/pages/os/os-events"));
 const OSCommandCenter = lazy(() => import("@/pages/os/os-command-center"));
+const OSBriefing = lazy(() => import("@/pages/os/os-briefing"));
 
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
@@ -299,6 +300,7 @@ function Router() {
       <Route path="/account-settings" component={() => <ConsumerRoute component={AccountSettings} />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={NotificationsPage} />} />
       <Route path="/os/command-center" component={() => <OSAdminRoute component={OSCommandCenter} />} />
+      <Route path="/os/briefing" component={() => <OSAdminRoute component={OSBriefing} />} />
       <Route path="/os/dashboard" component={() => <OSAdminRoute component={OSDashboard} />} />
       <Route path="/os/approve" component={() => <OSAdminRoute component={OSApprove} />} />
       <Route path="/os/memory" component={() => <OSAdminRoute component={OSMemory} />} />
