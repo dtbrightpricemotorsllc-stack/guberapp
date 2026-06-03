@@ -37,7 +37,7 @@ const DEMO_WORKERS = [
   { dLat: -0.003, dLng: 0.011 },
 ];
 
-export function GridDemo({ onClose, onClaim }: { onClose: () => void; onClaim: () => void }) {
+export function GridDemo({ onClaim, onCollapse }: { onClaim: () => void; onCollapse?: () => void }) {
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [selected, setSelected] = useState<DemoTask | null>(null);
 
@@ -112,31 +112,16 @@ export function GridDemo({ onClose, onClaim }: { onClose: () => void; onClaim: (
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background" data-testid="overlay-grid-demo">
-      {/* Sticky disclaimer banner */}
-      <div
-        className="relative z-20 flex items-center gap-2 px-4 py-2.5 text-center justify-center"
-        style={{
-          background: "linear-gradient(90deg, rgba(0,229,118,0.15), rgba(0,229,118,0.08))",
-          borderBottom: "1px solid rgba(0,229,118,0.3)",
-        }}
-        data-testid="banner-demo-disclaimer"
-      >
-        <p className="text-[11px] sm:text-xs font-display font-semibold tracking-wide text-emerald-300 leading-snug">
-          💡 APP PREVIEW ACTIVE — This is a live sample layout showing mock local opportunities near you.
-        </p>
-        <button
-          onClick={onClose}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-emerald-200/70 hover:text-white hover:bg-white/10 transition-colors"
-          data-testid="button-demo-close"
-          aria-label="Close preview"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
+    <div
+      className="relative w-full rounded-2xl overflow-hidden"
+      style={{
+        border: "1px solid rgba(0,229,118,0.28)",
+        boxShadow: "0 0 50px rgba(0,229,118,0.08), 0 18px 50px rgba(0,0,0,0.5)",
+      }}
+      data-testid="section-grid-demo"
+    >
       {/* Native-style dashboard frame */}
-      <div className="relative flex-1 overflow-hidden">
+      <div className="relative h-[70vh] min-h-[440px] max-h-[680px] overflow-hidden">
         <div className="absolute inset-0">
           <GoogleMap
             pins={pins}
@@ -157,6 +142,19 @@ export function GridDemo({ onClose, onClaim }: { onClose: () => void; onClaim: (
             {pins.length} opportunities near you
           </span>
         </div>
+
+        {/* Collapse button */}
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            className="absolute top-3 right-3 z-10 p-2 rounded-full text-white/80 hover:text-white transition-colors"
+            style={{ background: "rgba(0,0,0,0.78)", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(6px)" }}
+            data-testid="button-demo-collapse"
+            aria-label="Hide map"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Selected marker popover (native template) */}
         {selected && (
@@ -225,6 +223,17 @@ export function GridDemo({ onClose, onClaim }: { onClose: () => void; onClaim: (
             </div>
           </div>
         )}
+      </div>
+
+      {/* Subtle honesty footer */}
+      <div
+        className="px-3 py-2 text-center"
+        style={{ background: "rgba(0,229,118,0.06)", borderTop: "1px solid rgba(0,229,118,0.18)" }}
+        data-testid="banner-demo-disclaimer"
+      >
+        <p className="text-[10px] font-display tracking-wide text-emerald-300/80 leading-snug">
+          ⚡ Sample activity near you — sign up to unlock the real live grid in your city.
+        </p>
       </div>
     </div>
   );

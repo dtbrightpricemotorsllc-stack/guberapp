@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -182,7 +182,17 @@ export default function Home() {
   const [gateOpen, setGateOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   const [wallOpen, setWallOpen] = useState(false);
+  const mapSectionRef = useRef<HTMLDivElement>(null);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
+
+  const revealMap = () => {
+    setDemoOpen(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 90);
+    });
+  };
 
   const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
     queryKey: ["/api/public/jobs"],
@@ -191,7 +201,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col" data-testid="page-home">
       {gateOpen && <GateModal onClose={() => setGateOpen(false)} />}
-      {demoOpen && <GridDemo onClose={() => setDemoOpen(false)} onClaim={() => setWallOpen(true)} />}
       {wallOpen && <SignUpWall onClose={() => setWallOpen(false)} />}
 
       {/* Background orbs */}
@@ -292,9 +301,9 @@ export default function Home() {
           <ArrowRight className="w-4 h-4" />
         </Link>
 
-        {/* See the map — launches the interactive Grid demo */}
+        {/* See the map — reveals the live interactive map inline */}
         <button
-          onClick={() => setDemoOpen(true)}
+          onClick={revealMap}
           className="w-full max-w-md h-12 rounded-2xl font-display tracking-[0.16em] text-sm btn-glass-premium flex items-center justify-center gap-2 mb-4"
           data-testid="button-see-the-map"
         >
@@ -332,6 +341,21 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Live Map (revealed inline from "See the map" / category tiles) ── */}
+      {demoOpen && (
+        <section
+          ref={mapSectionRef}
+          className="relative z-10 px-5 pb-12 max-w-2xl mx-auto w-full scroll-mt-4 animate-fade-in"
+          data-testid="section-live-map"
+        >
+          <div className="mb-4 text-center">
+            <h2 className="text-xl font-display font-black tracking-wider mb-1">THE GRID — LIVE NEAR YOU</h2>
+            <p className="text-muted-foreground text-xs">Real local jobs &amp; cash drops dropping around you. Tap any pin to claim it.</p>
+          </div>
+          <GridDemo onClaim={() => setWallOpen(true)} onCollapse={() => setDemoOpen(false)} />
+        </section>
+      )}
+
       {/* ── Categories ── */}
       <section className="relative z-10 px-5 pb-12 max-w-6xl mx-auto w-full">
         <div className="mb-6 text-center">
@@ -343,7 +367,7 @@ export default function Home() {
           {CATEGORIES.map(({ label, desc, icon: Icon, bg, badge, border }) => (
             <button
               key={label}
-              onClick={() => setDemoOpen(true)}
+              onClick={revealMap}
               className="relative rounded-2xl p-4 flex flex-col gap-1 items-start text-left active:scale-[0.97] transition-transform overflow-hidden"
               style={{ background: bg, border: border ?? "1px solid rgba(255,255,255,0.06)" }}
               data-testid={`card-category-${label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`}
