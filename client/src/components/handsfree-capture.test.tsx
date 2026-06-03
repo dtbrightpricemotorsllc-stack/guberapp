@@ -21,6 +21,12 @@ vi.mock("@/lib/platform", () => ({
   isIOS: false,
 }));
 
+vi.mock("@/lib/cloudinary-upload", () => ({
+  uploadToCloudinarySigned: vi.fn(async () => ({
+    url: "https://res.cloudinary.com/test/video/upload/v1/guber-proof/clip.mp4",
+  })),
+}));
+
 const mockToast = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
@@ -98,7 +104,7 @@ describe("HandsFreeCapture preflight warnings (task-467/472)", () => {
     mockReadDuration.mockResolvedValue(10);
     mockReadMeta.mockResolvedValue({
       capturedAt: new Date(Date.now() - 48 * 3_600_000),
-      gps: { lat: JOB_LAT + 0.05, lng: JOB_LNG },
+      gps: { lat: JOB_LAT + 0.01, lng: JOB_LNG },
     });
 
     render(

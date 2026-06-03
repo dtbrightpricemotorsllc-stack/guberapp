@@ -790,12 +790,12 @@ describe("Mobile checkout redirect — product-key → metadata mapping (task-57
     expect(Number(sessionParams.metadata.quantity)).toBeLessThanOrEqual(50);
   });
 
-  it("invalid/expired token redirects to /login", async () => {
+  it("invalid/expired token returns 401 so the native SDK can detect it", async () => {
     const res = await agent
       .get("/api/mobile/checkout-redirect?token=not_a_valid_token");
 
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toMatch(/\/login\?error=link_expired/);
+    expect(res.status).toBe(401);
+    expect(res.body.message).toMatch(/expired|invalid/i);
     expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
   });
 });

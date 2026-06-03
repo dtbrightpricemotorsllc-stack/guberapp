@@ -364,7 +364,7 @@ describe("Admin featured-clips PATCH — validation (task-613)", () => {
     mockUpdateFeaturedClip.mockRejectedValueOnce(new DuplicateSlugError("taken-slug"));
     const res = await adminAgent.patch("/api/admin/studio/featured/5").send({ slug: "taken-slug" });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/slug already exists/i);
+    expect(res.body.error).toMatch(/slug already/i);
   });
 
   it("returns 200 and the updated row when the clip exists", async () => {

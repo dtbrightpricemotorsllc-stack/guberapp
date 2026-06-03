@@ -430,6 +430,16 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'fal-ai/flux/schnell', 1, NULL, true)
 ON CONFLICT (tool_key) DO NOTHING;
 
+-- listing_video and promo_clip: composite generation tools (35 cr each).
+INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES
+  ('listing_video', 'Listing Video',
+   'Property or product listing walkthrough video (35 cr).',
+   'composite:listing_video', 35, true),
+  ('promo_clip',    'Promo Clip',
+   'Short promotional video clip for any business type (35 cr).',
+   'composite:promo_clip', 35, true)
+ON CONFLICT (tool_key) DO NOTHING;
+
 -- task-519: re-price the four Studio tools to the Kling-mirrored economy.
 -- Idempotent: UPDATEs every run so any drift from earlier deploys converges.
 UPDATE studio_model_pricing SET credits_cost = 80 WHERE tool_key = 'kling_motion_control';

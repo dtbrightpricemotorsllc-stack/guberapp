@@ -11718,7 +11718,7 @@ export async function registerRoutes(
     const payload = verifyMobileCheckoutToken(raw);
     if (!payload) {
       // Token is missing, expired, or tampered. Return 401 so the native app
-      // can detect the failure programmatically and prompt the user to retry.
+      // SDK can detect the failure programmatically and prompt the user to retry.
       return res.status(401).json({ message: "Checkout link has expired or is invalid. Please try again." });
     }
     const { userId, product, options } = payload;

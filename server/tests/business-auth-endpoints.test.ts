@@ -156,8 +156,14 @@ vi.mock("connect-pg-simple", async () => {
 
 vi.mock("../push", () => ({
   sendPushToUser: vi.fn().mockResolvedValue(undefined),
+  sendPushBroadcast: vi.fn().mockResolvedValue(undefined),
   saveSubscription: vi.fn().mockResolvedValue(undefined),
   removeSubscription: vi.fn().mockResolvedValue(undefined),
+  saveApnsToken: vi.fn().mockResolvedValue(undefined),
+  removeApnsToken: vi.fn().mockResolvedValue(undefined),
+  saveFcmToken: vi.fn().mockResolvedValue(undefined),
+  removeFcmToken: vi.fn().mockResolvedValue(undefined),
+  notify: vi.fn().mockResolvedValue(undefined),
   VAPID_PUBLIC_KEY: "test-vapid-key",
 }));
 
@@ -327,6 +333,7 @@ const VALID_ACCESS_REQUEST = {
   fullName: "Beta Boss",
   username: "betaboss",
   password: "StrongPass!1",
+  businessAddress: "123 Main St, Austin, TX",
 };
 
 describe("POST /api/auth/business-signup", () => {

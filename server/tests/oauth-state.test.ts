@@ -74,13 +74,16 @@ describe("Google OAuth state validation (production handlers)", () => {
 
     it("should return 503 when GOOGLE_CLIENT_ID is not set", async () => {
       const savedId = process.env.GOOGLE_CLIENT_ID;
+      const savedViteId = process.env.VITE_GOOGLE_WEB_CLIENT_ID;
       delete process.env.GOOGLE_CLIENT_ID;
+      delete process.env.VITE_GOOGLE_WEB_CLIENT_ID;
       try {
         const agent = supertest.agent(app);
         const res = await agent.get("/api/auth/google").expect(503);
         expect(res.body.message).toBe("Google Sign-In not configured");
       } finally {
-        process.env.GOOGLE_CLIENT_ID = savedId;
+        if (savedId !== undefined) process.env.GOOGLE_CLIENT_ID = savedId;
+        if (savedViteId !== undefined) process.env.VITE_GOOGLE_WEB_CLIENT_ID = savedViteId;
       }
     });
   });

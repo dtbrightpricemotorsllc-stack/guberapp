@@ -5,7 +5,10 @@ import userEvent from "@testing-library/user-event";
 
 // ── Capacitor mocks (pulled in transitively by token-storage) ─────────────────
 vi.mock("@capacitor/core", () => ({
-  Capacitor: { isNativePlatform: () => false },
+  Capacitor: {
+    isNativePlatform: () => false,
+    getPlatform: () => "web",
+  },
 }));
 vi.mock("@capacitor/preferences", () => ({
   Preferences: {

@@ -71,7 +71,7 @@ describe("studio_model_pricing rows (task-519, post-merge.sh)", () => {
     const rows = await db.execute(sql`
       SELECT tool_key, credits_cost
         FROM studio_model_pricing
-       WHERE tool_key IN ('kling_motion_control','wan_motion_5s','wan_motion_10s','minimax_music')
+       WHERE tool_key IN ('kling_motion_control','wan_motion_5s','wan_motion_10s','minimax_music','listing_video','promo_clip')
     `);
     const actual: Record<string, number> = {};
     for (const r of rows.rows as Array<{ tool_key: string; credits_cost: number }>) {
