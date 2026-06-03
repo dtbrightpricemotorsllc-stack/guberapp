@@ -8,9 +8,11 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, X,
   Briefcase, ShieldCheck, Zap, Users, Star, ArrowRight, Lock,
-  Globe, Hammer, Wrench, ShoppingBag, Repeat, Truck, Bot,
+  Globe, Hammer, Wrench, ShoppingBag, Repeat, Truck, Bot, Map as MapIcon,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
+import { GridDemo } from "@/components/grid-demo";
+import { SignUpWall } from "@/components/signup-wall";
 
 import logoImg   from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
@@ -178,6 +180,8 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
 
 export default function Home() {
   const [gateOpen, setGateOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [wallOpen, setWallOpen] = useState(false);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
   const { data: jobs, isLoading: jobsLoading } = useQuery<PublicJob[]>({
@@ -187,6 +191,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col" data-testid="page-home">
       {gateOpen && <GateModal onClose={() => setGateOpen(false)} />}
+      {demoOpen && <GridDemo onClose={() => setDemoOpen(false)} onClaim={() => setWallOpen(true)} />}
+      {wallOpen && <SignUpWall onClose={() => setWallOpen(false)} />}
 
       {/* Background orbs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
@@ -279,12 +285,23 @@ export default function Home() {
         {/* Primary CTA */}
         <Link
           href="/signup"
-          className="w-full max-w-md h-14 rounded-2xl font-display tracking-[0.18em] text-sm premium-btn btn-breathe-glow flex items-center justify-center gap-2 mb-4"
+          className="w-full max-w-md h-14 rounded-2xl font-display tracking-[0.18em] text-sm premium-btn btn-breathe-glow flex items-center justify-center gap-2 mb-3"
           data-testid="link-hero-enter-ecosystem"
         >
           ENTER THE GUBER ECOSYSTEM
           <ArrowRight className="w-4 h-4" />
         </Link>
+
+        {/* See the map — launches the interactive Grid demo */}
+        <button
+          onClick={() => setDemoOpen(true)}
+          className="w-full max-w-md h-12 rounded-2xl font-display tracking-[0.16em] text-sm btn-glass-premium flex items-center justify-center gap-2 mb-4"
+          data-testid="button-see-the-map"
+        >
+          <MapIcon className="w-4 h-4" />
+          SEE THE MAP
+          <ArrowRight className="w-4 h-4" />
+        </button>
 
         <Link
           href="/login"
@@ -323,11 +340,11 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {CATEGORIES.map(({ label, desc, icon: Icon, bg, href, badge, border }) => (
-            <Link
+          {CATEGORIES.map(({ label, desc, icon: Icon, bg, badge, border }) => (
+            <button
               key={label}
-              href={href}
-              className="relative rounded-2xl p-4 flex flex-col gap-1 active:scale-[0.97] transition-transform overflow-hidden"
+              onClick={() => setDemoOpen(true)}
+              className="relative rounded-2xl p-4 flex flex-col gap-1 items-start text-left active:scale-[0.97] transition-transform overflow-hidden"
               style={{ background: bg, border: border ?? "1px solid rgba(255,255,255,0.06)" }}
               data-testid={`card-category-${label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`}
             >
@@ -341,7 +358,7 @@ export default function Home() {
               <p className="text-sm font-display font-black text-white leading-tight">{label}</p>
               <p className="text-[10px] text-white/60 leading-tight">{desc}</p>
               <ChevronRight className="w-3.5 h-3.5 text-white/30 mt-1" />
-            </Link>
+            </button>
           ))}
         </div>
       </section>

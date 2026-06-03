@@ -639,6 +639,16 @@ export default function Dashboard() {
   const isSharingRef = useRef(false);
   const [isSharing, setIsSharing] = useState(false);
 
+  const handleWakeUpCity = async () => {
+    const link = referralData?.link || (user?.referralCode ? `https://guberapp.app/join/${user.referralCode}` : "https://guberapp.app/signup");
+    try {
+      await navigator.clipboard.writeText(link);
+      toast({ title: "Link copied! Go wake up your circle ⚡", description: "Share it everywhere — your city activates at 50." });
+    } catch {
+      toast({ title: "Your invite link", description: link });
+    }
+  };
+
   const handleReferralShare = async () => {
     if (isSharingRef.current) return;
     isSharingRef.current = true;
@@ -668,6 +678,48 @@ export default function Dashboard() {
 
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
+
+        {/* ── Activate Your City (shown when the local grid is dark) ── */}
+        {!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0 && (
+          <div
+            className="mb-4 rounded-2xl p-5 animate-fade-in"
+            style={{
+              background: "linear-gradient(160deg, hsl(0 60% 10%), hsl(0 0% 5%))",
+              border: "1.5px solid rgba(239,68,68,0.3)",
+              boxShadow: "0 0 40px rgba(239,68,68,0.08)",
+            }}
+            data-testid="card-activate-city"
+          >
+            <h2 className="text-lg font-display font-black tracking-tight text-white leading-tight" data-testid="text-city-dark-headline">
+              🛑 Your City is Currently Dark.
+            </h2>
+            <p className="text-[12px] text-muted-foreground leading-relaxed mt-2">
+              Guber goes live in a city the exact second 50 local users lock in their territory. Once activated, the live feed unlocks and cash drops hit the map.
+            </p>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-display font-bold tracking-widest text-white/70 uppercase">Current Status</span>
+                <span className="text-[11px] font-display font-black text-emerald-400" data-testid="text-city-locked-count">12 / 50 Users Locked In</span>
+              </div>
+              <div className="h-2.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: "24%", background: "linear-gradient(90deg,#00E576,#34d399)", transition: "width 1s ease" }}
+                  data-testid="bar-city-progress"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleWakeUpCity}
+              className="w-full mt-4 h-12 rounded-xl font-display font-bold tracking-[0.12em] text-sm premium-btn flex items-center justify-center gap-2"
+              data-testid="button-wake-up-city"
+            >
+              📣 Wake Up My City
+            </button>
+          </div>
+        )}
 
         {/* ── HIRE / WORK Toggle ── */}
         <div className="grid grid-cols-2 gap-3 mb-4 animate-fade-in stagger-1" data-testid="toggle-mode">
