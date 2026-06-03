@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -331,6 +331,13 @@ export default function LoadBoardPost() {
   // Other fields
   const [customFreightType, setCustomFreightType] = useState("");
 
+  // Live refs so async callbacks (e.g. VIN decode) can read the *current*
+  // trailer type / VIN and discard results that arrived after a type switch.
+  const freightTrailerTypeRef = useRef(freightTrailerType);
+  freightTrailerTypeRef.current = freightTrailerType;
+  const vinRef = useRef(vin);
+  vinRef.current = vin;
+
   // Step 4 — add-ons
   const [addonFlags, setAddonFlags] = useState<string[]>([]);
 
@@ -404,9 +411,14 @@ export default function LoadBoardPost() {
 
   const handleVinDecode = useCallback(async () => {
     if (vin.length < 11) return;
+    const vinAtStart = vin;
     setVinDecoding(true);
     const decoded = await decodeVin(vin);
     setVinDecoding(false);
+    // Ignore stale results: the user may have switched trailer type (which
+    // resets VIN + vehicle fields) or edited the VIN while the decode was in
+    // flight. Applying old results here would re-leak car-hauler data.
+    if (freightTrailerTypeRef.current !== "car_hauler" || vinRef.current !== vinAtStart) return;
     if (decoded) {
       if (decoded.year)  setYear(decoded.year);
       if (decoded.make)  setMake(decoded.make);
@@ -533,6 +545,37 @@ export default function LoadBoardPost() {
     setStep(s => Math.min(6, s + 1) as Step);
   }
 
+  // ── trailer-type selection ─────────────────────────────────────────────────
+  // Changing the trailer type wipes every Step 3 type-specific field so values
+  // from one trailer type can't bleed into another (UI or submitted payload).
+  // Re-tapping the same type is a no-op and preserves what the user entered.
+  // Route (Step 2), add-ons (Step 4) and pricing (Step 5) intentionally persist.
+  function selectTrailerType(value: string) {
+    if (value === freightTrailerType) return;
+    setFreightTrailerType(value);
+    // common detail fields
+    setCommodityType("");
+    setWeightLbs("");
+    // dry van
+    setPalletCount(""); setDockPickup(""); setDockDelivery(""); setLiftgateRequired("");
+    // reefer
+    setTempRequired(""); setTempValue("");
+    // flatbed / step deck / conestoga / lowboy
+    setDimLength(""); setDimWidth(""); setDimHeight("");
+    setTarpRequired(""); setChains(""); setStraps(""); setOversized("");
+    setPermit(""); setEscort(""); setWeather(""); setSideLoad(""); setDockLoad("");
+    // hotshot
+    setHotshotTrailerType("");
+    // power only
+    setPowerOnlyTrailerType(""); setTrailerNumber("");
+    // car hauler
+    setVehicleCount(""); setCarrierType(""); setVehicleType("");
+    setVin(""); setVinDecoding(false); setVinVerified(false);
+    setYear(""); setMake(""); setModel(""); setVehicleRunning(""); setOwnershipProofStatus("");
+    // other
+    setCustomFreightType("");
+  }
+
   // ── step config ──────────────────────────────────────────────────────────────
 
   const STEPS = [
@@ -584,7 +627,7 @@ export default function LoadBoardPost() {
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => setFreightTrailerType(t.value)}
+                    onClick={() => selectTrailerType(t.value)}
                     className="rounded-2xl p-3.5 text-left transition-all active:scale-95"
                     style={sel
                       ? { background: t.activeBg, border: t.activeBorder }
@@ -766,11 +809,14 @@ export default function LoadBoardPost() {
         {step === 3 && (
           <div className="space-y-5">
 
-            {/* Commodity — all types */}
-            <div>
-              <SectionLabel>Commodity Type</SectionLabel>
-              <ChipGrid options={COMMODITY_TYPES} value={commodityType} onChange={setCommodityType} />
-            </div>
+            {/* Commodity — general freight only. Hidden for car haulers, whose
+                load is described by the vehicle-specific inputs below. */}
+            {freightTrailerType !== "car_hauler" && (
+              <div>
+                <SectionLabel>Commodity Type</SectionLabel>
+                <ChipGrid options={COMMODITY_TYPES} value={commodityType} onChange={setCommodityType} />
+              </div>
+            )}
 
             {/* ── DRY VAN ── */}
             {freightTrailerType === "dry_van" && (

@@ -47,6 +47,7 @@ export function CommercialWizardForm({
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const fileRef = useRef<HTMLInputElement>(null);
+  // statebleed-allow: linear wizard; each step's input accumulates into one submission and must persist across steps.
   const [step, setStep] = useState<Step>("vertical");
   const [vertical, setVertical] = useState<string>("");
   const [customVertical, setCustomVertical] = useState("");

@@ -158,6 +158,7 @@ export default function CarrierProfilePage() {
   const [mcNumber,                setMcNumber]               = useState("");
   const [insuranceAmount,         setInsuranceAmount]        = useState("");
   const [serviceArea,             setServiceArea]            = useState("");
+  // statebleed-allow: tabs edit different sections of one carrier profile; their fields must persist across tab switches.
   const [activeTab, setActiveTab] = useState<"profile" | "credentials" | "subscription">("profile");
 
   // Populate once profile loads
