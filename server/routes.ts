@@ -24,6 +24,7 @@ import {
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
+import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
 import { validatePasswordStrength, hashPassword, comparePasswords, filterContactInfo, sanitizeUser, regenerateSession, contactInfoPattern, handleMe, handleLogout, handleResetPassword, handleLogin, handleSignup, handleForgotPassword, handleBusinessSignup, handleNativeGoogleAuth, handleNativeAppleAuth } from "./auth";
@@ -4640,6 +4641,37 @@ export async function registerRoutes(
     }
   });
 
+  // ── GUBER Ambassador Bounty (limited-time referral campaign) ────────────
+  // $5 (configurable) per 100 (configurable) ID-verified referral signups
+  // during the campaign window. Returns the viewer's shareable link plus their
+  // progress toward the next reward. Separate from Performance Shares above.
+  app.get("/api/users/me/ambassador", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // Lazy-create referral code on first view (mirrors /referral).
+      let code = (user as any).referralCode as string | null;
+      if (!code) {
+        let newCode = generateReferralCode();
+        while ((await db.execute(sql`SELECT 1 FROM users WHERE referral_code = ${newCode} LIMIT 1`)).rows.length) {
+          newCode = generateReferralCode();
+        }
+        await storage.updateUser(userId, { referralCode: newCode } as any);
+        code = newCode;
+      }
+
+      const appBase = process.env.APP_URL || "https://guberapp.app";
+      const link = `${appBase}/join/${code}`;
+      const status = await getAmbassadorStatusForUser(userId);
+
+      res.json({ code, link, ...status });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/verifications", requireAdmin, async (req, res) => {
     try {
       const statusFilter = (req.query.status as string) || "pending";
@@ -4848,6 +4880,13 @@ export async function registerRoutes(
 
       await storage.updateUser(log.userId, updates);
       await db.update(auditLogsTable).set({ reviewStatus: "approved", reviewedAt: new Date() }).where(sqlEq(auditLogsTable.id, parseInt(logId)));
+
+      // Ambassador bounty: an ID-verified signup is a qualifying join. If this
+      // user was referred, credit their referrer any newly-completed milestone.
+      if (isId) {
+        await maybeAwardAmbassadorForReferredUser(log.userId);
+      }
+
       await notify(log.userId, {
         title: "Verification Approved ✅",
         body: `Your ${isId ? "ID" : isSelfie ? "selfie" : "credential"} verification has been approved.`,
@@ -14156,6 +14195,13 @@ export async function registerRoutes(
     let finalUser = user;
     if (data.day1OG === true && user && (!user.aiOrNotCredits || user.aiOrNotCredits < 5)) {
       finalUser = (await storage.updateUser(id, { aiOrNotCredits: 5 })) ?? user;
+    }
+
+    // Ambassador bounty: if an admin manually marks this user ID-verified, treat
+    // it as a qualifying join and credit their referrer (idempotent — recounts
+    // under a lock, so a no-op if already counted).
+    if (data.idVerified === true) {
+      await maybeAwardAmbassadorForReferredUser(id);
     }
 
     // If admin is force-activating a business account, ensure a stub profile exists

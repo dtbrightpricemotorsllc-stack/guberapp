@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Wallet, ArrowUpRight, ArrowDownLeft, RefreshCcw, DollarSign, AlertCircle, ExternalLink, Zap, Info, Banknote, Shield, Lock, Clock, CheckCircle, ChevronRight } from "lucide-react";
+import { Wallet, ArrowUpRight, ArrowDownLeft, RefreshCcw, DollarSign, AlertCircle, ExternalLink, Zap, Info, Banknote, Shield, Lock, Clock, CheckCircle, ChevronRight, Users, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { WalletTransaction } from "@shared/schema";
@@ -153,6 +153,41 @@ export default function WalletPage() {
     enabled: !!user,
     staleTime: 30_000,
   });
+
+  // Ambassador bounty — limited-time $X per N ID-verified referral signups.
+  const { data: ambassador } = useQuery<{
+    link: string;
+    active: boolean;
+    daysRemaining: number;
+    rewardPerMilestone: number;
+    joinsPerMilestone: number;
+    qualifyingJoins: number;
+    milestonesPaid: number;
+    totalEarned: number;
+    joinsTowardNext: number;
+    joinsToNextReward: number;
+  }>({
+    queryKey: ["/api/users/me/ambassador"],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  const shareAmbassador = async () => {
+    if (!ambassador?.link) return;
+    const msg = `Join me on GUBER — get paid for local tasks near you. ${ambassador.link}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Join me on GUBER", text: msg, url: ambassador.link });
+        return;
+      }
+    } catch { /* user dismissed share sheet — fall through to copy */ }
+    try {
+      await navigator.clipboard.writeText(ambassador.link);
+      toast({ title: "Link copied", description: "Share it anywhere to start earning." });
+    } catch {
+      toast({ title: "Couldn't copy", description: ambassador.link, variant: "destructive" });
+    }
+  };
 
   const claimMutation = useMutation({
     mutationFn: async () => {
@@ -332,6 +367,65 @@ export default function WalletPage() {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* GUBER Ambassador Bounty — limited-time referral campaign. */}
+        {ambassador && ambassador.active && (
+          <div
+            className="mb-4 rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.08] to-emerald-600/[0.03] p-4"
+            data-testid="card-ambassador"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+                <Users className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-display font-semibold text-emerald-400 uppercase tracking-wider">
+                  Ambassador Bounty · Limited time
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  ${ambassador.rewardPerMilestone} for every {ambassador.joinsPerMilestone} ID-verified signups from your link
+                </p>
+              </div>
+              <span className="text-[10px] font-display font-semibold text-emerald-300/80 whitespace-nowrap" data-testid="text-ambassador-days">
+                {ambassador.daysRemaining}d left
+              </span>
+            </div>
+
+            {/* Earned + progress */}
+            <div className="flex items-baseline gap-3 mb-2">
+              <p className="text-2xl font-display font-bold text-emerald-300" data-testid="text-ambassador-earned">
+                ${ambassador.totalEarned.toFixed(2)}
+              </p>
+              <p className="text-[11px] text-muted-foreground" data-testid="text-ambassador-joins">
+                {ambassador.qualifyingJoins} verified join{ambassador.qualifyingJoins !== 1 ? "s" : ""}
+              </p>
+            </div>
+
+            <div className="h-2 rounded-full bg-emerald-950/40 overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.min(100, Math.round((ambassador.joinsTowardNext / ambassador.joinsPerMilestone) * 100))}%`,
+                  background: "linear-gradient(90deg,#00e576,#34d399)",
+                  transition: "width 1s ease",
+                }}
+                data-testid="bar-ambassador-progress"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5" data-testid="text-ambassador-next">
+              {ambassador.joinsTowardNext}/{ambassador.joinsPerMilestone} toward your next ${ambassador.rewardPerMilestone} — {ambassador.joinsToNextReward} more verified join{ambassador.joinsToNextReward !== 1 ? "s" : ""} to go
+            </p>
+
+            <Button
+              onClick={shareAmbassador}
+              className="w-full mt-3 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-display font-semibold"
+              data-testid="button-ambassador-share"
+            >
+              <Share2 className="w-4 h-4 mr-1.5" />
+              Share your link & earn
+            </Button>
           </div>
         )}
 

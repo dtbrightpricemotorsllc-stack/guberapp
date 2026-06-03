@@ -1,3 +1,4 @@
 - [Load Board ZIP migration](load-board-zip.md) — pickup_zip/delivery_zip columns added to load_board_listings; use `pg` (not @neondatabase/serverless) for raw SQL migrations in this project.
 - [Load Board PATCH route](load-board-patch-route.md) — PATCH /api/load-board/:id already exists and accepts postedPrice, notes, urgent, pricingMode, trailerPreference, status edits from the poster.
+- [Ambassador payout idempotency](ambassador-payout-idempotency.md) — COUNT-vs-COUNT wallet payouts need a per-user advisory lock + in-tx insert, or they double-pay; trigger on every idVerified path.
 - [Homepage intro splash](home-intro-splash.md) — public home.tsx plays an animated mascot intro that replays on every fresh screenshot load; can't capture past it, verify UI another way.
