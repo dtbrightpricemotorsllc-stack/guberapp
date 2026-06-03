@@ -355,6 +355,297 @@ async function checkLoadBoard(): Promise<CheckResult> {
   }
 }
 
+// ── App Health Monitor checks ─────────────────────────────────────────────────
+
+async function checkNativeMapsKey(): Promise<CheckResult> {
+  const key = "native_maps_key";
+  // VITE_ prefixed — baked into the client bundle; we verify the server-side
+  // geocoding key as a proxy (same restriction domain applies to the JS key).
+  const serverKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  const clientKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!serverKey && !clientKey) {
+    return crit(key, "Maps — API Key", null,
+      "No Google Maps key found (GOOGLE_MAPS_API_KEY or VITE_GOOGLE_MAPS_API_KEY)",
+      "Add GOOGLE_MAPS_API_KEY to environment secrets and VITE_GOOGLE_MAPS_API_KEY for the client bundle.",
+      "Maps API key missing");
+  }
+  if (clientKey) return ok(key, "Maps — API Key", "Configured", "VITE_GOOGLE_MAPS_API_KEY present (client bundle key)");
+  return warn(key, "Maps — API Key", "Server only",
+    "GOOGLE_MAPS_API_KEY present for server geocoding but VITE_GOOGLE_MAPS_API_KEY not set — native map tiles may fail",
+    "Set VITE_GOOGLE_MAPS_API_KEY for the client-side Maps JS SDK.", "VITE_GOOGLE_MAPS_API_KEY missing");
+}
+
+async function checkAndroidPackageConfig(): Promise<CheckResult> {
+  const key = "android_package";
+  // Can't verify Google Console allow-list server-side — surface as manual action.
+  return {
+    key, name: "Maps — Android Package", status: "unknown", value: "com.guber.app",
+    detail: "Cannot verify Google Console restrictions server-side. Manual check required.",
+    lastSuccess: null, lastFailure: null, failureReason: null,
+    recommendedAction: "In Google Cloud Console → APIs & Services → Credentials, confirm com.guber.app is in the Android app restrictions list for your Maps key.",
+  };
+}
+
+async function checkSHA1Fingerprints(): Promise<CheckResult> {
+  const key = "sha1_fingerprints";
+  return {
+    key, name: "Maps — SHA Fingerprints", status: "unknown", value: null,
+    detail: "SHA-1/SHA-256 fingerprints must be set in Google Cloud Console — cannot verify from server.",
+    lastSuccess: null, lastFailure: null, failureReason: null,
+    recommendedAction: "In Google Cloud Console → Credentials, add the SHA-1 and SHA-256 fingerprints from your release keystore for the Android Maps key.",
+  };
+}
+
+async function checkMapsSdkBilling(): Promise<CheckResult> {
+  const key = "maps_sdk_billing";
+  // Live geocoding test already validates Maps + billing indirectly.
+  const serverKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  if (!serverKey) {
+    return {
+      key, name: "Maps SDK + Billing", status: "unknown", value: null,
+      detail: "No Maps API key configured — cannot test billing status.",
+      lastSuccess: null, lastFailure: null, failureReason: null,
+      recommendedAction: "Set GOOGLE_MAPS_API_KEY and ensure a billing account is linked in Google Cloud Console.",
+    };
+  }
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=Chicago&key=${serverKey}`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(7000) });
+    const data: any = await resp.json();
+    if (data.status === "OK" || data.status === "ZERO_RESULTS") {
+      mark(key, true);
+      return ok(key, "Maps SDK + Billing", "Active", "Geocoding API returned OK — Maps SDK enabled and billing active");
+    }
+    if (data.status === "REQUEST_DENIED") {
+      const reason = `Maps SDK or billing issue: ${data.error_message ?? data.status}`;
+      return crit(key, "Maps SDK + Billing", "Denied", reason,
+        "Enable Maps JavaScript API and Geocoding API in Google Cloud Console, and ensure a billing account is linked.", reason);
+    }
+    return warn(key, "Maps SDK + Billing", data.status,
+      `Unexpected status: ${data.status}`, "Check Maps API quota and billing.", data.status);
+  } catch (e: any) {
+    return warn(key, "Maps SDK + Billing", "Unreachable", e?.message ?? "Network error",
+      "Check connectivity to maps.googleapis.com.", e?.message);
+  }
+}
+
+async function checkGoogleOAuthClientId(): Promise<CheckResult> {
+  const key = "google_oauth_client_id";
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_WEB_CLIENT_ID;
+  if (!clientId) {
+    return crit(key, "OAuth — Google Client ID", null,
+      "GOOGLE_CLIENT_ID not set — native Google Sign-In will fail",
+      "Set GOOGLE_CLIENT_ID (web) in environment secrets.", "GOOGLE_CLIENT_ID missing");
+  }
+  return ok(key, "OAuth — Google Client ID", "Configured", `GOOGLE_CLIENT_ID present (${clientId.slice(0, 12)}…)`);
+}
+
+async function checkFirebaseFCM(): Promise<CheckResult> {
+  const key = "firebase_fcm";
+  const sa = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!sa) {
+    return crit(key, "Firebase / FCM", null,
+      "FIREBASE_SERVICE_ACCOUNT not set — Android push notifications will not work",
+      "Set FIREBASE_SERVICE_ACCOUNT (full service account JSON) in environment secrets.", "FIREBASE_SERVICE_ACCOUNT missing");
+  }
+  try {
+    JSON.parse(sa);
+    return ok(key, "Firebase / FCM", "Configured", "FIREBASE_SERVICE_ACCOUNT present and valid JSON");
+  } catch {
+    return crit(key, "Firebase / FCM", "Invalid JSON",
+      "FIREBASE_SERVICE_ACCOUNT is not valid JSON",
+      "Paste the full Firebase service account JSON into the FIREBASE_SERVICE_ACCOUNT secret.", "Invalid JSON");
+  }
+}
+
+async function checkAPNsBundleId(): Promise<CheckResult> {
+  const key = "apns_bundle_id";
+  const bundleId = process.env.APNS_BUNDLE_ID || "com.guber.app";
+  const keyId    = process.env.APNS_KEY_ID;
+  const teamId   = process.env.APNS_TEAM_ID;
+  const pk       = process.env.APNS_PRIVATE_KEY;
+  if (!keyId || !teamId || !pk) {
+    return crit(key, "APNs — Bundle + Keys", null,
+      "One or more APNS_* secrets missing — iOS push will not work",
+      "Set APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY in environment secrets.", "APNs secrets incomplete");
+  }
+  return ok(key, "APNs — Bundle + Keys", bundleId,
+    `Bundle: ${bundleId} · Key ID: ${keyId} · Team: ${teamId}`);
+}
+
+async function checkStripeConnect(): Promise<CheckResult> {
+  const key = "stripe_connect";
+  const connectKey = process.env.STRIPE_CONNECT_SECRET_KEY;
+  if (!connectKey) {
+    return crit(key, "Stripe Connect (Payouts)", null,
+      "STRIPE_CONNECT_SECRET_KEY not set — worker payouts will fail",
+      "Set STRIPE_CONNECT_SECRET_KEY in environment secrets.", "STRIPE_CONNECT_SECRET_KEY missing");
+  }
+  try {
+    const resp = await fetch("https://api.stripe.com/v1/balance", {
+      headers: { Authorization: `Bearer ${connectKey}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (resp.ok) return ok(key, "Stripe Connect (Payouts)", "Live", "Connect account reachable and authenticated");
+    const body: any = await resp.json().catch(() => ({}));
+    const reason = body?.error?.message ?? `HTTP ${resp.status}`;
+    return crit(key, "Stripe Connect (Payouts)", `HTTP ${resp.status}`, reason,
+      "Check STRIPE_CONNECT_SECRET_KEY in dashboard.stripe.com.", reason);
+  } catch (e: any) {
+    return warn(key, "Stripe Connect (Payouts)", "Unreachable", e?.message ?? "Network error",
+      "Check connectivity to api.stripe.com.", e?.message);
+  }
+}
+
+async function checkStripeWebhooks(): Promise<CheckResult> {
+  const key = "stripe_webhooks";
+  const mainSecret    = process.env.STRIPE_WEBHOOK_SECRET;
+  const connectSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+  if (!mainSecret && !connectSecret) {
+    return crit(key, "Stripe Webhooks", null,
+      "STRIPE_WEBHOOK_SECRET and STRIPE_CONNECT_WEBHOOK_SECRET both missing — payment events will not process",
+      "Set STRIPE_WEBHOOK_SECRET and STRIPE_CONNECT_WEBHOOK_SECRET in environment secrets.", "Both webhook secrets missing");
+  }
+  if (!mainSecret) return warn(key, "Stripe Webhooks", "Connect only",
+    "STRIPE_WEBHOOK_SECRET missing — main payment webhook events will be rejected",
+    "Set STRIPE_WEBHOOK_SECRET in environment secrets.", "STRIPE_WEBHOOK_SECRET missing");
+  if (!connectSecret) return warn(key, "Stripe Webhooks", "Main only",
+    "STRIPE_CONNECT_WEBHOOK_SECRET missing — Connect payout events will be rejected",
+    "Set STRIPE_CONNECT_WEBHOOK_SECRET in environment secrets.", "STRIPE_CONNECT_WEBHOOK_SECRET missing");
+  return ok(key, "Stripe Webhooks", "Both configured",
+    "STRIPE_WEBHOOK_SECRET (main) and STRIPE_CONNECT_WEBHOOK_SECRET (Connect) both present");
+}
+
+async function checkTrustBoxPriceId(): Promise<CheckResult> {
+  const key = "trust_box_price";
+  const priceId = process.env.STRIPE_PAYROLL_TRUST_BOX_PRICE_ID;
+  if (!priceId) {
+    return crit(key, "Trust Box Price ID", null,
+      "STRIPE_PAYROLL_TRUST_BOX_PRICE_ID not set — Trust Box checkout will return 400",
+      "Set STRIPE_PAYROLL_TRUST_BOX_PRICE_ID in environment secrets.", "Trust Box price ID missing");
+  }
+  return ok(key, "Trust Box Price ID", priceId.slice(0, 14) + "…",
+    "STRIPE_PAYROLL_TRUST_BOX_PRICE_ID configured");
+}
+
+async function checkDemoDataIsolation(): Promise<CheckResult> {
+  const key = "demo_data_isolation";
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(*)::int                                           AS total_users,
+        COUNT(*) FILTER (WHERE is_test_user = true)::int       AS demo_users,
+        COUNT(*) FILTER (WHERE is_test_job  = true)::int       AS demo_jobs
+      FROM users
+      CROSS JOIN (SELECT COUNT(*) FILTER (WHERE is_test_job = true) FROM jobs) j(demo_jobs)
+    `);
+    const row = result.rows[0] as any;
+    const total = row.total_users ?? 0;
+    const demo  = row.demo_users  ?? 0;
+    const ratio = total > 0 ? (demo / total) * 100 : 0;
+    if (demo === 0) return ok(key, "Demo Data Isolation", "Clean",
+      `${total} real users, 0 demo users — no demo contamination`);
+    if (ratio < 10) return ok(key, "Demo Data Isolation", `${demo} demo`,
+      `${demo}/${total} users are test accounts (${ratio.toFixed(1)}%) — within acceptable range`);
+    return warn(key, "Demo Data Isolation", `${ratio.toFixed(0)}% demo`,
+      `${demo}/${total} users are test accounts — high ratio may skew analytics`,
+      "Review test user accounts at /admin/users and archive stale ones.", "High demo ratio");
+  } catch (e: any) {
+    const reason = e?.message ?? "DB query failed";
+    return warn(key, "Demo Data Isolation", null, reason, "Check users table.", reason);
+  }
+}
+
+async function checkBackendConnectivity(): Promise<CheckResult> {
+  const key = "backend_connectivity";
+  // If this function executes, the backend is reachable by definition.
+  try {
+    await db.execute(sql`SELECT 1`);
+    return ok(key, "Frontend → Backend → DB", "Reachable",
+      "API server responding and database connection confirmed");
+  } catch (e: any) {
+    return crit(key, "Frontend → Backend → DB", "DB Down",
+      "Backend is up but database is unreachable", "Check DATABASE_URL and connection pool.", e?.message ?? "DB error");
+  }
+}
+
+// ── App Health grouped export ──────────────────────────────────────────────────
+
+export interface AppHealthGroup {
+  id: string;
+  label: string;
+  checks: CheckResult[];
+}
+
+export interface AppHealthReport {
+  generatedAt: string;
+  criticalCount: number;
+  warningCount: number;
+  groups: AppHealthGroup[];
+}
+
+export async function runAppHealthChecks(): Promise<AppHealthReport> {
+  const [
+    // Maps
+    googleMaps, nativeMapsKey, androidPkg, sha1, mapsBilling,
+    // Auth
+    googleLogin, googleClientId, appleLogin, firebaseFCM, apnsBundleId,
+    // Payments
+    stripe, stripeConnect, stripeWebhooks, trustBoxPrice,
+    // Notifications
+    pushNotifications,
+    // Production Data
+    database, demoIsolation, connectivity,
+  ] = await Promise.all([
+    checkGoogleMaps(), checkNativeMapsKey(), checkAndroidPackageConfig(),
+    checkSHA1Fingerprints(), checkMapsSdkBilling(),
+    checkGoogleLogin(), checkGoogleOAuthClientId(), checkAppleLogin(),
+    checkFirebaseFCM(), checkAPNsBundleId(),
+    checkStripe(), checkStripeConnect(), checkStripeWebhooks(), checkTrustBoxPriceId(),
+    checkPushNotifications(),
+    checkDatabase(), checkDemoDataIsolation(), checkBackendConnectivity(),
+  ]);
+
+  const groups: AppHealthGroup[] = [
+    {
+      id: "maps",
+      label: "Native App Maps",
+      checks: [googleMaps, nativeMapsKey, mapsBilling, androidPkg, sha1],
+    },
+    {
+      id: "auth",
+      label: "Authentication",
+      checks: [googleLogin, googleClientId, appleLogin, firebaseFCM, apnsBundleId],
+    },
+    {
+      id: "payments",
+      label: "Payments",
+      checks: [stripe, stripeConnect, stripeWebhooks, trustBoxPrice],
+    },
+    {
+      id: "notifications",
+      label: "Notifications",
+      checks: [pushNotifications, firebaseFCM, apnsBundleId],
+    },
+    {
+      id: "production",
+      label: "Production Data",
+      checks: [connectivity, database, demoIsolation],
+    },
+  ];
+
+  const allChecks = groups.flatMap(g => g.checks);
+  const criticalCount = allChecks.filter(c => c.status === "critical").length;
+  const warningCount  = allChecks.filter(c => c.status === "warning").length;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    criticalCount,
+    warningCount,
+    groups,
+  };
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function runAllHealthChecks(): Promise<CheckResult[]> {

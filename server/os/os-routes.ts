@@ -17,7 +17,7 @@ import { proposeAction, decideAction } from "./approval-engine";
 import { executeAction } from "./action-executor";
 import { emitOSEvent } from "./event-bus";
 import { writeAuditLog } from "./logger";
-import { runAllHealthChecks } from "./health-checks";
+import { runAllHealthChecks, runAppHealthChecks } from "./health-checks";
 import { getOperationsData, getBusinessData, getGrowthData, getAdminData } from "./command-center";
 import { runCOOAnalysis, getLatestCOOBriefing, queueRecommendation, type COOFinding } from "./coo-agent";
 import { runCFOAnalysis, getLatestCFOBriefing } from "./cfo-agent";
@@ -692,6 +692,16 @@ export function registerOSRoutes(app: Express): void {
       res.json(result);
     } catch (e: any) {
       res.status(500).json({ message: e?.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/admin/app-health", async (req, res) => {
+    if (!(await requireOSAdmin(req, res))) return;
+    try {
+      const report = await runAppHealthChecks();
+      res.json(report);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "App health check failed" });
     }
   });
 
