@@ -38,7 +38,10 @@ export async function getOperationsData(): Promise<MetricItem[]> {
         COUNT(*) FILTER (WHERE banned = true)::int AS banned,
         COUNT(*) FILTER (WHERE under_review = true)::int AS under_review,
         COUNT(*) FILTER (WHERE suspended = true)::int AS suspended
-      FROM users WHERE deleted_at IS NULL
+      FROM users
+      WHERE deleted_at IS NULL
+        AND is_test_user = false
+        AND email NOT ILIKE '%@guberapp.internal'
     `);
     const row = r.rows[0] as any;
     const total = row.total ?? 0;
@@ -64,7 +67,13 @@ export async function getOperationsData(): Promise<MetricItem[]> {
         COUNT(*) FILTER (WHERE status = 'completed')::int AS completed,
         COUNT(*) FILTER (WHERE status = 'disputed')::int AS disputed,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::int AS new_today
-      FROM jobs WHERE is_test_job = false
+      FROM jobs
+      WHERE is_test_job = false
+        AND is_demo = false
+        AND posted_by_id IN (
+          SELECT id FROM users
+          WHERE is_test_user = false AND email NOT ILIKE '%@guberapp.internal'
+        )
     `);
     const row = r.rows[0] as any;
     const total = row.total ?? 0;
@@ -102,7 +111,13 @@ export async function getOperationsData(): Promise<MetricItem[]> {
           AND status IN ('posted_public','helper_confirmed'))::int AS active,
         COUNT(*) FILTER (WHERE category = 'Verify & Inspect' AND status = 'completed')::int AS completed,
         COUNT(*) FILTER (WHERE category = 'Verify & Inspect' AND status = 'disputed')::int AS disputed
-      FROM jobs WHERE is_test_job = false
+      FROM jobs
+      WHERE is_test_job = false
+        AND is_demo = false
+        AND posted_by_id IN (
+          SELECT id FROM users
+          WHERE is_test_user = false AND email NOT ILIKE '%@guberapp.internal'
+        )
     `);
     const row = r.rows[0] as any;
     items.push(good("vi", "Verify & Inspect", row.active ?? 0,
@@ -130,7 +145,11 @@ export async function getOperationsData(): Promise<MetricItem[]> {
         COUNT(*) FILTER (WHERE ai_or_not_credits > 0)::int AS with_credits,
         COALESCE(SUM(ai_or_not_credits),0)::int AS total_credits,
         COUNT(*) FILTER (WHERE ai_or_not_unlimited_text = true)::int AS unlimited
-      FROM users WHERE deleted_at IS NULL AND banned = false
+      FROM users
+      WHERE deleted_at IS NULL
+        AND banned = false
+        AND is_test_user = false
+        AND email NOT ILIKE '%@guberapp.internal'
     `);
     const row = r.rows[0] as any;
     items.push(good("ai_or_not", "AI or Not", row.with_credits ?? 0,
@@ -286,7 +305,10 @@ export async function getGrowthData(): Promise<MetricItem[]> {
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::int AS d1,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')::int AS d7,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int AS d30
-      FROM users WHERE deleted_at IS NULL
+      FROM users
+      WHERE deleted_at IS NULL
+        AND is_test_user = false
+        AND email NOT ILIKE '%@guberapp.internal'
     `);
     const row = r.rows[0] as any;
     items.push(good("new_users", "New Users", row.d1 ?? 0,
@@ -299,7 +321,12 @@ export async function getGrowthData(): Promise<MetricItem[]> {
       SELECT
         COUNT(*) FILTER (WHERE jobs_completed > 0)::int AS engaged,
         COUNT(*)::int AS total
-      FROM users WHERE deleted_at IS NULL AND banned = false AND created_at < NOW() - INTERVAL '7 days'
+      FROM users
+      WHERE deleted_at IS NULL
+        AND banned = false
+        AND is_test_user = false
+        AND email NOT ILIKE '%@guberapp.internal'
+        AND created_at < NOW() - INTERVAL '7 days'
     `);
     const row = r.rows[0] as any;
     const total = row.total ?? 0;
@@ -325,7 +352,14 @@ export async function getGrowthData(): Promise<MetricItem[]> {
   try {
     const r = await db.execute(sql`
       SELECT category, COUNT(*)::int AS cnt
-      FROM jobs WHERE is_test_job = false AND category IS NOT NULL
+      FROM jobs
+      WHERE is_test_job = false
+        AND is_demo = false
+        AND category IS NOT NULL
+        AND posted_by_id IN (
+          SELECT id FROM users
+          WHERE is_test_user = false AND email NOT ILIKE '%@guberapp.internal'
+        )
       GROUP BY category ORDER BY cnt DESC LIMIT 5
     `);
     const rows = r.rows as any[];
@@ -407,7 +441,11 @@ export async function getAdminData(): Promise<MetricItem[]> {
         COUNT(*) FILTER (WHERE strikes > 0)::int AS with_strikes,
         COUNT(*) FILTER (WHERE risk_level != 'normal')::int AS at_risk,
         COUNT(*) FILTER (WHERE under_review = true)::int AS under_review
-      FROM users WHERE deleted_at IS NULL AND banned = false
+      FROM users
+      WHERE deleted_at IS NULL
+        AND banned = false
+        AND is_test_user = false
+        AND email NOT ILIKE '%@guberapp.internal'
     `);
     const row = r.rows[0] as any;
     const atRisk = row.at_risk ?? 0;
