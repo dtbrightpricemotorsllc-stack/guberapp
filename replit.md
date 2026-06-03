@@ -8,6 +8,7 @@ Local visibility network connecting hirers with workers, emphasizing trust and e
 - **E2E tests:** `npx playwright test` (requires dev server running)
 - **Production (Autoscale) env vars:** `DISABLE_BACKGROUND_JOBS=true`, `CRON_SECRET=<random>`
 - **Cron trigger:** `curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" https://guberapp.app/api/internal/cron/run`
+- **Health monitor (Mission Control):** `node scripts/automated-watchdog.mjs` (also `--json`, `--loop`). Endpoint: `GET|POST /api/internal/mission-control/status` (header `x-cron-secret: $CRON_SECRET`; GREEN→200, RED→503). Runs state-bleed audit + the 7 protected test suites + native manifest checks. Edit `PROTECTED_TEST_SUITES` / `MANIFEST_REQUIREMENTS` in the script if suites or required manifest keys change.
 
 ## Stack
 - **Frontend:** React, TypeScript, Vite, TailwindCSS, TanStack Query, wouter

@@ -21631,6 +21631,110 @@ OUTPUT STYLE:
   app.post("/api/internal/cron/run", handleCronRun);
   app.get("/api/internal/cron/run", handleCronRun);
 
+  // ── Mission Control: Automated Watchdog health endpoint ───────────────────
+  // Triggers scripts/automated-watchdog.mjs (state-bleed audit + the 7 protected
+  // test suites + native manifest integrity) and returns a single health
+  // payload the GUBER Mission Control dashboard can ping.
+  //
+  //   GET/POST /api/internal/mission-control/status
+  //     header: x-cron-secret: <CRON_SECRET>   (or ?secret=<CRON_SECRET>)
+  //
+  // Auth reuses CRON_SECRET. In development, if CRON_SECRET is unset the route is
+  // open for local testing; in production an unset secret returns 503 so the
+  // monitor can never be probed anonymously.
+  //
+  // Note: this runs the full vitest suite as a child process and can take ~15s.
+  // It is intended for dev/staging monitoring. Autoscale production images that
+  // strip devDependencies/test files will report those checks as failing.
+  //
+  // Single-flight guard: the watchdog is expensive, so concurrent pings share
+  // one in-flight run instead of each spawning their own suite (prevents the
+  // endpoint from amplifying load under aggressive dashboard polling).
+  let missionControlInFlight: Promise<any> | null = null;
+
+  const spawnWatchdog = (): Promise<any> => {
+    return (async () => {
+      const { spawn } = await import("child_process");
+      const { join } = await import("path");
+      const scriptPath = join(process.cwd(), "scripts", "automated-watchdog.mjs");
+
+      return new Promise<any>((resolveRun, rejectRun) => {
+        const child = spawn(process.execPath, [scriptPath, "--json"], {
+          cwd: process.cwd(),
+          env: { ...process.env, CI: "true", FORCE_COLOR: "0" },
+        });
+        let stdout = "";
+        let stderr = "";
+        // Outer kill timeout sits comfortably above the watchdog's own internal
+        // check timeouts (vitest 240s) so a slow-but-finishing run still returns
+        // a structured RED report rather than a premature SIGKILL.
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          rejectRun(new Error("watchdog timed out"));
+        }, 300_000);
+        child.stdout.on("data", (d) => (stdout += d.toString()));
+        child.stderr.on("data", (d) => (stderr += d.toString()));
+        child.on("error", (err) => {
+          clearTimeout(timer);
+          rejectRun(err);
+        });
+        child.on("close", () => {
+          clearTimeout(timer);
+          try {
+            resolveRun(JSON.parse(stdout.trim()));
+          } catch {
+            rejectRun(new Error(stderr.trim() || "watchdog produced no parseable output"));
+          }
+        });
+      });
+    })();
+  };
+
+  const handleMissionControlStatus = async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    const isDev = (process.env.NODE_ENV || app.get("env")) === "development";
+
+    // Header-only auth: never accept the secret via query string (avoids leaking
+    // it into access logs, referrers, or browser history).
+    if (secret) {
+      const provided = req.header("x-cron-secret") || "";
+      const a = Buffer.from(provided);
+      const b = Buffer.from(secret);
+      if (a.length === 0 || a.length !== b.length || !timingSafeEqual(a, b)) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+    } else if (!isDev) {
+      return res.status(503).json({ error: "CRON_SECRET not configured" });
+    }
+
+    try {
+      const shared = !missionControlInFlight;
+      if (!missionControlInFlight) {
+        missionControlInFlight = spawnWatchdog().finally(() => {
+          missionControlInFlight = null;
+        });
+      }
+      const report = await missionControlInFlight;
+
+      // Surface RED as 503 so external monitors flag the run, GREEN as 200.
+      // `shared_run` tells the caller this result came from a run already in
+      // progress (deduped) rather than a freshly triggered one.
+      return res
+        .status(report.status === "GREEN" ? 200 : 503)
+        .json({ ...report, shared_run: !shared });
+    } catch (e: any) {
+      return res.status(500).json({
+        status: "RED",
+        total_tests_passing: 0,
+        files_audited: 0,
+        active_errors: [`watchdog failed to run: ${e?.message || e}`],
+      });
+    }
+  };
+
+  app.post("/api/internal/mission-control/status", handleMissionControlStatus);
+  app.get("/api/internal/mission-control/status", handleMissionControlStatus);
+
   // ── Investor deck HTML (new 2026 deck) ────────────────────────────────────
   const { join: pathJoin } = await import("path");
   app.get("/deck", async (req: Request, res: Response) => {
