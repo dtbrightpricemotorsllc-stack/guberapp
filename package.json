@@ -10,7 +10,8 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "audit:statebleed": "node scripts/audit-statebleed.mjs"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^7.2.0",
