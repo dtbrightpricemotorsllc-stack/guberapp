@@ -33,7 +33,7 @@ export const INVESTOR_CONFIG = {
     headline: "GUBER",
     subtitle: ["Find Work.", "Hire Help.", "Verify Things."],
     tagline: "Create Value In Yourself.",
-    sub: "A trust-enforced local platform. Verified identity. On-platform payments. Structured proof of work. Live on web and Google Play today.",
+    sub: "One trust rail for local work — verified identity, on-platform payments, and proof of every job. Live on web and Google Play today.",
     primaryCta: { label: "SEE THE OPPORTUNITY", target: "section-funding" },
     secondaryCta: { label: "CONTACT THE FOUNDER", target: "section-cta" },
   },
@@ -43,11 +43,11 @@ export const INVESTOR_CONFIG = {
     headline: "The Problem",
     needs: ["Money", "Help", "Proof"],
     body: [
-      "A person needing work struggles to find opportunity.",
-      "A business needing help struggles to find reliable assistance.",
-      "A buyer making a large purchase struggles to verify what they are buying.",
+      "A person needs work but can't find the opportunity.",
+      "A business needs help but can't find anyone reliable.",
+      "A buyer needs to verify a big purchase but can't be there.",
     ],
-    closer: "The need exists.\n\nThe visibility does not.",
+    closer: "The need is everywhere.\n\nThe visibility isn't.",
   },
 
   // SLIDE 3
@@ -56,18 +56,18 @@ export const INVESTOR_CONFIG = {
     cards: [
       {
         title: "Transmission Failed",
-        body: "A transmission fails on Wednesday.\n\nPayday is Friday.\n\nThe person needs money today.",
+        body: "A transmission fails Wednesday.\n\nPayday is Friday.\n\nThey need money today.",
       },
       {
         title: "GT500 Purchase",
-        body: "A buyer is about to spend tens of thousands of dollars on a vehicle located hundreds of miles away.\n\nThey need proof before they buy.",
+        body: "A buyer is about to spend tens of thousands on a car hundreds of miles away.\n\nThey need proof before they pay.",
       },
       {
         title: "Airbnb Property",
-        body: "A property owner lives in another state.\n\nThey need eyes on a property they cannot physically visit.",
+        body: "An owner lives out of state.\n\nThey need eyes on a property they can't visit.",
       },
     ],
-    closer: "Different situations. Same problem.\n\nPeople need opportunity, help, and verification.",
+    closer: "Different situations.\n\nSame problem.",
   },
 
   // SLIDE 4
@@ -80,14 +80,12 @@ export const INVESTOR_CONFIG = {
       "A chance.",
     ],
     steps: [
-      "Complete jobs.",
-      "Help others.",
-      "Verify information.",
-      "Build credibility.",
-      "Earn trust.",
+      "Your work becomes your record.",
+      "Your record becomes your reputation.",
+      "Your reputation opens the next door.",
     ],
-    profileLine: "Your profile becomes a reflection of your actions.",
-    closer: "GUBER does not judge people by assumptions.\n\nGUBER documents what they do.",
+    profileLine: "Your profile reflects what you actually do.",
+    closer: "GUBER doesn't judge by assumptions.\n\nIt documents action.",
   },
 
   // SLIDE 5
@@ -106,7 +104,7 @@ export const INVESTOR_CONFIG = {
   // SLIDE 6
   traction: {
     headline: "Traction",
-    sub: "This is not a pitch for a future product. GUBER is live, deployed, and already serving real users.",
+    sub: "Not a someday pitch. GUBER is live, deployed, and serving real users today.",
     googlePlayLaunchDate: "April 8, 2026",
     googlePlayLaunchPlaceholder: "April 8, 2026",
     stats: [
@@ -116,14 +114,11 @@ export const INVESTOR_CONFIG = {
       { value: "Live", label: "Sponsored Cash Drops in market", sub: "Real winners. Real cash. Public proof." },
     ],
     facts: [
-      "Native Android live on Google Play since April 8, 2026. iOS App Store submission in progress.",
-      "Web PWA live at guberapp.com serving real users today.",
-      "Brand-funded Cash Drops already paying out to real users — winners photographed and posted publicly on Facebook.",
-      "Active social presence across LinkedIn, Facebook, TikTok, Instagram, and X — organic engagement with zero paid promotion.",
-      "Founder-built end-to-end: product design, full-stack engineering, payments, native Android/iOS, admin tooling.",
-      "Day-1 OG founding-supporter tier live and generating Stripe revenue today.",
-      "Stripe Connect, escrow, and money ledger wired end-to-end and tested.",
-      "All revenue streams are either Live or flag-gated — none require future engineering.",
+      "Native Android live on Google Play since April 8, 2026 — iOS App Store submission in progress.",
+      "Web app live at guberapp.com, serving real users today.",
+      "Brand-funded Cash Drops already paying real users — winners photographed and posted publicly.",
+      "Stripe Connect, escrow, and payouts wired end-to-end and tested.",
+      "Founder-built end-to-end — every revenue stream is live or one flag away.",
     ],
     proofHeadline: "Real Users. Real Cash. No Staging.",
     proofSub: "Every face below is a real GUBER user who found a sponsored Cash Drop in their city — photographed by them, posted by them, no actors, no staging.",
@@ -146,12 +141,12 @@ export const INVESTOR_CONFIG = {
     openLine: "Anyone can start.\n\nTrust is earned.",
     credibilityItems: [
       "Completed jobs",
-      "Ratings from both sides",
-      "GPS-verified proof submissions",
+      "Two-sided ratings",
+      "GPS-verified proof",
       "ID + selfie verification",
       "Consistency over time",
     ],
-    closer: "GUBER documents trust.\n\nIt does not assume trust.",
+    closer: "GUBER documents trust.\n\nIt doesn't assume it.",
   },
 
   // SLIDE 8
@@ -161,37 +156,37 @@ export const INVESTOR_CONFIG = {
       {
         label: "Platform Fees",
         color: "#39FF14",
-        items: ["20% job platform fee (from helper share)", "3.2% processing fee (added on top)"],
+        items: ["20% platform fee on every job (18% for Day-1 OG)", "+3.2% processing, added on top"],
         status: "Live",
       },
       {
         label: "Verify & Inspect",
         color: "#D100FF",
-        items: ["Helpers earn $40–$120+ per job", "Platform earns 20% on every V&I transaction"],
+        items: ["Inspectors earn $40–$120+ per job", "Platform takes 20% on every V&I"],
         status: "Live",
       },
       {
         label: "Business Features",
         color: "#00bfff",
-        items: ["$99/mo Business Scout Plan (20 talent unlocks/mo)", "$49 one-time business verification"],
+        items: ["$99/mo Business Scout (20 talent unlocks)", "$49 one-time business verification"],
         status: "Live",
       },
       {
         label: "Premium Services",
         color: "#f59e0b",
-        items: ["$4.99/mo Trust Box (AI content detection)", "Studio credit packs: $5 – $200", "Studio tiers: $10.99 / $37.99 / $99 per month"],
+        items: ["$4.99/mo Trust Box", "Studio credit packs $5–$200", "Studio tiers $10.99 / $37.99 / $99 mo"],
         status: "Live",
       },
       {
         label: "Sponsorships",
         color: "#22c55e",
-        items: ["~60% gross margin on every Cash Drop sponsor dollar", "27 drops live in market"],
+        items: ["~60% margin on Cash Drop sponsor dollars", "27 drops live in market"],
         status: "Live",
       },
       {
         label: "Future Expansion",
         color: "#a855f7",
-        items: ["B2B API fees on aggregated verification reports", "Observation marketplace (20% platform cut)", "Instant cashout fees (2–5%)"],
+        items: ["B2B verification-report API", "Observation marketplace (20% cut)", "Instant-cashout fees (2–5%)"],
         status: "Flag-gated",
       },
     ],
@@ -203,25 +198,25 @@ export const INVESTOR_CONFIG = {
     headline: "Distribution Strategy",
     sub: "Growth comes from community activation — not paid advertising.",
     items: [
-      { label: "Local Launches", body: "City-by-city rollout builds density before expanding." },
-      { label: "Cash Drops", body: "Sponsored geo-targeted rewards drive real-world installs and word-of-mouth." },
-      { label: "Referral Loops", body: "Every completed job creates a story worth sharing." },
-      { label: "Verify & Inspect Demand", body: "B2B pull from buyers, dealers, insurers, and lenders." },
-      { label: "Business Partnerships", body: "Local businesses unlock worker access through Scout Plan." },
-      { label: "Social Media", body: "Organic engagement across Facebook, TikTok, Instagram, LinkedIn, and X." },
+      { label: "Local Launches", body: "City-by-city — build density before breadth." },
+      { label: "Cash Drops", body: "Sponsored geo-rewards drive installs and word-of-mouth." },
+      { label: "Referral Loops", body: "Every completed job is a story worth sharing." },
+      { label: "Verify & Inspect Demand", body: "B2B pull from buyers, dealers, insurers, lenders." },
+      { label: "Business Partnerships", body: "Local businesses unlock talent via Scout Plan." },
+      { label: "Social Media", body: "Organic reach across our channels — zero paid spend." },
     ],
-    closer: "Growth is driven by visibility, participation, and community activation.",
+    closer: "Growth driven by visibility and participation.",
   },
 
   // SLIDE 10
   expansion: {
     headline: "Expansion Playbook",
     steps: [
-      { label: "Start local.", sub: "Launch in a single city. Build density." },
-      { label: "Prove repeatability.", sub: "Document what works before scaling." },
-      { label: "Expand city by city.", sub: "Roll the playbook into new markets." },
-      { label: "Expand region by region.", sub: "Stack density across connected markets." },
-      { label: "Expand nationally.", sub: "The infrastructure is already built for it." },
+      { label: "Start local.", sub: "Launch one city. Build density." },
+      { label: "Prove repeatability.", sub: "Document what works." },
+      { label: "Expand city by city.", sub: "Roll the playbook forward." },
+      { label: "Expand region by region.", sub: "Stack connected markets." },
+      { label: "Expand nationally.", sub: "The infrastructure is already built." },
     ],
     closer: "A disciplined, asset-light expansion strategy.",
   },
@@ -232,21 +227,19 @@ export const INVESTOR_CONFIG = {
     eyebrow: "WHY THIS SCALES",
     intro: "Every completed task creates:",
     items: ["Proof", "Reputation", "Credibility", "Accountability"],
-    body: "The more activity that occurs, the more valuable the platform becomes.\n\nMore workers build credibility. More hirers trust the platform. More businesses buy verification. More sponsors fund Cash Drops. More data strengthens trust scores.",
-    closer: "Trust is not purchased.\n\nIt is built through action.",
+    body: "The more activity that happens, the more valuable the platform becomes — more workers build credibility, more hirers trust it, more businesses buy verification, and the data behind every trust score gets stronger.",
+    closer: "Trust isn't purchased.\n\nIt's built through action.",
   },
 
   // SLIDE 12
   whyWin: {
     headline: "Why GUBER Can Win",
     points: [
-      "Existing demand — people already need work, help, and proof",
-      "Multiple revenue streams built and live today",
-      "Asset-light software model — infrastructure cost near zero at idle",
-      "Local-first expansion — density before breadth",
-      "Marketplace + verification advantages compound with usage",
-      "Trust grows automatically as the platform scales",
-      "Does not require changing human behavior — people already transact locally",
+      "Demand already exists — people need work, help, and proof today.",
+      "Multiple revenue streams, all live now.",
+      "Asset-light and founder-built — capital goes to growth, not catch-up.",
+      "One trust rail powers every service, so advantages compound with usage.",
+      "No behavior change required — people already transact locally.",
     ],
     closer: "People already need work, help, and proof.\n\nGUBER simply makes it visible.",
   },
@@ -254,7 +247,7 @@ export const INVESTOR_CONFIG = {
   // SLIDE 13
   vision: {
     headline: "Vision",
-    body: "The long-term vision is simple.\n\nCreate a platform where opportunity, work, verification, and trust become visible in real time — in every community across the country.",
+    body: "The vision is simple.\n\nMake opportunity, work, and trust visible in real time — in every community across the country.",
     closer: "Helping people create value in themselves.",
   },
 
@@ -264,7 +257,7 @@ export const INVESTOR_CONFIG = {
     raise: "$1,000,000 over 18 months",
     valuation: "$15M early-stage valuation framework",
     structure: "Early-stage round. Capital goes straight to growth — not engineering. The product is already built.",
-    useHeadline: "Raising $1M over 18 months against a $15M early-stage valuation framework — based on live product, existing deployment, platform infrastructure, market opportunity, trust and verification positioning, and national expansion potential.",
+    useHeadline: "Raising $1M over 18 months at a $15M early-stage framework — against a live product, real deployment, and national expansion potential.",
     use: [
       "Product Development & Engineering — 30% · $300K",
       "Marketing, Growth & Community Activation — 25% · $250K",
@@ -283,24 +276,24 @@ export const INVESTOR_CONFIG = {
       { label: "Infrastructure, Cloud & Platform Scaling", pct: 5, amount: "$50K", color: "#fbbf24" },
       { label: "Working Capital & Contingency", pct: 5, amount: "$50K", color: "#9ca3af" },
     ],
-    urgency: "The terms reward investors who move at GUBER speed — same week, not same quarter. This is an early-stage valuation framework, not a guaranteed company worth.",
+    urgency: "Terms reward investors who move fast — same week, not same quarter. This is an early-stage framework, not a guaranteed company worth.",
   },
 
   legal: {
     eyebrow: "Built Right",
     headline: "The corporate stack is already in place.",
-    sub: "No co-founders to negotiate with. No prior raise to clean up. No cap-table baggage. The legal scaffolding is done so capital can move on day one.",
+    sub: "No co-founders to negotiate with. No prior raise to clean up. The legal scaffolding is done so capital can move on day one.",
     items: [
-      { label: "Delaware LLC", body: "GUBER Global LLC — Delaware-formed, the structure investors already know how to underwrite." },
-      { label: "GUBER Trademark", body: "U.S. trademark application filed — protecting the brand mark from day one." },
-      { label: "DUNS Number", body: "Issued — required for Apple Developer enrollment, Google Play business verification, and B2B procurement." },
-      { label: "100% Founder-Owned", body: "No prior dilution. No SAFEs in the drawer. Whatever you write is the cap table." },
+      { label: "Delaware LLC", body: "GUBER Global LLC — the structure investors know how to underwrite." },
+      { label: "GUBER Trademark", body: "U.S. trademark application filed — protecting the brand from day one." },
+      { label: "DUNS Number", body: "Issued — required for Apple, Google Play, and B2B procurement." },
+      { label: "100% Founder-Owned", body: "No prior dilution. No SAFEs. Whatever you write is the cap table." },
     ],
   },
 
   cta: {
     headline: "Less talk. Straight action.",
-    sub: "This brief is intentionally private. If you're reading it, the founder believes you can move quickly. Email, call, or text — same hour, same day. Every serious inbound gets a serious reply.",
+    sub: "This brief is private. Email, call, or text — every serious inbound gets a serious reply, same day.",
     founderName: "Dimetris Bowden",
     founderTitle: "Founder & CEO · 100% owner, GUBER Global LLC",
   },
