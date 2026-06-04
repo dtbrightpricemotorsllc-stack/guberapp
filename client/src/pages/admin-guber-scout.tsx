@@ -146,12 +146,21 @@ export default function AdminGuberScout() {
       const res = await apiRequest("POST", "/api/admin/guber-scout/run", { category, zipCode });
       return res.json();
     },
-    onSuccess: (resp: { listings: PresetListing[]; usedAI: boolean }) => {
+    onSuccess: (resp: { listings: PresetListing[]; usedAI: boolean; source?: "google_places" | "sample" }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/guber-scout/listings"] });
-      toast({
-        title: `Staged ${resp.listings?.length ?? 0} leads`,
-        description: resp.usedAI ? "AI drafted each outreach message." : "Used template copy (AI unavailable).",
-      });
+      const n = resp.listings?.length ?? 0;
+      const ai = resp.usedAI ? "AI drafted each outreach message." : "Used template copy (AI unavailable).";
+      if (resp.source === "sample") {
+        toast({
+          title: `Staged ${n} sample leads`,
+          description: `No live Google Places results — enable the Places API for real businesses. ${ai}`,
+        });
+      } else {
+        toast({
+          title: `Pulled ${n} real businesses`,
+          description: `Live from Google Places (name, phone, coordinates). ${ai}`,
+        });
+      }
     },
     onError: (err: any) => {
       toast({ title: "Scout run failed", description: err?.message ?? "Try again.", variant: "destructive" });
@@ -237,7 +246,7 @@ export default function AdminGuberScout() {
               </Button>
             </div>
             <p className="mt-2 text-[11px] text-white/30">
-              Generates 5 staged business profiles with map pins near the ZIP and an AI-drafted outreach message each. Sending stays manual.
+              Pulls real local businesses from Google Maps near the ZIP (name, phone, coordinates) plus a social link from each site, with an AI-drafted outreach message each. Sending stays manual.
             </p>
           </CardContent>
         </Card>

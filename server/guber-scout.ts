@@ -1,8 +1,12 @@
 // GUBER Scout — internal lead-generation + semi-automated outreach pipeline.
-// Admin-gated. Mock-scrapes local businesses by category + ZIP, geocodes them
-// near the ZIP center for map pins, and drafts a peer-to-peer outreach message
-// per business via the OpenAI integration. The actual "Send" stays manual.
+// Admin-gated. Pulls REAL local businesses for a category + ZIP from the
+// official Google Places API (name, phone, coordinates) and derives a social
+// link from each business's own website, then drafts a peer-to-peer outreach
+// message per business via the OpenAI integration. Falls back to a synthetic
+// sample set only when no Maps key is set or Places returns nothing. The
+// actual "Send" stays manual.
 import type { Express, Request, Response } from "express";
+import { lookup } from "node:dns/promises";
 import { z } from "zod";
 import OpenAI from "openai";
 import { db } from "./db";
@@ -70,19 +74,216 @@ function sanitizeUrl(raw: string | null): string | null {
   return null;
 }
 
-// Cluster a pin near the ZIP center: ~0.01deg ≈ 1.1km, so ±0.02 keeps it local.
-function jitterCoord(base: number) {
-  return Math.round((base + rand(-0.02, 0.02)) * 1e6) / 1e6;
+// Small random offset so multiple pins at the same spot don't overlap on the
+// map. Real Google coordinates use a tiny ~100m jitter; synthetic samples use a
+// wider spread (~2km) to scatter across the ZIP area. amount is in degrees.
+function jitterCoord(base: number, amount = 0.02) {
+  return Math.round((base + rand(-amount, amount)) * 1e6) / 1e6;
 }
 
-interface GeneratedBusiness {
+// Server-side Maps key for Places. Prefer GOOGLE_MAPS_API_KEY (the project's
+// key that has the Places API enabled); fall back to the geocoding key.
+const MAPS_KEY = () => process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_GEOCODING_API_KEY || "";
+
+interface SourcedBusiness {
   businessName: string;
   phoneNumber: string | null;
   socialMediaUrl: string | null;
-  draftedMessage: string;
+  website: string | null;
+  latitude: number | null; // real Google coords; null → fall back to ZIP center
+  longitude: number | null;
 }
 
-// ── Deterministic fallback (used if the LLM is unavailable) ──────────────────
+// ── Resilient JSON fetch (Google APIs sometimes return HTML error pages) ─────
+async function fetchJson(url: string, timeoutMs = 6000): Promise<any | null> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    const txt = await r.text();
+    try {
+      return JSON.parse(txt);
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Google Places Text Search → candidate businesses for "<category> in <zip>".
+async function placesTextSearch(category: string, zip: string, key: string): Promise<any[]> {
+  const query = `${category} in ${zip}`;
+  const url =
+    `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+    `?query=${encodeURIComponent(query)}&region=us&key=${key}`;
+  const data = await fetchJson(url);
+  if (!data) return [];
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    console.warn("[guber-scout] places textsearch status:", data.status, data.error_message ?? "");
+    return [];
+  }
+  return Array.isArray(data.results) ? data.results : [];
+}
+
+// Google Place Details → phone + website (field-masked to limit billing).
+async function placeDetails(placeId: string, key: string): Promise<{ phone: string | null; website: string | null }> {
+  const url =
+    `https://maps.googleapis.com/maps/api/place/details/json` +
+    `?place_id=${encodeURIComponent(placeId)}&fields=formatted_phone_number,international_phone_number,website&key=${key}`;
+  const data = await fetchJson(url);
+  if (!data || data.status !== "OK") return { phone: null, website: null };
+  return {
+    phone: data.result?.formatted_phone_number ?? data.result?.international_phone_number ?? null,
+    website: data.result?.website ?? null,
+  };
+}
+
+// Social links we recognize on a business's own website.
+const SOCIAL_RX =
+  /https?:\/\/(?:www\.)?(?:instagram\.com|facebook\.com|m\.facebook\.com|fb\.com|tiktok\.com|linktr\.ee|linktree\.com)\/[^\s"'<>)\\]+/i;
+
+function isSocialUrl(u: string | null): boolean {
+  return !!u && SOCIAL_RX.test(u);
+}
+
+// ── SSRF guard: never let an attacker-controlled website value (Place Details
+// returns whatever the business put there) point our server at internal hosts ─
+function isPrivateIp(ip: string): boolean {
+  const v4 = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const a = +v4[1], b = +v4[2];
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;       // link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+    if (a >= 224) return true;                      // multicast / reserved
+    return false;
+  }
+  const h = ip.toLowerCase();
+  if (h === "::1" || h === "::") return true;
+  if (h.startsWith("fe80")) return true;            // link-local
+  if (h.startsWith("fc") || h.startsWith("fd")) return true; // unique-local
+  if (h.startsWith("::ffff:")) return isPrivateIp(h.slice(7)); // IPv4-mapped
+  return false;
+}
+
+async function hostIsSafe(hostname: string): Promise<boolean> {
+  const h = hostname.toLowerCase();
+  if (!h || h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal")) {
+    return false;
+  }
+  try {
+    const addrs = await lookup(hostname, { all: true });
+    if (!addrs.length) return false;
+    return !addrs.some((a) => isPrivateIp(a.address));
+  } catch {
+    return false;
+  }
+}
+
+// Fetch a business's OWN public website (SSRF-guarded) with manual redirect
+// re-validation, port/content-type checks, and a true streamed size cap.
+async function safeFetchHtml(startUrl: string, maxBytes = 400_000, maxRedirects = 3): Promise<string | null> {
+  let url = startUrl;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    let u: URL;
+    try {
+      u = new URL(url);
+    } catch {
+      return null;
+    }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const port = u.port || (u.protocol === "https:" ? "443" : "80");
+    if (port !== "80" && port !== "443") return null;
+    if (!(await hostIsSafe(u.hostname))) return null;
+
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const r = await fetch(u.toString(), {
+        signal: ctrl.signal,
+        redirect: "manual",
+        headers: { "user-agent": "Mozilla/5.0 (compatible; GuberScout/1.0)" },
+      });
+      if (r.status >= 300 && r.status < 400) {
+        const loc = r.headers.get("location");
+        if (!loc) return null;
+        url = new URL(loc, u).toString(); // re-validate next hop on the next loop
+        continue;
+      }
+      if (!r.ok) return null;
+      const ct = r.headers.get("content-type") || "";
+      if (ct && !/text\/html|application\/xhtml/i.test(ct)) return null;
+      if (!r.body) return (await r.text()).slice(0, maxBytes);
+      const reader = r.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          total += value.length;
+          if (total >= maxBytes) {
+            try { await reader.cancel(); } catch {}
+            break;
+          }
+        }
+      }
+      return Buffer.concat(chunks).toString("utf8").slice(0, maxBytes);
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+  return null;
+}
+
+// Read a business's published page and pull the first social link from it.
+async function extractSocialFromWebsite(website: string): Promise<string | null> {
+  const html = await safeFetchHtml(website);
+  if (!html) return null;
+  const m = html.match(SOCIAL_RX);
+  return m ? m[0].replace(/[)>,.'"\\]+$/, "") : null;
+}
+
+// Orchestrate the live pull: top Places results → details + social enrichment.
+async function fetchLiveBusinesses(category: string, zip: string, key: string): Promise<SourcedBusiness[]> {
+  if (!key) return [];
+  const results = await placesTextSearch(category, zip, key);
+  if (results.length === 0) return [];
+
+  const top = results.slice(0, 6);
+  const detailed = await Promise.all(
+    top.map(async (p: any): Promise<SourcedBusiness | null> => {
+      const name = String(p?.name ?? "").trim();
+      if (!name) return null;
+      const det = p?.place_id ? await placeDetails(p.place_id, key) : { phone: null, website: null };
+      let social: string | null = null;
+      if (det.website && isSocialUrl(det.website)) social = det.website;
+      else if (det.website) social = await extractSocialFromWebsite(det.website);
+      const loc = p?.geometry?.location;
+      return {
+        businessName: name,
+        phoneNumber: det.phone,
+        // Prefer a real social link; fall back to the website so the outreach
+        // button always has something to open. sanitizeUrl blocks bad schemes.
+        socialMediaUrl: sanitizeUrl(social) ?? sanitizeUrl(det.website),
+        website: det.website ?? null,
+        latitude: typeof loc?.lat === "number" ? loc.lat : null,
+        longitude: typeof loc?.lng === "number" ? loc.lng : null,
+      };
+    }),
+  );
+  return detailed.filter((b): b is SourcedBusiness => !!b).slice(0, 5);
+}
+
+// ── Synthetic sample set (only used when Places is unavailable / returns none) ─
 const NAME_PARTS_A = ["Apex", "BlueLine", "Summit", "Evergreen", "Riverstone", "Ironclad", "Coastal", "Frontline", "Heritage", "Precision"];
 const NAME_PARTS_B: Record<string, string> = {
   "Landscaping": "Landscapes",
@@ -97,7 +298,7 @@ const NAME_PARTS_B: Record<string, string> = {
   "Window Washing": "Window Care",
 };
 
-function fallbackBusinesses(category: string, zip: string): GeneratedBusiness[] {
+function mockBusinesses(category: string): SourcedBusiness[] {
   const suffix = NAME_PARTS_B[category] ?? category;
   const picks = [...NAME_PARTS_A].sort(() => Math.random() - 0.5).slice(0, 5);
   return picks.map((a) => {
@@ -109,35 +310,42 @@ function fallbackBusinesses(category: string, zip: string): GeneratedBusiness[] 
       businessName,
       phoneNumber,
       socialMediaUrl: `https://instagram.com/${handle}`,
-      draftedMessage:
-        `Hey ${businessName} — saw you're grinding ${category.toLowerCase()} around ${zip}. ` +
-        `GUBER puts paying jobs right in your route so you fill the dead gaps in your day. ` +
-        `No corporate middleman, no cut of your money — it's neighbor-to-neighbor. ` +
-        `Want me to drop ${zip} jobs straight to your phone?`,
+      website: null,
+      latitude: null,
+      longitude: null,
     };
   });
 }
 
-// ── LLM generation: 5 realistic businesses + outreach copy in one JSON call ──
-async function generateBusinesses(category: string, zip: string): Promise<{ businesses: GeneratedBusiness[]; usedAI: boolean }> {
+// ── AI copywriter: one peer-to-peer outreach text per business name ──────────
+function templateMessage(name: string, category: string, zip: string): string {
+  return (
+    `Hey ${name} — saw you're doing ${category.toLowerCase()} around ${zip}. ` +
+    `GUBER drops paying local jobs right into your route so you fill the dead gaps in your day. ` +
+    `No corporate middleman taking a cut — it's neighbor-to-neighbor. ` +
+    `Want me to send ${zip} jobs straight to your phone?`
+  );
+}
+
+async function draftMessages(
+  businesses: SourcedBusiness[],
+  category: string,
+  zip: string,
+): Promise<{ messages: string[]; usedAI: boolean }> {
+  const fallback = businesses.map((b) => templateMessage(b.businessName, category, zip));
   const openai = getOpenAI();
-  if (!openai) return { businesses: fallbackBusinesses(category, zip), usedAI: false };
+  if (!openai || businesses.length === 0) return { messages: fallback, usedAI: false };
 
+  const names = businesses.map((b) => b.businessName);
   const system =
-    "You are GUBER Scout, a lead-generation assistant for a local-services gig platform. " +
-    "You generate REALISTIC but FICTIONAL local small-business profiles for outreach staging. " +
-    "Return ONLY valid JSON.";
-
+    "You are GUBER Scout, writing peer-to-peer outreach texts for a local-services gig platform. Return ONLY valid JSON.";
   const user =
-    `Generate exactly 5 realistic, fictional local "${category}" small businesses operating near ZIP code ${zip} (US).\n` +
-    `For each business produce:\n` +
-    `- businessName: a believable independent operator name (no nationwide franchises)\n` +
-    `- phoneNumber: a formatted US phone like "(555) 123-4567" (fictional)\n` +
-    `- socialMediaUrl: a plausible Instagram or Facebook URL based on the name\n` +
-    `- draftedMessage: a short (max ~55 words), high-energy, direct, NO-BS peer-to-peer outreach text. ` +
-    `It MUST mention the business name and the ZIP code ${zip}. Frame GUBER as a way to fill dead time in their daily routing with paying local jobs, ` +
-    `with ZERO corporate middleman cuts. Sound like one hustler texting another — not a corporate ad.\n\n` +
-    `Return JSON of shape: {"businesses":[{"businessName":"","phoneNumber":"","socialMediaUrl":"","draftedMessage":""}]}`;
+    `Write one short outreach text for each of these REAL local "${category}" businesses near ZIP ${zip}:\n` +
+    names.map((n, i) => `${i + 1}. ${n}`).join("\n") +
+    `\n\nEach message: max ~55 words, high-energy, direct, no-BS — like one hustler texting another, not a corporate ad. ` +
+    `It MUST mention that exact business name and the ZIP ${zip}. Frame GUBER as filling dead time in their daily routing ` +
+    `with paying local jobs, ZERO corporate middleman cuts.\n` +
+    `Return JSON: {"drafts":[{"name":"<exact business name>","message":"..."}]}`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -147,28 +355,23 @@ async function generateBusinesses(category: string, zip: string): Promise<{ busi
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      max_completion_tokens: 1400,
+      max_completion_tokens: 1600,
     });
     const raw = completion.choices?.[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw);
-    const arr = Array.isArray(parsed?.businesses) ? parsed.businesses : [];
-    const businesses: GeneratedBusiness[] = arr
-      .filter((b: any) => b && typeof b.businessName === "string" && b.businessName.trim())
-      .slice(0, 5)
-      .map((b: any) => ({
-        businessName: String(b.businessName).trim(),
-        phoneNumber: b.phoneNumber ? String(b.phoneNumber).trim() : null,
-        socialMediaUrl: b.socialMediaUrl ? String(b.socialMediaUrl).trim() : null,
-        draftedMessage: b.draftedMessage ? String(b.draftedMessage).trim() : "",
-      }));
-    if (businesses.length === 0) return { businesses: fallbackBusinesses(category, zip), usedAI: false };
-    // Backfill any missing drafted message with the deterministic template.
-    const fb = fallbackBusinesses(category, zip);
-    businesses.forEach((b, i) => { if (!b.draftedMessage) b.draftedMessage = fb[i % fb.length].draftedMessage; });
-    return { businesses, usedAI: true };
+    const drafts = Array.isArray(parsed?.drafts) ? parsed.drafts : [];
+    const byName = new Map<string, string>();
+    for (const d of drafts) {
+      if (d?.name && d?.message) byName.set(String(d.name).trim().toLowerCase(), String(d.message).trim());
+    }
+    const messages = businesses.map((b, i) => byName.get(b.businessName.trim().toLowerCase()) || fallback[i]);
+    // Only report AI usage if at least one draft actually matched a business;
+    // otherwise every message silently fell back to the template.
+    const matchedAny = businesses.some((b) => byName.has(b.businessName.trim().toLowerCase()));
+    return { messages, usedAI: matchedAny };
   } catch (err: any) {
-    console.warn("[guber-scout] LLM generation failed, using fallback:", err?.message);
-    return { businesses: fallbackBusinesses(category, zip), usedAI: false };
+    console.warn("[guber-scout] message drafting failed, using template:", err?.message);
+    return { messages: fallback, usedAI: false };
   }
 }
 
@@ -183,7 +386,8 @@ export function registerGuberScoutRoutes(app: Express, requireAdmin: RequireAdmi
     res.json({ categories: SCOUT_CATEGORIES });
   });
 
-  // Run the (mock) scout: generate 5 staged businesses for the category + ZIP.
+  // Run the scout: pull real businesses from Google Places for the category +
+  // ZIP, enrich with phone/social, draft outreach copy, and stage 5 listings.
   app.post("/api/admin/guber-scout/run", requireAdmin, async (req: Request, res: Response) => {
     const parsed = runSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -191,28 +395,41 @@ export function registerGuberScoutRoutes(app: Express, requireAdmin: RequireAdmi
     }
     const { category, zipCode } = parsed.data;
 
-    // Accurate-ish center for the ZIP; pins jitter around it. Fallback to a
-    // continental-US center if the ZIP can't be resolved so the run still works.
+    // ZIP center is the fallback coordinate for synthetic samples (real Google
+    // results carry their own coordinates).
     const center = (await geocodeZip(zipCode)) ?? { lat: 39.5, lng: -98.35 };
 
-    const { businesses, usedAI } = await generateBusinesses(category, zipCode);
+    // Live pull first; fall back to a synthetic sample set if there's no Maps
+    // key or Places returns nothing for this category/ZIP.
+    let source: "google_places" | "sample" = "google_places";
+    let businesses = await fetchLiveBusinesses(category, zipCode, MAPS_KEY());
+    if (businesses.length === 0) {
+      source = "sample";
+      businesses = mockBusinesses(category);
+    }
 
-    const rows = [];
-    for (const b of businesses) {
+    const { messages, usedAI } = await draftMessages(businesses, category, zipCode);
+
+    const rows = businesses.map((b, i) => {
       const slug = `${slugify(b.businessName)}-${Math.random().toString(36).slice(2, 6)}`;
-      rows.push({
+      const hasReal = typeof b.latitude === "number" && typeof b.longitude === "number";
+      const baseLat = hasReal ? (b.latitude as number) : center.lat;
+      const baseLng = hasReal ? (b.longitude as number) : center.lng;
+      // Real coords: ~100m de-overlap jitter. Samples: ~2km spread across ZIP.
+      const amount = hasReal ? 0.0009 : 0.02;
+      return {
         businessName: b.businessName,
         phoneNumber: b.phoneNumber,
         socialMediaUrl: sanitizeUrl(b.socialMediaUrl),
         category,
         zipCode,
-        latitude: jitterCoord(center.lat),
-        longitude: jitterCoord(center.lng),
+        latitude: jitterCoord(baseLat, amount),
+        longitude: jitterCoord(baseLng, amount),
         profileSlug: slug,
         claimedStatus: false,
-        draftedMessage: b.draftedMessage,
-      });
-    }
+        draftedMessage: messages[i] ?? templateMessage(b.businessName, category, zipCode),
+      };
+    });
 
     let inserted: typeof presetListings.$inferSelect[] = [];
     try {
@@ -222,8 +439,8 @@ export function registerGuberScoutRoutes(app: Express, requireAdmin: RequireAdmi
       return res.status(500).json({ message: "Failed to stage listings" });
     }
 
-    await audit(req, "guber_scout_run", { category, zipCode, count: inserted.length, usedAI });
-    res.json({ listings: inserted, usedAI });
+    await audit(req, "guber_scout_run", { category, zipCode, count: inserted.length, source, usedAI });
+    res.json({ listings: inserted, usedAI, source });
   });
 
   // All staged listings, newest first (client groups by ZIP).
