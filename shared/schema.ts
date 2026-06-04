@@ -2248,3 +2248,25 @@ export const carrierCredentials = pgTable("carrier_credentials", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type CarrierCredential = typeof carrierCredentials.$inferSelect;
+
+// ── GUBER Scout: lead-generation preset listings ────────────────────────────
+// Mock-scraped local business profiles staged for semi-automated outreach.
+// Populated by the admin "Guber Scout" panel; each row carries an AI-drafted
+// peer-to-peer outreach message and a map-ready coordinate near its ZIP.
+export const presetListings = pgTable("preset_listings", {
+  id: serial("id").primaryKey(),
+  businessName: text("business_name").notNull(),
+  phoneNumber: text("phone_number"),
+  socialMediaUrl: text("social_media_url"),
+  category: text("category").notNull(),
+  zipCode: text("zip_code").notNull(),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  profileSlug: text("profile_slug").notNull().unique(),
+  claimedStatus: boolean("claimed_status").notNull().default(false),
+  draftedMessage: text("drafted_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertPresetListingSchema = createInsertSchema(presetListings).omit({ id: true, createdAt: true });
+export type InsertPresetListing = z.infer<typeof insertPresetListingSchema>;
+export type PresetListing = typeof presetListings.$inferSelect;

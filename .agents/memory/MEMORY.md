@@ -1,4 +1,5 @@
 - [Load Board ZIP migration](load-board-zip.md) — pickup_zip/delivery_zip columns added to load_board_listings; use `pg` (not @neondatabase/serverless) for raw SQL migrations in this project.
+- [New DB table provisioning](db-table-provisioning.md) — new tables need a CREATE TABLE IF NOT EXISTS block in server/index.ts startup too; prod has no db:push step, and db:push is non-interactive-blocked.
 - [Load Board PATCH route](load-board-patch-route.md) — PATCH /api/load-board/:id already exists and accepts postedPrice, notes, urgent, pricingMode, trailerPreference, status edits from the poster.
 - [Mission Control Watchdog](mission-control-watchdog.md) — automated health engine + /api/internal/mission-control/status; keep PROTECTED_TEST_SUITES & MANIFEST_REQUIREMENTS in sync, counts are measured not hardcoded.
 - [State-bleed in mode-selector forms](statebleed-auditor.md) — changing a string-literal mode selector must reset all its branch-scoped fields (and async results must be discarded); guarded by `scripts/audit-statebleed.mjs` + `statebleed` validation/test.

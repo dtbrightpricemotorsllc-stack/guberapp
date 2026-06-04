@@ -351,6 +351,24 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_bo_purchases_user_month ON marketplace_buyer_order_purchases(user_id, month_key);
   `).catch(e => console.error("[migration] marketplace_buyer_order_purchases error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS preset_listings (
+      id SERIAL PRIMARY KEY,
+      business_name TEXT NOT NULL,
+      phone_number TEXT,
+      social_media_url TEXT,
+      category TEXT NOT NULL,
+      zip_code TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      profile_slug TEXT NOT NULL UNIQUE,
+      claimed_status BOOLEAN NOT NULL DEFAULT false,
+      drafted_message TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_preset_listings_zip ON preset_listings(zip_code);
+  `).catch(e => console.error("[migration] preset_listings error:", e));
+
   await registerRoutes(httpServer, app);
   await startOSRuntime(app);
   startStudioToolsListener();

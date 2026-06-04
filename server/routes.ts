@@ -21799,6 +21799,10 @@ OUTPUT STYLE:
   const { registerAdminQaRoutes } = await import("./admin-qa.js");
   registerAdminQaRoutes(app, requireAdmin);
 
+  // ── GUBER Scout (lead-gen + outreach pipeline) ───────────────────────────
+  const { registerGuberScoutRoutes } = await import("./guber-scout.js");
+  registerGuberScoutRoutes(app, requireAdmin);
+
   // ── Load Board ─────────────────────────────────────────────────────────────
   // Connection fee tiers
   const LB_CONNECTION_TIERS: Record<string, { label: string; amount: number }> = {
