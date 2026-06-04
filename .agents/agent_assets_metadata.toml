@@ -305,3 +305,9 @@ id = "-8vz2b6R4DEgCth263wn3"
 uri = "file://attached_assets/load-board-hero-wideload.png"
 type = "image"
 title = "New — Wide load highway"
+
+[[outputs]]
+id = "Ojp-3pWL0wwwrE9WjQufd"
+uri = "file://attached_assets/screenshots/guberapp_com.png"
+type = "image"
+title = "guberapp.com — current production homepage"
