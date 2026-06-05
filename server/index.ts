@@ -209,6 +209,15 @@ app.use((req, res, next) => {
     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS stuck_acknowledged_by INTEGER;
   `).catch(e => console.error("[migration] jobs stuck_acknowledged columns error:", e));
 
+  // Analytics / OS-agent queries (server/os/*.ts) filter production data on these
+  // test/demo flags. Defined in shared/schema.ts, but prod has no db:push step, so
+  // self-heal them here (idempotent) to keep the dashboard queries from failing
+  // with `column "is_test_job" does not exist`.
+  await pool.query(`
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_test_job boolean DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test_user boolean DEFAULT false;
+  `).catch(e => console.error("[migration] test-flag columns error:", e));
+
   await pool.query(`
     ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS expiry_warning_sent_at TIMESTAMP;
   `).catch(e => console.error("[migration] worker_qualifications expiry_warning_sent_at error:", e));
