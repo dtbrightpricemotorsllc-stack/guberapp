@@ -39,6 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { compressImageToDataUrl } from "@/lib/image-compress";
 import { isStoreBuild } from "@/lib/platform";
 import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import { StudioWelcomeTour } from "@/components/studio/studio-welcome-tour";
@@ -609,12 +610,13 @@ export default function StudioPageV2() {
       toast({ title: "File too big", description: "Keep references under 25 MB.", variant: "destructive" });
       return;
     }
-    const dataUrl = await new Promise<string>((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(String(r.result || ""));
-      r.onerror = () => rej(new Error("read failed"));
-      r.readAsDataURL(file);
-    });
+    let dataUrl: string;
+    try {
+      dataUrl = await compressImageToDataUrl(file);
+    } catch (e: any) {
+      toast({ title: "Couldn't use that photo", description: e?.message || "Try a different image.", variant: "destructive" });
+      return;
+    }
     uploadMutation.mutate({ dataUrl, kind: "image" });
   }
 

@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { StudioToolPageShell } from "@/components/studio/studio-tool-page-shell";
 import { MirrorMotionForm } from "@/components/studio/mirror-motion-form";
+import { compressImageToDataUrl } from "@/lib/image-compress";
 
 type StudioFile = {
   id: number;
@@ -61,12 +62,13 @@ export default function StudioMirrorMotionPage() {
       toast({ title: "File too big", description: "Keep references under 25 MB.", variant: "destructive" });
       return;
     }
-    const dataUrl = await new Promise<string>((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(String(r.result || ""));
-      r.onerror = () => rej(new Error("read failed"));
-      r.readAsDataURL(file);
-    });
+    let dataUrl: string;
+    try {
+      dataUrl = await compressImageToDataUrl(file);
+    } catch (e: any) {
+      toast({ title: "Couldn't use that photo", description: e?.message || "Try a different image.", variant: "destructive" });
+      return;
+    }
     uploadMutation.mutate({ dataUrl, kind: "image" });
   }
 

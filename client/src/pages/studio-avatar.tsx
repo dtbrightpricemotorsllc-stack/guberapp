@@ -10,6 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, UserRound, Upload, X, Sparkles } from "lucide-react";
 import { StudioToolPageShell } from "@/components/studio/studio-tool-page-shell";
 import { isStoreBuild } from "@/lib/platform";
+import { compressImageToDataUrl } from "@/lib/image-compress";
 
 type StudioMe = { credits: number };
 
@@ -34,7 +35,7 @@ export default function StudioAvatarPage() {
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
   const credits = meQuery.data?.credits ?? 0;
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     if (!file.type.startsWith("image/")) {
       toast({ title: "Images only", description: "Please upload a JPG or PNG photo.", variant: "destructive" });
       return;
@@ -43,13 +44,13 @@ export default function StudioAvatarPage() {
       toast({ title: "File too large", description: "Max 10 MB per photo.", variant: "destructive" });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const url = e.target?.result as string;
+    try {
+      const url = await compressImageToDataUrl(file);
       setPhotoDataUrl(url);
       setPhotoPreview(url);
-    };
-    reader.readAsDataURL(file);
+    } catch (e: any) {
+      toast({ title: "Couldn't use that photo", description: e?.message || "Try a different image.", variant: "destructive" });
+    }
   }
 
   const generate = useMutation({

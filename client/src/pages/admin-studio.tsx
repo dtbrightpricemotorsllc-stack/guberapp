@@ -58,8 +58,9 @@ const ICONS = [
 ];
 
 const KIND_OPTS = ["video", "audio", "image"] as const;
+const WIZARD_NONE = "__none__";
 const WIZARD_OPTS = [
-  { value: "", label: "None" },
+  { value: WIZARD_NONE, label: "None" },
   { value: "mirror_motion", label: "Mirror Motion" },
   { value: "commercial_builder", label: "Commercial Builder" },
 ];
@@ -205,7 +206,7 @@ function TemplateForm({
             onChange={(e) => s({ posterUrl: e.target.value })} data-testid="input-tpl-poster-url" />
         </Field>
         <Field label="Wizard (advanced routing)">
-          <Select value={f.wizardKey} onValueChange={(v) => s({ wizardKey: v })}>
+          <Select value={f.wizardKey || WIZARD_NONE} onValueChange={(v) => s({ wizardKey: v === WIZARD_NONE ? "" : v })}>
             <SelectTrigger className={inputCls()} data-testid="select-tpl-wizard">
               <SelectValue placeholder="None" />
             </SelectTrigger>
