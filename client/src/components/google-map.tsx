@@ -105,6 +105,8 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const dropOverlaysRef = useRef<google.maps.OverlayView[]>([]);
+  const mapListenersRef = useRef<google.maps.MapsEventListener[]>([]);
+  const mountedRef = useRef(true);
   const initStartedRef = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const hasCenteredRef = useRef(false);
@@ -151,11 +153,11 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         clickableIcons: false,
       });
 
-      map.addListener("click", () => {
+      const clickListener = map.addListener("click", () => {
         onPinClick?.(null as any);
       });
 
-      map.addListener("idle", () => {
+      const idleListener = map.addListener("idle", () => {
         const b = map.getBounds();
         if (b && onBoundsChanged) {
           onBoundsChanged({
@@ -166,6 +168,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
           });
         }
       });
+      mapListenersRef.current.push(clickListener, idleListener);
 
       mapRef.current = map;
       setMapReady(true);
@@ -181,7 +184,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     try {
       const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
       const data = await res.json();
-      if (data?.zip) setZipInput(data.zip);
+      if (data?.zip && mountedRef.current) setZipInput(data.zip);
     } catch {}
   };
 
@@ -196,6 +199,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     if (highAccuracy) {
       gpsGetCurrentPosition({ enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 })
         .then((pos) => {
+          if (!mountedRef.current) return;
           if (userPosRef.current) return;
           const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           userPosRef.current = coords;
@@ -214,6 +218,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     }
     gpsStartWatchPosition(
       (pos) => {
+        if (!mountedRef.current) return;
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         userPosRef.current = coords;
         setUserPos(coords);
@@ -228,6 +233,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         reverseGeocodeZip(coords.lat, coords.lng);
       },
       async (err) => {
+        if (!mountedRef.current) return;
         const labels: Record<number, string> = {
           1: "PERMISSION_DENIED",
           2: "POSITION_UNAVAILABLE",
@@ -258,6 +264,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         // map is built at US_CENTER before the fallback coordinates land.
         try {
           const r = await fetch("/api/places/ip-locate");
+          if (!mountedRef.current) return;
           if (r.ok) {
             const data = await r.json();
             if (typeof data?.lat === "number" && typeof data?.lng === "number") {
@@ -290,6 +297,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       }
       watchIdRef.current = id;
     }).catch(() => {
+      if (!mountedRef.current) return;
       // If we already have a fix from somewhere else, don't flip the UI to
       // denied just because the watcher couldn't be installed.
       if (userPosRef.current) { setLocating(false); return; }
@@ -313,6 +321,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     try {
       const res = await fetch(`/api/geocode?address=${encodeURIComponent(zipInput.trim())}`);
       const data = await res.json();
+      if (!mountedRef.current) return;
       if (typeof data?.lat === "number" && typeof data?.lng === "number" && mapRef.current) {
         const coords = { lat: data.lat, lng: data.lng };
         mapRef.current.panTo(coords);
@@ -324,16 +333,30 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     } catch (e) {
       console.warn("[GUBER] ZIP geocode failed:", e);
     } finally {
-      setZipLoading(false);
+      if (mountedRef.current) setZipLoading(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     watchCancelledRef.current = false;
     startWatchPosition();
     return () => {
+      // Block any in-flight async callbacks from touching React state after
+      // unmount, and tear down every map resource we created so nothing keeps
+      // running (watchers, listeners, markers, overlays) once the screen is gone.
+      mountedRef.current = false;
       watchCancelledRef.current = true;
       if (watchIdRef.current !== null) gpsClearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+      mapListenersRef.current.forEach((l) => { try { l.remove(); } catch {} });
+      mapListenersRef.current = [];
+      if (clustererRef.current) { try { clustererRef.current.clearMarkers(); } catch {} clustererRef.current = null; }
+      markersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
+      markersRef.current = [];
+      if (userMarkerRef.current) { try { userMarkerRef.current.setMap(null); } catch {} userMarkerRef.current = null; }
+      dropOverlaysRef.current.forEach((o) => { try { o.setMap(null); } catch {} });
+      dropOverlaysRef.current = [];
     };
   }, []);
 
