@@ -640,7 +640,7 @@ export default function AccountSettings() {
           </button>
         </div>
 
-        {user?.accountType === "business" ? (
+        {user?.role !== "admin" && (user?.accountType === "business" ? (
           <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3">
             <h3 className="font-display font-semibold text-sm">Business Portal</h3>
             <p className="text-[11px] text-muted-foreground leading-relaxed">Manage your business profile, post jobs in bulk, and access business-only tools.</p>
@@ -715,7 +715,7 @@ export default function AccountSettings() {
             <p className="text-[11px] text-muted-foreground leading-relaxed">Business accounts are reviewed and approved by the GUBER team. Contact support to apply.</p>
             <p className="text-[10px] text-muted-foreground font-display tracking-wider" data-testid="text-biz-apply-info">support@guberapp.com</p>
           </div>
-        )}
+        ))}
 
         {/* Feedback */}
         <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-3" data-testid="card-feedback">
