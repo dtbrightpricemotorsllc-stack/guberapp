@@ -31,6 +31,7 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
+import { evaluatePayoutMultiFactor } from "./payout-guard";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
@@ -9612,7 +9613,47 @@ export async function registerRoutes(
       const last = valid[valid.length - 1];
       await storage.updateUser(req.session.userId!, { lat: last.lat, lng: last.lng });
 
-      res.json({ active: true, stored: rows.length });
+      // ── Geofence proximity: VERIFY & LOG only ──────────────────────────────
+      // We compute whether the worker has reached the job geofence purely to
+      // record an immutable audit trail and stamp geofenceVerifiedAt. This is
+      // ONE factor in the payout guardrail — it NEVER releases funds on its own
+      // (GPS can be spoofed). Payout still requires manual completion + a
+      // customer-confirmation / photo step downstream.
+      const GEOFENCE_RADIUS_METERS = 250;
+      let geofence: { withinRadius: boolean; meters: number | null; radius: number } = {
+        withinRadius: false,
+        meters: null,
+        radius: GEOFENCE_RADIUS_METERS,
+      };
+      const jobHasRealCoords =
+        typeof job.lat === "number" && typeof job.lng === "number" &&
+        !(job.lat === 0 && job.lng === 0);
+      if (jobHasRealCoords) {
+        const meters = haversineMeters(job.lat as number, job.lng as number, last.lat, last.lng);
+        const withinRadius = meters <= GEOFENCE_RADIUS_METERS;
+        geofence = { withinRadius, meters: Math.round(meters), radius: GEOFENCE_RADIUS_METERS };
+        if (withinRadius && !(job as any).geofenceVerifiedAt) {
+          // First confirmed entry into the geofence — stamp + audit once.
+          await storage.updateJob(jobId, { geofenceVerifiedAt: new Date() } as any);
+          await storage.createAuditLog({
+            actorId: req.session.userId!,
+            action: "geofence_proximity_verified",
+            entityType: "job",
+            entityId: jobId,
+            metadata: {
+              gpsLat: last.lat,
+              gpsLng: last.lng,
+              jobLat: job.lat,
+              jobLng: job.lng,
+              metersFromJob: Math.round(meters),
+              radiusMeters: GEOFENCE_RADIUS_METERS,
+              note: "verification-only; does not authorize payout",
+            },
+          });
+        }
+      }
+
+      res.json({ active: true, stored: rows.length, geofence });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -10685,12 +10726,38 @@ export async function registerRoutes(
 
           const workerShare = (job as any).workerGrossShare || job.helperPayout || 0;
 
+          // ── Anti-fraud payout guardrail ──────────────────────────────────
+          // Defense-in-depth: never release funds unless the multi-factor check
+          // passes (GPS proximity verified + worker submitted completion +
+          // customer confirmation/photo). GPS alone can never trigger this.
+          const payoutGate = evaluatePayoutMultiFactor({
+            job: job as any,
+            proofs,
+            helperConfirmed: newHelperConfirmed,
+            customerConfirmed: newBuyerConfirmed,
+          });
+
           // Capture the PaymentIntent — funds move from poster's card into GUBER's Stripe account.
           // We then transfer the worker's share to their Stripe Connect account immediately.
           // Idempotency: skip if already paid_out or capture_expired.
           const piId = (job as any).stripePaymentIntentId;
           const currentPayoutStatus = (job as any).payoutStatus;
-          if (piId && currentPayoutStatus !== "paid_out" && currentPayoutStatus !== "capture_expired") {
+          if (piId && !payoutGate.ok) {
+            // Conditions for release not met — hold for manual review instead of
+            // moving money. This should not happen on a legitimate dual-confirm
+            // flow; it is a backstop against any path that tries to pay on GPS
+            // alone or with missing confirmation.
+            update.payoutStatus = "manual_review";
+            update.internalPayoutStatus = "on_hold";
+            await storage.createAuditLog({
+              actorId: req.session.userId!,
+              action: "payout_blocked_multifactor",
+              entityType: "job",
+              entityId: job.id,
+              metadata: { reasons: payoutGate.reasons, factors: payoutGate.factors },
+            });
+            console.warn(`[GUBER][payout-guard] jobId=${job.id} capture HELD — reasons=${payoutGate.reasons.join(",")}`);
+          } else if (piId && currentPayoutStatus !== "paid_out" && currentPayoutStatus !== "capture_expired") {
             try {
               const captured = await stripe.paymentIntents.capture(piId);
               const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
@@ -16740,6 +16807,10 @@ OUTPUT STYLE:
             update.payoutStatus = "capture_expired";
             update.internalPayoutStatus = "on_hold";
           } else {
+            // Explicit, audited override of the multi-factor payout guard: an
+            // admin has manually adjudicated this dispute (human-mediated, not a
+            // GPS/automated trigger), which is itself the authorizing factor.
+            await storage.createAuditLog({ userId: req.session.userId, action: "payout_guard_admin_override", details: `Job ${jobId}: dispute worker_favor capture authorized by admin ${req.session.userId} — bypasses multi-factor guard via human adjudication` });
             try {
               const captured = await stripe.paymentIntents.capture(piId);
               const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;
@@ -16838,6 +16909,10 @@ OUTPUT STYLE:
             update.payoutStatus = "capture_expired";
             update.internalPayoutStatus = "on_hold";
           } else {
+            // Explicit, audited override of the multi-factor payout guard: an
+            // admin has manually adjudicated this dispute (human-mediated, not a
+            // GPS/automated trigger), which is itself the authorizing factor.
+            await storage.createAuditLog({ userId: req.session.userId, action: "payout_guard_admin_override", details: `Job ${jobId}: dispute partial capture (helperShare=$${helperShare}) authorized by admin ${req.session.userId} — bypasses multi-factor guard via human adjudication` });
             try {
               const captured = await stripe.paymentIntents.capture(piId);
               const capturedAmount = (captured.amount_received || captured.amount || 0) / 100;

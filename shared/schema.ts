@@ -354,6 +354,9 @@ export const jobs = pgTable("jobs", {
   paidOutAt: timestamp("paid_out_at"),
   payoutStatus: text("payout_status").default("none"),
   payoutMode: text("payout_mode"),
+  // Anti-fraud: timestamp the worker's GPS first verified proximity to the job
+  // geofence. Used to *verify and log* arrival — never to auto-release payout.
+  geofenceVerifiedAt: timestamp("geofence_verified_at"),
   autoConfirmAt: timestamp("auto_confirm_at"),
   reviewTimerStartedAt: timestamp("review_timer_started_at"),
   disputeReason: text("dispute_reason"),

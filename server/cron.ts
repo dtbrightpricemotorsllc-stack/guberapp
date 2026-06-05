@@ -10,6 +10,7 @@ import { claimReminder, isUserInQuietHours } from "./reminders";
 import { TRUST_ADJUSTMENTS } from "./pricing";
 import { getDemoUserIds } from "./demo-guard";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
+import { evaluatePayoutMultiFactor } from "./payout-guard";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY!, { apiVersion: "2025-01-27.acacia" as any });
@@ -190,6 +191,13 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
     stripePaymentIntentId: jobs.stripePaymentIntentId,
     workerGrossShare: jobs.workerGrossShare,
     payoutStatus: jobs.payoutStatus,
+    // Fields read by the multi-factor payout guardrail:
+    helperConfirmed: jobs.helperConfirmed,
+    lat: jobs.lat,
+    lng: jobs.lng,
+    arrivedAt: jobs.arrivedAt,
+    workerArrivedAt: jobs.workerArrivedAt,
+    geofenceVerifiedAt: jobs.geofenceVerifiedAt,
   })
     .from(jobs)
     .where(
@@ -210,15 +218,6 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
       continue;
     }
 
-    const update: any = {
-      status: "completed_paid",
-      confirmedAt: now,
-      payoutStatus: "payout_eligible",
-      internalPayoutStatus: "approved",
-    };
-
-    await db.update(jobs).set(update).where(eq(jobs.id, job.id));
-
     // Capture the PaymentIntent — releases 80% to worker, GUBER keeps 20% application fee
     // Idempotency: skip if authorization was already captured or has expired
     const piId = job.stripePaymentIntentId;
@@ -227,6 +226,36 @@ async function autoConfirmReviewTimerJobs(): Promise<number> {
     const canonicalWorkerShare = job.workerGrossShare || job.helperPayout || 0;
     let captureSucceeded = false;
     let captureExpired = false;
+
+    // ── Anti-fraud payout guardrail ────────────────────────────────────────
+    // Auto-confirm releases on the review-timer (NOT on GPS). Still enforce the
+    // multi-factor check: GPS proximity verified + worker submitted completion +
+    // confirmation (the review-window auto-confirm stands in for the customer).
+    // Evaluate BEFORE marking the job completed_paid so a held payout never
+    // leaves the job finalized with funds simultaneously on hold.
+    const cronPayoutGate = evaluatePayoutMultiFactor({
+      job: job as any,
+      proofs: proofs as any,
+      helperConfirmed: !!(job as any).helperConfirmed,
+      customerConfirmed: true,
+    });
+    if (piId && !cronPayoutGate.ok) {
+      // Route to manual review and clear the auto-confirm timer so the job does
+      // not re-trigger this same hold on every subsequent cron run.
+      await db.update(jobs).set({ payoutStatus: "manual_review", internalPayoutStatus: "on_hold", autoConfirmAt: null }).where(eq(jobs.id, job.id));
+      await storage.createAuditLog({ userId: job.postedById, action: "payout_guard_cron_hold", details: `Job ${job.id}: auto-confirm payout HELD by multi-factor guard — reasons=${cronPayoutGate.reasons.join(",")}` });
+      console.warn(`[GUBER][payout-guard] cron jobId=${job.id} capture HELD — reasons=${cronPayoutGate.reasons.join(",")}`);
+      continue;
+    }
+
+    const update: any = {
+      status: "completed_paid",
+      confirmedAt: now,
+      payoutStatus: "payout_eligible",
+      internalPayoutStatus: "approved",
+    };
+
+    await db.update(jobs).set(update).where(eq(jobs.id, job.id));
 
     if (piId && jobPayoutStatus !== "paid_out" && jobPayoutStatus !== "capture_expired") {
       try {

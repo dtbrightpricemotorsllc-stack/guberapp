@@ -26,6 +26,15 @@ export interface TrackPoint {
 type Coords = { lat: number; lng: number };
 type Subscriber = (coords: Coords) => void;
 
+// Server-reported geofence proximity. This is verification/telemetry only — it
+// never authorizes a payout (the backend enforces a multi-factor guardrail).
+export interface GeofenceStatus {
+  withinRadius: boolean;
+  meters: number | null;
+  radius: number;
+}
+type GeofenceSubscriber = (status: GeofenceStatus) => void;
+
 export const MIN_DISTANCE_M = 25;
 export const MIN_INTERVAL_MS = 60_000;
 export const BATCH_SIZE = 10;
@@ -59,6 +68,8 @@ export class TaskTrackingService {
   private watchId: number | null = null;
   private starting = false;
   private subscribers = new Set<Subscriber>();
+  private geofenceSubscribers = new Set<GeofenceSubscriber>();
+  private latestGeofence: GeofenceStatus | null = null;
   private latest: Coords | null = null;
   private lastAccepted: TrackPoint | null = null;
   private queue: TrackPoint[] = [];
@@ -90,6 +101,26 @@ export class TaskTrackingService {
   private emit(c: Coords): void {
     this.subscribers.forEach((s) => {
       try { s(c); } catch { /* ignore */ }
+    });
+  }
+
+  /** Latest server-reported geofence proximity (verification only). */
+  getGeofenceStatus(): GeofenceStatus | null {
+    return this.latestGeofence;
+  }
+
+  /** Subscribe to geofence proximity updates. Returns an unsubscribe fn. */
+  subscribeGeofence(cb: GeofenceSubscriber): () => void {
+    this.geofenceSubscribers.add(cb);
+    if (this.latestGeofence) {
+      try { cb(this.latestGeofence); } catch { /* listener errors must not break tracking */ }
+    }
+    return () => { this.geofenceSubscribers.delete(cb); };
+  }
+
+  private emitGeofence(g: GeofenceStatus): void {
+    this.geofenceSubscribers.forEach((s) => {
+      try { s(g); } catch { /* ignore */ }
     });
   }
 
@@ -227,6 +258,16 @@ export class TaskTrackingService {
       // stays for the next flush.
       this.queue = this.queue.slice(batch.length);
       this.persistQueue();
+      // Surface server-reported geofence proximity (verification/telemetry only;
+      // this never authorizes a payout — the backend enforces that separately).
+      if (data && data.geofence && typeof data.geofence.withinRadius === "boolean") {
+        this.latestGeofence = {
+          withinRadius: data.geofence.withinRadius,
+          meters: typeof data.geofence.meters === "number" ? data.geofence.meters : null,
+          radius: typeof data.geofence.radius === "number" ? data.geofence.radius : 0,
+        };
+        this.emitGeofence(this.latestGeofence);
+      }
       if (data && data.active === false) {
         this.queue = [];
         this.persistQueue();

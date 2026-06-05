@@ -1280,6 +1280,7 @@ export async function seedDisputeProtectionColumns() {
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS safety_confirmed_by_poster BOOLEAN DEFAULT FALSE`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS safety_confirmed_by_helper BOOLEAN DEFAULT FALSE`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS internal_payout_status TEXT`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS geofence_verified_at TIMESTAMPTZ`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS contact_bypass_flagged BOOLEAN DEFAULT FALSE`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS job_quality_score INTEGER`);
 
