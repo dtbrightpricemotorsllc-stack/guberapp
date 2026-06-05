@@ -13955,7 +13955,7 @@ export async function registerRoutes(
   app.post("/api/admin/danger/fresh-start", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { confirm } = req.body || {};
-      if (confirm !== "FRESH START") {
+      if (typeof confirm !== "string" || confirm.trim().toUpperCase() !== "FRESH START") {
         return res.status(412).json({ error: 'Confirmation required: send { "confirm": "FRESH START" }' });
       }
       const result = await storage.adminFreshStartWipe(req.session.userId);

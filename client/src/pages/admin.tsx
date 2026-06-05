@@ -6474,8 +6474,14 @@ return (
       data-testid="input-fresh-start-confirm"
     />
     <button
-      onClick={() => freshStartMutation.mutate()}
-      disabled={freshStartConfirm !== "FRESH START" || freshStartMutation.isPending}
+      onClick={() => {
+        if (freshStartConfirm.trim().toUpperCase() !== "FRESH START") {
+          toast({ title: "Confirmation required", description: 'Type FRESH START to confirm.', variant: "destructive" });
+          return;
+        }
+        freshStartMutation.mutate();
+      }}
+      disabled={freshStartMutation.isPending}
       className="shrink-0 px-4 py-2 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       data-testid="button-fresh-start"
     >
