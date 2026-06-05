@@ -13949,6 +13949,24 @@ export async function registerRoutes(
     }
   });
 
+  // One-time "Fresh Start": HARD-delete real jobs + sample marketplace listings.
+  // Requires a typed confirmation in the body to prevent accidental triggering.
+  // Demo/seed jobs, real marketplace listings, and user accounts are preserved.
+  app.post("/api/admin/danger/fresh-start", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { confirm } = req.body || {};
+      if (confirm !== "FRESH START") {
+        return res.status(412).json({ error: 'Confirmation required: send { "confirm": "FRESH START" }' });
+      }
+      const result = await storage.adminFreshStartWipe(req.session.userId);
+      console.log(`[GUBER][admin/fresh-start] wiped ${result.jobsDeleted} real jobs + ${result.marketplaceDeleted} sample listings`);
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error("Admin fresh-start error:", err);
+      res.status(500).json({ error: err.message || "Fresh start failed" });
+    }
+  });
+
   // Mark a stuck job as acknowledged so it no longer appears in diagnostic scans
   app.patch("/api/admin/jobs/:id/acknowledge-stuck", requireAdmin, async (req: Request, res: Response) => {
     try {

@@ -105,6 +105,7 @@ export interface IStorage {
   acknowledgeStuckJob(id: number, adminId: number): Promise<Job | undefined>;
   deleteJob(id: number): Promise<void>;
   adminRemoveJob(id: number, reason: string): Promise<void>;
+  adminFreshStartWipe(): Promise<{ jobsDeleted: number; marketplaceDeleted: number }>;
 
   getCategories(): Promise<Category[]>;
   createCategory(name: string, icon?: string, color?: string): Promise<Category>;
@@ -771,6 +772,82 @@ export class DatabaseStorage implements IStorage {
       removedByAdmin: true,
       removedByAdminReason: reason,
     }).where(eq(jobs.id, id));
+  }
+
+  // One-time "fresh start": HARD-deletes the real (non-demo, non-test) jobs
+  // posted by real users, plus all sample marketplace listings — and every
+  // dependent row tied to them. Demo/seed jobs, real marketplace listings, and
+  // all user accounts are left untouched. There are no DB-level FK constraints
+  // on these tables, so dependents are removed explicitly so the app is left
+  // with no orphaned/dangling job references. Runs in a single transaction.
+  async adminFreshStartWipe(adminId?: number): Promise<{ jobsDeleted: number; marketplaceDeleted: number }> {
+    return await db.transaction(async (tx) => {
+      // Target sets captured up front into temp tables (same connection / tx).
+      await tx.execute(sql`
+        CREATE TEMP TABLE _fs_job_ids ON COMMIT DROP AS
+        SELECT j.id FROM jobs j
+        JOIN users u ON u.id = j.posted_by_id
+        WHERE j.is_demo = false AND j.is_test_job = false
+          AND u.is_test_user = false
+          AND u.email NOT ILIKE '%@guberapp.internal'`);
+      await tx.execute(sql`
+        CREATE TEMP TABLE _fs_listing_ids ON COMMIT DROP AS
+        SELECT id FROM marketplace_items WHERE is_sample = true`);
+
+      const J = sql`(SELECT id FROM _fs_job_ids)`;
+
+      // ── Job dependents (delete in dependency order) ──────────────────────
+      await tx.execute(sql`DELETE FROM timesheets WHERE assignment_id IN (SELECT id FROM assignments WHERE job_id IN ${J})`);
+      await tx.execute(sql`DELETE FROM assignments        WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM proof_submissions  WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM reviews            WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM bounty_attempts    WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM task_history_summary WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM reminders_sent     WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM cancellation_log   WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM direct_offers      WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM notifications      WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM strike_records     WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM guber_disputes     WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM guber_payments     WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM money_ledger       WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM wallet_transactions WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM fund_claims_or_holds WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM job_status_logs    WHERE job_id IN ${J}`);
+      await tx.execute(sql`DELETE FROM job_location_pings WHERE job_id IN ${J}`);
+
+      // ── Preserve parent records, null their dangling pointers ────────────
+      await tx.execute(sql`UPDATE observations      SET converted_to_job_id = NULL WHERE converted_to_job_id IN ${J}`);
+      await tx.execute(sql`UPDATE load_board_addons SET linked_job_id        = NULL WHERE linked_job_id IN ${J}`);
+      await tx.execute(sql`UPDATE marketplace_items SET vi_job_id            = NULL WHERE vi_job_id IN ${J}`);
+
+      const jobsRes: any = await tx.execute(sql`DELETE FROM jobs WHERE id IN ${J}`);
+
+      // ── Sample marketplace listings + their dependents ───────────────────
+      const L = sql`(SELECT id FROM _fs_listing_ids)`;
+      const sampleDealIds = sql`(SELECT id FROM marketplace_deals WHERE listing_id IN ${L})`;
+      await tx.execute(sql`DELETE FROM marketplace_deal_messages WHERE deal_id IN ${sampleDealIds}`);
+      await tx.execute(sql`DELETE FROM marketplace_deal_reviews  WHERE deal_id IN ${sampleDealIds}`);
+      await tx.execute(sql`DELETE FROM marketplace_deals               WHERE listing_id IN ${L}`);
+      await tx.execute(sql`DELETE FROM marketplace_offers              WHERE listing_id IN ${L}`);
+      await tx.execute(sql`DELETE FROM marketplace_viewing_requests    WHERE listing_id IN ${L}`);
+      await tx.execute(sql`DELETE FROM marketplace_verification_requests WHERE listing_id IN ${L}`);
+      await tx.execute(sql`DELETE FROM marketplace_listing_reports     WHERE listing_id IN ${L}`);
+      await tx.execute(sql`DELETE FROM marketplace_buyer_order_requests  WHERE listing_id IN ${L}`);
+      await tx.execute(sql`DELETE FROM marketplace_buyer_order_purchases WHERE listing_id IN ${L}`);
+      const mktRes: any = await tx.execute(sql`DELETE FROM marketplace_items WHERE is_sample = true`);
+
+      const jobsDeleted = jobsRes.rowCount ?? 0;
+      const marketplaceDeleted = mktRes.rowCount ?? 0;
+
+      await tx.insert(auditLogs).values({
+        userId: adminId ?? null,
+        action: "admin_fresh_start",
+        details: `Hard-deleted ${jobsDeleted} real jobs (+ dependents) and ${marketplaceDeleted} sample marketplace listings.`,
+      });
+
+      return { jobsDeleted, marketplaceDeleted };
+    });
   }
 
   async getJobsByCategory(category: string): Promise<Job[]> {

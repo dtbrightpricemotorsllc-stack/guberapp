@@ -6243,6 +6243,21 @@ const [disclaimerFilter, setDisclaimerFilter] = useState(false);
 const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 const [jobFilter, setJobFilter] = useState<"all" | "stuck" | "active" | "done">("all");
 const [includeDemoJobs, setIncludeDemoJobs] = useState(false);
+const [freshStartConfirm, setFreshStartConfirm] = useState("");
+
+const freshStartMutation = useMutation({
+  mutationFn: async () => {
+    const r = await apiRequest("POST", "/api/admin/danger/fresh-start", { confirm: "FRESH START" });
+    return r.json();
+  },
+  onSuccess: (data: { jobsDeleted: number; marketplaceDeleted: number }) => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/production-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/jobs"] });
+    setFreshStartConfirm("");
+    toast({ title: "Fresh start complete", description: `Deleted ${data.jobsDeleted} jobs and ${data.marketplaceDeleted} sample listings.` });
+  },
+  onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+});
 
 const updateUserMutation = useMutation({
 mutationFn: ({ id, data }: { id: number; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
@@ -6434,6 +6449,40 @@ return (
     </div>
   );
 })()}
+
+{/* ── Danger Zone: Fresh Start ─────────────────────────────────────────── */}
+<div className="rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/5 to-transparent p-4 mb-6" data-testid="danger-zone-fresh-start">
+  <div className="flex items-center gap-2 mb-2">
+    <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+      <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+    </div>
+    <span className="text-sm font-display font-bold text-red-400">Danger Zone — Fresh Start</span>
+  </div>
+  <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+    Permanently deletes <span className="text-foreground font-medium">all real jobs</span> (currently {prodStats?.stats.jobs ?? "—"}) and
+    <span className="text-foreground font-medium"> all sample marketplace listings</span>, including their related records.
+    Demo/seed jobs, real marketplace listings, and user accounts are kept. This cannot be undone.
+    To confirm, type <span className="text-red-400 font-mono font-bold">FRESH START</span> below.
+  </p>
+  <div className="flex items-center gap-2">
+    <input
+      type="text"
+      value={freshStartConfirm}
+      onChange={(e) => setFreshStartConfirm(e.target.value)}
+      placeholder="Type FRESH START"
+      className="flex-1 bg-card border border-border/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500/50"
+      data-testid="input-fresh-start-confirm"
+    />
+    <button
+      onClick={() => freshStartMutation.mutate()}
+      disabled={freshStartConfirm !== "FRESH START" || freshStartMutation.isPending}
+      className="shrink-0 px-4 py-2 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      data-testid="button-fresh-start"
+    >
+      {freshStartMutation.isPending ? "Deleting…" : "Delete & Reset"}
+    </button>
+  </div>
+</div>
 
 {/* ── GUBER OS ─────────────────────────────────────────────────────────── */}
 <div className="rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/5 to-transparent p-4 mb-6" data-testid="guber-os-block">
