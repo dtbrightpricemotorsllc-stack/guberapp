@@ -6,3 +6,4 @@
 - [State-bleed in mode-selector forms](statebleed-auditor.md) — changing a string-literal mode selector must reset all its branch-scoped fields (and async results must be discarded); guarded by `scripts/audit-statebleed.mjs` + `statebleed` validation/test.
 - [Ambassador payout idempotency](ambassador-payout-idempotency.md) — COUNT-vs-COUNT wallet payouts need a per-user advisory lock + in-tx insert, or they double-pay; trigger on every idVerified path.
 - [Homepage intro splash](home-intro-splash.md) — public home.tsx plays an animated mascot intro that replays on every fresh screenshot load; can't capture past it, verify UI another way.
+- [Overlay sequencing](overlay-sequencing.md) — GPS disclaimer (z-[200], global) and onboarding tour must be mutually exclusive, GPS-first; gate via gps.ts events + isGpsDisclaimerPending().

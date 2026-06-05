@@ -7,22 +7,36 @@ type Rejector = (err: Error) => void;
 const pendingResolvers: Resolver[] = [];
 const pendingRejectors: Rejector[] = [];
 
+// True while the GPS disclaimer is on-screen and awaiting the user's choice.
+// Lets UI mounted after the "show" event (e.g. the dashboard tour) still know
+// the modal is open and defer itself.
+let disclaimerPending = false;
+
 export function isGpsDisclaimerAccepted(): boolean {
   try { return localStorage.getItem(SESSION_KEY) === "1"; } catch { return false; }
 }
 
+/** True if the GPS disclaimer is currently open and waiting on the user. */
+export function isGpsDisclaimerPending(): boolean {
+  return disclaimerPending;
+}
+
 export function acceptGpsDisclaimer(): void {
   try { localStorage.setItem(SESSION_KEY, "1"); } catch {}
+  disclaimerPending = false;
   pendingRejectors.length = 0;
   while (pendingResolvers.length > 0) pendingResolvers.shift()?.();
+  try { window.dispatchEvent(new Event("guber:gps-disclaimer-resolved")); } catch {}
 }
 
 /** Called when the user dismisses the GPS disclaimer without accepting (e.g. Android back button). */
 export function dismissGpsDisclaimer(): void {
+  disclaimerPending = false;
   pendingResolvers.length = 0;
   const err = new Error("Location permission denied");
   (err as any).code = 1;
   while (pendingRejectors.length > 0) pendingRejectors.shift()?.(err);
+  try { window.dispatchEvent(new Event("guber:gps-disclaimer-resolved")); } catch {}
 }
 
 export function ensureGpsDisclaimer(): Promise<void> {
@@ -30,6 +44,7 @@ export function ensureGpsDisclaimer(): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     pendingResolvers.push(resolve);
     pendingRejectors.push(reject);
+    disclaimerPending = true;
     window.dispatchEvent(new Event("guber:show-gps-disclaimer"));
   });
 }

@@ -26,7 +26,7 @@ import {
   getAlertStatus, setAlertStatus, shouldShowAlertPrompt,
   hasAutoShownAlertModal, markAlertModalAutoShown,
 } from "@/components/alert-prompt-modal";
-import { gpsGetCurrentPosition } from "@/lib/gps";
+import { gpsGetCurrentPosition, isGpsDisclaimerAccepted, isGpsDisclaimerPending } from "@/lib/gps";
 
 // ─── Promo Modal System ───────────────────────────────────────────────────────
 
@@ -286,6 +286,22 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [showTour, setShowTour] = useState(() => !isTourComplete());
+
+  // GPS-first: never let the onboarding tour and the GPS disclaimer overlap.
+  // The tour is suppressed while the GPS notice is open and resumes once the
+  // user accepts or dismisses it.
+  const [gpsBlocking, setGpsBlocking] = useState(() => isGpsDisclaimerPending());
+  useEffect(() => {
+    if (isGpsDisclaimerAccepted()) return;
+    const open = () => setGpsBlocking(true);
+    const resolved = () => setGpsBlocking(false);
+    window.addEventListener("guber:show-gps-disclaimer", open);
+    window.addEventListener("guber:gps-disclaimer-resolved", resolved);
+    return () => {
+      window.removeEventListener("guber:show-gps-disclaimer", open);
+      window.removeEventListener("guber:gps-disclaimer-resolved", resolved);
+    };
+  }, []);
 
   const [mode, setMode] = useState<DashboardMode>(() => {
     if (typeof window !== "undefined") {
@@ -1314,8 +1330,8 @@ export default function Dashboard() {
       {/* ── Floating mascot helper (subtle, anchored bottom-right) ── */}
       <InstallMascot />
 
-      {/* ── Onboarding tour ── */}
-      {showTour && !!user && (
+      {/* ── Onboarding tour (deferred until the GPS notice is resolved) ── */}
+      {showTour && !!user && !gpsBlocking && (
         <DashboardTour
           accountType={(user as any)?.accountType || "individual"}
           onComplete={() => setShowTour(false)}
