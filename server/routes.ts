@@ -9562,6 +9562,62 @@ export async function registerRoutes(
     }
   });
 
+  // Batched live-location breadcrumbs from the assigned helper while a job is
+  // actively in progress. The foreground TaskTrackingService throttles points
+  // client-side (~25 m / 60 s) and uploads them in batches. We only accept them
+  // while the job is genuinely trackable (helper en route / on site and the job
+  // hasn't ended) — otherwise we reply { active: false } so the client tears
+  // its tracker down. This is the server-driven stop signal.
+  app.post("/api/jobs/:id/location-batch", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      if (isNaN(jobId)) return res.status(400).json({ message: "Invalid job id" });
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+      if (job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Not assigned" });
+      }
+
+      const TERMINAL_STATUSES = ["completed", "completed_paid", "cancelled", "expired", "closed", "disputed", "refunded"];
+      const stage = (job as any).helperStage;
+      const trackable = (stage === "on_the_way" || stage === "arrived") && !TERMINAL_STATUSES.includes(job.status);
+      if (!trackable) {
+        return res.json({ active: false, stored: 0 });
+      }
+
+      const rawPoints = Array.isArray(req.body?.points) ? req.body.points : [];
+      if (rawPoints.length === 0) return res.json({ active: true, stored: 0 });
+
+      const MAX_POINTS = 200;
+      const valid = rawPoints
+        .slice(0, MAX_POINTS)
+        .filter((p: any) =>
+          typeof p?.lat === "number" && typeof p?.lng === "number" &&
+          p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180,
+        );
+      if (valid.length === 0) return res.json({ active: true, stored: 0 });
+
+      const rows = valid.map((p: any) => ({
+        jobId,
+        userId: req.session.userId!,
+        lat: p.lat,
+        lng: p.lng,
+        recordedAt: typeof p.ts === "number" ? new Date(p.ts) : new Date(),
+      }));
+
+      await storage.insertJobLocationPings(rows);
+
+      // Mirror the latest fix onto the user's profile so worker pins / "nearby"
+      // logic see a fresh location without a separate ping call.
+      const last = valid[valid.length - 1];
+      await storage.updateUser(req.session.userId!, { lat: last.lat, lng: last.lng });
+
+      res.json({ active: true, stored: rows.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/jobs/:id/milestones", requireAuth, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);

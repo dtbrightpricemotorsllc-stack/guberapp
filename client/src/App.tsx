@@ -8,6 +8,7 @@ import { UploadProgressPill } from "@/components/upload-progress-pill";
 import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { taskTrackingService } from "@/services/location/TaskTrackingService";
 import { ThemeProvider } from "@/lib/theme-context";
 import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
@@ -536,6 +537,17 @@ function SplashWrapper({ onDone }: { onDone: () => void }) {
   return <LoadingSplash loading={isLoading} onDone={onDone} />;
 }
 
+// Resume an in-progress live-location task after a reload / app relaunch. Only
+// fires once we have an authenticated user; the service no-ops if nothing was
+// being tracked, and the server tears it down if the job has since ended.
+function TaskTrackingResumer() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (user) void taskTrackingService.resumeIfActive();
+  }, [user?.id]);
+  return null;
+}
+
 function App() {
   const [splashDone, setSplashDone] = useState(() => {
     if (import.meta.env.DEV && typeof window !== "undefined") {
@@ -550,6 +562,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
+            <TaskTrackingResumer />
             <Toaster />
             <UploadProgressPill />
             <GoogleAuthOverlay />

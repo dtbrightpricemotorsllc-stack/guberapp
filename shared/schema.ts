@@ -699,6 +699,24 @@ export const jobStatusLogs = pgTable("job_status_logs", {
 export type JobStatusLog = typeof jobStatusLogs.$inferSelect;
 export const insertJobStatusLogSchema = createInsertSchema(jobStatusLogs).omit({ id: true, createdAt: true });
 
+// Batched GPS breadcrumbs for an actively in-progress job (helper en route /
+// on site). Written by POST /api/jobs/:id/location-batch from the foreground
+// TaskTrackingService. Throttled client-side to ~25 m / 60 s so this stays
+// cheap even on long routes.
+export const jobLocationPings = pgTable("job_location_pings", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").notNull(),
+  userId: integer("user_id").notNull(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  recordedAt: timestamp("recorded_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type JobLocationPing = typeof jobLocationPings.$inferSelect;
+export const insertJobLocationPingSchema = createInsertSchema(jobLocationPings).omit({ id: true, createdAt: true });
+export type InsertJobLocationPing = z.infer<typeof insertJobLocationPingSchema>;
+
 export const marketplaceItems = pgTable("marketplace_items", {
   id: serial("id").primaryKey(),
   sellerId: integer("seller_id").notNull(),

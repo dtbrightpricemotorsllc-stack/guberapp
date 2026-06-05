@@ -378,6 +378,19 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_preset_listings_zip ON preset_listings(zip_code);
   `).catch(e => console.error("[migration] preset_listings error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS job_location_pings (
+      id SERIAL PRIMARY KEY,
+      job_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      recorded_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_location_pings_job ON job_location_pings(job_id);
+  `).catch(e => console.error("[migration] job_location_pings error:", e));
+
   await registerRoutes(httpServer, app);
   await startOSRuntime(app);
   startStudioToolsListener();

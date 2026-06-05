@@ -36,6 +36,7 @@ Local visibility network connecting hirers with workers, emphasizing trust and e
 | Job builder config | `client/src/lib/job-builder-config.ts` |
 | Platform detection | `client/src/lib/platform.ts` (`isStoreBuild`, `isIOS`) |
 | Push notifications | `server/push.ts`, `client/src/lib/push.ts` |
+| Live task tracking | `client/src/services/location/TaskTrackingService.ts` (foreground GPS watch; `POST /api/jobs/:id/location-batch`; table `job_location_pings`) |
 | Admin QA | `client/src/pages/admin-qa.tsx`, `server/admin-qa.ts` |
 | Dispute types | `shared/dispute.ts` |
 | Server tests | `server/tests/` |

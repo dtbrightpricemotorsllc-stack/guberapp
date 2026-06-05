@@ -3,7 +3,7 @@ import {
   notifications, reviews, strikeRecords, proofSubmissions, walletTransactions,
   viCategories, useCases, catalogServiceTypes, detailOptionSets,
   proofTemplates, proofChecklistItems, auditLogs, passwordResetTokens,
-  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceBuyerOrderPurchases, marketplaceDeals, marketplaceDealMessages, marketplaceDealReviews, jobStatusLogs, bountyAttempts,
+  marketplaceItems, marketplaceOffers, marketplaceViewingRequests, marketplaceVerificationRequests, marketplaceListingReports, marketplaceBuyerOrderRequests, marketplaceBuyerOrderPurchases, marketplaceDeals, marketplaceDealMessages, marketplaceDealReviews, jobStatusLogs, jobLocationPings, bountyAttempts,
   businessProfiles, bulkJobBatches, cashDrops, cashDropAttempts, servicePricingConfig,
   workerQualifications, observations, dropSponsors,
   businessAccounts, businessPlans, businessCandidateUnlocks, businessOffers,
@@ -23,7 +23,7 @@ import {
   type Notification, type Review, type StrikeRecord, type ProofSubmission,
   type WalletTransaction, type VICategory, type UseCase, type CatalogServiceType,
   type DetailOptionSet, type ProofTemplate, type ProofChecklistItem, type AuditLog,
-  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceBuyerOrderPurchase, type MarketplaceDeal, type MarketplaceDealMessage, type MarketplaceDealReview, type JobStatusLog, type BountyAttempt,
+  type MarketplaceItem, type MarketplaceOffer, type MarketplaceViewingRequest, type MarketplaceVerificationRequest, type MarketplaceListingReport, type MarketplaceBuyerOrderRequest, type MarketplaceBuyerOrderPurchase, type MarketplaceDeal, type MarketplaceDealMessage, type MarketplaceDealReview, type JobStatusLog, type JobLocationPing, type InsertJobLocationPing, type BountyAttempt,
   type BusinessProfile, type CashDrop, type CashDropAttempt, type ServicePricingConfig,
   type WorkerQualification, type Observation, type DropSponsor,
   type BusinessAccount, type BusinessPlan, type BusinessCandidateUnlock,
@@ -193,6 +193,8 @@ export interface IStorage {
 
   createJobStatusLog(data: any): Promise<JobStatusLog>;
   getJobStatusLogs(jobId: number): Promise<JobStatusLog[]>;
+  insertJobLocationPings(rows: InsertJobLocationPing[]): Promise<void>;
+  getJobLocationPings(jobId: number): Promise<JobLocationPing[]>;
   computeAndUpdateReliability(userId: number): Promise<void>;
   maybeUnderReview(userId: number): Promise<void>;
 
@@ -1577,6 +1579,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(jobStatusLogs)
       .where(eq(jobStatusLogs.jobId, jobId))
       .orderBy(desc(jobStatusLogs.createdAt));
+  }
+
+  async insertJobLocationPings(rows: InsertJobLocationPing[]): Promise<void> {
+    if (!rows.length) return;
+    await db.insert(jobLocationPings).values(rows);
+  }
+
+  async getJobLocationPings(jobId: number): Promise<JobLocationPing[]> {
+    return db.select().from(jobLocationPings)
+      .where(eq(jobLocationPings.jobId, jobId))
+      .orderBy(jobLocationPings.recordedAt);
   }
 
   async computeAndUpdateReliability(userId: number): Promise<void> {

@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { gpsGetCurrentPosition, gpsStartWatchPosition } from "@/lib/gps";
+import { gpsGetCurrentPosition } from "@/lib/gps";
+import { taskTrackingService } from "@/services/location/TaskTrackingService";
 import { isJobAddressUnlocked } from "@/components/scheduling-panel";
 import type { Job } from "@shared/schema";
 
@@ -65,8 +66,6 @@ export default function JobNavigate() {
   const destMarkerRef = useRef<google.maps.Marker | null>(null);
   const polylineRef = useRef<google.maps.Polyline | null>(null);
   const initStartedRef = useRef(false);
-  const watchIdRef = useRef<number | null>(null);
-  const watchCancelledRef = useRef(false);
   const hasFitRef = useRef(false);
 
   const [mapReady, setMapReady] = useState(false);
@@ -162,36 +161,46 @@ export default function JobNavigate() {
       );
   };
 
-  // Live GPS watcher.
+  // Live position comes from the standalone TaskTrackingService — not a local
+  // watch. This decouples the map from the GPS lifecycle: tracking keeps
+  // running (throttled + batched) even if the worker leaves this screen, and
+  // the watch is cleared centrally (via gpsClearWatch) when the task ends.
+  // Before tracking has started (worker hasn't tapped "On My Way") we take a
+  // single one-shot fix so the map/ETA still render — that is NOT continuous
+  // tracking, just an initial position.
   useEffect(() => {
-    watchCancelledRef.current = false;
-    gpsStartWatchPosition(
-      (pos) => {
-        if (pos.coords.accuracy > 300) return;
-        setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocationDenied(false);
-      },
-      (err) => {
-        console.warn("[GUBER] job-navigate geolocation error:", err.code, err.message);
-        setLocationDenied(true);
-      },
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 },
-    )
-      .then((id) => {
-        if (watchCancelledRef.current && navigator.geolocation) {
-          navigator.geolocation.clearWatch(id);
-          return;
-        }
-        watchIdRef.current = id;
-      })
-      .catch(() => setLocationDenied(true));
-    return () => {
-      watchCancelledRef.current = true;
-      if (watchIdRef.current !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-    };
+    let cancelled = false;
+    const unsub = taskTrackingService.subscribe((c) => {
+      if (cancelled) return;
+      setUserPos(c);
+      setLocationDenied(false);
+    });
+    const seed = taskTrackingService.getLatest();
+    if (seed) {
+      setUserPos(seed);
+    } else {
+      gpsGetCurrentPosition({ enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 })
+        .then((pos) => {
+          if (!cancelled && taskTrackingService.getLatest() == null) {
+            setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          }
+        })
+        .catch(() => { if (!cancelled) setLocationDenied(true); });
+    }
+    return () => { cancelled = true; unsub(); };
   }, []);
+
+  // Tracking is gated strictly on the task being actively in progress: the
+  // worker is en route ("on_the_way") or on site ("arrived"). startTask is
+  // idempotent. We deliberately do NOT stop on unmount — the service owns the
+  // lifecycle and stops itself when the server reports the job has ended
+  // (server-driven { active: false }) or on cancel/completion.
+  useEffect(() => {
+    if (!canRender) return;
+    if (helperStage === "on_the_way" || helperStage === "arrived") {
+      void taskTrackingService.startTask(jobId);
+    }
+  }, [canRender, helperStage, jobId]);
 
   // Init map once we know destination + have the API key.
   // `canRender` keeps the map from booting before the address-lock guard clears.
