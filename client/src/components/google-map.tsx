@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin as MapPinIcon, AlertTriangle, Navigation, LocateOff, RefreshCw } from "lucide-react";
-import { gpsStartWatchPosition } from "@/lib/gps";
+import { gpsStartWatchPosition, gpsClearWatch, gpsGetCurrentPosition } from "@/lib/gps";
 
 export interface JobPin {
   id: number;
@@ -188,6 +188,30 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   const startWatchPosition = (highAccuracy: boolean = true) => {
     setLocating(true);
     setLocationDenied(false);
+    // Seed an immediate one-shot fix on the initial (high-accuracy) attempt.
+    // On native, watchPosition can be slow to emit its first sample, so this
+    // gets a marker on the map faster. Guarded so it never overwrites a fix the
+    // watcher already delivered, and failures are swallowed (the watcher + IP
+    // fallback own the error/denied UX).
+    if (highAccuracy) {
+      gpsGetCurrentPosition({ enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 })
+        .then((pos) => {
+          if (userPosRef.current) return;
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          userPosRef.current = coords;
+          setUserPos(coords);
+          setLocating(false);
+          setLocationDenied(false);
+          onUserPos?.(coords);
+          if (mapRef.current && !center && !hasCenteredRef.current) {
+            mapRef.current.panTo(coords);
+            mapRef.current.setZoom(11);
+            hasCenteredRef.current = true;
+          }
+          reverseGeocodeZip(coords.lat, coords.lng);
+        })
+        .catch(() => {});
+    }
     gpsStartWatchPosition(
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -223,7 +247,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
         if (highAccuracy && !lowAccuracyRetriedRef.current && (err.code === 2 || err.code === 3)) {
           lowAccuracyRetriedRef.current = true;
           console.warn(`[GUBER] Geolocation ${labels[err.code]} — retrying with low accuracy.`);
-          if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
+          if (watchIdRef.current !== null) gpsClearWatch(watchIdRef.current);
           watchIdRef.current = null;
           startWatchPosition(false);
           return;
@@ -261,7 +285,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       { enableHighAccuracy: highAccuracy, maximumAge: 30000, timeout: highAccuracy ? 10000 : 15000 }
     ).then((id) => {
       if (watchCancelledRef.current) {
-        if (navigator.geolocation) navigator.geolocation.clearWatch(id);
+        gpsClearWatch(id);
         return;
       }
       watchIdRef.current = id;
@@ -275,7 +299,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
   };
 
   const handleRetryLocation = () => {
-    if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
+    if (watchIdRef.current !== null) gpsClearWatch(watchIdRef.current);
     watchIdRef.current = null;
     hasCenteredRef.current = false;
     lowAccuracyRetriedRef.current = false;
@@ -309,7 +333,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     startWatchPosition();
     return () => {
       watchCancelledRef.current = true;
-      if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (watchIdRef.current !== null) gpsClearWatch(watchIdRef.current);
     };
   }, []);
 
