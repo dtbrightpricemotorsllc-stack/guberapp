@@ -5,15 +5,14 @@ description: Anti-fraud invariant for Stripe capture/transfer — GPS proximity 
 
 # Multi-factor payout guard
 
-`evaluatePayoutMultiFactor({job, proofs, helperConfirmed, customerConfirmed})` in `server/payout-guard.ts` enforces that a Stripe `paymentIntents.capture`/transfer only proceeds when ALL THREE factors hold:
-1. **GPS proximity verified** — job has `arrivedAt | workerArrivedAt | geofenceVerifiedAt`, OR the job has no real coords (null/undefined or `(0,0)` → online/legacy, exempt).
-2. **Provider submitted completion** — `helperConfirmed`.
-3. **Confirmation factor** — `customerConfirmed` OR a non-`notEncountered` photo/video proof artifact.
+**Invariant:** a Stripe `paymentIntents.capture`/transfer may only proceed when ALL THREE factors hold:
+1. **GPS proximity verified** — an arrival/geofence timestamp exists, OR the job has no real coords (`(0,0)` or null = online/legacy, exempt).
+2. **Provider submitted completion** (`helperConfirmed`).
+3. **Confirmation factor** — customer confirmed OR a real (non-"not encountered") photo/video proof artifact.
 
-**Why:** GPS/geofence is verification + telemetry ONLY; it must never auto-trigger money movement. The location-batch route (`/api/jobs/:id/location-batch`) computes 250m haversine, stamps `geofenceVerifiedAt` once, writes a `geofence_proximity_verified` audit log, and returns telemetry — no payout side effects.
+**Why:** GPS/geofence is verification + telemetry ONLY; it must never auto-trigger money movement. Legit dual-confirm flows already satisfy all three (helper must arrive → arrival stamped → before confirming), so the guard is defense-in-depth with no regression to normal payouts.
 
-**How to apply:** Any NEW code path that calls `stripe.paymentIntents.capture` must run the guard first (manual confirm path + cron auto-confirm path already do). In cron, evaluate the guard BEFORE setting `status: completed_paid` and clear `autoConfirmAt` when held, or a held payout leaves the job finalized-but-on-hold and re-loops every cron tick.
-
-**Deliberate exception:** admin dispute-resolution captures (`/api/admin/jobs/:id/resolve-dispute`, `worker_favor` + `partial`) intentionally bypass the guard because a human admin adjudication IS the authorizing factor — but they log a `payout_guard_admin_override` audit entry. Don't "fix" this by blocking them; that breaks dispute resolution.
-
-Legit dual-confirm flows already satisfy all 3 factors (helper must arrive → `arrivedAt` set → before `helperConfirmed`), so the guard is defense-in-depth with no regression to normal payouts.
+**How to apply:**
+- Any NEW code path that captures/transfers must run the guard first.
+- In the cron auto-confirm path, evaluate the guard BEFORE marking the job finalized (`completed_paid`) and clear the auto-confirm timer when held — otherwise a held payout leaves the job finalized-but-on-hold and re-fires every cron tick.
+- **Deliberate exception:** admin dispute-resolution captures bypass the guard because a human admin adjudication IS the authorizing factor — but they must write an explicit override audit entry. Do NOT "fix" this by blocking them; that breaks dispute resolution.

@@ -1,4 +1,5 @@
 import { gpsStartWatchPosition, gpsClearWatch } from "@/lib/gps";
+import { startForegroundTracking, stopForegroundTracking } from "@/lib/foreground-tracking";
 import { apiRequest } from "@/lib/queryClient";
 
 // Standalone, UI-independent live-location tracker for an actively in-progress
@@ -156,6 +157,10 @@ export class TaskTrackingService {
       }
       this.watchId = id;
       this.startFlushTimer();
+      // Android: surface the persistent foreground-service notification for the
+      // duration of tracking (no-op on iOS/web). Best-effort — never blocks the
+      // watch from starting.
+      void startForegroundTracking();
     } finally {
       this.starting = false;
     }
@@ -183,6 +188,9 @@ export class TaskTrackingService {
     this.queue = [];
     this.startedAt = 0;
     this.clearPersisted();
+    // Android: dismiss the persistent foreground-service notification (no-op on
+    // iOS/web). Best-effort.
+    void stopForegroundTracking();
   }
 
   private onPosition(pos: GeolocationPosition): void {

@@ -19,6 +19,7 @@ const browserOpenSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => true, getPlatform: () => "ios", isPluginAvailable: () => true },
+  registerPlugin: () => ({ start: vi.fn().mockResolvedValue(undefined), stop: vi.fn().mockResolvedValue(undefined) }),
 }));
 
 vi.mock("@capacitor/app", () => ({

@@ -6,6 +6,10 @@ vi.mock("@/lib/gps", () => ({
   gpsStartWatchPosition: vi.fn(),
   gpsClearWatch: vi.fn(),
 }));
+vi.mock("@/lib/foreground-tracking", () => ({
+  startForegroundTracking: vi.fn(),
+  stopForegroundTracking: vi.fn(),
+}));
 vi.mock("@/lib/queryClient", () => ({
   apiRequest: vi.fn(),
 }));
