@@ -22360,6 +22360,292 @@ OUTPUT STYLE:
     }
   });
 
+  // ════════════════════════════════════════════════════════════════════════
+  // GUBER Verified Release System™ — Phase 3: secure asset release
+  // The carrier requests authorization at the pickup (live selfie + GPS +
+  // tow/trailer/VIN verification); the owner / authorized contacts approve; a
+  // one-time pickup code is issued to the owner and validated by the carrier at
+  // hand-off, which appends the immutable "loaded" custody event. GPS is never
+  // trusted alone — geofence proximity AND a matching VIN are both required.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Does the viewer control this asset (owner/authorized contact, asset-admin,
+  // or platform admin)? Used to gate approve/deny/geofence/code-visibility.
+  async function viewerControlsAsset(req: Request, assetId: number): Promise<boolean> {
+    const uid = req.session.userId!;
+    if (await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact", "admin"])) {
+      return true;
+    }
+    return viewerIsAdmin(req);
+  }
+
+  // POST /api/assets/:id/geofence — owner/authorized sets the pickup geofence.
+  app.post("/api/assets/:id/geofence", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      if (!(await viewerControlsAsset(req, assetId))) {
+        return res.status(403).json({ message: "Only the asset owner can set the pickup geofence" });
+      }
+      const lat = Number(req.body?.lat);
+      const lng = Number(req.body?.lng);
+      const radiusMeters = req.body?.radiusMeters != null ? Number(req.body.radiusMeters) : undefined;
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return res.status(400).json({ message: "Valid lat/lng are required" });
+      }
+      if (radiusMeters != null && (!isFinite(radiusMeters) || radiusMeters <= 0 || radiusMeters > 10000)) {
+        return res.status(400).json({ message: "radiusMeters must be between 1 and 10000" });
+      }
+      await assetCustody.setAssetGeofence(assetId, lat, lng, radiusMeters);
+      const updated = await assetCustody.getProtectedAsset(assetId);
+      res.json({ asset: updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/assets/:id/custody — the append-only chain-of-custody timeline.
+  app.get("/api/assets/:id/custody", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      const uid = req.session.userId!;
+      const hasRole = await assetCustody.userHasRoleOnAsset(assetId, uid, [
+        "owner", "sender", "authorized_contact", "carrier", "driver", "witness", "recipient", "admin",
+      ]);
+      if (!hasRole && !(await viewerIsAdmin(req))) {
+        return res.status(403).json({ message: "Not authorized for this asset" });
+      }
+      const timeline = await assetCustody.getCustodyTimeline(assetId);
+      res.json({ asset, timeline });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/assets/:id/release/request — carrier requests release at pickup.
+  // Body: { selfieUrl, lat, lng, tow?:{...}, trailer?:{...}, scannedVin?, vinPhotoUrl? }
+  app.post("/api/assets/:id/release/request", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the connected carrier can request a release" });
+      }
+      const b = req.body || {};
+      const lat = Number(b.lat);
+      const lng = Number(b.lng);
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return res.status(400).json({ message: "A live GPS reading (lat/lng) is required" });
+      }
+      if (!b.selfieUrl || typeof b.selfieUrl !== "string") {
+        return res.status(400).json({ message: "A live selfie is required" });
+      }
+      // The selfie must be a GUBER-signed Cloudinary upload (anti-spoofing).
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const allowedHost = cloudName ? `https://res.cloudinary.com/${cloudName}/` : null;
+      if (!allowedHost || !String(b.selfieUrl).startsWith(allowedHost)) {
+        return res.status(400).json({ message: "selfieUrl must be a GUBER-signed Cloudinary upload" });
+      }
+      const result = await assetCustody.requestReleaseAuthorization({
+        assetId,
+        requestedBy: uid,
+        selfieUrl: String(b.selfieUrl),
+        lat,
+        lng,
+        tow: b.tow
+          ? {
+              vehicleType: b.tow.vehicleType ?? null,
+              plateNumber: b.tow.plateNumber ?? null,
+              plateState: b.tow.plateState ?? null,
+              photoUrls: Array.isArray(b.tow.photoUrls) ? b.tow.photoUrls : null,
+            }
+          : null,
+        trailer: b.trailer
+          ? {
+              trailerType: b.trailer.trailerType ?? null,
+              trailerNumber: b.trailer.trailerNumber ?? null,
+              plateNumber: b.trailer.plateNumber ?? null,
+              photoUrls: Array.isArray(b.trailer.photoUrls) ? b.trailer.photoUrls : null,
+            }
+          : null,
+        scannedVin: b.scannedVin ?? null,
+        vinPhotoUrl: b.vinPhotoUrl ?? null,
+      });
+
+      // Route the approval request to the owner + authorized contacts.
+      const roles = await assetCustody.getAssetRoles(assetId);
+      const approverIds = new Set(
+        roles
+          .filter((r) => r.status === "active" && ["owner", "sender", "authorized_contact"].includes(r.role))
+          .map((r) => r.userId),
+      );
+      const carrier = await storage.getUser(uid);
+      const carrierName = carrier?.guberId || "A carrier";
+      const vinWarn = result.vin.status === "mismatch" ? " ⚠️ VIN MISMATCH — review carefully." : "";
+      for (const approverId of Array.from(approverIds)) {
+        await notify(approverId, {
+          title: "Release authorization requested",
+          body: `${carrierName} is requesting to load your protected asset.${vinWarn}`,
+          type: "load_board",
+        }, "/load-board");
+      }
+
+      res.json({
+        authorization: result.authorization,
+        geofence: result.geofence,
+        vin: { status: result.vin.status, matched: result.vin.matched },
+      });
+    } catch (err: any) {
+      res.status(err.message === "Asset not found" ? 404 : 500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/assets/:id/release/authorizations — list release requests.
+  app.get("/api/assets/:id/release/authorizations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      const hasRole = await assetCustody.userHasRoleOnAsset(assetId, uid, [
+        "owner", "sender", "authorized_contact", "carrier", "driver", "admin",
+      ]);
+      if (!hasRole && !(await viewerIsAdmin(req))) {
+        return res.status(403).json({ message: "Not authorized for this asset" });
+      }
+      const authorizations = await assetCustody.getReleaseAuthorizationsForAsset(assetId);
+      res.json({ authorizations });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/assets/:id/release/authorizations/:authId/approve — owner approves.
+  app.post("/api/assets/:id/release/authorizations/:authId/approve", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const authId = parseInt(req.params.authId);
+      if (!(await viewerControlsAsset(req, assetId))) {
+        return res.status(403).json({ message: "Only the asset owner can approve a release" });
+      }
+      const auth = await assetCustody.getReleaseAuthorization(authId);
+      if (!auth || auth.assetId !== assetId) return res.status(404).json({ message: "Authorization not found" });
+      let result;
+      try {
+        result = await assetCustody.approveReleaseAuthorization(authId, req.session.userId!);
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+      // Tell the carrier they're cleared; give the owner the one-time code.
+      await notify(auth.requestedBy, {
+        title: "Release approved",
+        body: "Your release request was approved. Get the one-time pickup code from the owner at hand-off.",
+        type: "load_board",
+      }, "/load-board");
+      res.json({ authorization: result.authorization, code: result.code });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/assets/:id/release/authorizations/:authId/deny — owner denies.
+  app.post("/api/assets/:id/release/authorizations/:authId/deny", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const authId = parseInt(req.params.authId);
+      if (!(await viewerControlsAsset(req, assetId))) {
+        return res.status(403).json({ message: "Only the asset owner can deny a release" });
+      }
+      const auth = await assetCustody.getReleaseAuthorization(authId);
+      if (!auth || auth.assetId !== assetId) return res.status(404).json({ message: "Authorization not found" });
+      const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 500) : null;
+      let denied;
+      try {
+        denied = await assetCustody.denyReleaseAuthorization(authId, req.session.userId!, reason);
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+      await notify(auth.requestedBy, {
+        title: "Release denied",
+        body: reason ? `Your release request was denied: ${reason}` : "Your release request was denied.",
+        type: "load_board",
+      }, "/load-board");
+      res.json({ authorization: denied });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/assets/:id/release/codes — owner views the one-time codes to share.
+  app.get("/api/assets/:id/release/codes", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      if (!(await viewerControlsAsset(req, assetId))) {
+        return res.status(403).json({ message: "Only the asset owner can view pickup codes" });
+      }
+      const codes = await assetCustody.getReleaseCodesForAsset(assetId);
+      res.json({ codes });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/assets/:id/release/redeem — carrier validates the code at hand-off.
+  // Body: { code, lat, lng }
+  app.post("/api/assets/:id/release/redeem", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the connected carrier can redeem a pickup code" });
+      }
+      const b = req.body || {};
+      const lat = Number(b.lat);
+      const lng = Number(b.lng);
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return res.status(400).json({ message: "A live GPS reading (lat/lng) is required" });
+      }
+      if (!b.code || typeof b.code !== "string") {
+        return res.status(400).json({ message: "Pickup code is required" });
+      }
+      let result;
+      try {
+        result = await assetCustody.redeemReleaseCode({ assetId, code: String(b.code), redeemedBy: uid, lat, lng });
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+      if (result.alreadyRedeemed) {
+        return res.status(409).json({ message: "This pickup code has already been used" });
+      }
+      // Confirm the hand-off to the owner + authorized contacts.
+      const roles = await assetCustody.getAssetRoles(assetId);
+      const ownerIds = new Set(
+        roles
+          .filter((r) => r.status === "active" && ["owner", "sender", "authorized_contact"].includes(r.role))
+          .map((r) => r.userId),
+      );
+      for (const ownerId of Array.from(ownerIds)) {
+        await notify(ownerId, {
+          title: "Asset loaded & released",
+          body: "Your protected asset has been loaded and released to the carrier. Custody is now in transit.",
+          type: "load_board",
+        }, "/load-board");
+      }
+      res.json({ ok: true, code: { id: result.code.id, status: result.code.status, usedAt: result.code.usedAt } });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // POST /api/load-board — create listing
   app.post("/api/load-board", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
@@ -22749,6 +23035,12 @@ OUTPUT STYLE:
         if (action === "accept") {
           await storage.updateLoadBoardOffer(offerId, { status: "accepted" });
           await storage.updateLoadBoardListing(offer.listingId, { status: "offer_accepted", connectedCarrierId: offer.carrierId });
+          // Verified Release System™ — grant the connected carrier the carrier
+          // role on the protected asset (if any) so they can request release.
+          try {
+            const linkedAsset = await assetCustody.getAssetByListing(offer.listingId);
+            if (linkedAsset) await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "carrier");
+          } catch (e) { console.error("[release] carrier role assign failed:", e); }
           await storage.createNotification({
             userId: offer.carrierId,
             title: "Offer Accepted — Proceed to Connect",
@@ -22811,6 +23103,10 @@ OUTPUT STYLE:
           const agreedPrice = offer.counterAmount ?? offer.offerAmount;
           await storage.updateLoadBoardOffer(offerId, { status: "accepted", offerAmount: agreedPrice });
           await storage.updateLoadBoardListing(offer.listingId, { status: "offer_accepted", connectedCarrierId: offer.carrierId });
+          try {
+            const linkedAsset = await assetCustody.getAssetByListing(offer.listingId);
+            if (linkedAsset) await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "carrier");
+          } catch (e) { console.error("[release] carrier role assign failed:", e); }
           await storage.createNotification({
             userId: listing.posterId,
             title: "Carrier Accepted Your Counter",
