@@ -356,12 +356,30 @@ export async function grantFounderMembership(userId: number): Promise<boolean> {
       await client.query("COMMIT");
       return false;
     }
+    // Strict cap: never oversubscribe. Under the advisory lock we read the live
+    // claimed/cap counts and refuse to grant once the cap is reached. An admin
+    // must raise cap_limit before any further grants — paid fulfillment past the
+    // cap is handled by the caller (refund/standard pricing), not by overage.
+    const capRes = await client.query(
+      "SELECT total_claimed AS claimed, cap_limit AS cap FROM founders_club_state WHERE id = 1",
+    );
+    const claimed = Number(capRes.rows[0]?.claimed ?? 0);
+    const cap = Number(capRes.rows[0]?.cap ?? 0);
+    if (claimed >= cap) {
+      await client.query("COMMIT");
+      return false;
+    }
+    // Conditional increment so two racing transactions can never push past cap.
+    const inc = await client.query(
+      "UPDATE founders_club_state SET total_claimed = total_claimed + 1, updated_at = NOW() WHERE id = 1 AND total_claimed < cap_limit RETURNING total_claimed",
+    );
+    if (!inc.rows.length) {
+      await client.query("COMMIT");
+      return false;
+    }
     await client.query(
       "UPDATE users SET founding_asset_protection_member = true WHERE id = $1",
       [userId],
-    );
-    await client.query(
-      "UPDATE founders_club_state SET total_claimed = total_claimed + 1, updated_at = NOW() WHERE id = 1",
     );
     await client.query("COMMIT");
     return true;
@@ -689,6 +707,17 @@ export async function requestReleaseAuthorization(input: ReleaseRequestInput): P
   const asset = await getProtectedAsset(input.assetId);
   if (!asset) throw new Error("Asset not found");
 
+  // Mandatory tow vehicle + trailer verification (hard requirement). The carrier
+  // must present a tow vehicle plate and a trailer type at the pickup point — no
+  // release/loading can proceed without both. Fail fast here so we never create a
+  // pending authorization that can never be approved.
+  if (!input.tow || !input.tow.plateNumber || !input.tow.plateNumber.trim()) {
+    throw new Error("Release blocked: tow vehicle verification (plate) is required");
+  }
+  if (!input.trailer || !input.trailer.trailerType || !input.trailer.trailerType.trim()) {
+    throw new Error("Release blocked: trailer verification (type) is required");
+  }
+
   const geofence = checkGeofence(asset, input.lat, input.lng);
 
   const [auth] = await db
@@ -790,12 +819,24 @@ function makeReleaseCode(): string {
 // Release codes are never stored in plaintext. We persist only an HMAC-SHA256
 // digest keyed by a server secret; redemption hashes the supplied code and
 // compares digests with a timing-safe equality check.
-const RELEASE_CODE_HMAC_SECRET =
-  process.env.RELEASE_CODE_SECRET || process.env.SESSION_SECRET || "guber-release-code-fallback-secret";
+// No hardcoded fallback: release codes are a custody-authorization primitive, so
+// a predictable key in a misconfigured environment would undermine the whole
+// guarantee. We require a strong env secret (RELEASE_CODE_SECRET, or the shared
+// SESSION_SECRET which boot already enforces at ≥32 chars). If neither is set,
+// every hash/redeem operation throws instead of silently using a known key.
+function getReleaseCodeSecret(): string {
+  const s = process.env.RELEASE_CODE_SECRET || process.env.SESSION_SECRET;
+  if (!s || s.length < 16) {
+    throw new Error(
+      "Release codes are disabled: set RELEASE_CODE_SECRET (or SESSION_SECRET) to a strong value (≥16 chars) before issuing or redeeming pickup codes.",
+    );
+  }
+  return s;
+}
 
 export function hashReleaseCode(code: string): string {
   const normalized = (code ?? "").trim().toUpperCase();
-  return crypto.createHmac("sha256", RELEASE_CODE_HMAC_SECRET).update(normalized).digest("hex");
+  return crypto.createHmac("sha256", getReleaseCodeSecret()).update(normalized).digest("hex");
 }
 
 export function timingSafeHashEqual(a: string, b: string): boolean {
@@ -866,6 +907,16 @@ export async function approveReleaseAuthorization(
   }
   if (normalizeVin(assetForVin?.vin) && (!vin || vin.status !== "matched")) {
     throw new Error("Release blocked: VIN has not been verified against the asset on file");
+  }
+  // Mandatory tow vehicle + trailer hard gate before a code is ever issued. The
+  // authorization MUST carry a verified tow record AND a verified trailer record.
+  const towRec = auth.towVerificationId ? await getTowVehicleVerification(auth.towVerificationId) : undefined;
+  if (!towRec || !towRec.verified) {
+    throw new Error("Release blocked: tow vehicle has not been verified");
+  }
+  const trailerRec = auth.trailerVerificationId ? await getTrailerVerification(auth.trailerVerificationId) : undefined;
+  if (!trailerRec || !trailerRec.verified) {
+    throw new Error("Release blocked: trailer has not been verified");
   }
 
   const [approved] = await db
@@ -1036,7 +1087,8 @@ export async function redeemReleaseCode(input: {
       await client.query("COMMIT");
       throw new Error("Pickup code has expired");
     } else {
-      // Re-assert the VIN hard block against the linked authorization.
+      // Re-assert the VIN + tow/trailer hard blocks against the linked
+      // authorization at the final hand-off (defense in depth).
       if (codeRow.authorization_id) {
         const vinRes = await client.query(
           "SELECT status FROM vin_verifications WHERE authorization_id = $1 ORDER BY id DESC LIMIT 1",
@@ -1045,6 +1097,22 @@ export async function redeemReleaseCode(input: {
         if (vinRes.rows[0]?.status === "mismatch") {
           await client.query("ROLLBACK");
           throw new Error("Release blocked: VIN mismatch");
+        }
+        const towRes = await client.query(
+          "SELECT verified FROM tow_vehicle_verifications WHERE authorization_id = $1 ORDER BY id DESC LIMIT 1",
+          [codeRow.authorization_id],
+        );
+        if (!towRes.rows[0]?.verified) {
+          await client.query("ROLLBACK");
+          throw new Error("Release blocked: tow vehicle has not been verified");
+        }
+        const trailerRes = await client.query(
+          "SELECT verified FROM trailer_verifications WHERE authorization_id = $1 ORDER BY id DESC LIMIT 1",
+          [codeRow.authorization_id],
+        );
+        if (!trailerRes.rows[0]?.verified) {
+          await client.query("ROLLBACK");
+          throw new Error("Release blocked: trailer has not been verified");
         }
       }
 
@@ -1175,6 +1243,14 @@ export async function getTowVerificationsForAsset(assetId: number): Promise<TowV
 }
 export async function getTrailerVerificationsForAsset(assetId: number): Promise<TrailerVerification[]> {
   return db.select().from(trailerVerifications).where(eq(trailerVerifications.assetId, assetId)).orderBy(desc(trailerVerifications.id));
+}
+export async function getTowVehicleVerification(id: number): Promise<TowVehicleVerification | undefined> {
+  const [row] = await db.select().from(towVehicleVerifications).where(eq(towVehicleVerifications.id, id));
+  return row;
+}
+export async function getTrailerVerification(id: number): Promise<TrailerVerification | undefined> {
+  const [row] = await db.select().from(trailerVerifications).where(eq(trailerVerifications.id, id));
+  return row;
 }
 export async function getVinVerificationsForAsset(assetId: number): Promise<VinVerification[]> {
   return db.select().from(vinVerifications).where(eq(vinVerifications.assetId, assetId)).orderBy(desc(vinVerifications.id));

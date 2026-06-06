@@ -3661,14 +3661,27 @@ export async function registerRoutes(
           const fres = await assetCustody.fulfillPurchaseBySession(session.id, pi);
           const fUserId = metadata.userId ? parseInt(metadata.userId) : null;
           if (fUserId && fres.fulfilled) {
-            await assetCustody.grantFounderMembership(fUserId);
-            await storage.createNotification({
-              userId: fUserId,
-              title: "Welcome to the Founders Club!",
-              body: "You are now a GUBER Asset Protection Founding Member — lifetime founder pricing and benefits, permanently.",
-              type: "system",
-            }).catch(() => {});
-            console.log(`[GUBER][webhook/main] asset_protection_founders: user ${fUserId} enrolled (session ${session.id})`);
+            const granted = await assetCustody.grantFounderMembership(fUserId);
+            if (granted) {
+              await storage.createNotification({
+                userId: fUserId,
+                title: "Welcome to the Founders Club!",
+                body: "You are now a GUBER Asset Protection Founding Member — lifetime founder pricing and benefits, permanently.",
+                type: "system",
+              }).catch(() => {});
+              console.log(`[GUBER][webhook/main] asset_protection_founders: user ${fUserId} enrolled (session ${session.id})`);
+            } else {
+              // Cap was reached between checkout and webhook (or already a member):
+              // do NOT oversubscribe. Flag for manual reconciliation (refund or
+              // standard-tier conversion) rather than silently granting overage.
+              await storage.createNotification({
+                userId: fUserId,
+                title: "Founders Club is full",
+                body: "The Founders Club reached capacity just before your payment cleared. Our team will reach out to make it right (refund or convert to standard).",
+                type: "system",
+              }).catch(() => {});
+              console.warn(`[GUBER][webhook/main] asset_protection_founders: CAP REACHED for user ${fUserId} after payment (session ${session.id}) — needs manual reconciliation (refund/convert)`);
+            }
           } else {
             console.log(`[GUBER][webhook/main] asset_protection_founders: session ${session.id} alreadyDone=${fres.alreadyDone}`);
           }

@@ -123,4 +123,19 @@ describe("Verified Release System™ — pickup-code secret handling", () => {
     expect(safe.code).toBe("••••••45");
     expect(safe.status).toBe("active");
   });
+
+  it("refuses to hash with NO insecure fallback when neither secret env var is set", () => {
+    const prevRelease = process.env.RELEASE_CODE_SECRET;
+    const prevSession = process.env.SESSION_SECRET;
+    try {
+      delete process.env.RELEASE_CODE_SECRET;
+      delete process.env.SESSION_SECRET;
+      expect(() => hashReleaseCode("ABCD2345")).toThrow(/disabled|secret/i);
+    } finally {
+      if (prevRelease === undefined) delete process.env.RELEASE_CODE_SECRET;
+      else process.env.RELEASE_CODE_SECRET = prevRelease;
+      if (prevSession === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = prevSession;
+    }
+  });
 });
