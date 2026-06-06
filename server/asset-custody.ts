@@ -787,9 +787,42 @@ function makeReleaseCode(): string {
   return out;
 }
 
+// Release codes are never stored in plaintext. We persist only an HMAC-SHA256
+// digest keyed by a server secret; redemption hashes the supplied code and
+// compares digests with a timing-safe equality check.
+const RELEASE_CODE_HMAC_SECRET =
+  process.env.RELEASE_CODE_SECRET || process.env.SESSION_SECRET || "guber-release-code-fallback-secret";
+
+function hashReleaseCode(code: string): string {
+  const normalized = (code ?? "").trim().toUpperCase();
+  return crypto.createHmac("sha256", RELEASE_CODE_HMAC_SECRET).update(normalized).digest("hex");
+}
+
+function timingSafeHashEqual(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a, "hex");
+  const bufB = Buffer.from(b, "hex");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Masked, non-redeemable representation kept for owner display only.
+function maskReleaseCode(code: string): string {
+  const c = (code ?? "").trim().toUpperCase();
+  if (c.length <= 2) return "••••••";
+  return "••••••" + c.slice(-2);
+}
+
+// How many wrong-code attempts (within the window) lock redemption for an asset.
+const RELEASE_CODE_MAX_FAILS = 5;
+const RELEASE_CODE_FAIL_WINDOW_MS = 15 * 60 * 1000;
+
 export interface ApproveResult {
   authorization: ReleaseAuthorization;
   code: ReleaseCode;
+  // The plaintext pickup code, returned EXACTLY ONCE at mint time (never stored
+  // and never recoverable afterwards). Null when re-approving an existing auth.
+  plainCode: string | null;
 }
 
 /**
@@ -810,7 +843,7 @@ export async function approveReleaseAuthorization(
       .from(releaseCodes)
       .where(and(eq(releaseCodes.authorizationId, authId), eq(releaseCodes.status, "active")))
       .orderBy(desc(releaseCodes.id));
-    if (existing) return { authorization: auth, code: existing };
+    if (existing) return { authorization: auth, code: existing, plainCode: null };
   }
   if (auth.status !== "pending") {
     throw new Error(`Authorization is ${auth.status} and cannot be approved`);
@@ -842,12 +875,14 @@ export async function approveReleaseAuthorization(
     .returning();
   if (!approved) throw new Error("Authorization could not be approved (already acted on)");
 
+  const plainCode = makeReleaseCode();
   const [code] = await db
     .insert(releaseCodes)
     .values({
       assetId: auth.assetId,
       authorizationId: authId,
-      code: makeReleaseCode(),
+      code: maskReleaseCode(plainCode),
+      codeHash: hashReleaseCode(plainCode),
       status: "active",
       expiresAt: new Date(Date.now() + RELEASE_CODE_TTL_MS),
     } as any)
@@ -864,7 +899,7 @@ export async function approveReleaseAuthorization(
     metadata: { authorizationId: authId, codeId: code.id, expiresAt: code.expiresAt },
   });
 
-  return { authorization: approved, code };
+  return { authorization: approved, code, plainCode };
 }
 
 /** Deny a pending release authorization and revoke any code it produced. */
@@ -903,6 +938,16 @@ export async function getReleaseCodesForAsset(assetId: number): Promise<ReleaseC
     .orderBy(desc(releaseCodes.id));
 }
 
+/**
+ * Strip the secret verifier (`codeHash`) before a release code ever crosses the
+ * API boundary. Clients only ever see the masked display value plus safe
+ * metadata — never the HMAC digest used to validate a presented code.
+ */
+export function redactReleaseCode(code: ReleaseCode): Omit<ReleaseCode, "codeHash"> {
+  const { codeHash, ...safe } = code as ReleaseCode & { codeHash?: string | null };
+  return safe;
+}
+
 export interface RedeemResult {
   ok: boolean;
   alreadyRedeemed?: boolean;
@@ -932,6 +977,21 @@ export async function redeemReleaseCode(input: {
   const supplied = (input.code ?? "").trim().toUpperCase();
   if (!supplied) throw new Error("Pickup code is required");
 
+  // Rate-limit: too many recent wrong-code attempts lock redemption for this
+  // asset, blunting brute-force / shoulder-surf guessing. Failures are recorded
+  // as immutable custody events, which also drive the fraud-flag escalation.
+  const recentFails = (await getCustodyTimeline(input.assetId)).filter(
+    (e) =>
+      e.eventType === "code_failed" &&
+      e.createdAt != null &&
+      Date.now() - new Date(e.createdAt as any).getTime() < RELEASE_CODE_FAIL_WINDOW_MS,
+  ).length;
+  if (recentFails >= RELEASE_CODE_MAX_FAILS) {
+    const err: any = new Error("Too many incorrect pickup-code attempts. Redemption is locked; please try again later.");
+    err.code = "RATE_LIMITED";
+    throw err;
+  }
+
   // Geofence is a hard lock at hand-off.
   const geofence = checkGeofence(asset, input.lat, input.lng);
   if (geofence.unconfigured) {
@@ -943,57 +1003,60 @@ export async function redeemReleaseCode(input: {
     );
   }
 
+  const suppliedHash = hashReleaseCode(supplied);
+  let codeNotFound = false;
+  let consumedCodeId: number | null = null;
+  let alreadyUsedCode: ReleaseCode | undefined;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     // Serialize redemptions per-asset so a code can never be consumed twice.
     await client.query("SELECT pg_advisory_xact_lock($1, $2)", [747474, input.assetId]);
 
+    // Never query by plaintext. Pull this asset's codes and match the HMAC digest
+    // with a timing-safe comparison so the lookup leaks no timing signal.
     const codeRes = await client.query(
-      "SELECT * FROM release_codes WHERE asset_id = $1 AND code = $2 ORDER BY id DESC LIMIT 1",
-      [input.assetId, supplied],
+      "SELECT * FROM release_codes WHERE asset_id = $1 ORDER BY id DESC",
+      [input.assetId],
     );
-    const codeRow = codeRes.rows[0];
+    const codeRow = codeRes.rows.find((r: any) => timingSafeHashEqual(r.code_hash, suppliedHash));
     if (!codeRow) {
       await client.query("ROLLBACK");
-      throw new Error("Invalid pickup code");
-    }
-    if (codeRow.status === "used") {
+      codeNotFound = true;
+    } else if (codeRow.status === "used") {
       await client.query("COMMIT");
-      const code = (await db.select().from(releaseCodes).where(eq(releaseCodes.id, codeRow.id)))[0];
-      return { ok: false, alreadyRedeemed: true, code, geofence };
-    }
-    if (codeRow.status !== "active") {
+      alreadyUsedCode = (await db.select().from(releaseCodes).where(eq(releaseCodes.id, codeRow.id)))[0];
+    } else if (codeRow.status !== "active") {
       await client.query("ROLLBACK");
       throw new Error(`Pickup code is ${codeRow.status}`);
-    }
-    if (codeRow.expires_at && new Date(codeRow.expires_at).getTime() < Date.now()) {
+    } else if (codeRow.expires_at && new Date(codeRow.expires_at).getTime() < Date.now()) {
       await client.query("UPDATE release_codes SET status = 'expired' WHERE id = $1", [codeRow.id]);
       await client.query("COMMIT");
       throw new Error("Pickup code has expired");
-    }
-
-    // Re-assert the VIN hard block against the linked authorization.
-    if (codeRow.authorization_id) {
-      const vinRes = await client.query(
-        "SELECT status FROM vin_verifications WHERE authorization_id = $1 ORDER BY id DESC LIMIT 1",
-        [codeRow.authorization_id],
-      );
-      if (vinRes.rows[0]?.status === "mismatch") {
-        await client.query("ROLLBACK");
-        throw new Error("Release blocked: VIN mismatch");
+    } else {
+      // Re-assert the VIN hard block against the linked authorization.
+      if (codeRow.authorization_id) {
+        const vinRes = await client.query(
+          "SELECT status FROM vin_verifications WHERE authorization_id = $1 ORDER BY id DESC LIMIT 1",
+          [codeRow.authorization_id],
+        );
+        if (vinRes.rows[0]?.status === "mismatch") {
+          await client.query("ROLLBACK");
+          throw new Error("Release blocked: VIN mismatch");
+        }
       }
+      const consumed = await client.query(
+        "UPDATE release_codes SET status = 'used', used_at = NOW(), used_by = $2 WHERE id = $1 AND status = 'active' RETURNING *",
+        [codeRow.id, input.redeemedBy],
+      );
+      if (!consumed.rows.length) {
+        await client.query("ROLLBACK");
+        throw new Error("Pickup code could not be redeemed (already used)");
+      }
+      consumedCodeId = codeRow.id;
+      await client.query("COMMIT");
     }
-
-    const consumed = await client.query(
-      "UPDATE release_codes SET status = 'used', used_at = NOW(), used_by = $2 WHERE id = $1 AND status = 'active' RETURNING *",
-      [codeRow.id, input.redeemedBy],
-    );
-    if (!consumed.rows.length) {
-      await client.query("ROLLBACK");
-      throw new Error("Pickup code could not be redeemed (already used)");
-    }
-    await client.query("COMMIT");
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     throw e;
@@ -1001,11 +1064,26 @@ export async function redeemReleaseCode(input: {
     client.release();
   }
 
+  // Wrong code: record the failed attempt immutably (drives fraud escalation).
+  if (codeNotFound) {
+    await appendCustodyEvent(input.assetId, "code_failed", {
+      actorId: input.redeemedBy,
+      description: "Incorrect pickup code presented at hand-off",
+      metadata: { reason: "invalid_code" },
+      lat: input.lat,
+      lng: input.lng,
+    });
+    throw new Error("Invalid pickup code");
+  }
+  if (alreadyUsedCode) {
+    return { ok: false, alreadyRedeemed: true, code: alreadyUsedCode, geofence };
+  }
+
   // Outside the lock: flip asset state and append the immutable custody trail.
   await updateAsset(input.assetId, { status: "in_transit" } as any);
   const [code] = await db.select().from(releaseCodes).where(
-    and(eq(releaseCodes.assetId, input.assetId), eq(releaseCodes.code, supplied)),
-  ).orderBy(desc(releaseCodes.id));
+    eq(releaseCodes.id, consumedCodeId as number),
+  );
   const authorization = code?.authorizationId ? await getReleaseAuthorization(code.authorizationId) : undefined;
 
   await appendCustodyEvent(input.assetId, "code_redeemed", {

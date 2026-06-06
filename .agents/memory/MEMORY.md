@@ -10,6 +10,7 @@
 - [Live task location tracking](task-tracking-service.md) — foreground-only TaskTrackingService owns the GPS watch (not the map); clear via gpsClearWatch only; empty-queue heartbeat + 401/403/404=terminal are what stop it; runs ONLY for on_the_way/arrived tasks.
 - [Overlay sequencing](overlay-sequencing.md) — GPS disclaimer (z-[200], global) and onboarding tour must be mutually exclusive, GPS-first; gate via gps.ts events + isGpsDisclaimerPending().
 - [Mission Control /status endpoint](mission-control-status.md) — GREEN/RED comes only from watchdog (statebleed+tests+manifests); DB columns & VITE env vars don't affect it. Maps key served via /api/config, not VITE_.
+- [Release-code security](release-code-security.md) — pickup codes must be HMAC-hashed at rest, matched timing-safe, redacted from API (never leak codeHash), rate-limited; whole system ships dark behind verified_release_system flag.
 - [Witness payout authorization](witness-payout-authz.md) — witness accept+report gate on idVerified; report does atomic accepted→completed transition first to prevent double-pay; high-value tow/trailer changes allow owner-side roles, not carrier-only.
 - [Asset protection checkout idempotency](asset-protection-checkout-idempotency.md) — guard one-asset purchases at checkout-init (paid→409, reuse open session), not just webhook; web endpoints return `checkoutUrl` not `url`.
 - [tsx stale routes after big edits](tsx-stale-routes.md) — new Express routes returning SPA HTML (text/html 200) means tsx didn't hot-reload; restart the workflow, don't debug route order.

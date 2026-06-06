@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
@@ -22218,6 +22218,33 @@ OUTPUT STYLE:
     return { url: session.url };
   }
 
+  // ── Verified Release System feature gate ──────────────────────────────────
+  // The whole system ships dark: every asset-protection / custody / release /
+  // witness route (and the admin oversight routes) 404s unless the
+  // `verified_release_system` flag is enabled for the viewer. Admins always
+  // preview regardless of rollout scope.
+  const requireVerifiedReleaseSystem = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const uid = req.session.userId ?? null;
+      const user = uid ? await storage.getUser(uid) : null;
+      const { isFeatureEnabledFor } = await import("./feature-flags.js");
+      const enabled = await isFeatureEnabledFor(
+        "verified_release_system",
+        user ? { id: user.id, role: user.role } : null,
+      );
+      if (enabled || user?.role === "admin") return next();
+      return res.status(404).json({ message: "Not found" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  };
+  app.use("/api/asset-protection", requireVerifiedReleaseSystem);
+  app.use("/api/assets", requireVerifiedReleaseSystem);
+  app.use("/api/witness", requireVerifiedReleaseSystem);
+  app.use("/api/admin/assets", requireVerifiedReleaseSystem);
+  app.use("/api/admin/incidents", requireVerifiedReleaseSystem);
+  app.use("/api/admin/issues", requireVerifiedReleaseSystem);
+
   // GET /api/asset-protection/pricing — LOCKED catalog + founder status for the
   // viewer (used by the Load Board toggle and all purchase surfaces).
   app.get("/api/asset-protection/pricing", requireAuth, async (req: Request, res: Response) => {
@@ -22547,7 +22574,14 @@ OUTPUT STYLE:
         body: "Your release request was approved. Get the one-time pickup code from the owner at hand-off.",
         type: "load_board",
       }, "/load-board");
-      res.json({ authorization: result.authorization, code: result.code });
+      // `plainCode` is returned exactly once here — it is never stored in
+      // plaintext and cannot be retrieved again. The owner must capture it now.
+      // The code row is redacted so the secret HMAC verifier never leaves the server.
+      res.json({
+        authorization: result.authorization,
+        code: assetCustody.redactReleaseCode(result.code),
+        plainCode: result.plainCode,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -22590,7 +22624,7 @@ OUTPUT STYLE:
       if (!(await viewerControlsAsset(req, assetId))) {
         return res.status(403).json({ message: "Only the asset owner can view pickup codes" });
       }
-      const codes = await assetCustody.getReleaseCodesForAsset(assetId);
+      const codes = (await assetCustody.getReleaseCodesForAsset(assetId)).map(assetCustody.redactReleaseCode);
       res.json({ codes });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -22621,6 +22655,7 @@ OUTPUT STYLE:
       try {
         result = await assetCustody.redeemReleaseCode({ assetId, code: String(b.code), redeemedBy: uid, lat, lng });
       } catch (e: any) {
+        if (e?.code === "RATE_LIMITED") return res.status(429).json({ message: e.message });
         return res.status(409).json({ message: e.message });
       }
       if (result.alreadyRedeemed) {

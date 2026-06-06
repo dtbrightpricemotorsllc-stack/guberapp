@@ -2409,7 +2409,10 @@ export const releaseCodes = pgTable("release_codes", {
   id: serial("id").primaryKey(),
   assetId: integer("asset_id").notNull(),
   authorizationId: integer("authorization_id"),
+  // `code` stores only a masked display value (e.g. "••••••XY"); the redeemable
+  // secret is never persisted in plaintext. Validation is against `codeHash`.
   code: text("code").notNull(),
+  codeHash: text("code_hash"),
   status: text("status").notNull().default("active"), // active | used | expired | revoked
   usedAt: timestamp("used_at"),
   usedBy: integer("used_by"),

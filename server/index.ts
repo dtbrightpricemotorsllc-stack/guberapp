@@ -483,6 +483,7 @@ app.use((req, res, next) => {
       created_at TIMESTAMP DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_release_codes_asset ON release_codes(asset_id);
+    ALTER TABLE release_codes ADD COLUMN IF NOT EXISTS code_hash TEXT;
 
     CREATE TABLE IF NOT EXISTS tow_vehicle_verifications (
       id SERIAL PRIMARY KEY,
