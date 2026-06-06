@@ -128,6 +128,7 @@ const LoadBoardPost = lazy(() => import("@/pages/load-board-post"));
 const LoadBoardDetail = lazy(() => import("@/pages/load-board-detail"));
 const LoadBoardEdit = lazy(() => import("@/pages/load-board-edit"));
 const LoadBoardCarrierHub = lazy(() => import("@/pages/load-board-carrier-hub"));
+const FoundersClub = lazy(() => import("@/pages/founders-club"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 
@@ -381,6 +382,7 @@ function Router() {
       <Route path="/load-board/:id/edit" component={() => <ProtectedRoute component={LoadBoardEdit} />} />
       <Route path="/load-board/:id" component={() => <ProtectedRoute component={LoadBoardDetail} />} />
       <Route path="/load-board" component={() => <ProtectedRoute component={LoadBoard} />} />
+      <Route path="/founders" component={() => <ProtectedRoute component={FoundersClub} />} />
       <Route path="/carrier-profile" component={() => <ProtectedRoute component={CarrierProfilePage} />} />
       <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />

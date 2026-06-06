@@ -599,6 +599,31 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     res.json(updated);
   });
 
+  // ── Founders Club admin controls ─────────────────────────────────────────
+  // Adjust the cap and the founder / standard prices. Gated behind requireAdmin.
+  app.get("/api/admin/founders", requireAdmin, async (_req, res) => {
+    const assetCustody = await import("./asset-custody.js");
+    const status = await assetCustody.getFoundersStatus();
+    res.json(status);
+  });
+
+  app.patch("/api/admin/founders", requireAdmin, async (req, res) => {
+    const schema = z.object({
+      capLimit: z.number().int().positive().optional(),
+      founderPriceCents: z.number().int().min(0).optional(),
+      standardPriceCents: z.number().int().min(0).optional(),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid founders config", issues: parsed.error.issues });
+    }
+    const assetCustody = await import("./asset-custody.js");
+    const before = await assetCustody.getFoundersStatus();
+    const status = await assetCustody.updateFoundersConfig(parsed.data);
+    await audit(req, "founders_config_update", { before, patch: parsed.data, after: status });
+    res.json(status);
+  });
+
   // Public lookup for the client `useFeatureFlag` hook.
   app.get("/api/feature-flags/:key", async (req, res) => {
     if (!isKnownFlag(req.params.key)) return res.status(404).json({ enabled: false });

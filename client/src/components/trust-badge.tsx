@@ -87,6 +87,29 @@ export function Day1OGLogo({ size = "sm" }: { size?: "sm" | "md" | "lg" | "xl" }
   );
 }
 
+export function FoundingMemberBadge({ showHint = false }: { showHint?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Badge
+        variant="outline"
+        className="bg-gradient-to-r from-emerald-500/15 to-teal-500/10 text-emerald-400 border-emerald-500/40 gap-1 font-display text-[11px] tracking-wide shadow-[0_0_12px_hsl(160_84%_45%/0.2)]"
+        data-testid="badge-founding-member"
+      >
+        <ShieldCheck className="w-3 h-3" />
+        Founding Member
+      </Badge>
+      {showHint && (
+        <InfoHint
+          title="Asset Protection Founding Member"
+          description="Founding Members locked in lifetime founder pricing across every GUBER Verified Release System™ service."
+          bullets={["Lifetime founder pricing on all protection tiers", "Discounted Witness Verified add-ons", "Permanent founding-member status"]}
+          warning="Founding Member is a lifetime status and cannot be transferred."
+        />
+      )}
+    </span>
+  );
+}
+
 export function Day1OGBadge({ showHint = false }: { showHint?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck } from "lucide-react";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -1286,6 +1286,111 @@ function clipFormErrors(f: ClipFormState) {
   return errs;
 }
 
+interface AdminFoundersStatus {
+  totalClaimed: number;
+  capLimit: number;
+  spotsRemaining: number;
+  soldOut: boolean;
+  currentPriceCents: number;
+  founderPriceCents: number;
+  standardPriceCents: number;
+}
+
+function FoundersTab() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<AdminFoundersStatus>({ queryKey: ["/api/admin/founders"] });
+  const [cap, setCap] = useState("");
+  const [founderPrice, setFounderPrice] = useState("");
+  const [standardPrice, setStandardPrice] = useState("");
+
+  useEffect(() => {
+    if (data) {
+      setCap(String(data.capLimit));
+      setFounderPrice((data.founderPriceCents / 100).toString());
+      setStandardPrice((data.standardPriceCents / 100).toString());
+    }
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: (patch: Record<string, number>) =>
+      apiRequest("PATCH", "/api/admin/founders", patch).then((r) => r.json()),
+    onSuccess: () => {
+      toast({ title: "Founders Club updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/founders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-protection/founders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/asset-protection/pricing"] });
+    },
+    onError: (e: any) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
+  });
+
+  const onSave = () => {
+    const patch: Record<string, number> = {};
+    const capNum = parseInt(cap, 10);
+    const fp = Math.round(parseFloat(founderPrice) * 100);
+    const sp = Math.round(parseFloat(standardPrice) * 100);
+    if (Number.isFinite(capNum) && capNum > 0) patch.capLimit = capNum;
+    if (Number.isFinite(fp) && fp >= 0) patch.founderPriceCents = fp;
+    if (Number.isFinite(sp) && sp >= 0) patch.standardPriceCents = sp;
+    if (Object.keys(patch).length === 0) {
+      toast({ title: "Nothing to update", variant: "destructive" });
+      return;
+    }
+    save.mutate(patch);
+  };
+
+  if (isLoading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Founders Club Controls</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <p className="text-muted-foreground">
+          Adjust the cap and pricing for the Asset Protection Founders Club. Enrollment is also gated by the{" "}
+          <code>asset_protection_founders_club</code> feature flag. The cap cannot be set below the number of spots already claimed.
+        </p>
+
+        {data && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3" data-testid="stat-claimed">
+              <div className="text-xs text-muted-foreground">Claimed</div>
+              <div className="text-xl font-bold">{data.totalClaimed.toLocaleString()}</div>
+            </div>
+            <div className="rounded-lg border p-3" data-testid="stat-remaining">
+              <div className="text-xs text-muted-foreground">Remaining</div>
+              <div className="text-xl font-bold">{data.spotsRemaining.toLocaleString()}</div>
+            </div>
+            <div className="rounded-lg border p-3" data-testid="stat-status">
+              <div className="text-xs text-muted-foreground">Status</div>
+              <div className="text-xl font-bold">{data.soldOut ? "Sold out" : "Open"}</div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="text-xs text-muted-foreground">Cap (total spots)</label>
+            <Input type="number" value={cap} onChange={(e) => setCap(e.target.value)} data-testid="input-founders-cap" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Founder price ($)</label>
+            <Input type="number" step="0.01" value={founderPrice} onChange={(e) => setFounderPrice(e.target.value)} data-testid="input-founders-price" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Standard price ($)</label>
+            <Input type="number" step="0.01" value={standardPrice} onChange={(e) => setStandardPrice(e.target.value)} data-testid="input-standard-price" />
+          </div>
+        </div>
+
+        <Button onClick={onSave} disabled={save.isPending} data-testid="button-save-founders">
+          {save.isPending ? "Saving…" : "Save changes"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function FeaturedClipsTab() {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
@@ -1673,6 +1778,7 @@ export default function AdminQa() {
           <TabsTrigger value="users" data-testid="tab-users"><UsersIcon className="mr-1 h-3 w-3" />Users</TabsTrigger>
           <TabsTrigger value="cashdrops" data-testid="tab-cashdrops"><Bug className="mr-1 h-3 w-3" />Cash Drop Debug</TabsTrigger>
           <TabsTrigger value="flags" data-testid="tab-flags"><Flag className="mr-1 h-3 w-3" />Feature Flags</TabsTrigger>
+          <TabsTrigger value="founders" data-testid="tab-founders"><ShieldCheck className="mr-1 h-3 w-3" />Founders Club</TabsTrigger>
           <TabsTrigger value="push" data-testid="tab-push"><Bell className="mr-1 h-3 w-3" />Push Log</TabsTrigger>
           <TabsTrigger value="orphan-sweep" data-testid="tab-orphan-sweep"><Trash2 className="mr-1 h-3 w-3" />Orphan Sweep</TabsTrigger>
           <TabsTrigger value="studio-usage" data-testid="tab-studio-usage"><Activity className="mr-1 h-3 w-3" />Studio Usage</TabsTrigger>
@@ -1693,6 +1799,7 @@ export default function AdminQa() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="founders"><FoundersTab /></TabsContent>
         <TabsContent value="push">
           <Card>
             <CardHeader><CardTitle>Push Delivery Log</CardTitle></CardHeader>

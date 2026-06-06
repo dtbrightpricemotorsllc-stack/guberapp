@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { TrustBadge, TrustProgressBar, Day1OGBadge, Day1OGLogo } from "@/components/trust-badge";
+import { TrustBadge, TrustProgressBar, Day1OGBadge, Day1OGLogo, FoundingMemberBadge } from "@/components/trust-badge";
 import { MapPin, Star, Edit, CheckCircle, Crown, Loader2, ShieldCheck, Camera, FileText, Upload, Clock, TrendingUp, Award, AlertCircle, FileUp, DollarSign, ExternalLink, Banknote, ChevronRight, Share2, Copy, Gift, Shield, Lock, Zap, MessageSquare, Bell, Plus, X as XIcon, BadgeCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "wouter";
@@ -582,6 +582,7 @@ export default function Profile() {
             <div className="flex items-center gap-2 mb-3 flex-wrap justify-center">
               <TrustBadge tier={displayUser.tier} />
               {displayUser.day1OG && <Day1OGBadge />}
+              {(displayUser as any).foundingAssetProtectionMember && <FoundingMemberBadge showHint={isOwnProfile} />}
               {((displayUser as any).milestoneBadges || []).includes("trusted_worker") && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-display font-bold" style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#86efac" }} data-testid="badge-trusted-worker">
                   <Award className="w-2.5 h-2.5" /> Trusted Worker

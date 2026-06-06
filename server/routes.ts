@@ -12101,6 +12101,7 @@ export async function registerRoutes(
         const result = await buildFoundersCheckout({
           userId: user.id,
           userEmail: user.email,
+          userRole: user.role,
           successUrl: resolveSuccessUrl(options.successUrl, `${APP_BASE}/load-board?founders=success`),
           cancelUrl: `${APP_BASE}/load-board`,
         });
@@ -22168,9 +22169,16 @@ OUTPUT STYLE:
   async function buildFoundersCheckout(opts: {
     userId: number;
     userEmail: string | null;
+    userRole?: string | null;
     successUrl: string;
     cancelUrl: string;
   }): Promise<{ url: string } | { error: string; code: number }> {
+    const { isFeatureEnabledFor } = await import("./feature-flags.js");
+    const flagOn = await isFeatureEnabledFor("asset_protection_founders_club", {
+      id: opts.userId,
+      role: opts.userRole ?? null,
+    });
+    if (!flagOn) return { error: "Founders Club is not available", code: 404 };
     if (await assetCustody.isFounder(opts.userId)) {
       return { error: "Already a Founding Member", code: 409 };
     }
@@ -22302,6 +22310,36 @@ OUTPUT STYLE:
     }
   });
 
+  // GET /api/asset-protection/founders — Founders Club status for the enrollment
+  // surface. Returns live remaining counter, current price, whether the viewer
+  // is already a member, and whether the club is open (feature flag).
+  app.get("/api/asset-protection/founders", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      const { isFeatureEnabledFor } = await import("./feature-flags.js");
+      const enabled = await isFeatureEnabledFor("asset_protection_founders_club", {
+        id: userId,
+        role: user?.role ?? null,
+      });
+      const status = await assetCustody.getFoundersStatus();
+      const founder = await assetCustody.isFounder(userId);
+      res.json({
+        enabled,
+        founder,
+        totalClaimed: status.totalClaimed,
+        capLimit: status.capLimit,
+        spotsRemaining: status.spotsRemaining,
+        soldOut: status.soldOut,
+        currentPriceCents: status.currentPriceCents,
+        founderPriceCents: status.founderPriceCents,
+        standardPriceCents: status.standardPriceCents,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // POST /api/asset-protection/founders/checkout — web Founders Club enrollment.
   app.post("/api/asset-protection/founders/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
@@ -22311,6 +22349,7 @@ OUTPUT STYLE:
       const result = await buildFoundersCheckout({
         userId,
         userEmail: user?.email ?? null,
+        userRole: user?.role ?? null,
         successUrl: `${origin}/load-board?founders=success`,
         cancelUrl: `${origin}/load-board`,
       });

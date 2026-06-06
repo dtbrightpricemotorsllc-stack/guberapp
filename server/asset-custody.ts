@@ -222,6 +222,36 @@ export async function getFoundersStatus(): Promise<FoundersStatus> {
   };
 }
 
+/**
+ * Admin-only update of the Founders Club configuration (cap / prices). Ensures
+ * the singleton row exists first. The cap can never be set below the number of
+ * spots already claimed (that would create a negative remaining count and
+ * silently retro-close the club). Returns the fresh status.
+ */
+export async function updateFoundersConfig(patch: {
+  capLimit?: number;
+  founderPriceCents?: number;
+  standardPriceCents?: number;
+}): Promise<FoundersStatus> {
+  // Ensure the singleton exists.
+  await getFoundersStatus();
+  const [current] = await db.select().from(foundersClubState).where(eq(foundersClubState.id, 1));
+  const totalClaimed = current?.totalClaimed ?? 0;
+
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.capLimit != null && Number.isFinite(patch.capLimit)) {
+    set.capLimit = Math.max(totalClaimed, Math.floor(patch.capLimit));
+  }
+  if (patch.founderPriceCents != null && Number.isFinite(patch.founderPriceCents)) {
+    set.founderPriceCents = Math.max(0, Math.floor(patch.founderPriceCents));
+  }
+  if (patch.standardPriceCents != null && Number.isFinite(patch.standardPriceCents)) {
+    set.standardPriceCents = Math.max(0, Math.floor(patch.standardPriceCents));
+  }
+  await db.update(foundersClubState).set(set as any).where(eq(foundersClubState.id, 1));
+  return getFoundersStatus();
+}
+
 export async function isFounder(userId: number): Promise<boolean> {
   const [u] = await db
     .select({ f: users.foundingAssetProtectionMember })
