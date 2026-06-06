@@ -311,3 +311,21 @@ id = "Ojp-3pWL0wwwrE9WjQufd"
 uri = "file://attached_assets/screenshots/guberapp_com.png"
 type = "image"
 title = "guberapp.com — current production homepage"
+
+[[outputs]]
+id = "bUSr1OIbNICLahsigQtLa"
+uri = "file://attached_assets/generated_audio/music_guber_promo_bed.mp3"
+type = "audio"
+title = "guber promo bed"
+
+[[outputs]]
+id = "luXGZs545xLNSol9AXXN-"
+uri = "file://attached_assets/generated_audio/speech_guber_promo_vo.mp3"
+type = "audio"
+title = "guber promo vo"
+
+[[outputs]]
+id = "1cL2fquYSVYSPWzpPndLy"
+uri = "file://attached_assets/generated_videos/guber_promo_master_16x9.mp4"
+type = "video"
+title = "GUBER Promo / Teaser — \"Proof, Not Promises\" (16:9 master)"
