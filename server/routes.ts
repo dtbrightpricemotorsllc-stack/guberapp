@@ -3653,16 +3653,17 @@ export async function registerRoutes(
             console.log(`[GUBER][webhook/main] asset_protection: session ${session.id} had no pending purchase row — ignored`);
           }
         } else if (metadata?.type === "asset_protection_founders") {
-          // Founders Club one-time enrollment. The founder spot is granted
-          // atomically (advisory lock) only on payment success; here we mark
-          // the purchase paid, grant membership, and notify. Idempotent via the
-          // unique stripe_session_id on asset_protection_purchases.
+          // Founders Club one-time enrollment, idempotent via the unique
+          // stripe_session_id on asset_protection_purchases.
           const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
+          // Enrollment now happens ATOMICALLY inside fulfillPurchaseBySession (the
+          // founder flag + cap increment + purchase row all flip in one tx), so a
+          // paid founders purchase can never end up un-enrolled and a Stripe retry
+          // never double-grants. We only act on the outcome it reports.
           const fres = await assetCustody.fulfillPurchaseBySession(session.id, pi);
           const fUserId = metadata.userId ? parseInt(metadata.userId) : null;
           if (fUserId && fres.fulfilled) {
-            const granted = await assetCustody.grantFounderMembership(fUserId);
-            if (granted) {
+            if (fres.founderGranted) {
               await storage.createNotification({
                 userId: fUserId,
                 title: "Welcome to the Founders Club!",
@@ -3670,10 +3671,9 @@ export async function registerRoutes(
                 type: "system",
               }).catch(() => {});
               console.log(`[GUBER][webhook/main] asset_protection_founders: user ${fUserId} enrolled (session ${session.id})`);
-            } else {
-              // Cap was reached between checkout and webhook (or already a member):
-              // do NOT oversubscribe. Flag for manual reconciliation (refund or
-              // standard-tier conversion) rather than silently granting overage.
+            } else if (fres.founderSoldOut) {
+              // Cap filled between checkout and payment: do NOT oversubscribe.
+              // Flag for manual reconciliation (refund or standard-tier convert).
               await storage.createNotification({
                 userId: fUserId,
                 title: "Founders Club is full",
@@ -3681,6 +3681,8 @@ export async function registerRoutes(
                 type: "system",
               }).catch(() => {});
               console.warn(`[GUBER][webhook/main] asset_protection_founders: CAP REACHED for user ${fUserId} after payment (session ${session.id}) — needs manual reconciliation (refund/convert)`);
+            } else {
+              console.log(`[GUBER][webhook/main] asset_protection_founders: user ${fUserId} already a member (session ${session.id})`);
             }
           } else {
             console.log(`[GUBER][webhook/main] asset_protection_founders: session ${session.id} alreadyDone=${fres.alreadyDone}`);

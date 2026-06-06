@@ -283,113 +283,10 @@ export async function isFounder(userId: number): Promise<boolean> {
   return !!u?.f;
 }
 
-/**
- * Atomically claim a Founders Club spot for `userId`. Uses a transaction-scoped
- * advisory lock so concurrent purchases can never over-sell the 500 cap or
- * double-grant the same user. Returns whether the user got a FOUNDER spot
- * (i.e. was within the cap) — callers still charge the appropriate price.
- *
- * Idempotent: if the user is already a founder, returns granted=false,
- * alreadyMember=true without incrementing.
- */
-export async function claimFounderSpot(
-  userId: number,
-): Promise<{ granted: boolean; alreadyMember: boolean; soldOut: boolean }> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    // Single global lock for the founders counter.
-    await client.query("SELECT pg_advisory_xact_lock($1)", [987654321]);
-
-    const already = await client.query(
-      "SELECT founding_asset_protection_member AS m FROM users WHERE id = $1",
-      [userId],
-    );
-    if (already.rows[0]?.m) {
-      await client.query("COMMIT");
-      return { granted: false, alreadyMember: true, soldOut: false };
-    }
-
-    const stateRes = await client.query(
-      "SELECT total_claimed, cap_limit FROM founders_club_state WHERE id = 1 FOR UPDATE",
-    );
-    const totalClaimed = stateRes.rows[0]?.total_claimed ?? 0;
-    const capLimit = stateRes.rows[0]?.cap_limit ?? FOUNDERS_CLUB.defaultCap;
-    if (totalClaimed >= capLimit) {
-      await client.query("COMMIT");
-      return { granted: false, alreadyMember: false, soldOut: true };
-    }
-
-    await client.query(
-      "UPDATE founders_club_state SET total_claimed = total_claimed + 1, updated_at = NOW() WHERE id = 1",
-    );
-    await client.query(
-      "UPDATE users SET founding_asset_protection_member = true WHERE id = $1",
-      [userId],
-    );
-    await client.query("COMMIT");
-    return { granted: true, alreadyMember: false, soldOut: false };
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw e;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Grant founder membership AFTER a successful payment. Idempotent and honors the
- * payment even in the rare race where the cap filled between checkout creation
- * and webhook delivery (enrollment is gated on soldOut at the route, so overage
- * is at most a handful and is admin-visible). Returns whether it was newly granted.
- */
-export async function grantFounderMembership(userId: number): Promise<boolean> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock($1)", [987654321]);
-    const already = await client.query(
-      "SELECT founding_asset_protection_member AS m FROM users WHERE id = $1",
-      [userId],
-    );
-    if (already.rows[0]?.m) {
-      await client.query("COMMIT");
-      return false;
-    }
-    // Strict cap: never oversubscribe. Under the advisory lock we read the live
-    // claimed/cap counts and refuse to grant once the cap is reached. An admin
-    // must raise cap_limit before any further grants — paid fulfillment past the
-    // cap is handled by the caller (refund/standard pricing), not by overage.
-    const capRes = await client.query(
-      "SELECT total_claimed AS claimed, cap_limit AS cap FROM founders_club_state WHERE id = 1",
-    );
-    const claimed = Number(capRes.rows[0]?.claimed ?? 0);
-    const cap = Number(capRes.rows[0]?.cap ?? 0);
-    if (claimed >= cap) {
-      await client.query("COMMIT");
-      return false;
-    }
-    // Conditional increment so two racing transactions can never push past cap.
-    const inc = await client.query(
-      "UPDATE founders_club_state SET total_claimed = total_claimed + 1, updated_at = NOW() WHERE id = 1 AND total_claimed < cap_limit RETURNING total_claimed",
-    );
-    if (!inc.rows.length) {
-      await client.query("COMMIT");
-      return false;
-    }
-    await client.query(
-      "UPDATE users SET founding_asset_protection_member = true WHERE id = $1",
-      [userId],
-    );
-    await client.query("COMMIT");
-    return true;
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw e;
-  } finally {
-    client.release();
-  }
-}
+// Founders Club enrollment is performed atomically inside fulfillPurchaseBySession
+// (founder flag + cap increment + purchase row in one transaction under the
+// global advisory lock 987654321), so there is no separate claim/grant helper —
+// a single source of truth keeps "paid" and "enrolled" inseparable.
 
 // ── Purchases (idempotent fulfillment) ──────────────────────────────────────
 export async function recordPendingPurchase(opts: {
@@ -452,44 +349,120 @@ export async function findPurchaseForAsset(opts: {
 export async function fulfillPurchaseBySession(
   stripeSessionId: string,
   paymentIntentId?: string | null,
-): Promise<{ fulfilled: boolean; alreadyDone: boolean }> {
-  const [purchase] = await db
-    .select()
-    .from(assetProtectionPurchases)
-    .where(eq(assetProtectionPurchases.stripeSessionId, stripeSessionId));
-  if (!purchase) return { fulfilled: false, alreadyDone: false };
-  if (purchase.status === "paid") return { fulfilled: false, alreadyDone: true };
+): Promise<{ fulfilled: boolean; alreadyDone: boolean; founderGranted?: boolean; founderSoldOut?: boolean }> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Serialize concurrent fulfillment attempts (webhook + success redirect) on
+    // this purchase row so the money/state effects apply exactly once.
+    const pres = await client.query(
+      "SELECT * FROM asset_protection_purchases WHERE stripe_session_id = $1 FOR UPDATE",
+      [stripeSessionId],
+    );
+    const p = pres.rows[0];
+    if (!p) {
+      await client.query("COMMIT");
+      return { fulfilled: false, alreadyDone: false };
+    }
+    if (p.status === "paid") {
+      // Already fully fulfilled in a prior COMMITTED transaction. Because the
+      // status flip and ALL entitlement effects share one transaction (below),
+      // "paid" guarantees the effects landed too — nothing to reconcile.
+      await client.query("COMMIT");
+      return { fulfilled: false, alreadyDone: true };
+    }
 
-  // Flip to paid first (idempotency guard).
-  const updated = await db
-    .update(assetProtectionPurchases)
-    .set({ status: "paid", fulfilledAt: new Date(), stripePaymentIntentId: paymentIntentId ?? null })
-    .where(
-      and(eq(assetProtectionPurchases.stripeSessionId, stripeSessionId), eq(assetProtectionPurchases.status, "pending")),
-    )
-    .returning();
-  if (!updated.length) return { fulfilled: false, alreadyDone: true };
+    // Mark paid AND apply every entitlement effect inside ONE transaction: either
+    // all commit or none do. A mid-fulfillment failure rolls the row back to
+    // "pending", so Stripe's retry converges cleanly — there is no window where a
+    // purchase is "paid" but the asset/founder entitlement was never applied.
+    await client.query(
+      "UPDATE asset_protection_purchases SET status = 'paid', fulfilled_at = NOW(), stripe_payment_intent_id = $2 WHERE id = $1",
+      [p.id, paymentIntentId ?? null],
+    );
 
-  const p = updated[0];
+    let founderGranted: boolean | undefined;
+    let founderSoldOut: boolean | undefined;
 
-  if (p.productType === "package" && p.assetId && p.packageTier && isProtectionPackageKey(p.packageTier)) {
-    await updateAsset(p.assetId, { packageTier: p.packageTier, status: "active" } as any);
-    await appendCustodyEvent(p.assetId, "package_purchased", {
-      actorId: p.userId,
-      description: `Protection package purchased: ${p.packageTier}`,
-      metadata: { amountCents: p.amountCents, packageTier: p.packageTier, sessionId: stripeSessionId },
-    });
-  } else if (p.productType === "witness_addon" && p.assetId) {
-    await updateAsset(p.assetId, { witnessAddon: true } as any);
-    await appendCustodyEvent(p.assetId, "package_purchased", {
-      actorId: p.userId,
-      description: `Witness add-on purchased: ${p.packageTier ?? "witness"}`,
-      metadata: { amountCents: p.amountCents, addon: p.packageTier, sessionId: stripeSessionId },
-    });
+    if (p.product_type === "package" && p.asset_id && p.package_tier && isProtectionPackageKey(p.package_tier)) {
+      await client.query(
+        "UPDATE protected_assets SET package_tier = $2, status = 'active', updated_at = NOW() WHERE id = $1",
+        [p.asset_id, p.package_tier],
+      );
+      await client.query(
+        "INSERT INTO custody_events (asset_id, actor_id, event_type, description, metadata) VALUES ($1, $2, 'package_purchased', $3, $4)",
+        [
+          p.asset_id,
+          p.user_id,
+          `Protection package purchased: ${p.package_tier}`,
+          JSON.stringify({ amountCents: p.amount_cents, packageTier: p.package_tier, sessionId: stripeSessionId }),
+        ],
+      );
+    } else if (p.product_type === "witness_addon" && p.asset_id) {
+      await client.query(
+        "UPDATE protected_assets SET witness_addon = true, updated_at = NOW() WHERE id = $1",
+        [p.asset_id],
+      );
+      await client.query(
+        "INSERT INTO custody_events (asset_id, actor_id, event_type, description, metadata) VALUES ($1, $2, 'package_purchased', $3, $4)",
+        [
+          p.asset_id,
+          p.user_id,
+          `Witness add-on purchased: ${p.package_tier ?? "witness"}`,
+          JSON.stringify({ amountCents: p.amount_cents, addon: p.package_tier, sessionId: stripeSessionId }),
+        ],
+      );
+    } else if (p.product_type === "founders_club") {
+      // Founder enrollment is part of the SAME atomic fulfillment so a paid
+      // founders purchase can never end up un-enrolled. Strict cap under the
+      // global founders lock; overage is refused and surfaced to the caller for
+      // refund/convert reconciliation (never a silent oversubscription).
+      await client.query("SELECT pg_advisory_xact_lock($1)", [987654321]);
+      const memRes = await client.query(
+        "SELECT founding_asset_protection_member AS m FROM users WHERE id = $1",
+        [p.user_id],
+      );
+      if (memRes.rows[0]?.m) {
+        founderGranted = false; // already a member — idempotent no-op
+      } else {
+        const capRes = await client.query(
+          "SELECT total_claimed AS claimed, cap_limit AS cap FROM founders_club_state WHERE id = 1 FOR UPDATE",
+        );
+        const claimed = Number(capRes.rows[0]?.claimed ?? 0);
+        const cap = Number(capRes.rows[0]?.cap ?? 0);
+        if (claimed >= cap) {
+          founderGranted = false;
+          founderSoldOut = true;
+        } else {
+          const inc = await client.query(
+            "UPDATE founders_club_state SET total_claimed = total_claimed + 1, updated_at = NOW() WHERE id = 1 AND total_claimed < cap_limit RETURNING total_claimed",
+          );
+          if (inc.rows.length) {
+            await client.query(
+              "UPDATE users SET founding_asset_protection_member = true WHERE id = $1",
+              [p.user_id],
+            );
+            await client.query(
+              "UPDATE protected_assets SET founder_protected = true, updated_at = NOW() WHERE id = $1",
+              [p.asset_id],
+            );
+            founderGranted = true;
+          } else {
+            founderGranted = false;
+            founderSoldOut = true;
+          }
+        }
+      }
+    }
+
+    await client.query("COMMIT");
+    return { fulfilled: true, alreadyDone: false, founderGranted, founderSoldOut };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
   }
-  // founders_club fulfillment is handled by claimFounderSpot at purchase time.
-
-  return { fulfilled: true, alreadyDone: false };
 }
 
 /** Resolve the locked, server-authoritative price for a checkout request. */
