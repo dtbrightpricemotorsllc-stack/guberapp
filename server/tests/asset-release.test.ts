@@ -3,8 +3,12 @@ import {
   haversineMeters,
   checkGeofence,
   normalizeVin,
+  hashReleaseCode,
+  timingSafeHashEqual,
+  maskReleaseCode,
+  redactReleaseCode,
 } from "../asset-custody";
-import type { ProtectedAsset } from "@shared/schema";
+import type { ProtectedAsset, ReleaseCode } from "@shared/schema";
 
 // Minimal protected-asset stub with just the geofence fields the guard reads.
 function asset(over: Partial<ProtectedAsset> = {}): ProtectedAsset {
@@ -70,5 +74,53 @@ describe("Verified Release System™ — VIN hard block (normalizeVin)", () => {
 
   it("distinguishes genuinely different VINs", () => {
     expect(normalizeVin("1HGBH41JXMN109186")).not.toBe(normalizeVin("1HGBH41JXMN109187"));
+  });
+});
+
+describe("Verified Release System™ — pickup-code secret handling", () => {
+  it("hashes deterministically and case/whitespace-insensitively (never returns plaintext)", () => {
+    const h = hashReleaseCode("ABCD2345");
+    expect(h).toHaveLength(64); // hex sha256
+    expect(h).not.toContain("ABCD2345");
+    expect(hashReleaseCode(" abcd2345 ")).toBe(h);
+  });
+
+  it("produces different digests for different codes", () => {
+    expect(hashReleaseCode("ABCD2345")).not.toBe(hashReleaseCode("ABCD2346"));
+  });
+
+  it("timing-safe compare matches equal digests and rejects mismatches", () => {
+    const h = hashReleaseCode("ABCD2345");
+    expect(timingSafeHashEqual(h, hashReleaseCode("ABCD2345"))).toBe(true);
+    expect(timingSafeHashEqual(h, hashReleaseCode("ZZZZ9999"))).toBe(false);
+  });
+
+  it("timing-safe compare safely rejects null/empty/short (legacy rows w/o codeHash)", () => {
+    const h = hashReleaseCode("ABCD2345");
+    expect(timingSafeHashEqual(null as any, h)).toBe(false);
+    expect(timingSafeHashEqual(h, "" as any)).toBe(false);
+    expect(timingSafeHashEqual("abc", h)).toBe(false); // length mismatch, no throw
+  });
+
+  it("masks codes so the plaintext is never reconstructable from the display value", () => {
+    const masked = maskReleaseCode("ABCD2345");
+    expect(masked).not.toContain("ABCD");
+    expect(masked.endsWith("45")).toBe(true);
+    expect(maskReleaseCode("XY")).toBe("••••••");
+  });
+
+  it("redactReleaseCode strips the secret verifier (codeHash) before it leaves the server", () => {
+    const row = {
+      id: 1,
+      assetId: 1,
+      authorizationId: 1,
+      code: "••••••45",
+      codeHash: hashReleaseCode("ABCD2345"),
+      status: "active",
+    } as unknown as ReleaseCode;
+    const safe = redactReleaseCode(row);
+    expect((safe as any).codeHash).toBeUndefined();
+    expect(safe.code).toBe("••••••45");
+    expect(safe.status).toBe("active");
   });
 });

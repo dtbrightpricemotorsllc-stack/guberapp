@@ -793,12 +793,12 @@ function makeReleaseCode(): string {
 const RELEASE_CODE_HMAC_SECRET =
   process.env.RELEASE_CODE_SECRET || process.env.SESSION_SECRET || "guber-release-code-fallback-secret";
 
-function hashReleaseCode(code: string): string {
+export function hashReleaseCode(code: string): string {
   const normalized = (code ?? "").trim().toUpperCase();
   return crypto.createHmac("sha256", RELEASE_CODE_HMAC_SECRET).update(normalized).digest("hex");
 }
 
-function timingSafeHashEqual(a: string, b: string): boolean {
+export function timingSafeHashEqual(a: string, b: string): boolean {
   if (!a || !b) return false;
   const bufA = Buffer.from(a, "hex");
   const bufB = Buffer.from(b, "hex");
@@ -807,7 +807,7 @@ function timingSafeHashEqual(a: string, b: string): boolean {
 }
 
 // Masked, non-redeemable representation kept for owner display only.
-function maskReleaseCode(code: string): string {
+export function maskReleaseCode(code: string): string {
   const c = (code ?? "").trim().toUpperCase();
   if (c.length <= 2) return "••••••";
   return "••••••" + c.slice(-2);
@@ -1005,6 +1005,7 @@ export async function redeemReleaseCode(input: {
 
   const suppliedHash = hashReleaseCode(supplied);
   let codeNotFound = false;
+  let driverMismatch = false;
   let consumedCodeId: number | null = null;
   let alreadyUsedCode: ReleaseCode | undefined;
 
@@ -1046,16 +1047,33 @@ export async function redeemReleaseCode(input: {
           throw new Error("Release blocked: VIN mismatch");
         }
       }
-      const consumed = await client.query(
-        "UPDATE release_codes SET status = 'used', used_at = NOW(), used_by = $2 WHERE id = $1 AND status = 'active' RETURNING *",
-        [codeRow.id, input.redeemedBy],
-      );
-      if (!consumed.rows.length) {
+
+      // Bind redemption to the exact driver the owner approved. A valid code in
+      // the wrong hands — including a different carrier-side user on the same
+      // asset — must NOT release. Identity is checked server-side against the
+      // authorization that minted the code, never trusted from the request.
+      const authRes = codeRow.authorization_id
+        ? await client.query(
+            "SELECT requested_by FROM release_authorizations WHERE id = $1",
+            [codeRow.authorization_id],
+          )
+        : { rows: [] as any[] };
+      const requestedBy = authRes.rows[0]?.requested_by;
+      if (requestedBy == null || Number(requestedBy) !== Number(input.redeemedBy)) {
         await client.query("ROLLBACK");
-        throw new Error("Pickup code could not be redeemed (already used)");
+        driverMismatch = true;
+      } else {
+        const consumed = await client.query(
+          "UPDATE release_codes SET status = 'used', used_at = NOW(), used_by = $2 WHERE id = $1 AND status = 'active' RETURNING *",
+          [codeRow.id, input.redeemedBy],
+        );
+        if (!consumed.rows.length) {
+          await client.query("ROLLBACK");
+          throw new Error("Pickup code could not be redeemed (already used)");
+        }
+        consumedCodeId = codeRow.id;
+        await client.query("COMMIT");
       }
-      consumedCodeId = codeRow.id;
-      await client.query("COMMIT");
     }
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
@@ -1074,6 +1092,21 @@ export async function redeemReleaseCode(input: {
       lng: input.lng,
     });
     throw new Error("Invalid pickup code");
+  }
+
+  // Right code, wrong person: the presenter is not the approved driver. Record
+  // it immutably (feeds fraud escalation) and refuse the release.
+  if (driverMismatch) {
+    await appendCustodyEvent(input.assetId, "code_failed", {
+      actorId: input.redeemedBy,
+      description: "Pickup code presented by a user other than the approved driver",
+      metadata: { reason: "driver_mismatch" },
+      lat: input.lat,
+      lng: input.lng,
+    });
+    const err: any = new Error("Release blocked: this pickup code is bound to a different driver");
+    err.code = "DRIVER_MISMATCH";
+    throw err;
   }
   if (alreadyUsedCode) {
     return { ok: false, alreadyRedeemed: true, code: alreadyUsedCode, geofence };

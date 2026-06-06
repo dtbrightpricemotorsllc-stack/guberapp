@@ -22656,6 +22656,7 @@ OUTPUT STYLE:
         result = await assetCustody.redeemReleaseCode({ assetId, code: String(b.code), redeemedBy: uid, lat, lng });
       } catch (e: any) {
         if (e?.code === "RATE_LIMITED") return res.status(429).json({ message: e.message });
+        if (e?.code === "DRIVER_MISMATCH") return res.status(403).json({ message: e.message });
         return res.status(409).json({ message: e.message });
       }
       if (result.alreadyRedeemed) {
