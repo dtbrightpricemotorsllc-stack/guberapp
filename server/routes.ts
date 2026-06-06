@@ -22724,6 +22724,22 @@ OUTPUT STYLE:
     }
   };
 
+  // Notify every platform admin (in-app + push) of a high-urgency custody event.
+  const notifyAdmins = async (
+    payload: { title: string; body: string; type?: string },
+    link?: string,
+    exclude?: number,
+  ) => {
+    const admins = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(sqlEq(usersTable.role, "admin"));
+    for (const a of admins) {
+      if (a.id === exclude) continue;
+      await notify(a.id, { title: payload.title, body: payload.body, type: payload.type as any }, link);
+    }
+  };
+
   const finiteLatLng = (b: any): { lat: number | null; lng: number | null } => {
     const lat = Number(b?.lat);
     const lng = Number(b?.lng);
@@ -22947,6 +22963,9 @@ OUTPUT STYLE:
       await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
         title: "Incident reported", body: `${incidentType} (${incident.severity})`, type: "load_board",
       }, `/custody/asset/${assetId}`, uid);
+      await notifyAdmins({
+        title: "Custody incident filed", body: `${incidentType} (${incident.severity}) reported on asset #${assetId}.`, type: "admin_alert",
+      }, `/admin/asset-protection`);
       res.json(incident);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -23129,6 +23148,9 @@ OUTPUT STYLE:
       await notifyAssetParties(assetId, ["carrier", "driver"], {
         title: "Asset frozen", body: `This asset was frozen: ${reason}. Delivery and transfers are blocked.`, type: "load_board",
       }, `/custody/carrier`, uid);
+      await notifyAdmins({
+        title: "Asset frozen", body: `Asset #${assetId} was frozen: ${reason}.`, type: "admin_alert",
+      }, `/admin/asset-protection`);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -23145,6 +23167,13 @@ OUTPUT STYLE:
         return res.status(403).json({ message: "Only the owner/sender or an admin can unfreeze this asset" });
       }
       await assetCustody.unfreezeAsset(assetId, uid, req.body?.note ? String(req.body.note) : null);
+      const unfrozenByAdmin = me?.role === "admin" && !ownerSide;
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact", "carrier", "driver"], {
+        title: "Asset unfrozen", body: "This asset was unfrozen. Delivery and transfers may resume.", type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      await notifyAdmins({
+        title: "Asset unfrozen", body: `Asset #${assetId} was unfrozen${unfrozenByAdmin ? " by an admin" : ""}.`, type: "admin_alert",
+      }, `/admin/asset-protection`, uid);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -23293,6 +23322,9 @@ OUTPUT STYLE:
         await notifyAssetParties(assignment.assetId, ["owner", "sender", "authorized_contact"], {
           title: "Witness report filed", body: "A witness verification report was filed for your asset.", type: "load_board",
         }, `/custody/asset/${assignment.assetId}`);
+        await notifyAdmins({
+          title: "Witness report filed", body: `A witness verification report was filed for asset #${assignment.assetId}.`, type: "admin_alert",
+        }, `/admin/asset-protection`);
       }
       res.json(result);
     } catch (err: any) {
@@ -23336,12 +23368,23 @@ OUTPUT STYLE:
   app.post("/api/admin/assets/:id/freeze", requireAdmin, demoGuard, async (req: Request, res: Response) => {
     try {
       const assetId = parseInt(req.params.id);
+      const adminId = req.session.userId!;
       const freeze = req.body?.freeze !== false;
       if (freeze) {
-        await assetCustody.freezeAsset(assetId, req.session.userId!, String(req.body?.reason || "Admin freeze"));
+        const reason = String(req.body?.reason || "Admin freeze");
+        await assetCustody.freezeAsset(assetId, adminId, reason);
+        await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact", "carrier", "driver"], {
+          title: "Asset frozen", body: `This asset was frozen by an admin: ${reason}. Delivery and transfers are blocked.`, type: "load_board",
+        }, `/custody/asset/${assetId}`);
       } else {
-        await assetCustody.unfreezeAsset(assetId, req.session.userId!, req.body?.note ? String(req.body.note) : "Admin unfreeze");
+        await assetCustody.unfreezeAsset(assetId, adminId, req.body?.note ? String(req.body.note) : "Admin unfreeze");
+        await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact", "carrier", "driver"], {
+          title: "Asset unfrozen", body: "This asset was unfrozen by an admin. Delivery and transfers may resume.", type: "load_board",
+        }, `/custody/asset/${assetId}`);
       }
+      await notifyAdmins({
+        title: freeze ? "Asset frozen" : "Asset unfrozen", body: `Asset #${assetId} was ${freeze ? "frozen" : "unfrozen"} by an admin.`, type: "admin_alert",
+      }, `/admin/asset-protection`, adminId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
