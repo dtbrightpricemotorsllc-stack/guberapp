@@ -11,6 +11,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { CustodyPhotoUpload } from "@/components/custody-photo-upload";
 import {
   ShieldCheck, Loader2, AlertTriangle, Snowflake, FileText, MapPin, Clock,
   Truck, PackageCheck, Flame, Eye, ChevronLeft,
@@ -167,13 +168,10 @@ export default function CustodyAsset({ id: propId }: { id?: number } = {}) {
                 </Button>
               ))}
             </div>
+            <LifecycleDialog assetId={id} onDone={refresh} disabled={frozen} />
             <div className="grid grid-cols-2 gap-2 mt-2">
               <IncidentDialog assetId={id} onDone={refresh} disabled={frozen} />
-              <Button variant="outline" size="sm" disabled={frozen || !!busy}
-                onClick={() => run("storage", "POST", `/api/assets/${id}/storage`, { eventType: "stored" }, true)}
-                data-testid="button-carrier-store">
-                <PackageCheck className="w-4 h-4 mr-1" /> Log storage
-              </Button>
+              <StorageDialog assetId={id} onDone={refresh} disabled={frozen} />
             </div>
             <div className="grid grid-cols-2 gap-2 mt-2">
               <ChangeDialog assetId={id} kind="tow-vehicle" label="Change tow vehicle" onDone={refresh} disabled={frozen} />
@@ -183,11 +181,7 @@ export default function CustodyAsset({ id: propId }: { id?: number } = {}) {
               <SimpleNumberDialog assetId={id} field="newDriverId" url={`/api/assets/${id}/driver-change`} label="Change driver" onDone={refresh} disabled={frozen} testid="driver-change" />
               <SimpleNumberDialog assetId={id} field="toCarrierId" url={`/api/assets/${id}/custody-transfer`} label="Transfer custody" onDone={refresh} disabled={frozen} testid="custody-transfer" withReason />
             </div>
-            <Button className="w-full mt-2" disabled={frozen || !!busy}
-              onClick={() => run("delivery", "POST", `/api/assets/${id}/delivery`, {}, true)}
-              data-testid="button-carrier-delivery">
-              {busy === "delivery" ? <Loader2 className="w-4 h-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-1" /> Confirm delivery</>}
-            </Button>
+            <DeliveryDialog assetId={id} onDone={refresh} disabled={frozen} />
           </Panel>
         )}
 
@@ -255,6 +249,15 @@ export default function CustodyAsset({ id: propId }: { id?: number } = {}) {
                     {fmt(e.createdAt)}
                     {e.lat != null && e.lng != null && <span className="inline-flex items-center gap-0.5"><MapPin className="w-3 h-3" />{e.lat.toFixed(3)},{e.lng.toFixed(3)}</span>}
                   </div>
+                  {Array.isArray(e.photoUrls) && e.photoUrls.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid={`event-photos-${e.id}`}>
+                      {e.photoUrls.map((url: string, i: number) => (
+                        <a key={url + i} href={url} target="_blank" rel="noreferrer" className="block w-14 h-14 rounded-md overflow-hidden border border-border" data-testid={`link-event-photo-${e.id}-${i}`}>
+                          <img src={url} alt="evidence" className="w-full h-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -290,22 +293,24 @@ function IncidentDialog({ assetId, onDone, disabled }: { assetId: number; onDone
   const [type, setType] = useState("accident");
   const [severity, setSeverity] = useState("high");
   const [desc, setDesc] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const reset = () => { setDesc(""); setPhotoUrls([]); };
   const submit = async () => {
     setBusy(true);
     try {
       const pos = await getPos();
-      const res = await apiRequest("POST", `/api/assets/${assetId}/incidents`, { incidentType: type, severity, description: desc, ...pos });
+      const res = await apiRequest("POST", `/api/assets/${assetId}/incidents`, { incidentType: type, severity, description: desc, photoUrls, ...pos });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d?.message);
       toast({ title: "Incident logged" });
-      setOpen(false); setDesc(""); onDone();
+      setOpen(false); reset(); onDone();
     } catch (e: any) {
       toast({ title: "Failed", description: e?.message, variant: "destructive" });
     } finally { setBusy(false); }
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" disabled={disabled} data-testid="button-carrier-incident"><Flame className="w-4 h-4 mr-1" /> Incident</Button>
       </DialogTrigger>
@@ -331,8 +336,148 @@ function IncidentDialog({ assetId, onDone, disabled }: { assetId: number; onDone
           </SelectContent>
         </Select>
         <Textarea placeholder="What happened?" value={desc} onChange={(e) => setDesc(e.target.value)} data-testid="input-incident-desc" />
+        <CustodyPhotoUpload photos={photoUrls} onChange={setPhotoUrls} disabled={busy} label="Evidence photos (optional)" testid="incident" />
         <DialogFooter>
           <Button onClick={submit} disabled={busy} data-testid="button-submit-incident">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LifecycleDialog({ assetId, onDone, disabled }: { assetId: number; onDone: () => void; disabled?: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState("running_normally");
+  const [desc, setDesc] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const reset = () => { setDesc(""); setPhotoUrls([]); setStatus("running_normally"); };
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const pos = await getPos();
+      const res = await apiRequest("POST", `/api/assets/${assetId}/lifecycle`, { status, description: desc, photoUrls, ...pos });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      toast({ title: "Update posted" });
+      setOpen(false); reset(); onDone();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full mt-2" disabled={disabled} data-testid="button-carrier-lifecycle-photos">
+          <Truck className="w-4 h-4 mr-1" /> Status update with photos
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Transport status update</DialogTitle></DialogHeader>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger data-testid="select-lifecycle-status"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {[
+              ["running_normally", "Running normally"],
+              ["delayed", "Delayed"],
+              ["weather_delay", "Weather delay"],
+              ["dot_inspection", "DOT inspection"],
+              ["hos_delay", "HOS delay"],
+              ["mechanical_breakdown", "Breakdown"],
+              ["arrived", "Arrived"],
+            ].map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Textarea placeholder="Add a note (optional)" value={desc} onChange={(e) => setDesc(e.target.value)} data-testid="input-lifecycle-desc" />
+        <CustodyPhotoUpload photos={photoUrls} onChange={setPhotoUrls} disabled={busy} testid="lifecycle" />
+        <DialogFooter>
+          <Button onClick={submit} disabled={busy} data-testid="button-submit-lifecycle">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Post update"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StorageDialog({ assetId, onDone, disabled }: { assetId: number; onDone: () => void; disabled?: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [eventType, setEventType] = useState("stored");
+  const [locationName, setLocationName] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const reset = () => { setLocationName(""); setPhotoUrls([]); setEventType("stored"); };
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const pos = await getPos();
+      const res = await apiRequest("POST", `/api/assets/${assetId}/storage`, { eventType, locationName, photoUrls, ...pos });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      toast({ title: "Storage event logged" });
+      setOpen(false); reset(); onDone();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={disabled} data-testid="button-carrier-store"><PackageCheck className="w-4 h-4 mr-1" /> Log storage</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Log storage event</DialogTitle></DialogHeader>
+        <Select value={eventType} onValueChange={setEventType}>
+          <SelectTrigger data-testid="select-storage-type"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="stored">Stored</SelectItem>
+            <SelectItem value="retrieved">Retrieved</SelectItem>
+            <SelectItem value="transferred">Transferred</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input placeholder="Location name (optional)" value={locationName} onChange={(e) => setLocationName(e.target.value)} data-testid="input-storage-location" />
+        <CustodyPhotoUpload photos={photoUrls} onChange={setPhotoUrls} disabled={busy} testid="storage" />
+        <DialogFooter>
+          <Button onClick={submit} disabled={busy} data-testid="button-submit-storage">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Log"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeliveryDialog({ assetId, onDone, disabled }: { assetId: number; onDone: () => void; disabled?: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [receiverName, setReceiverName] = useState("");
+  const [odometer, setOdometer] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const reset = () => { setReceiverName(""); setOdometer(""); setPhotoUrls([]); };
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const pos = await getPos();
+      const res = await apiRequest("POST", `/api/assets/${assetId}/delivery`, { receiverName, odometer, photoUrls, ...pos });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      toast({ title: "Delivery confirmed" });
+      setOpen(false); reset(); onDone();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+      <DialogTrigger asChild>
+        <Button className="w-full mt-2" disabled={disabled} data-testid="button-carrier-delivery"><PackageCheck className="w-4 h-4 mr-1" /> Confirm delivery</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Confirm delivery</DialogTitle></DialogHeader>
+        <Input placeholder="Received by (optional)" value={receiverName} onChange={(e) => setReceiverName(e.target.value)} data-testid="input-delivery-receiver" />
+        <Input placeholder="Odometer (optional)" value={odometer} onChange={(e) => setOdometer(e.target.value)} data-testid="input-delivery-odometer" />
+        <CustodyPhotoUpload photos={photoUrls} onChange={setPhotoUrls} disabled={busy} label="Delivery photos (optional)" testid="delivery" />
+        <DialogFooter>
+          <Button onClick={submit} disabled={busy} data-testid="button-submit-delivery">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm delivery"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

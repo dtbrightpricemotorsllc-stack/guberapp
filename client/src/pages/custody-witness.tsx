@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { CustodyPhotoUpload } from "@/components/custody-photo-upload";
 import { Loader2, Eye, ShieldCheck, DollarSign, CheckCircle2 } from "lucide-react";
 
 const title = (s: string) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -115,23 +116,24 @@ function FileReportDialog({ assignmentId, onDone }: { assignmentId: number; onDo
   const [open, setOpen] = useState(false);
   const [reportType, setReportType] = useState("loading");
   const [notes, setNotes] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
     try {
       const pos = await getPos();
-      const res = await apiRequest("POST", `/api/witness/assignments/${assignmentId}/report`, { reportType, notes, ...pos });
+      const res = await apiRequest("POST", `/api/witness/assignments/${assignmentId}/report`, { reportType, notes, photoUrls, ...pos });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d?.message);
       const payout = d?.payout?.status === "sent" ? "Payout sent to your account." : "Payout is available for collection.";
       toast({ title: "Report filed", description: payout });
-      setOpen(false); setNotes(""); onDone();
+      setOpen(false); setNotes(""); setPhotoUrls([]); onDone();
     } catch (e: any) {
       toast({ title: "Could not file report", description: e?.message, variant: "destructive" });
     } finally { setBusy(false); }
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setNotes(""); setPhotoUrls([]); } }}>
       <DialogTrigger asChild>
         <Button size="sm" data-testid={`button-file-report-${assignmentId}`}>File report</Button>
       </DialogTrigger>
@@ -143,6 +145,7 @@ function FileReportDialog({ assignmentId, onDone }: { assignmentId: number; onDo
           ))}
         </div>
         <Textarea placeholder="What did you observe and verify?" value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-report-notes" />
+        <CustodyPhotoUpload photos={photoUrls} onChange={setPhotoUrls} disabled={busy} label="Verification photos (optional)" testid="report" />
         <DialogFooter>
           <Button onClick={submit} disabled={busy} data-testid="button-submit-report">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "File & get paid"}</Button>
         </DialogFooter>

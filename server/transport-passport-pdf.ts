@@ -67,6 +67,23 @@ export function renderTransportPassportPdf(p: TransportPassport, out: Writable):
       doc.moveDown(0.2);
     };
 
+    // Render attached evidence photos as numbered, clickable links. Embedding
+    // the actual images would require fetching each (slow + failure-prone), so
+    // the tamper-evident record links out to the immutable Cloudinary URLs.
+    const photoLinks = (urls: unknown, indent = 18) => {
+      if (!Array.isArray(urls)) return;
+      const list = urls.filter((u): u is string => typeof u === "string" && u.length > 0);
+      if (!list.length) return;
+      list.forEach((url, i) => {
+        if (doc.y > doc.page.height - 80) doc.addPage();
+        doc.fillColor(MUTED).font("Helvetica").fontSize(8)
+          .text(`Photo ${i + 1}: `, left + indent, doc.y, { width: contentWidth - indent, continued: true });
+        doc.fillColor(ACCENT).font("Helvetica").fontSize(8)
+          .text(url, { link: url, underline: true });
+        doc.moveDown(0.1);
+      });
+    };
+
     // ── Header ────────────────────────────────────────────────────────────────
     doc.fillColor(INK).font("Helvetica-Bold").fontSize(22).text("GUBER Transport Passport");
     doc.fillColor(MUTED).font("Helvetica").fontSize(10).text("Verified Release System™ — tamper-evident chain of custody");
@@ -132,17 +149,26 @@ export function renderTransportPassportPdf(p: TransportPassport, out: Writable):
 
     sectionTitle("Incidents");
     if (!p.incidents.length) bullet("No incidents reported.", MUTED);
-    for (const i of p.incidents) bullet(`${titleCase(i.incidentType)} — ${i.severity} / ${titleCase(i.status)} / claim ${titleCase(i.protectionClaimStatus)}${i.description ? `: ${i.description}` : ""} (${fmtDate(i.createdAt)})`, i.severity === "critical" || i.severity === "high" ? DANGER : INK);
+    for (const i of p.incidents) {
+      bullet(`${titleCase(i.incidentType)} — ${i.severity} / ${titleCase(i.status)} / claim ${titleCase(i.protectionClaimStatus)}${i.description ? `: ${i.description}` : ""} (${fmtDate(i.createdAt)})`, i.severity === "critical" || i.severity === "high" ? DANGER : INK);
+      photoLinks((i as any).photoUrls);
+    }
 
     // ── Storage ─────────────────────────────────────────────────────────────
     sectionTitle("Storage Events");
     if (!p.storageEvents.length) bullet("No storage events.", MUTED);
-    for (const s of p.storageEvents) bullet(`${titleCase(s.eventType)}${s.locationName ? ` @ ${s.locationName}` : ""} (${fmtDate(s.createdAt)})`);
+    for (const s of p.storageEvents) {
+      bullet(`${titleCase(s.eventType)}${s.locationName ? ` @ ${s.locationName}` : ""} (${fmtDate(s.createdAt)})`);
+      photoLinks((s as any).photoUrls);
+    }
 
     // ── Witness reports ─────────────────────────────────────────────────────
     sectionTitle("Witness Verification Reports");
     if (!p.witnessReports.length) bullet("No witness reports.", MUTED);
-    for (const w of p.witnessReports) bullet(`${titleCase(w.reportType)} — witness #${w.witnessUserId}${w.notes ? `: ${w.notes}` : ""} (${fmtDate(w.createdAt)})`);
+    for (const w of p.witnessReports) {
+      bullet(`${titleCase(w.reportType)} — witness #${w.witnessUserId}${w.notes ? `: ${w.notes}` : ""} (${fmtDate(w.createdAt)})`);
+      photoLinks((w as any).photoUrls);
+    }
 
     // ── Full custody timeline ───────────────────────────────────────────────
     sectionTitle("Full Custody Timeline (append-only)");
@@ -154,6 +180,7 @@ export function renderTransportPassportPdf(p: TransportPassport, out: Writable):
       doc.fillColor(MUTED).font("Helvetica").fontSize(8).text(fmtDate(e.createdAt), left, doc.y, { width: 120, continued: true });
       doc.fillColor(INK).font("Helvetica-Bold").fontSize(8).text(`  ${titleCase(e.eventType)}`, { continued: true });
       doc.fillColor(INK).font("Helvetica").fontSize(8).text(`${e.description ? ` — ${e.description}` : ""}${geo}`);
+      photoLinks((e as any).photoUrls, 8);
       doc.moveDown(0.15);
     }
 
