@@ -15,3 +15,4 @@
 - [Witness payout authorization](witness-payout-authz.md) — accept+report gate on idVerified; report does atomic accepted→completed first to prevent double-pay; tow/trailer changes allow owner-side roles.
 - [Asset protection checkout idempotency](asset-protection-checkout-idempotency.md) — guard one-asset purchases at checkout-init (paid→409, reuse open session), not just webhook; web endpoints return `checkoutUrl` not `url`.
 - [tsx stale routes after big edits](tsx-stale-routes.md) — new Express routes returning SPA HTML (text/html 200) means tsx didn't hot-reload; restart the workflow, don't debug route order.
+- [Rebase brace collapse](rebase-brace-collapse.md) — additive rebases where both branches append funcs before a shared EOF `}` make git steal one side's closing brace into the shared trailing line; re-add it.
