@@ -22460,8 +22460,8 @@ OUTPUT STYLE:
       const uid = req.session.userId!;
       const asset = await assetCustody.getProtectedAsset(assetId);
       if (!asset) return res.status(404).json({ message: "Asset not found" });
-      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
-        return res.status(403).json({ message: "Only the connected carrier can request a release" });
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["driver"]))) {
+        return res.status(403).json({ message: "Only the assigned driver can request a release" });
       }
       const b = req.body || {};
       const lat = Number(b.lat);
@@ -22639,8 +22639,8 @@ OUTPUT STYLE:
       const uid = req.session.userId!;
       const asset = await assetCustody.getProtectedAsset(assetId);
       if (!asset) return res.status(404).json({ message: "Asset not found" });
-      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
-        return res.status(403).json({ message: "Only the connected carrier can redeem a pickup code" });
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["driver"]))) {
+        return res.status(403).json({ message: "Only the assigned driver can redeem a pickup code" });
       }
       const b = req.body || {};
       const lat = Number(b.lat);
@@ -23746,12 +23746,18 @@ OUTPUT STYLE:
         if (action === "accept") {
           await storage.updateLoadBoardOffer(offerId, { status: "accepted" });
           await storage.updateLoadBoardListing(offer.listingId, { status: "offer_accepted", connectedCarrierId: offer.carrierId });
-          // Verified Release System™ — grant the connected carrier the carrier
-          // role on the protected asset (if any) so they can request release.
+          // Verified Release System™ — grant the connected carrier both the
+          // carrier role and the assigned-driver role on the protected asset (if
+          // any). The connecting carrier is the default owner-operator driver;
+          // a later driver-change/custody-transfer reassigns "driver" to someone
+          // else. Only the assigned driver can request/redeem a release.
           try {
             const linkedAsset = await assetCustody.getAssetByListing(offer.listingId);
-            if (linkedAsset) await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "carrier");
-          } catch (e) { console.error("[release] carrier role assign failed:", e); }
+            if (linkedAsset) {
+              await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "carrier");
+              await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "driver");
+            }
+          } catch (e) { console.error("[release] carrier/driver role assign failed:", e); }
           await storage.createNotification({
             userId: offer.carrierId,
             title: "Offer Accepted — Proceed to Connect",
@@ -23816,8 +23822,11 @@ OUTPUT STYLE:
           await storage.updateLoadBoardListing(offer.listingId, { status: "offer_accepted", connectedCarrierId: offer.carrierId });
           try {
             const linkedAsset = await assetCustody.getAssetByListing(offer.listingId);
-            if (linkedAsset) await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "carrier");
-          } catch (e) { console.error("[release] carrier role assign failed:", e); }
+            if (linkedAsset) {
+              await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "carrier");
+              await assetCustody.assignRole(linkedAsset.id, offer.carrierId, "driver");
+            }
+          } catch (e) { console.error("[release] carrier/driver role assign failed:", e); }
           await storage.createNotification({
             userId: listing.posterId,
             title: "Carrier Accepted Your Counter",

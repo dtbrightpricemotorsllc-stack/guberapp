@@ -9,6 +9,7 @@ Any one-time secret verifier (release/pickup codes) in this codebase must follow
 2. **Match by digest, timing-safe** — redemption pulls the asset's codes and compares HMAC digests with a constant-time compare; never `WHERE code = $plaintext`.
 3. **Redact on the way out** — strip `codeHash` from every API response. The plain code is returned exactly once (at approval) and never retrievable again. A code-review FAIL was caused by returning raw DB rows that still carried `codeHash`.
 4. **Rate-limit wrong attempts** — count recent `code_failed` immutable custody events (5 / 15min); over the threshold throw with `err.code = "RATE_LIMITED"` → route returns HTTP 429. Wrong codes append a `code_failed` event (also drives fraud escalation).
+5. **Bind to the assigned driver, not the carrier** — `/release/request` and `/release/redeem` must gate on the `"driver"` role only (NOT `["carrier","driver"]`); redemption additionally requires the authorization's `requested_by === session userId` (else `DRIVER_MISMATCH` → 403 + `code_failed`). Because the load-board offer-accept paths originally assigned only `"carrier"`, they now assign BOTH `"carrier"` and `"driver"` to the connecting carrier (default owner-operator) — otherwise the driver-only gate breaks every standard pickup. A later driver-change/custody-transfer reassigns `"driver"`.
 
 **Why:** these codes authorize physical hand-off of high-value assets; plaintext storage, plaintext SQL lookup, or leaking the verifier digest all undermine the custody guarantee.
 
