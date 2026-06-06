@@ -129,6 +129,10 @@ const LoadBoardDetail = lazy(() => import("@/pages/load-board-detail"));
 const LoadBoardEdit = lazy(() => import("@/pages/load-board-edit"));
 const LoadBoardCarrierHub = lazy(() => import("@/pages/load-board-carrier-hub"));
 const FoundersClub = lazy(() => import("@/pages/founders-club"));
+const CustodyCarrier = lazy(() => import("@/pages/custody-carrier"));
+const CustodyAsset = lazy(() => import("@/pages/custody-asset"));
+const CustodyWitness = lazy(() => import("@/pages/custody-witness"));
+const AdminAssetProtection = lazy(() => import("@/pages/admin-asset-protection"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 
@@ -327,6 +331,7 @@ function Router() {
       <Route path="/admin/users/:id" component={() => <AdminRoute component={AdminUserProfile} />} />
       <Route path="/admin/studio" component={() => <AdminRoute component={AdminStudio} />} />
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
+      <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />
       <Route path="/wallet" component={() => <ConsumerRoute component={WalletPage} />} />
@@ -382,6 +387,9 @@ function Router() {
       <Route path="/load-board/:id/edit" component={() => <ProtectedRoute component={LoadBoardEdit} />} />
       <Route path="/load-board/:id" component={() => <ProtectedRoute component={LoadBoardDetail} />} />
       <Route path="/load-board" component={() => <ProtectedRoute component={LoadBoard} />} />
+      <Route path="/custody/carrier" component={() => <ProtectedRoute component={CustodyCarrier} />} />
+      <Route path="/custody/witness" component={() => <ProtectedRoute component={CustodyWitness} />} />
+      <Route path="/custody/asset/:id" component={() => <ProtectedRoute component={CustodyAsset} />} />
       <Route path="/founders" component={() => <ProtectedRoute component={FoundersClub} />} />
       <Route path="/carrier-profile" component={() => <ProtectedRoute component={CarrierProfilePage} />} />
       <Route path="/auth-success" component={AuthSuccess} />

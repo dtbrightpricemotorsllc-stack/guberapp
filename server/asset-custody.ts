@@ -23,6 +23,12 @@ import {
   towVehicleVerifications,
   trailerVerifications,
   vinVerifications,
+  masterTransportEvents,
+  transportIssues,
+  incidents,
+  storageEvents,
+  witnessAssignments,
+  witnessReports,
   users,
   type ProtectedAsset,
   type AssetRole,
@@ -31,8 +37,14 @@ import {
   type TowVehicleVerification,
   type TrailerVerification,
   type VinVerification,
+  type MasterTransportEvent,
+  type TransportIssue,
+  type Incident,
+  type StorageEvent,
+  type WitnessAssignment,
+  type WitnessReport,
 } from "@shared/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import {
   FOUNDERS_CLUB,
   isProtectionPackageKey,
@@ -1012,4 +1024,789 @@ export async function redeemReleaseCode(input: {
   });
 
   return { ok: true, code, authorization, geofence };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Phase 4/5 — Transport lifecycle, master transport, incidents/storage/freeze,
+// fraud-risk flags, witness dispatch + 80/20 payout, dashboard queries, and the
+// Transport Passport aggregation. Everything appends an immutable custody event;
+// nothing is ever deleted. Role-on-asset is enforced at the route layer.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const WITNESS_PAYOUT_RATE = 0.8; // witness keeps 80%, GUBER keeps 20%
+
+// ── Dashboard role queries ──────────────────────────────────────────────────
+/** Assets where the user currently holds ANY of the given active roles. */
+export async function getAssetsForUserByRoles(
+  userId: number,
+  roles: AssetRoleName[],
+): Promise<ProtectedAsset[]> {
+  const roleRows = await db
+    .select()
+    .from(assetRoles)
+    .where(and(eq(assetRoles.userId, userId), eq(assetRoles.status, "active")));
+  const ids = Array.from(
+    new Set(
+      roleRows.filter((r) => roles.includes(r.role as AssetRoleName)).map((r) => r.assetId),
+    ),
+  );
+  if (!ids.length) return [];
+  return db
+    .select()
+    .from(protectedAssets)
+    .where(inArray(protectedAssets.id, ids))
+    .orderBy(desc(protectedAssets.id));
+}
+
+// ── Per-asset verification / event reads (for dashboards + passport) ─────────
+export async function getTowVerificationsForAsset(assetId: number): Promise<TowVehicleVerification[]> {
+  return db.select().from(towVehicleVerifications).where(eq(towVehicleVerifications.assetId, assetId)).orderBy(desc(towVehicleVerifications.id));
+}
+export async function getTrailerVerificationsForAsset(assetId: number): Promise<TrailerVerification[]> {
+  return db.select().from(trailerVerifications).where(eq(trailerVerifications.assetId, assetId)).orderBy(desc(trailerVerifications.id));
+}
+export async function getVinVerificationsForAsset(assetId: number): Promise<VinVerification[]> {
+  return db.select().from(vinVerifications).where(eq(vinVerifications.assetId, assetId)).orderBy(desc(vinVerifications.id));
+}
+
+// ── Master transport events ─────────────────────────────────────────────────
+export async function createMasterTransportEvent(input: {
+  assetId: number;
+  senderId: number;
+  carrierId?: number | null;
+  originAddress?: string | null;
+  originLat?: number | null;
+  originLng?: number | null;
+  destAddress?: string | null;
+  destLat?: number | null;
+  destLng?: number | null;
+}): Promise<MasterTransportEvent> {
+  const [row] = await db
+    .insert(masterTransportEvents)
+    .values({
+      assetId: input.assetId,
+      senderId: input.senderId,
+      carrierId: input.carrierId ?? null,
+      originAddress: input.originAddress ?? null,
+      originLat: input.originLat ?? null,
+      originLng: input.originLng ?? null,
+      destAddress: input.destAddress ?? null,
+      destLat: input.destLat ?? null,
+      destLng: input.destLng ?? null,
+      status: "created",
+    } as any)
+    .returning();
+  return row;
+}
+
+export async function getMasterForAsset(assetId: number): Promise<MasterTransportEvent | undefined> {
+  const [row] = await db
+    .select()
+    .from(masterTransportEvents)
+    .where(eq(masterTransportEvents.assetId, assetId))
+    .orderBy(desc(masterTransportEvents.id));
+  return row;
+}
+
+export async function getMasterTransportEvent(id: number): Promise<MasterTransportEvent | undefined> {
+  const [row] = await db.select().from(masterTransportEvents).where(eq(masterTransportEvents.id, id));
+  return row;
+}
+
+/** Assets attached to a master transport (multi-asset hauls share a carrier). */
+export async function getAssetsForMaster(masterId: number): Promise<number[]> {
+  const master = await getMasterTransportEvent(masterId);
+  if (!master?.carrierId) return master ? [master.assetId] : [];
+  const rows = await db
+    .select({ assetId: masterTransportEvents.assetId })
+    .from(masterTransportEvents)
+    .where(eq(masterTransportEvents.carrierId, master.carrierId));
+  return Array.from(new Set(rows.map((r) => r.assetId)));
+}
+
+const MASTER_STATUS_STAMP: Record<string, string> = {
+  loaded: "loadedAt",
+  in_transit: "departedAt",
+  arrived: "arrivedAt",
+  delivered: "deliveredAt",
+};
+
+/**
+ * Update a master transport's status and PROPAGATE to every asset on the haul
+ * (per the spec: breakdown/delay/status updates fan out to all attached assets).
+ * Each affected asset gets its own immutable custody event.
+ */
+export async function updateMasterTransportStatus(
+  masterId: number,
+  status: string,
+  actorId: number,
+  opts: { description?: string | null; lat?: number | null; lng?: number | null; propagate?: boolean } = {},
+): Promise<{ master: MasterTransportEvent; affectedAssetIds: number[] }> {
+  const stamp = MASTER_STATUS_STAMP[status];
+  const set: Record<string, unknown> = { status, updatedAt: new Date() };
+  if (stamp) set[stamp] = new Date();
+  const [master] = await db
+    .update(masterTransportEvents)
+    .set(set as any)
+    .where(eq(masterTransportEvents.id, masterId))
+    .returning();
+
+  const affected = opts.propagate === false ? [master.assetId] : await getAssetsForMaster(masterId);
+  for (const aid of affected) {
+    await appendCustodyEvent(aid, `master_${status}`, {
+      actorId,
+      description: opts.description ?? `Master transport status: ${status.replace(/_/g, " ")}`,
+      metadata: { masterEventId: masterId, status, propagated: aid !== master.assetId },
+      lat: opts.lat ?? null,
+      lng: opts.lng ?? null,
+    });
+  }
+  return { master, affectedAssetIds: affected };
+}
+
+// ── Carrier transport lifecycle ─────────────────────────────────────────────
+// Maps each carrier "status button" to a custody event and, where appropriate,
+// a transport issue or an incident. The lifecycle is append-only.
+const LIFECYCLE_ISSUE_TYPES = new Set([
+  "delayed",
+  "weather_delay",
+  "dot_inspection",
+  "hos_delay",
+  "mechanical_breakdown",
+]);
+const LIFECYCLE_INCIDENT: Record<string, { incidentType: string; severity: string }> = {
+  accident: { incidentType: "accident", severity: "high" },
+  fire: { incidentType: "fire", severity: "critical" },
+  theft_attempt: { incidentType: "theft", severity: "critical" },
+};
+
+export interface LifecycleResult {
+  eventType: string;
+  issue?: TransportIssue;
+  incident?: Incident;
+}
+
+/**
+ * Record a carrier lifecycle update for an asset (running_normally, delayed,
+ * mechanical_breakdown, accident, fire, weather_delay, dot_inspection, hos_delay,
+ * arrived, …). Writes the custody event and, for incident/issue statuses, the
+ * matching transport_issue / incident row. Blocked when the asset is frozen.
+ */
+export async function recordLifecycleEvent(input: {
+  assetId: number;
+  actorId: number;
+  status: string;
+  description?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  photoUrls?: string[] | null;
+}): Promise<LifecycleResult> {
+  const asset = await getProtectedAsset(input.assetId);
+  if (!asset) throw new Error("Asset not found");
+  if (asset.frozenAt) throw new Error("Asset is frozen — lifecycle updates are blocked until it is resolved");
+
+  const status = input.status;
+  let issue: TransportIssue | undefined;
+  let incident: Incident | undefined;
+
+  if (LIFECYCLE_INCIDENT[status]) {
+    const cfg = LIFECYCLE_INCIDENT[status];
+    incident = await createIncident({
+      assetId: input.assetId,
+      reportedBy: input.actorId,
+      incidentType: cfg.incidentType,
+      severity: cfg.severity,
+      description: input.description ?? null,
+      photoUrls: input.photoUrls ?? null,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+      _skipCustody: true,
+    });
+  } else if (LIFECYCLE_ISSUE_TYPES.has(status)) {
+    issue = await createTransportIssue({
+      assetId: input.assetId,
+      reportedBy: input.actorId,
+      issueType: status,
+      description: input.description ?? null,
+      _skipCustody: true,
+    });
+  }
+
+  await appendCustodyEvent(input.assetId, `lifecycle_${status}`, {
+    actorId: input.actorId,
+    description: input.description ?? `Transport update: ${status.replace(/_/g, " ")}`,
+    metadata: { status, issueId: issue?.id ?? null, incidentId: incident?.id ?? null },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.photoUrls ?? null,
+  });
+
+  return { eventType: `lifecycle_${status}`, issue, incident };
+}
+
+// ── Transport issues ────────────────────────────────────────────────────────
+export async function createTransportIssue(input: {
+  assetId: number;
+  masterEventId?: number | null;
+  reportedBy: number;
+  issueType: string;
+  description?: string | null;
+  _skipCustody?: boolean;
+}): Promise<TransportIssue> {
+  const [row] = await db
+    .insert(transportIssues)
+    .values({
+      assetId: input.assetId,
+      masterEventId: input.masterEventId ?? null,
+      reportedBy: input.reportedBy,
+      issueType: input.issueType,
+      description: input.description ?? null,
+      status: "open",
+    } as any)
+    .returning();
+  if (!input._skipCustody) {
+    await appendCustodyEvent(input.assetId, "issue_reported", {
+      actorId: input.reportedBy,
+      description: `Issue reported: ${input.issueType.replace(/_/g, " ")}`,
+      metadata: { issueId: row.id, issueType: input.issueType },
+    });
+  }
+  return row;
+}
+
+export async function getIssuesForAsset(assetId: number): Promise<TransportIssue[]> {
+  return db.select().from(transportIssues).where(eq(transportIssues.assetId, assetId)).orderBy(desc(transportIssues.id));
+}
+
+export async function resolveTransportIssue(issueId: number, actorId: number, note?: string | null): Promise<TransportIssue> {
+  const [row] = await db
+    .update(transportIssues)
+    .set({ status: "resolved", resolvedAt: new Date() } as any)
+    .where(eq(transportIssues.id, issueId))
+    .returning();
+  if (row) {
+    await appendCustodyEvent(row.assetId, "issue_resolved", {
+      actorId,
+      description: note ? `Issue resolved: ${note}` : "Issue resolved",
+      metadata: { issueId },
+    });
+  }
+  return row;
+}
+
+// ── Incidents ───────────────────────────────────────────────────────────────
+export async function createIncident(input: {
+  assetId: number;
+  reportedBy: number;
+  incidentType: string;
+  description?: string | null;
+  photoUrls?: string[] | null;
+  lat?: number | null;
+  lng?: number | null;
+  severity?: string | null;
+  _skipCustody?: boolean;
+}): Promise<Incident> {
+  const [row] = await db
+    .insert(incidents)
+    .values({
+      assetId: input.assetId,
+      reportedBy: input.reportedBy,
+      incidentType: input.incidentType,
+      description: input.description ?? null,
+      photoUrls: input.photoUrls ?? null,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+      severity: input.severity ?? "medium",
+      status: "open",
+      protectionClaimStatus: "none",
+    } as any)
+    .returning();
+  await appendCustodyEvent(input.assetId, "incident_reported", {
+    actorId: input.reportedBy,
+    description: `Incident: ${input.incidentType} (${row.severity})`,
+    metadata: { incidentId: row.id, incidentType: input.incidentType, severity: row.severity },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.photoUrls ?? null,
+  });
+  void input._skipCustody;
+  return row;
+}
+
+export async function getIncidentsForAsset(assetId: number): Promise<Incident[]> {
+  return db.select().from(incidents).where(eq(incidents.assetId, assetId)).orderBy(desc(incidents.id));
+}
+
+export async function updateIncidentStatus(
+  incidentId: number,
+  actorId: number,
+  patch: { status?: string; protectionClaimStatus?: string; note?: string | null },
+): Promise<Incident> {
+  const set: Record<string, unknown> = {};
+  if (patch.status) set.status = patch.status;
+  if (patch.protectionClaimStatus) set.protectionClaimStatus = patch.protectionClaimStatus;
+  const [row] = await db.update(incidents).set(set as any).where(eq(incidents.id, incidentId)).returning();
+  if (row) {
+    await appendCustodyEvent(row.assetId, "incident_updated", {
+      actorId,
+      description: patch.note ? `Incident update: ${patch.note}` : `Incident status: ${row.status} / claim: ${row.protectionClaimStatus}`,
+      metadata: { incidentId, status: row.status, protectionClaimStatus: row.protectionClaimStatus },
+    });
+  }
+  return row;
+}
+
+// ── Storage events ──────────────────────────────────────────────────────────
+export async function createStorageEvent(input: {
+  assetId: number;
+  actorId: number;
+  eventType: string; // stored | retrieved | transferred
+  locationName?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  photoUrls?: string[] | null;
+}): Promise<StorageEvent> {
+  const [row] = await db
+    .insert(storageEvents)
+    .values({
+      assetId: input.assetId,
+      eventType: input.eventType,
+      locationName: input.locationName ?? null,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+      photoUrls: input.photoUrls ?? null,
+      actorId: input.actorId,
+    } as any)
+    .returning();
+  await appendCustodyEvent(input.assetId, `storage_${input.eventType}`, {
+    actorId: input.actorId,
+    description: input.locationName ? `Storage ${input.eventType} @ ${input.locationName}` : `Storage ${input.eventType}`,
+    metadata: { storageEventId: row.id, eventType: input.eventType, locationName: input.locationName ?? null },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.photoUrls ?? null,
+  });
+  return row;
+}
+
+export async function getStorageEventsForAsset(assetId: number): Promise<StorageEvent[]> {
+  return db.select().from(storageEvents).where(eq(storageEvents.assetId, assetId)).orderBy(desc(storageEvents.id));
+}
+
+// ── Driver / tow vehicle / trailer changes ──────────────────────────────────
+/** Record a new tow vehicle mid-transport (a change → new verification row). */
+export async function changeTowVehicle(input: {
+  assetId: number;
+  carrierId: number;
+  vehicleType?: string | null;
+  plateNumber?: string | null;
+  plateState?: string | null;
+  photoUrls?: string[] | null;
+}): Promise<TowVehicleVerification> {
+  const row = await createTowVehicleVerification(input);
+  await appendCustodyEvent(input.assetId, "tow_vehicle_changed", {
+    actorId: input.carrierId,
+    description: "Tow vehicle changed and re-verified",
+    metadata: { towVerificationId: row.id, plateNumber: input.plateNumber ?? null },
+    photoUrls: input.photoUrls ?? null,
+  });
+  return row;
+}
+
+export async function changeTrailer(input: {
+  assetId: number;
+  carrierId: number;
+  trailerType?: string | null;
+  trailerNumber?: string | null;
+  plateNumber?: string | null;
+  photoUrls?: string[] | null;
+}): Promise<TrailerVerification> {
+  const row = await createTrailerVerification(input);
+  await appendCustodyEvent(input.assetId, "trailer_changed", {
+    actorId: input.carrierId,
+    description: "Trailer changed and re-verified",
+    metadata: { trailerVerificationId: row.id, trailerType: input.trailerType ?? null },
+    photoUrls: input.photoUrls ?? null,
+  });
+  return row;
+}
+
+/** Assign a new driver to the asset (driver change) with a fresh selfie + GPS. */
+export async function changeDriver(input: {
+  assetId: number;
+  newDriverId: number;
+  actorId: number;
+  selfieUrl?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}): Promise<void> {
+  await assignRole(input.assetId, input.newDriverId, "driver");
+  await appendCustodyEvent(input.assetId, "driver_changed", {
+    actorId: input.actorId,
+    description: "Driver changed and re-verified",
+    metadata: { newDriverId: input.newDriverId },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.selfieUrl ? [input.selfieUrl] : null,
+  });
+}
+
+/** Emergency custody transfer to a replacement carrier (append-only). */
+export async function emergencyCustodyTransfer(input: {
+  assetId: number;
+  fromCarrierId: number;
+  toCarrierId: number;
+  reason?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  photoUrls?: string[] | null;
+}): Promise<void> {
+  await assignRole(input.assetId, input.toCarrierId, "carrier");
+  await assignRole(input.assetId, input.toCarrierId, "driver");
+  await appendCustodyEvent(input.assetId, "custody_transferred", {
+    actorId: input.fromCarrierId,
+    description: input.reason ? `Emergency custody transfer: ${input.reason}` : "Emergency custody transfer",
+    metadata: { fromCarrierId: input.fromCarrierId, toCarrierId: input.toCarrierId },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.photoUrls ?? null,
+  });
+}
+
+// ── Delivery ────────────────────────────────────────────────────────────────
+export async function recordDelivery(input: {
+  assetId: number;
+  actorId: number;
+  receiverName?: string | null;
+  odometer?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  photoUrls?: string[] | null;
+}): Promise<void> {
+  const asset = await getProtectedAsset(input.assetId);
+  if (!asset) throw new Error("Asset not found");
+  if (asset.frozenAt) throw new Error("Asset is frozen — delivery is blocked until it is resolved");
+  await updateAsset(input.assetId, { status: "delivered" } as any);
+  await appendCustodyEvent(input.assetId, "delivered", {
+    actorId: input.actorId,
+    description: input.receiverName ? `Delivered and verified — received by ${input.receiverName}` : "Delivered and verified",
+    metadata: { receiverName: input.receiverName ?? null, odometer: input.odometer ?? null },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.photoUrls ?? null,
+  });
+}
+
+// ── Emergency freeze / unfreeze (sender / owner / admin) ─────────────────────
+export async function freezeAsset(assetId: number, actorId: number, reason: string): Promise<void> {
+  await updateAsset(assetId, { frozenAt: new Date(), frozenReason: reason } as any);
+  await appendCustodyEvent(assetId, "asset_frozen", {
+    actorId,
+    description: `Asset frozen: ${reason}`,
+    metadata: { reason },
+  });
+}
+
+export async function unfreezeAsset(assetId: number, actorId: number, note?: string | null): Promise<void> {
+  await updateAsset(assetId, { frozenAt: null, frozenReason: null } as any);
+  await appendCustodyEvent(assetId, "asset_unfrozen", {
+    actorId,
+    description: note ? `Asset unfrozen: ${note}` : "Asset unfrozen",
+    metadata: { note: note ?? null },
+  });
+}
+
+export async function reportFraudConcern(assetId: number, actorId: number, concern: string): Promise<void> {
+  await appendCustodyEvent(assetId, "fraud_reported", {
+    actorId,
+    description: `Fraud concern reported: ${concern}`,
+    metadata: { concern },
+  });
+}
+
+// ── Automatic fraud-risk flags (derived, read-only) ─────────────────────────
+export interface FraudFlag {
+  code: string;
+  label: string;
+  severity: "warning" | "critical";
+}
+
+/**
+ * Derive fraud-risk flags from the immutable custody trail + verifications.
+ * Pure read — never mutates. Surfaced in the sender + admin dashboards.
+ */
+export async function computeFraudFlags(assetId: number): Promise<FraudFlag[]> {
+  const [timeline, vins, asset] = await Promise.all([
+    getCustodyTimeline(assetId),
+    getVinVerificationsForAsset(assetId),
+    getProtectedAsset(assetId),
+  ]);
+  const flags: FraudFlag[] = [];
+  const count = (t: string) => timeline.filter((e) => e.eventType === t).length;
+
+  if (count("driver_changed") >= 2) flags.push({ code: "multiple_driver_changes", label: "Multiple driver changes", severity: "warning" });
+  if (count("tow_vehicle_changed") >= 2) flags.push({ code: "multiple_tow_changes", label: "Multiple tow vehicle changes", severity: "warning" });
+  if (count("trailer_changed") >= 2) flags.push({ code: "multiple_trailer_changes", label: "Multiple trailer changes", severity: "warning" });
+  if (count("custody_transferred") >= 2) flags.push({ code: "excessive_custody_transfers", label: "Excessive custody transfers", severity: "critical" });
+  if (vins.some((v) => v.status === "mismatch")) flags.push({ code: "vin_mismatch", label: "VIN mismatch on record", severity: "critical" });
+
+  const geofenceFails = timeline.filter(
+    (e) => e.eventType === "release_requested" && (e.metadata as any)?.geofenceVerified === false,
+  ).length;
+  if (geofenceFails >= 1) flags.push({ code: "outside_geofence", label: "Release requested outside pickup geofence", severity: "warning" });
+
+  const codeFails = timeline.filter((e) => e.eventType === "code_failed").length;
+  if (codeFails >= 3) flags.push({ code: "repeated_code_failures", label: "Repeated release-code failures", severity: "critical" });
+
+  if (count("storage_stored") >= 1 && !timeline.some((e) => e.eventType === "release_approved")) {
+    flags.push({ code: "storage_without_approval", label: "Stored without an approved release", severity: "warning" });
+  }
+  if (timeline.some((e) => e.eventType === "fraud_reported")) {
+    flags.push({ code: "manual_fraud_report", label: "Manual fraud concern on file", severity: "critical" });
+  }
+  if (asset?.frozenAt) flags.push({ code: "frozen", label: "Asset is currently frozen", severity: "critical" });
+
+  return flags;
+}
+
+// ── Witness dispatch + 80/20 payout ─────────────────────────────────────────
+/** Create a witness assignment (open for a V&I user to accept). */
+export async function requestWitness(input: {
+  assetId: number;
+  requestedBy: number;
+  reportType: string; // loading | release | delivery
+  feeCents: number;
+  jobId?: number | null;
+}): Promise<WitnessAssignment> {
+  const payoutAmount = Math.round(input.feeCents * WITNESS_PAYOUT_RATE) / 100;
+  const [row] = await db
+    .insert(witnessAssignments)
+    .values({
+      assetId: input.assetId,
+      witnessUserId: null,
+      jobId: input.jobId ?? null,
+      status: "open",
+      payoutAmount,
+      payoutStatus: "pending",
+    } as any)
+    .returning();
+  await appendCustodyEvent(input.assetId, "witness_requested", {
+    actorId: input.requestedBy,
+    description: `Witness requested: ${input.reportType}`,
+    metadata: { assignmentId: row.id, reportType: input.reportType, payoutAmount },
+  });
+  return row;
+}
+
+export async function getWitnessAssignment(id: number): Promise<WitnessAssignment | undefined> {
+  const [row] = await db.select().from(witnessAssignments).where(eq(witnessAssignments.id, id));
+  return row;
+}
+
+export async function getWitnessAssignmentsForAsset(assetId: number): Promise<WitnessAssignment[]> {
+  return db.select().from(witnessAssignments).where(eq(witnessAssignments.assetId, assetId)).orderBy(desc(witnessAssignments.id));
+}
+
+/** Open (unclaimed) assignments + those already assigned to this witness. */
+export async function getWitnessAssignmentsForUser(userId: number): Promise<WitnessAssignment[]> {
+  return db
+    .select()
+    .from(witnessAssignments)
+    .where(or(eq(witnessAssignments.status, "open"), eq(witnessAssignments.witnessUserId, userId)))
+    .orderBy(desc(witnessAssignments.id));
+}
+
+/** A V&I user accepts an open witness assignment (atomic claim). */
+export async function acceptWitnessAssignment(assignmentId: number, witnessUserId: number): Promise<WitnessAssignment> {
+  const [row] = await db
+    .update(witnessAssignments)
+    .set({ witnessUserId, status: "accepted" } as any)
+    .where(and(eq(witnessAssignments.id, assignmentId), eq(witnessAssignments.status, "open")))
+    .returning();
+  if (!row) throw new Error("Assignment is no longer available");
+  await appendCustodyEvent(row.assetId, "witness_accepted", {
+    actorId: witnessUserId,
+    description: "Witness accepted the assignment",
+    metadata: { assignmentId },
+  });
+  return row;
+}
+
+export interface WitnessReportResult {
+  report: WitnessReport;
+  payout: { status: string; transferId?: string | null; reason?: string };
+}
+
+/**
+ * File a Witness Verification Report and trigger the 80/20 payout. The witness
+ * must own the (accepted) assignment. Payout uses Stripe Connect transfers to
+ * the witness's connected account; if they have none, payout stays "available"
+ * for later collection (mirrors the worker-payout pattern).
+ */
+export async function fileWitnessReport(input: {
+  assignmentId: number;
+  witnessUserId: number;
+  reportType: string;
+  notes?: string | null;
+  photoUrls?: string[] | null;
+  lat?: number | null;
+  lng?: number | null;
+  doTransfer: (witnessAccountId: string, amountCents: number, assignmentId: number) => Promise<string>;
+}): Promise<WitnessReportResult> {
+  const assignment = await getWitnessAssignment(input.assignmentId);
+  if (!assignment) throw new Error("Assignment not found");
+  if (assignment.witnessUserId !== input.witnessUserId) throw new Error("You are not the assigned witness");
+
+  // Atomic single-report guard: only an "accepted" assignment may be completed,
+  // and only once. This wins the race so a witness cannot file two reports (and
+  // two payout attempts) for the same assignment.
+  const [claimed] = await db
+    .update(witnessAssignments)
+    .set({ status: "completed" } as any)
+    .where(and(eq(witnessAssignments.id, input.assignmentId), eq(witnessAssignments.status, "accepted")))
+    .returning();
+  if (!claimed) throw new Error("This assignment has already been reported or is not in an acceptable state");
+
+  const [report] = await db
+    .insert(witnessReports)
+    .values({
+      assignmentId: input.assignmentId,
+      assetId: assignment.assetId,
+      witnessUserId: input.witnessUserId,
+      reportType: input.reportType,
+      notes: input.notes ?? null,
+      photoUrls: input.photoUrls ?? null,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+    } as any)
+    .returning();
+
+  await appendCustodyEvent(assignment.assetId, "witness_report_filed", {
+    actorId: input.witnessUserId,
+    description: `Witness verification report filed: ${input.reportType}`,
+    metadata: { assignmentId: input.assignmentId, reportId: report.id, reportType: input.reportType },
+    lat: input.lat ?? null,
+    lng: input.lng ?? null,
+    photoUrls: input.photoUrls ?? null,
+  });
+
+  // 80/20 payout via the caller-provided Stripe transfer (idempotent guard here).
+  let payout: WitnessReportResult["payout"] = { status: assignment.payoutStatus };
+  if (assignment.payoutStatus !== "sent") {
+    const [witness] = await db.select({ acct: users.stripeAccountId }).from(users).where(eq(users.id, input.witnessUserId));
+    const amountCents = Math.round((assignment.payoutAmount ?? 0) * 100);
+    if (witness?.acct && amountCents > 0) {
+      try {
+        const transferId = await input.doTransfer(witness.acct, amountCents, input.assignmentId);
+        await db
+          .update(witnessAssignments)
+          .set({ payoutStatus: "sent", stripeTransferId: transferId } as any)
+          .where(eq(witnessAssignments.id, input.assignmentId));
+        payout = { status: "sent", transferId };
+        await appendCustodyEvent(assignment.assetId, "witness_paid", {
+          actorId: input.witnessUserId,
+          description: `Witness payout sent ($${(amountCents / 100).toFixed(2)})`,
+          metadata: { assignmentId: input.assignmentId, transferId, amountCents },
+        });
+      } catch (e: any) {
+        await db.update(witnessAssignments).set({ payoutStatus: "available" } as any).where(eq(witnessAssignments.id, input.assignmentId));
+        payout = { status: "available", reason: e?.message ?? "transfer_failed" };
+      }
+    } else {
+      await db.update(witnessAssignments).set({ payoutStatus: "available" } as any).where(eq(witnessAssignments.id, input.assignmentId));
+      payout = { status: "available", reason: witness?.acct ? "zero_amount" : "no_connected_account" };
+    }
+  }
+
+  return { report, payout };
+}
+
+export async function getWitnessReportsForAsset(assetId: number): Promise<WitnessReport[]> {
+  return db.select().from(witnessReports).where(eq(witnessReports.assetId, assetId)).orderBy(desc(witnessReports.id));
+}
+
+// ── Admin views ─────────────────────────────────────────────────────────────
+export async function listAllAssets(filter?: "frozen" | "incidents" | "high_value"): Promise<ProtectedAsset[]> {
+  const rows = await db.select().from(protectedAssets).orderBy(desc(protectedAssets.id));
+  if (filter === "frozen") return rows.filter((a) => a.frozenAt != null);
+  if (filter === "high_value") return rows.filter((a) => (a.estimatedValue ?? 0) >= 50000);
+  if (filter === "incidents") {
+    const inc = await db.select({ assetId: incidents.assetId }).from(incidents);
+    const ids = new Set(inc.map((i) => i.assetId));
+    return rows.filter((a) => ids.has(a.id));
+  }
+  return rows;
+}
+
+/** Admin "correction": append-only note onto the custody trail. Never deletes. */
+export async function appendAdminNote(assetId: number, adminId: number, note: string): Promise<void> {
+  await appendCustodyEvent(assetId, "admin_note", {
+    actorId: adminId,
+    description: note,
+    metadata: { admin: true },
+  });
+}
+
+// ── Transport Passport aggregation ──────────────────────────────────────────
+export interface TransportPassport {
+  asset: ProtectedAsset;
+  roles: AssetRole[];
+  master: MasterTransportEvent | undefined;
+  timeline: Awaited<ReturnType<typeof getCustodyTimeline>>;
+  vinVerifications: VinVerification[];
+  towVerifications: TowVehicleVerification[];
+  trailerVerifications: TrailerVerification[];
+  releaseAuthorizations: ReleaseAuthorization[];
+  issues: TransportIssue[];
+  incidents: Incident[];
+  storageEvents: StorageEvent[];
+  witnessReports: WitnessReport[];
+  fraudFlags: FraudFlag[];
+}
+
+export async function getTransportPassport(assetId: number): Promise<TransportPassport | null> {
+  const asset = await getProtectedAsset(assetId);
+  if (!asset) return null;
+  const [
+    roles,
+    master,
+    timeline,
+    vinVerifications,
+    towVerifications,
+    trailerVerifications,
+    releaseAuthorizations,
+    issues,
+    incidentRows,
+    storageRows,
+    witnessReportRows,
+    fraudFlags,
+  ] = await Promise.all([
+    getAssetRoles(assetId),
+    getMasterForAsset(assetId),
+    getCustodyTimeline(assetId),
+    getVinVerificationsForAsset(assetId),
+    getTowVerificationsForAsset(assetId),
+    getTrailerVerificationsForAsset(assetId),
+    getReleaseAuthorizationsForAsset(assetId),
+    getIssuesForAsset(assetId),
+    getIncidentsForAsset(assetId),
+    getStorageEventsForAsset(assetId),
+    getWitnessReportsForAsset(assetId),
+    computeFraudFlags(assetId),
+  ]);
+  return {
+    asset,
+    roles,
+    master,
+    timeline,
+    vinVerifications,
+    towVerifications,
+    trailerVerifications,
+    releaseAuthorizations,
+    issues,
+    incidents: incidentRows,
+    storageEvents: storageRows,
+    witnessReports: witnessReportRows,
+    fraudFlags,
+  };
 }

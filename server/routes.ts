@@ -22646,6 +22646,681 @@ OUTPUT STYLE:
     }
   });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Verified Release System — Phase 4/5: carrier lifecycle, master transport,
+  // incidents/storage/changes/freeze, fraud flags, witness dispatch + payout,
+  // dashboards data, and the Transport Passport PDF. All role checks are
+  // server-side; every mutation appends an immutable custody event.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Notify everyone holding any of `roles` on an asset (deduped).
+  const notifyAssetParties = async (
+    assetId: number,
+    roles: assetCustody.AssetRoleName[],
+    payload: { title: string; body: string; type?: string },
+    link?: string,
+    exclude?: number,
+  ) => {
+    const all = await assetCustody.getAssetRoles(assetId);
+    const ids = new Set(
+      all
+        .filter((r) => r.status === "active" && roles.includes(r.role as assetCustody.AssetRoleName))
+        .map((r) => r.userId)
+        .filter((id) => id !== exclude),
+    );
+    for (const id of Array.from(ids)) {
+      await notify(id, { title: payload.title, body: payload.body, type: payload.type as any }, link);
+    }
+  };
+
+  const finiteLatLng = (b: any): { lat: number | null; lng: number | null } => {
+    const lat = Number(b?.lat);
+    const lng = Number(b?.lng);
+    const ok = isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    return ok ? { lat, lng } : { lat: null, lng: null };
+  };
+
+  const sanitizePhotoUrls = (v: any): string[] | null => {
+    if (!Array.isArray(v)) return null;
+    const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+    const out = v
+      .filter((u) => typeof u === "string")
+      .filter((u: string) => /^https:\/\/res\.cloudinary\.com\//.test(u) || (cloud ? u.startsWith(`https://res.cloudinary.com/${cloud}/`) : false));
+    return out.length ? out : null;
+  };
+
+  // Custody photo upload (Cloudinary) — mirrors /api/vi/reference-upload.
+  app.post("/api/assets/upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const dataUrl = String(req.body?.dataUrl || "");
+      if (!dataUrl.startsWith("data:image/")) return res.status(400).json({ message: "Missing image data" });
+      if (!process.env.CLOUDINARY_CLOUD_NAME) return res.status(503).json({ message: "Photo storage isn't configured." });
+      const cloudinary = (await import("./cloudinary.js")).default;
+      const up = await cloudinary.uploader.upload(dataUrl, {
+        resource_type: "image",
+        folder: "guber-custody",
+        transformation: [{ width: 1600, crop: "limit" }],
+      });
+      res.json({ url: up.secure_url });
+    } catch (err: any) {
+      res.status(500).json({ message: `Upload failed: ${err.message}` });
+    }
+  });
+
+  // List my protected assets by dashboard role (carrier | sender | witness).
+  app.get("/api/assets/mine", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const uid = req.session.userId!;
+      const role = String(req.query.role || "");
+      const roleSets: Record<string, assetCustody.AssetRoleName[]> = {
+        carrier: ["carrier", "driver"],
+        sender: ["owner", "sender", "authorized_contact"],
+        witness: ["witness"],
+      };
+      const roles = roleSets[role] || ["owner", "sender", "carrier", "driver", "authorized_contact", "witness", "recipient"];
+      const assets = await assetCustody.getAssetsForUserByRoles(uid, roles);
+      res.json(assets);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Full asset detail for a dashboard (any role on the asset, or admin).
+  app.get("/api/assets/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const me = await storage.getUser(uid);
+      const isAdmin = me?.role === "admin";
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      const anyRole: assetCustody.AssetRoleName[] = [
+        "owner", "sender", "buyer", "seller", "authorized_contact", "carrier", "driver", "witness", "pickup_contact", "delivery_contact", "recipient",
+      ];
+      if (!isAdmin && !(await assetCustody.userHasRoleOnAsset(assetId, uid, anyRole))) {
+        return res.status(403).json({ message: "You don't have a role on this asset" });
+      }
+      const passport = await assetCustody.getTransportPassport(assetId);
+      const myRoles = (await assetCustody.getAssetRoles(assetId))
+        .filter((r) => r.userId === uid && r.status === "active")
+        .map((r) => r.role);
+      res.json({ ...passport, myRoles, isAdmin });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Transport Passport PDF.
+  app.get("/api/assets/:id/passport.pdf", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const me = await storage.getUser(uid);
+      const isAdmin = me?.role === "admin";
+      const anyRole: assetCustody.AssetRoleName[] = [
+        "owner", "sender", "buyer", "seller", "authorized_contact", "carrier", "driver", "witness", "pickup_contact", "delivery_contact", "recipient",
+      ];
+      if (!isAdmin && !(await assetCustody.userHasRoleOnAsset(assetId, uid, anyRole))) {
+        return res.status(403).json({ message: "You don't have a role on this asset" });
+      }
+      const passport = await assetCustody.getTransportPassport(assetId);
+      if (!passport) return res.status(404).json({ message: "Asset not found" });
+      const { renderTransportPassportPdf } = await import("./transport-passport-pdf.js");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="transport-passport-${assetId}.pdf"`);
+      await renderTransportPassportPdf(passport, res);
+    } catch (err: any) {
+      if (!res.headersSent) res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Carrier lifecycle status update (running_normally | delayed | breakdown | …).
+  app.post("/api/assets/:id/lifecycle", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the active carrier can post transport updates" });
+      }
+      const b = req.body || {};
+      const status = String(b.status || "").trim();
+      if (!status) return res.status(400).json({ message: "A status is required" });
+      const { lat, lng } = finiteLatLng(b);
+      let result;
+      try {
+        result = await assetCustody.recordLifecycleEvent({
+          assetId, actorId: uid, status,
+          description: b.description ? String(b.description) : null,
+          lat, lng, photoUrls: sanitizePhotoUrls(b.photoUrls),
+        });
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Transport update",
+        body: `Status: ${status.replace(/_/g, " ")}`,
+        type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Create / fetch the master transport event for an asset (sender/owner).
+  app.post("/api/assets/:id/master", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Only the owner/sender can create a master transport" });
+      }
+      const existing = await assetCustody.getMasterForAsset(assetId);
+      if (existing) return res.json(existing);
+      const b = req.body || {};
+      const master = await assetCustody.createMasterTransportEvent({
+        assetId, senderId: uid, carrierId: b.carrierId ? Number(b.carrierId) : null,
+        originAddress: b.originAddress ?? null, destAddress: b.destAddress ?? null,
+      });
+      res.json(master);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Update master transport status with multi-asset propagation (carrier).
+  app.post("/api/assets/:id/master/status", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the active carrier can update master transport status" });
+      }
+      const master = await assetCustody.getMasterForAsset(assetId);
+      if (!master) return res.status(404).json({ message: "No master transport for this asset" });
+      const b = req.body || {};
+      const status = String(b.status || "").trim();
+      if (!status) return res.status(400).json({ message: "A status is required" });
+      const { lat, lng } = finiteLatLng(b);
+      const result = await assetCustody.updateMasterTransportStatus(master.id, status, uid, {
+        description: b.description ? String(b.description) : null, lat, lng,
+        propagate: b.propagate !== false,
+      });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Report a transport issue (carrier/driver/owner/sender).
+  app.post("/api/assets/:id/issues", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver", "owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Not authorized on this asset" });
+      }
+      const b = req.body || {};
+      const issueType = String(b.issueType || "").trim();
+      if (!issueType) return res.status(400).json({ message: "issueType is required" });
+      const issue = await assetCustody.createTransportIssue({
+        assetId, reportedBy: uid, issueType, description: b.description ? String(b.description) : null,
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Transport issue reported", body: issueType.replace(/_/g, " "), type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json(issue);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Report an incident (carrier/driver/owner/sender).
+  app.post("/api/assets/:id/incidents", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver", "owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Not authorized on this asset" });
+      }
+      const b = req.body || {};
+      const incidentType = String(b.incidentType || "").trim();
+      if (!incidentType) return res.status(400).json({ message: "incidentType is required" });
+      const { lat, lng } = finiteLatLng(b);
+      const incident = await assetCustody.createIncident({
+        assetId, reportedBy: uid, incidentType,
+        description: b.description ? String(b.description) : null,
+        severity: b.severity ? String(b.severity) : "medium",
+        photoUrls: sanitizePhotoUrls(b.photoUrls), lat, lng,
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Incident reported", body: `${incidentType} (${incident.severity})`, type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json(incident);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Storage event (carrier).
+  app.post("/api/assets/:id/storage", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the active carrier can record a storage event" });
+      }
+      const b = req.body || {};
+      const eventType = String(b.eventType || "stored").trim();
+      const { lat, lng } = finiteLatLng(b);
+      const ev = await assetCustody.createStorageEvent({
+        assetId, actorId: uid, eventType,
+        locationName: b.locationName ? String(b.locationName) : null,
+        photoUrls: sanitizePhotoUrls(b.photoUrls), lat, lng,
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Storage event", body: `Asset ${eventType}`, type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json(ev);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Tow vehicle / trailer change (carrier). High-value (>= $50k) changes need an
+  // owner/sender to make them OR an explicit emergency flag.
+  const highValueChangeGuard = async (assetId: number, uid: number, emergency: boolean): Promise<string | null> => {
+    const asset = await assetCustody.getProtectedAsset(assetId);
+    if (!asset) return "Asset not found";
+    if ((asset.estimatedValue ?? 0) >= 50000 && !emergency) {
+      const ownerSide = await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]);
+      if (!ownerSide) return "Sender approval is required to change tow vehicle/trailer on a high-value asset (or mark as emergency)";
+    }
+    return null;
+  };
+
+  app.post("/api/assets/:id/tow-vehicle", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver", "owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Only the active carrier or an owner/sender can change the tow vehicle" });
+      }
+      const b = req.body || {};
+      const guard = await highValueChangeGuard(assetId, uid, b.emergency === true);
+      if (guard) return res.status(409).json({ message: guard });
+      const row = await assetCustody.changeTowVehicle({
+        assetId, carrierId: uid, vehicleType: b.vehicleType ?? null,
+        plateNumber: b.plateNumber ?? null, plateState: b.plateState ?? null,
+        photoUrls: sanitizePhotoUrls(b.photoUrls),
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Tow vehicle changed", body: "A new tow vehicle was verified.", type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/assets/:id/trailer", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver", "owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Only the active carrier or an owner/sender can change the trailer" });
+      }
+      const b = req.body || {};
+      const guard = await highValueChangeGuard(assetId, uid, b.emergency === true);
+      if (guard) return res.status(409).json({ message: guard });
+      const row = await assetCustody.changeTrailer({
+        assetId, carrierId: uid, trailerType: b.trailerType ?? null,
+        trailerNumber: b.trailerNumber ?? null, plateNumber: b.plateNumber ?? null,
+        photoUrls: sanitizePhotoUrls(b.photoUrls),
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Trailer changed", body: "A new trailer was verified.", type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Driver change (carrier) — new selfie + GPS, re-verify.
+  app.post("/api/assets/:id/driver-change", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the active carrier can change drivers" });
+      }
+      const b = req.body || {};
+      const newDriverId = Number(b.newDriverId);
+      if (!Number.isInteger(newDriverId)) return res.status(400).json({ message: "newDriverId is required" });
+      const { lat, lng } = finiteLatLng(b);
+      await assetCustody.changeDriver({
+        assetId, newDriverId, actorId: uid,
+        selfieUrl: sanitizePhotoUrls(b.selfieUrl ? [b.selfieUrl] : null)?.[0] ?? null, lat, lng,
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Driver changed", body: "A new driver was verified for this asset.", type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Emergency custody transfer (carrier → replacement carrier).
+  app.post("/api/assets/:id/custody-transfer", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver"]))) {
+        return res.status(403).json({ message: "Only the active carrier can transfer custody" });
+      }
+      const b = req.body || {};
+      const toCarrierId = Number(b.toCarrierId);
+      if (!Number.isInteger(toCarrierId)) return res.status(400).json({ message: "toCarrierId is required" });
+      const { lat, lng } = finiteLatLng(b);
+      await assetCustody.emergencyCustodyTransfer({
+        assetId, fromCarrierId: uid, toCarrierId,
+        reason: b.reason ? String(b.reason) : null, lat, lng, photoUrls: sanitizePhotoUrls(b.photoUrls),
+      });
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Custody transferred", body: "Custody of your asset was transferred to a new carrier.", type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      await notify(toCarrierId, { title: "You received asset custody", body: "An asset's custody was transferred to you.", type: "load_board" as any }, `/custody/carrier`);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Delivery release (carrier / driver / recipient).
+  app.post("/api/assets/:id/delivery", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["carrier", "driver", "recipient", "delivery_contact"]))) {
+        return res.status(403).json({ message: "Not authorized to confirm delivery" });
+      }
+      const b = req.body || {};
+      const { lat, lng } = finiteLatLng(b);
+      try {
+        await assetCustody.recordDelivery({
+          assetId, actorId: uid, receiverName: b.receiverName ? String(b.receiverName) : null,
+          odometer: b.odometer ? String(b.odometer) : null, lat, lng, photoUrls: sanitizePhotoUrls(b.photoUrls),
+        });
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+      await notifyAssetParties(assetId, ["owner", "sender", "authorized_contact"], {
+        title: "Asset delivered", body: "Your protected asset was delivered and verified.", type: "load_board",
+      }, `/custody/asset/${assetId}`, uid);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Freeze / unfreeze (owner / sender; admin can also unfreeze).
+  app.post("/api/assets/:id/freeze", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Only the owner/sender can freeze this asset" });
+      }
+      const reason = String(req.body?.reason || "").trim() || "Owner-initiated freeze";
+      await assetCustody.freezeAsset(assetId, uid, reason);
+      await notifyAssetParties(assetId, ["carrier", "driver"], {
+        title: "Asset frozen", body: `This asset was frozen: ${reason}. Delivery and transfers are blocked.`, type: "load_board",
+      }, `/custody/carrier`, uid);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/assets/:id/unfreeze", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const me = await storage.getUser(uid);
+      const ownerSide = await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]);
+      if (me?.role !== "admin" && !ownerSide) {
+        return res.status(403).json({ message: "Only the owner/sender or an admin can unfreeze this asset" });
+      }
+      await assetCustody.unfreezeAsset(assetId, uid, req.body?.note ? String(req.body.note) : null);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Report a fraud concern (owner / sender).
+  app.post("/api/assets/:id/report-fraud", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Only the owner/sender can report a fraud concern" });
+      }
+      const concern = String(req.body?.concern || "").trim();
+      if (!concern) return res.status(400).json({ message: "Describe the concern" });
+      await assetCustody.reportFraudConcern(assetId, uid, concern);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Fraud-risk flags (any role on the asset).
+  app.get("/api/assets/:id/fraud-flags", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      const me = await storage.getUser(uid);
+      const anyRole: assetCustody.AssetRoleName[] = ["owner", "sender", "authorized_contact", "carrier", "driver", "witness", "recipient"];
+      if (me?.role !== "admin" && !(await assetCustody.userHasRoleOnAsset(assetId, uid, anyRole))) {
+        return res.status(403).json({ message: "Not authorized on this asset" });
+      }
+      res.json(await assetCustody.computeFraudFlags(assetId));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Request a witness (owner / sender). reportType: loading | release | delivery.
+  app.post("/api/assets/:id/request-witness", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const uid = req.session.userId!;
+      if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]))) {
+        return res.status(403).json({ message: "Only the owner/sender can request a witness" });
+      }
+      const reportType = String(req.body?.reportType || "loading").trim();
+      const { priceForWitnessAddon } = await import("@shared/asset-protection");
+      const founder = await assetCustody.isFounder(uid);
+      const feeCents = priceForWitnessAddon(reportType === "delivery" ? "witness_delivery" : "witness_pickup", founder);
+      const assignment = await assetCustody.requestWitness({ assetId, requestedBy: uid, reportType, feeCents });
+      res.json(assignment);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Witness dashboard — my assignments (open + assigned to me).
+  app.get("/api/witness/assignments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const uid = req.session.userId!;
+      const rows = await assetCustody.getWitnessAssignmentsForUser(uid);
+      const enriched = await Promise.all(
+        rows.map(async (a) => {
+          const asset = await assetCustody.getProtectedAsset(a.assetId);
+          return { ...a, asset: asset ? { id: asset.id, year: asset.year, make: asset.make, model: asset.model, assetType: asset.assetType, description: asset.description } : null };
+        }),
+      );
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Witness eligibility — paid verification work requires a verified identity,
+  // mirroring the load-board carrier / V&I worker gate. Demo users are exempt.
+  const requireWitnessEligible = async (uid: number): Promise<string | null> => {
+    if (await isDemoUser(uid)) return null;
+    const u = await storage.getUser(uid);
+    if (!u) return "User not found";
+    if (!u.idVerified) return "ID_REQUIRED";
+    return null;
+  };
+
+  // Accept an open witness assignment.
+  app.post("/api/witness/assignments/:id/accept", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const uid = req.session.userId!;
+      const assignmentId = parseInt(req.params.id);
+      const ineligible = await requireWitnessEligible(uid);
+      if (ineligible) {
+        if (ineligible === "ID_REQUIRED") return res.status(403).json({ message: "ID_REQUIRED", detail: "You must verify your ID before accepting witness assignments. Go to Profile → Trust & Credentials." });
+        return res.status(403).json({ message: ineligible });
+      }
+      try {
+        const row = await assetCustody.acceptWitnessAssignment(assignmentId, uid);
+        await assetCustody.assignRole(row.assetId, uid, "witness");
+        res.json(row);
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // File a Witness Verification Report → triggers 80/20 payout.
+  app.post("/api/witness/assignments/:id/report", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const uid = req.session.userId!;
+      const assignmentId = parseInt(req.params.id);
+      const ineligible = await requireWitnessEligible(uid);
+      if (ineligible) {
+        if (ineligible === "ID_REQUIRED") return res.status(403).json({ message: "ID_REQUIRED", detail: "You must verify your ID before filing a witness report. Go to Profile → Trust & Credentials." });
+        return res.status(403).json({ message: ineligible });
+      }
+      const b = req.body || {};
+      const { lat, lng } = finiteLatLng(b);
+      const doTransfer = async (witnessAccountId: string, amountCents: number, aid: number): Promise<string> => {
+        const transfer = await stripe.transfers.create(
+          {
+            amount: amountCents,
+            currency: "usd",
+            destination: witnessAccountId,
+            description: `GUBER witness verification payout (assignment ${aid})`,
+            metadata: { assignmentId: String(aid), kind: "witness_payout" },
+          },
+          { idempotencyKey: `witness-payout-${aid}` },
+        );
+        return transfer.id;
+      };
+      let result;
+      try {
+        result = await assetCustody.fileWitnessReport({
+          assignmentId, witnessUserId: uid,
+          reportType: String(b.reportType || "loading"),
+          notes: b.notes ? String(b.notes) : null,
+          photoUrls: sanitizePhotoUrls(b.photoUrls), lat, lng, doTransfer,
+        });
+      } catch (e: any) {
+        return res.status(409).json({ message: e.message });
+      }
+      const assignment = await assetCustody.getWitnessAssignment(assignmentId);
+      if (assignment) {
+        await notifyAssetParties(assignment.assetId, ["owner", "sender", "authorized_contact"], {
+          title: "Witness report filed", body: "A witness verification report was filed for your asset.", type: "load_board",
+        }, `/custody/asset/${assignment.assetId}`);
+      }
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Admin: Verified Release System oversight (view-all, append-only) ────────
+  app.get("/api/admin/assets", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const filter = req.query.filter as any;
+      const assets = await assetCustody.listAllAssets(["frozen", "incidents", "high_value"].includes(filter) ? filter : undefined);
+      res.json(assets);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/assets/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const passport = await assetCustody.getTransportPassport(parseInt(req.params.id));
+      if (!passport) return res.status(404).json({ message: "Asset not found" });
+      res.json(passport);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/assets/:id/note", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const note = String(req.body?.note || "").trim();
+      if (!note) return res.status(400).json({ message: "Note text is required" });
+      await assetCustody.appendAdminNote(assetId, req.session.userId!, note);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/assets/:id/freeze", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const assetId = parseInt(req.params.id);
+      const freeze = req.body?.freeze !== false;
+      if (freeze) {
+        await assetCustody.freezeAsset(assetId, req.session.userId!, String(req.body?.reason || "Admin freeze"));
+      } else {
+        await assetCustody.unfreezeAsset(assetId, req.session.userId!, req.body?.note ? String(req.body.note) : "Admin unfreeze");
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/incidents/:id/status", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const incidentId = parseInt(req.params.id);
+      const row = await assetCustody.updateIncidentStatus(incidentId, req.session.userId!, {
+        status: req.body?.status ? String(req.body.status) : undefined,
+        protectionClaimStatus: req.body?.protectionClaimStatus ? String(req.body.protectionClaimStatus) : undefined,
+        note: req.body?.note ? String(req.body.note) : null,
+      });
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/issues/:id/resolve", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const issueId = parseInt(req.params.id);
+      const row = await assetCustody.resolveTransportIssue(issueId, req.session.userId!, req.body?.note ? String(req.body.note) : null);
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // POST /api/load-board — create listing
   app.post("/api/load-board", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
