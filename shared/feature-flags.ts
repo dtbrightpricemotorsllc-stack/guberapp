@@ -17,6 +17,8 @@ export type FeatureFlagKey =
   | "business_signup"
   | "qa_dashboard"
   | "investor_pitch_public"
+  | "verified_release_system"
+  | "asset_protection_founders_club"
   | "free_quickpic_enabled";
 
 export type RolloutScope = "off" | "global" | "role" | "allowlist";
@@ -134,6 +136,20 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     description: "When ON, surfaces a public nav link to the hidden /investors page. The page itself is always reachable at /investors and /guber-investor-deck regardless of this flag.",
     defaultEnabled: false,
     defaultScope: "global",
+  },
+  {
+    key: "verified_release_system",
+    label: "Verified Release System",
+    description: "GUBER Verified Release System™ — asset custody protection, secure release authorization, and Transport Passport. Ship dark; admins always preview.",
+    defaultEnabled: false,
+    defaultScope: "off",
+  },
+  {
+    key: "asset_protection_founders_club",
+    label: "Asset Protection Founders Club",
+    description: "Founders Club buy-in for the Verified Release System (first 500 at $99, then $299). Off until launch.",
+    defaultEnabled: false,
+    defaultScope: "off",
   },
 ];
 

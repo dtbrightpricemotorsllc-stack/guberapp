@@ -10,6 +10,8 @@ const VALID_PRODUCTS = [
   "business_scout",
   "business_unlock",
   "marketplace_buyer_order",
+  "asset_protection",
+  "asset_protection_founders",
 ] as const;
 
 export type MobileCheckoutProduct = (typeof VALID_PRODUCTS)[number];

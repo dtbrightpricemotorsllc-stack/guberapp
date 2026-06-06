@@ -391,6 +391,264 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_job_location_pings_job ON job_location_pings(job_id);
   `).catch(e => console.error("[migration] job_location_pings error:", e));
 
+  // ── GUBER Verified Release System™ — Asset Custody Engine ──────────────────
+  // Prod has no db:push step, so provision these idempotently on boot. The
+  // custody_events table is APPEND-ONLY, enforced below by a Postgres rule that
+  // turns any UPDATE/DELETE into a no-op — it is the immutable chain of custody.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS founding_asset_protection_member boolean DEFAULT false;
+
+    CREATE TABLE IF NOT EXISTS protected_assets (
+      id SERIAL PRIMARY KEY,
+      owner_id INTEGER NOT NULL,
+      listing_id INTEGER,
+      job_id INTEGER,
+      asset_type TEXT NOT NULL DEFAULT 'vehicle',
+      vin TEXT,
+      year TEXT,
+      make TEXT,
+      model TEXT,
+      description TEXT,
+      estimated_value REAL,
+      package_tier TEXT NOT NULL DEFAULT 'none',
+      witness_addon BOOLEAN DEFAULT false,
+      status TEXT NOT NULL DEFAULT 'pending',
+      geofence_lat REAL,
+      geofence_lng REAL,
+      geofence_radius_meters INTEGER DEFAULT 250,
+      founder_protected BOOLEAN DEFAULT false,
+      frozen_at TIMESTAMP,
+      frozen_reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_protected_assets_owner ON protected_assets(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_protected_assets_listing ON protected_assets(listing_id);
+
+    CREATE TABLE IF NOT EXISTS asset_roles (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      assigned_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_asset_roles_asset ON asset_roles(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_asset_roles_user ON asset_roles(user_id);
+
+    CREATE TABLE IF NOT EXISTS custody_events (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      actor_id INTEGER,
+      event_type TEXT NOT NULL,
+      description TEXT,
+      metadata JSON,
+      lat REAL,
+      lng REAL,
+      photo_urls TEXT[],
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_custody_events_asset ON custody_events(asset_id);
+
+    CREATE TABLE IF NOT EXISTS release_authorizations (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      requested_by INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      selfie_url TEXT,
+      lat REAL,
+      lng REAL,
+      geofence_verified BOOLEAN DEFAULT false,
+      geofence_meters INTEGER,
+      tow_verification_id INTEGER,
+      trailer_verification_id INTEGER,
+      vin_verification_id INTEGER,
+      approved_by INTEGER,
+      approved_at TIMESTAMP,
+      denied_reason TEXT,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_release_auth_asset ON release_authorizations(asset_id);
+
+    CREATE TABLE IF NOT EXISTS release_codes (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      authorization_id INTEGER,
+      code TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      used_at TIMESTAMP,
+      used_by INTEGER,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_release_codes_asset ON release_codes(asset_id);
+
+    CREATE TABLE IF NOT EXISTS tow_vehicle_verifications (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      authorization_id INTEGER,
+      carrier_id INTEGER NOT NULL,
+      vehicle_type TEXT,
+      plate_number TEXT,
+      plate_state TEXT,
+      photo_urls TEXT[],
+      verified BOOLEAN DEFAULT false,
+      verified_by INTEGER,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS trailer_verifications (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      authorization_id INTEGER,
+      carrier_id INTEGER NOT NULL,
+      trailer_type TEXT,
+      trailer_number TEXT,
+      plate_number TEXT,
+      photo_urls TEXT[],
+      verified BOOLEAN DEFAULT false,
+      verified_by INTEGER,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS vin_verifications (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      authorization_id INTEGER,
+      expected_vin TEXT,
+      scanned_vin TEXT,
+      matched BOOLEAN,
+      photo_url TEXT,
+      verified_by INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS master_transport_events (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      sender_id INTEGER NOT NULL,
+      carrier_id INTEGER,
+      origin_address TEXT,
+      origin_lat REAL,
+      origin_lng REAL,
+      dest_address TEXT,
+      dest_lat REAL,
+      dest_lng REAL,
+      status TEXT NOT NULL DEFAULT 'created',
+      loaded_at TIMESTAMP,
+      departed_at TIMESTAMP,
+      arrived_at TIMESTAMP,
+      delivered_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_master_transport_asset ON master_transport_events(asset_id);
+
+    CREATE TABLE IF NOT EXISTS transport_issues (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      master_event_id INTEGER,
+      reported_by INTEGER NOT NULL,
+      issue_type TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolved_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS incidents (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      reported_by INTEGER NOT NULL,
+      incident_type TEXT NOT NULL,
+      description TEXT,
+      photo_urls TEXT[],
+      lat REAL,
+      lng REAL,
+      severity TEXT NOT NULL DEFAULT 'medium',
+      status TEXT NOT NULL DEFAULT 'open',
+      protection_claim_status TEXT NOT NULL DEFAULT 'none',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_incidents_asset ON incidents(asset_id);
+
+    CREATE TABLE IF NOT EXISTS storage_events (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL,
+      location_name TEXT,
+      lat REAL,
+      lng REAL,
+      photo_urls TEXT[],
+      actor_id INTEGER,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS witness_assignments (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL,
+      witness_user_id INTEGER,
+      job_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'open',
+      payout_amount REAL,
+      payout_status TEXT NOT NULL DEFAULT 'pending',
+      stripe_transfer_id TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_witness_assign_asset ON witness_assignments(asset_id);
+
+    CREATE TABLE IF NOT EXISTS witness_reports (
+      id SERIAL PRIMARY KEY,
+      assignment_id INTEGER NOT NULL,
+      asset_id INTEGER NOT NULL,
+      witness_user_id INTEGER NOT NULL,
+      report_type TEXT NOT NULL,
+      notes TEXT,
+      photo_urls TEXT[],
+      lat REAL,
+      lng REAL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_protection_purchases (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      asset_id INTEGER,
+      listing_id INTEGER,
+      product_type TEXT NOT NULL,
+      package_tier TEXT,
+      amount_cents INTEGER NOT NULL,
+      stripe_session_id TEXT UNIQUE,
+      stripe_payment_intent_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      fulfilled_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_asset_purchases_user ON asset_protection_purchases(user_id);
+
+    CREATE TABLE IF NOT EXISTS founders_club_state (
+      id SERIAL PRIMARY KEY,
+      total_claimed INTEGER NOT NULL DEFAULT 0,
+      cap_limit INTEGER NOT NULL DEFAULT 500,
+      founder_price_cents INTEGER NOT NULL DEFAULT 9900,
+      standard_price_cents INTEGER NOT NULL DEFAULT 29900,
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    INSERT INTO founders_club_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+  `).catch(e => console.error("[migration] verified release system tables error:", e));
+
+  // Append-only enforcement for the chain of custody. Any UPDATE or DELETE is
+  // silently rewritten to do nothing, so historical events can never be altered
+  // or removed at the SQL level — even by application bugs or compromised code.
+  await pool.query(`
+    CREATE OR REPLACE RULE custody_events_no_update AS
+      ON UPDATE TO custody_events DO INSTEAD NOTHING;
+    CREATE OR REPLACE RULE custody_events_no_delete AS
+      ON DELETE TO custody_events DO INSTEAD NOTHING;
+  `).catch(e => console.error("[migration] custody_events append-only rule error:", e));
+
   await registerRoutes(httpServer, app);
   await startOSRuntime(app);
   startStudioToolsListener();

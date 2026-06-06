@@ -32,6 +32,16 @@ import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHi
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
+import * as assetCustody from "./asset-custody";
+import {
+  PROTECTION_PACKAGES,
+  WITNESS_ADDONS,
+  HIGH_VALUE_THRESHOLD,
+  recommendPackage,
+  isProtectionPackageKey,
+  isWitnessAddonKey,
+  type ProtectionPackageKey,
+} from "@shared/asset-protection";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
 import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
@@ -3627,6 +3637,40 @@ export async function registerRoutes(
               status: "connected",
             });
             console.log(`[GUBER][webhook/main] load_board_connection: listing #${lbListingId} connected to carrier #${lbCarrierId}`);
+          }
+        } else if (metadata?.type === "asset_protection") {
+          // Verified Release System package / witness add-on. Idempotent:
+          // the pending purchase row was written at checkout creation; this
+          // flips it to paid exactly once and applies effects (attach package
+          // to the asset + append a custody event).
+          const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
+          const result = await assetCustody.fulfillPurchaseBySession(session.id, pi);
+          if (result.alreadyDone) {
+            console.log(`[GUBER][webhook/main] asset_protection: session ${session.id} already fulfilled — skipping duplicate`);
+          } else if (result.fulfilled) {
+            console.log(`[GUBER][webhook/main] asset_protection: session ${session.id} fulfilled (${metadata.packageTier || metadata.productType})`);
+          } else {
+            console.log(`[GUBER][webhook/main] asset_protection: session ${session.id} had no pending purchase row — ignored`);
+          }
+        } else if (metadata?.type === "asset_protection_founders") {
+          // Founders Club one-time enrollment. The founder spot is granted
+          // atomically (advisory lock) only on payment success; here we mark
+          // the purchase paid, grant membership, and notify. Idempotent via the
+          // unique stripe_session_id on asset_protection_purchases.
+          const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
+          const fres = await assetCustody.fulfillPurchaseBySession(session.id, pi);
+          const fUserId = metadata.userId ? parseInt(metadata.userId) : null;
+          if (fUserId && fres.fulfilled) {
+            await assetCustody.grantFounderMembership(fUserId);
+            await storage.createNotification({
+              userId: fUserId,
+              title: "Welcome to the Founders Club!",
+              body: "You are now a GUBER Asset Protection Founding Member — lifetime founder pricing and benefits, permanently.",
+              type: "system",
+            }).catch(() => {});
+            console.log(`[GUBER][webhook/main] asset_protection_founders: user ${fUserId} enrolled (session ${session.id})`);
+          } else {
+            console.log(`[GUBER][webhook/main] asset_protection_founders: session ${session.id} alreadyDone=${fres.alreadyDone}`);
           }
         } else {
           console.log(`[GUBER][webhook/main] checkout.session.completed: unhandled session type "${metadata?.type || "none"}" — ignored`);
@@ -12031,6 +12075,37 @@ export async function registerRoutes(
           metadata: { type: "marketplace_buyer_order", itemId: String(itemId), userId: String(user.id) },
         });
         sessionUrl = stripeSession.url;
+
+      } else if (product === "asset_protection") {
+        // Verified Release System package / witness add-on (iOS external purchase).
+        const assetId = parseInt(String(options.assetId || "0"));
+        const productType = String(options.productType || "");
+        const key = String(options.key || "");
+        if (!assetId || (productType !== "package" && productType !== "witness_addon") || !key) {
+          return res.redirect(`${APP_BASE}/load-board?error=invalid_protection`);
+        }
+        const result = await buildAssetProtectionCheckout({
+          userId: user.id,
+          userEmail: user.email,
+          productType: productType as "package" | "witness_addon",
+          key,
+          assetId,
+          successUrl: resolveSuccessUrl(options.successUrl, `${APP_BASE}/load-board?protection=success`),
+          cancelUrl: `${APP_BASE}/load-board`,
+        });
+        if ("error" in result) return res.redirect(`${APP_BASE}/load-board?error=protection_failed`);
+        sessionUrl = result.url;
+
+      } else if (product === "asset_protection_founders") {
+        // Founders Club enrollment (iOS external purchase).
+        const result = await buildFoundersCheckout({
+          userId: user.id,
+          userEmail: user.email,
+          successUrl: resolveSuccessUrl(options.successUrl, `${APP_BASE}/load-board?founders=success`),
+          cancelUrl: `${APP_BASE}/load-board`,
+        });
+        if ("error" in result) return res.redirect(`${APP_BASE}/load-board?error=founders_${result.code}`);
+        sessionUrl = result.url;
       }
 
       if (!sessionUrl) return res.redirect(`${APP_BASE}/?error=unknown_product`);
@@ -21987,6 +22062,265 @@ OUTPUT STYLE:
     return { low: Math.max(min, 250), high: Math.max(max, 400) };
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // GUBER Verified Release System™ — pricing + purchase flow
+  // ────────────────────────────────────────────────────────────────────────
+  // Server is the source of truth for money & state. Prices are resolved BY KEY
+  // from the LOCKED catalog (shared/asset-protection.ts) — client-supplied
+  // amounts are never trusted. Fulfillment is idempotent via a pending purchase
+  // row keyed on the unique Stripe session id.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Build a Stripe Checkout session for a package or witness add-on on an asset.
+  // Declared (hoisted) so both the web route and the mobile redirect can share it.
+  async function buildAssetProtectionCheckout(opts: {
+    userId: number;
+    userEmail: string | null;
+    productType: "package" | "witness_addon";
+    key: string;
+    assetId: number;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<{ url: string } | { error: string; code: number }> {
+    const asset = await assetCustody.getProtectedAsset(opts.assetId);
+    if (!asset) return { error: "Asset not found", code: 404 };
+    // Only owner/sender/authorized contacts may pay for protection on an asset.
+    const allowed =
+      asset.ownerId === opts.userId ||
+      (await assetCustody.userHasRoleOnAsset(opts.assetId, opts.userId, [
+        "owner",
+        "sender",
+        "authorized_contact",
+      ]));
+    if (!allowed) return { error: "Not authorized for this asset", code: 403 };
+
+    const priced = await assetCustody.resolvePrice(opts.userId, opts.productType, opts.key);
+    if (!priced) return { error: "Invalid package or add-on", code: 400 };
+
+    // Checkout-init idempotency: never mint a second charge surface for an asset
+    // that is already protected, and reuse a still-open session rather than
+    // creating a duplicate pending purchase.
+    const existing = await assetCustody.findPurchaseForAsset({
+      assetId: opts.assetId,
+      productType: opts.productType,
+      packageTier: opts.key,
+    });
+    if (existing?.status === "paid") {
+      return { error: "This protection is already active for this asset", code: 409 };
+    }
+    if (existing?.status === "pending" && existing.stripeSessionId) {
+      try {
+        const prior = await stripeMain.checkout.sessions.retrieve(existing.stripeSessionId);
+        if (prior.status === "open" && prior.url) return { url: prior.url };
+      } catch {
+        // Prior session unretrievable/expired — fall through and mint a fresh one.
+      }
+    }
+
+    const label =
+      opts.productType === "package"
+        ? PROTECTION_PACKAGES[opts.key as ProtectionPackageKey].name
+        : WITNESS_ADDONS[opts.key as keyof typeof WITNESS_ADDONS].name;
+    const blurb =
+      opts.productType === "package"
+        ? PROTECTION_PACKAGES[opts.key as ProtectionPackageKey].blurb
+        : WITNESS_ADDONS[opts.key as keyof typeof WITNESS_ADDONS].blurb;
+
+    const session = await stripeMain.checkout.sessions.create({
+      payment_method_types: ["card"],
+      customer_email: opts.userEmail || undefined,
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: `GUBER Verified Release · ${label}`, description: blurb },
+            unit_amount: priced.amountCents,
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
+      metadata: {
+        type: "asset_protection",
+        userId: String(opts.userId),
+        assetId: String(opts.assetId),
+        productType: opts.productType,
+        packageTier: opts.key,
+      },
+    });
+    if (!session.url) return { error: "Could not create checkout session", code: 500 };
+
+    await assetCustody.recordPendingPurchase({
+      userId: opts.userId,
+      assetId: opts.assetId,
+      listingId: asset.listingId ?? null,
+      productType: opts.productType,
+      packageTier: opts.key,
+      amountCents: priced.amountCents,
+      stripeSessionId: session.id,
+    });
+    return { url: session.url };
+  }
+
+  // Build a Founders Club one-time enrollment checkout. Hoisted for reuse.
+  async function buildFoundersCheckout(opts: {
+    userId: number;
+    userEmail: string | null;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<{ url: string } | { error: string; code: number }> {
+    if (await assetCustody.isFounder(opts.userId)) {
+      return { error: "Already a Founding Member", code: 409 };
+    }
+    const status = await assetCustody.getFoundersStatus();
+    if (status.soldOut) return { error: "Founders Club is sold out", code: 410 };
+
+    const session = await stripeMain.checkout.sessions.create({
+      payment_method_types: ["card"],
+      customer_email: opts.userEmail || undefined,
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "GUBER Asset Protection — Founding Member",
+              description: "Lifetime founder pricing + benefits across all Asset Protection services. One-time, no recurring charge.",
+            },
+            unit_amount: status.currentPriceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
+      metadata: { type: "asset_protection_founders", userId: String(opts.userId) },
+    });
+    if (!session.url) return { error: "Could not create checkout session", code: 500 };
+
+    await assetCustody.recordPendingPurchase({
+      userId: opts.userId,
+      productType: "founders_club",
+      packageTier: null,
+      amountCents: status.currentPriceCents,
+      stripeSessionId: session.id,
+    });
+    return { url: session.url };
+  }
+
+  // GET /api/asset-protection/pricing — LOCKED catalog + founder status for the
+  // viewer (used by the Load Board toggle and all purchase surfaces).
+  app.get("/api/asset-protection/pricing", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const founder = await assetCustody.isFounder(userId);
+      const foundersStatus = await assetCustody.getFoundersStatus();
+      res.json({
+        founder,
+        highValueThreshold: HIGH_VALUE_THRESHOLD,
+        packages: Object.values(PROTECTION_PACKAGES).map((p) => ({
+          key: p.key,
+          name: p.name,
+          blurb: p.blurb,
+          valueRangeLabel: p.valueRangeLabel,
+          features: p.features,
+          priceCents: p.priceCents,
+          founderPriceCents: p.founderPriceCents,
+          effectivePriceCents: founder ? p.founderPriceCents : p.priceCents,
+        })),
+        witnessAddons: Object.values(WITNESS_ADDONS).map((a) => ({
+          key: a.key,
+          name: a.name,
+          blurb: a.blurb,
+          priceCents: a.priceCents,
+          founderPriceCents: a.founderPriceCents,
+          effectivePriceCents: founder ? a.founderPriceCents : a.priceCents,
+        })),
+        foundersClub: {
+          totalClaimed: foundersStatus.totalClaimed,
+          capLimit: foundersStatus.capLimit,
+          spotsRemaining: foundersStatus.spotsRemaining,
+          soldOut: foundersStatus.soldOut,
+          currentPriceCents: foundersStatus.currentPriceCents,
+          founderPriceCents: foundersStatus.founderPriceCents,
+          standardPriceCents: foundersStatus.standardPriceCents,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/asset-protection/recommend?value=NNN — value-based guidance.
+  app.get("/api/asset-protection/recommend", requireAuth, async (req: Request, res: Response) => {
+    const value = parseFloat(String(req.query.value || "0")) || 0;
+    const key = recommendPackage(value);
+    res.json({
+      recommended: key,
+      name: PROTECTION_PACKAGES[key].name,
+      highValue: value >= HIGH_VALUE_THRESHOLD,
+      highValueThreshold: HIGH_VALUE_THRESHOLD,
+      warning:
+        value >= HIGH_VALUE_THRESHOLD
+          ? "This asset may benefit from High Value Transport Passport protection."
+          : null,
+    });
+  });
+
+  // POST /api/asset-protection/checkout — web checkout for a package/witness add-on.
+  // Body: { assetId, productType: "package"|"witness_addon", key }
+  app.post("/api/asset-protection/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { assetId, productType, key } = req.body || {};
+      if (!assetId || (productType !== "package" && productType !== "witness_addon") || !key) {
+        return res.status(400).json({ message: "assetId, productType, and key are required" });
+      }
+      if (productType === "package" && !isProtectionPackageKey(String(key))) {
+        return res.status(400).json({ message: "Invalid package key" });
+      }
+      if (productType === "witness_addon" && !isWitnessAddonKey(String(key))) {
+        return res.status(400).json({ message: "Invalid witness add-on key" });
+      }
+      const user = await storage.getUser(userId);
+      const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+      const result = await buildAssetProtectionCheckout({
+        userId,
+        userEmail: user?.email ?? null,
+        productType,
+        key: String(key),
+        assetId: parseInt(String(assetId)),
+        successUrl: `${origin}/load-board?protection=success`,
+        cancelUrl: `${origin}/load-board`,
+      });
+      if ("error" in result) return res.status(result.code).json({ message: result.error });
+      res.json({ checkoutUrl: result.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/asset-protection/founders/checkout — web Founders Club enrollment.
+  app.post("/api/asset-protection/founders/checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUser(userId);
+      const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+      const result = await buildFoundersCheckout({
+        userId,
+        userEmail: user?.email ?? null,
+        successUrl: `${origin}/load-board?founders=success`,
+        cancelUrl: `${origin}/load-board`,
+      });
+      if ("error" in result) return res.status(result.code).json({ message: result.error });
+      res.json({ checkoutUrl: result.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // POST /api/load-board — create listing
   app.post("/api/load-board", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
@@ -22075,7 +22409,26 @@ OUTPUT STYLE:
         urgent: b.urgent || false,
         notes: b.notes || null,
       });
-      res.json({ listing });
+
+      // GUBER Verified Release System™ — if the poster opted into protection,
+      // create the generic protected asset (owner role + opening custody event).
+      // The actual package purchase happens next via /api/asset-protection/checkout.
+      let asset: Awaited<ReturnType<typeof assetCustody.createProtectedAsset>> | null = null;
+      if (b.protectionRequested) {
+        asset = await assetCustody.createProtectedAsset({
+          ownerId: userId,
+          listingId: listing.id,
+          assetType: b.assetProtectionType || (b.boatType ? "boat" : b.rvClass ? "rv" : b.equipmentType ? "equipment" : "vehicle"),
+          vin: b.vin || null,
+          year: b.year ? String(b.year) : null,
+          make: b.make || null,
+          model: b.model || null,
+          description: b.assetDescription || null,
+          estimatedValue: b.estimatedValue != null ? Number(b.estimatedValue) : null,
+        });
+      }
+
+      res.json({ listing, asset });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

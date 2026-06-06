@@ -197,6 +197,11 @@ export const users = pgTable("users", {
   // waivers are recorded on `assignments` instead.
   liabilityDisclaimerAcceptedAt: timestamp("liability_disclaimer_accepted_at"),
 
+  // ── GUBER Verified Release System — Founders Club ──
+  // Permanent flag granted to the first 500 members who buy in at the $99
+  // founder price. Once true it never reverts (lifetime membership).
+  foundingAssetProtectionMember: boolean("founding_asset_protection_member").default(false),
+
   // ── Soft-delete / data-retention fields ────────────────────────────────────
   deletedAt: timestamp("deleted_at"),
   deletionScheduledPurgeAt: timestamp("deletion_scheduled_purge_at"),
@@ -2291,3 +2296,295 @@ export const presetListings = pgTable("preset_listings", {
 export const insertPresetListingSchema = createInsertSchema(presetListings).omit({ id: true, createdAt: true });
 export type InsertPresetListing = z.infer<typeof insertPresetListingSchema>;
 export type PresetListing = typeof presetListings.$inferSelect;
+
+// ════════════════════════════════════════════════════════════════════════════
+// GUBER Verified Release System™ — Asset Custody Engine
+// ────────────────────────────────────────────────────────────────────────────
+// An additive, reusable custody/chain-of-control layer. The Load Board is the
+// first consumer (a protected_asset links to a load_board_listing) but nothing
+// here is Load-Board-specific. Core principles:
+//   • custody_events is APPEND-ONLY (enforced by a Postgres rule, see
+//     server/index.ts) — it is the immutable chain of custody.
+//   • GPS is never trusted alone; release requires a live selfie, geofence
+//     proximity, tow/trailer verification, and a mandatory VIN match.
+//   • All money/state transitions are server-authoritative.
+// ════════════════════════════════════════════════════════════════════════════
+
+// The protected asset itself. One row per item under custody protection.
+export const protectedAssets = pgTable("protected_assets", {
+  id: serial("id").primaryKey(),
+  ownerId: integer("owner_id").notNull(), // sender / asset owner
+  // First use case: a Load Board listing. Generic by design — either may be null.
+  listingId: integer("listing_id"),
+  jobId: integer("job_id"), // optional linked GUBER job (witness V&I, etc.)
+  assetType: text("asset_type").notNull().default("vehicle"), // vehicle | equipment | boat | rv | trailer | other
+  vin: text("vin"),
+  year: text("year"),
+  make: text("make"),
+  model: text("model"),
+  description: text("description"),
+  estimatedValue: real("estimated_value"),
+  // Security package: none | standard ($49) | premium ($149) | elite ($299–499)
+  packageTier: text("package_tier").notNull().default("none"),
+  witnessAddon: boolean("witness_addon").default(false),
+  // pending → active → in_transit → released → delivered → closed
+  // (or disputed | frozen at any point)
+  status: text("status").notNull().default("pending"),
+  // Geofence lock around the pickup/origin. Release is blocked outside this.
+  geofenceLat: real("geofence_lat"),
+  geofenceLng: real("geofence_lng"),
+  geofenceRadiusMeters: integer("geofence_radius_meters").default(250),
+  founderProtected: boolean("founder_protected").default(false),
+  frozenAt: timestamp("frozen_at"),
+  frozenReason: text("frozen_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export const insertProtectedAssetSchema = createInsertSchema(protectedAssets).omit({
+  id: true, status: true, founderProtected: true, frozenAt: true, frozenReason: true,
+  createdAt: true, updatedAt: true,
+});
+export type ProtectedAsset = typeof protectedAssets.$inferSelect;
+export type InsertProtectedAsset = z.infer<typeof insertProtectedAssetSchema>;
+
+// Who plays which part for a given asset (sender, carrier, witness, admin, recipient).
+export const assetRoles = pgTable("asset_roles", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  userId: integer("user_id").notNull(),
+  role: text("role").notNull(), // sender | carrier | witness | admin | recipient
+  status: text("status").notNull().default("active"), // active | revoked
+  assignedAt: timestamp("assigned_at").defaultNow(),
+});
+export const insertAssetRoleSchema = createInsertSchema(assetRoles).omit({ id: true, assignedAt: true });
+export type AssetRole = typeof assetRoles.$inferSelect;
+export type InsertAssetRole = z.infer<typeof insertAssetRoleSchema>;
+
+// APPEND-ONLY chain of custody. Never updated or deleted (DB rule enforced).
+export const custodyEvents = pgTable("custody_events", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  actorId: integer("actor_id"), // null for system-generated events
+  eventType: text("event_type").notNull(), // created | package_purchased | release_requested | release_approved | release_denied | code_issued | code_redeemed | vin_verified | vin_mismatch | tow_verified | trailer_verified | loaded | departed | in_transit | arrived | delivered | incident_reported | stored | retrieved | frozen | unfrozen | witness_assigned | witness_report | closed
+  description: text("description"),
+  metadata: json("metadata"),
+  lat: real("lat"),
+  lng: real("lng"),
+  photoUrls: text("photo_urls").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertCustodyEventSchema = createInsertSchema(custodyEvents).omit({ id: true, createdAt: true });
+export type CustodyEvent = typeof custodyEvents.$inferSelect;
+export type InsertCustodyEvent = z.infer<typeof insertCustodyEventSchema>;
+
+// A carrier's request to take custody / release the asset. Bundles the live
+// selfie, GPS, and references to the tow/trailer/VIN verifications.
+export const releaseAuthorizations = pgTable("release_authorizations", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  requestedBy: integer("requested_by").notNull(), // carrier
+  status: text("status").notNull().default("pending"), // pending | approved | denied | expired
+  selfieUrl: text("selfie_url"),
+  lat: real("lat"),
+  lng: real("lng"),
+  geofenceVerified: boolean("geofence_verified").default(false),
+  geofenceMeters: integer("geofence_meters"),
+  towVerificationId: integer("tow_verification_id"),
+  trailerVerificationId: integer("trailer_verification_id"),
+  vinVerificationId: integer("vin_verification_id"),
+  approvedBy: integer("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  deniedReason: text("denied_reason"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertReleaseAuthorizationSchema = createInsertSchema(releaseAuthorizations).omit({
+  id: true, status: true, approvedBy: true, approvedAt: true, deniedReason: true, createdAt: true,
+});
+export type ReleaseAuthorization = typeof releaseAuthorizations.$inferSelect;
+export type InsertReleaseAuthorization = z.infer<typeof insertReleaseAuthorizationSchema>;
+
+// One-time release codes. Sender shares the code; carrier redeems on hand-off.
+export const releaseCodes = pgTable("release_codes", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  authorizationId: integer("authorization_id"),
+  code: text("code").notNull(),
+  status: text("status").notNull().default("active"), // active | used | expired | revoked
+  usedAt: timestamp("used_at"),
+  usedBy: integer("used_by"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type ReleaseCode = typeof releaseCodes.$inferSelect;
+
+// Tow vehicle verification (the vehicle hauling the asset).
+export const towVehicleVerifications = pgTable("tow_vehicle_verifications", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  authorizationId: integer("authorization_id"),
+  carrierId: integer("carrier_id").notNull(),
+  vehicleType: text("vehicle_type"),
+  plateNumber: text("plate_number"),
+  plateState: text("plate_state"),
+  photoUrls: text("photo_urls").array(),
+  verified: boolean("verified").default(false),
+  verifiedBy: integer("verified_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type TowVehicleVerification = typeof towVehicleVerifications.$inferSelect;
+
+// Trailer verification (the trailer/transport the asset is loaded onto).
+export const trailerVerifications = pgTable("trailer_verifications", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  authorizationId: integer("authorization_id"),
+  carrierId: integer("carrier_id").notNull(),
+  trailerType: text("trailer_type"),
+  trailerNumber: text("trailer_number"),
+  plateNumber: text("plate_number"),
+  photoUrls: text("photo_urls").array(),
+  verified: boolean("verified").default(false),
+  verifiedBy: integer("verified_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type TrailerVerification = typeof trailerVerifications.$inferSelect;
+
+// Mandatory VIN verification. A mismatch is a HARD BLOCK on release.
+export const vinVerifications = pgTable("vin_verifications", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  authorizationId: integer("authorization_id"),
+  expectedVin: text("expected_vin"),
+  scannedVin: text("scanned_vin"),
+  matched: boolean("matched"),
+  photoUrl: text("photo_url"),
+  verifiedBy: integer("verified_by"),
+  status: text("status").notNull().default("pending"), // pending | matched | mismatch
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type VinVerification = typeof vinVerifications.$inferSelect;
+
+// The Master Transport Event — the umbrella record for one transport leg,
+// tying together origin/destination, sender, carrier, and lifecycle timestamps.
+export const masterTransportEvents = pgTable("master_transport_events", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  senderId: integer("sender_id").notNull(),
+  carrierId: integer("carrier_id"),
+  originAddress: text("origin_address"),
+  originLat: real("origin_lat"),
+  originLng: real("origin_lng"),
+  destAddress: text("dest_address"),
+  destLat: real("dest_lat"),
+  destLng: real("dest_lng"),
+  status: text("status").notNull().default("created"), // created | loaded | in_transit | arrived | delivered | closed
+  loadedAt: timestamp("loaded_at"),
+  departedAt: timestamp("departed_at"),
+  arrivedAt: timestamp("arrived_at"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type MasterTransportEvent = typeof masterTransportEvents.$inferSelect;
+
+// Issues raised mid-transport (route change, delay, dispute, etc.).
+export const transportIssues = pgTable("transport_issues", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  masterEventId: integer("master_event_id"),
+  reportedBy: integer("reported_by").notNull(),
+  issueType: text("issue_type").notNull(), // route_change | delay | dispute | mechanical | other
+  description: text("description"),
+  status: text("status").notNull().default("open"), // open | acknowledged | resolved
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type TransportIssue = typeof transportIssues.$inferSelect;
+
+// Incident protection records (theft, damage, accident). Drives claims.
+export const incidents = pgTable("incidents", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  reportedBy: integer("reported_by").notNull(),
+  incidentType: text("incident_type").notNull(), // theft | damage | accident | delay | other
+  description: text("description"),
+  photoUrls: text("photo_urls").array(),
+  lat: real("lat"),
+  lng: real("lng"),
+  severity: text("severity").notNull().default("medium"), // low | medium | high | critical
+  status: text("status").notNull().default("open"), // open | investigating | resolved
+  protectionClaimStatus: text("protection_claim_status").notNull().default("none"), // none | filed | approved | denied | paid
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type Incident = typeof incidents.$inferSelect;
+
+// Storage custody events (asset placed in / pulled from a storage location).
+export const storageEvents = pgTable("storage_events", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  eventType: text("event_type").notNull(), // stored | retrieved | transferred
+  locationName: text("location_name"),
+  lat: real("lat"),
+  lng: real("lng"),
+  photoUrls: text("photo_urls").array(),
+  actorId: integer("actor_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type StorageEvent = typeof storageEvents.$inferSelect;
+
+// Witness verification — fulfilled via the existing V&I system. 80/20 payout.
+export const witnessAssignments = pgTable("witness_assignments", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  witnessUserId: integer("witness_user_id"),
+  jobId: integer("job_id"), // linked V&I job
+  status: text("status").notNull().default("open"), // open | assigned | accepted | completed | declined
+  payoutAmount: real("payout_amount"),
+  payoutStatus: text("payout_status").notNull().default("pending"), // pending | available | sent
+  stripeTransferId: text("stripe_transfer_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type WitnessAssignment = typeof witnessAssignments.$inferSelect;
+
+export const witnessReports = pgTable("witness_reports", {
+  id: serial("id").primaryKey(),
+  assignmentId: integer("assignment_id").notNull(),
+  assetId: integer("asset_id").notNull(),
+  witnessUserId: integer("witness_user_id").notNull(),
+  reportType: text("report_type").notNull(), // loading | release | delivery
+  notes: text("notes"),
+  photoUrls: text("photo_urls").array(),
+  lat: real("lat"),
+  lng: real("lng"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type WitnessReport = typeof witnessReports.$inferSelect;
+
+// Stripe purchase records for protection packages, witness add-ons, founders.
+export const assetProtectionPurchases = pgTable("asset_protection_purchases", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  assetId: integer("asset_id"),
+  listingId: integer("listing_id"),
+  productType: text("product_type").notNull(), // package | witness_addon | founders_club
+  packageTier: text("package_tier"), // standard | premium | elite (for product_type=package)
+  amountCents: integer("amount_cents").notNull(),
+  stripeSessionId: text("stripe_session_id").unique(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  status: text("status").notNull().default("pending"), // pending | paid | refunded
+  fulfilledAt: timestamp("fulfilled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type AssetProtectionPurchase = typeof assetProtectionPurchases.$inferSelect;
+
+// Singleton global state for the Founders Club (first 500 at $99, then $299).
+export const foundersClubState = pgTable("founders_club_state", {
+  id: serial("id").primaryKey(),
+  totalClaimed: integer("total_claimed").notNull().default(0),
+  capLimit: integer("cap_limit").notNull().default(500),
+  founderPriceCents: integer("founder_price_cents").notNull().default(9900), // $99
+  standardPriceCents: integer("standard_price_cents").notNull().default(29900), // $299
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type FoundersClubState = typeof foundersClubState.$inferSelect;

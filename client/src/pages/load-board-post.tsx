@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -8,7 +8,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ChevronRight, ChevronLeft, Loader2, TrendingUp, Zap, Info, ShoppingCart, Check } from "lucide-react";
+import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
+import { isIOS } from "@/lib/platform";
+import { ChevronRight, ChevronLeft, Loader2, TrendingUp, Zap, Info, ShoppingCart, Check, ShieldCheck, AlertTriangle } from "lucide-react";
+
+// ── GUBER Verified Release System™ — pricing payload types ──────────────────────
+
+interface ProtectionPackage {
+  key: string;
+  name: string;
+  blurb: string;
+  valueRangeLabel: string;
+  features: string[];
+  priceCents: number;
+  founderPriceCents: number;
+  effectivePriceCents: number;
+}
+interface ProtectionPricing {
+  founder: boolean;
+  highValueThreshold: number;
+  packages: ProtectionPackage[];
+  witnessAddons: { key: string; name: string; blurb: string; priceCents: number; founderPriceCents: number; effectivePriceCents: number }[];
+  foundersClub: {
+    totalClaimed: number; capLimit: number; spotsRemaining: number;
+    soldOut: boolean; currentPriceCents: number; founderPriceCents: number; standardPriceCents: number;
+  };
+}
+interface ProtectionRecommendation {
+  recommended: string | null;
+  name: string;
+  highValue: boolean;
+  highValueThreshold: number;
+  warning: string | null;
+}
+const fmtUsd = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 // ── style constants ────────────────────────────────────────────────────────────
 
@@ -346,6 +379,19 @@ export default function LoadBoardPost() {
   const [postedPrice, setPostedPrice] = useState("");
   const [urgent,      setUrgent]      = useState(false);
 
+  // Step 5 — GUBER Verified Release System™ (additive asset protection)
+  const [protectionEnabled, setProtectionEnabled] = useState(false);
+  const [assetValue,        setAssetValue]        = useState("");
+  const [selectedPackage,   setSelectedPackage]   = useState("");
+  // After the load (+ protected asset) is created, this holds the asset id so
+  // the iOS ExternalPurchaseSheet can mount with the right options and fire.
+  const [pendingProtection, setPendingProtection] = useState<number | null>(null);
+  const iosPurchaseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (pendingProtection != null && isIOS) iosPurchaseRef.current?.();
+  }, [pendingProtection]);
+
   // ── ZIP lookup ──────────────────────────────────────────────────────────────
 
   const lookupZip = useCallback(async (zip: string, target: "pickup" | "delivery") => {
@@ -443,6 +489,23 @@ export default function LoadBoardPost() {
     enabled: !!freightTrailerType && parseInt(estimatedMiles) > 0,
   });
 
+  // ── asset protection pricing + recommendation ────────────────────────────────
+
+  const { data: protectionPricing } = useQuery<ProtectionPricing>({
+    queryKey: ["/api/asset-protection/pricing"],
+    enabled: protectionEnabled,
+  });
+
+  const numericValue = parseFloat(assetValue) || 0;
+  const { data: protectionRec } = useQuery<ProtectionRecommendation>({
+    queryKey: ["/api/asset-protection/recommend", numericValue],
+    queryFn: async () => {
+      const res = await fetch(`/api/asset-protection/recommend?value=${numericValue}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: protectionEnabled && numericValue > 0,
+  });
+
   // ── computed ────────────────────────────────────────────────────────────────
 
   const addonTotal = addonFlags.reduce((sum, key) => {
@@ -458,6 +521,34 @@ export default function LoadBoardPost() {
     mutationFn: (data: any) => apiRequest("POST", "/api/load-board", data),
     onSuccess: async (res: any) => {
       const json = await res.json();
+      // Verified Release System™: if the poster opted in and picked a package,
+      // continue straight into the (Stripe) purchase. The protected asset was
+      // already created server-side and returned as json.asset.
+      if (protectionEnabled && selectedPackage && json.asset?.id) {
+        if (isIOS) {
+          // Mount the ExternalPurchaseSheet (Apple disclosure) for this asset;
+          // the effect fires its onPress once it has rendered.
+          setPendingProtection(json.asset.id);
+          return;
+        }
+        try {
+          const r = await apiRequest("POST", "/api/asset-protection/checkout", {
+            assetId: json.asset.id,
+            productType: "package",
+            key: selectedPackage,
+          });
+          const d = await r.json();
+          if (d?.checkoutUrl) {
+            window.location.href = d.checkoutUrl;
+            return;
+          }
+        } catch {
+          // Fall through to the listing — they can finish protection there.
+        }
+        toast({ title: "Load posted", description: "Finish asset protection from your load page." });
+        navigate(`/load-board/${json.listing.id}`);
+        return;
+      }
       toast({ title: "Load posted!", description: "Carriers can now submit offers." });
       navigate(`/load-board/${json.listing.id}`);
     },
@@ -523,6 +614,12 @@ export default function LoadBoardPost() {
       addonFlags:      addonFlags.length ? addonFlags : undefined,
       urgent:          urgent || addonFlags.includes("urgent_boost"),
       notes:           notes || undefined,
+      // Verified Release System™ — additive asset protection opt-in.
+      protectionRequested: protectionEnabled || undefined,
+      assetProtectionType: protectionEnabled
+        ? (freightTrailerType === "car_hauler" ? "vehicle" : "freight")
+        : undefined,
+      estimatedValue: protectionEnabled && numericValue > 0 ? numericValue : undefined,
     });
   }
 
@@ -1294,6 +1391,128 @@ export default function LoadBoardPost() {
                 <p className="text-xs text-amber-400 font-display font-bold">Urgent Boost add-on active</p>
               </div>
             )}
+
+            {/* ── GUBER Verified Release System™ (additive) ──────────────────── */}
+            <div
+              className="rounded-2xl p-4 space-y-3"
+              style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.22)" }}
+              data-testid="section-asset-protection"
+            >
+              <button
+                type="button"
+                onClick={() => setProtectionEnabled(v => !v)}
+                className="w-full flex items-start gap-3 text-left"
+                data-testid="toggle-asset-protection"
+              >
+                <div
+                  className="w-5 h-5 rounded-md mt-0.5 shrink-0 flex items-center justify-center transition-all"
+                  style={protectionEnabled
+                    ? { background: "linear-gradient(135deg,#10b981,#059669)" }
+                    : { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.18)" }}
+                >
+                  {protectionEnabled && <Check className="w-3.5 h-3.5 text-white" />}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <p className="text-sm font-display font-black text-foreground">GUBER Verified Release System™</p>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/50 mt-0.5 leading-relaxed">
+                    Protect your asset end-to-end: verified handoff, geofenced release, one-time pickup code, and a tamper-proof custody timeline.
+                  </p>
+                </div>
+              </button>
+
+              {protectionEnabled && (
+                <div className="space-y-3 pt-1">
+                  {/* Declared value */}
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground/50">Declared Asset Value ($)</Label>
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                      <Input
+                        value={assetValue}
+                        onChange={e => setAssetValue(e.target.value)}
+                        placeholder="e.g. 45000"
+                        type="number"
+                        inputMode="numeric"
+                        className="rounded-xl h-11 bg-background/50 border-border/50 text-base pl-7"
+                        data-testid="input-asset-value"
+                      />
+                    </div>
+                    <p className="text-[9px] text-muted-foreground/40 mt-1">Used to recommend the right protection tier.</p>
+                  </div>
+
+                  {/* High-value warning */}
+                  {protectionRec?.highValue && protectionRec?.warning && (
+                    <div
+                      className="rounded-xl p-3 flex items-start gap-2"
+                      style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}
+                      data-testid="warning-high-value"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-amber-300/90 leading-relaxed">{protectionRec.warning}</p>
+                    </div>
+                  )}
+
+                  {/* Founder pricing note */}
+                  {protectionPricing?.founder && (
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                      <p className="text-[10px] font-display font-bold text-emerald-400">Founders Club pricing applied</p>
+                    </div>
+                  )}
+
+                  {/* Package picker */}
+                  {!protectionPricing && (
+                    <div className="flex items-center gap-2 py-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground/40" />
+                      <p className="text-[10px] text-muted-foreground/40">Loading protection tiers…</p>
+                    </div>
+                  )}
+                  {protectionPricing?.packages.map((pkg) => {
+                    const isSelected = selectedPackage === pkg.key;
+                    const isRecommended = protectionRec?.recommended === pkg.key;
+                    const discounted = pkg.effectivePriceCents < pkg.priceCents;
+                    return (
+                      <button
+                        key={pkg.key}
+                        type="button"
+                        onClick={() => setSelectedPackage(pkg.key)}
+                        className="w-full rounded-2xl p-3.5 text-left transition-all"
+                        style={isSelected
+                          ? { background: "linear-gradient(135deg,rgba(16,185,129,0.22),rgba(5,150,105,0.12))", border: "1.5px solid rgba(16,185,129,0.55)" }
+                          : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        data-testid={`select-protection-${pkg.key}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-display font-black text-foreground">{pkg.name}</p>
+                            {isRecommended && (
+                              <span className="text-[8px] font-display font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+                                Recommended
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            {discounted && (
+                              <span className="text-[10px] text-muted-foreground/40 line-through mr-1">{fmtUsd(pkg.priceCents)}</span>
+                            )}
+                            <span className="text-sm font-display font-black text-emerald-400">{fmtUsd(pkg.effectivePriceCents)}</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/50 mt-0.5">{pkg.blurb}</p>
+                        <p className="text-[9px] text-muted-foreground/40 mt-0.5">{pkg.valueRangeLabel}</p>
+                      </button>
+                    );
+                  })}
+
+                  <p className="text-[9px] text-muted-foreground/40 leading-relaxed">
+                    Posting stays free. Protection is purchased securely after you post — your load goes live either way.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1437,6 +1656,17 @@ export default function LoadBoardPost() {
           )}
         </div>
       </div>
+
+      {/* iOS-only: Apple disclosure + external Stripe checkout for protection.
+          Mounts once the protected asset exists; the effect fires onPress. */}
+      {pendingProtection != null && selectedPackage && isIOS && (
+        <ExternalPurchaseSheet
+          product="asset_protection"
+          options={{ assetId: String(pendingProtection), productType: "package", key: selectedPackage }}
+        >
+          {({ onPress }) => { iosPurchaseRef.current = onPress; return null; }}
+        </ExternalPurchaseSheet>
+      )}
     </GuberLayout>
   );
 }

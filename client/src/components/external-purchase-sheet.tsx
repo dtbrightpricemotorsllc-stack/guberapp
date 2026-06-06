@@ -19,7 +19,9 @@ export type ExternalPurchaseProduct =
   | "trust_box"
   | "business_scout"
   | "business_unlock"
-  | "marketplace_buyer_order";
+  | "marketplace_buyer_order"
+  | "asset_protection"
+  | "asset_protection_founders";
 
 interface ExternalPurchaseSheetProps {
   product: ExternalPurchaseProduct;
@@ -62,6 +64,10 @@ export function ExternalPurchaseSheet({
               params.set("type", "business_scout");
             } else if (product === "business_unlock") {
               params.set("type", "business_unlock");
+            } else if (product === "asset_protection") {
+              params.set("type", "asset_protection");
+            } else if (product === "asset_protection_founders") {
+              params.set("type", "asset_protection_founders");
             }
             const qs = params.toString();
             return `guber://purchase-complete${qs ? "?" + qs : ""}`;
