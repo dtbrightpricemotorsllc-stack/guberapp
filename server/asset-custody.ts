@@ -107,6 +107,17 @@ export async function getProtectedAsset(id: number): Promise<ProtectedAsset | un
   return row;
 }
 
+/**
+ * Returns true if the asset has a paid entitlement that covers witness service:
+ *   - explicit witness_addon add-on purchased (witnessAddon = true), OR
+ *   - elite / elite_max package (both include witness in the catalog).
+ * All other tiers (none, standard, premium) require the standalone add-on.
+ */
+export function assetHasWitnessEntitlement(asset: ProtectedAsset): boolean {
+  if (asset.witnessAddon) return true;
+  return asset.packageTier === "elite" || asset.packageTier === "elite_max";
+}
+
 export async function getAssetByListing(listingId: number): Promise<ProtectedAsset | undefined> {
   const [row] = await db
     .select()
@@ -1849,6 +1860,14 @@ export async function fileWitnessReport(input: {
     lng: input.lng ?? null,
     photoUrls: input.photoUrls ?? null,
   });
+
+  // Defense-in-depth entitlement check before payout — mirrors the route-layer gate.
+  // Prevents payout if the asset's entitlement was somehow revoked between dispatch
+  // and report filing (e.g. chargeback voided the purchase).
+  const assetForPayout = await getProtectedAsset(assignment.assetId);
+  if (!assetForPayout || !assetHasWitnessEntitlement(assetForPayout)) {
+    throw new Error("Witness payout blocked: asset no longer has a valid witness entitlement");
+  }
 
   // 80/20 payout via the caller-provided Stripe transfer (idempotent guard here).
   let payout: WitnessReportResult["payout"] = { status: assignment.payoutStatus };

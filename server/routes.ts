@@ -23433,6 +23433,12 @@ OUTPUT STYLE:
       if (!(await assetCustody.userHasRoleOnAsset(assetId, uid, ["owner", "sender", "authorized_contact"]))) {
         return res.status(403).json({ message: "Only the owner/sender can request a witness" });
       }
+      // Entitlement gate: asset must have a paid witness add-on OR an elite/elite_max package.
+      const asset = await assetCustody.getProtectedAsset(assetId);
+      if (!asset) return res.status(404).json({ message: "Asset not found" });
+      if (!assetCustody.assetHasWitnessEntitlement(asset)) {
+        return res.status(402).json({ message: "Witness service requires a paid witness add-on or an Elite/Elite Max protection package" });
+      }
       const reportType = String(req.body?.reportType || "loading").trim();
       const { priceForWitnessAddon } = await import("@shared/asset-protection");
       const founder = await assetCustody.isFounder(uid);
