@@ -449,3 +449,9 @@ id = "m1Tbif5zSODg72PvME_6Z"
 uri = "file://attached_assets/stock_images/delivery_handshake.jpg"
 type = "image"
 title = "professional driver and customer handshake vehicle delivery satisfied"
+
+[[outputs]]
+id = "TsFy9mLsnyfcILQHsLjjh"
+uri = "file://attached_assets/guber-loadboard-commercial-v2.mp4"
+type = "video"
+title = "GUBER Load Board Commercial v2 — 30s Vertical (Real Vehicles + Security Verification)"
