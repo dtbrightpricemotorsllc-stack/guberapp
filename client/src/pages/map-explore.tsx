@@ -169,6 +169,7 @@ export default function MapExplore() {
   const [panelCatFilter, setPanelCatFilter] = useState("");
   const [bottomOpen, setBottomOpen] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
+  const userEditedZipRef = useRef(false);
 
   const { data: config } = useQuery<{ googleMapsApiKey: string }>({
     queryKey: ["/api/config"],
@@ -249,10 +250,11 @@ export default function MapExplore() {
   const watchCancelledRef = useRef(false);
 
   const reverseGeocodeZip = async (lat: number, lng: number) => {
+    if (userEditedZipRef.current) return;
     try {
       const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
       const data = await res.json();
-      if (data?.zip) setZipInput(data.zip);
+      if (data?.zip && !userEditedZipRef.current) setZipInput(data.zip);
     } catch {}
   };
 
@@ -716,14 +718,14 @@ export default function MapExplore() {
               pattern="[0-9]*"
               placeholder="Search zip code..."
               value={zipInput}
-              onChange={e => { setZipInput(e.target.value.replace(/\D/g, "").slice(0, 5)); setZipError(""); }}
+              onChange={e => { userEditedZipRef.current = true; setZipInput(e.target.value.replace(/\D/g, "").slice(0, 5)); setZipError(""); }}
               onKeyDown={e => e.key === "Enter" && handleZipJump()}
               className="flex-1 bg-transparent text-sm outline-none"
               style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}
               data-testid="input-zip-jump"
             />
             {zipInput && zipInput.length < 5 && (
-              <button onClick={() => { setZipInput(""); setJumpCenter(null); setZipError(""); }} style={{ color: DARK_MUTED }}>
+              <button onClick={() => { userEditedZipRef.current = false; setZipInput(""); setJumpCenter(null); setZipError(""); }} style={{ color: DARK_MUTED }}>
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
