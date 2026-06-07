@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button";
 import {
   Truck, ChevronRight, Plus, MapPin, Zap, Loader2,
   ShieldCheck, Map as MapIcon, List, User2, Star,
-  Car, Anchor, Bus, HardHat, Package,
+  Car, Anchor, Bus, HardHat, Package, Info, X as XIcon,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import heroLambo    from "@assets/load-board-hero-lambo.png";
 import heroWideLoad from "@assets/load-board-hero-wideload.png";
@@ -508,6 +511,49 @@ function LoadBoardMap({ listings, apiKey }: { listings: any[]; apiKey: string })
 }
 
 // ── Categories Hub ─────────────────────────────────────────────────────────────
+function AssetProtectionInfoDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-sm rounded-2xl" style={{ background: "hsl(var(--card))", border: "1px solid rgba(16,185,129,0.3)" }}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-display font-black">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            Asset Protection
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+          <p>
+            <span className="font-bold text-foreground">Verified Release System™</span> — a cryptographic
+            hand-off protocol that keeps high-value assets safe during transport.
+          </p>
+          <ul className="space-y-2">
+            {[
+              "🔐 One-time pickup code — only the approved driver can unlock the asset",
+              "📍 GPS geofence — code only works at the confirmed pickup location",
+              "🚗 VIN verification — vehicle identity confirmed before release",
+              "📸 Photo + selfie confirmation — both parties documented",
+              "📋 Immutable chain of custody — every event logged forever",
+              "⚖️ Dispute protection — full audit trail for claims",
+            ].map(line => (
+              <li key={line} className="flex gap-2">
+                <span className="shrink-0">{line.split(" ")[0]}</span>
+                <span>{line.slice(line.indexOf(" ") + 1)}</span>
+              </li>
+            ))}
+          </ul>
+          <div
+            className="rounded-xl p-3 text-xs"
+            style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}
+          >
+            <p className="font-bold text-emerald-400 mb-1">Available when posting a load</p>
+            <p>Add Asset Protection when creating a load listing. Choose a coverage package based on your cargo's value.</p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CategoriesScreen({
   allListings,
   myCount,
@@ -521,6 +567,7 @@ function CategoriesScreen({
   onSelect: (cat: CategoryValue) => void;
   onMyPostings: () => void;
 }) {
+  const [showApInfo, setShowApInfo] = useState(false);
   // Count open loads per category
   const open = allListings.filter(l => l.status === "posted" || l.status === "offer_received");
   const counts: Record<string, number> = {};
@@ -617,8 +664,62 @@ function CategoriesScreen({
               </button>
             );
           })}
+
+          {/* Asset Protection tile — premium selling point */}
+          <button
+            onClick={() => setShowApInfo(true)}
+            className="rounded-2xl p-4 text-left relative overflow-hidden active:scale-[0.97] transition-all"
+            style={{
+              background: "linear-gradient(135deg, rgba(16,185,129,0.10), rgba(5,150,105,0.05))",
+              border: "1px solid rgba(16,185,129,0.55)",
+            }}
+            data-testid="category-asset-protection"
+          >
+            {/* "NEW" badge */}
+            <span
+              className="absolute top-2 right-2 text-[9px] font-display font-black px-1.5 py-0.5 rounded-full"
+              style={{ background: "rgba(16,185,129,0.2)", color: "#34d399" }}
+            >
+              NEW
+            </span>
+            <div className="mb-3 w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)" }}>
+              <ShieldCheck className="w-5 h-5" style={{ color: "#10b981" }} />
+            </div>
+            <p className="text-sm font-display font-black leading-tight" style={{ color: "#34d399" }}>Asset Protection</p>
+            <p className="text-[10px] text-muted-foreground/50 mt-0.5 leading-tight">Verified custody for high-value cargo</p>
+            <div className="flex items-center gap-1 mt-3">
+              <Info className="w-3 h-3" style={{ color: "#10b981" }} />
+              <span className="text-[10px] font-display font-bold" style={{ color: "#10b981" }}>Learn more</span>
+            </div>
+          </button>
         </div>
       </div>
+
+      {/* Asset Protection promo strip */}
+      <button
+        onClick={() => setShowApInfo(true)}
+        className="w-full rounded-2xl p-3.5 flex items-center gap-3 active:scale-[0.98] transition-all"
+        style={{
+          background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.04))",
+          border: "1px solid rgba(16,185,129,0.3)",
+        }}
+        data-testid="banner-asset-protection"
+      >
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.35)" }}>
+          <ShieldCheck className="w-4 h-4" style={{ color: "#10b981" }} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-[11px] font-display font-black" style={{ color: "#34d399" }}>
+            🛡️ Add Asset Protection when you post a load
+          </p>
+          <p className="text-[10px] text-muted-foreground/40 mt-0.5">GPS-locked pickup code + VIN check + chain of custody</p>
+        </div>
+        <Info className="w-4 h-4 shrink-0 text-muted-foreground/30" />
+      </button>
+
+      <AssetProtectionInfoDialog open={showApInfo} onClose={() => setShowApInfo(false)} />
 
       {/* All Loads */}
       <button

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
 import { InstallHint, InstallMascot } from "@/components/install-prompt";
@@ -280,6 +280,74 @@ function HostDropCta({ testIdSuffix }: { testIdSuffix: string }) {
   );
 }
 
+function CityDarkCard({
+  onDismiss,
+  onWakeUp,
+  timerRef,
+}: {
+  onDismiss: () => void;
+  onWakeUp: () => void;
+  timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
+}) {
+  useEffect(() => {
+    timerRef.current = setTimeout(onDismiss, 5000);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      className="mb-4 rounded-2xl p-5 animate-fade-in relative"
+      style={{
+        background: "linear-gradient(160deg, hsl(0 60% 10%), hsl(0 0% 5%))",
+        border: "1.5px solid rgba(239,68,68,0.3)",
+        boxShadow: "0 0 40px rgba(239,68,68,0.08)",
+      }}
+      data-testid="card-activate-city"
+    >
+      {/* Close button */}
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+        style={{ background: "rgba(255,255,255,0.06)" }}
+        aria-label="Dismiss"
+        data-testid="button-dismiss-city-card"
+      >
+        <X className="w-3.5 h-3.5 text-white/40" />
+      </button>
+
+      <h2 className="text-lg font-display font-black tracking-tight text-white leading-tight pr-8" data-testid="text-city-dark-headline">
+        🛑 Your City is Currently Dark.
+      </h2>
+      <p className="text-[12px] text-muted-foreground leading-relaxed mt-2">
+        Guber goes live in a city the exact second 50 local users lock in their territory. Once activated, the live feed unlocks and cash drops hit the map.
+      </p>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-display font-bold tracking-widest text-white/70 uppercase">Current Status</span>
+          <span className="text-[11px] font-display font-black text-emerald-400" data-testid="text-city-locked-count">12 / 50 Users Locked In</span>
+        </div>
+        <div className="h-2.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+          <div
+            className="h-full rounded-full"
+            style={{ width: "24%", background: "linear-gradient(90deg,#00E576,#34d399)", transition: "width 1s ease" }}
+            data-testid="bar-city-progress"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={onWakeUp}
+        className="w-full mt-4 h-12 rounded-xl font-display font-bold tracking-[0.12em] text-sm premium-btn flex items-center justify-center gap-2"
+        data-testid="button-wake-up-city"
+      >
+        📣 Wake Up My City
+      </button>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
@@ -309,6 +377,9 @@ export default function Dashboard() {
     }
     return "hire";
   });
+
+  const [cityCardDismissed, setCityCardDismissed] = useState(false);
+  const cityCardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [promoOpen, setPromoOpen] = useState(false);
   const [activePromo, setActivePromo] = useState<PromoCard | null>(null);
@@ -695,46 +766,13 @@ export default function Dashboard() {
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
 
-        {/* ── Activate Your City (shown when the local grid is dark) ── */}
-        {!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0 && (
-          <div
-            className="mb-4 rounded-2xl p-5 animate-fade-in"
-            style={{
-              background: "linear-gradient(160deg, hsl(0 60% 10%), hsl(0 0% 5%))",
-              border: "1.5px solid rgba(239,68,68,0.3)",
-              boxShadow: "0 0 40px rgba(239,68,68,0.08)",
-            }}
-            data-testid="card-activate-city"
-          >
-            <h2 className="text-lg font-display font-black tracking-tight text-white leading-tight" data-testid="text-city-dark-headline">
-              🛑 Your City is Currently Dark.
-            </h2>
-            <p className="text-[12px] text-muted-foreground leading-relaxed mt-2">
-              Guber goes live in a city the exact second 50 local users lock in their territory. Once activated, the live feed unlocks and cash drops hit the map.
-            </p>
-
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-display font-bold tracking-widest text-white/70 uppercase">Current Status</span>
-                <span className="text-[11px] font-display font-black text-emerald-400" data-testid="text-city-locked-count">12 / 50 Users Locked In</span>
-              </div>
-              <div className="h-2.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: "24%", background: "linear-gradient(90deg,#00E576,#34d399)", transition: "width 1s ease" }}
-                  data-testid="bar-city-progress"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleWakeUpCity}
-              className="w-full mt-4 h-12 rounded-xl font-display font-bold tracking-[0.12em] text-sm premium-btn flex items-center justify-center gap-2"
-              data-testid="button-wake-up-city"
-            >
-              📣 Wake Up My City
-            </button>
-          </div>
+        {/* ── Activate Your City (shown when the local grid is dark, auto-dismisses after 5s) ── */}
+        {!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0 && !cityCardDismissed && (
+          <CityDarkCard
+            onDismiss={() => setCityCardDismissed(true)}
+            onWakeUp={handleWakeUpCity}
+            timerRef={cityCardTimerRef}
+          />
         )}
 
         {/* ── HIRE / WORK Toggle ── */}
