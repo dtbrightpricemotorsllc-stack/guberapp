@@ -180,6 +180,18 @@ uri = "file://attached_assets/_tmp_still/s4_delivery_handshake.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "6WTsKTr7zGst3G9pj97-_"
+uri = "file://attached_assets/_tmp_still/s3a_driver_selfie.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "ulX4wezUrZwfLaua0r9gx"
+uri = "file://attached_assets/_tmp_still/s3b_vin_photo.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
