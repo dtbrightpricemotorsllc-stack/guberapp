@@ -69,7 +69,6 @@ const MANIFEST_REQUIREMENTS = [
     file: "ios/App/App/Info.plist",
     keys: [
       "NSLocationWhenInUseUsageDescription",
-      "NSLocationAlwaysAndWhenInUseUsageDescription",
     ],
   },
   {
