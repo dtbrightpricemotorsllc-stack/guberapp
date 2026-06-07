@@ -383,3 +383,33 @@ id = "vjZT1XvdE6FuaXafZB4aS"
 uri = "file://attached_assets/guber-loadboard-commercial.mp4"
 type = "video"
 title = "GUBER Load Board & Asset Protection — 30s Commercial (Vertical 9:16)"
+
+[[outputs]]
+id = "lUNRa81TzLoYjFA1TyTM7"
+uri = "file://attached_assets/stock_images/gps_driver_truck.jpg"
+type = "image"
+title = "logistics driver GPS navigation smartphone inside truck cab"
+
+[[outputs]]
+id = "d2RUr06_GxrfQr1sD20qy"
+uri = "file://attached_assets/stock_images/driver_phone_depot.jpg"
+type = "image"
+title = "professional truck driver smiling holding smartphone at truck depot semi trucks background"
+
+[[outputs]]
+id = "RTgw4IX73kGRwdm4gQnfs"
+uri = "file://attached_assets/stock_images/flatbed_tow_car.jpg"
+type = "image"
+title = "flatbed tow truck hauling luxury car on highway professional transport"
+
+[[outputs]]
+id = "BR87BePiLRPlwn11be5yP"
+uri = "file://attached_assets/stock_images/secure_lock_phone.jpg"
+type = "image"
+title = "secure padlock digital security smartphone lock protection concept"
+
+[[outputs]]
+id = "m1Tbif5zSODg72PvME_6Z"
+uri = "file://attached_assets/stock_images/delivery_handshake.jpg"
+type = "image"
+title = "professional driver and customer handshake vehicle delivery satisfied"
