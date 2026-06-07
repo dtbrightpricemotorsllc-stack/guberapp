@@ -22604,12 +22604,63 @@ OUTPUT STYLE:
       if (!b.selfieUrl || typeof b.selfieUrl !== "string") {
         return res.status(400).json({ message: "A live selfie is required" });
       }
-      // The selfie must be a GUBER-signed Cloudinary upload (anti-spoofing).
+      // ── Evidence URL provenance guards ────────────────────────────────────
+      // Every URL that becomes part of the immutable custody record must be:
+      //   1. A GUBER Cloudinary upload (correct cloud name prefix).
+      //   2. Signed by our /api/assets/upload endpoint via HMAC token, binding
+      //      the URL to the uploading userId + a 30-minute expiry. This proves
+      //      the file was captured through our system, not injected from outside.
       const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
       const allowedHost = cloudName ? `https://res.cloudinary.com/${cloudName}/` : null;
+      const { verifyAssetUploadToken } = await import("./asset-upload-token.js");
+
+      // selfieUrl
       if (!allowedHost || !String(b.selfieUrl).startsWith(allowedHost)) {
         return res.status(400).json({ message: "selfieUrl must be a GUBER-signed Cloudinary upload" });
       }
+      if (!verifyAssetUploadToken(String(b.selfieToken ?? ""), String(b.selfieUrl), uid)) {
+        return res.status(400).json({ message: "selfieUrl upload token is missing or invalid" });
+      }
+
+      // vinPhotoUrl (optional — only validated when provided)
+      if (b.vinPhotoUrl != null) {
+        if (!allowedHost || !String(b.vinPhotoUrl).startsWith(allowedHost)) {
+          return res.status(400).json({ message: "vinPhotoUrl must be a GUBER-signed Cloudinary upload" });
+        }
+        if (!verifyAssetUploadToken(String(b.vinPhotoToken ?? ""), String(b.vinPhotoUrl), uid)) {
+          return res.status(400).json({ message: "vinPhotoUrl upload token is missing or invalid" });
+        }
+      }
+
+      // tow.photoUrls (optional — each URL individually verified)
+      if (b.tow?.photoUrls && Array.isArray(b.tow.photoUrls) && b.tow.photoUrls.length > 0) {
+        const towTokens: unknown[] = Array.isArray(b.tow.photoTokens) ? b.tow.photoTokens : [];
+        for (let i = 0; i < b.tow.photoUrls.length; i++) {
+          const u = String(b.tow.photoUrls[i]);
+          if (!allowedHost || !u.startsWith(allowedHost)) {
+            return res.status(400).json({ message: "tow.photoUrls must be GUBER-signed Cloudinary uploads" });
+          }
+          if (!verifyAssetUploadToken(String(towTokens[i] ?? ""), u, uid)) {
+            return res.status(400).json({ message: "tow.photoUrls upload token is missing or invalid" });
+          }
+        }
+      }
+
+      // trailer.photoUrls (optional — each URL individually verified)
+      if (b.trailer?.photoUrls && Array.isArray(b.trailer.photoUrls) && b.trailer.photoUrls.length > 0) {
+        const trailerTokens: unknown[] = Array.isArray(b.trailer.photoTokens) ? b.trailer.photoTokens : [];
+        for (let i = 0; i < b.trailer.photoUrls.length; i++) {
+          const u = String(b.trailer.photoUrls[i]);
+          if (!allowedHost || !u.startsWith(allowedHost)) {
+            return res.status(400).json({ message: "trailer.photoUrls must be GUBER-signed Cloudinary uploads" });
+          }
+          if (!verifyAssetUploadToken(String(trailerTokens[i] ?? ""), u, uid)) {
+            return res.status(400).json({ message: "trailer.photoUrls upload token is missing or invalid" });
+          }
+        }
+      }
+      // ── end evidence URL provenance guards ───────────────────────────────
+
       const result = await assetCustody.requestReleaseAuthorization({
         assetId,
         requestedBy: uid,
@@ -22920,7 +22971,9 @@ OUTPUT STYLE:
         folder: "guber-custody",
         transformation: [{ width: 1600, crop: "limit" }],
       });
-      res.json({ url: up.secure_url });
+      const { signAssetUploadToken } = await import("./asset-upload-token.js");
+      const uploadToken = signAssetUploadToken(up.secure_url, req.session.userId!);
+      res.json({ url: up.secure_url, uploadToken });
     } catch (err: any) {
       res.status(500).json({ message: `Upload failed: ${err.message}` });
     }

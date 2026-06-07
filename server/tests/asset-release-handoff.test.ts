@@ -90,6 +90,7 @@ import {
 } from "@shared/schema";
 import * as assetCustody from "../asset-custody";
 import { registerRoutes } from "../routes";
+import { signAssetUploadToken } from "../asset-upload-token";
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,10 @@ const FAR_LNG = -79.82;
 
 const selfieUrl = () =>
   `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/v1/guber-proof/selfie.jpg`;
+
+// Generates a valid HMAC upload token for a given URL + userId, mirroring
+// what /api/assets/upload returns. SESSION_SECRET must already be set above.
+const selfieToken = (userId: number) => signAssetUploadToken(selfieUrl(), userId);
 
 let agent: ReturnType<typeof supertest>;
 const createdAssetIds: number[] = [];
@@ -174,11 +179,13 @@ async function driverRequest(
   assetId: number,
   opts: { lat?: number; lng?: number; scannedVin?: string | null; as?: number; accuracy?: number | null; gpsTimestamp?: number | null } = {},
 ) {
-  currentUserId = opts.as ?? DRIVER_ID;
+  const asUserId = opts.as ?? DRIVER_ID;
+  currentUserId = asUserId;
   return agent
     .post(`/api/assets/${assetId}/release/request`)
     .send({
       selfieUrl: selfieUrl(),
+      selfieToken: selfieToken(asUserId),
       lat: opts.lat ?? PICKUP_LAT,
       lng: opts.lng ?? PICKUP_LNG,
       accuracy: opts.accuracy !== undefined ? opts.accuracy : 10,
@@ -320,6 +327,72 @@ describe("Verified Release System™ — release request", () => {
       .send({ selfieUrl: "https://evil.example.com/fake.jpg", lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(), tow: { plateNumber: "X1" }, trailer: { trailerType: "open" } })
       .expect(400);
     expect(res.body.message).toMatch(/cloudinary/i);
+  });
+
+  it("rejects a selfie with a missing or forged upload token (400)", async () => {
+    const assetId = await makeAsset();
+    currentUserId = DRIVER_ID;
+    const res = await agent
+      .post(`/api/assets/${assetId}/release/request`)
+      .send({
+        selfieUrl: selfieUrl(),
+        // selfieToken intentionally omitted — upload never went through our endpoint
+        lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(),
+        tow: { plateNumber: "X1" }, trailer: { trailerType: "open" },
+      })
+      .expect(400);
+    expect(res.body.message).toMatch(/upload token/i);
+  });
+
+  it("rejects a forged vinPhotoUrl not from GUBER's Cloudinary (400)", async () => {
+    const assetId = await makeAsset();
+    currentUserId = DRIVER_ID;
+    const res = await agent
+      .post(`/api/assets/${assetId}/release/request`)
+      .send({
+        selfieUrl: selfieUrl(),
+        selfieToken: selfieToken(DRIVER_ID),
+        vinPhotoUrl: "https://evil.example.com/vin.jpg",
+        lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(),
+        tow: { plateNumber: "X1" }, trailer: { trailerType: "open" },
+        scannedVin: VIN,
+      })
+      .expect(400);
+    expect(res.body.message).toMatch(/vinPhotoUrl.*cloudinary|cloudinary.*vinPhotoUrl/i);
+  });
+
+  it("rejects a forged tow photoUrl not from GUBER's Cloudinary (400)", async () => {
+    const assetId = await makeAsset();
+    currentUserId = DRIVER_ID;
+    const res = await agent
+      .post(`/api/assets/${assetId}/release/request`)
+      .send({
+        selfieUrl: selfieUrl(),
+        selfieToken: selfieToken(DRIVER_ID),
+        lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(),
+        tow: { plateNumber: "X1", photoUrls: ["https://evil.example.com/truck.jpg"] },
+        trailer: { trailerType: "open" },
+        scannedVin: VIN,
+      })
+      .expect(400);
+    expect(res.body.message).toMatch(/tow\.photoUrls.*cloudinary|cloudinary.*tow|tow.*cloudinary/i);
+  });
+
+  it("rejects a forged trailer photoUrl not from GUBER's Cloudinary (400)", async () => {
+    const assetId = await makeAsset();
+    currentUserId = DRIVER_ID;
+    const res = await agent
+      .post(`/api/assets/${assetId}/release/request`)
+      .send({
+        selfieUrl: selfieUrl(),
+        selfieToken: selfieToken(DRIVER_ID),
+        lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(),
+        tow: { plateNumber: "X1" },
+        trailer: { trailerType: "open", photoUrls: ["https://evil.example.com/trailer.jpg"] },
+        scannedVin: VIN,
+      })
+      .expect(400);
+    expect(res.body.message).toMatch(/trailer\.photoUrls.*cloudinary|cloudinary.*trailer|trailer.*cloudinary/i);
   });
 });
 
