@@ -335,3 +335,9 @@ id = "svmXcgueyu8x770KveRWJ"
 uri = "file://attached_assets/generated_videos/guber_social_master.mp4"
 type = "video"
 title = "GUBER Social Master — with music + ending card"
+
+[[outputs]]
+id = "RRyM_lJwPw7s5MzN59oou"
+uri = "file://attached_assets/generated_videos/guber_social_enhanced.mp4"
+type = "video"
+title = "GUBER Social — Cinematic Enhanced (crowd noise reduced, music + ending card)"
