@@ -196,31 +196,31 @@ title = "generated_image"
 id = "sK9JUkXsSuJfUX_LWja4k"
 uri = "file://attached_assets/_stills2/s1_driver_semi.png"
 type = "image"
-title = "generated_image"
+title = "driver semi loadboard"
 
 [[generated]]
 id = "cUZuwKuylo9K8TN9ts9E1"
 uri = "file://attached_assets/_stills2/s2_hauler_highway.png"
 type = "image"
-title = "generated_image"
+title = "hauler highway varied cars"
 
 [[generated]]
 id = "vf2nUtnJNAOZ3i_ygT72z"
 uri = "file://attached_assets/_stills2/s3a_selfie.png"
 type = "image"
-title = "generated_image"
+title = "female driver selfie"
 
 [[generated]]
 id = "yfjZMQ2VvZ_ts07ni-Sn5"
 uri = "file://attached_assets/_stills2/s3b_vin_lambo.png"
 type = "image"
-title = "generated_image"
+title = "vehicle documentation photo"
 
 [[generated]]
 id = "sx3oiZwTpJBrYLj7hl8aG"
 uri = "file://attached_assets/_stills2/s4_delivery.png"
 type = "image"
-title = "generated_image"
+title = "delivery handshake varied"
 
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
@@ -490,4 +490,4 @@ title = "GUBER Load Board Commercial v2 — 30s Vertical (Real Vehicles + Securi
 id = "I0T12yW2S1wrzZLiQ6qYO"
 uri = "file://attached_assets/guber-loadboard-commercial-v3.mp4"
 type = "video"
-title = "GUBER Load Board Commercial v3"
+title = "GUBER Load Board Commercial v3 (fixed)"
