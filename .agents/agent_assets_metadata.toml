@@ -341,3 +341,9 @@ id = "RRyM_lJwPw7s5MzN59oou"
 uri = "file://attached_assets/generated_videos/guber_social_enhanced.mp4"
 type = "video"
 title = "GUBER Social — Cinematic Enhanced (crowd noise reduced, music + ending card)"
+
+[[outputs]]
+id = "Dk0-R-4wcCgYSaCrxO6kM"
+uri = "file://attached_assets/generated_videos/guber_social_final.mp4"
+type = "video"
+title = "GUBER Social Final — Cinematic grade + crowd noise removed + music + ending card"
