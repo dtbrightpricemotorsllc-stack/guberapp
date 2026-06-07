@@ -509,3 +509,9 @@ id = "py-aHUGWw0pCiSDIhuRnW"
 uri = "file://attached_assets/guber_final.mp4"
 type = "video"
 title = "GUBER — Features Video with Voiceover + Logo End Card"
+
+[[outputs]]
+id = "dRP-zFHADzLX7bh_lNOM7"
+uri = "file://attached_assets/guber_final_v2.mp4"
+type = "video"
+title = "GUBER — Full Feature Walkthrough with Synced Voiceover"
