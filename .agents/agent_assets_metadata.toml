@@ -192,6 +192,36 @@ uri = "file://attached_assets/_tmp_still/s3b_vin_photo.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "sK9JUkXsSuJfUX_LWja4k"
+uri = "file://attached_assets/_stills2/s1_driver_semi.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "cUZuwKuylo9K8TN9ts9E1"
+uri = "file://attached_assets/_stills2/s2_hauler_highway.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "vf2nUtnJNAOZ3i_ygT72z"
+uri = "file://attached_assets/_stills2/s3a_selfie.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "yfjZMQ2VvZ_ts07ni-Sn5"
+uri = "file://attached_assets/_stills2/s3b_vin_lambo.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "sx3oiZwTpJBrYLj7hl8aG"
+uri = "file://attached_assets/_stills2/s4_delivery.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"

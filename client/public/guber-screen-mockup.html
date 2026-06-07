@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>GUBER Load Board</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0A0A0A; font-family: Inter, -apple-system, sans-serif; color: #F5F5F7; width: 390px; min-height: 844px; overflow: hidden; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; background: #0A0A0A; border-bottom: 1px solid #1a1a1a; }
+  .logo { font-size: 22px; font-weight: 900; color: #39FF14; letter-spacing: 2px; }
+  .logo span { color: #8B5CF6; }
+  .notif { width: 34px; height: 34px; background: #1a1a1a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+
+  .search-bar { margin: 12px 16px; background: #141414; border: 1px solid #222; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
+  .search-bar span { color: #555; font-size: 13px; }
+  .search-icon { color: #39FF14; font-size: 15px; }
+
+  .tabs { display: flex; padding: 0 16px; gap: 8px; margin-bottom: 12px; }
+  .tab { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; }
+  .tab.active { background: #39FF14; color: #0A0A0A; }
+  .tab.inactive { background: #1a1a1a; color: #777; }
+
+  .section-title { padding: 0 16px 8px; font-size: 11px; font-weight: 700; color: #555; letter-spacing: 1px; text-transform: uppercase; }
+
+  .card { margin: 0 16px 10px; background: #111; border: 1px solid #1e1e1e; border-radius: 14px; padding: 14px; }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #F5F5F7; }
+  .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+  .badge.green { background: #0d2e0d; color: #39FF14; border: 1px solid #39FF14; }
+  .badge.purple { background: #1e1030; color: #8B5CF6; border: 1px solid #8B5CF6; }
+  .badge.gold { background: #2a1f00; color: #FFCC33; border: 1px solid #FFCC33; }
+  .card-meta { display: flex; gap: 12px; margin-bottom: 8px; }
+  .meta-item { font-size: 11px; color: #666; display: flex; align-items: center; gap: 3px; }
+  .meta-icon { font-size: 12px; }
+  .card-footer { display: flex; justify-content: space-between; align-items: center; }
+  .price { font-size: 18px; font-weight: 800; color: #39FF14; }
+  .distance { font-size: 11px; color: #555; }
+  .protect-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #1e1e1e; }
+  .shield-icon { font-size: 13px; }
+  .protect-text { font-size: 11px; color: #FFCC33; font-weight: 600; }
+
+  .ap-banner { margin: 0 16px 12px; background: linear-gradient(135deg, #0d2e0d, #1a0a30); border: 1px solid #39FF14; border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+  .ap-icon { font-size: 28px; }
+  .ap-title { font-size: 13px; font-weight: 800; color: #39FF14; }
+  .ap-sub { font-size: 11px; color: #8B5CF6; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">GUBER<span>™</span></div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <div style="font-size:11px;color:#39FF14;font-weight:700;">LOAD BOARD</div>
+    <div class="notif">🔔</div>
+  </div>
+</div>
+
+<div class="search-bar">
+  <span class="search-icon">📍</span>
+  <span>Search by zip, city, or route…</span>
+</div>
+
+<div class="tabs">
+  <button class="tab active">All Loads</button>
+  <button class="tab inactive">Near Me</button>
+  <button class="tab inactive">Auto</button>
+  <button class="tab inactive">Heavy</button>
+</div>
+
+<div class="ap-banner">
+  <div class="ap-icon">🛡️</div>
+  <div>
+    <div class="ap-title">Asset Protection Active</div>
+    <div class="ap-sub">GPS-locked · VIN verified · One-time release code</div>
+  </div>
+</div>
+
+<div class="section-title">3 loads near you</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Exotic Auto Transport</div>
+    <div class="badge gold">🛡 PROTECTED</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-item"><span class="meta-icon">📍</span> Miami, FL → Atlanta, GA</div>
+    <div class="meta-item"><span class="meta-icon">📦</span> 2 vehicles</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-item"><span class="meta-icon">🚛</span> Car Hauler</div>
+    <div class="meta-item"><span class="meta-icon">⏱</span> ASAP</div>
+  </div>
+  <div class="card-footer">
+    <div class="price">$1,850</div>
+    <div class="distance">4.2 mi away</div>
+  </div>
+  <div class="protect-row">
+    <span class="shield-icon">🔐</span>
+    <span class="protect-text">Requires selfie + VIN + release code at pickup</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Semi Load — Electronics</div>
+    <div class="badge green">OPEN</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-item"><span class="meta-icon">📍</span> Dallas, TX → Nashville, TN</div>
+    <div class="meta-item"><span class="meta-icon">📦</span> 40,000 lbs</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-item"><span class="meta-icon">🚛</span> 53ft Dry Van</div>
+    <div class="meta-item"><span class="meta-icon">⏱</span> Tue pickup</div>
+  </div>
+  <div class="card-footer">
+    <div class="price">$3,200</div>
+    <div class="distance">1.8 mi away</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Luxury Vehicle — Single</div>
+    <div class="badge purple">URGENT</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-item"><span class="meta-icon">📍</span> Los Angeles → Las Vegas</div>
+    <div class="meta-item"><span class="meta-icon">🚗</span> Lamborghini Urus</div>
+  </div>
+  <div class="card-meta">
+    <div class="meta-item"><span class="meta-icon">🚛</span> Enclosed Carrier</div>
+    <div class="meta-item"><span class="meta-icon">⏱</span> Today</div>
+  </div>
+  <div class="card-footer">
+    <div class="price">$2,400</div>
+    <div class="distance">7.1 mi away</div>
+  </div>
+  <div class="protect-row">
+    <span class="shield-icon">🔐</span>
+    <span class="protect-text">Asset Protection required by poster</span>
+  </div>
+</div>
+
+</body>
+</html>

@@ -23620,6 +23620,46 @@ OUTPUT STYLE:
     }
   });
 
+  // GET /api/admin/founders — current cap, pricing, and claim stats.
+  app.get("/api/admin/founders", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const status = await assetCustody.getFoundersStatus();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // PATCH /api/admin/founders — update cap limit and/or pricing.
+  // Body: { capLimit?: number; founderPriceCents?: number; standardPriceCents?: number }
+  app.patch("/api/admin/founders", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const b = req.body || {};
+      const patch: { capLimit?: number; founderPriceCents?: number; standardPriceCents?: number } = {};
+      if (b.capLimit != null) {
+        const v = Math.floor(Number(b.capLimit));
+        if (!isFinite(v) || v < 1) return res.status(400).json({ message: "capLimit must be a positive integer" });
+        patch.capLimit = v;
+      }
+      if (b.founderPriceCents != null) {
+        const v = Math.floor(Number(b.founderPriceCents));
+        if (!isFinite(v) || v < 0) return res.status(400).json({ message: "founderPriceCents must be ≥ 0" });
+        patch.founderPriceCents = v;
+      }
+      if (b.standardPriceCents != null) {
+        const v = Math.floor(Number(b.standardPriceCents));
+        if (!isFinite(v) || v < 0) return res.status(400).json({ message: "standardPriceCents must be ≥ 0" });
+        patch.standardPriceCents = v;
+      }
+      if (Object.keys(patch).length === 0) return res.status(400).json({ message: "No valid fields provided" });
+      await assetCustody.updateFoundersConfig(patch);
+      const updated = await assetCustody.getFoundersStatus();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
   // POST /api/load-board — create listing
   app.post("/api/load-board", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {

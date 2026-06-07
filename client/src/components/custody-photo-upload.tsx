@@ -6,13 +6,14 @@ import { compressImageToDataUrl } from "@/lib/image-compress";
 interface CustodyPhotoUploadProps {
   photos: string[];
   onChange: (urls: string[]) => void;
+  onToken?: (url: string, token: string) => void;
   max?: number;
   disabled?: boolean;
   label?: string;
   testid?: string;
 }
 
-async function uploadCustodyPhoto(file: File): Promise<string> {
+async function uploadCustodyPhoto(file: File): Promise<{ url: string; token: string }> {
   const dataUrl = await compressImageToDataUrl(file);
   const res = await fetch("/api/assets/upload", {
     method: "POST",
@@ -23,12 +24,13 @@ async function uploadCustodyPhoto(file: File): Promise<string> {
   const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d?.message || "Upload failed");
   if (!d?.url) throw new Error("Upload returned no URL");
-  return d.url as string;
+  return { url: d.url as string, token: (d.uploadToken as string) ?? "" };
 }
 
 export function CustodyPhotoUpload({
   photos,
   onChange,
+  onToken,
   max = 5,
   disabled,
   label = "Photos (optional)",
@@ -48,11 +50,12 @@ export function CustodyPhotoUpload({
     }
     setUploading(true);
     try {
-      const urls: string[] = [];
+      const items: Array<{ url: string; token: string }> = [];
       for (const f of files) {
-        urls.push(await uploadCustodyPhoto(f));
+        items.push(await uploadCustodyPhoto(f));
       }
-      onChange([...photos, ...urls]);
+      onChange([...photos, ...items.map((i) => i.url)]);
+      if (onToken) items.forEach((i) => onToken(i.url, i.token));
     } catch (err: any) {
       toast({ title: "Photo upload failed", description: err?.message || "Try again.", variant: "destructive" });
     } finally {

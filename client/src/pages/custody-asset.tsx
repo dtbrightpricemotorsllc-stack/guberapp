@@ -737,12 +737,14 @@ function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; 
   const [vin, setVin] = useState("");
   const [vinPhoto, setVinPhoto] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [tokenMap, setTokenMap] = useState<Record<string, string>>({});
+  const onToken = (url: string, token: string) => setTokenMap((m) => ({ ...m, [url]: token }));
 
   const reset = () => {
     setStep(0); setSelfieUrls([]); setGps(null); setGpsLoading(false);
     setTowType(""); setTowPlate(""); setTowState(""); setTowPhotos([]);
     setTrailerType(""); setTrailerNum(""); setTrailerPlate(""); setTrailerPhotos([]);
-    setVin(""); setVinPhoto([]);
+    setVin(""); setVinPhoto([]); setTokenMap({});
   };
 
   const captureGps = async () => {
@@ -759,14 +761,15 @@ function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; 
     try {
       const body: Record<string, any> = {
         selfieUrl: selfieUrls[0],
+        selfieToken: tokenMap[selfieUrls[0]] ?? "",
         lat: gps.lat,
         lng: gps.lng,
         accuracy: gps.accuracy,
         gpsTimestamp: gps.gpsTimestamp,
       };
-      if (towType || towPlate) body.tow = { vehicleType: towType || null, plateNumber: towPlate || null, plateState: towState || null, photoUrls: towPhotos.length ? towPhotos : null };
-      if (trailerType || trailerNum) body.trailer = { trailerType: trailerType || null, trailerNumber: trailerNum || null, plateNumber: trailerPlate || null, photoUrls: trailerPhotos.length ? trailerPhotos : null };
-      if (vin) { body.scannedVin = vin; body.vinPhotoUrl = vinPhoto[0] || null; }
+      if (towType || towPlate) body.tow = { vehicleType: towType || null, plateNumber: towPlate || null, plateState: towState || null, photoUrls: towPhotos.length ? towPhotos : null, photoTokens: towPhotos.map((u) => tokenMap[u] ?? "") };
+      if (trailerType || trailerNum) body.trailer = { trailerType: trailerType || null, trailerNumber: trailerNum || null, plateNumber: trailerPlate || null, photoUrls: trailerPhotos.length ? trailerPhotos : null, photoTokens: trailerPhotos.map((u) => tokenMap[u] ?? "") };
+      if (vin) { body.scannedVin = vin; body.vinPhotoUrl = vinPhoto[0] || null; body.vinPhotoToken = vinPhoto[0] ? (tokenMap[vinPhoto[0]] ?? "") : undefined; }
       const res = await apiRequest("POST", `/api/assets/${assetId}/release/request`, body);
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d?.message);
@@ -802,7 +805,7 @@ function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; 
         {step === 0 && (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Upload a live selfie — this is your identity confirmation and is required for every release.</p>
-            <CustodyPhotoUpload photos={selfieUrls} onChange={setSelfieUrls} max={1} disabled={busy} label="Selfie (required)" testid="release-selfie" />
+            <CustodyPhotoUpload photos={selfieUrls} onChange={setSelfieUrls} onToken={onToken} max={1} disabled={busy} label="Selfie (required)" testid="release-selfie" />
           </div>
         )}
 
@@ -845,7 +848,7 @@ function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; 
             </Select>
             <Input placeholder="Plate number (optional)" value={towPlate} onChange={(e) => setTowPlate(e.target.value)} data-testid="input-tow-plate" />
             <Input placeholder="Plate state (e.g. TX, optional)" value={towState} onChange={(e) => setTowState(e.target.value)} data-testid="input-tow-state" />
-            <CustodyPhotoUpload photos={towPhotos} onChange={setTowPhotos} disabled={busy} label="Tow vehicle photos (optional)" testid="tow" />
+            <CustodyPhotoUpload photos={towPhotos} onChange={setTowPhotos} onToken={onToken} disabled={busy} label="Tow vehicle photos (optional)" testid="tow" />
           </div>
         )}
 
@@ -864,7 +867,7 @@ function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; 
             </Select>
             <Input placeholder="Trailer number (optional)" value={trailerNum} onChange={(e) => setTrailerNum(e.target.value)} data-testid="input-trailer-num" />
             <Input placeholder="Trailer plate (optional)" value={trailerPlate} onChange={(e) => setTrailerPlate(e.target.value)} data-testid="input-trailer-plate" />
-            <CustodyPhotoUpload photos={trailerPhotos} onChange={setTrailerPhotos} disabled={busy} label="Trailer photos (optional)" testid="trailer" />
+            <CustodyPhotoUpload photos={trailerPhotos} onChange={setTrailerPhotos} onToken={onToken} disabled={busy} label="Trailer photos (optional)" testid="trailer" />
           </div>
         )}
 
@@ -872,7 +875,7 @@ function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; 
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Scan or type the VIN from the vehicle. A mismatch will flag the request for owner review.</p>
             <Input placeholder="VIN (optional)" value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} data-testid="input-vin" />
-            <CustodyPhotoUpload photos={vinPhoto} onChange={setVinPhoto} max={1} disabled={busy} label="VIN plate photo (optional)" testid="vin" />
+            <CustodyPhotoUpload photos={vinPhoto} onChange={setVinPhoto} onToken={onToken} max={1} disabled={busy} label="VIN plate photo (optional)" testid="vin" />
           </div>
         )}
 
