@@ -22552,6 +22552,47 @@ OUTPUT STYLE:
       if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
         return res.status(400).json({ message: "A live GPS reading (lat/lng) is required" });
       }
+      // ── GPS anti-spoof hard gates ─────────────────────────────────────────
+      // 1) Accuracy threshold: reject readings weaker than 150 m (typical for
+      //    GPS-spoof apps that claim ±9999 m or omit accuracy entirely).
+      // 2) Staleness gate: reject readings older than 60 s (cached / replayed).
+      // 3) Impossible-location: if the submitted coords are > 50 km from the
+      //    asset's geofence centre the driver physically cannot be "at the asset"
+      //    — write a fraud_flag custody event and hard-reject.
+      {
+        const GPS_ACCURACY_MAX_M = 150;
+        const GPS_STALENESS_MAX_MS = 60_000;
+        const GPS_OUTER_SPOOF_RADIUS_M = 50_000;
+        const accuracy = b.accuracy != null ? Number(b.accuracy) : null;
+        const gpsTimestamp = b.gpsTimestamp != null ? Number(b.gpsTimestamp) : null;
+        if (accuracy === null || !isFinite(accuracy) || accuracy > GPS_ACCURACY_MAX_M) {
+          return res.status(409).json({
+            message: "GPS signal too weak or unavailable for a secure release. Move outdoors and try again.",
+            code: "GPS_ACCURACY",
+          });
+        }
+        if (gpsTimestamp === null || !isFinite(gpsTimestamp) || Date.now() - gpsTimestamp > GPS_STALENESS_MAX_MS) {
+          return res.status(409).json({
+            message: "GPS reading is stale. Refresh your location and try again.",
+            code: "GPS_STALE",
+          });
+        }
+        if (asset.geofenceLat != null && asset.geofenceLng != null) {
+          const outerDist = haversineMeters(asset.geofenceLat, asset.geofenceLng, lat, lng);
+          if (outerDist > GPS_OUTER_SPOOF_RADIUS_M) {
+            await assetCustody.appendCustodyEvent(assetId, "fraud_flag", {
+              actorId: uid,
+              description: "GPS impossible location on release request — potential spoof",
+              metadata: { submittedLat: lat, submittedLng: lng, outerDistMeters: Math.round(outerDist) },
+            });
+            return res.status(409).json({
+              message: "Your GPS location is inconsistent with the asset location. This incident has been logged.",
+              code: "GPS_IMPOSSIBLE_LOCATION",
+            });
+          }
+        }
+      }
+      // ── end GPS anti-spoof ────────────────────────────────────────────────
       if (!b.selfieUrl || typeof b.selfieUrl !== "string") {
         return res.status(400).json({ message: "A live selfie is required" });
       }
@@ -22731,6 +22772,41 @@ OUTPUT STYLE:
       if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
         return res.status(400).json({ message: "A live GPS reading (lat/lng) is required" });
       }
+      // ── GPS anti-spoof hard gates ─────────────────────────────────────────
+      {
+        const GPS_ACCURACY_MAX_M = 150;
+        const GPS_STALENESS_MAX_MS = 60_000;
+        const GPS_OUTER_SPOOF_RADIUS_M = 50_000;
+        const accuracy = b.accuracy != null ? Number(b.accuracy) : null;
+        const gpsTimestamp = b.gpsTimestamp != null ? Number(b.gpsTimestamp) : null;
+        if (accuracy === null || !isFinite(accuracy) || accuracy > GPS_ACCURACY_MAX_M) {
+          return res.status(409).json({
+            message: "GPS signal too weak or unavailable for a secure release. Move outdoors and try again.",
+            code: "GPS_ACCURACY",
+          });
+        }
+        if (gpsTimestamp === null || !isFinite(gpsTimestamp) || Date.now() - gpsTimestamp > GPS_STALENESS_MAX_MS) {
+          return res.status(409).json({
+            message: "GPS reading is stale. Refresh your location and try again.",
+            code: "GPS_STALE",
+          });
+        }
+        if (asset.geofenceLat != null && asset.geofenceLng != null) {
+          const outerDist = haversineMeters(asset.geofenceLat, asset.geofenceLng, lat, lng);
+          if (outerDist > GPS_OUTER_SPOOF_RADIUS_M) {
+            await assetCustody.appendCustodyEvent(assetId, "fraud_flag", {
+              actorId: uid,
+              description: "GPS impossible location on code redeem — potential spoof",
+              metadata: { submittedLat: lat, submittedLng: lng, outerDistMeters: Math.round(outerDist) },
+            });
+            return res.status(409).json({
+              message: "Your GPS location is inconsistent with the asset location. This incident has been logged.",
+              code: "GPS_IMPOSSIBLE_LOCATION",
+            });
+          }
+        }
+      }
+      // ── end GPS anti-spoof ────────────────────────────────────────────────
       if (!b.code || typeof b.code !== "string") {
         return res.status(400).json({ message: "Pickup code is required" });
       }
