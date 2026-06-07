@@ -39,13 +39,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, "..");
 
-// The 7 protected suites — the exact set verified at the 152-test baseline.
+// The protected suites — money-moving / trust-critical surfaces whose
+// regression must flip the health monitor RED.
 export const PROTECTED_TEST_SUITES = [
   "server/tests/stripe-webhook-credits.test.ts",
   "server/tests/business-auth-endpoints.test.ts",
   "server/tests/oauth-state.test.ts",
   "server/tests/studio-featured-admin.test.ts",
   "server/tests/studio-pricing.test.ts",
+  "server/tests/asset-custody-routes.test.ts",
   "client/src/pages/login.test.tsx",
   "client/src/components/handsfree-capture.test.tsx",
 ];
