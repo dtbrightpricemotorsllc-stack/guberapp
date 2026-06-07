@@ -1784,6 +1784,7 @@ export default function AdminQa() {
           <TabsTrigger value="studio-usage" data-testid="tab-studio-usage"><Activity className="mr-1 h-3 w-3" />Studio Usage</TabsTrigger>
           <TabsTrigger value="studio-tiles" data-testid="tab-studio-tiles"><ImageIcon className="mr-1 h-3 w-3" />Studio Tiles</TabsTrigger>
           <TabsTrigger value="featured-clips" data-testid="tab-featured-clips"><Film className="mr-1 h-3 w-3" />Trends Rail</TabsTrigger>
+          <TabsTrigger value="growth-engine" data-testid="tab-growth-engine">🌱 Growth Engine</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -1813,6 +1814,15 @@ export default function AdminQa() {
         <TabsContent value="studio-usage"><StudioUsageTab /></TabsContent>
         <TabsContent value="studio-tiles"><StudioTilesTab /></TabsContent>
         <TabsContent value="featured-clips"><FeaturedClipsTab /></TabsContent>
+        <TabsContent value="growth-engine">
+          <Card>
+            <CardHeader><CardTitle>Growth Engine</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p className="text-muted-foreground">Manage ZIP-based fallback community tasks, reward configs, and completion logs. Enable via the <strong>zip_fallback_growth_tasks</strong> feature flag.</p>
+              <Button asChild><Link href="/admin/growth-engine">Open Growth Engine</Link></Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );

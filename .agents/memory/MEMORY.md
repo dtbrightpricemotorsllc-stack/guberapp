@@ -17,3 +17,4 @@
 - [tsx stale routes after big edits](tsx-stale-routes.md) — new Express routes returning SPA HTML (text/html 200) means tsx didn't hot-reload; restart the workflow, don't debug route order.
 - [Rebase brace collapse](rebase-brace-collapse.md) — additive rebases where both branches append funcs before a shared EOF `}` make git steal one side's closing brace into the shared trailing line; re-add it.
 - [GUBER commercial video](guber-commercial-video.md) — show the real app via a phone-mockup INSERT (not composite on AI phones); varied cars/no yellow Lambo; short captions (72px fits ~16 chars); logo end-card only.
+- [Growth Engine architecture](growth-engine-arch.md) — growth tasks are NOT in the jobs table; 4 separate tables; awardReferralGrowthCredits() exists but must be explicitly called at referral trigger points; flag zip_fallback_growth_tasks is off by default.

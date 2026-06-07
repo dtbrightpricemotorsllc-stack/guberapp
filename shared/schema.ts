@@ -225,6 +225,12 @@ export const users = pgTable("users", {
   mktSellerRatingCount: integer("mkt_seller_rating_count").default(0),
   mktBuyerRatingSum: integer("mkt_buyer_rating_sum").default(0),
   mktBuyerRatingCount: integer("mkt_buyer_rating_count").default(0),
+  // ── GUBER Growth Engine ──────────────────────────────────────────────────
+  // Separate from studioCredits/aiOrNotCredits. 100 growthCredits = $1.
+  // Min cashout 1,000 credits ($10). Earned via growth tasks + referral milestones.
+  growthCredits: integer("growth_credits").default(0),
+  // guberScore: engagement/reputation metric separate from trustScore.
+  guberScore: integer("guber_score").default(0),
 });
 
 export const categories = pgTable("categories", {
@@ -2591,3 +2597,67 @@ export const foundersClubState = pgTable("founders_club_state", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type FoundersClubState = typeof foundersClubState.$inferSelect;
+
+// ── GUBER Growth Engine ───────────────────────────────────────────────────────
+// Growth tasks are NOT marketplace jobs. They are community engagement missions
+// that earn credits (100 cr = $1, min 1000 cr cashout) and guberScore.
+// They never appear in real job counts or the paid-work flow.
+
+export const growthTaskTemplates = pgTable("growth_task_templates", {
+  id: serial("id").primaryKey(),
+  emoji: text("emoji").notNull().default("📢"),
+  title: text("title").notNull(),
+  description: text("description"),
+  rewardCredits: integer("reward_credits").notNull().default(25),
+  rewardScore: integer("reward_score").notNull().default(50),
+  ogBonusPct: integer("og_bonus_pct").notNull().default(25),
+  category: text("category").notNull().default("community"), // community | referral | verify
+  isActive: boolean("is_active").notNull().default(true),
+  paused: boolean("paused").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type GrowthTaskTemplate = typeof growthTaskTemplates.$inferSelect;
+
+// Per-scope fallback configuration (global → state → city → zip, most specific wins).
+// scopeValue = '' for global, 'CA' for state, 'Los Angeles' for city, '90210' for zip.
+export const zipFallbackSettings = pgTable("zip_fallback_settings", {
+  id: serial("id").primaryKey(),
+  scope: text("scope").notNull().default("global"), // global | state | city | zip
+  scopeValue: text("scope_value").notNull().default(""),
+  enabled: boolean("enabled").notNull().default(true),
+  showWhenRealJobsExist: boolean("show_when_real_jobs_exist").notNull().default(false),
+  maxTasksShown: integer("max_tasks_shown").notNull().default(6),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type ZipFallbackSetting = typeof zipFallbackSettings.$inferSelect;
+
+// Append-only completion log — anti-abuse + analytics source of truth.
+export const growthTaskCompletions = pgTable("growth_task_completions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  templateId: integer("template_id").notNull(),
+  zip: text("zip"),
+  creditsAwarded: integer("credits_awarded").notNull().default(0),
+  scoreAwarded: integer("score_awarded").notNull().default(0),
+  submissionData: json("submission_data"),
+  deviceFingerprint: text("device_fingerprint"),
+  ipAddress: text("ip_address"),
+  lat: real("lat"),
+  lng: real("lng"),
+  status: text("status").notNull().default("approved"), // approved | rejected | duplicate | suspicious
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type GrowthTaskCompletion = typeof growthTaskCompletions.$inferSelect;
+
+// Admin-editable reward config — every tunable number lives here, nothing hardcoded.
+export const growthRewardConfig = pgTable("growth_reward_config", {
+  key: text("key").primaryKey(),
+  valueInt: integer("value_int").notNull().default(0),
+  label: text("label").notNull(),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type GrowthRewardConfig = typeof growthRewardConfig.$inferSelect;

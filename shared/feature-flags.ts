@@ -3,6 +3,7 @@
 // (`/admin/qa/flags`) and is queryable via isFeatureEnabledFor(key, viewer).
 
 export type FeatureFlagKey =
+  | "zip_fallback_growth_tasks"
   | "studio_ai"
   | "studio_v2"
   | "studio_subscriptions"
@@ -32,6 +33,13 @@ export interface FeatureFlagDef {
 }
 
 export const FEATURE_FLAGS: FeatureFlagDef[] = [
+  {
+    key: "zip_fallback_growth_tasks",
+    label: "ZIP Fallback Growth Tasks",
+    description: "Show GUBER-created community tasks in ZIPs with zero real user jobs.",
+    defaultEnabled: false,
+    defaultScope: "global",
+  },
   {
     key: "studio_ai",
     label: "AI Video Studio",

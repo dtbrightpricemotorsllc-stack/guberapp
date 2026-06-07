@@ -650,6 +650,107 @@ app.use((req, res, next) => {
       ON DELETE TO custody_events DO INSTEAD NOTHING;
   `).catch(e => console.error("[migration] custody_events append-only rule error:", e));
 
+  // ── GUBER Growth Engine ────────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS growth_credits INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS guber_score    INTEGER DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS growth_task_templates (
+      id            SERIAL PRIMARY KEY,
+      emoji         TEXT NOT NULL DEFAULT '📢',
+      title         TEXT NOT NULL,
+      description   TEXT,
+      reward_credits INTEGER NOT NULL DEFAULT 25,
+      reward_score   INTEGER NOT NULL DEFAULT 50,
+      og_bonus_pct   INTEGER NOT NULL DEFAULT 25,
+      category       TEXT NOT NULL DEFAULT 'community',
+      is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+      paused         BOOLEAN NOT NULL DEFAULT FALSE,
+      sort_order     INTEGER NOT NULL DEFAULT 0,
+      created_at     TIMESTAMP DEFAULT NOW(),
+      updated_at     TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS zip_fallback_settings (
+      id                       SERIAL PRIMARY KEY,
+      scope                    TEXT NOT NULL DEFAULT 'global',
+      scope_value              TEXT NOT NULL DEFAULT '',
+      enabled                  BOOLEAN NOT NULL DEFAULT TRUE,
+      show_when_real_jobs_exist BOOLEAN NOT NULL DEFAULT FALSE,
+      max_tasks_shown          INTEGER NOT NULL DEFAULT 6,
+      updated_at               TIMESTAMP DEFAULT NOW(),
+      UNIQUE (scope, scope_value)
+    );
+
+    CREATE TABLE IF NOT EXISTS growth_task_completions (
+      id                 SERIAL PRIMARY KEY,
+      user_id            INTEGER NOT NULL,
+      template_id        INTEGER NOT NULL,
+      zip                TEXT,
+      credits_awarded    INTEGER NOT NULL DEFAULT 0,
+      score_awarded      INTEGER NOT NULL DEFAULT 0,
+      submission_data    JSONB,
+      device_fingerprint TEXT,
+      ip_address         TEXT,
+      lat                REAL,
+      lng                REAL,
+      status             TEXT NOT NULL DEFAULT 'approved',
+      rejection_reason   TEXT,
+      created_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_growth_completions_user     ON growth_task_completions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_growth_completions_template ON growth_task_completions(template_id);
+    CREATE INDEX IF NOT EXISTS idx_growth_completions_created  ON growth_task_completions(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS growth_reward_config (
+      key        TEXT PRIMARY KEY,
+      value_int  INTEGER NOT NULL DEFAULT 0,
+      label      TEXT NOT NULL,
+      description TEXT,
+      updated_at  TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] growth engine tables error:", e));
+
+  // Seed default growth task templates (6 canonical tasks)
+  await pool.query(`
+    INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order) VALUES
+      ('🍔', 'Best Place To Eat',       'Nominate the best local restaurant or food spot in your ZIP.',       25, 50,  25, 'community', 1),
+      ('🔧', 'Trusted Local Business',   'Share a local business you trust and would recommend to neighbors.', 25, 50,  25, 'community', 2),
+      ('⛽', 'Cheapest Fuel Report',     'Report today''s cheapest gas price you''ve spotted in your area.',   20, 40,  25, 'community', 3),
+      ('💼', 'Hiring Alert',             'Know someone who''s hiring locally? Share the opportunity.',         30, 60,  25, 'community', 4),
+      ('📢', 'Share GUBER',             'Tell a neighbor about GUBER and what it does for your community.',   15, 30,  25, 'community', 5),
+      ('👥', 'Invite A User',           'Invite a friend or neighbor to join GUBER with your referral link.', 50, 100, 25, 'referral',  6)
+    ON CONFLICT DO NOTHING;
+  `).catch(e => console.error("[seed] growth task templates error:", e));
+
+  // Seed global fallback setting (enabled by default once feature flag is on)
+  await pool.query(`
+    INSERT INTO zip_fallback_settings (scope, scope_value, enabled, show_when_real_jobs_exist, max_tasks_shown)
+    VALUES ('global', '', true, false, 6)
+    ON CONFLICT (scope, scope_value) DO NOTHING;
+  `).catch(e => console.error("[seed] zip fallback global setting error:", e));
+
+  // Seed reward config keys (admin can edit values; defaults are conservative)
+  await pool.query(`
+    INSERT INTO growth_reward_config (key, value_int, label, description) VALUES
+      ('referral_signup_credits',             2,    'Referral: Signup Credits',              'Credits awarded to referrer when referred user creates account'),
+      ('referral_signup_score',               25,   'Referral: Signup Score',                'Score awarded to referrer when referred user creates account'),
+      ('referral_verified_credits',           10,   'Referral: ID Verified Credits',         'Credits awarded to referrer when referred user verifies ID'),
+      ('referral_verified_score',             100,  'Referral: ID Verified Score',           'Score awarded to referrer when referred user verifies ID'),
+      ('referral_stripe_connected_credits',   25,   'Referral: Stripe Connected Credits',    'Credits awarded when referred user connects Stripe payout'),
+      ('referral_stripe_connected_score',     250,  'Referral: Stripe Connected Score',      'Score awarded when referred user connects Stripe payout'),
+      ('referral_first_paid_job_credits',     100,  'Referral: First Paid Job Credits',      'Credits awarded to referrer when referred user completes first paid job'),
+      ('referral_first_paid_job_score',       1000, 'Referral: First Paid Job Score',        'Score awarded to referrer when referred user completes first paid job'),
+      ('referral_og_purchase_referrer_credits', 50, 'Referral: OG Purchase (Referrer) Credits', 'Credits to referrer when referred user buys Day-1 OG'),
+      ('referral_og_purchase_referrer_score',  500, 'Referral: OG Purchase (Referrer) Score',   'Score to referrer when referred user buys Day-1 OG'),
+      ('referral_og_purchase_referred_credits', 25, 'Referral: OG Purchase (Referred) Credits', 'Credits to referred user for purchasing Day-1 OG via referral'),
+      ('referral_og_purchase_referred_score',  250, 'Referral: OG Purchase (Referred) Score',   'Score to referred user for purchasing Day-1 OG via referral'),
+      ('cashout_minimum_credits',             1000, 'Cashout Minimum Credits',               'Minimum growth credits required to request a cashout (100 cr = $1)'),
+      ('credits_per_dollar',                  100,  'Credits Per Dollar',                    'Number of growth credits equal to $1 USD'),
+      ('og_bonus_pct',                        25,   'Day-1 OG Bonus %',                      'Extra % credits/score earned by Day-1 OG members on growth tasks')
+    ON CONFLICT (key) DO NOTHING;
+  `).catch(e => console.error("[seed] growth reward config error:", e));
+
   await registerRoutes(httpServer, app);
   await startOSRuntime(app);
   startStudioToolsListener();

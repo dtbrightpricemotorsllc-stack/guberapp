@@ -24,6 +24,13 @@ import {
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
+import {
+  getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
+  getRewardConfigAll, updateRewardConfigKey,
+  listGrowthTaskTemplates, createGrowthTaskTemplate, updateGrowthTaskTemplate, deleteGrowthTaskTemplate,
+  listZipSettings, upsertZipSetting, deleteZipSetting,
+  listGrowthCompletions,
+} from "./growth-engine";
 import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
 import { demoGuard, getDemoUserIds, isDemoUser, viewerCanSeeJobSync } from "./demo-guard";
@@ -24708,6 +24715,218 @@ OUTPUT STYLE:
     // This is called internally from the main webhook after signature verification.
     // For now the main webhook will call this logic directly via the metadata.type check.
     res.json({ ok: true });
+  });
+
+  // ── GUBER GROWTH ENGINE ────────────────────────────────────────────────────
+  // Growth tasks are community engagement missions separate from the paid job
+  // marketplace. They never inflate real job counts or dashboard stats.
+
+  // Public: get ZIP fallback tasks (no auth required — works on jobs map too)
+  app.get("/api/growth-tasks/zip", async (req: Request, res: Response) => {
+    try {
+      const zip = (req.query.zip as string || "").trim().replace(/\D/g, "").slice(0, 5);
+      if (!zip || zip.length !== 5) return res.status(400).json({ error: "Valid 5-digit ZIP required" });
+      const viewer = req.session?.userId
+        ? await storage.getUser(req.session.userId).catch(() => null)
+        : null;
+      const result = await getZipFallbackTasks(zip, viewer ? { id: viewer.id, role: viewer.role } : null);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Auth: get user's growth credits + score balance
+  app.get("/api/growth-tasks/my-balance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const row = await pool.query(
+        `SELECT growth_credits, guber_score FROM users WHERE id = $1`,
+        [userId]
+      );
+      const cashoutMinimum = await (async () => {
+        const r = await pool.query(`SELECT value_int FROM growth_reward_config WHERE key = 'cashout_minimum_credits'`);
+        return r.rows[0]?.value_int ?? 1000;
+      })();
+      const creditsPerDollar = await (async () => {
+        const r = await pool.query(`SELECT value_int FROM growth_reward_config WHERE key = 'credits_per_dollar'`);
+        return r.rows[0]?.value_int ?? 100;
+      })();
+      res.json({
+        growthCredits: row.rows[0]?.growth_credits ?? 0,
+        guberScore: row.rows[0]?.guber_score ?? 0,
+        cashoutMinimum,
+        creditsPerDollar,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Auth: get user's completion history
+  app.get("/api/growth-tasks/my-completions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const page = Math.max(1, parseInt(req.query.page as string || "1", 10));
+      const limit = 20;
+      const offset = (page - 1) * limit;
+      const res2 = await pool.query(
+        `SELECT c.id, c.template_id, t.emoji, t.title, c.zip, c.credits_awarded,
+                c.score_awarded, c.status, c.rejection_reason, c.created_at
+         FROM growth_task_completions c
+         JOIN growth_task_templates t ON t.id = c.template_id
+         WHERE c.user_id = $1
+         ORDER BY c.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+      const total = await pool.query(
+        `SELECT COUNT(*) FROM growth_task_completions WHERE user_id = $1`, [userId]
+      );
+      res.json({ rows: res2.rows, total: parseInt(total.rows[0].count, 10) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Auth: complete a growth task
+  app.post("/api/growth-tasks/:templateId/complete", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const templateId = parseInt(req.params.templateId, 10);
+      if (isNaN(templateId)) return res.status(400).json({ error: "Invalid task ID" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const { zip, submissionData, deviceFingerprint, lat, lng } = req.body;
+      if (!zip) return res.status(400).json({ error: "zip is required" });
+
+      const isDay1OG = !!(user as any).isDayOneOG;
+      const ipAddress = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "").split(",")[0].trim();
+
+      const result = await completeGrowthTask({
+        userId, templateId, zip,
+        submissionData: submissionData ?? {},
+        deviceFingerprint: deviceFingerprint ?? undefined,
+        ipAddress,
+        lat: lat !== undefined ? parseFloat(lat) : undefined,
+        lng: lng !== undefined ? parseFloat(lng) : undefined,
+        isDay1OG,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Admin: Growth Engine CRUD ──────────────────────────────────────────────
+
+  app.get("/api/admin/growth-engine/templates", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await listGrowthTaskTemplates()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/admin/growth-engine/templates", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { emoji, title, description, rewardCredits, rewardScore, ogBonusPct, category, sortOrder,
+              reward_credits, reward_score, og_bonus_pct, sort_order } = req.body;
+      if (!title) return res.status(400).json({ error: "title required" });
+      const tpl = await createGrowthTaskTemplate({
+        emoji: emoji ?? "📢",
+        title,
+        description,
+        rewardCredits: rewardCredits ?? reward_credits ?? 25,
+        rewardScore:   rewardScore   ?? reward_score   ?? 50,
+        ogBonusPct:    ogBonusPct    ?? og_bonus_pct   ?? 25,
+        category:      category      ?? "community",
+        sortOrder:     sortOrder      ?? sort_order     ?? 0,
+      });
+      res.json(tpl);
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.patch("/api/admin/growth-engine/templates/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { emoji, title, description, rewardCredits, rewardScore, ogBonusPct, category,
+              isActive, paused, sortOrder,
+              reward_credits, reward_score, og_bonus_pct, is_active, sort_order } = req.body;
+      await updateGrowthTaskTemplate(id, {
+        emoji, title, description,
+        rewardCredits: rewardCredits ?? reward_credits,
+        rewardScore:   rewardScore   ?? reward_score,
+        ogBonusPct:    ogBonusPct    ?? og_bonus_pct,
+        category,
+        isActive:      isActive      !== undefined ? isActive  : is_active,
+        paused,
+        sortOrder:     sortOrder     ?? sort_order,
+      });
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/admin/growth-engine/templates/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await deleteGrowthTaskTemplate(parseInt(req.params.id, 10));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/admin/growth-engine/zip-settings", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await listZipSettings()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/admin/growth-engine/zip-settings", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { scope, scopeValue, enabled, showWhenRealJobsExist, maxTasksShown } = req.body;
+      if (!scope) return res.status(400).json({ error: "scope required" });
+      await upsertZipSetting(scope, scopeValue ?? "", { enabled, showWhenRealJobsExist, maxTasksShown });
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete("/api/admin/growth-engine/zip-settings/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await deleteZipSetting(parseInt(req.params.id, 10));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/admin/growth-engine/reward-config", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await getRewardConfigAll()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.patch("/api/admin/growth-engine/reward-config/:key", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { key } = req.params;
+      const { valueInt } = req.body;
+      if (valueInt === undefined || isNaN(parseInt(valueInt, 10))) return res.status(400).json({ error: "valueInt required" });
+      await updateRewardConfigKey(key, parseInt(valueInt, 10));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get("/api/admin/growth-engine/completions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string || "1", 10));
+      res.json(await listGrowthCompletions(page));
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Real-job count for a ZIP (used by client map to decide whether to show growth tasks)
+  app.get("/api/growth-tasks/zip-job-count", async (req: Request, res: Response) => {
+    try {
+      const zip = (req.query.zip as string || "").trim().replace(/\D/g, "").slice(0, 5);
+      if (!zip || zip.length !== 5) return res.status(400).json({ error: "Valid 5-digit ZIP required" });
+      const count = await countRealJobsInZip(zip);
+      res.json({ zip, count });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return httpServer;
