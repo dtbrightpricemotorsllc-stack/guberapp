@@ -1907,6 +1907,41 @@ export async function appendAdminNote(assetId: number, adminId: number, note: st
   });
 }
 
+// ── Release authorization enrichment ─────────────────────────────────────────
+export interface EnrichedReleaseAuthorization extends ReleaseAuthorization {
+  vinStatus: string | null;
+  scannedVin: string | null;
+  towDetails: { vehicleType: string | null; plateNumber: string | null } | null;
+  trailerDetails: { trailerType: string | null; trailerNumber: string | null } | null;
+}
+
+export async function enrichReleaseAuthorizations(
+  auths: ReleaseAuthorization[],
+): Promise<EnrichedReleaseAuthorization[]> {
+  return Promise.all(
+    auths.map(async (auth) => {
+      const [vin, tow, trailer] = await Promise.all([
+        auth.vinVerificationId ? getVinVerification(auth.vinVerificationId) : Promise.resolve(undefined),
+        auth.towVerificationId
+          ? db.select().from(towVehicleVerifications).where(eq(towVehicleVerifications.id, auth.towVerificationId!)).then((r) => r[0])
+          : Promise.resolve(undefined),
+        auth.trailerVerificationId
+          ? db.select().from(trailerVerifications).where(eq(trailerVerifications.id, auth.trailerVerificationId!)).then((r) => r[0])
+          : Promise.resolve(undefined),
+      ]);
+      return {
+        ...auth,
+        vinStatus: vin?.status ?? null,
+        scannedVin: vin?.scannedVin ?? null,
+        towDetails: tow ? { vehicleType: tow.vehicleType ?? null, plateNumber: tow.plateNumber ?? null } : null,
+        trailerDetails: trailer
+          ? { trailerType: trailer.trailerType ?? null, trailerNumber: trailer.trailerNumber ?? null }
+          : null,
+      };
+    }),
+  );
+}
+
 // ── Transport Passport aggregation ──────────────────────────────────────────
 export interface TransportPassport {
   asset: ProtectedAsset;
@@ -1916,7 +1951,7 @@ export interface TransportPassport {
   vinVerifications: VinVerification[];
   towVerifications: TowVehicleVerification[];
   trailerVerifications: TrailerVerification[];
-  releaseAuthorizations: ReleaseAuthorization[];
+  releaseAuthorizations: EnrichedReleaseAuthorization[];
   issues: TransportIssue[];
   incidents: Incident[];
   storageEvents: StorageEvent[];
@@ -1947,7 +1982,7 @@ export async function getTransportPassport(assetId: number): Promise<TransportPa
     getVinVerificationsForAsset(assetId),
     getTowVerificationsForAsset(assetId),
     getTrailerVerificationsForAsset(assetId),
-    getReleaseAuthorizationsForAsset(assetId),
+    getReleaseAuthorizationsForAsset(assetId).then(enrichReleaseAuthorizations),
     getIssuesForAsset(assetId),
     getIncidentsForAsset(assetId),
     getStorageEventsForAsset(assetId),

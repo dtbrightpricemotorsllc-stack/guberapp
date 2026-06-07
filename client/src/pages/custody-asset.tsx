@@ -14,7 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CustodyPhotoUpload } from "@/components/custody-photo-upload";
 import {
   ShieldCheck, Loader2, AlertTriangle, Snowflake, FileText, MapPin, Clock,
-  Truck, PackageCheck, Flame, Eye, ChevronLeft,
+  Truck, PackageCheck, Flame, Eye, ChevronLeft, Key, CheckCircle2, XCircle, Copy, Lock, Navigation,
 } from "lucide-react";
 
 interface AssetDetail {
@@ -45,6 +45,22 @@ async function getPos(): Promise<{ lat?: number; lng?: number }> {
       (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
       () => resolve({}),
       { enableHighAccuracy: true, timeout: 8000 },
+    );
+  });
+}
+
+async function getPosWithMeta(): Promise<{ lat?: number; lng?: number; accuracy?: number; gpsTimestamp?: number }> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({});
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({
+        lat: p.coords.latitude,
+        lng: p.coords.longitude,
+        accuracy: p.coords.accuracy,
+        gpsTimestamp: p.timestamp,
+      }),
+      () => resolve({}),
+      { enableHighAccuracy: true, timeout: 12000 },
     );
   });
 }
@@ -128,6 +144,13 @@ export default function CustodyAsset({ id: propId }: { id?: number } = {}) {
             </Button>
           </div>
 
+          {a.geofenceLat != null && (
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="text-geofence-set">
+              <Navigation className="w-3.5 h-3.5 text-emerald-600" />
+              Pickup geofence: {a.geofenceLat.toFixed(4)}, {a.geofenceLng.toFixed(4)} · {a.geofenceRadiusMeters ?? 250}m radius
+            </div>
+          )}
+
           {frozen && (
             <div className="mt-3 flex items-start gap-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 p-3" data-testid="banner-frozen">
               <Snowflake className="w-4 h-4 text-sky-600 mt-0.5" />
@@ -182,13 +205,18 @@ export default function CustodyAsset({ id: propId }: { id?: number } = {}) {
               <SimpleNumberDialog assetId={id} field="toCarrierId" url={`/api/assets/${id}/custody-transfer`} label="Transfer custody" onDone={refresh} disabled={frozen} testid="custody-transfer" withReason />
             </div>
             <DeliveryDialog assetId={id} onDone={refresh} disabled={frozen} />
+            <div className="border-t border-border/50 mt-3 pt-3 space-y-2">
+              <ReleaseRequestDialog assetId={id} onDone={refresh} disabled={frozen} />
+              <RedeemCodeDialog assetId={id} onDone={refresh} disabled={frozen} />
+            </div>
           </Panel>
         )}
 
         {/* Owner / sender actions */}
         {isOwnerSide && (
           <Panel title="Owner / Sender — Controls" icon={<ShieldCheck className="w-4 h-4" />}>
-            <div className="grid grid-cols-2 gap-2">
+            <GeofenceDialog assetId={id} onDone={refresh} currentLat={a.geofenceLat} currentLng={a.geofenceLng} currentRadius={a.geofenceRadiusMeters} />
+            <div className="grid grid-cols-2 gap-2 mt-2">
               {!frozen ? (
                 <ReasonDialog label="Freeze asset" url={`/api/assets/${id}/freeze`} field="reason" onDone={refresh} testid="freeze" danger />
               ) : (
@@ -206,6 +234,18 @@ export default function CustodyAsset({ id: propId }: { id?: number } = {}) {
                   data-testid={`button-request-witness-${rt}`}>
                   <Eye className="w-3.5 h-3.5 mr-1" /> {title(rt)}
                 </Button>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {/* Release authorization requests — shown to owner/sender when pending */}
+        {isOwnerSide && data.releaseAuthorizations.some((a) => a.status === "pending") && (
+          <Panel title="Release Authorization Requests" icon={<Key className="w-4 h-4 text-amber-500" />}>
+            <p className="text-xs text-muted-foreground mb-3">Review and approve each carrier release request. The one-time code is shown exactly once after you approve — copy it immediately.</p>
+            <div className="space-y-3">
+              {data.releaseAuthorizations.filter((a) => a.status === "pending").map((auth) => (
+                <AuthorizationRow key={auth.id} assetId={id} auth={auth} onDone={refresh} />
               ))}
             </div>
           </Panel>
@@ -591,5 +631,470 @@ function ReasonDialog({ label, url, field, onDone, testid, danger }: { label: st
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function GeofenceDialog({ assetId, onDone, currentLat, currentLng, currentRadius }: {
+  assetId: number; onDone: () => void;
+  currentLat?: number | null; currentLng?: number | null; currentRadius?: number | null;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
+  const [radius, setRadius] = useState("250");
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const captureGps = async () => {
+    setGpsLoading(true);
+    const pos = await getPosWithMeta();
+    if (pos.lat != null) { setLat(String(pos.lat.toFixed(6))); setLng(String(pos.lng!.toFixed(6))); }
+    else toast({ title: "Could not get GPS", variant: "destructive" });
+    setGpsLoading(false);
+  };
+
+  const submit = async () => {
+    const latN = parseFloat(lat); const lngN = parseFloat(lng); const radN = parseInt(radius);
+    if (!isFinite(latN) || !isFinite(lngN)) { toast({ title: "Enter or capture a valid location", variant: "destructive" }); return; }
+    setBusy(true);
+    try {
+      const res = await apiRequest("POST", `/api/assets/${assetId}/geofence`, { lat: latN, lng: lngN, radiusMeters: radN });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      toast({ title: "Geofence set", description: `Pickup zone locked to ${radN}m radius.` });
+      setOpen(false); onDone();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full" data-testid="button-set-geofence">
+          <Navigation className="w-4 h-4 mr-1" />
+          {currentLat != null ? "Update pickup geofence" : "Set pickup geofence"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Set Pickup Geofence</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          Lock the physical pickup zone for this asset. Carriers must be within this radius to submit a release request. Use your current GPS or enter coordinates manually.
+        </p>
+        {currentLat != null && (
+          <div className="rounded-lg bg-muted/30 border border-border p-2 text-xs text-muted-foreground" data-testid="text-current-geofence">
+            Current: {currentLat?.toFixed(4)}, {currentLng?.toFixed(4)} · {currentRadius ?? 250}m
+          </div>
+        )}
+        <Button variant="outline" size="sm" onClick={captureGps} disabled={gpsLoading} data-testid="button-capture-geofence-gps">
+          {gpsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <MapPin className="w-4 h-4 mr-1" />}
+          Use my current location
+        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Input placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} data-testid="input-geofence-lat" />
+          <Input placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} data-testid="input-geofence-lng" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Radius (metres)"
+            value={radius}
+            onChange={(e) => setRadius(e.target.value)}
+            type="number"
+            min={50}
+            max={2000}
+            data-testid="input-geofence-radius"
+          />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">metres (50–2000)</span>
+        </div>
+        <DialogFooter>
+          <Button onClick={submit} disabled={busy || !lat || !lng} data-testid="button-submit-geofence">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save geofence"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReleaseRequestDialog({ assetId, onDone, disabled }: { assetId: number; onDone: () => void; disabled?: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(0);
+  const [selfieUrls, setSelfieUrls] = useState<string[]>([]);
+  const [gps, setGps] = useState<{ lat?: number; lng?: number; accuracy?: number; gpsTimestamp?: number } | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [towType, setTowType] = useState("");
+  const [towPlate, setTowPlate] = useState("");
+  const [towState, setTowState] = useState("");
+  const [towPhotos, setTowPhotos] = useState<string[]>([]);
+  const [trailerType, setTrailerType] = useState("");
+  const [trailerNum, setTrailerNum] = useState("");
+  const [trailerPlate, setTrailerPlate] = useState("");
+  const [trailerPhotos, setTrailerPhotos] = useState<string[]>([]);
+  const [vin, setVin] = useState("");
+  const [vinPhoto, setVinPhoto] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setStep(0); setSelfieUrls([]); setGps(null); setGpsLoading(false);
+    setTowType(""); setTowPlate(""); setTowState(""); setTowPhotos([]);
+    setTrailerType(""); setTrailerNum(""); setTrailerPlate(""); setTrailerPhotos([]);
+    setVin(""); setVinPhoto([]);
+  };
+
+  const captureGps = async () => {
+    setGpsLoading(true);
+    const pos = await getPosWithMeta();
+    setGps(pos);
+    setGpsLoading(false);
+  };
+
+  const submit = async () => {
+    if (!selfieUrls[0]) { toast({ title: "Selfie required", variant: "destructive" }); return; }
+    if (!gps?.lat || !gps?.lng) { toast({ title: "GPS required — tap Capture GPS first", variant: "destructive" }); return; }
+    setBusy(true);
+    try {
+      const body: Record<string, any> = {
+        selfieUrl: selfieUrls[0],
+        lat: gps.lat,
+        lng: gps.lng,
+        accuracy: gps.accuracy,
+        gpsTimestamp: gps.gpsTimestamp,
+      };
+      if (towType || towPlate) body.tow = { vehicleType: towType || null, plateNumber: towPlate || null, plateState: towState || null, photoUrls: towPhotos.length ? towPhotos : null };
+      if (trailerType || trailerNum) body.trailer = { trailerType: trailerType || null, trailerNumber: trailerNum || null, plateNumber: trailerPlate || null, photoUrls: trailerPhotos.length ? trailerPhotos : null };
+      if (vin) { body.scannedVin = vin; body.vinPhotoUrl = vinPhoto[0] || null; }
+      const res = await apiRequest("POST", `/api/assets/${assetId}/release/request`, body);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      const vinWarn = d.vin?.status === "mismatch" ? " ⚠️ VIN mismatch flagged — owner will review." : "";
+      const geoMsg = d.geofence?.withinFence === false ? ` GPS is ${Math.round(d.geofence.distanceMeters)}m from geofence.` : "";
+      toast({ title: "Release request sent", description: `Owner will review and send you a pickup code.${vinWarn}${geoMsg}` });
+      setOpen(false); reset(); onDone();
+    } catch (e: any) {
+      toast({ title: "Request failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+
+  const steps = ["Selfie", "GPS", "Tow vehicle", "Trailer", "VIN", "Review"];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full" disabled={disabled} data-testid="button-request-release">
+          <Key className="w-4 h-4 mr-1" /> Request Release Authorization
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Request Release Authorization</DialogTitle>
+          <div className="flex gap-1 mt-2">
+            {steps.map((s, i) => (
+              <div key={s} className={`h-1 flex-1 rounded-full ${i <= step ? "bg-emerald-500" : "bg-muted"}`} />
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{steps[step]}</p>
+        </DialogHeader>
+
+        {step === 0 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Upload a live selfie — this is your identity confirmation and is required for every release.</p>
+            <CustodyPhotoUpload photos={selfieUrls} onChange={setSelfieUrls} max={1} disabled={busy} label="Selfie (required)" testid="release-selfie" />
+          </div>
+        )}
+
+        {step === 1 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Your live GPS is required to prove you are at the asset location. Accuracy must be ≤150m.</p>
+            <Button variant="outline" size="sm" className="w-full" onClick={captureGps} disabled={gpsLoading} data-testid="button-capture-gps">
+              {gpsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <MapPin className="w-4 h-4 mr-1" />}
+              {gps?.lat ? "Re-capture GPS" : "Capture GPS"}
+            </Button>
+            {gps?.lat && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-0.5" data-testid="gps-result">
+                <div className="text-xs text-foreground font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> GPS captured
+                </div>
+                <div className="text-xs text-muted-foreground">{gps.lat?.toFixed(5)}, {gps.lng?.toFixed(5)}</div>
+                <div className="text-xs text-muted-foreground">Accuracy: {gps.accuracy != null ? `${Math.round(gps.accuracy)}m` : "unknown"}</div>
+                {gps.accuracy != null && gps.accuracy > 150 && (
+                  <div className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Accuracy {Math.round(gps.accuracy)}m exceeds 150m limit — move outdoors and re-capture.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Enter your tow vehicle details (optional but recommended for high-value assets).</p>
+            <Select value={towType} onValueChange={setTowType}>
+              <SelectTrigger data-testid="select-tow-type"><SelectValue placeholder="Tow vehicle type (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="flatbed">Flatbed</SelectItem>
+                <SelectItem value="wheel_lift">Wheel lift</SelectItem>
+                <SelectItem value="hook_chain">Hook & chain</SelectItem>
+                <SelectItem value="enclosed_trailer">Enclosed trailer truck</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Plate number (optional)" value={towPlate} onChange={(e) => setTowPlate(e.target.value)} data-testid="input-tow-plate" />
+            <Input placeholder="Plate state (e.g. TX, optional)" value={towState} onChange={(e) => setTowState(e.target.value)} data-testid="input-tow-state" />
+            <CustodyPhotoUpload photos={towPhotos} onChange={setTowPhotos} disabled={busy} label="Tow vehicle photos (optional)" testid="tow" />
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Enter trailer details if applicable (optional).</p>
+            <Select value={trailerType} onValueChange={setTrailerType}>
+              <SelectTrigger data-testid="select-trailer-type"><SelectValue placeholder="Trailer type (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="enclosed">Enclosed</SelectItem>
+                <SelectItem value="open">Open / flatbed</SelectItem>
+                <SelectItem value="lowboy">Lowboy</SelectItem>
+                <SelectItem value="car_hauler">Car hauler</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Trailer number (optional)" value={trailerNum} onChange={(e) => setTrailerNum(e.target.value)} data-testid="input-trailer-num" />
+            <Input placeholder="Trailer plate (optional)" value={trailerPlate} onChange={(e) => setTrailerPlate(e.target.value)} data-testid="input-trailer-plate" />
+            <CustodyPhotoUpload photos={trailerPhotos} onChange={setTrailerPhotos} disabled={busy} label="Trailer photos (optional)" testid="trailer" />
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Scan or type the VIN from the vehicle. A mismatch will flag the request for owner review.</p>
+            <Input placeholder="VIN (optional)" value={vin} onChange={(e) => setVin(e.target.value.toUpperCase())} maxLength={17} data-testid="input-vin" />
+            <CustodyPhotoUpload photos={vinPhoto} onChange={setVinPhoto} max={1} disabled={busy} label="VIN plate photo (optional)" testid="vin" />
+          </div>
+        )}
+
+        {step === 5 && (
+          <div className="space-y-2 text-xs">
+            <p className="text-muted-foreground">Review before submitting:</p>
+            <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1">
+              <div><span className="text-muted-foreground">Selfie:</span> {selfieUrls[0] ? <span className="text-emerald-600">✓ uploaded</span> : <span className="text-red-500">missing</span>}</div>
+              <div><span className="text-muted-foreground">GPS:</span> {gps?.lat ? `${gps.lat?.toFixed(4)}, ${gps.lng?.toFixed(4)} (±${gps.accuracy != null ? Math.round(gps.accuracy) : "?"}m)` : <span className="text-red-500">not captured</span>}</div>
+              <div><span className="text-muted-foreground">Tow vehicle:</span> {towType ? `${title(towType)}${towPlate ? ` · ${towPlate}` : ""}` : "not provided"}</div>
+              <div><span className="text-muted-foreground">Trailer:</span> {trailerType ? `${title(trailerType)}${trailerNum ? ` · ${trailerNum}` : ""}` : "not provided"}</div>
+              <div><span className="text-muted-foreground">VIN:</span> {vin || "not provided"}</div>
+            </div>
+            {(!selfieUrls[0] || !gps?.lat) && (
+              <div className="flex items-center gap-1 text-amber-600"><AlertTriangle className="w-3.5 h-3.5" /> Selfie and GPS are required.</div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          {step > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setStep(step - 1)} disabled={busy} data-testid="button-release-back">Back</Button>
+          )}
+          {step < steps.length - 1 ? (
+            <Button size="sm" onClick={() => setStep(step + 1)} disabled={step === 0 && !selfieUrls[0]} data-testid="button-release-next">Next</Button>
+          ) : (
+            <Button size="sm" onClick={submit} disabled={busy || !selfieUrls[0] || !gps?.lat} data-testid="button-release-submit">
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit request"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RedeemCodeDialog({ assetId, onDone, disabled }: { assetId: number; onDone: () => void; disabled?: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!code.trim()) { toast({ title: "Enter the release code", variant: "destructive" }); return; }
+    setBusy(true);
+    try {
+      const gps = await getPosWithMeta();
+      const res = await apiRequest("POST", `/api/assets/${assetId}/release/redeem`, {
+        code: code.trim().toUpperCase(),
+        lat: gps.lat,
+        lng: gps.lng,
+        accuracy: gps.accuracy,
+        gpsTimestamp: gps.gpsTimestamp,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      toast({ title: "Code accepted — asset released", description: "Custody event logged. You may proceed with loading." });
+      setOpen(false); setCode(""); onDone();
+    } catch (e: any) {
+      toast({ title: "Code rejected", description: e?.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setCode(""); }}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="w-full" disabled={disabled} data-testid="button-redeem-code">
+          <Lock className="w-4 h-4 mr-1" /> Redeem Release Code
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Redeem Release Code</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">Enter the one-time code provided by the asset owner at hand-off. Your live GPS will be captured automatically.</p>
+        <Input
+          placeholder="Release code (e.g. XXXXXX-XXXXXX)"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          className="font-mono tracking-widest text-center"
+          data-testid="input-release-code"
+        />
+        <DialogFooter>
+          <Button onClick={submit} disabled={busy || !code.trim()} data-testid="button-submit-redeem">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Redeem & unlock"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AuthorizationRow({ assetId, auth, onDone }: { assetId: number; auth: any; onDone: () => void }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
+  const [denyReason, setDenyReason] = useState("");
+  const [denyOpen, setDenyOpen] = useState(false);
+  const [plainCode, setPlainCode] = useState<string | null>(null);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const approve = async () => {
+    setBusy("approve");
+    try {
+      const res = await apiRequest("POST", `/api/assets/${assetId}/release/authorizations/${auth.id}/approve`, {});
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      setPlainCode(d.plainCode || null);
+      setCodeOpen(true);
+      onDone();
+    } catch (e: any) {
+      toast({ title: "Approval failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(null); }
+  };
+
+  const deny = async () => {
+    setBusy("deny");
+    try {
+      const res = await apiRequest("POST", `/api/assets/${assetId}/release/authorizations/${auth.id}/deny`, { reason: denyReason });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.message);
+      toast({ title: "Request denied" });
+      setDenyOpen(false); setDenyReason(""); onDone();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    } finally { setBusy(null); }
+  };
+
+  const copyCode = () => {
+    if (plainCode) { navigator.clipboard.writeText(plainCode).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  };
+
+
+  return (
+    <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2" data-testid={`auth-row-${auth.id}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <Key className="w-3.5 h-3.5 text-amber-500" /> Release request #{auth.id}
+        </div>
+        <span className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400 font-medium">Pending</span>
+      </div>
+
+      {auth.selfieUrl && (
+        <a href={auth.selfieUrl} target="_blank" rel="noreferrer" className="block w-16 h-16 rounded-lg overflow-hidden border border-border" data-testid={`auth-selfie-${auth.id}`}>
+          <img src={auth.selfieUrl} alt="Carrier selfie" className="w-full h-full object-cover" />
+        </a>
+      )}
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+        <div className="text-muted-foreground">GPS</div>
+        <div className={auth.geofenceVerified === false && auth.geofenceMeters != null ? "text-amber-600" : "text-foreground"}>
+          {auth.geofenceVerified
+            ? <span className="text-emerald-600">Within geofence</span>
+            : auth.geofenceMeters != null
+              ? `${auth.geofenceMeters}m outside`
+              : "No geofence set"}
+        </div>
+        <div className="text-muted-foreground">VIN</div>
+        <div className={auth.vinStatus === "mismatch" ? "text-red-600 font-semibold" : "text-foreground"}>
+          {auth.vinStatus === "matched" && <span className="text-emerald-600">✓ Matched</span>}
+          {auth.vinStatus === "mismatch" && "⚠️ MISMATCH"}
+          {auth.vinStatus === "no_vin_on_file" && "No VIN on file"}
+          {auth.vinStatus === "not_provided" && "Not provided"}
+          {!auth.vinStatus && "—"}
+        </div>
+        {auth.towDetails?.plateNumber && (
+          <>
+            <div className="text-muted-foreground">Tow</div>
+            <div className="text-foreground">{title(auth.towDetails.vehicleType || "")} {auth.towDetails.plateNumber}</div>
+          </>
+        )}
+        {auth.trailerDetails?.trailerNumber && (
+          <>
+            <div className="text-muted-foreground">Trailer</div>
+            <div className="text-foreground">{title(auth.trailerDetails.trailerType || "")} {auth.trailerDetails.trailerNumber}</div>
+          </>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" onClick={approve} disabled={!!busy} data-testid={`button-approve-auth-${auth.id}`}>
+          {busy === "approve" ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-3.5 h-3.5 mr-1" />Approve</>}
+        </Button>
+        <Dialog open={denyOpen} onOpenChange={(o) => { setDenyOpen(o); if (!o) setDenyReason(""); }}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" disabled={!!busy} data-testid={`button-deny-auth-${auth.id}`}>
+              <XCircle className="w-3.5 h-3.5 mr-1" /> Deny
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Deny release request</DialogTitle></DialogHeader>
+            <Textarea placeholder="Reason for denial (optional)" value={denyReason} onChange={(e) => setDenyReason(e.target.value)} data-testid={`input-deny-reason-${auth.id}`} />
+            <DialogFooter>
+              <Button variant="destructive" onClick={deny} disabled={busy === "deny"} data-testid={`button-confirm-deny-${auth.id}`}>
+                {busy === "deny" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Deny request"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* One-time code modal — shown immediately after approval */}
+      <Dialog open={codeOpen} onOpenChange={setCodeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Key className="w-5 h-5 text-emerald-600" /> Release code — copy now</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">This code is shown exactly once and cannot be retrieved again. Share it verbally with the carrier at hand-off only.</p>
+          <div className="rounded-xl border-2 border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-center" data-testid="plaincode-display">
+            <div className="font-mono text-2xl font-bold tracking-widest text-emerald-700 dark:text-emerald-300 select-all" data-testid="text-plain-code">
+              {plainCode || "—"}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={copyCode} data-testid="button-copy-code">
+              {copied ? <CheckCircle2 className="w-4 h-4 mr-1 text-emerald-500" /> : <Copy className="w-4 h-4 mr-1" />}
+              {copied ? "Copied!" : "Copy code"}
+            </Button>
+            <Button onClick={() => setCodeOpen(false)} data-testid="button-close-code">Done — I've shared it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
