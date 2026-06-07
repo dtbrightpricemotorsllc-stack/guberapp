@@ -485,3 +485,9 @@ id = "TsFy9mLsnyfcILQHsLjjh"
 uri = "file://attached_assets/guber-loadboard-commercial-v2.mp4"
 type = "video"
 title = "GUBER Load Board Commercial v2 — 30s Vertical (Real Vehicles + Security Verification)"
+
+[[outputs]]
+id = "I0T12yW2S1wrzZLiQ6qYO"
+uri = "file://attached_assets/guber-loadboard-commercial-v3.mp4"
+type = "video"
+title = "GUBER Load Board Commercial v3"
