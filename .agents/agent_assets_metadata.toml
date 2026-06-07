@@ -497,3 +497,15 @@ id = "fjWclvE6DbSOlSoOYBYqK"
 uri = "file://attached_assets/guber-loadboard-commercial-v4.mp4"
 type = "video"
 title = "GUBER Load Board — Asset Protection Commercial (v4, real motion video)"
+
+[[outputs]]
+id = "fqipEo1wKt1OpBmLsT-9R"
+uri = "file://attached_assets/generated_audio/guber_voiceover.mp3"
+type = "audio"
+title = "guber_features_voiceover"
+
+[[outputs]]
+id = "py-aHUGWw0pCiSDIhuRnW"
+uri = "file://attached_assets/guber_final.mp4"
+type = "video"
+title = "GUBER — Features Video with Voiceover + Logo End Card"
