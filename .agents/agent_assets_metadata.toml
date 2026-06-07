@@ -491,3 +491,9 @@ id = "I0T12yW2S1wrzZLiQ6qYO"
 uri = "file://attached_assets/guber-loadboard-commercial-v3.mp4"
 type = "video"
 title = "GUBER Load Board Commercial v3 (fixed)"
+
+[[outputs]]
+id = "fjWclvE6DbSOlSoOYBYqK"
+uri = "file://attached_assets/guber-loadboard-commercial-v4.mp4"
+type = "video"
+title = "GUBER Load Board — Asset Protection Commercial (v4, real motion video)"
