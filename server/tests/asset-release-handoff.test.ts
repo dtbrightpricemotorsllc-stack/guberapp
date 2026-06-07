@@ -168,9 +168,11 @@ async function makeAsset(opts: { secondDriver?: boolean } = {}): Promise<number>
 
 // A driver requests release at the pickup point. Defaults to a valid in-fence,
 // VIN-matching request; override lat/lng/scannedVin to drive failure paths.
+// accuracy defaults to 10 m (strong GPS signal) and gpsTimestamp defaults to
+// Date.now() so the anti-spoof gates pass unless overridden.
 async function driverRequest(
   assetId: number,
-  opts: { lat?: number; lng?: number; scannedVin?: string | null; as?: number } = {},
+  opts: { lat?: number; lng?: number; scannedVin?: string | null; as?: number; accuracy?: number | null; gpsTimestamp?: number | null } = {},
 ) {
   currentUserId = opts.as ?? DRIVER_ID;
   return agent
@@ -179,6 +181,8 @@ async function driverRequest(
       selfieUrl: selfieUrl(),
       lat: opts.lat ?? PICKUP_LAT,
       lng: opts.lng ?? PICKUP_LNG,
+      accuracy: opts.accuracy !== undefined ? opts.accuracy : 10,
+      gpsTimestamp: opts.gpsTimestamp !== undefined ? opts.gpsTimestamp : Date.now(),
       tow: { vehicleType: "flatbed", plateNumber: "ABC1234", plateState: "NC" },
       trailer: { trailerType: "open", trailerNumber: "TR-9" },
       scannedVin: opts.scannedVin === undefined ? VIN : opts.scannedVin,
@@ -304,7 +308,7 @@ describe("Verified Release System™ — release request", () => {
     currentUserId = DRIVER_ID;
     await agent
       .post(`/api/assets/${assetId}/release/request`)
-      .send({ lat: PICKUP_LAT, lng: PICKUP_LNG, tow: { plateNumber: "X1" }, trailer: { trailerType: "open" } })
+      .send({ lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(), tow: { plateNumber: "X1" }, trailer: { trailerType: "open" } })
       .expect(400);
   });
 
@@ -313,7 +317,7 @@ describe("Verified Release System™ — release request", () => {
     currentUserId = DRIVER_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/request`)
-      .send({ selfieUrl: "https://evil.example.com/fake.jpg", lat: PICKUP_LAT, lng: PICKUP_LNG, tow: { plateNumber: "X1" }, trailer: { trailerType: "open" } })
+      .send({ selfieUrl: "https://evil.example.com/fake.jpg", lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now(), tow: { plateNumber: "X1" }, trailer: { trailerType: "open" } })
       .expect(400);
     expect(res.body.message).toMatch(/cloudinary/i);
   });
@@ -424,7 +428,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.code.status).toBe("used");
@@ -445,12 +449,12 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER_ID;
     await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(200);
 
     const dup = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(409);
     expect(dup.body.message).toMatch(/already been used/i);
     // The "loaded" event was appended exactly once.
@@ -464,7 +468,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: "ZZZZ9999", lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: "ZZZZ9999", lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(409);
     expect(res.body.message).toMatch(/invalid pickup code/i);
     const asset = await assetCustody.getProtectedAsset(assetId);
@@ -477,7 +481,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: FAR_LAT, lng: FAR_LNG })
+      .send({ code: plainCode, lat: FAR_LAT, lng: FAR_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(409);
     expect(res.body.message).toMatch(/pickup point|geofence/i);
     // Code is still active (not consumed) and asset is not loaded.
@@ -496,7 +500,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(409);
     expect(res.body.message).toMatch(/expired/i);
   });
@@ -515,7 +519,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER2_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: appr.body.plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: appr.body.plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(403);
     expect(res.body.message).toMatch(/different driver/i);
     // Code remains active; asset is not loaded.
@@ -535,7 +539,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = DRIVER_ID;
     const res = await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(409);
     expect(res.body.message).toMatch(/VIN mismatch/i);
     const asset = await assetCustody.getProtectedAsset(assetId);
@@ -547,7 +551,7 @@ describe("Verified Release System™ — pickup-code redemption", () => {
     currentUserId = OWNER_ID;
     await agent
       .post(`/api/assets/${assetId}/release/redeem`)
-      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG })
+      .send({ code: plainCode, lat: PICKUP_LAT, lng: PICKUP_LNG, accuracy: 10, gpsTimestamp: Date.now() })
       .expect(403);
   });
 });
