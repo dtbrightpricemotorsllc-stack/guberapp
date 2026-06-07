@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Coins, Star, TrendingUp, MapPin, Search, CheckCircle2, Loader2, Gift } from "lucide-react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 interface GrowthTask {
   id: number;
@@ -38,8 +38,10 @@ interface GrowthBalance {
 }
 
 export default function GrowthTasksPage() {
-  const [zip, setZip] = useState("");
-  const [searchedZip, setSearchedZip] = useState("");
+  const search = useSearch();
+  const urlZip = new URLSearchParams(search).get("zip")?.replace(/\D/g, "").slice(0, 5) ?? "";
+  const [zip, setZip] = useState(urlZip);
+  const [searchedZip, setSearchedZip] = useState(urlZip);
   const [selectedTask, setSelectedTask] = useState<GrowthTask | null>(null);
   const [submissionText, setSubmissionText] = useState("");
   const { toast } = useToast();

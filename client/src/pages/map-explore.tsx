@@ -35,6 +35,24 @@ interface ZipGroup {
   jobs: ZipJob[];
 }
 
+interface GrowthTask {
+  id: number;
+  emoji: string;
+  title: string;
+  description: string;
+  rewardCredits: number;
+  rewardScore: number;
+  ogBonusPct: number;
+  category: string;
+}
+
+interface ZipFallbackResult {
+  hasFallback: boolean;
+  realJobCount: number;
+  tasks: GrowthTask[];
+  zip: string;
+}
+
 const RADIUS_OPTIONS = [
   { label: "Any distance", miles: 0 },
   { label: "5 mi", miles: 5 },
@@ -168,6 +186,7 @@ export default function MapExplore() {
   const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
   const [panelCatFilter, setPanelCatFilter] = useState("");
   const [bottomOpen, setBottomOpen] = useState(true);
+  const [zipFallback, setZipFallback] = useState<ZipFallbackResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const userEditedZipRef = useRef(false);
 
@@ -581,7 +600,7 @@ export default function MapExplore() {
   const handleZipJump = async () => {
     const zip = zipInput.trim();
     if (!/^\d{5}$/.test(zip)) { setZipError("Enter a valid 5-digit zip"); return; }
-    setZipError(""); setZipLoading(true);
+    setZipError(""); setZipLoading(true); setZipFallback(null);
     try {
       const res = await fetch(`/api/geocode?address=${encodeURIComponent(zip + ", USA")}`);
       if (!res.ok) throw new Error();
@@ -594,6 +613,14 @@ export default function MapExplore() {
         mapRef.current.setZoom(11);
       }
       inputRef.current?.blur();
+      // Check for growth task fallback (only shows when ZIP has zero real jobs + flag on)
+      try {
+        const gr = await fetch(`/api/growth-tasks/zip?zip=${encodeURIComponent(zip)}`);
+        if (gr.ok) {
+          const gd = await gr.json();
+          if (gd.hasFallback) setZipFallback({ ...gd, zip });
+        }
+      } catch { /* non-fatal: map still works without growth tasks */ }
     } catch { setZipError("Zip not found"); }
     finally { setZipLoading(false); }
   };
@@ -725,7 +752,7 @@ export default function MapExplore() {
               data-testid="input-zip-jump"
             />
             {zipInput && zipInput.length < 5 && (
-              <button onClick={() => { userEditedZipRef.current = false; setZipInput(""); setJumpCenter(null); setZipError(""); }} style={{ color: DARK_MUTED }}>
+              <button onClick={() => { userEditedZipRef.current = false; setZipInput(""); setJumpCenter(null); setZipError(""); setZipFallback(null); }} style={{ color: DARK_MUTED }}>
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
@@ -1161,6 +1188,91 @@ export default function MapExplore() {
               data-testid="button-view-cash-drop"
             >
               ⚡ VIEW CASH DROP →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* GROWTH TASK FALLBACK PANEL — shown when a searched ZIP has zero real jobs */}
+      {zipFallback && zipFallback.hasFallback && !selectedZip && !selectedDrop && (
+        <div
+          className="absolute inset-x-0 bottom-0 z-40 rounded-t-3xl flex flex-col"
+          style={{
+            maxHeight: "60vh",
+            background: DARK_CTRL_SOLID,
+            boxShadow: "0 -4px 24px rgba(0,0,0,0.5)",
+            borderTop: `1px solid ${DARK_BORDER}`,
+          }}
+          data-testid="panel-zip-growth-tasks"
+        >
+          <div className="flex-shrink-0">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
+            </div>
+            <div className="flex items-center justify-between px-5 pt-1 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: "rgba(22,163,74,0.18)" }}>
+                  <span style={{ fontSize: 20 }}>🌱</span>
+                </div>
+                <div>
+                  <p className="text-base font-bold" style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}>
+                    ZIP {zipFallback.zip} — Community Tasks
+                  </p>
+                  <p className="text-xs" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
+                    No jobs yet · earn credits &amp; GUBER Score
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setZipFallback(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center active:scale-95"
+                style={{ background: DARK_CHIP_INACTIVE }}
+                data-testid="button-close-growth-panel"
+              >
+                <X className="w-4 h-4" style={{ color: DARK_MUTED }} />
+              </button>
+            </div>
+            <div style={{ height: 1, background: DARK_BORDER }} />
+          </div>
+
+          <div className="overflow-y-auto flex-1">
+            {zipFallback.tasks.map((task, i) => (
+              <button
+                key={task.id}
+                onClick={() => navigate(`/community-tasks?zip=${encodeURIComponent(zipFallback.zip)}`)}
+                className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors active:bg-white/5"
+                style={{ borderBottom: i < zipFallback.tasks.length - 1 ? `1px solid ${DARK_BORDER}` : "none" }}
+                data-testid={`button-growth-task-${task.id}`}
+              >
+                <span className="text-xl flex-shrink-0">{task.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}>
+                    {task.title}
+                  </p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
+                    {task.description}
+                  </p>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <p className="text-xs font-bold" style={{ color: "#16a34a", fontFamily: "Inter, sans-serif" }}>
+                    +{task.rewardCredits} cr
+                  </p>
+                  <p className="text-[10px]" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
+                    +{task.rewardScore} score
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-shrink-0 px-5 py-4" style={{ borderTop: `1px solid ${DARK_BORDER}` }}>
+            <button
+              onClick={() => navigate(`/community-tasks?zip=${encodeURIComponent(zipFallback.zip)}`)}
+              className="w-full py-2.5 rounded-xl text-sm font-bold active:opacity-80 transition-opacity"
+              style={{ background: "#16a34a", color: "#fff", fontFamily: "Inter, sans-serif" }}
+              data-testid="button-view-community-tasks"
+            >
+              View All Tasks for {zipFallback.zip} →
             </button>
           </div>
         </div>
