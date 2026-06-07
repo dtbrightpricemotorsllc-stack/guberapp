@@ -23827,6 +23827,8 @@ OUTPUT STYLE:
       // Privacy: poster identity hidden until connection
       const isConnected = listing.connectedCarrierId === userId || isPoster;
 
+      const protectedAsset = await assetCustody.getAssetByListing(listing.id);
+
       res.json({
         listing: {
           ...listing,
@@ -23842,6 +23844,7 @@ OUTPUT STYLE:
         myOffer,
         carrierProfile: isConnected ? carrierProfile : null,
         isPoster,
+        protectedAsset: protectedAsset ?? null,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

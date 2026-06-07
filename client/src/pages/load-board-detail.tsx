@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ReactNode, CSSProperties } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ export default function LoadBoardDetail() {
   const [showFieldCart, setShowFieldCart] = useState(false);
 
   const { data, isLoading } = useQuery<{
-    listing: any; offers: any[]; myOffer: any; isPoster: boolean; addons: any[];
+    listing: any; offers: any[]; myOffer: any; isPoster: boolean; addons: any[]; protectedAsset: any | null;
   }>({
     queryKey: ["/api/load-board", listingId],
     queryFn: async () => {
@@ -622,6 +622,30 @@ export default function LoadBoardDetail() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── VRS Asset Custody Banner ── */}
+        {data.protectedAsset && (
+          <Link href={`/custody/asset/${data.protectedAsset.id}`}>
+            <a
+              className="flex items-center justify-between gap-3 rounded-2xl p-4 hover-elevate"
+              style={{ background: "linear-gradient(135deg,rgba(16,185,129,0.14),rgba(5,150,105,0.07))", border: "1.5px solid rgba(16,185,129,0.45)" }}
+              data-testid="card-vrs-custody-link"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(16,185,129,0.18)" }}>
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-display font-black text-emerald-400">Asset Custody Active</p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-0.5 leading-relaxed">
+                    GUBER Verified Release System™ · Tap to open the custody dashboard
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-emerald-400/60 shrink-0" />
+            </a>
+          </Link>
         )}
 
         {/* ── Active add-on flags ── */}

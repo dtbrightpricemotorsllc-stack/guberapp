@@ -75,6 +75,7 @@ export const STUDIO_TOOL_CREDIT_COSTS = {
   minimax_music: 5,
   listing_video: 35,
   promo_clip: 35,
+  ai_director: 200,
 } as const;
 
 export const STUDIO_CREDIT_REPRICE_MULTIPLIER_V519 = 41.25;

@@ -140,9 +140,9 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
   {
     key: "verified_release_system",
     label: "Verified Release System",
-    description: "GUBER Verified Release System™ — asset custody protection, secure release authorization, and Transport Passport. Ship dark; admins always preview.",
-    defaultEnabled: false,
-    defaultScope: "off",
+    description: "GUBER Verified Release System™ — asset custody protection, secure release authorization, and Transport Passport.",
+    defaultEnabled: true,
+    defaultScope: "global",
   },
   {
     key: "asset_protection_founders_club",

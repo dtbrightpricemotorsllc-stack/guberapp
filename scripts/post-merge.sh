@@ -440,6 +440,12 @@ INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoin
    'composite:promo_clip', 35, true)
 ON CONFLICT (tool_key) DO NOTHING;
 
+INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES
+  ('ai_director', 'AI Director',
+   'Automated commercial director — script → clips → assembled ad (200–2240 cr based on duration).',
+   'composite:ai_director', 200, true)
+ON CONFLICT (tool_key) DO NOTHING;
+
 -- task-519: re-price the four Studio tools to the Kling-mirrored economy.
 -- Idempotent: UPDATEs every run so any drift from earlier deploys converges.
 UPDATE studio_model_pricing SET credits_cost = 80 WHERE tool_key = 'kling_motion_control';
