@@ -1,7 +1,6 @@
 // /studio/ai-director — GUBER AI Director
-// User picks a category + fills a brief → server generates 2 clips,
-// music, and voiceover, assembles via FFmpeg, and returns a finished
-// commercial MP4. No editing required on the user's end.
+// Variable-duration commercial generator: pick category + duration tier + brief
+// → server generates N clips, music, VO, assembles MP4. No editing required.
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -14,13 +13,15 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Clapperboard, CheckCircle2, Download, ChevronLeft,
   Tv2, Car, Sparkles, Truck, Camera, Dumbbell, UtensilsCrossed,
-  Briefcase, Music, Mic2, Film, Play,
+  Briefcase, Music, Mic2, Film, Play, Clock, Zap,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 type DirectorCategory =
   | "home_services" | "auto" | "beauty" | "moving"
   | "events" | "fitness" | "food" | "general";
+
+type DurationTierId = "short" | "standard" | "long" | "extended" | "feature";
 
 type DirectorJobStatus =
   | "pending" | "generating_clips" | "generating_audio"
@@ -36,9 +37,24 @@ type DirectorJobPoll = {
 
 type StudioMe = { credits: number };
 
-// ── Config ─────────────────────────────────────────────────────────────────────
-const COST = 200;
+// ── Duration tiers (must mirror server/studio/ai-director.ts DURATION_TIERS) ──
+const DURATION_TIERS: Array<{
+  id: DurationTierId;
+  label: string;
+  approxLabel: string;
+  clips: number;
+  credits: number;
+  icon: React.ComponentType<{ className?: string }>;
+  hint: string;
+}> = [
+  { id: "short",    label: "Short",    approxLabel: "~20 sec",  clips: 2,  credits: 200,  icon: Zap,        hint: "Perfect for social posts" },
+  { id: "standard", label: "Standard", approxLabel: "~45 sec",  clips: 4,  credits: 320,  icon: Play,       hint: "Classic commercial length" },
+  { id: "long",     label: "Long",     approxLabel: "~1.5 min", clips: 8,  credits: 560,  icon: Film,       hint: "Brand story format" },
+  { id: "extended", label: "Extended", approxLabel: "~3 min",   clips: 18, credits: 1160, icon: Clock,      hint: "Deep-dive showcase" },
+  { id: "feature",  label: "Feature",  approxLabel: "~6 min",   clips: 36, credits: 2240, icon: Clapperboard, hint: "Full-length brand film" },
+];
 
+// ── Category config ────────────────────────────────────────────────────────────
 const CATEGORIES: Array<{
   id: DirectorCategory;
   label: string;
@@ -47,55 +63,18 @@ const CATEGORIES: Array<{
   blurb: string;
   color: string;
 }> = [
-  {
-    id: "home_services", label: "Home Services", emoji: "🏠",
-    icon: Tv2, blurb: "Cleaning, repairs, landscaping, HVAC…",
-    color: "from-emerald-500/20 to-teal-600/20 border-emerald-500/30",
-  },
-  {
-    id: "auto", label: "Auto Services", emoji: "🚗",
-    icon: Car, blurb: "Detailing, mobile mechanic, towing…",
-    color: "from-sky-500/20 to-blue-600/20 border-sky-500/30",
-  },
-  {
-    id: "beauty", label: "Beauty & Grooming", emoji: "✂️",
-    icon: Sparkles, blurb: "Barber, hair, nails, lashes…",
-    color: "from-pink-500/20 to-rose-600/20 border-pink-500/30",
-  },
-  {
-    id: "moving", label: "Moving & Delivery", emoji: "📦",
-    icon: Truck, blurb: "Local moving, courier, same-day…",
-    color: "from-amber-500/20 to-orange-600/20 border-amber-500/30",
-  },
-  {
-    id: "events", label: "Events & Photography", emoji: "🎉",
-    icon: Camera, blurb: "Event staff, DJ, photography…",
-    color: "from-violet-500/20 to-purple-600/20 border-violet-500/30",
-  },
-  {
-    id: "fitness", label: "Fitness & Wellness", emoji: "💪",
-    icon: Dumbbell, blurb: "Personal training, massage, yoga…",
-    color: "from-orange-500/20 to-red-600/20 border-orange-500/30",
-  },
-  {
-    id: "food", label: "Food & Catering", emoji: "🍽️",
-    icon: UtensilsCrossed, blurb: "Personal chef, catering, meal prep…",
-    color: "from-lime-500/20 to-green-600/20 border-lime-500/30",
-  },
-  {
-    id: "general", label: "General Business", emoji: "💼",
-    icon: Briefcase, blurb: "Any service or trade…",
-    color: "from-neutral-500/20 to-neutral-600/20 border-neutral-500/30",
-  },
+  { id: "home_services", label: "Home Services",      emoji: "🏠", icon: Tv2,            blurb: "Cleaning, repairs, landscaping, HVAC…",    color: "from-emerald-500/20 to-teal-600/20 border-emerald-500/30" },
+  { id: "auto",          label: "Auto Services",       emoji: "🚗", icon: Car,            blurb: "Detailing, mobile mechanic, towing…",       color: "from-sky-500/20 to-blue-600/20 border-sky-500/30" },
+  { id: "beauty",        label: "Beauty & Grooming",   emoji: "✂️", icon: Sparkles,       blurb: "Barber, hair, nails, lashes…",             color: "from-pink-500/20 to-rose-600/20 border-pink-500/30" },
+  { id: "moving",        label: "Moving & Delivery",   emoji: "📦", icon: Truck,          blurb: "Local moving, courier, same-day…",         color: "from-amber-500/20 to-orange-600/20 border-amber-500/30" },
+  { id: "events",        label: "Events & Photography",emoji: "🎉", icon: Camera,         blurb: "Event staff, DJ, photography…",            color: "from-violet-500/20 to-purple-600/20 border-violet-500/30" },
+  { id: "fitness",       label: "Fitness & Wellness",  emoji: "💪", icon: Dumbbell,       blurb: "Personal training, massage, yoga…",        color: "from-orange-500/20 to-red-600/20 border-orange-500/30" },
+  { id: "food",          label: "Food & Catering",     emoji: "🍽️", icon: UtensilsCrossed,blurb: "Personal chef, catering, meal prep…",     color: "from-lime-500/20 to-green-600/20 border-lime-500/30" },
+  { id: "general",       label: "General Business",    emoji: "💼", icon: Briefcase,      blurb: "Any service or trade…",                   color: "from-neutral-500/20 to-neutral-600/20 border-neutral-500/30" },
 ];
 
-// ── Stage UI config ────────────────────────────────────────────────────────────
 const STAGE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  generating_clips: Film,
-  generating_audio: Music,
-  assembling: Clapperboard,
-  uploading: Loader2,
-  pending: Loader2,
+  generating_clips: Film, generating_audio: Music, assembling: Clapperboard, uploading: Loader2, pending: Loader2,
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -104,6 +83,7 @@ export default function StudioAiDirectorPage() {
 
   const [step, setStep] = useState<"category" | "brief" | "review" | "generating" | "result">("category");
   const [category, setCategory] = useState<DirectorCategory | null>(null);
+  const [durationTierId, setDurationTierId] = useState<DurationTierId>("short");
   const [businessName, setBusinessName] = useState("");
   const [tagline, setTagline] = useState("");
   const [description, setDescription] = useState("");
@@ -113,32 +93,29 @@ export default function StudioAiDirectorPage() {
 
   const meQuery = useQuery<StudioMe>({ queryKey: ["/api/studio/me"] });
   const credits = meQuery.data?.credits ?? 0;
-  const insufficient = credits < COST;
 
-  // ── Polling when generating ──────────────────────────────────────────────────
+  const selectedTier = DURATION_TIERS.find((t) => t.id === durationTierId) ?? DURATION_TIERS[0];
+  const cost = selectedTier.credits;
+  const insufficient = credits < cost;
+
+  // ── Polling ────────────────────────────────────────────────────────────────
   const pollQuery = useQuery<DirectorJobPoll>({
     queryKey: ["/api/studio/director/jobs", jobId],
     enabled: !!jobId && step === "generating",
     refetchInterval: (query) => {
       const d = query.state.data;
-      if (!d) return 5000;
-      if (d.status === "complete" || d.status === "failed") return false;
+      if (!d || d.status === "complete" || d.status === "failed") return false;
       return 5000;
     },
   });
 
-  // Transition to result when job completes
   const polled = pollQuery.data;
   if (polled?.status === "complete" && step === "generating" && polled.outputUrl) {
     setOutputUrl(polled.outputUrl);
     setStep("result");
   }
   if (polled?.status === "failed" && step === "generating") {
-    toast({
-      title: "Generation failed",
-      description: polled.error || "Your credits were returned.",
-      variant: "destructive",
-    });
+    toast({ title: "Generation failed", description: polled.error || "Your credits were returned.", variant: "destructive" });
     queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
     setStep("review");
     setJobId(null);
@@ -148,9 +125,9 @@ export default function StudioAiDirectorPage() {
   const generate = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/studio/generate/ai-director", {
-        category, businessName: businessName.trim(),
-        tagline: tagline.trim(), description: description.trim(),
-        cta: cta.trim(),
+        category, durationTierId,
+        businessName: businessName.trim(), tagline: tagline.trim(),
+        description: description.trim(), cta: cta.trim(),
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
@@ -168,20 +145,15 @@ export default function StudioAiDirectorPage() {
   });
 
   const reset = () => {
-    setStep("category");
-    setCategory(null);
-    setBusinessName("");
-    setTagline("");
-    setDescription("");
-    setCta("");
-    setJobId(null);
-    setOutputUrl(null);
+    setStep("category"); setCategory(null); setDurationTierId("short");
+    setBusinessName(""); setTagline(""); setDescription(""); setCta("");
+    setJobId(null); setOutputUrl(null);
     queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
   };
 
   const selectedCat = CATEGORIES.find((c) => c.id === category);
 
-  // ── Step: Category ───────────────────────────────────────────────────────────
+  // ── Step: Category ─────────────────────────────────────────────────────────
   if (step === "category") {
     return (
       <StudioToolPageShell
@@ -216,14 +188,13 @@ export default function StudioAiDirectorPage() {
             })}
           </div>
 
-          {/* What you get */}
           <div className="rounded-2xl bg-white/[0.03] border border-white/8 p-4 space-y-2.5 mt-2">
             <p className="text-xs font-bold text-[#39FF14] uppercase tracking-widest">What AI Director creates</p>
             {[
-              [Film, "2 AI-generated video scenes from your brief"],
-              [Music, "Custom music track matched to your category"],
-              [Mic2, "Professional voiceover reading your key message"],
-              [Play, "Assembled, finished MP4 — ready to post"],
+              [Film,   "AI-generated video scenes matched to your brief"],
+              [Music,  "Custom music track matched to your category"],
+              [Mic2,   "Professional voiceover reading your key message"],
+              [Play,   "Assembled, finished MP4 — ready to post anywhere"],
             ].map(([Icon, label]: any) => (
               <div key={label} className="flex items-center gap-2.5">
                 <Icon className="w-3.5 h-3.5 text-white/40 shrink-0" />
@@ -231,8 +202,8 @@ export default function StudioAiDirectorPage() {
               </div>
             ))}
             <div className="border-t border-white/10 pt-2.5 flex items-center justify-between">
-              <span className="text-xs text-white/40">Credit cost</span>
-              <span className="font-black text-sm text-white">{COST} credits</span>
+              <span className="text-xs text-white/40">Starting from</span>
+              <span className="font-black text-sm text-white">200 credits</span>
             </div>
           </div>
         </div>
@@ -240,13 +211,13 @@ export default function StudioAiDirectorPage() {
     );
   }
 
-  // ── Step: Brief ──────────────────────────────────────────────────────────────
+  // ── Step: Brief (includes duration picker) ─────────────────────────────────
   if (step === "brief") {
     const canContinue = businessName.trim().length > 0 && tagline.trim().length > 0;
     return (
       <StudioToolPageShell
         title="AI Director"
-        subtitle="Tell the Director about your business — this becomes the creative brief."
+        subtitle="Tell the Director about your business and choose your video length."
         iconAccent="from-[#39FF14] to-emerald-600"
       >
         <div className="space-y-5 max-w-lg mx-auto">
@@ -260,10 +231,59 @@ export default function StudioAiDirectorPage() {
             {selectedCat?.label}
           </button>
 
-          {/* Category badge */}
           <div className={`inline-flex items-center gap-2 rounded-xl border bg-gradient-to-br px-3 py-2 ${selectedCat?.color}`}>
             <span>{selectedCat?.emoji}</span>
             <span className="text-sm font-bold">{selectedCat?.label}</span>
+          </div>
+
+          {/* Duration picker */}
+          <div>
+            <p className="text-xs text-white/40 uppercase tracking-widest mb-3">Video length</p>
+            <div className="space-y-2">
+              {DURATION_TIERS.map((tier) => {
+                const TierIcon = tier.icon;
+                const selected = durationTierId === tier.id;
+                const canAfford = credits >= tier.credits;
+                return (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    onClick={() => setDurationTierId(tier.id)}
+                    className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+                      selected
+                        ? "bg-[#39FF14]/10 border-[#39FF14]/50"
+                        : "bg-white/[0.03] border-white/10 hover:border-white/20"
+                    }`}
+                    data-testid={`btn-tier-${tier.id}`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      selected ? "bg-[#39FF14]/20" : "bg-white/5"
+                    }`}>
+                      <TierIcon className={`w-4 h-4 ${selected ? "text-[#39FF14]" : "text-white/40"}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold text-sm ${selected ? "text-white" : "text-white/70"}`}>
+                          {tier.label}
+                        </span>
+                        <span className={`text-xs ${selected ? "text-[#39FF14]" : "text-white/35"}`}>
+                          {tier.approxLabel}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-white/35 leading-tight">{tier.hint}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`font-black text-sm ${selected ? "text-[#39FF14]" : canAfford ? "text-white/60" : "text-red-400/70"}`}>
+                        {tier.credits} cr
+                      </p>
+                      {!canAfford && (
+                        <p className="text-[10px] text-red-400/60">need more</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>
@@ -319,9 +339,24 @@ export default function StudioAiDirectorPage() {
             />
           </div>
 
+          {/* Cost preview */}
+          <div className="rounded-xl bg-black/40 border border-[#39FF14]/20 px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-white/40">{selectedTier.label} · {selectedTier.approxLabel} · {selectedTier.clips} scenes</p>
+              {insufficient && (
+                <p className="text-xs text-red-400 mt-0.5">
+                  You have {credits} cr — <a href="/studio/credits" className="underline">get more →</a>
+                </p>
+              )}
+            </div>
+            <span className={`font-black text-base ${insufficient ? "text-red-400" : "text-[#39FF14]"}`} data-testid="text-cost-preview">
+              {cost} cr
+            </span>
+          </div>
+
           <Button
             onClick={() => setStep("review")}
-            disabled={!canContinue}
+            disabled={!canContinue || insufficient}
             className="w-full bg-[#39FF14] hover:bg-[#2de010] text-black font-black h-12 text-base"
             data-testid="btn-next-review"
           >
@@ -332,8 +367,11 @@ export default function StudioAiDirectorPage() {
     );
   }
 
-  // ── Step: Review ─────────────────────────────────────────────────────────────
+  // ── Step: Review ───────────────────────────────────────────────────────────
   if (step === "review") {
+    const TierIcon = selectedTier.icon;
+    const batchCount = Math.ceil(selectedTier.clips / 4);
+    const estMinutes = selectedTier.clips <= 4 ? "3–5" : selectedTier.clips <= 8 ? "6–10" : selectedTier.clips <= 18 ? "15–25" : "30–50";
     return (
       <StudioToolPageShell
         title="AI Director"
@@ -350,11 +388,16 @@ export default function StudioAiDirectorPage() {
             <ChevronLeft className="w-4 h-4" /> Edit brief
           </button>
 
-          {/* Brief summary */}
           <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5 space-y-4">
-            <div className={`inline-flex items-center gap-2 rounded-xl border bg-gradient-to-br px-3 py-1.5 ${selectedCat?.color}`}>
-              <span>{selectedCat?.emoji}</span>
-              <span className="text-xs font-bold">{selectedCat?.label}</span>
+            <div className="flex items-center gap-2">
+              <div className={`inline-flex items-center gap-2 rounded-xl border bg-gradient-to-br px-3 py-1.5 ${selectedCat?.color}`}>
+                <span>{selectedCat?.emoji}</span>
+                <span className="text-xs font-bold">{selectedCat?.label}</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-xl border border-[#39FF14]/30 bg-[#39FF14]/10 px-3 py-1.5">
+                <TierIcon className="w-3 h-3 text-[#39FF14]" />
+                <span className="text-xs font-bold text-[#39FF14]">{selectedTier.label} · {selectedTier.approxLabel}</span>
+              </div>
             </div>
 
             <div>
@@ -368,10 +411,10 @@ export default function StudioAiDirectorPage() {
 
             <div className="border-t border-white/10 pt-3 space-y-1.5">
               {[
-                [Film, "2 AI scenes matched to your category"],
-                [Music, "Music composed for " + selectedCat?.label],
-                [Mic2, "Voiceover: " + [businessName, tagline, cta || "Call us today"].filter(Boolean).join(" • ")],
-                [Clapperboard, "FFmpeg assembly → finished MP4"],
+                [Film,       `${selectedTier.clips} AI scenes (${batchCount} generation batch${batchCount > 1 ? "es" : ""})`],
+                [Music,      `Music composed for ${selectedCat?.label}`],
+                [Mic2,       `Voiceover: ${[businessName, tagline, cta || "Call us today"].filter(Boolean).join(" • ")}`],
+                [Clapperboard,`FFmpeg assembly → ~${selectedTier.approxLabel} MP4`],
               ].map(([Icon, label]: any) => (
                 <div key={label} className="flex items-center gap-2 text-xs text-white/50">
                   <Icon className="w-3.5 h-3.5 text-white/30 shrink-0" />
@@ -381,22 +424,21 @@ export default function StudioAiDirectorPage() {
             </div>
           </div>
 
-          {/* Cost + generate */}
           <div className="flex items-center justify-between rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
             <span className="text-sm text-white/60">Credit cost</span>
-            <span className="font-black text-base" data-testid="text-cost">{COST} cr</span>
+            <span className="font-black text-base" data-testid="text-cost">{cost} cr</span>
           </div>
 
           {insufficient && (
             <p className="text-xs text-red-400 text-center" data-testid="text-insufficient">
-              You need {COST} credits — you have {credits}. <a href="/studio/credits" className="underline">Get more →</a>
+              You need {cost} credits — you have {credits}. <a href="/studio/credits" className="underline">Get more →</a>
             </p>
           )}
 
           <div className="rounded-xl bg-black/40 border border-[#39FF14]/20 p-3">
             <p className="text-xs text-white/50 text-center leading-relaxed">
-              Generation takes <strong className="text-white">3–5 minutes</strong>. The Director generates scenes, composes music,
-              records voiceover, and assembles the final video automatically.
+              Generation takes <strong className="text-white">{estMinutes} minutes</strong>. The Director generates {selectedTier.clips} scenes,
+              composes music, records voiceover, and assembles the final video automatically.
             </p>
           </div>
 
@@ -409,7 +451,7 @@ export default function StudioAiDirectorPage() {
             {generate.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Starting…</>
             ) : (
-              `🎬 Direct my commercial — ${COST} credits`
+              `🎬 Direct my commercial — ${cost} credits`
             )}
           </Button>
         </div>
@@ -417,15 +459,12 @@ export default function StudioAiDirectorPage() {
     );
   }
 
-  // ── Step: Generating (polling) ────────────────────────────────────────────────
+  // ── Step: Generating (polling) ─────────────────────────────────────────────
   if (step === "generating") {
     const status = polled?.status ?? "pending";
     const stage = polled?.stage ?? "Starting up…";
     const StageIcon = STAGE_ICONS[status] ?? Loader2;
-
-    const STAGES: DirectorJobStatus[] = [
-      "generating_clips", "generating_audio", "assembling", "uploading",
-    ];
+    const STAGES: DirectorJobStatus[] = ["generating_clips", "generating_audio", "assembling", "uploading"];
     const stageIdx = STAGES.indexOf(status);
 
     return (
@@ -435,24 +474,24 @@ export default function StudioAiDirectorPage() {
         iconAccent="from-[#39FF14] to-emerald-600"
       >
         <div className="max-w-lg mx-auto space-y-8 py-8">
-          {/* Animated icon */}
           <div className="flex flex-col items-center gap-5">
             <div className="w-20 h-20 rounded-2xl bg-[#39FF14]/10 border border-[#39FF14]/30 flex items-center justify-center">
               <StageIcon className="w-9 h-9 text-[#39FF14] animate-spin" />
             </div>
             <div className="text-center">
               <p className="font-black text-lg">{stage}</p>
-              <p className="text-xs text-white/40 mt-1">This takes 3–5 minutes total</p>
+              <p className="text-xs text-white/40 mt-1">
+                {selectedTier.label} · {selectedTier.clips} scenes · {selectedTier.approxLabel}
+              </p>
             </div>
           </div>
 
-          {/* Progress steps */}
           <div className="space-y-3">
             {[
-              { s: "generating_clips" as DirectorJobStatus, label: "Generating video scenes", icon: Film },
-              { s: "generating_audio" as DirectorJobStatus, label: "Composing music + voiceover", icon: Music },
-              { s: "assembling" as DirectorJobStatus, label: "Assembling your commercial", icon: Clapperboard },
-              { s: "uploading" as DirectorJobStatus, label: "Uploading finished video", icon: Loader2 },
+              { s: "generating_clips"  as DirectorJobStatus, label: `Generating ${selectedTier.clips} video scenes`, icon: Film },
+              { s: "generating_audio"  as DirectorJobStatus, label: "Composing music + voiceover",                  icon: Music },
+              { s: "assembling"        as DirectorJobStatus, label: `Assembling ~${selectedTier.approxLabel} commercial`, icon: Clapperboard },
+              { s: "uploading"         as DirectorJobStatus, label: "Uploading finished video",                      icon: Loader2 },
             ].map(({ s, label, icon: Icon }, i) => {
               const done = stageIdx > i;
               const active = stageIdx === i;
@@ -460,20 +499,20 @@ export default function StudioAiDirectorPage() {
                 <div
                   key={s}
                   className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all ${
-                    done ? "bg-[#39FF14]/10 border-[#39FF14]/30" :
+                    done   ? "bg-[#39FF14]/10 border-[#39FF14]/30" :
                     active ? "bg-white/5 border-white/20" :
-                    "bg-white/[0.02] border-white/5 opacity-40"
+                             "bg-white/[0.02] border-white/5 opacity-40"
                   }`}
                   data-testid={`step-${s}`}
                 >
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                    done ? "bg-[#39FF14] text-black" :
+                    done   ? "bg-[#39FF14] text-black" :
                     active ? "bg-white/10 border border-white/30" :
-                    "bg-white/5"
+                             "bg-white/5"
                   }`}>
-                    {done ? <CheckCircle2 className="w-4 h-4" /> :
+                    {done   ? <CheckCircle2 className="w-4 h-4" /> :
                      active ? <Icon className="w-3.5 h-3.5 animate-spin" /> :
-                     <Icon className="w-3.5 h-3.5 text-white/30" />}
+                              <Icon className="w-3.5 h-3.5 text-white/30" />}
                   </div>
                   <span className={`text-sm ${done ? "text-[#39FF14] font-bold" : active ? "text-white font-medium" : "text-white/30"}`}>
                     {label}
@@ -491,7 +530,7 @@ export default function StudioAiDirectorPage() {
     );
   }
 
-  // ── Step: Result ─────────────────────────────────────────────────────────────
+  // ── Step: Result ───────────────────────────────────────────────────────────
   return (
     <StudioToolPageShell
       title="AI Director"
@@ -502,9 +541,14 @@ export default function StudioAiDirectorPage() {
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-[#39FF14]" />
           <p className="font-black text-[#39FF14]">Commercial ready!</p>
-          <Badge className="ml-auto bg-[#39FF14]/20 text-[#39FF14] border-[#39FF14]/30 text-[10px]">
-            {selectedCat?.label}
-          </Badge>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Badge className="bg-[#39FF14]/20 text-[#39FF14] border-[#39FF14]/30 text-[10px]">
+              {selectedCat?.label}
+            </Badge>
+            <Badge className="bg-white/10 text-white/60 border-white/15 text-[10px]">
+              {selectedTier.approxLabel}
+            </Badge>
+          </div>
         </div>
 
         {outputUrl && (
@@ -522,16 +566,11 @@ export default function StudioAiDirectorPage() {
         <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4 space-y-1.5">
           <p className="text-xs font-bold text-white/60">"{businessName}"</p>
           <p className="text-xs text-[#39FF14] italic">"{tagline}"</p>
+          <p className="text-[11px] text-white/30">{selectedTier.clips} scenes · {selectedTier.approxLabel} · {cost} credits</p>
         </div>
 
         {outputUrl && (
-          <a
-            href={outputUrl}
-            download
-            target="_blank"
-            rel="noreferrer"
-            data-testid="link-download"
-          >
+          <a href={outputUrl} download target="_blank" rel="noreferrer" data-testid="link-download">
             <Button className="w-full bg-[#39FF14] hover:bg-[#2de010] text-black font-black h-12">
               <Download className="w-4 h-4 mr-2" /> Download Commercial
             </Button>

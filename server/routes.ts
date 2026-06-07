@@ -13584,12 +13584,14 @@ export async function registerRoutes(
 
   // ── GUBER AI Director ──────────────────────────────────────────────────────
   // POST /api/studio/generate/ai-director
-  // Body: { category, businessName, tagline, description?, cta? }
-  // Deducts 200 credits, kicks off async assembly job, returns { jobId }.
+  // Body: { category, businessName, tagline, description?, cta?, durationTierId? }
+  // Credits scale by tier: short=200, standard=320, long=560, extended=1160, feature=2240.
+  // Deducts credits upfront, kicks off async assembly job, returns { jobId }.
   // Poll GET /api/studio/director/jobs/:jobId for status.
   app.post("/api/studio/generate/ai-director", requireAuth, async (req: Request, res: Response) => {
     const userId = req.session.userId!;
-    const CREDITS_COST = 200;
+
+    const { DURATION_TIERS, createDirectorJob, runDirectorJob } = await import("./studio/ai-director");
 
     const VALID_CATEGORIES = [
       "home_services", "auto", "beauty", "moving",
@@ -13601,11 +13603,18 @@ export async function registerRoutes(
     const tagline = typeof req.body?.tagline === "string" ? req.body.tagline.trim().slice(0, 70) : "";
     const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 200) : "";
     const cta = typeof req.body?.cta === "string" ? req.body.cta.trim().slice(0, 60) : "";
+    const durationTierId = typeof req.body?.durationTierId === "string" ? req.body.durationTierId : "short";
 
     if (!VALID_CATEGORIES.includes(category as any))
       return res.status(400).json({ message: "Invalid category." });
     if (!businessName) return res.status(400).json({ message: "businessName is required." });
     if (!tagline) return res.status(400).json({ message: "tagline is required." });
+
+    const tier = DURATION_TIERS[durationTierId as keyof typeof DURATION_TIERS];
+    if (!tier) return res.status(400).json({ message: "Invalid durationTierId." });
+
+    const CREDITS_COST = tier.credits;
+    const nClips = tier.clips;
 
     // Deduct credits upfront
     const newBalance = await storage.decrementStudioCredits(userId, CREDITS_COST);
@@ -13615,14 +13624,13 @@ export async function registerRoutes(
     // Ensure an open session exists (function is in scope within registerRoutes)
     const session = await ensureStudioSession(userId);
 
-    const { createDirectorJob, runDirectorJob } = await import("./studio/ai-director");
     const jobId = `dir_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const job = createDirectorJob(jobId, userId, CREDITS_COST);
 
     // Fire-and-forget — credits already debited, refund happens inside job on failure
     runDirectorJob(
       job,
-      { category: category as any, businessName, tagline, description, cta },
+      { category: category as any, businessName, tagline, description, cta, nClips },
       storage,
       db,
       session.id,
@@ -13630,7 +13638,7 @@ export async function registerRoutes(
       console.error("[ai-director] unhandled job error:", err);
     });
 
-    res.json({ jobId, status: "pending" });
+    res.json({ jobId, status: "pending", tier: durationTierId, credits: CREDITS_COST });
   });
 
   // GET /api/studio/director/jobs/:jobId
