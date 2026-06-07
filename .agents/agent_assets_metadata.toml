@@ -156,6 +156,30 @@ uri = "file://attached_assets/load-board-hero-wideload.png"
 type = "image"
 title = "wide load crane highway golden hour"
 
+[[generated]]
+id = "2p7yAbi0LCvI_iLnfhcUR"
+uri = "file://attached_assets/_tmp_still/s1_driver_loadboard.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "6JcycqkK4s-8cf0mSESWl"
+uri = "file://attached_assets/_tmp_still/s2_flatbed_truck.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "4Ep8Pb4nZ8CzwfGOS8l4o"
+uri = "file://attached_assets/_tmp_still/s3_gps_phone.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "CcurlhINkmyBSqACCmYnn"
+uri = "file://attached_assets/_tmp_still/s4_delivery_handshake.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "HX6uXRXpAqt_gidjEfGUi"
 uri = "file://attached_assets/stock_images/online_items.jpg"
