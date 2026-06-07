@@ -13582,6 +13582,74 @@ export async function registerRoutes(
     }
   });
 
+  // ── GUBER AI Director ──────────────────────────────────────────────────────
+  // POST /api/studio/generate/ai-director
+  // Body: { category, businessName, tagline, description?, cta? }
+  // Deducts 200 credits, kicks off async assembly job, returns { jobId }.
+  // Poll GET /api/studio/director/jobs/:jobId for status.
+  app.post("/api/studio/generate/ai-director", requireAuth, async (req: Request, res: Response) => {
+    const userId = req.session.userId!;
+    const CREDITS_COST = 200;
+
+    const VALID_CATEGORIES = [
+      "home_services", "auto", "beauty", "moving",
+      "events", "fitness", "food", "general",
+    ] as const;
+
+    const category = typeof req.body?.category === "string" ? req.body.category : "";
+    const businessName = typeof req.body?.businessName === "string" ? req.body.businessName.trim().slice(0, 50) : "";
+    const tagline = typeof req.body?.tagline === "string" ? req.body.tagline.trim().slice(0, 70) : "";
+    const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 200) : "";
+    const cta = typeof req.body?.cta === "string" ? req.body.cta.trim().slice(0, 60) : "";
+
+    if (!VALID_CATEGORIES.includes(category as any))
+      return res.status(400).json({ message: "Invalid category." });
+    if (!businessName) return res.status(400).json({ message: "businessName is required." });
+    if (!tagline) return res.status(400).json({ message: "tagline is required." });
+
+    // Deduct credits upfront
+    const newBalance = await storage.decrementStudioCredits(userId, CREDITS_COST);
+    if (newBalance === null)
+      return res.status(402).json({ message: "Not enough Studio credits. Buy a credit pack to keep creating." });
+
+    // Ensure an open session exists (function is in scope within registerRoutes)
+    const session = await ensureStudioSession(userId);
+
+    const { createDirectorJob, runDirectorJob } = await import("./studio/ai-director");
+    const jobId = `dir_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const job = createDirectorJob(jobId, userId, CREDITS_COST);
+
+    // Fire-and-forget — credits already debited, refund happens inside job on failure
+    runDirectorJob(
+      job,
+      { category: category as any, businessName, tagline, description, cta },
+      storage,
+      db,
+      session.id,
+    ).catch((err) => {
+      console.error("[ai-director] unhandled job error:", err);
+    });
+
+    res.json({ jobId, status: "pending" });
+  });
+
+  // GET /api/studio/director/jobs/:jobId
+  // Returns the current status, stage text, and outputUrl when complete.
+  app.get("/api/studio/director/jobs/:jobId", requireAuth, async (req: Request, res: Response) => {
+    const { getDirectorJob } = await import("./studio/ai-director");
+    const job = getDirectorJob(String(req.params.jobId));
+    if (!job) return res.status(404).json({ message: "Job not found or expired." });
+    if (job.userId !== req.session.userId!)
+      return res.status(403).json({ message: "Forbidden." });
+    res.json({
+      jobId: job.jobId,
+      status: job.status,
+      stage: job.stage,
+      outputUrl: job.outputUrl,
+      error: job.error,
+    });
+  });
+
   app.post("/api/stripe/trust-box-checkout", requireAuth, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);

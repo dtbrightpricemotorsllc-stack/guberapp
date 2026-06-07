@@ -48,7 +48,7 @@ import {
   Sparkles, Loader2, Image as ImageIcon, Music, Wand2, X, Download,
   Coins, ArrowLeft, Lock, ExternalLink, Plus, Play, Flame, Film,
   Building2, Megaphone, Zap, Crown, Check, ShoppingCart, ShoppingBag, RotateCcw, Gamepad2,
-  Repeat, ChevronRight, UserRound, Settings, Rocket, Camera, Video, Cpu, Layers, Star,
+  Repeat, ChevronRight, UserRound, Settings, Rocket, Camera, Video, Cpu, Layers, Star, Clapperboard,
 } from "lucide-react";
 
 // Map icon key strings (stored in DB) to lucide components
@@ -194,6 +194,13 @@ const TOOL_TILES: ToolTile[] = [
     badge: "New",
     accent: "#f59e0b",
     href: "/studio/promo-clip",
+  },
+  {
+    key: "ai-director", label: "AI Director", blurb: "Complete ad",
+    kind: "video", icon: Clapperboard, costToolKey: "ai_director", dbKey: "ai_director",
+    badge: "New",
+    accent: "#39FF14",
+    href: "/studio/ai-director",
   },
 ];
 
