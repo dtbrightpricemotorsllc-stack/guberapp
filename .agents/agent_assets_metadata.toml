@@ -347,3 +347,39 @@ id = "Dk0-R-4wcCgYSaCrxO6kM"
 uri = "file://attached_assets/generated_videos/guber_social_final.mp4"
 type = "video"
 title = "GUBER Social Final — Cinematic grade + crowd noise removed + music + ending card"
+
+[[outputs]]
+id = "ebmfK-Apq5xxKjDS_fh7v"
+uri = "file://attached_assets/generated_audio/music_guber_motivational_bed.mp3"
+type = "audio"
+title = "guber_motivational_bed"
+
+[[outputs]]
+id = "4LcaPMi2QKZ88I-B5I2ZW"
+uri = "file://attached_assets/generated_audio/vo3.mp3"
+type = "audio"
+title = "vo3"
+
+[[outputs]]
+id = "tWdk8KVtIFW6vavQx5L2G"
+uri = "file://attached_assets/generated_audio/vo1.mp3"
+type = "audio"
+title = "vo1"
+
+[[outputs]]
+id = "lUPvr9JRwHV4gg1o5KyBh"
+uri = "file://attached_assets/generated_audio/vo2.mp3"
+type = "audio"
+title = "vo2"
+
+[[outputs]]
+id = "H095OtBotqUXoWtQ2bt79"
+uri = "file://attached_assets/generated_audio/vo4.mp3"
+type = "audio"
+title = "vo4"
+
+[[outputs]]
+id = "vjZT1XvdE6FuaXafZB4aS"
+uri = "file://attached_assets/guber-loadboard-commercial.mp4"
+type = "video"
+title = "GUBER Load Board & Asset Protection — 30s Commercial (Vertical 9:16)"
