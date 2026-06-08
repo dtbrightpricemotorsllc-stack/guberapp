@@ -5,17 +5,10 @@ workflows:
     max_build_duration: 60
 
     # ---------------------------------------------------------------------------
-    # Signing: Codemagic Code Signing Identities (manually uploaded assets).
-    #   Certificate : GUBER_iOS_Distribution
-    #   Profile     : GUBER_Profile_v3  (com.guber.app, App Store)
+    # Signing: App Store Connect API fetches a FRESH profile on every build so
+    # Push Notifications + Sign in with Apple entitlements are always present.
     #
-    # The profile stored in Codemagic may not reflect the latest App ID
-    # capabilities (Push Notifications, Sign in with Apple). To guarantee the
-    # export uses a profile that includes those entitlements, the "Set up code
-    # signing" step fetches the current profile from Apple Developer Portal via
-    # the App Store Connect API before running xcode-project use-profiles.
-    #
-    # App Store Connect API creds come from the Default environment group:
+    # Required vars in the "Default" environment group:
     #   APP_STORE_CONNECT_ISSUER_ID
     #   APP_STORE_CONNECT_KEY_IDENTIFIER
     #   APP_STORE_CONNECT_PRIVATE_KEY
@@ -23,13 +16,12 @@ workflows:
     environment:
       groups:
         - Default
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.guber.app
       vars:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
         BUNDLE_ID: com.guber.app
+        TEAM_ID: 7MC93QFW6Q
+        PROF_DIR: /Users/builder/Library/MobileDevice/Provisioning Profiles
       xcode: 16.2
 
     scripts:
@@ -53,17 +45,17 @@ workflows:
           keychain initialize
           keychain add-certificates
 
-          # Codemagic's ios_signing block pre-installs GUBER_Profile_v3 into the
-          # provisioning profiles folder before any script runs. That profile is a
-          # stale snapshot that may not include Push Notifications / Sign in with
-          # Apple. Wipe it now so only the freshly fetched profile remains.
-          echo "Removing pre-installed provisioning profiles..."
-          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision
-          echo "Done. Profiles folder is now empty."
+          # Wipe ALL pre-installed profiles (Codemagic may have cached a stale
+          # one that is missing Push Notifications / Sign in with Apple).
+          echo "=== Clearing cached provisioning profiles ==="
+          rm -rf "$PROF_DIR"
+          mkdir -p "$PROF_DIR"
+          echo "Done — profiles folder is empty."
 
-          # Fetch the CURRENT App Store profile from Apple Developer Portal.
-          # Because the App ID has Push Notifications + Sign in with Apple enabled,
-          # the profile Apple returns will include those entitlements.
+          # Fetch the current App Store profile from Apple Developer Portal.
+          # --create regenerates if none exists; the profile Apple returns
+          # reflects whatever capabilities are live on the App ID right now.
+          echo "=== Fetching fresh profile from Apple Developer ==="
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --issuer-id   "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id      "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
@@ -71,33 +63,25 @@ workflows:
             --type IOS_APP_STORE \
             --create
 
-          echo "=== Installed profiles after fetch ==="
-          PROF_DIR=~/Library/MobileDevice/Provisioning\ Profiles
+          echo "=== Installed profiles ==="
           ls -1 "$PROF_DIR" 2>/dev/null || echo "(none)"
 
-          echo "=== Profile details (name, UUID, entitlements) ==="
+          echo "=== Profile audit (name / UUID / Push / SIWA) ==="
           for f in "$PROF_DIR"/*.mobileprovision; do
             [ -f "$f" ] || continue
             echo "--- $f ---"
-            security cms -D -i "$f" 2>/dev/null | \
-              grep -A1 -E "<key>(Name|UUID|application-identifier)</key>" || true
-            echo "  Push entitlement present:"
-            security cms -D -i "$f" 2>/dev/null | grep -c "aps-environment" || echo "0"
-            echo "  Sign in with Apple entitlement present:"
-            security cms -D -i "$f" 2>/dev/null | grep -c "com.apple.developer.applesignin" || echo "0"
+            security cms -D -i "$f" 2>/dev/null \
+              | grep -A1 -E "<key>(Name|UUID|application-identifier)</key>" || true
+            PUSH=$(security cms -D -i "$f" 2>/dev/null | grep -c "aps-environment" || echo 0)
+            SIWA=$(security cms -D -i "$f" 2>/dev/null | grep -c "com.apple.developer.applesignin" || echo 0)
+            echo "  aps-environment (Push) count : $PUSH"
+            echo "  applesignin (SIWA) count     : $SIWA"
           done
 
-          # Capture the profile name for use in ExportOptions.plist.
-          PROFILE_NAME=$(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null \
-            | grep -A1 "<key>Name</key>" | grep "<string>" \
-            | sed 's/.*<string>\(.*\)<\/string>.*/\1/' | head -1)
-          echo "Captured profile name: $PROFILE_NAME"
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$CM_ENV"
-
-          # Patch project.pbxproj with the UUID of the freshly fetched profile.
+          # Patch project.pbxproj so Xcode uses this profile UUID during archive.
           xcode-project use-profiles
 
-      - name: Xcode archive (App Store export)
+      - name: Xcode archive + export (App Store)
         script: |
           ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
           IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
@@ -106,9 +90,10 @@ workflows:
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\nOTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal\n' \
             > /tmp/spm_override.xcconfig
 
+          # ── ARCHIVE ────────────────────────────────────────────────────────
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
+            -scheme     "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath "$ARCHIVE_PATH" \
             -destination "generic/platform=iOS" \
@@ -119,48 +104,78 @@ workflows:
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
           if [ "$ARCHIVE_STATUS" -ne 0 ]; then
-            echo ""
-            echo "====== LAST 50 LINES ======"
+            echo "====== ARCHIVE FAILED — last 50 lines ======"
             tail -50 /tmp/xcodebuild_archive.log
-            echo ""
-            echo "====== COMPILE ERRORS (actionable lines) ======"
-            grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -80 || \
-              grep -iE " error:" /tmp/xcodebuild_archive.log | grep -v "^note:" | head -80 || \
-              echo "(no error: lines found — check artifacts zip for full log)"
+            grep -E "\.swift:[0-9]+:[0-9]+: error:" /tmp/xcodebuild_archive.log | head -40 || true
             exit "$ARCHIVE_STATUS"
           fi
+          echo "ARCHIVE SUCCEEDED"
 
+          # ── RESOLVE PROFILE FOR EXPORT ─────────────────────────────────────
+          # Read the profile UUID directly from disk in THIS shell so there is
+          # no cross-step variable passing that could produce an empty string.
+          PROFILE_UUID=$(security cms -D -i "$PROF_DIR"/*.mobileprovision 2>/dev/null \
+            | grep -A1 "<key>UUID</key>" \
+            | grep "<string>" \
+            | sed 's/.*<string>\(.*\)<\/string>.*/\1/' \
+            | head -1)
+
+          PROFILE_NAME=$(security cms -D -i "$PROF_DIR"/*.mobileprovision 2>/dev/null \
+            | grep -A1 "<key>Name</key>" \
+            | grep "<string>" \
+            | sed 's/.*<string>\(.*\)<\/string>.*/\1/' \
+            | head -1)
+
+          echo "=== Profile resolved for export ==="
+          echo "  Name : $PROFILE_NAME"
+          echo "  UUID : $PROFILE_UUID"
+
+          if [ -z "$PROFILE_UUID" ]; then
+            echo "ERROR: Could not read a provisioning profile UUID from $PROF_DIR"
+            ls -la "$PROF_DIR" || true
+            exit 1
+          fi
+
+          # ── BUILD ExportOptions.plist ──────────────────────────────────────
+          # Use UUID (not name) — UUIDs are unambiguous even when names contain
+          # spaces or special characters.
           cat > /tmp/ExportOptions.plist << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>app-store</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>teamID</key>
-            <string>7MC93QFW6Q</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.guber.app</key>
-              <string>${PROFILE_NAME}</string>
-            </dict>
-          </dict>
-          </plist>
-          PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>teamID</key>
+  <string>${TEAM_ID}</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>${BUNDLE_ID}</key>
+    <string>${PROFILE_UUID}</string>
+  </dict>
+</dict>
+</plist>
+PLIST
 
+          echo "=== ExportOptions.plist ==="
+          cat /tmp/ExportOptions.plist
+
+          # ── EXPORT ─────────────────────────────────────────────────────────
           xcodebuild \
             -exportArchive \
-            -archivePath "$ARCHIVE_PATH" \
+            -archivePath        "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
+            -exportPath         "$IPA_DIR" 2>&1 | tee /tmp/xcodebuild_export.log
           EXPORT_STATUS=${PIPESTATUS[0]}
+
           if [ "$EXPORT_STATUS" -ne 0 ]; then
             echo "====== EXPORT FAILED — last 30 lines ======"
             tail -30 /tmp/xcodebuild_export.log
             exit "$EXPORT_STATUS"
           fi
+
           echo "IPA exported to: $(find "$IPA_DIR" -name "*.ipa")"
 
     artifacts:
