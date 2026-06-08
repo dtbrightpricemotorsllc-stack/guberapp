@@ -133,6 +133,36 @@ export const INVESTOR_CONFIG = {
     ],
   },
 
+  // SLIDE 6b — PLATFORM POSITION (liability / GUBER land)
+  platformPosition: {
+    headline: "GUBER Doesn't Inspect. GUBER Doesn't Hire.",
+    eyebrow: "PLATFORM POSITION · NOT A LIABILITY",
+    opening: "Let's be direct about what GUBER is — and what it isn't.",
+    notList: [
+      "GUBER is not an employer.",
+      "GUBER does not conduct inspections.",
+      "GUBER does not background-check on behalf of hirers.",
+      "GUBER does not guarantee any outcome.",
+    ],
+    isHeadline: "What GUBER is:",
+    isList: [
+      "A visibility platform.",
+      "A toolset that lets people verify themselves.",
+      "An infrastructure layer — we build the road, we don't drive the cars.",
+      "A record of what people actually do, not what they claim.",
+    ],
+    guberLand: {
+      headline: "Welcome to GUBER Land.",
+      body: "Everyone starts with a clean slate.\n\nNo judgment by assumption. No gatekeeping by background.\n\nYou show up. You work. Your record speaks for itself.\n\nFresh start. Your rules. But safely — because every action is documented, every identity is verified, and every payment is on-platform.",
+    },
+    assetProtection: {
+      headline: "Asset Protection Is a Tool, Not a Liability.",
+      body: "When a user requests a Verify & Inspect job — on a car, a property, a piece of equipment — GUBER facilitates the transaction. An independent worker accepts the job, completes it, and submits proof.\n\nGUBER never touches the asset. GUBER never makes the call. GUBER documents that a human did.",
+      closer: "The user took action.\n\nGUBER made it visible.",
+    },
+    closer: "The platform doesn't create liability.\n\nIt creates accountability.",
+  },
+
   // SLIDE 7
   trustEarned: {
     headline: "Trust Is Earned",
@@ -191,6 +221,23 @@ export const INVESTOR_CONFIG = {
       },
     ],
     closer: "Multiple revenue streams.\nOne ecosystem.",
+  },
+
+  // SLIDE 8b — LOAD BOARD (transport strategy)
+  loadBoard: {
+    headline: "The Load Board.",
+    eyebrow: "TRANSPORT STRATEGY · NEW VERTICAL",
+    sub: "GUBER brings its trust rail to the $800B+ U.S. freight and transport industry.",
+    problem: "The problem in transport is the same problem GUBER was built to solve — visibility.\n\nLoads sit unmatched. Carriers sit idle. No one can verify who they're dealing with until money has already moved.",
+    solution: [
+      { label: "Verified Carriers", body: "Every carrier on the GUBER Load Board has a verified identity on file. No ghost accounts. No untracked drivers." },
+      { label: "Matched Visibility", body: "Load posters publish what needs moving. Verified carriers bid and accept. The match happens on-platform." },
+      { label: "Escrow & Payout", body: "Payment held in escrow until delivery is confirmed. Same rail that powers every GUBER job — already built." },
+      { label: "Proof of Delivery", body: "GPS tracking + photo confirmation at pickup and drop. Disputes are documented, not guessed at." },
+      { label: "Asset Protection Add-On", body: "For high-value loads, hirers can request a Verify & Inspect job at origin or destination — an extra layer of proof before money moves." },
+    ],
+    revenueNote: "Platform fee on every completed load. Same 20% model. Zero new infrastructure — the trust rail already exists.",
+    closer: "The freight industry doesn't have a truck problem.\n\nIt has a trust problem.\n\nGUBER already solved that.",
   },
 
   // SLIDE 9

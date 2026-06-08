@@ -515,6 +515,86 @@ export default function InvestorsPage() {
         </div>
       </Section>
 
+      {/* SLIDE 6b — PLATFORM POSITION */}
+      <Section id="section-platform-position" eyebrow={C.platformPosition.eyebrow} headline={C.platformPosition.headline}>
+        <div className="grid lg:grid-cols-2 gap-6 mb-6">
+          {/* What GUBER is NOT */}
+          <Reveal>
+            <div className="inv-card p-7 h-full" style={{ borderColor: "rgba(255,60,60,0.2)", background: "rgba(255,40,40,0.03)" }}>
+              <p className="text-sm text-muted-foreground mb-5 italic">{C.platformPosition.opening}</p>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: "#ff4444" }}>What GUBER is not:</div>
+              <ul className="space-y-3">
+                {C.platformPosition.notList.map((item, i) => (
+                  <li key={i} className="flex gap-3 items-start text-sm text-muted-foreground" data-testid={`text-not-${i}`}>
+                    <span className="flex-shrink-0 mt-0.5 font-bold" style={{ color: "#ff4444" }}>✕</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
+          {/* What GUBER IS */}
+          <Reveal delay={80}>
+            <div className="inv-card p-7 h-full" style={{ borderColor: `${NEON_GREEN}33`, background: "rgba(57,255,20,0.03)" }}>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: NEON_GREEN }}>{C.platformPosition.isHeadline}</div>
+              <ul className="space-y-3">
+                {C.platformPosition.isList.map((item, i) => (
+                  <li key={i} className="flex gap-3 items-start text-sm text-white font-medium" data-testid={`text-is-${i}`}>
+                    <span className="flex-shrink-0 mt-0.5" style={{ color: NEON_GREEN }}>›</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
+        </div>
+
+        {/* GUBER Land */}
+        <Reveal delay={120}>
+          <div className="inv-card p-8 sm:p-10 mb-5" style={{ borderColor: `${NEON_PURPLE}44`, background: "radial-gradient(ellipse at top left, rgba(209,0,255,0.07), transparent 65%)" }}>
+            <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-3" style={{ color: NEON_PURPLE }}>The Philosophy</div>
+            <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-5">{C.platformPosition.guberLand.headline}</h3>
+            <div className="space-y-3 max-w-2xl">
+              {C.platformPosition.guberLand.body.split("\n\n").map((para, i) => (
+                <p key={i} className={`leading-relaxed ${i === 0 ? "text-base sm:text-lg text-white font-semibold" : "text-sm sm:text-base text-muted-foreground"}`}>{para}</p>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+
+        {/* Asset Protection framing */}
+        <div className="grid lg:grid-cols-2 gap-5">
+          <Reveal>
+            <div className="inv-card p-7 h-full" style={{ borderColor: `${NEON_CYAN}33` }}>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-3" style={{ color: NEON_CYAN }}>Asset Protection</div>
+              <h4 className="text-lg font-bold text-white mb-4">{C.platformPosition.assetProtection.headline}</h4>
+              <div className="space-y-3">
+                {C.platformPosition.assetProtection.body.split("\n\n").map((para, i) => (
+                  <p key={i} className="text-sm text-muted-foreground leading-relaxed">{para}</p>
+                ))}
+              </div>
+              <div className="mt-5 border-t border-white/10 pt-4 space-y-1">
+                {C.platformPosition.assetProtection.closer.split("\n\n").map((line, i) => (
+                  <p key={i} className="text-sm font-bold text-white">{line}</p>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <div className="inv-card p-7 h-full flex flex-col justify-center text-center"
+              style={{ borderColor: `${NEON_GREEN}44`, background: "radial-gradient(ellipse at center, rgba(57,255,20,0.05), transparent 70%)" }}>
+              <div className="text-5xl sm:text-6xl font-extrabold glow-text-green mb-4" style={{ color: NEON_GREEN, fontFamily: "'DM Mono', monospace" }}>⚖</div>
+              <div className="space-y-2">
+                {C.platformPosition.closer.split("\n\n").map((line, i) => (
+                  <p key={i} className={`font-bold text-white ${i === 0 ? "text-lg sm:text-xl" : "text-xl sm:text-2xl glow-text-green"}`}
+                    style={i === 1 ? { color: NEON_GREEN } : {}}>{line}</p>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </Section>
+
       {/* SLIDE 8 — REVENUE MODEL */}
       <Section id="section-revenue" eyebrow="07 · Revenue Model" headline={C.revenue.headline}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
@@ -541,6 +621,52 @@ export default function InvestorsPage() {
           <div className="inv-card p-6 text-center" style={{ borderColor: `${NEON_GREEN}33`, background: "rgba(57,255,20,0.03)" }}>
             {C.revenue.closer.split("\n").map((line, i) => (
               <p key={i} className={`font-bold text-white ${i === 0 ? "text-xl sm:text-2xl" : "text-base text-muted-foreground mt-1"}`}>{line}</p>
+            ))}
+          </div>
+        </Reveal>
+      </Section>
+
+      {/* SLIDE 8b — LOAD BOARD */}
+      <Section id="section-load-board" eyebrow={C.loadBoard.eyebrow} headline={C.loadBoard.headline} sub={C.loadBoard.sub}>
+        {/* Problem statement */}
+        <Reveal>
+          <div className="inv-card p-7 mb-6" style={{ borderColor: `${NEON_CYAN}33`, background: "rgba(0,229,255,0.03)" }}>
+            <div className="space-y-3">
+              {C.loadBoard.problem.split("\n\n").map((para, i) => (
+                <p key={i} className={`leading-relaxed ${i === 0 ? "text-base sm:text-lg text-muted-foreground" : "text-lg sm:text-xl font-bold text-white"}`}>{para}</p>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+
+        {/* Solution cards */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {C.loadBoard.solution.map((item, i) => (
+            <Reveal key={i} delay={(i % 3) * 60}>
+              <div className="inv-card p-5 inv-card-hover h-full" style={{ borderColor: `${NEON_CYAN}22` }} data-testid={`card-loadboard-${i}`}>
+                <div className="num-font text-[11px] uppercase tracking-[0.15em] mb-2" style={{ color: NEON_CYAN }}>{item.label}</div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.body}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* Revenue note */}
+        <Reveal>
+          <div className="inv-card p-5 mb-5 flex items-center gap-4" style={{ borderColor: `${NEON_GREEN}44`, background: "rgba(57,255,20,0.04)" }}>
+            <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center" style={{ background: "rgba(57,255,20,0.12)", border: "1px solid rgba(57,255,20,0.3)" }}>
+              <span className="num-font text-xs font-bold" style={{ color: NEON_GREEN }}>20%</span>
+            </div>
+            <p className="text-sm text-white font-medium">{C.loadBoard.revenueNote}</p>
+          </div>
+        </Reveal>
+
+        {/* Closer */}
+        <Reveal delay={80}>
+          <div className="inv-card p-8 text-center" style={{ borderColor: `${NEON_CYAN}44`, background: "radial-gradient(ellipse at center, rgba(0,229,255,0.06), transparent 70%)" }}>
+            {C.loadBoard.closer.split("\n\n").map((line, i) => (
+              <p key={i} className={`font-bold ${i === 0 ? "text-base text-muted-foreground" : i === 1 ? "text-lg text-white mt-1" : "text-xl sm:text-2xl mt-2 glow-text-green"}`}
+                style={i === 2 ? { color: NEON_GREEN } : {}}>{line}</p>
             ))}
           </div>
         </Reveal>
