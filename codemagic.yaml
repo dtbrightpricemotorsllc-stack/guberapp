@@ -49,6 +49,7 @@ workflows:
 
       - name: Set up code signing — GUBER_Profile_v3 only
         script: |
+          echo "=== CUSTOM SIGNING SCRIPT START ==="
           set -euo pipefail
           PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 
@@ -223,25 +224,16 @@ workflows:
           fi
 
           # ── ExportOptions — UUID pinned, method app-store-connect ────────
-          cat > /tmp/ExportOptions.plist << PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key>
-  <string>app-store-connect</string>
-  <key>signingStyle</key>
-  <string>manual</string>
-  <key>teamID</key>
-  <string>${TEAM_ID}</string>
-  <key>provisioningProfiles</key>
-  <dict>
-    <key>${BUNDLE_ID}</key>
-    <string>${PROFILE_UUID}</string>
-  </dict>
-</dict>
-</plist>
-PLIST
+          # Written with printf to avoid YAML-breaking heredoc at column 0.
+          printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'                                   >  /tmp/ExportOptions.plist
+          printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> /tmp/ExportOptions.plist
+          printf '%s\n' '<plist version="1.0"><dict>'                                              >> /tmp/ExportOptions.plist
+          printf '%s\n' '  <key>method</key><string>app-store-connect</string>'                    >> /tmp/ExportOptions.plist
+          printf '%s\n' '  <key>signingStyle</key><string>manual</string>'                         >> /tmp/ExportOptions.plist
+          printf '  <key>teamID</key><string>%s</string>\n'            "$TEAM_ID"                  >> /tmp/ExportOptions.plist
+          printf '%s\n' '  <key>provisioningProfiles</key><dict>'                                  >> /tmp/ExportOptions.plist
+          printf '    <key>%s</key><string>%s</string>\n' "$BUNDLE_ID" "$PROFILE_UUID"             >> /tmp/ExportOptions.plist
+          printf '%s\n' '  </dict></dict></plist>'                                                 >> /tmp/ExportOptions.plist
 
           echo "=== ExportOptions.plist ==="
           cat /tmp/ExportOptions.plist
