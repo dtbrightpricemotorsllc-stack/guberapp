@@ -20,11 +20,11 @@ export const INVESTOR_CONFIG = {
   },
 
   socials: [
-    { brand: "linkedin" as const, name: "LinkedIn", url: "https://www.linkedin.com/company/guber-global" },
-    { brand: "facebook" as const, name: "Facebook", url: "https://www.facebook.com/guberapp" },
-    { brand: "tiktok" as const, name: "TikTok", url: "https://www.tiktok.com/@guberapp" },
-    { brand: "instagram" as const, name: "Instagram", url: "https://www.instagram.com/guberapp" },
-    { brand: "x" as const, name: "X", url: "https://x.com/guberapp" },
+    { brand: "linkedin" as const, name: "LinkedIn", url: "https://www.linkedin.com/in/dimetris-bowden-6618a0407" },
+    { brand: "facebook" as const, name: "Facebook", url: "https://www.facebook.com/share/18rHLMqQxe/" },
+    { brand: "tiktok" as const, name: "TikTok", url: "https://www.tiktok.com/@cash_flow_by_guber" },
+    { brand: "instagram" as const, name: "Instagram", url: "https://www.instagram.com/guber_global" },
+    { brand: "x" as const, name: "X", url: "https://x.com/GuberGlobal" },
   ] satisfies InvestorSocial[],
 
   // SLIDE 1
