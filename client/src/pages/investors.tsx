@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useRef, useCallback, type ReactNode } from "react";
 import { Mail, Phone, Globe, ChevronRight, Check, ArrowDown, Printer } from "lucide-react";
 import { INVESTOR_CONFIG as C } from "@/lib/investor-config";
 import { SocialLinks } from "@/components/social-links";
@@ -97,27 +97,9 @@ function PhoneFrame({ src, alt, label, testId }: { src: string; alt: string; lab
 }
 
 export default function InvestorsPage() {
-  const [pdfLoading, setPdfLoading] = useState(false);
 
-  const handleDownloadPdf = useCallback(async () => {
-    setPdfLoading(true);
-    try {
-      const res = await fetch("/api/investor/pdf");
-      if (!res.ok) throw new Error("generation failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "GUBER-Investor-Deck.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      alert("PDF generation failed — please try again.");
-    } finally {
-      setPdfLoading(false);
-    }
+  const handleDownloadPdf = useCallback(() => {
+    window.open("/api/investor/pdf", "_blank");
   }, []);
 
   return (
@@ -189,11 +171,10 @@ export default function InvestorsPage() {
           <span className="pill pill-green num-font" data-testid="text-nav-confidential">Confidential</span>
           <button
             onClick={handleDownloadPdf}
-            disabled={pdfLoading}
-            className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inline-flex items-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition text-white disabled:opacity-60 disabled:cursor-wait"
+            className="h-9 px-4 rounded-full text-xs uppercase tracking-[0.18em] num-font font-bold inline-flex items-center gap-2 border border-white/20 bg-white/5 hover:bg-white/10 transition text-white"
             data-testid="button-nav-pdf">
-            <Printer className={`w-3.5 h-3.5 ${pdfLoading ? "animate-spin" : ""}`} />
-            {pdfLoading ? "Generating…" : "Download PDF"}
+            <Printer className="w-3.5 h-3.5" />
+            Download PDF
           </button>
           <button
             onClick={() => scrollToId("section-cta")}
