@@ -22089,7 +22089,7 @@ OUTPUT STYLE:
       const page = await browser.newPage();
       await page.setViewportSize({ width: 1440, height: 900 });
       const base = `http://localhost:${process.env.PORT || 5000}`;
-      await page.goto(`${base}/investors?nosplash=1`, { waitUntil: "networkidle", timeout: 60000 });
+      await page.goto(`${base}/investors?nosplash=1`, { waitUntil: "load", timeout: 45000 });
       // Let fonts + reveal animations settle
       await page.waitForTimeout(2500);
       // Force all reveal nodes visible

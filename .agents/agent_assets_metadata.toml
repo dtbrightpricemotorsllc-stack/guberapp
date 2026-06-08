@@ -515,3 +515,9 @@ id = "dRP-zFHADzLX7bh_lNOM7"
 uri = "file://attached_assets/guber_final_v2.mp4"
 type = "video"
 title = "GUBER — Full Feature Walkthrough with Synced Voiceover"
+
+[[outputs]]
+id = "VVbb_w5Xgj-dlKKTF06GW"
+uri = "file://investor-deck.pdf"
+type = "pdf"
+title = "GUBER Investor Deck — PDF"
