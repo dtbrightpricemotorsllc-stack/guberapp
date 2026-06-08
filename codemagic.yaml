@@ -5,17 +5,15 @@ workflows:
     max_build_duration: 60
 
     # ---------------------------------------------------------------------------
-    # Signing: GUBER_AppStore_Profile_v3 (com.guber.app, App Store Distribution)
-    #   - PROVISIONING_PROFILE_SPECIFIER is hardcoded in project.pbxproj Release
-    #     config so cap sync ios cannot overwrite it.
-    #   - ExportOptions.plist names the profile explicitly — no shell extraction.
-    #   - -allowProvisioningUpdates added as belt-and-suspenders so Xcode can
-    #     download/refresh the profile if it isn't found locally.
-    #
-    # Required vars in the "Default" Codemagic environment group:
-    #   APP_STORE_CONNECT_ISSUER_ID
-    #   APP_STORE_CONNECT_KEY_IDENTIFIER
-    #   APP_STORE_CONNECT_PRIVATE_KEY
+    # Signing notes:
+    #   - PROVISIONING_PROFILE_SPECIFIER is hardcoded to "GUBER_AppStore_Profile_v3"
+    #     in the Release build config inside project.pbxproj so cap sync ios
+    #     cannot wipe it.
+    #   - The signing + archive + export step reads the profile name live from the
+    #     downloaded .mobileprovision file using PlistBuddy so there is zero
+    #     mismatch between what is on disk and what ExportOptions.plist requests.
+    #   - -allowProvisioningUpdates lets Xcode download/refresh the profile if it
+    #     cannot be found locally by name.
     # ---------------------------------------------------------------------------
     environment:
       groups:
@@ -25,7 +23,6 @@ workflows:
         XCODE_SCHEME: App
         BUNDLE_ID: com.guber.app
         TEAM_ID: 7MC93QFW6Q
-        PROFILE_NAME: GUBER_AppStore_Profile_v3
       xcode: 16.2
 
     scripts:
@@ -44,19 +41,27 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME"
 
-      - name: Set up code signing
+      - name: Sign, Archive, and Export
         script: |
-          PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          set -euo pipefail
 
+          PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
+          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
+          AUTH_KEY_PATH="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
+
+          mkdir -p "$PROF_DIR" "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
+
+          # ── 1. CERTIFICATES ────────────────────────────────────────────────
+          echo "=== Setting up keychain and certificates ==="
           keychain initialize
           keychain add-certificates
 
-          # Wipe any cached profiles and fetch GUBER_AppStore_Profile_v3 fresh.
-          echo "=== Clearing cached provisioning profiles ==="
-          rm -rf "$PROF_DIR"
-          mkdir -p "$PROF_DIR"
+          # ── 2. FETCH FRESH PROFILE ─────────────────────────────────────────
+          echo "=== Clearing cached profiles ==="
+          rm -rf "${PROF_DIR:?}"/*
 
-          echo "=== Fetching $PROFILE_NAME from Apple Developer ==="
+          echo "=== Fetching App Store profile from Apple Developer ==="
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --issuer-id   "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id      "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
@@ -64,50 +69,70 @@ workflows:
             --type IOS_APP_STORE \
             --create
 
-          echo "=== Installed profiles ==="
-          ls -1 "$PROF_DIR" 2>/dev/null || echo "(none — fetch failed)"
+          # ── 3. READ PROFILE NAME FROM DISK WITH PLISTBUDDY ─────────────────
+          # PlistBuddy is the only 100 % reliable method — no sed/grep pipeline
+          # that can fail on whitespace or special characters.
+          PROF_FILE=$(ls "$PROF_DIR"/*.mobileprovision 2>/dev/null | head -1)
+          if [ -z "$PROF_FILE" ]; then
+            echo "ERROR: No provisioning profile was downloaded to $PROF_DIR"
+            echo "Check APP_STORE_CONNECT_* credentials in Codemagic env group 'Default'"
+            exit 1
+          fi
 
-          echo "=== Profile capability audit ==="
-          for f in "$PROF_DIR"/*.mobileprovision; do
-            [ -f "$f" ] || continue
-            echo "--- $f ---"
-            security cms -D -i "$f" 2>/dev/null \
-              | grep -A1 -E "<key>(Name|UUID|application-identifier)</key>" || true
-            PUSH=$(security cms -D -i "$f" 2>/dev/null | grep -c "aps-environment" || true)
-            SIWA=$(security cms -D -i "$f" 2>/dev/null | grep -c "com.apple.developer.applesignin" || true)
-            echo "  aps-environment (Push Notifications) : $PUSH"
-            echo "  applesignin     (Sign in with Apple) : $SIWA"
-            if [ "$PUSH" = "0" ] || [ "$SIWA" = "0" ]; then
-              echo "  ERROR: profile is missing one or more required capabilities"
-              echo "  ACTION: go to developer.apple.com -> Profiles -> $PROFILE_NAME -> Edit -> Save"
-              exit 1
-            fi
-            echo "  OK: profile contains both required capabilities"
-          done
+          # Decode the CMS-signed profile to a readable plist
+          security cms -D -i "$PROF_FILE" -o /tmp/decoded_profile.plist
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/decoded_profile.plist)
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/decoded_profile.plist)
+          PUSH_COUNT=$(grep -c "aps-environment" /tmp/decoded_profile.plist || true)
+          SIWA_COUNT=$(grep -c "com.apple.developer.applesignin" /tmp/decoded_profile.plist || true)
 
-          # Patch PROVISIONING_PROFILE_SPECIFIER and CODE_SIGN_STYLE in pbxproj.
-          # This is belt-and-suspenders — the specifier is already hardcoded in
-          # the Release config, but use-profiles also sets the UUID correctly.
+          echo "=== Profile resolved from disk ==="
+          echo "  Name : $PROFILE_NAME"
+          echo "  UUID : $PROFILE_UUID"
+          echo "  File : $PROF_FILE"
+          echo "  aps-environment (Push) count : $PUSH_COUNT"
+          echo "  applesignin (SIWA) count     : $SIWA_COUNT"
+
+          if [ "$PUSH_COUNT" = "0" ] || [ "$SIWA_COUNT" = "0" ]; then
+            echo ""
+            echo "FATAL: Profile '$PROFILE_NAME' is missing Push Notifications or"
+            echo "Sign in with Apple. The profile on Apple Developer Portal must be"
+            echo "regenerated to include the current App ID capabilities."
+            echo ""
+            echo "ACTION: developer.apple.com → Certificates, IDs & Profiles"
+            echo "  → Profiles → find '$PROFILE_NAME' → Edit → Save"
+            echo "Then re-run this build."
+            exit 1
+          fi
+          echo "  OK: profile contains both required capabilities"
+
+          # ── 4. PATCH PBXPROJ ───────────────────────────────────────────────
           xcode-project use-profiles
 
-          echo "=== Signing settings in project.pbxproj (Release) ==="
-          grep -E "PROVISIONING_PROFILE|CODE_SIGN_STYLE|CODE_SIGN_IDENTITY" \
+          echo "=== Signing settings in Release config after use-profiles ==="
+          grep -E "PROVISIONING_PROFILE|CODE_SIGN" \
             ios/App/App.xcodeproj/project.pbxproj || true
 
-      - name: Xcode archive + export (App Store)
-        script: |
-          PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
-          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
-          AUTH_KEY_PATH="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
+          # ── 5. WRITE API KEY ───────────────────────────────────────────────
+          if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | grep -q "BEGIN"; then
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$AUTH_KEY_PATH"
+          else
+            # Key stored as raw body without PEM headers — add them
+            {
+              echo "-----BEGIN PRIVATE KEY-----"
+              printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY"
+              echo ""
+              echo "-----END PRIVATE KEY-----"
+            } > "$AUTH_KEY_PATH"
+          fi
+          chmod 600 "$AUTH_KEY_PATH"
 
-          mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
-
+          # ── 6. XCCONFIG OVERRIDE ───────────────────────────────────────────
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\nOTHER_SWIFT_FLAGS = $(inherited) -strict-concurrency=minimal\n' \
             > /tmp/spm_override.xcconfig
 
-          # ── ARCHIVE ────────────────────────────────────────────────────────
-          echo "=== Starting archive ==="
+          # ── 7. ARCHIVE ─────────────────────────────────────────────────────
+          echo "=== Starting archive (profile: $PROFILE_NAME) ==="
           xcodebuild \
             -workspace     "$XCODE_WORKSPACE" \
             -scheme        "$XCODE_SCHEME" \
@@ -115,8 +140,13 @@ workflows:
             -archivePath   "$ARCHIVE_PATH" \
             -destination   "generic/platform=iOS" \
             -xcconfig      /tmp/spm_override.xcconfig \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath     "$AUTH_KEY_PATH" \
+            -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
+            "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
@@ -128,39 +158,18 @@ workflows:
           fi
           echo "** ARCHIVE SUCCEEDED **"
 
-          # ── DIAGNOSTIC: dump entitlements embedded in the archive ──────────
+          # ── 8. DUMP ARCHIVE ENTITLEMENTS ──────────────────────────────────
           echo "=== Entitlements embedded in archived App.app ==="
-          codesign -d --entitlements :- \
-            "$ARCHIVE_PATH/Products/Applications/App.app" 2>/dev/null || \
-            echo "(codesign entitlements dump failed — check archive manually)"
+          security cms -D -i \
+            "$ARCHIVE_PATH/Products/Applications/App.app/embedded.mobileprovision" \
+            2>/dev/null | grep -A2 "aps-environment\|applesignin" || \
+            codesign -d --entitlements :- \
+              "$ARCHIVE_PATH/Products/Applications/App.app" 2>/dev/null || \
+            echo "(could not read archive entitlements)"
 
-          # ── DIAGNOSTIC: confirm which profile is on disk ───────────────────
-          echo "=== Profiles on disk at export time ==="
-          for f in "$PROF_DIR"/*.mobileprovision; do
-            [ -f "$f" ] || continue
-            NAME=$(security cms -D -i "$f" 2>/dev/null \
-              | awk '/<key>Name<\/key>/{f=1;next} f{gsub(/[ \t]*<\/?string>[ \t]*/,"");print;exit}')
-            UUID=$(security cms -D -i "$f" 2>/dev/null \
-              | awk '/<key>UUID<\/key>/{f=1;next} f{gsub(/[ \t]*<\/?string>[ \t]*/,"");print;exit}')
-            echo "  Name : $NAME"
-            echo "  UUID : $UUID"
-          done
-
-          # ── WRITE API KEY ──────────────────────────────────────────────────
-          # Handle both "raw key body" and "full PEM with headers" storage formats.
-          if echo "$APP_STORE_CONNECT_PRIVATE_KEY" | grep -q "BEGIN"; then
-            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$AUTH_KEY_PATH"
-          else
-            printf '-----BEGIN PRIVATE KEY-----\n%s\n-----END PRIVATE KEY-----\n' \
-              "$APP_STORE_CONNECT_PRIVATE_KEY" > "$AUTH_KEY_PATH"
-          fi
-          chmod 600 "$AUTH_KEY_PATH"
-
-          # ── EXPORT OPTIONS ─────────────────────────────────────────────────
-          # Profile named explicitly — no runtime extraction needed.
-          # -allowProvisioningUpdates lets Xcode fetch the profile via API if
-          # it isn't found on disk by name.
-          cat > /tmp/ExportOptions.plist << 'PLIST'
+          # ── 9. BUILD EXPORT OPTIONS ────────────────────────────────────────
+          # Profile name is read from the actual file on disk — guaranteed match.
+          cat > /tmp/ExportOptions.plist << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -170,20 +179,20 @@ workflows:
   <key>signingStyle</key>
   <string>manual</string>
   <key>teamID</key>
-  <string>7MC93QFW6Q</string>
+  <string>${TEAM_ID}</string>
   <key>provisioningProfiles</key>
   <dict>
-    <key>com.guber.app</key>
-    <string>GUBER_AppStore_Profile_v3</string>
+    <key>${BUNDLE_ID}</key>
+    <string>${PROFILE_NAME}</string>
   </dict>
 </dict>
 </plist>
 PLIST
 
-          echo "=== ExportOptions.plist ==="
+          echo "=== ExportOptions.plist (profile: $PROFILE_NAME) ==="
           cat /tmp/ExportOptions.plist
 
-          # ── EXPORT ─────────────────────────────────────────────────────────
+          # ── 10. EXPORT ─────────────────────────────────────────────────────
           echo "=== Starting export ==="
           xcodebuild \
             -exportArchive \
@@ -205,7 +214,8 @@ PLIST
             exit "$EXPORT_STATUS"
           fi
 
-          echo "IPA exported to: $(find "$IPA_DIR" -name "*.ipa")"
+          echo "=== IPA exported ==="
+          find "$IPA_DIR" -name "*.ipa"
 
     artifacts:
       - build/ios/ipa/*.ipa
