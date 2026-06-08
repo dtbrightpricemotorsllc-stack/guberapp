@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useEffect, useRef, useCallback, useState, type ReactNode } from "react";
 import { Mail, Phone, Globe, ChevronRight, Check, ArrowDown, Printer } from "lucide-react";
 import { INVESTOR_CONFIG as C } from "@/lib/investor-config";
 import { SocialLinks } from "@/components/social-links";
@@ -609,6 +609,19 @@ export default function InvestorsPage() {
 
       {/* SLIDE 8b — LOAD BOARD */}
       <Section id="section-load-board" eyebrow={C.loadBoard.eyebrow} headline={C.loadBoard.headline} sub={C.loadBoard.sub}>
+        {/* Market size numbers */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {C.loadBoard.markets.map((m, i) => (
+            <Reveal key={i} delay={i * 50}>
+              <div className="inv-card p-5 text-center" style={{ borderColor: `${NEON_CYAN}33` }} data-testid={`card-market-${i}`}>
+                <div className="num-font font-extrabold text-2xl sm:text-3xl mb-1" style={{ color: NEON_CYAN }}>{m.size}</div>
+                <div className="text-xs font-bold text-white mb-0.5">{m.label}</div>
+                <div className="text-[10px] text-muted-foreground">{m.note}</div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
         {/* Problem statement */}
         <Reveal>
           <div className="inv-card p-7 mb-6" style={{ borderColor: `${NEON_CYAN}33`, background: "rgba(0,229,255,0.03)" }}>
@@ -646,9 +659,139 @@ export default function InvestorsPage() {
         <Reveal delay={80}>
           <div className="inv-card p-8 text-center" style={{ borderColor: `${NEON_CYAN}44`, background: "radial-gradient(ellipse at center, rgba(0,229,255,0.06), transparent 70%)" }}>
             {C.loadBoard.closer.split("\n\n").map((line, i) => (
-              <p key={i} className={`font-bold ${i === 0 ? "text-base text-muted-foreground" : i === 1 ? "text-lg text-white mt-1" : "text-xl sm:text-2xl mt-2 glow-text-green"}`}
+              <p key={i} className={`font-bold ${i === 0 ? "text-base text-muted-foreground" : i === 1 ? "text-lg text-white mt-1" : "text-xl sm:text-2xl mt-2"}`}
                 style={i === 2 ? { color: NEON_GREEN } : {}}>{line}</p>
             ))}
+          </div>
+        </Reveal>
+      </Section>
+
+      {/* SLIDE 8c — MARKET OPPORTUNITY */}
+      <Section id="section-market" eyebrow={C.marketOpportunity.eyebrow} headline={C.marketOpportunity.headline} sub={C.marketOpportunity.sub}>
+        {/* TAM / SAM / SOM */}
+        <div className="grid sm:grid-cols-3 gap-4 mb-8">
+          {C.marketOpportunity.tiers.map((t, i) => (
+            <Reveal key={i} delay={i * 80}>
+              <div className="inv-card p-6 h-full" style={{ borderColor: `${t.color}44`, background: `radial-gradient(ellipse at top, ${t.color}08, transparent 70%)` }} data-testid={`card-market-tier-${i}`}>
+                <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-1" style={{ color: t.color }}>{t.label} · {t.sublabel}</div>
+                <div className="num-font font-extrabold mb-1" style={{ fontSize: "clamp(2rem, 4vw, 3rem)", color: t.color, lineHeight: 1 }}>{t.size}</div>
+                <div className="text-xs font-semibold text-white mb-4">{t.note}</div>
+                <ul className="space-y-1.5">
+                  {t.sectors.map((s, j) => (
+                    <li key={j} className="flex gap-2 text-xs text-muted-foreground">
+                      <span style={{ color: t.color }} className="flex-shrink-0">›</span>{s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* Why Now */}
+        <div className="grid lg:grid-cols-2 gap-5 mb-6">
+          <Reveal>
+            <div className="inv-card p-7" style={{ borderColor: `${NEON_GREEN}33` }}>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: NEON_GREEN }}>Why Now</div>
+              <ul className="space-y-3">
+                {C.marketOpportunity.whyNow.map((item, i) => (
+                  <li key={i} className="flex gap-3 items-start text-sm text-white font-medium">
+                    <span style={{ color: NEON_GREEN }} className="flex-shrink-0 mt-0.5">›</span>{item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <div className="inv-card p-7" style={{ borderColor: `${NEON_PURPLE}33` }}>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: NEON_PURPLE }}>The Fragmentation Problem</div>
+              <div className="space-y-3">
+                {C.marketOpportunity.fragmentation.split("\n\n").map((para, i) => (
+                  <p key={i} className={`text-sm leading-relaxed ${i === 0 ? "text-muted-foreground" : "text-white font-semibold"}`}>{para}</p>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        </div>
+
+        <Reveal>
+          <div className="inv-card p-6 text-center" style={{ borderColor: `${NEON_GREEN}33`, background: "rgba(57,255,20,0.03)" }}>
+            {C.marketOpportunity.closer.split("\n\n").map((line, i) => (
+              <p key={i} className={`font-bold text-white ${i === 0 ? "text-base sm:text-lg" : "text-lg sm:text-xl mt-2"}`}
+                style={i === 1 ? { color: NEON_GREEN } : {}}>{line}</p>
+            ))}
+          </div>
+        </Reveal>
+      </Section>
+
+      {/* SLIDE 8d — CATEGORY CREATION + FLYWHEEL */}
+      <Section id="section-category" eyebrow={C.categoryCreation.eyebrow} headline={C.categoryCreation.headline}>
+        <Reveal>
+          <p className="text-lg sm:text-xl text-muted-foreground italic mb-6">{C.categoryCreation.statement}</p>
+        </Reveal>
+
+        {/* Category name */}
+        <Reveal>
+          <div className="inv-card p-8 sm:p-10 mb-6 text-center" style={{ borderColor: `${NEON_PURPLE}55`, background: "radial-gradient(ellipse at center, rgba(209,0,255,0.08), transparent 70%)" }}>
+            {C.categoryCreation.category.split("\n").map((line, i) => (
+              <p key={i} className={`font-extrabold text-white ${i === 0 ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl"}`}
+                style={i === 1 ? { color: NEON_PURPLE } : {}}>{line}</p>
+            ))}
+          </div>
+        </Reveal>
+
+        <div className="grid lg:grid-cols-2 gap-6 mb-6">
+          {/* Pillars */}
+          <Reveal>
+            <div className="inv-card p-7">
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: NEON_GREEN }}>One unified platform connects:</div>
+              <div className="grid grid-cols-2 gap-2">
+                {C.categoryCreation.pillars.map((p, i) => (
+                  <div key={i} className="inv-card p-3 text-center" style={{ borderColor: `${NEON_GREEN}22` }}>
+                    <span className="num-font text-xs font-bold" style={{ color: NEON_GREEN }}>{p}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+
+          {/* Flywheel */}
+          <Reveal delay={80}>
+            <div className="inv-card p-7" style={{ borderColor: `${NEON_CYAN}33`, background: "rgba(0,229,255,0.02)" }}>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-4" style={{ color: NEON_CYAN }}>The GUBER Flywheel</div>
+              <div className="space-y-0">
+                {C.categoryCreation.flywheel.map((item, i) => (
+                  <div key={i}>
+                    <div className="flex items-center gap-3 py-2">
+                      <span className="text-lg w-7 text-center flex-shrink-0">{item.icon}</span>
+                      <span className="text-sm font-semibold text-white">{item.step}</span>
+                    </div>
+                    {i < C.categoryCreation.flywheel.length - 1 && (
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 flex justify-center">
+                          <div className="w-px h-3" style={{ background: `${NEON_CYAN}44` }} />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">↓</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        </div>
+
+        {/* Long-term vision */}
+        <Reveal>
+          <div className="inv-card p-7" style={{ borderColor: `${NEON_PURPLE}33`, background: "rgba(209,0,255,0.03)" }}>
+            <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-3" style={{ color: NEON_PURPLE }}>Long-Term Vision</div>
+            <p className="text-base sm:text-lg text-white leading-relaxed mb-5">{C.categoryCreation.vision}</p>
+            <div className="border-t border-white/10 pt-4">
+              {C.categoryCreation.tagline.split("\n").map((line, i) => (
+                <p key={i} className={`font-extrabold ${i === 0 ? "text-lg sm:text-xl text-white" : "text-base sm:text-lg mt-1"}`}
+                  style={i === 1 ? { color: NEON_GREEN } : {}}>{line}</p>
+              ))}
+            </div>
           </div>
         </Reveal>
       </Section>
@@ -770,15 +913,32 @@ export default function InvestorsPage() {
 
       {/* SLIDE 13 — VISION */}
       <Section id="section-vision" eyebrow="12 · Vision" headline={C.vision.headline}>
-        <div className="max-w-3xl mx-auto text-center">
+        <div className="grid lg:grid-cols-2 gap-5">
           <Reveal>
-            <div className="inv-card p-10 sm:p-14" style={{ borderColor: `${NEON_PURPLE}33`, background: "radial-gradient(ellipse at center, rgba(209,0,255,0.06), transparent 70%)" }}>
+            <div className="inv-card p-8 sm:p-10 h-full" style={{ borderColor: `${NEON_PURPLE}33`, background: "radial-gradient(ellipse at top, rgba(209,0,255,0.07), transparent 70%)" }}>
               {C.vision.body.split("\n\n").map((para, i) => (
                 <p key={i} className={`leading-relaxed ${i === 0 ? "text-sm text-muted-foreground mb-4" : "text-lg sm:text-xl font-semibold text-white"}`}>{para}</p>
               ))}
-              <div className="mt-10 border-t border-white/10 pt-8">
-                <p className="text-xl sm:text-2xl font-extrabold" style={{ color: NEON_PURPLE }}>{C.vision.closer}</p>
+              <div className="mt-8 border-t border-white/10 pt-6">
+                {C.vision.closer.split("\n").map((line, i) => (
+                  <p key={i} className={`font-extrabold ${i === 0 ? "text-xl sm:text-2xl text-white" : "text-base sm:text-lg mt-1"}`}
+                    style={i === 1 ? { color: NEON_GREEN } : { color: NEON_PURPLE }}>{line}</p>
+                ))}
               </div>
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <div className="inv-card p-8 h-full" style={{ borderColor: `${NEON_GREEN}33` }}>
+              <div className="num-font text-[11px] uppercase tracking-[0.18em] mb-5" style={{ color: NEON_GREEN }}>Current Milestones</div>
+              <ul className="space-y-3">
+                {C.vision.milestones.map((m, i) => (
+                  <li key={i} className="flex items-center gap-3 text-sm" data-testid={`milestone-${i}`}>
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                      style={{ background: "rgba(57,255,20,0.12)", border: "1px solid rgba(57,255,20,0.35)", color: NEON_GREEN }}>✓</span>
+                    <span className="text-white font-medium">{m}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </Reveal>
         </div>
@@ -834,6 +994,25 @@ export default function InvestorsPage() {
               </div>
             </div>
           </Reveal>
+        </div>
+
+        {/* Use-of-capital detail cards */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {C.fundingAsk.useDetail.map((d, i) => (
+            <Reveal key={i} delay={i * 60}>
+              <div className="inv-card p-5 h-full" style={{ borderColor: `${C.fundingAsk.breakdown[i]?.color ?? NEON_GREEN}33` }} data-testid={`card-use-detail-${i}`}>
+                <div className="num-font text-[10px] uppercase tracking-[0.15em] mb-1" style={{ color: C.fundingAsk.breakdown[i]?.color ?? NEON_GREEN }}>{d.label}</div>
+                <div className="num-font font-extrabold text-lg text-white mb-3">{d.amount}</div>
+                <ul className="space-y-1.5">
+                  {d.items.map((it, j) => (
+                    <li key={j} className="flex gap-2 text-xs text-muted-foreground">
+                      <span style={{ color: C.fundingAsk.breakdown[i]?.color ?? NEON_GREEN }} className="flex-shrink-0">·</span>{it}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+          ))}
         </div>
 
         {/* Legal stack */}
