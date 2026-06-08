@@ -711,6 +711,26 @@ app.use((req, res, next) => {
     );
   `).catch(e => console.error("[migration] growth engine tables error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS growth_score_ranks (
+      id         SERIAL PRIMARY KEY,
+      title      TEXT NOT NULL,
+      emoji      TEXT NOT NULL DEFAULT '',
+      min_score  INTEGER NOT NULL,
+      max_score  INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    INSERT INTO growth_score_ranks (title, emoji, min_score, max_score, sort_order) VALUES
+      ('Rookie Scout',       '🌱', 0,     499,   1),
+      ('Local Scout',        '🔍', 500,   1999,  2),
+      ('Senior Scout',       '⭐', 2000,  4999,  3),
+      ('City Scout',         '🏙️', 5000,  9999,  4),
+      ('City Leader',        '🏆', 10000, 24999, 5),
+      ('City Founder Elite', '👑', 25000, NULL,  6)
+    ON CONFLICT DO NOTHING;
+  `).catch(e => console.error("[migration] growth_score_ranks error:", e));
+
   // Seed default growth task templates (6 canonical tasks)
   await pool.query(`
     INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order) VALUES

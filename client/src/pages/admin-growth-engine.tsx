@@ -13,53 +13,43 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Pencil, Trash2, Plus, ArrowLeft, Loader2, RefreshCw } from "lucide-react";
+import { Pencil, Trash2, Plus, ArrowLeft, Loader2, BarChart3 } from "lucide-react";
 import { useLocation } from "wouter";
 
 interface Template {
-  id: number;
-  emoji: string;
-  title: string;
-  description: string | null;
-  reward_credits: number;
-  reward_score: number;
-  og_bonus_pct: number;
-  category: string;
-  is_active: boolean;
-  paused: boolean;
-  sort_order: number;
+  id: number; emoji: string; title: string; description: string | null;
+  reward_credits: number; reward_score: number; og_bonus_pct: number;
+  category: string; is_active: boolean; paused: boolean; sort_order: number;
 }
 
 interface ZipSetting {
-  id: number;
-  scope: string;
-  scope_value: string;
-  enabled: boolean;
-  show_when_real_jobs_exist: boolean;
-  max_tasks_shown: number;
+  id: number; scope: string; scope_value: string; enabled: boolean;
+  show_when_real_jobs_exist: boolean; max_tasks_shown: number;
 }
 
 interface RewardConfig {
-  key: string;
-  valueInt: number;
-  label: string;
-  description: string | null;
+  key: string; valueInt: number; label: string; description: string | null;
 }
 
 interface Completion {
-  id: number;
-  user_id: number;
-  template_id: number;
-  emoji: string;
-  title: string;
-  zip: string;
-  credits_awarded: number;
-  score_awarded: number;
-  status: string;
-  rejection_reason: string | null;
-  created_at: string;
-  username: string;
-  email: string;
+  id: number; user_id: number; template_id: number; emoji: string; title: string;
+  zip: string; credits_awarded: number; score_awarded: number; status: string;
+  rejection_reason: string | null; created_at: string; username: string; email: string;
+}
+
+interface ScoreRank {
+  id: number; title: string; emoji: string; minScore: number; maxScore: number | null; sortOrder: number;
+}
+
+interface GrowthAnalytics {
+  totalCreditsIssued: number; totalCreditsRedeemed: number;
+  outstandingCreditLiability: number; estimatedUsdLiability: number;
+  totalCompletions: number; approvedCompletions: number; suspiciousCompletions: number;
+  totalReferrals: number; verifiedReferrals: number; stripeConnectedReferrals: number;
+  day1OgSales: number;
+  topCities: Array<{ city: string; state: string; count: number }>;
+  topContributors: Array<{ username: string; guberScore: number; completions: number }>;
+  completionsByTask: Array<{ title: string; emoji: string; count: number; totalCredits: number }>;
 }
 
 function TemplatesTab() {
@@ -99,7 +89,7 @@ function TemplatesTab() {
   });
 
   const emptyTpl: Partial<Template> = {
-    emoji: "📢", title: "", description: "", reward_credits: 25, reward_score: 50,
+    emoji: "📢", title: "", description: "", reward_credits: 5, reward_score: 10,
     og_bonus_pct: 25, category: "community", sort_order: 0,
   };
 
@@ -154,8 +144,7 @@ function TemplatesTab() {
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
                     <Button
-                      variant="ghost"
-                      size="icon"
+                      variant="ghost" size="icon"
                       onClick={() => confirm("Delete this task template?") && deleteMutation.mutate(t.id)}
                     >
                       <Trash2 className="w-3.5 h-3.5 text-red-500" />
@@ -190,19 +179,18 @@ function TemplatesTab() {
                 <Textarea
                   value={editingTpl.description ?? ""}
                   onChange={e => setEditingTpl(p => ({ ...p!, description: e.target.value }))}
-                  rows={2}
-                  className="resize-none"
+                  rows={2} className="resize-none"
                 />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <Label>Credits</Label>
-                  <Input type="number" value={editingTpl.reward_credits ?? 25}
+                  <Input type="number" value={editingTpl.reward_credits ?? 5}
                     onChange={e => setEditingTpl(p => ({ ...p!, reward_credits: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div>
                   <Label>Score</Label>
-                  <Input type="number" value={editingTpl.reward_score ?? 50}
+                  <Input type="number" value={editingTpl.reward_score ?? 10}
                     onChange={e => setEditingTpl(p => ({ ...p!, reward_score: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div>
@@ -319,12 +307,9 @@ function ZipSettingsTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Scope</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead>Enabled</TableHead>
-              <TableHead>Show w/ Real Jobs</TableHead>
-              <TableHead>Max Tasks</TableHead>
-              <TableHead></TableHead>
+              <TableHead>Scope</TableHead><TableHead>Value</TableHead>
+              <TableHead>Enabled</TableHead><TableHead>Show w/ Real Jobs</TableHead>
+              <TableHead>Max Tasks</TableHead><TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -333,26 +318,17 @@ function ZipSettingsTab() {
                 <TableCell><Badge variant="outline">{s.scope}</Badge></TableCell>
                 <TableCell className="font-mono">{s.scope_value || "(global)"}</TableCell>
                 <TableCell>
-                  <Switch
-                    checked={s.enabled}
-                    onCheckedChange={v => upsertMutation.mutate({ scope: s.scope, scopeValue: s.scope_value, enabled: v, showWhenRealJobsExist: s.show_when_real_jobs_exist, maxTasksShown: s.max_tasks_shown })}
-                  />
+                  <Switch checked={s.enabled}
+                    onCheckedChange={v => upsertMutation.mutate({ scope: s.scope, scopeValue: s.scope_value, enabled: v, showWhenRealJobsExist: s.show_when_real_jobs_exist, maxTasksShown: s.max_tasks_shown })} />
                 </TableCell>
                 <TableCell>
-                  <Switch
-                    checked={s.show_when_real_jobs_exist}
-                    onCheckedChange={v => upsertMutation.mutate({ scope: s.scope, scopeValue: s.scope_value, enabled: s.enabled, showWhenRealJobsExist: v, maxTasksShown: s.max_tasks_shown })}
-                  />
+                  <Switch checked={s.show_when_real_jobs_exist}
+                    onCheckedChange={v => upsertMutation.mutate({ scope: s.scope, scopeValue: s.scope_value, enabled: s.enabled, showWhenRealJobsExist: v, maxTasksShown: s.max_tasks_shown })} />
                 </TableCell>
                 <TableCell>
-                  <Input
-                    type="number"
-                    className="w-16"
-                    value={s.max_tasks_shown}
+                  <Input type="number" className="w-16" value={s.max_tasks_shown}
                     onChange={e => upsertMutation.mutate({ scope: s.scope, scopeValue: s.scope_value, enabled: s.enabled, showWhenRealJobsExist: s.show_when_real_jobs_exist, maxTasksShown: parseInt(e.target.value) || 6 })}
-                    min={1}
-                    max={20}
-                  />
+                    min={1} max={20} />
                 </TableCell>
                 <TableCell>
                   {s.scope !== "global" && (
@@ -404,24 +380,81 @@ function RewardConfigTab() {
           </div>
           <div className="flex items-center gap-2">
             <Input
-              type="number"
-              className="w-24 text-right"
+              type="number" className="w-24 text-right"
               value={editing[c.key] !== undefined ? editing[c.key] : c.valueInt}
               onChange={e => setEditing(p => ({ ...p, [c.key]: parseInt(e.target.value) || 0 }))}
               data-testid={`input-config-${c.key}`}
             />
             {editing[c.key] !== undefined && editing[c.key] !== c.valueInt && (
-              <Button
-                size="sm"
+              <Button size="sm"
                 onClick={() => updateMutation.mutate({ key: c.key, valueInt: editing[c.key] })}
                 disabled={updateMutation.isPending}
-              >
-                Save
-              </Button>
+              >Save</Button>
             )}
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ScoreRanksTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [editing, setEditing] = useState<Record<number, Partial<ScoreRank>>>({});
+
+  const { data: ranks = [], isLoading } = useQuery<ScoreRank[]>({
+    queryKey: ["/api/admin/growth-engine/score-ranks"],
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<ScoreRank> }) =>
+      apiRequest("PATCH", `/api/admin/growth-engine/score-ranks/${id}`, {
+        title: data.title, emoji: data.emoji, minScore: data.minScore, maxScore: data.maxScore, sortOrder: data.sortOrder,
+      }),
+    onSuccess: (_, { id }) => {
+      toast({ title: "Rank updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/growth-engine/score-ranks"] });
+      setEditing(p => { const n = { ...p }; delete n[id]; return n; });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500 mb-4">City ranking levels displayed on user profiles and leaderboards. Edit score thresholds freely.</p>
+      {ranks.map(r => {
+        const e = editing[r.id] ?? {};
+        const merged = { ...r, ...e };
+        const isDirty = Object.keys(e).length > 0;
+        return (
+          <div key={r.id} className="flex items-center gap-3 p-3 rounded-lg border bg-white dark:bg-gray-900" data-testid={`row-rank-${r.id}`}>
+            <div className="flex items-center gap-2 w-8">
+              <Input value={merged.emoji} className="w-10 text-center px-1" maxLength={4}
+                onChange={e2 => setEditing(p => ({ ...p, [r.id]: { ...p[r.id], emoji: e2.target.value } }))} />
+            </div>
+            <div className="flex-1">
+              <Input value={merged.title} className="font-semibold"
+                onChange={e2 => setEditing(p => ({ ...p, [r.id]: { ...p[r.id], title: e2.target.value } }))} />
+            </div>
+            <div className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+              <Input type="number" className="w-20 text-right" value={merged.minScore}
+                onChange={e2 => setEditing(p => ({ ...p, [r.id]: { ...p[r.id], minScore: parseInt(e2.target.value) || 0 } }))} />
+              <span>–</span>
+              <Input type="number" className="w-20 text-right" placeholder="∞"
+                value={merged.maxScore ?? ""}
+                onChange={e2 => setEditing(p => ({ ...p, [r.id]: { ...p[r.id], maxScore: e2.target.value ? parseInt(e2.target.value) : null } }))} />
+            </div>
+            {isDirty && (
+              <Button size="sm" onClick={() => updateMutation.mutate({ id: r.id, data: merged })} disabled={updateMutation.isPending}>
+                Save
+              </Button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -434,8 +467,8 @@ function CompletionsTab() {
   });
 
   const statusColor = (s: string) => {
-    if (s === "approved") return "bg-green-100 text-green-700";
-    if (s === "rejected") return "bg-red-100 text-red-700";
+    if (s === "approved")   return "bg-green-100 text-green-700";
+    if (s === "rejected")   return "bg-red-100 text-red-700";
     if (s === "suspicious") return "bg-orange-100 text-orange-700";
     return "bg-gray-100 text-gray-700";
   };
@@ -450,13 +483,9 @@ function CompletionsTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Task</TableHead>
-                <TableHead>ZIP</TableHead>
-                <TableHead>Credits</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>When</TableHead>
+                <TableHead>User</TableHead><TableHead>Task</TableHead><TableHead>ZIP</TableHead>
+                <TableHead>Credits</TableHead><TableHead>Score</TableHead>
+                <TableHead>Status</TableHead><TableHead>When</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -472,8 +501,7 @@ function CompletionsTab() {
                   <TableCell className="font-semibold text-blue-600">+{c.score_awarded}</TableCell>
                   <TableCell>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor(c.status)}`}>
-                      {c.status}
-                      {c.rejection_reason ? ` (${c.rejection_reason})` : ""}
+                      {c.status}{c.rejection_reason ? ` (${c.rejection_reason})` : ""}
                     </span>
                   </TableCell>
                   <TableCell className="text-xs text-gray-500">
@@ -496,6 +524,120 @@ function CompletionsTab() {
   );
 }
 
+function AnalyticsTab() {
+  const { data: a, isLoading } = useQuery<GrowthAnalytics>({
+    queryKey: ["/api/admin/growth-engine/analytics"],
+  });
+
+  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!a) return null;
+
+  const StatBox = ({ label, value, sub }: { label: string; value: string | number; sub?: string }) => (
+    <div className="p-4 rounded-lg border bg-white dark:bg-gray-900">
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <p className="text-xl font-bold">{typeof value === "number" ? value.toLocaleString() : value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Credits */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Credits &amp; Liability</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatBox label="Total Credits Issued" value={a.totalCreditsIssued} sub="from completed tasks" />
+          <StatBox label="Total Credits Redeemed" value={a.totalCreditsRedeemed} sub="cashouts processed" />
+          <StatBox label="Outstanding Liability" value={a.outstandingCreditLiability.toLocaleString()} sub={`~$${a.estimatedUsdLiability.toFixed(2)} USD`} />
+          <StatBox label="Day-1 OG Sales" value={a.day1OgSales} />
+        </div>
+      </div>
+
+      {/* Completions */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Task Completions</p>
+        <div className="grid grid-cols-3 gap-3">
+          <StatBox label="Total Submissions" value={a.totalCompletions} />
+          <StatBox label="Approved" value={a.approvedCompletions} />
+          <StatBox label="Suspicious" value={a.suspiciousCompletions} />
+        </div>
+      </div>
+
+      {/* Referrals */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Referrals</p>
+        <div className="grid grid-cols-3 gap-3">
+          <StatBox label="Total Referrals" value={a.totalReferrals} />
+          <StatBox label="ID Verified" value={a.verifiedReferrals} />
+          <StatBox label="Stripe Connected" value={a.stripeConnectedReferrals} />
+        </div>
+      </div>
+
+      {/* Task Breakdown */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Completion Rates by Task</p>
+        {a.completionsByTask.length === 0 ? (
+          <p className="text-sm text-gray-500">No completions yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {a.completionsByTask.map(t => (
+              <div key={t.title} className="flex items-center gap-3 p-3 rounded-lg border bg-white dark:bg-gray-900">
+                <span className="text-lg">{t.emoji}</span>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{t.title}</p>
+                  <p className="text-xs text-gray-500">{t.totalCredits.toLocaleString()} credits issued</p>
+                </div>
+                <span className="font-bold text-sm">{t.count.toLocaleString()} completions</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Top Cities */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Top Cities</p>
+        {a.topCities.length === 0 ? (
+          <p className="text-sm text-gray-500">No city data yet.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {a.topCities.map((c, i) => (
+              <div key={`${c.city}-${c.state}`} className="flex items-center gap-3 p-2.5 rounded-lg border bg-white dark:bg-gray-900">
+                <span className="text-xs font-bold text-gray-400 w-5">#{i + 1}</span>
+                <div className="flex-1">
+                  <span className="font-medium text-sm">{c.city}, {c.state}</span>
+                </div>
+                <span className="text-sm font-semibold">{c.count} tasks</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Top Contributors */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Top Contributors</p>
+        {a.topContributors.length === 0 ? (
+          <p className="text-sm text-gray-500">No contributors yet.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {a.topContributors.map((u, i) => (
+              <div key={u.username} className="flex items-center gap-3 p-2.5 rounded-lg border bg-white dark:bg-gray-900">
+                <span className="text-xs font-bold text-gray-400 w-5">#{i + 1}</span>
+                <div className="flex-1">
+                  <span className="font-medium text-sm">{u.username}</span>
+                  <span className="text-xs text-gray-500 ml-2">{u.completions} tasks</span>
+                </div>
+                <span className="text-sm font-semibold text-blue-600">⭐ {u.guberScore.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminGrowthEnginePage() {
   const [, navigate] = useLocation();
 
@@ -509,20 +651,27 @@ export default function AdminGrowthEnginePage() {
           >
             <ArrowLeft className="w-4 h-4" /> Admin QA
           </button>
-          <h1 className="text-xl font-bold">Growth Engine</h1>
-          <p className="text-sm text-gray-400">Manage ZIP fallback tasks, rewards, and settings</p>
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-yellow-400" />
+            <h1 className="text-xl font-bold">Growth Engine</h1>
+          </div>
+          <p className="text-sm text-gray-400">All values founder-configurable. No hard limits.</p>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 mt-6">
-        <Tabs defaultValue="templates">
-          <TabsList className="mb-6">
-            <TabsTrigger value="templates">Templates</TabsTrigger>
+        <Tabs defaultValue="analytics">
+          <TabsList className="mb-6 flex flex-wrap gap-1">
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="templates">Tasks</TabsTrigger>
+            <TabsTrigger value="score-ranks">Score Ranks</TabsTrigger>
             <TabsTrigger value="zip-settings">ZIP Settings</TabsTrigger>
             <TabsTrigger value="reward-config">Reward Config</TabsTrigger>
             <TabsTrigger value="completions">Completions</TabsTrigger>
           </TabsList>
+          <TabsContent value="analytics"><AnalyticsTab /></TabsContent>
           <TabsContent value="templates"><TemplatesTab /></TabsContent>
+          <TabsContent value="score-ranks"><ScoreRanksTab /></TabsContent>
           <TabsContent value="zip-settings"><ZipSettingsTab /></TabsContent>
           <TabsContent value="reward-config"><RewardConfigTab /></TabsContent>
           <TabsContent value="completions"><CompletionsTab /></TabsContent>

@@ -30,6 +30,8 @@ import {
   listGrowthTaskTemplates, createGrowthTaskTemplate, updateGrowthTaskTemplate, deleteGrowthTaskTemplate,
   listZipSettings, upsertZipSetting, deleteZipSetting,
   listGrowthCompletions,
+  getScoreRanks, updateScoreRank,
+  getLeaderboard, getGrowthAnalytics,
 } from "./growth-engine";
 import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
@@ -24933,6 +24935,58 @@ OUTPUT STYLE:
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // ── Growth Leaderboard (public) ────────────────────────────────────────────
+  app.get("/api/growth/leaderboard", async (req: Request, res: Response) => {
+    try {
+      const type = (req.query.type as string) || "global";
+      if (!["global", "state", "city"].includes(type)) return res.status(400).json({ error: "type must be global, state, or city" });
+      const value = (req.query.value as string) || undefined;
+      const limit = Math.min(parseInt(req.query.limit as string || "50", 10), 100);
+      const entries = await getLeaderboard(type as any, value, limit);
+      res.json({ type, value, entries });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Growth My Rank (auth) ──────────────────────────────────────────────────
+  app.get("/api/growth/my-rank", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const ranks = await getScoreRanks();
+      const userRes = await pool.query(`SELECT guber_score FROM users WHERE id=$1`, [userId]);
+      const score = userRes.rows[0]?.guber_score ?? 0;
+      const sorted = [...ranks].sort((a, b) => b.minScore - a.minScore);
+      const rank = sorted.find(r => score >= r.minScore) ?? null;
+      res.json({ score, rank, ranks });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Growth Score Ranks — admin CRUD ───────────────────────────────────────
+  app.get("/api/admin/growth-engine/score-ranks", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await getScoreRanks()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.patch("/api/admin/growth-engine/score-ranks/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { title, emoji, minScore, maxScore, sortOrder } = req.body;
+      await updateScoreRank(id, { title, emoji, minScore, maxScore, sortOrder });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Growth Analytics — admin ───────────────────────────────────────────────
+  app.get("/api/admin/growth-engine/analytics", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await getGrowthAnalytics()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
   return httpServer;

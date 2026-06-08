@@ -420,6 +420,204 @@ export async function deleteZipSetting(id: number): Promise<void> {
   await pool.query(`DELETE FROM zip_fallback_settings WHERE id = $1 AND scope != 'global'`, [id]);
 }
 
+// ── Score Ranks ───────────────────────────────────────────────────────────────
+
+export interface ScoreRank {
+  id: number;
+  title: string;
+  emoji: string;
+  minScore: number;
+  maxScore: number | null;
+  sortOrder: number;
+}
+
+export async function getScoreRanks(): Promise<ScoreRank[]> {
+  const res = await pool.query(
+    `SELECT id, title, emoji, min_score, max_score, sort_order
+     FROM growth_score_ranks ORDER BY sort_order ASC`
+  );
+  return res.rows.map((r: any) => ({
+    id: r.id, title: r.title, emoji: r.emoji,
+    minScore: r.min_score, maxScore: r.max_score, sortOrder: r.sort_order,
+  }));
+}
+
+export async function updateScoreRank(id: number, data: Partial<{
+  title: string; emoji: string; minScore: number; maxScore: number | null; sortOrder: number;
+}>): Promise<void> {
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+  if (data.title     !== undefined) { sets.push(`title = $${i++}`);      vals.push(data.title); }
+  if (data.emoji     !== undefined) { sets.push(`emoji = $${i++}`);      vals.push(data.emoji); }
+  if (data.minScore  !== undefined) { sets.push(`min_score = $${i++}`);  vals.push(data.minScore); }
+  if (data.maxScore  !== undefined) { sets.push(`max_score = $${i++}`);  vals.push(data.maxScore); }
+  if (data.sortOrder !== undefined) { sets.push(`sort_order = $${i++}`); vals.push(data.sortOrder); }
+  if (sets.length === 0) return;
+  sets.push(`updated_at = NOW()`);
+  vals.push(id);
+  await pool.query(`UPDATE growth_score_ranks SET ${sets.join(", ")} WHERE id = $${i}`, vals);
+}
+
+export function computeRankTitle(score: number, ranks: ScoreRank[]): ScoreRank | null {
+  const sorted = [...ranks].sort((a, b) => b.minScore - a.minScore);
+  return sorted.find(r => score >= r.minScore) ?? null;
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  userId: number;
+  username: string;
+  guberScore: number;
+  growthCredits: number;
+  referralCount: number;
+  completionCount: number;
+  zip: string | null;
+}
+
+export async function getLeaderboard(
+  type: "global" | "state" | "city",
+  value?: string,
+  limit = 50
+): Promise<LeaderboardEntry[]> {
+  const fetchLimit = type === "global" ? limit : 500;
+  const res = await pool.query(
+    `SELECT u.id AS user_id, u.username, u.guber_score, u.growth_credits,
+            COALESCE(u.referral_count, 0) AS referral_count, u.zip,
+            COUNT(c.id) AS completion_count
+     FROM users u
+     LEFT JOIN growth_task_completions c ON c.user_id = u.id AND c.status = 'approved'
+     WHERE u.guber_score > 0
+     GROUP BY u.id
+     ORDER BY u.guber_score DESC
+     LIMIT $1`,
+    [fetchLimit]
+  );
+  let rows: LeaderboardEntry[] = res.rows.map((r: any) => ({
+    userId: r.user_id,
+    username: r.username,
+    guberScore: r.guber_score,
+    growthCredits: r.growth_credits,
+    referralCount: r.referral_count,
+    completionCount: parseInt(r.completion_count, 10),
+    zip: r.zip,
+  }));
+  if ((type === "state" || type === "city") && value) {
+    rows = rows.filter(r => {
+      if (!r.zip) return false;
+      const info = lookupZipCity(r.zip);
+      if (!info) return false;
+      return type === "state" ? info.state === value : info.city === value;
+    }).slice(0, limit);
+  }
+  return rows;
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+export interface GrowthAnalytics {
+  totalCreditsIssued: number;
+  totalCreditsRedeemed: number;
+  outstandingCreditLiability: number;
+  estimatedUsdLiability: number;
+  totalCompletions: number;
+  approvedCompletions: number;
+  suspiciousCompletions: number;
+  totalReferrals: number;
+  verifiedReferrals: number;
+  stripeConnectedReferrals: number;
+  day1OgSales: number;
+  topCities: Array<{ city: string; state: string; count: number }>;
+  topContributors: Array<{ username: string; guberScore: number; completions: number }>;
+  completionsByTask: Array<{ title: string; emoji: string; count: number; totalCredits: number }>;
+}
+
+export async function getGrowthAnalytics(): Promise<GrowthAnalytics> {
+  const [
+    creditsRes, liabilityRes, completionsRes,
+    referralsRes, ogRes, taskBreakdownRes, topUsersRes, zipBreakdownRes,
+  ] = await Promise.all([
+    pool.query(`SELECT COALESCE(SUM(credits_awarded),0) AS total FROM growth_task_completions WHERE status='approved'`),
+    pool.query(`SELECT COALESCE(SUM(growth_credits),0) AS total FROM users`),
+    pool.query(`SELECT
+      COUNT(*) FILTER(WHERE status='approved')   AS approved,
+      COUNT(*) FILTER(WHERE status='suspicious') AS suspicious,
+      COUNT(*) AS total
+      FROM growth_task_completions`),
+    pool.query(`
+      SELECT COUNT(*) AS total,
+             COUNT(*) FILTER(WHERE u.id_verified=true) AS verified,
+             COUNT(*) FILTER(WHERE u.stripe_account_id IS NOT NULL) AS stripe_connected
+      FROM referrals r
+      JOIN users u ON u.id = r.referred_id`),
+    pool.query(`SELECT COUNT(*) AS total FROM users WHERE day1_og=true`),
+    pool.query(`
+      SELECT t.title, t.emoji,
+             COUNT(c.id) AS count,
+             COALESCE(SUM(c.credits_awarded),0) AS total_credits
+      FROM growth_task_completions c
+      JOIN growth_task_templates t ON t.id = c.template_id
+      WHERE c.status='approved'
+      GROUP BY t.id, t.title, t.emoji
+      ORDER BY count DESC`),
+    pool.query(`
+      SELECT u.username, u.guber_score, COUNT(c.id) AS completions
+      FROM users u
+      LEFT JOIN growth_task_completions c ON c.user_id=u.id AND c.status='approved'
+      WHERE u.guber_score > 0
+      GROUP BY u.id
+      ORDER BY u.guber_score DESC
+      LIMIT 10`),
+    pool.query(`
+      SELECT zip, COUNT(*) AS count
+      FROM growth_task_completions
+      WHERE status='approved' AND zip IS NOT NULL
+      GROUP BY zip
+      ORDER BY count DESC
+      LIMIT 100`),
+  ]);
+
+  const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 100);
+  const totalCreditsIssued = Number(creditsRes.rows[0]?.total ?? 0);
+  const liability = Number(liabilityRes.rows[0]?.total ?? 0);
+
+  const cityMap = new Map<string, number>();
+  for (const row of zipBreakdownRes.rows) {
+    const info = lookupZipCity(row.zip);
+    if (info) {
+      const key = `${info.city}||${info.state}`;
+      cityMap.set(key, (cityMap.get(key) ?? 0) + parseInt(row.count, 10));
+    }
+  }
+  const topCities = [...cityMap.entries()]
+    .sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([key, count]) => { const [city, state] = key.split("||"); return { city, state, count }; });
+
+  const refs = referralsRes.rows[0];
+  return {
+    totalCreditsIssued,
+    totalCreditsRedeemed: 0,
+    outstandingCreditLiability: liability,
+    estimatedUsdLiability: +(liability / creditsPerDollar).toFixed(2),
+    totalCompletions: parseInt(completionsRes.rows[0]?.total ?? "0", 10),
+    approvedCompletions: parseInt(completionsRes.rows[0]?.approved ?? "0", 10),
+    suspiciousCompletions: parseInt(completionsRes.rows[0]?.suspicious ?? "0", 10),
+    totalReferrals: parseInt(refs?.total ?? "0", 10),
+    verifiedReferrals: parseInt(refs?.verified ?? "0", 10),
+    stripeConnectedReferrals: parseInt(refs?.stripe_connected ?? "0", 10),
+    day1OgSales: parseInt(ogRes.rows[0]?.total ?? "0", 10),
+    topCities,
+    topContributors: topUsersRes.rows.map((r: any) => ({
+      username: r.username, guberScore: r.guber_score, completions: parseInt(r.completions, 10),
+    })),
+    completionsByTask: taskBreakdownRes.rows.map((r: any) => ({
+      title: r.title, emoji: r.emoji,
+      count: parseInt(r.count, 10), totalCredits: parseInt(r.total_credits, 10),
+    })),
+  };
+}
+
 export async function listGrowthCompletions(page = 1, pageSize = 50) {
   const offset = (page - 1) * pageSize;
   const res = await pool.query(
