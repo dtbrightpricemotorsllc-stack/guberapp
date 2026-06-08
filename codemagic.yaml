@@ -136,6 +136,16 @@ workflows:
           fi
           echo "  Status: OK — both capabilities present"
 
+          # ── Prove this yaml is the active one ────────────────────────────
+          echo "=== CUSTOM SIGNING SCRIPT START ==="
+          grep -n "CUSTOM SIGNING SCRIPT" codemagic.yaml || true
+
+          # ── Re-fetch with CM_CERTIFICATE_PRIVATE_KEY (Codemagic cert key) ─
+          app-store-connect fetch-signing-files com.guber.app \
+            --type IOS_APP_STORE \
+            --create \
+            --certificate-key=@env:CM_CERTIFICATE_PRIVATE_KEY
+
           # ── Patch pbxproj ─────────────────────────────────────────────────
           xcode-project use-profiles
 
