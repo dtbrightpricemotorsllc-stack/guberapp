@@ -53,9 +53,8 @@ workflows:
           set -euo pipefail
           PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 
-          # ── Certificate into keychain ─────────────────────────────────────
+          # ── Init keychain (cert will be created via API below) ───────────
           keychain initialize
-          keychain add-certificates
 
           # ── Wipe everything Codemagic may have pre-installed ─────────────
           echo "=== Clearing profile directory ==="
