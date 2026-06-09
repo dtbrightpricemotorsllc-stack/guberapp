@@ -12,7 +12,7 @@ workflows:
         XCODE_SCHEME: App
         BUNDLE_ID: com.guber.app
         TEAM_ID: 7MC93QFW6Q
-        TARGET_PROFILE: GUBER_Profile_v3
+        TARGET_PROFILE: GUBER_AppStore_Profile_v3
       xcode: 16.2
 
     scripts:
