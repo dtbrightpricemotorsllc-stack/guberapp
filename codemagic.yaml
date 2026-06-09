@@ -39,16 +39,22 @@ workflows:
 
           keychain initialize
 
+          echo "=== Generating certificate private key (PKCS8) ==="
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+            -out /tmp/distribution_key.pem
+          head -1 /tmp/distribution_key.pem
+
           echo "=== Clearing profile directory ==="
           rm -rf "${PROF_DIR:?}"/*
           mkdir -p "$PROF_DIR"
 
-          echo "=== Fetching certificate + profiles (no --profile-name) ==="
+          echo "=== Fetching certificate + profiles ==="
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --issuer-id   "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id      "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "@env:APP_STORE_CONNECT_PRIVATE_KEY" \
-            --type        IOS_APP_STORE \
+            --issuer-id       "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id          "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key     "@env:APP_STORE_CONNECT_PRIVATE_KEY" \
+            --type            IOS_APP_STORE \
+            --certificate-key "@file:/tmp/distribution_key.pem" \
             --create
 
           echo "=== Profiles on disk after fetch ==="
