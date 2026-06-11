@@ -39,9 +39,8 @@ workflows:
 
           keychain initialize
 
-          echo "=== Generating certificate private key (PKCS8) ==="
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-            -out /tmp/distribution_key.pem
+          echo "=== Writing certificate private key from env ==="
+          printf '%s' "$CM_CERTIFICATE_PRIVATE_KEY" > /tmp/distribution_key.pem
           head -1 /tmp/distribution_key.pem
 
           echo "=== Clearing profile directory ==="
