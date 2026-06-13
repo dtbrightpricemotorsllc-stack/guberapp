@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Cropper from "react-easy-crop";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -95,6 +95,43 @@ export default function AccountSettings() {
       toast({ title: "Map preference saved" });
     },
     onError: (err: any) => toast({ title: "Could not save preference", description: err?.message, variant: "destructive" }),
+  });
+
+  const JOB_CATEGORIES = [
+    "Lawn & Yard", "Moving Help", "Cleaning", "Errands", "Handyman",
+    "Verify & Inspect", "Delivery", "Pet Care", "Tutoring", "Tech Help",
+  ];
+
+  const serviceAreaQuery = useQuery<{ zipcode: string | null; serviceRadius: number; alertCategories: string[] }>({
+    queryKey: ["/api/users/me/service-area"],
+    enabled: !!user,
+  });
+
+  const [saZip, setSaZip] = useState("");
+  const [saRadius, setSaRadius] = useState(25);
+  const [saCats, setSaCats] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (serviceAreaQuery.data) {
+      setSaZip(serviceAreaQuery.data.zipcode ?? "");
+      setSaRadius(serviceAreaQuery.data.serviceRadius ?? 25);
+      setSaCats(serviceAreaQuery.data.alertCategories ?? []);
+    }
+  }, [serviceAreaQuery.data]);
+
+  const serviceAreaMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PUT", "/api/users/me/service-area", {
+        zipcode: saZip,
+        serviceRadius: saRadius,
+        alertCategories: saCats,
+      }).then((r) => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/me/service-area"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Service area saved", description: "You'll get alerts for new jobs in this area." });
+    },
+    onError: (err: any) => toast({ title: "Could not save service area", description: err?.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -397,6 +434,92 @@ export default function AccountSettings() {
               <SelectItem value="waze">Waze</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4 mb-4" data-testid="card-service-area">
+          <div className="flex items-center gap-2 mb-1">
+            <MapPin className="w-4 h-4 text-primary" />
+            <h3 className="font-display font-semibold text-sm">Job Alert Area</h3>
+          </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            Set your home ZIP and alert radius so GUBER can notify you when new jobs are posted nearby.
+          </p>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">Home ZIP Code</Label>
+            <Input
+              value={saZip}
+              onChange={(e) => setSaZip(e.target.value)}
+              placeholder="e.g. 36608"
+              maxLength={10}
+              className="bg-background border-border/30"
+              data-testid="input-service-area-zip"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
+                <Sliders className="w-3 h-3 inline mr-1 -mt-0.5" />Alert Radius
+              </Label>
+              <span className="text-xs font-semibold text-primary" data-testid="text-service-radius">{saRadius} mi</span>
+            </div>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={saRadius}
+              onChange={(e) => setSaRadius(Number(e.target.value))}
+              className="w-full accent-primary"
+              data-testid="slider-service-radius"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>5 mi</span>
+              <span>50 mi</span>
+              <span>100 mi</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-[11px] text-[#00E5E5] uppercase tracking-wider font-display">
+              Category Filters <span className="text-muted-foreground normal-case font-normal">(optional — leave blank for all)</span>
+            </Label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {JOB_CATEGORIES.map((cat) => {
+                const active = saCats.includes(cat);
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    data-testid={`toggle-cat-${cat.replace(/\s+/g, "-").toLowerCase()}`}
+                    onClick={() =>
+                      setSaCats((prev) =>
+                        prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+                      )
+                    }
+                    className={`text-[11px] px-2.5 py-1.5 rounded-lg border text-left transition-colors font-medium ${
+                      active
+                        ? "bg-primary/10 border-primary/40 text-primary"
+                        : "bg-background border-border/25 text-muted-foreground"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Button
+            onClick={() => serviceAreaMutation.mutate()}
+            disabled={serviceAreaMutation.isPending || !saZip.trim()}
+            className="w-full h-11 font-display tracking-wider rounded-xl"
+            variant="outline"
+            data-testid="button-save-service-area"
+          >
+            {serviceAreaMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "SAVE ALERT AREA"}
+          </Button>
         </div>
 
         {biometricSupported && (

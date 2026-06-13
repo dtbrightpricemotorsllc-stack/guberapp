@@ -137,6 +137,8 @@ export const users = pgTable("users", {
   stripeProfileType: text("stripe_profile_type"),
   createdAt: timestamp("created_at").defaultNow(),
   notifNearbyJobs: boolean("notif_nearby_jobs").default(true),
+  serviceRadius: integer("service_radius").default(25),
+  alertCategories: text("alert_categories").array(),
   notifMessages: boolean("notif_messages").default(true),
   notifJobUpdates: boolean("notif_job_updates").default(true),
   notifCashDrops: boolean("notif_cash_drops").default(true),

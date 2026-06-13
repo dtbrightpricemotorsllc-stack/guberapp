@@ -3,7 +3,8 @@ import { storage } from "./storage";
 import { sql } from "drizzle-orm";
 import { sendPushToUser } from "./push";
 
-const TWENTY_MILES_METERS = 32187;
+const DEFAULT_RADIUS_MILES = 20;
+const MILES_TO_METERS = 1609.344;
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
@@ -19,44 +20,59 @@ export async function notifyNearbyAvailableWorkers(
 ) {
   try {
     if (!job.lat || !job.lng) return;
-    // Notify ANY user within 20 miles of the job — not just clocked-in
-    // workers. Hirers who aren't actively working still benefit from
-    // knowing what's going on around them, and a worker who isn't
-    // clocked in might want to clock in once they see a nearby job.
-    // Excluded: the poster, deleted accounts, banned/suspended users.
+    // Notify any user whose saved location is within their configured service
+    // radius (default 20 miles) of the job. Respects per-user alertCategories
+    // filter — if the user has set specific categories, only notify for those.
+    // Excluded: the poster, deleted accounts, banned/suspended users,
+    // users who have turned off nearby-job notifications.
     const rows = await db.execute(sql`
-      SELECT id, full_name, lat, lng FROM users
+      SELECT id, full_name, lat, lng,
+             COALESCE(service_radius, ${DEFAULT_RADIUS_MILES}) AS service_radius,
+             alert_categories,
+             COALESCE(notif_nearby_jobs, true) AS notif_nearby_jobs
+      FROM users
       WHERE lat IS NOT NULL
         AND lng IS NOT NULL
         AND id != ${job.postedById}
         AND deleted_at IS NULL
         AND COALESCE(banned, false) = false
         AND COALESCE(suspended, false) = false
+        AND COALESCE(notif_nearby_jobs, true) = true
     `);
-    for (const u of rows.rows as { id: number; full_name: string; lat: number; lng: number }[]) {
+    for (const u of rows.rows as {
+      id: number; full_name: string; lat: number; lng: number;
+      service_radius: number; alert_categories: string[] | null;
+      notif_nearby_jobs: boolean;
+    }[]) {
+      // Per-user radius (capped at 100 miles to prevent abuse)
+      const radiusMeters = Math.min(u.service_radius ?? DEFAULT_RADIUS_MILES, 100) * MILES_TO_METERS;
       const dist = haversineMeters(job.lat, job.lng, u.lat, u.lng);
-      if (dist <= TWENTY_MILES_METERS) {
-        const title = options?.titleOverride || "New Job Near You! 📍";
-        const body = options?.bodyOverride || `A new ${job.category || "job"} was posted within 20 miles of you: "${job.title}"`;
-        // In-app notification
-        await storage.createNotification({
-          userId: u.id,
-          title,
-          body,
-          type: "nearby",
-          jobId: job.id,
-        });
-        // Background push — fire and forget. Users without a push
-        // subscription will simply no-op here; the in-app notification
-        // above still lands in their notifications list.
-        sendPushToUser(u.id, {
-          title,
-          body,
-          url: `/jobs/${job.id}`,
-          tag: `nearby-job-${job.id}`,
-          sound: "guber_nearby.wav",
-        }).catch(() => {});
+      if (dist > radiusMeters) continue;
+
+      // Category filter — if user set specific categories, only notify for those
+      if (u.alert_categories && u.alert_categories.length > 0 && job.category) {
+        if (!u.alert_categories.includes(job.category)) continue;
       }
+
+      const radiusMiles = Math.round(dist / MILES_TO_METERS);
+      const title = options?.titleOverride || "New Job Near You! 📍";
+      const body = options?.bodyOverride || `A new ${job.category || "job"} was posted ${radiusMiles > 0 ? `${radiusMiles} mi away` : "nearby"}: "${job.title}"`;
+      // In-app notification
+      await storage.createNotification({
+        userId: u.id,
+        title,
+        body,
+        type: "nearby",
+        jobId: job.id,
+      });
+      // Background push — fire and forget
+      sendPushToUser(u.id, {
+        title,
+        body,
+        url: `/jobs/${job.id}`,
+        tag: `nearby-job-${job.id}`,
+        sound: "guber_nearby.wav",
+      }).catch(() => {});
     }
   } catch (e: any) {
     console.error("[GUBER] notifyNearbyAvailableWorkers error:", e.message);

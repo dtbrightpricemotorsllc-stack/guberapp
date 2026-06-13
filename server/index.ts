@@ -650,6 +650,12 @@ app.use((req, res, next) => {
       ON DELETE TO custody_events DO INSTEAD NOTHING;
   `).catch(e => console.error("[migration] custody_events append-only rule error:", e));
 
+  // ── Saved Service Area ────────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS service_radius   INTEGER DEFAULT 25;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS alert_categories TEXT[];
+  `).catch(e => console.error("[migration] service area columns error:", e));
+
   // ── GUBER Growth Engine ────────────────────────────────────────────────────
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS growth_credits INTEGER DEFAULT 0;

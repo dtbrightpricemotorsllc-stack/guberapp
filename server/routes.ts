@@ -2712,6 +2712,54 @@ export async function registerRoutes(
     }
   });
 
+  // ── Saved Service Area ──────────────────────────────────────────────────
+  // Workers set a home ZIP + radius + optional category filter.
+  // The server geocodes the ZIP and writes lat/lng onto the user record so
+  // notifyNearbyAvailableWorkers picks them up without a fresh GPS fix.
+  app.get("/api/users/me/service-area", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json({
+        zipcode: user.zipcode ?? null,
+        serviceRadius: (user as any).serviceRadius ?? 25,
+        alertCategories: (user as any).alertCategories ?? [],
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/users/me/service-area", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { zipcode, serviceRadius, alertCategories } = req.body;
+
+      const radius = Math.min(Math.max(parseInt(serviceRadius ?? "25", 10) || 25, 1), 100);
+      const cats: string[] = Array.isArray(alertCategories) ? alertCategories : [];
+
+      const update: Record<string, any> = {
+        serviceRadius: radius,
+        alertCategories: cats.length > 0 ? cats : null,
+      };
+
+      // Geocode the ZIP if provided so that lat/lng stay in sync
+      if (zipcode) {
+        update.zipcode = String(zipcode).trim();
+        const coords = await geocodeAddress(`${update.zipcode}, USA`);
+        if (coords) {
+          update.lat = coords.lat;
+          update.lng = coords.lng;
+        }
+      }
+
+      await storage.updateUser(userId, update as any);
+      res.json({ success: true, ...update });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // Liability protection (Task #318): record one-time global liability
   // disclaimer acknowledgement on the user. Idempotent — repeat calls are
   // a no-op once the timestamp is set.
