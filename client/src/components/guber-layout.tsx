@@ -6,6 +6,7 @@ import { playGuberPing, unlockAudio, isAudioUnlocked, playGuberSound, type Sound
 import { isNativeApp, isAndroid } from "@/lib/platform";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
 import { GpsDisclaimerModal } from "@/components/gps-disclaimer-modal";
+import { BackgroundLocationModal } from "@/components/background-location-modal";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "./guber-logo";
@@ -442,6 +443,7 @@ export function GuberLayout({ children, hideHeader, showBack, backHref, onBack, 
       )}
 
       <GpsDisclaimerModal />
+      <BackgroundLocationModal />
 
       <main className="flex-1" style={{ paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
         <PushNotificationBanner />

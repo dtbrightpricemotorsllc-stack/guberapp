@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ensureBackgroundLocation } from "@/lib/background-location";
 import type { ReactNode, CSSProperties } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -132,6 +133,15 @@ export default function LoadBoardDetail() {
       window.history.replaceState({}, "", `/load-board/${listingId}`);
     }
   }, [listingId]);
+
+  // Request background location for the carrier once the load is connected.
+  // Non-blocking — transport proceeds even if the carrier declines.
+  useEffect(() => {
+    if (!data?.listing) return;
+    if (data.listing.status !== "connected") return;
+    if (data.isPoster) return; // poster doesn't need tracking
+    void ensureBackgroundLocation("load_board");
+  }, [data?.listing?.status, data?.isPoster]);
 
   // ── Mutations ──
   const offerMutation = useMutation({

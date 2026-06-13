@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { gpsGetCurrentPosition } from "@/lib/gps";
+import { ensureBackgroundLocation } from "@/lib/background-location";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { useRoute } from "wouter";
 import { GuberLayout } from "@/components/guber-layout";
@@ -908,6 +909,10 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   const fireHelperStartAction = (action: "on_the_way") => {
     if (action === "on_the_way") {
+      // Request background location before the milestone fires so continuous
+      // tracking works even when the worker switches apps. Non-blocking —
+      // the GPS milestone proceeds regardless of the user's choice.
+      void ensureBackgroundLocation("job");
       gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
         .then((pos) => {
           milestoneMutation.mutate({

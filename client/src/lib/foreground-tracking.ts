@@ -5,9 +5,17 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 export interface ForegroundTrackingPlugin {
   start(options: { title?: string; text?: string }): Promise<void>;
   stop(): Promise<void>;
+  /** Returns the current background location permission state without prompting. */
+  checkBackgroundLocation(): Promise<{ status: string }>;
+  /**
+   * Requests ACCESS_BACKGROUND_LOCATION. Must only be called after the JS layer
+   * has shown its own in-app disclosure (Google Play policy). On Android 11+ the
+   * OS redirects to the location permission settings page.
+   */
+  requestBackgroundLocation(): Promise<{ status: string }>;
 }
 
-const ForegroundTracking = registerPlugin<ForegroundTrackingPlugin>("ForegroundTracking");
+export const ForegroundTracking = registerPlugin<ForegroundTrackingPlugin>("ForegroundTracking");
 
 // The plugin only exists in the native Android build. On iOS/web these calls
 // are no-ops (iOS keeps the GPS watch alive via its own foreground handling).

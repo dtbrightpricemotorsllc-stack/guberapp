@@ -1,21 +1,40 @@
 package com.guber.app;
 
+import android.Manifest;
 import android.content.Intent;
 
 import androidx.core.content.ContextCompat;
 
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 /**
  * JS bridge for the Android live-task foreground service. Exposed to the web
  * layer as the "ForegroundTracking" plugin with start()/stop(). The JS tracking
  * service calls these when an active task starts/ends so the persistent
  * status-bar notification appears for the duration of tracking.
+ *
+ * Also exposes checkBackgroundLocation() / requestBackgroundLocation() so the
+ * JS layer can implement the Google Play-required two-step in-app disclosure
+ * flow before requesting ACCESS_BACKGROUND_LOCATION at runtime.
+ * On Android 11+ the OS redirects to the location permission settings page
+ * ("Allow all the time") when the permission is requested.
  */
-@CapacitorPlugin(name = "ForegroundTracking")
+@CapacitorPlugin(
+    name = "ForegroundTracking",
+    permissions = {
+        @Permission(
+            alias = "backgroundLocation",
+            strings = { Manifest.permission.ACCESS_BACKGROUND_LOCATION }
+        )
+    }
+)
 public class ForegroundTrackingPlugin extends Plugin {
 
     @PluginMethod
@@ -46,5 +65,42 @@ public class ForegroundTrackingPlugin extends Plugin {
             // If the service isn't running there's nothing to stop — not an error.
         }
         call.resolve();
+    }
+
+    /**
+     * Returns the current background location permission state without prompting.
+     * Result: { status: "granted" | "denied" | "prompt" | "prompt-with-rationale" }
+     */
+    @PluginMethod
+    public void checkBackgroundLocation(PluginCall call) {
+        JSObject result = new JSObject();
+        PermissionState state = getPermissionState("backgroundLocation");
+        result.put("status", state != null ? state.toString() : "prompt");
+        call.resolve(result);
+    }
+
+    /**
+     * Requests ACCESS_BACKGROUND_LOCATION after the JS layer has already shown
+     * its in-app disclosure. If already granted, resolves immediately.
+     * Result: { status: "granted" | "denied" }
+     */
+    @PluginMethod
+    public void requestBackgroundLocation(PluginCall call) {
+        PermissionState state = getPermissionState("backgroundLocation");
+        if (state == PermissionState.GRANTED) {
+            JSObject result = new JSObject();
+            result.put("status", "granted");
+            call.resolve(result);
+            return;
+        }
+        requestPermissionForAlias("backgroundLocation", call, "bgLocationCallback");
+    }
+
+    @PermissionCallback
+    private void bgLocationCallback(PluginCall call) {
+        JSObject result = new JSObject();
+        PermissionState state = getPermissionState("backgroundLocation");
+        result.put("status", state == PermissionState.GRANTED ? "granted" : "denied");
+        call.resolve(result);
     }
 }

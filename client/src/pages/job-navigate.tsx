@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import { taskTrackingService } from "@/services/location/TaskTrackingService";
+import { ensureBackgroundLocation } from "@/lib/background-location";
 import { isJobAddressUnlocked } from "@/components/scheduling-panel";
 import type { Job } from "@shared/schema";
 
@@ -195,10 +196,14 @@ export default function JobNavigate() {
   // idempotent. We deliberately do NOT stop on unmount — the service owns the
   // lifecycle and stops itself when the server reports the job has ended
   // (server-driven { active: false }) or on cancel/completion.
+  //
+  // Before starting the GPS watch we request background location access so
+  // tracking continues when the worker switches apps mid-job. The request is
+  // non-blocking — if denied, foreground-only tracking proceeds normally.
   useEffect(() => {
     if (!canRender) return;
     if (helperStage === "on_the_way" || helperStage === "arrived") {
-      void taskTrackingService.startTask(jobId);
+      void ensureBackgroundLocation("job").then(() => taskTrackingService.startTask(jobId));
     }
   }, [canRender, helperStage, jobId]);
 
@@ -412,16 +417,28 @@ export default function JobNavigate() {
           )}
 
           {helperStage === "on_the_way" && (
-            <Button
-              onClick={handleArrived}
-              disabled={milestoneMutation.isPending}
-              className="w-full h-14 font-display tracking-wider rounded-2xl text-white font-bold text-base"
-              style={{ background: "linear-gradient(135deg, #059669, #047857)" }}
-              data-testid="button-arrived"
-            >
-              {milestoneMutation.isPending ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <MapPinned className="w-5 h-5 mr-2" />}
-              I'VE ARRIVED
-            </Button>
+            <>
+              <Button
+                onClick={handleArrived}
+                disabled={milestoneMutation.isPending}
+                className="w-full h-14 font-display tracking-wider rounded-2xl text-white font-bold text-base"
+                style={{ background: "linear-gradient(135deg, #059669, #047857)" }}
+                data-testid="button-arrived"
+              >
+                {milestoneMutation.isPending ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <MapPinned className="w-5 h-5 mr-2" />}
+                I'VE ARRIVED
+              </Button>
+              {taskTrackingService.isTracking() && (
+                <button
+                  onClick={() => { void taskTrackingService.stopTask(jobId); }}
+                  className="w-full py-2 text-[11px] font-display font-bold tracking-wider text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
+                  data-testid="button-stop-location-sharing"
+                >
+                  <MapPin className="w-3 h-3" />
+                  Stop sharing my location
+                </button>
+              )}
+            </>
           )}
 
           {helperStage === "arrived" && (
