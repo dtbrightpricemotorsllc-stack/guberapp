@@ -62,7 +62,9 @@ captures/
 .cxx/
 
 # Google Services (e.g. APIs or Firebase)
-# google-services.json
+# Decoded from GOOGLE_SERVICES_JSON env var during CI builds.
+# Never commit — contains API keys.
+google-services.json
 
 # Freeline
 freeline.py
