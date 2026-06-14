@@ -56,12 +56,22 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
+      - name: Decode keystore
+        run: |
+          mkdir -p android-build-config
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-build-config/guber-release.jks
+
       - name: Build signed release AAB
         run: cd android && ./gradlew bundleRelease --no-daemon
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/android-build-config/guber-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Upload signed AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: guber-v1.2-release.aab
+          name: guber-v1.3-release.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
