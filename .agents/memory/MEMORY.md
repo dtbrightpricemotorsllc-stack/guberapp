@@ -18,3 +18,4 @@
 - [Rebase brace collapse](rebase-brace-collapse.md) — additive rebases where both branches append funcs before a shared EOF `}` make git steal one side's closing brace into the shared trailing line; re-add it.
 - [GUBER commercial video](guber-commercial-video.md) — show the real app via a phone-mockup INSERT (not composite on AI phones); varied cars/no yellow Lambo; short captions (72px fits ~16 chars); logo end-card only.
 - [Growth Engine architecture](growth-engine-arch.md) — growth tasks are NOT in the jobs table; 4 separate tables; awardReferralGrowthCredits() exists but must be explicitly called at referral trigger points; flag zip_fallback_growth_tasks is off by default.
+- [Android CI pipeline setup](android-ci-pipeline.md) — .github/ gitignored; use Git Trees API with workflow-scoped PAT to push workflow files; untracked attached_assets break Vite build; keystore must be decoded from KEYSTORE_BASE64 secret before Gradle.
