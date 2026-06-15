@@ -12,6 +12,7 @@ workflows:
         XCODE_SCHEME: App
         BUNDLE_ID: com.guber.app
         TEAM_ID: 7MC93QFW6Q
+        APP_STORE_CONNECT_KEY_IDENTIFIER: UG7A49Y842
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.guber.app
