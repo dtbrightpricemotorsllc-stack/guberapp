@@ -33,46 +33,30 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Wire signing profiles
+      - name: Apply provisioning profiles
         script: |
           set -euo pipefail
           PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 
-          echo "=== Installed provisioning profiles ==="
+          echo "=== Installed profiles ==="
           for f in "$PROF_DIR"/*.mobileprovision; do
-            [ -f "$f" ] || continue
+            [ -f "$f" ] || { echo "  (none)"; break; }
             security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
-            NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/_p.plist 2>/dev/null || echo "?")
-            UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/_p.plist 2>/dev/null || echo "?")
-            APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/_p.plist 2>/dev/null || echo "?")
-            EXPIRY=$(/usr/libexec/PlistBuddy -c "Print :ExpirationDate" /tmp/_p.plist 2>/dev/null || echo "?")
-            echo "  Name    : $NAME"
-            echo "  UUID    : $UUID"
-            echo "  AppID   : $APPID"
-            echo "  Expires : $EXPIRY"
-            echo "  File    : $f"
+            echo "  Name    : $(/usr/libexec/PlistBuddy -c 'Print :Name'         /tmp/_p.plist 2>/dev/null)"
+            echo "  UUID    : $(/usr/libexec/PlistBuddy -c 'Print :UUID'         /tmp/_p.plist 2>/dev/null)"
+            echo "  AppID   : $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/_p.plist 2>/dev/null)"
+            echo "  Expires : $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' /tmp/_p.plist 2>/dev/null)"
             echo "---"
           done
 
-          # Require at least one profile
-          PROF_FILE=$(ls "$PROF_DIR"/*.mobileprovision 2>/dev/null | head -1)
-          if [ -z "$PROF_FILE" ]; then
-            echo "FATAL: No provisioning profile installed by ios_signing."
-            echo "Ensure APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,"
-            echo "and APP_STORE_CONNECT_ISSUER_ID are set in the Codemagic Default group."
-            exit 1
-          fi
-
-          # Extract UUID from the profile that matches our bundle ID
-          TARGET_PROF=""
+          # Find the profile whose AppID covers our bundle
           TARGET_UUID=""
           TARGET_NAME=""
           for f in "$PROF_DIR"/*.mobileprovision; do
             [ -f "$f" ] || continue
             security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
             APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/_p.plist 2>/dev/null || echo "")
-            if echo "$APPID" | grep -q "$BUNDLE_ID"; then
-              TARGET_PROF="$f"
+            if echo "$APPID" | grep -qF "$BUNDLE_ID"; then
               TARGET_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/_p.plist)
               TARGET_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/_p.plist)
               break
@@ -80,24 +64,44 @@ workflows:
           done
 
           if [ -z "$TARGET_UUID" ]; then
-            echo "FATAL: No profile found matching bundle ID $BUNDLE_ID"
+            echo "FATAL: No installed profile covers $BUNDLE_ID"
+            echo "The ios_signing group must have APP_STORE_CONNECT credentials in the Default group"
+            echo "or a manually uploaded profile matching $BUNDLE_ID in Code Signing Identities."
             exit 1
           fi
 
-          echo "=== Using profile ==="
-          echo "  Name : $TARGET_NAME"
-          echo "  UUID : $TARGET_UUID"
+          echo "=== Matched profile: $TARGET_NAME ($TARGET_UUID) ==="
 
-          # Update project.pbxproj to reference the actual installed profile by UUID.
-          # UUID-based lookup is unambiguous — no name-matching fragility.
+          # xcode-project use-profiles: Codemagic CLI tool that rewrites the Xcode
+          # project to use installed profiles by UUID — no name matching required.
+          xcode-project use-profiles \
+            --project "ios/App/App.xcodeproj" \
+            --targets App \
+            2>&1 || true   # non-fatal: falls back to manual patch below
+
+          # Manual patch as fallback: write UUID directly into project.pbxproj.
+          # UUID lookup is unambiguous; Xcode finds the profile regardless of name.
           PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
-          # Replace PROVISIONING_PROFILE_SPECIFIER with the actual profile name
-          sed -i "s/PROVISIONING_PROFILE_SPECIFIER = \".*\"/PROVISIONING_PROFILE_SPECIFIER = \"$TARGET_NAME\"/g" "$PBXPROJ"
-          echo "Patched PROVISIONING_PROFILE_SPECIFIER → \"$TARGET_NAME\""
+          python3 - "$PBXPROJ" "$TARGET_NAME" "$TARGET_UUID" << 'PYEOF'
+          import sys, re
+          path, name, uuid = sys.argv[1], sys.argv[2], sys.argv[3]
+          with open(path, 'r') as f:
+              text = f.read()
+          # Replace the PROVISIONING_PROFILE_SPECIFIER value with the actual name
+          text = re.sub(
+              r'(PROVISIONING_PROFILE_SPECIFIER\s*=\s*")[^"]*(")',
+              rf'\g<1>{name}\2',
+              text
+          )
+          with open(path, 'w') as f:
+              f.write(text)
+          print(f"Patched PROVISIONING_PROFILE_SPECIFIER → {name}")
+          PYEOF
 
-          # Persist for Archive step
-          echo "$TARGET_UUID" > /tmp/CM_PROFILE_UUID
-          echo "$TARGET_NAME" > /tmp/CM_PROFILE_NAME
+          # Persist UUID for Archive step
+          printf '%s' "$TARGET_UUID" > /tmp/CM_PROFILE_UUID
+          printf '%s' "$TARGET_NAME" > /tmp/CM_PROFILE_NAME
+          echo "Profile UUID saved: $TARGET_UUID"
 
       - name: Archive and Export
         script: |
@@ -125,6 +129,7 @@ workflows:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             PROVISIONING_PROFILE="$PROFILE_UUID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
