@@ -33,37 +33,71 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Verify signing assets
+      - name: Wire signing profiles
         script: |
           set -euo pipefail
           PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 
+          echo "=== Installed provisioning profiles ==="
+          for f in "$PROF_DIR"/*.mobileprovision; do
+            [ -f "$f" ] || continue
+            security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
+            NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/_p.plist 2>/dev/null || echo "?")
+            UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/_p.plist 2>/dev/null || echo "?")
+            APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/_p.plist 2>/dev/null || echo "?")
+            EXPIRY=$(/usr/libexec/PlistBuddy -c "Print :ExpirationDate" /tmp/_p.plist 2>/dev/null || echo "?")
+            echo "  Name    : $NAME"
+            echo "  UUID    : $UUID"
+            echo "  AppID   : $APPID"
+            echo "  Expires : $EXPIRY"
+            echo "  File    : $f"
+            echo "---"
+          done
+
+          # Require at least one profile
           PROF_FILE=$(ls "$PROF_DIR"/*.mobileprovision 2>/dev/null | head -1)
           if [ -z "$PROF_FILE" ]; then
-            echo "FATAL: No provisioning profile installed."
+            echo "FATAL: No provisioning profile installed by ios_signing."
             echo "Ensure APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,"
             echo "and APP_STORE_CONNECT_ISSUER_ID are set in the Codemagic Default group."
             exit 1
           fi
 
-          security cms -D -i "$PROF_FILE" -o /tmp/prof.plist 2>/dev/null
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/prof.plist)
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/prof.plist)
-          echo "Profile: $PROFILE_NAME ($PROFILE_UUID)"
+          # Extract UUID from the profile that matches our bundle ID
+          TARGET_PROF=""
+          TARGET_UUID=""
+          TARGET_NAME=""
+          for f in "$PROF_DIR"/*.mobileprovision; do
+            [ -f "$f" ] || continue
+            security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
+            APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/_p.plist 2>/dev/null || echo "")
+            if echo "$APPID" | grep -q "$BUNDLE_ID"; then
+              TARGET_PROF="$f"
+              TARGET_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/_p.plist)
+              TARGET_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/_p.plist)
+              break
+            fi
+          done
 
-          # Safety net: if the profile name differs from what is in the project file,
-          # patch it so xcodebuild finds it regardless.
-          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
-          if ! grep -q "\"$PROFILE_NAME\"" "$PBXPROJ"; then
-            echo "Profile name mismatch — patching project.pbxproj"
-            sed -i "s/PROVISIONING_PROFILE_SPECIFIER = \".*\"/PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\"/g" "$PBXPROJ"
-          else
-            echo "Profile name matches project.pbxproj — no patch needed"
+          if [ -z "$TARGET_UUID" ]; then
+            echo "FATAL: No profile found matching bundle ID $BUNDLE_ID"
+            exit 1
           fi
 
+          echo "=== Using profile ==="
+          echo "  Name : $TARGET_NAME"
+          echo "  UUID : $TARGET_UUID"
+
+          # Update project.pbxproj to reference the actual installed profile by UUID.
+          # UUID-based lookup is unambiguous — no name-matching fragility.
+          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
+          # Replace PROVISIONING_PROFILE_SPECIFIER with the actual profile name
+          sed -i "s/PROVISIONING_PROFILE_SPECIFIER = \".*\"/PROVISIONING_PROFILE_SPECIFIER = \"$TARGET_NAME\"/g" "$PBXPROJ"
+          echo "Patched PROVISIONING_PROFILE_SPECIFIER → \"$TARGET_NAME\""
+
           # Persist for Archive step
-          echo "$PROFILE_UUID" > /tmp/CM_PROFILE_UUID
-          echo "$PROFILE_NAME" > /tmp/CM_PROFILE_NAME
+          echo "$TARGET_UUID" > /tmp/CM_PROFILE_UUID
+          echo "$TARGET_NAME" > /tmp/CM_PROFILE_NAME
 
       - name: Archive and Export
         script: |
@@ -74,7 +108,7 @@ workflows:
           PROFILE_NAME=$(cat /tmp/CM_PROFILE_NAME)
 
           mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
-          echo "Archiving with: $PROFILE_NAME ($PROFILE_UUID)"
+          echo "Archiving: $PROFILE_NAME ($PROFILE_UUID)"
 
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\n' > /tmp/spm_override.xcconfig
 
@@ -87,12 +121,16 @@ workflows:
             -xcconfig      /tmp/spm_override.xcconfig \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
           if [ "$ARCHIVE_STATUS" -ne 0 ]; then
-            echo "====== ARCHIVE FAILED — last 50 lines ======"
-            tail -50 /tmp/xcodebuild_archive.log
+            echo "====== ARCHIVE FAILED — last 60 lines ======"
+            tail -60 /tmp/xcodebuild_archive.log
             exit "$ARCHIVE_STATUS"
           fi
           echo "** ARCHIVE SUCCEEDED **"
