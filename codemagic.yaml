@@ -1,4 +1,84 @@
-- name: Archive and Export
+workflows:
+  android-play-store:
+    name: GUBER Android — Play Store
+    instance_type: linux_x2
+    max_build_duration: 60
+
+    environment:
+      groups:
+        - Default
+      vars:
+        PACKAGE_NAME: com.guber.app
+
+    scripts:
+      - name: Write google-services.json
+        script: |
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+
+      - name: Write Android release keystore
+        script: |
+          mkdir -p android-build-config
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android-build-config/guber-release.jks
+
+      - name: Install Node dependencies
+        script: npm ci
+
+      - name: Build web app
+        script: npm run build
+
+      - name: Sync Capacitor Android
+        script: npx cap sync android
+
+      - name: Build Android release AAB
+        script: |
+          cd android
+          ./gradlew bundleRelease
+
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
+      - android/app/build/outputs/apk/release/*.apk
+
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+
+  ios-app-store:
+    name: GUBER iOS — App Store
+    instance_type: mac_mini_m1
+    max_build_duration: 60
+
+    environment:
+      groups:
+        - Default
+      vars:
+        XCODE_WORKSPACE: ios/App/App.xcworkspace
+        XCODE_SCHEME: App
+        BUNDLE_ID: com.guber.app
+        TEAM_ID: 7MC93QFW6Q
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.guber.app
+      xcode: 16.2
+
+    scripts:
+      - name: Install Node dependencies
+        script: npm ci
+
+      - name: Build web app
+        script: npm run build
+
+      - name: Sync Capacitor iOS
+        script: npx cap sync ios
+
+      - name: Resolve Swift Package Manager dependencies
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME"
+
+      - name: Archive and Export
         script: |
           set -euo pipefail
 
@@ -24,11 +104,16 @@
           cat > /tmp/ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>teamID</key><string>$TEAM_ID</string>
-          </dict></plist>
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>$TEAM_ID</string>
+          </dict>
+          </plist>
           EOF
 
           xcodebuild \
@@ -39,3 +124,16 @@
             2>&1 | tee /tmp/xcodebuild_export.log
 
           find "$IPA_DIR" -name "*.ipa"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_archive.log
+      - /tmp/xcodebuild_export.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
