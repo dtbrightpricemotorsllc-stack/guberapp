@@ -33,23 +33,46 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Archive and Export
+      - name: Patch Xcode signing
         script: |
           set -euo pipefail
           PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
-          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
 
-          mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
-
+          # Verify Codemagic ios_signing actually installed a profile
           PROF_FILE=$(ls "$PROF_DIR"/*.mobileprovision 2>/dev/null | head -1)
           if [ -z "$PROF_FILE" ]; then
-            echo "FATAL: No provisioning profile found."; exit 1
+            echo "FATAL: No provisioning profile installed by ios_signing group."
+            echo "Make sure APP_STORE_CONNECT_PRIVATE_KEY / KEY_IDENTIFIER / ISSUER_ID"
+            echo "are set in the Codemagic 'Default' environment group."
+            exit 1
           fi
+
           security cms -D -i "$PROF_FILE" -o /tmp/prof.plist 2>/dev/null
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/prof.plist)
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/prof.plist)
-          echo "Using profile: $PROFILE_NAME ($PROFILE_UUID)"
+          echo "Installed profile: $PROFILE_NAME ($PROFILE_UUID)"
+
+          # Patch project.pbxproj — replace the hardcoded profile name with the
+          # name of whichever profile Codemagic downloaded, so xcodebuild finds it.
+          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
+          sed -i "s/GUBER_Profile_v3/$PROFILE_NAME/g" "$PBXPROJ"
+          echo "Patched $PBXPROJ: GUBER_Profile_v3 → $PROFILE_NAME"
+
+          # Persist UUID for the Archive step
+          echo "$PROFILE_UUID" > /tmp/CM_PROFILE_UUID
+          echo "$PROFILE_NAME" > /tmp/CM_PROFILE_NAME
+
+      - name: Archive and Export
+        script: |
+          set -euo pipefail
+          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
+          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
+          PROFILE_UUID=$(cat /tmp/CM_PROFILE_UUID)
+          PROFILE_NAME=$(cat /tmp/CM_PROFILE_NAME)
+
+          mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
+
+          echo "Archiving with profile: $PROFILE_NAME ($PROFILE_UUID)"
 
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\n' > /tmp/spm_override.xcconfig
 
@@ -62,11 +85,6 @@ workflows:
             -xcconfig      /tmp/spm_override.xcconfig \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE="$PROFILE_UUID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
