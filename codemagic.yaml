@@ -33,88 +33,44 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Apply provisioning profiles
+      - name: Dump installed signing assets
         script: |
           set -euo pipefail
           PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-
-          echo "=== Installed profiles ==="
-          for f in "$PROF_DIR"/*.mobileprovision; do
-            [ -f "$f" ] || { echo "  (none)"; break; }
+          echo "=== Installed provisioning profiles ==="
+          count=0
+          for f in "$PROF_DIR"/*.mobileprovision 2>/dev/null; do
+            [ -f "$f" ] || continue
+            count=$((count+1))
             security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
-            echo "  Name    : $(/usr/libexec/PlistBuddy -c 'Print :Name'         /tmp/_p.plist 2>/dev/null)"
-            echo "  UUID    : $(/usr/libexec/PlistBuddy -c 'Print :UUID'         /tmp/_p.plist 2>/dev/null)"
-            echo "  AppID   : $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/_p.plist 2>/dev/null)"
-            echo "  Expires : $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' /tmp/_p.plist 2>/dev/null)"
+            echo "  Name    : $(/usr/libexec/PlistBuddy -c 'Print :Name'         /tmp/_p.plist 2>/dev/null || echo '?')"
+            echo "  UUID    : $(/usr/libexec/PlistBuddy -c 'Print :UUID'         /tmp/_p.plist 2>/dev/null || echo '?')"
+            echo "  AppID   : $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/_p.plist 2>/dev/null || echo '?')"
+            echo "  Expires : $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' /tmp/_p.plist 2>/dev/null || echo '?')"
             echo "---"
           done
-
-          # Find the profile whose AppID covers our bundle
-          TARGET_UUID=""
-          TARGET_NAME=""
-          for f in "$PROF_DIR"/*.mobileprovision; do
-            [ -f "$f" ] || continue
-            security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
-            APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/_p.plist 2>/dev/null || echo "")
-            if echo "$APPID" | grep -qF "$BUNDLE_ID"; then
-              TARGET_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/_p.plist)
-              TARGET_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/_p.plist)
-              break
-            fi
-          done
-
-          if [ -z "$TARGET_UUID" ]; then
-            echo "FATAL: No installed profile covers $BUNDLE_ID"
-            echo "The ios_signing group must have APP_STORE_CONNECT credentials in the Default group"
-            echo "or a manually uploaded profile matching $BUNDLE_ID in Code Signing Identities."
-            exit 1
-          fi
-
-          echo "=== Matched profile: $TARGET_NAME ($TARGET_UUID) ==="
-
-          # xcode-project use-profiles: Codemagic CLI tool that rewrites the Xcode
-          # project to use installed profiles by UUID — no name matching required.
-          xcode-project use-profiles \
-            --project "ios/App/App.xcodeproj" \
-            --targets App \
-            2>&1 || true   # non-fatal: falls back to manual patch below
-
-          # Manual patch as fallback: write UUID directly into project.pbxproj.
-          # UUID lookup is unambiguous; Xcode finds the profile regardless of name.
-          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
-          python3 - "$PBXPROJ" "$TARGET_NAME" "$TARGET_UUID" << 'PYEOF'
-          import sys, re
-          path, name, uuid = sys.argv[1], sys.argv[2], sys.argv[3]
-          with open(path, 'r') as f:
-              text = f.read()
-          # Replace the PROVISIONING_PROFILE_SPECIFIER value with the actual name
-          text = re.sub(
-              r'(PROVISIONING_PROFILE_SPECIFIER\s*=\s*")[^"]*(")',
-              rf'\g<1>{name}\2',
-              text
-          )
-          with open(path, 'w') as f:
-              f.write(text)
-          print(f"Patched PROVISIONING_PROFILE_SPECIFIER → {name}")
-          PYEOF
-
-          # Persist UUID for Archive step
-          printf '%s' "$TARGET_UUID" > /tmp/CM_PROFILE_UUID
-          printf '%s' "$TARGET_NAME" > /tmp/CM_PROFILE_NAME
-          echo "Profile UUID saved: $TARGET_UUID"
+          echo "(total: $count profile(s))"
+          echo ""
+          echo "=== Installed distribution certificates ==="
+          security find-identity -v -p codesigning | grep -iE "distribution|development" || echo "(none)"
 
       - name: Archive and Export
         script: |
           set -euo pipefail
           ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
           IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
-          PROFILE_UUID=$(cat /tmp/CM_PROFILE_UUID)
-          PROFILE_NAME=$(cat /tmp/CM_PROFILE_NAME)
-
           mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
-          echo "Archiving: $PROFILE_NAME ($PROFILE_UUID)"
 
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\n' > /tmp/spm_override.xcconfig
+
+          # Write the App Store Connect API key so xcodebuild can manage
+          # provisioning profiles automatically via -allowProvisioningUpdates.
+          # This avoids all name/UUID matching fragility.
+          KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
+          printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
+          echo "ASC key written: $KEY_FILE"
+          echo "Key ID  : $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "Issuer  : $APP_STORE_CONNECT_ISSUER_ID"
 
           xcodebuild \
             -workspace     "$XCODE_WORKSPACE" \
@@ -123,41 +79,42 @@ workflows:
             -archivePath   "$ARCHIVE_PATH" \
             -destination   "generic/platform=iOS" \
             -xcconfig      /tmp/spm_override.xcconfig \
+            -allowProvisioningUpdates \
+            -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            -authenticationKeyPath     "$KEY_FILE" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE="$PROFILE_UUID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            CODE_SIGN_STYLE=Automatic \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
           if [ "$ARCHIVE_STATUS" -ne 0 ]; then
-            echo "====== ARCHIVE FAILED — last 60 lines ======"
-            tail -60 /tmp/xcodebuild_archive.log
+            echo "====== ARCHIVE FAILED — last 80 lines ======"
+            tail -80 /tmp/xcodebuild_archive.log
             exit "$ARCHIVE_STATUS"
           fi
           echo "** ARCHIVE SUCCEEDED **"
 
-          cat > /tmp/ExportOptions.plist << EOF
+          cat > /tmp/ExportOptions.plist << 'PLIST_EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>teamID</key><string>$TEAM_ID</string>
-            <key>provisioningProfiles</key><dict>
-              <key>$BUNDLE_ID</key><string>$PROFILE_UUID</string>
-            </dict>
+            <key>signingStyle</key><string>automatic</string>
           </dict></plist>
-          EOF
+          PLIST_EOF
 
           xcodebuild \
             -exportArchive \
             -archivePath        "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath         "$IPA_DIR" \
+            -allowProvisioningUpdates \
+            -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            -authenticationKeyPath     "$KEY_FILE" \
             2>&1 | tee /tmp/xcodebuild_export.log
           EXPORT_STATUS=${PIPESTATUS[0]}
 
