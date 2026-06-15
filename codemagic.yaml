@@ -1,49 +1,4 @@
 workflows:
-  android-play-store:
-    name: GUBER Android — Play Store
-    instance_type: linux_x2
-    max_build_duration: 60
-
-    environment:
-      groups:
-        - Default
-      vars:
-        PACKAGE_NAME: com.guber.app
-
-    scripts:
-      - name: Write google-services.json
-        script: |
-          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
-
-      - name: Write Android release keystore
-        script: |
-          mkdir -p android-build-config
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android-build-config/guber-release.jks
-
-      - name: Install Node dependencies
-        script: npm ci
-
-      - name: Build web app
-        script: npm run build
-
-      - name: Sync Capacitor
-        script: npx cap sync android
-
-      - name: Build Android release AAB
-        script: |
-          cd android
-          ./gradlew bundleRelease
-
-    artifacts:
-      - android/app/build/outputs/bundle/release/*.aab
-      - android/app/build/outputs/apk/release/*.apk
-
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-        submit_as_draft: true
-
   ios-app-store:
     name: GUBER iOS — App Store
     instance_type: mac_mini_m1
