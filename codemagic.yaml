@@ -76,6 +76,13 @@ workflows:
           echo "=== Keychain identities ==="
           security find-identity -v -p codesigning 2>/dev/null || echo "(none)"
 
+          echo "=== xcodebuild -showBuildSettings | grep CODE_SIGN ==="
+          xcodebuild \
+            -showBuildSettings \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme    "$XCODE_SCHEME" \
+            2>/dev/null | grep "CODE_SIGN" || echo "(none)"
+
           # Archive — pure Automatic signing, -allowProvisioningUpdates manages
           # certificate + profile via the connected ASC key.
           xcodebuild archive \
