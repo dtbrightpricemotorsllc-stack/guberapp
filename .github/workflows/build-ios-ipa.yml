@@ -32,11 +32,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
-      - name: List available Xcode versions
+      - name: Select Xcode 26
         run: |
-          ls -d /Applications/Xcode*.app 2>/dev/null || echo "No Xcode*.app found"
-          xcodes installed 2>/dev/null || echo "xcodes not available or no installs"
-          echo "Default Xcode:"
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
           xcodebuild -version
 
       - name: Resolve Swift Package Manager dependencies
