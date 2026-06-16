@@ -45,23 +45,30 @@ workflows:
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
-          # Strip every CODE_SIGN_IDENTITY line ios_signing may have injected
-          # (including CODE_SIGN_IDENTITY[sdk=iphoneos*]).
-          # Two-pass: grep -v (plain substring, no regex) + sed (belt-and-suspenders).
+          # ── Strip CODE_SIGN_IDENTITY from every file ios_signing may touch ────
+          # project.pbxproj — two passes (grep -v, then sed) for safety
           grep -v "CODE_SIGN_IDENTITY" "$PBXPROJ" > /tmp/pbxproj.tmp \
             && mv /tmp/pbxproj.tmp "$PBXPROJ"
           sed -i '' '/CODE_SIGN_IDENTITY/d' "$PBXPROJ"
 
-          # Ensure CODE_SIGN_STYLE is Automatic for both configurations.
+          # All xcconfig files under ios/ (ios_signing may inject a generated one)
+          find ios/ -name "*.xcconfig" | while read xcf; do
+            if grep -q "CODE_SIGN_IDENTITY" "$xcf" 2>/dev/null; then
+              echo "Cleaning CODE_SIGN_IDENTITY from: $xcf"
+              grep -v "CODE_SIGN_IDENTITY" "$xcf" > /tmp/xcconfig.tmp \
+                && mv /tmp/xcconfig.tmp "$xcf"
+              sed -i '' '/CODE_SIGN_IDENTITY/d' "$xcf"
+            fi
+          done
+
+          # Ensure CODE_SIGN_STYLE is Automatic in pbxproj
           sed -i '' \
             's/CODE_SIGN_STYLE = [A-Za-z]*/CODE_SIGN_STYLE = Automatic/g' \
             "$PBXPROJ"
 
-          echo "=== grep -R CODE_SIGN_IDENTITY|iphoneos ios/App ==="
-          grep -R "CODE_SIGN_IDENTITY\|iphoneos" ios/App || true
-
-          echo "=== CODE_SIGN_STYLE lines in pbxproj ==="
-          grep -n "CODE_SIGN_STYLE" "$PBXPROJ" || echo "(none)"
+          # ── Verify — must show ZERO CODE_SIGN_IDENTITY lines ─────────────────
+          echo "=== grep -R CODE_SIGN_IDENTITY|PROVISIONING_PROFILE|iphoneos ios/App ==="
+          grep -R "CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE\|iphoneos" ios/App || true
 
           echo "=== CODE_SIGN env vars ==="
           env | grep -i "code_sign\|provisioning\|certificate" || echo "(none)"
