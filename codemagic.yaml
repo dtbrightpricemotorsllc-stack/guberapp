@@ -34,26 +34,49 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Dump installed signing assets
+      # ios_signing (above) installs the distribution certificate into the
+      # keychain, but also patches project.pbxproj to Manual + "Apple
+      # Distribution". We reset that here so xcodebuild sees only Automatic.
+      - name: Reset project signing to Automatic
         script: |
           set -euo pipefail
-          PROF_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "=== Installed provisioning profiles ==="
-          count=0
-          for f in "$PROF_DIR"/*.mobileprovision 2>/dev/null; do
-            [ -f "$f" ] || continue
-            count=$((count+1))
-            security cms -D -i "$f" -o /tmp/_p.plist 2>/dev/null || continue
-            echo "  Name    : $(/usr/libexec/PlistBuddy -c 'Print :Name'         /tmp/_p.plist 2>/dev/null || echo '?')"
-            echo "  UUID    : $(/usr/libexec/PlistBuddy -c 'Print :UUID'         /tmp/_p.plist 2>/dev/null || echo '?')"
-            echo "  AppID   : $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/_p.plist 2>/dev/null || echo '?')"
-            echo "  Expires : $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' /tmp/_p.plist 2>/dev/null || echo '?')"
-            echo "---"
-          done
-          echo "(total: $count profile(s))"
-          echo ""
-          echo "=== Installed distribution certificates ==="
-          security find-identity -v -p codesigning | grep -iE "distribution|development" || echo "(none)"
+          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
+
+          python3 << 'PYEOF'
+          import re, sys
+
+          path = "ios/App/App.xcodeproj/project.pbxproj"
+          with open(path) as f:
+              text = f.read()
+
+          original = text
+
+          # Force every CODE_SIGN_STYLE to Automatic
+          text = re.sub(r'(CODE_SIGN_STYLE\s*=\s*)\w+;', r'\1Automatic;', text)
+
+          # Remove any explicit CODE_SIGN_IDENTITY that Codemagic may have
+          # injected (Apple Distribution / iPhone Distribution / etc.).
+          # We keep empty-string identity ("") and "iPhone Developer" (debug).
+          text = re.sub(
+              r'\s*CODE_SIGN_IDENTITY = "(?!iPhone Developer|")[^"]*";', '', text
+          )
+
+          # Remove PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE
+          # (UUID-based) — not needed with Automatic + -allowProvisioningUpdates.
+          text = re.sub(r'\s*PROVISIONING_PROFILE_SPECIFIER = "[^"]*";', '', text)
+          text = re.sub(r'\s*PROVISIONING_PROFILE = "[^"]*";', '', text)
+
+          with open(path, 'w') as f:
+              f.write(text)
+
+          if text != original:
+              print("Signing reset: removed Manual overrides from project.pbxproj")
+          else:
+              print("project.pbxproj already clean — no changes needed")
+          PYEOF
+
+          echo "=== Signing state after reset ==="
+          grep -n "CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" "$PBXPROJ" || true
 
       - name: Archive and Export
         script: |
@@ -64,15 +87,16 @@ workflows:
 
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\n' > /tmp/spm_override.xcconfig
 
-          # Write the App Store Connect API key so xcodebuild can manage
-          # provisioning profiles automatically via -allowProvisioningUpdates.
-          # This avoids all name/UUID matching fragility.
+          # Write ASC key for -allowProvisioningUpdates
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
-          echo "ASC key written: $KEY_FILE"
-          echo "Key ID  : $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Issuer  : $APP_STORE_CONNECT_ISSUER_ID"
+          echo "Key ID : $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "Issuer : $APP_STORE_CONNECT_ISSUER_ID"
 
+          # CODE_SIGN_STYLE=Automatic + CODE_SIGN_IDENTITY="" as command-line
+          # overrides ensure no residual Manual setting from ios_signing or
+          # cap sync can sneak through.  -allowProvisioningUpdates fetches the
+          # correct App Store distribution profile from ASC automatically.
           xcodebuild \
             -workspace     "$XCODE_WORKSPACE" \
             -scheme        "$XCODE_SCHEME" \
@@ -84,9 +108,11 @@ workflows:
             -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             -authenticationKeyPath     "$KEY_FILE" \
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
             archive 2>&1 | tee /tmp/xcodebuild_archive.log
           ARCHIVE_STATUS=${PIPESTATUS[0]}
 
@@ -102,6 +128,7 @@ workflows:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>7MC93QFW6Q</string>
             <key>signingStyle</key><string>automatic</string>
           </dict></plist>
           PLIST_EOF
