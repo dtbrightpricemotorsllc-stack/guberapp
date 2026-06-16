@@ -32,8 +32,12 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: List available Xcode versions
+        run: |
+          ls -d /Applications/Xcode*.app 2>/dev/null || echo "No Xcode*.app found"
+          xcodes installed 2>/dev/null || echo "xcodes not available or no installs"
+          echo "Default Xcode:"
+          xcodebuild -version
 
       - name: Resolve Swift Package Manager dependencies
         run: |
