@@ -54,20 +54,15 @@ workflows:
           # 1. Force every CODE_SIGN_STYLE to Automatic
           text = re.sub(r'(CODE_SIGN_STYLE\s*=\s*)\w+;', r'\1Automatic;', text)
 
-          # 2. Change any Distribution identity to Apple Development.
-          #    Codemagic ios_signing injects "Apple Distribution" or
-          #    "iPhone Distribution" — replace with "Apple Development" so
-          #    Automatic signing sees no conflict.
-          text = re.sub(
-              r'CODE_SIGN_IDENTITY = "(?:Apple|iPhone) Distribution";',
-              'CODE_SIGN_IDENTITY = "Apple Development";',
-              text
-          )
+          # 2. Remove ALL CODE_SIGN_IDENTITY lines — any value, any sdk variant.
+          #    Setting any explicit identity conflicts with Automatic signing.
+          #    Codemagic must choose the identity; we must not specify one.
+          text = re.sub(r'[ \t]*CODE_SIGN_IDENTITY(?:\[sdk=[^\]]*\])?\s*=\s*"[^"]*";\n?', '', text)
 
           # 3. Remove PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE
           #    (UUID). Not needed with Automatic + -allowProvisioningUpdates.
-          text = re.sub(r'\s*PROVISIONING_PROFILE_SPECIFIER = "[^"]*";', '', text)
-          text = re.sub(r'\s*PROVISIONING_PROFILE = "[^"]*";', '', text)
+          text = re.sub(r'[ \t]*PROVISIONING_PROFILE_SPECIFIER\s*=\s*"[^"]*";\n?', '', text)
+          text = re.sub(r'[ \t]*PROVISIONING_PROFILE\s*=\s*"[^"]*";\n?', '', text)
 
           with open(path, 'w') as f:
               f.write(text)
