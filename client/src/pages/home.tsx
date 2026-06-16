@@ -55,6 +55,7 @@ const FIVE_DOORS = [
     tagline: "Turn free time into real cash.",
     features: ["Real jobs posted near you", "GPS-verified check-ins", "Get paid same day"],
     cta: "BROWSE JOBS", href: "/browse-jobs",
+    number: "1",
   },
   {
     id: "hire",      color: "#3B82F6", icon: Briefcase,  label: "HIRE",
@@ -62,6 +63,7 @@ const FIVE_DOORS = [
     tagline: "Vetted local workers, any task.",
     features: ["Post for free", "Workers apply instantly", "Payment held in escrow"],
     cta: "POST A JOB", href: "/post-job",
+    number: "2",
   },
   {
     id: "verify",    color: "#8B5CF6", icon: ShieldCheck, label: "VERIFY",
@@ -69,6 +71,7 @@ const FIVE_DOORS = [
     tagline: "Photo proof, property inspections.",
     features: ["Pre-purchase vehicle photos", "Property walk-throughs", "$40–$120+ per job"],
     cta: "SEE V&I JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",
+    number: "3",
   },
   {
     id: "loadboard", color: "#0891b2", icon: Truck,      label: "LOAD BOARD",
@@ -76,6 +79,7 @@ const FIVE_DOORS = [
     tagline: "Vehicles, boats, RVs & freight.",
     features: ["Cars, boats & equipment", "Partial + full loads", "Direct shipper contact"],
     cta: "VIEW LOAD BOARD", href: "/load-board",
+    number: "4",
   },
   {
     id: "explore",   color: "#EC4899", icon: Zap,        label: "EXPLORE",
@@ -83,8 +87,114 @@ const FIVE_DOORS = [
     tagline: "Barter, marketplace, AI games.",
     features: ["Trade skills, no cash needed", "Buy & sell locally", "Earn playing AI or Not?"],
     cta: "EXPLORE ALL", href: "/browse-jobs",
+    number: "5",
   },
 ];
+
+// ── Door SVG shape ────────────────────────────────────────────────────────────
+function DoorShape({ color, icon: Icon, label, number, isHovered }: {
+  color: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  label: string; number: string; isHovered: boolean;
+}) {
+  const w = 120;
+  const h = 180;
+  const r = 30; // arch radius
+  const frameW = 7;
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <svg
+        width={w} height={h} viewBox={`0 0 ${w} ${h}`}
+        style={{ filter: isHovered ? `drop-shadow(0 0 18px ${color}99) drop-shadow(0 0 6px ${color}66)` : `drop-shadow(0 0 6px ${color}33)`, transition: "filter 0.3s ease" }}
+      >
+        {/* Door frame (outer) */}
+        <path
+          d={`M4,${h - 4} L4,${r + 4} Q4,4 ${r + 4},4 L${w - r - 4},4 Q${w - 4},4 ${w - 4},${r + 4} L${w - 4},${h - 4} Z`}
+          fill="none"
+          stroke={color}
+          strokeWidth={frameW}
+          strokeLinejoin="round"
+        />
+        {/* Door fill (inner panel) */}
+        <path
+          d={`M${frameW + 2},${h - 2} L${frameW + 2},${r + frameW} Q${frameW + 2},${frameW + 2} ${r + frameW},${frameW + 2} L${w - r - frameW},${frameW + 2} Q${w - frameW - 2},${frameW + 2} ${w - frameW - 2},${r + frameW} L${w - frameW - 2},${h - 2} Z`}
+          fill={`${color}0f`}
+        />
+        {/* Door panel lines (upper decorative rectangle) */}
+        <rect x={frameW + 10} y={frameW + 14} width={w - (frameW * 2) - 20} height={Math.round(h * 0.28)}
+          rx="4" fill="none" stroke={`${color}40`} strokeWidth="1.5" />
+        {/* Door panel lines (lower decorative rectangle) */}
+        <rect x={frameW + 10} y={frameW + 14 + Math.round(h * 0.28) + 8} width={w - (frameW * 2) - 20} height={Math.round(h * 0.32)}
+          rx="4" fill="none" stroke={`${color}40`} strokeWidth="1.5" />
+        {/* Keyhole circle */}
+        <circle cx={w - frameW - 16} cy={h / 2 + 10} r={5} fill={color} opacity="0.9" />
+        <rect x={w - frameW - 17} cy={h / 2 + 15} width={6} height={8} rx="1" fill={color} opacity="0.9" y={h / 2 + 13} />
+        {/* Door number */}
+        <text x={w / 2} y={h - 14} textAnchor="middle" fontSize="11" fontWeight="900"
+          fontFamily="system-ui, sans-serif" fill={color} opacity="0.6" letterSpacing="2">
+          {number}
+        </text>
+      </svg>
+
+      {/* Icon badge */}
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300"
+        style={{
+          background: `${color}18`,
+          border: `1.5px solid ${color}40`,
+          boxShadow: isHovered ? `0 0 12px ${color}44` : "none",
+          transition: "box-shadow 0.3s ease",
+        }}>
+        <Icon className="w-4 h-4" style={{ color }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Door Card ─────────────────────────────────────────────────────────────────
+type DoorDef = typeof FIVE_DOORS[number];
+function DoorCard({ door }: { door: DoorDef }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Link
+      href={door.href}
+      className="flex-shrink-0 w-[160px] sm:w-auto flex flex-col items-center gap-4 pt-2 pb-5 px-3 rounded-2xl cursor-pointer"
+      style={{
+        background: hovered ? `${door.color}0a` : "transparent",
+        border: `1.5px solid ${hovered ? door.color + "50" : door.color + "20"}`,
+        transform: hovered ? "scale(1.03)" : "scale(1)",
+        transition: "background 0.3s ease, border-color 0.3s ease, transform 0.2s ease",
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      data-testid={`door-${door.id}`}
+    >
+      <DoorShape
+        color={door.color}
+        icon={door.icon}
+        label={door.label}
+        number={door.number}
+        isHovered={hovered}
+      />
+      <div className="text-center w-full">
+        <span className="block text-[10px] font-display font-black tracking-[0.3em] mb-1" style={{ color: door.color }}>
+          {door.label}
+        </span>
+        <h3 className="text-[12px] font-display font-black text-white leading-snug mb-1">{door.headline}</h3>
+        <p className="text-[10px] text-white/40 leading-snug mb-3">{door.tagline}</p>
+        <ul className="space-y-1 mb-3 text-left">
+          {door.features.map((f) => (
+            <li key={f} className="flex items-start gap-1.5 text-[10px] text-white/50">
+              <span className="w-1 h-1 rounded-full shrink-0 mt-[4px]" style={{ background: door.color }} />{f}
+            </li>
+          ))}
+        </ul>
+        <div className="inline-flex items-center gap-1 text-[10px] font-display font-black" style={{ color: door.color }}>
+          {door.cta} <ArrowRight className="w-2.5 h-2.5" />
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 // ── Demo job tiles ────────────────────────────────────────────────────────────
 const DEMO_JOBS: PublicJob[] = [
@@ -416,7 +526,7 @@ export default function Home() {
 
       {/* ── Five Doors ── */}
       <section className="relative z-10 px-5 pb-16 max-w-6xl mx-auto w-full" data-testid="section-five-doors">
-        <div className="text-center mb-8">
+        <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
             style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", color: "#8B5CF6" }}>
             YOUR FIVE DOORS
@@ -425,47 +535,9 @@ export default function Home() {
           <p className="text-muted-foreground text-sm">Every door leads to a different kind of opportunity.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {FIVE_DOORS.map((door) => (
-            <Link
-              key={door.id}
-              href={door.href}
-              className="group relative rounded-2xl p-5 flex flex-col gap-3 overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-              style={{ background: "rgba(8,8,16,0.97)", border: `1.5px solid ${door.color}28` }}
-              data-testid={`door-${door.id}`}
-            >
-              {/* Top accent bar */}
-              <div className="absolute top-0 inset-x-0 h-0.5 rounded-t-2xl"
-                style={{ background: `linear-gradient(90deg,transparent,${door.color},transparent)` }} />
-              {/* Hover glow */}
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
-                style={{ background: `radial-gradient(ellipse 80% 60% at 50% 0%,${door.color}0c 0%,transparent 100%)` }} />
-
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center relative z-10 transition-all duration-300 group-hover:scale-110"
-                style={{ background: `${door.color}14`, border: `1px solid ${door.color}28` }}>
-                <door.icon className="w-5 h-5" style={{ color: door.color }} />
-              </div>
-
-              <div className="relative z-10">
-                <span className="text-[10px] font-display font-black tracking-[0.3em]" style={{ color: door.color }}>{door.label}</span>
-                <h3 className="text-sm font-display font-black text-white leading-snug mt-1">{door.headline}</h3>
-                <p className="text-[11px] text-white/45 leading-snug mt-0.5">{door.tagline}</p>
-              </div>
-
-              <ul className="space-y-1.5 relative z-10 flex-1">
-                {door.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-[11px] text-white/55">
-                    <span className="w-1 h-1 rounded-full shrink-0" style={{ background: door.color }} />{f}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="flex items-center gap-1.5 text-[11px] font-display font-black relative z-10 mt-1 transition-all duration-200 group-hover:gap-2.5"
-                style={{ color: door.color }}>
-                {door.cta} <ArrowRight className="w-3 h-3" />
-              </div>
-            </Link>
-          ))}
+        {/* Doors row — horizontal scroll on mobile, 5-col on desktop */}
+        <div className="flex gap-4 overflow-x-auto pb-4 sm:pb-0 sm:grid sm:grid-cols-5 sm:overflow-visible scrollbar-hide">
+          {FIVE_DOORS.map((door) => <DoorCard key={door.id} door={door} />)}
         </div>
       </section>
 
