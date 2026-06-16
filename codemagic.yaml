@@ -43,7 +43,7 @@ workflows:
           PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
 
           python3 << 'PYEOF'
-          import re, sys
+          import re
 
           path = "ios/App/App.xcodeproj/project.pbxproj"
           with open(path) as f:
@@ -51,32 +51,40 @@ workflows:
 
           original = text
 
-          # Force every CODE_SIGN_STYLE to Automatic
+          # 1. Force every CODE_SIGN_STYLE to Automatic
           text = re.sub(r'(CODE_SIGN_STYLE\s*=\s*)\w+;', r'\1Automatic;', text)
 
-          # Remove any explicit CODE_SIGN_IDENTITY that Codemagic may have
-          # injected (Apple Distribution / iPhone Distribution / etc.).
-          # We keep empty-string identity ("") and "iPhone Developer" (debug).
+          # 2. Change any Distribution identity to Apple Development.
+          #    Codemagic ios_signing injects "Apple Distribution" or
+          #    "iPhone Distribution" — replace with "Apple Development" so
+          #    Automatic signing sees no conflict.
           text = re.sub(
-              r'\s*CODE_SIGN_IDENTITY = "(?!iPhone Developer|")[^"]*";', '', text
+              r'CODE_SIGN_IDENTITY = "(?:Apple|iPhone) Distribution";',
+              'CODE_SIGN_IDENTITY = "Apple Development";',
+              text
           )
 
-          # Remove PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE
-          # (UUID-based) — not needed with Automatic + -allowProvisioningUpdates.
+          # 3. Remove PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE
+          #    (UUID). Not needed with Automatic + -allowProvisioningUpdates.
           text = re.sub(r'\s*PROVISIONING_PROFILE_SPECIFIER = "[^"]*";', '', text)
           text = re.sub(r'\s*PROVISIONING_PROFILE = "[^"]*";', '', text)
 
           with open(path, 'w') as f:
               f.write(text)
 
+          changes = []
+          if 'CODE_SIGN_STYLE = Automatic' in text:
+              changes.append('CODE_SIGN_STYLE → Automatic everywhere')
           if text != original:
-              print("Signing reset: removed Manual overrides from project.pbxproj")
+              print('Signing reset applied:\n  ' + '\n  '.join(changes) if changes else 'Changes made')
           else:
-              print("project.pbxproj already clean — no changes needed")
-          PYEOF
+              print('project.pbxproj already clean — no changes needed')
 
-          echo "=== Signing state after reset ==="
-          grep -n "CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" "$PBXPROJ" || true
+          print('\n=== Final signing state ===')
+          for i, line in enumerate(text.splitlines(), 1):
+              if any(k in line for k in ('CODE_SIGN', 'PROVISIONING', 'DEVELOPMENT_TEAM')):
+                  print(f'  {i}: {line.strip()}')
+          PYEOF
 
       - name: Archive and Export
         script: |
