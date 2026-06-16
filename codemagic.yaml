@@ -46,18 +46,19 @@ workflows:
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
           # Strip every CODE_SIGN_IDENTITY line ios_signing may have injected
-          # (including the sdk=iphoneos* conditional variant).
-          # grep -v is safer than sed for lines with square brackets.
+          # (including CODE_SIGN_IDENTITY[sdk=iphoneos*]).
+          # Two-pass: grep -v (plain substring, no regex) + sed (belt-and-suspenders).
           grep -v "CODE_SIGN_IDENTITY" "$PBXPROJ" > /tmp/pbxproj.tmp \
             && mv /tmp/pbxproj.tmp "$PBXPROJ"
+          sed -i '' '/CODE_SIGN_IDENTITY/d' "$PBXPROJ"
 
           # Ensure CODE_SIGN_STYLE is Automatic for both configurations.
           sed -i '' \
             's/CODE_SIGN_STYLE = [A-Za-z]*/CODE_SIGN_STYLE = Automatic/g' \
             "$PBXPROJ"
 
-          echo "=== grep -R CODE_SIGN_IDENTITY ios/App ==="
-          grep -Rn "CODE_SIGN_IDENTITY" ios/App/ || echo "(none — clean)"
+          echo "=== grep -R CODE_SIGN_IDENTITY|iphoneos ios/App ==="
+          grep -R "CODE_SIGN_IDENTITY\|iphoneos" ios/App || true
 
           echo "=== CODE_SIGN_STYLE lines in pbxproj ==="
           grep -n "CODE_SIGN_STYLE" "$PBXPROJ" || echo "(none)"
