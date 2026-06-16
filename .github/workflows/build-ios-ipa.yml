@@ -47,16 +47,26 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
         run: |
           mkdir -p /tmp/asc ~/.appstoreconnect/private_keys
-          # Convert literal \n to real newlines in case the secret lost line breaks
-          printf '%s' "$ASC_PRIVATE_KEY" \
-            | sed 's/\\n/\n/g' \
-            | sed 's/-----BEGIN PRIVATE KEY----- /-----BEGIN PRIVATE KEY-----\n/' \
-            | sed 's/ -----END PRIVATE KEY-----/\n-----END PRIVATE KEY-----/' \
-            > /tmp/asc/AuthKey_${ASC_KEY_ID}.p8
+          # Use Python to reliably normalise the PEM regardless of how it was stored:
+          # handles CRLF endings, literal \n sequences, and missing trailing newline.
+          python3 - <<'PYEOF'
+          import os, sys
+          key = os.environ['ASC_PRIVATE_KEY']
+          key = key.replace('\r', '')          # strip Windows CR
+          key = key.replace('\\n', '\n')       # literal \n → real newline
+          if not key.endswith('\n'):
+              key += '\n'
+          kid = os.environ['ASC_KEY_ID']
+          path = f'/tmp/asc/AuthKey_{kid}.p8'
+          with open(path, 'w') as f:
+              f.write(key)
+          lines = key.splitlines()
+          print(f'Key written: {len(lines)} lines')
+          print(f'Line 1: {lines[0] if lines else "(empty)"}')
+          print(f'Last line: {lines[-1] if lines else "(empty)"}')
+          PYEOF
           cp /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
              ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
-          # Verify PEM looks valid
-          head -1 /tmp/asc/AuthKey_${ASC_KEY_ID}.p8
 
       - name: Archive
         env:
