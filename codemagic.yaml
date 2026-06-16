@@ -44,37 +44,75 @@ workflows:
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
-          echo "=== project.pbxproj signing at archive time ==="
-          grep -n "CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE" \
-            ios/App/App.xcodeproj/project.pbxproj || echo "(none)"
+          # ── 1. Find the distribution provisioning profile ios_signing installed ──
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "=== Installed provisioning profiles ==="
+          ls -1 "$PROFILES_DIR" 2>/dev/null || echo "(none)"
 
-          echo "=== Keychain identities ==="
-          security find-identity -v -p codesigning || true
+          PROFILE_UUID=""
+          for f in "$PROFILES_DIR"/*.mobileprovision; do
+            [ -f "$f" ] || continue
+            PLIST=$(security cms -D -i "$f" 2>/dev/null) || continue
+            # Must match our bundle ID
+            echo "$PLIST" | grep -q "com\.guber\.app" || continue
+            # Must be a distribution (App Store) profile
+            echo "$PLIST" | grep -q "ProvisionsAllDevices\|ProvisionedDevices" && continue
+            PROFILE_UUID=$(echo "$PLIST" | grep -A1 "<key>UUID</key>" | \
+              grep "<string>" | sed 's|.*<string>\(.*\)</string>.*|\1|')
+            echo "Matched profile: $f  UUID=$PROFILE_UUID"
+            break
+          done
 
-          # CODE_SIGN_STYLE=Manual + CODE_SIGN_IDENTITY="Apple Distribution"
-          # is a consistent, non-conflicting pair. Command-line build settings
-          # have the highest priority in xcodebuild (above project file and env
-          # vars), so whatever ios_signing or cap sync wrote to the project is
-          # irrelevant. -allowProvisioningUpdates + the ASC key downloads the
-          # matching App Store distribution profile automatically.
+          if [ -z "$PROFILE_UUID" ]; then
+            echo "ERROR: No App Store distribution profile found for $BUNDLE_ID"
+            echo "=== All profile bundle IDs ==="
+            for f in "$PROFILES_DIR"/*.mobileprovision; do
+              [ -f "$f" ] || continue
+              security cms -D -i "$f" 2>/dev/null | \
+                grep -A1 "application-identifier\|UUID" | head -6 || true
+              echo "---"
+            done
+            exit 1
+          fi
+
+          # ── 2. Find the distribution certificate name in the keychain ──
+          echo "=== Keychain codesigning identities ==="
+          security find-identity -v -p codesigning
+
+          CERT_NAME=$(security find-identity -v -p codesigning | \
+            grep "Apple Distribution" | head -1 | \
+            sed 's/.*"\(.*\)".*/\1/')
+
+          if [ -z "$CERT_NAME" ]; then
+            echo "ERROR: No Apple Distribution certificate in keychain"
+            exit 1
+          fi
+          echo "Using cert: $CERT_NAME"
+          echo "Using profile UUID: $PROFILE_UUID"
+
+          # ── 3. Archive — explicit Manual signing, no -allowProvisioningUpdates ──
           xcodebuild archive \
             -workspace   "$XCODE_WORKSPACE" \
             -scheme      "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath "$ARCHIVE_PATH" \
             -destination "generic/platform=iOS" \
-            -allowProvisioningUpdates \
-            -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-            -authenticationKeyPath     "$KEY_FILE" \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_IDENTITY="$CERT_NAME" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             2>&1 | tee /tmp/archive.log
-          test "${PIPESTATUS[0]}" -eq 0
+          ARCHIVE_RC=${PIPESTATUS[0]}
 
+          if [ "$ARCHIVE_RC" -ne 0 ]; then
+            echo "====== ARCHIVE FAILED — last 60 lines ======"
+            tail -60 /tmp/archive.log
+            exit "$ARCHIVE_RC"
+          fi
+          echo "** ARCHIVE SUCCEEDED **"
+
+          # ── 4. Export ──
           cat > /tmp/ExportOptions.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -83,8 +121,13 @@ workflows:
   <key>method</key><string>app-store-connect</string>
   <key>teamID</key><string>7MC93QFW6Q</string>
   <key>signingStyle</key><string>manual</string>
+  <key>provisioningProfiles</key><dict>
+    <key>com.guber.app</key><string>PROFILE_UUID_PLACEHOLDER</string>
+  </dict>
 </dict></plist>
 EOF
+          # Substitute the real UUID into the plist
+          sed -i '' "s/PROFILE_UUID_PLACEHOLDER/$PROFILE_UUID/" /tmp/ExportOptions.plist
 
           xcodebuild -exportArchive \
             -archivePath        "$ARCHIVE_PATH" \
@@ -95,7 +138,13 @@ EOF
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             -authenticationKeyPath     "$KEY_FILE" \
             2>&1 | tee /tmp/export.log
-          test "${PIPESTATUS[0]}" -eq 0
+          EXPORT_RC=${PIPESTATUS[0]}
+
+          if [ "$EXPORT_RC" -ne 0 ]; then
+            echo "====== EXPORT FAILED — last 40 lines ======"
+            tail -40 /tmp/export.log
+            exit "$EXPORT_RC"
+          fi
 
           echo "=== IPA ==="
           find "$IPA_DIR" -name "*.ipa"
