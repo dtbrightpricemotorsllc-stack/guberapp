@@ -13,9 +13,14 @@ workflows:
         BUNDLE_ID: com.guber.app
         TEAM_ID: 7MC93QFW6Q
         APP_STORE_CONNECT_KEY_IDENTIFIER: UG7A49Y842
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.guber.app
+      # No ios_signing block. When ios_signing is present, Codemagic wraps
+      # every xcodebuild invocation and appends
+      #   CODE_SIGN_IDENTITY="CODE_SIGN_IDENTITY[sdk=iphoneos*]="
+      # as a literal command-line argument. xcodebuild parses this as
+      # CODE_SIGN_IDENTITY = "CODE_SIGN_IDENTITY[sdk=iphoneos*]=" (the key
+      # name itself becomes the value), which conflicts with Automatic signing.
+      # Removing ios_signing stops the injection entirely.
+      # -allowProvisioningUpdates + the ASC key below handles cert + profile.
       xcode: 16.2
 
     scripts:
@@ -45,46 +50,13 @@ workflows:
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
-          # ── Strip CODE_SIGN_IDENTITY from every file ios_signing may touch ────
-          # project.pbxproj — two passes (grep -v, then sed) for safety
-          grep -v "CODE_SIGN_IDENTITY" "$PBXPROJ" > /tmp/pbxproj.tmp \
-            && mv /tmp/pbxproj.tmp "$PBXPROJ"
-          sed -i '' '/CODE_SIGN_IDENTITY/d' "$PBXPROJ"
+          echo "=== CODE_SIGN_STYLE in pbxproj ==="
+          grep -n "CODE_SIGN_STYLE" "$PBXPROJ" || echo "(none)"
 
-          # All xcconfig files under ios/ (ios_signing may inject a generated one)
-          find ios/ -name "*.xcconfig" | while read xcf; do
-            if grep -q "CODE_SIGN_IDENTITY" "$xcf" 2>/dev/null; then
-              echo "Cleaning CODE_SIGN_IDENTITY from: $xcf"
-              grep -v "CODE_SIGN_IDENTITY" "$xcf" > /tmp/xcconfig.tmp \
-                && mv /tmp/xcconfig.tmp "$xcf"
-              sed -i '' '/CODE_SIGN_IDENTITY/d' "$xcf"
-            fi
-          done
-
-          # Ensure CODE_SIGN_STYLE is Automatic in pbxproj
-          sed -i '' \
-            's/CODE_SIGN_STYLE = [A-Za-z]*/CODE_SIGN_STYLE = Automatic/g' \
-            "$PBXPROJ"
-
-          # ── Verify — must show ZERO CODE_SIGN_IDENTITY lines ─────────────────
           echo "=== grep -R CODE_SIGN_IDENTITY|PROVISIONING_PROFILE|iphoneos ios/App ==="
           grep -R "CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE\|iphoneos" ios/App || true
 
-          echo "=== CODE_SIGN env vars ==="
-          env | grep -i "code_sign\|provisioning\|certificate" || echo "(none)"
-
-          echo "=== Keychain identities ==="
-          security find-identity -v -p codesigning 2>/dev/null || echo "(none)"
-
-          echo "=== xcodebuild -showBuildSettings | grep CODE_SIGN ==="
-          xcodebuild \
-            -showBuildSettings \
-            -workspace "$XCODE_WORKSPACE" \
-            -scheme    "$XCODE_SCHEME" \
-            2>/dev/null | grep "CODE_SIGN" || echo "(none)"
-
-          # Archive — pure Automatic signing, -allowProvisioningUpdates manages
-          # certificate + profile via the connected ASC key.
+          # Archive — Automatic signing, cert+profile managed by ASC key
           xcodebuild archive \
             -workspace        "$XCODE_WORKSPACE" \
             -scheme           "$XCODE_SCHEME" \
@@ -105,18 +77,10 @@ workflows:
           if [ "$ARCHIVE_RC" -ne 0 ]; then
             echo ""
             echo "====== POST-FAILURE DIAGNOSTICS ======"
-            echo "--- pbxproj CODE_SIGN lines ---"
-            grep -n "CODE_SIGN\|PROVISIONING_PROFILE" "$PBXPROJ" || echo "(none)"
-            echo "--- Effective build settings ---"
-            xcodebuild -showBuildSettings \
-              -workspace     "$XCODE_WORKSPACE" \
-              -scheme        "$XCODE_SCHEME" \
-              -configuration Release \
-              2>/dev/null \
-              | grep -E "CODE_SIGN|PROVISIONING|DEVELOPMENT_TEAM" \
-              || echo "(error running showBuildSettings)"
+            echo "--- Keychain identities ---"
+            security find-identity -v -p codesigning 2>/dev/null || echo "(none)"
             echo "--- archive.log tail ---"
-            tail -30 /tmp/archive.log
+            tail -40 /tmp/archive.log
             echo "======================================"
             exit "$ARCHIVE_RC"
           fi
