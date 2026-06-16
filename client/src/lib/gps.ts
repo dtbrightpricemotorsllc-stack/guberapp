@@ -122,6 +122,13 @@ export async function gpsStartWatchPosition(
     try {
       const perm = await Geolocation.checkPermissions();
       if (perm.location !== "granted") {
+        // requestPermissions() maps to requestWhenInUseAuthorization() on iOS.
+        // The "Always" permission upgrade (needed for background GPS during
+        // Asset Protection / Transport jobs) is requested natively in AppDelegate
+        // via requestAlwaysAuthorization() when applicationDidBecomeActive fires
+        // after the user grants "When In Use". CLLocationManager.startUpdatingLocation
+        // is also swizzled in AppDelegate to set allowsBackgroundLocationUpdates = true
+        // on every call, including inside @capacitor/geolocation's IONGeolocationLib.
         const r = await Geolocation.requestPermissions();
         if (r.location !== "granted") {
           error({ code: 1, message: "Location permission denied", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
