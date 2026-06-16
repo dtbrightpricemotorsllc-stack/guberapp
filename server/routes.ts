@@ -1126,6 +1126,144 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch cash drops" });
     }
   });
+  // ── Local Business Pins (public + admin CRUD) ─────────────────────────────
+
+  app.get("/api/public/local-businesses", async (req: Request, res: Response) => {
+    try {
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      const radiusMiles = parseFloat((req.query.radiusMiles as string) || "25");
+      let rows: any[];
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const r = await pool.query(
+          `SELECT id, name, category, description, address, city, state, zip,
+                  lat, lng, phone, website, logo_url, featured,
+                  (3959 * acos(LEAST(1.0,
+                    cos(radians($1)) * cos(radians(lat)) * cos(radians(lng) - radians($2)) +
+                    sin(radians($1)) * sin(radians(lat))
+                  ))) AS distance_miles
+           FROM local_business_pins
+           WHERE status = 'active'
+             AND (3959 * acos(LEAST(1.0,
+                    cos(radians($1)) * cos(radians(lat)) * cos(radians(lng) - radians($2)) +
+                    sin(radians($1)) * sin(radians(lat))
+                  ))) <= $3
+           ORDER BY featured DESC, distance_miles ASC
+           LIMIT 100`,
+          [lat, lng, radiusMiles]
+        );
+        rows = r.rows;
+      } else {
+        const r = await pool.query(
+          `SELECT id, name, category, description, address, city, state, zip,
+                  lat, lng, phone, website, logo_url, featured
+           FROM local_business_pins WHERE status = 'active'
+           ORDER BY featured DESC, created_at DESC LIMIT 100`
+        );
+        rows = r.rows;
+      }
+      res.json(rows.map((b) => ({
+        id: b.id, name: b.name, category: b.category, description: b.description,
+        address: b.address, city: b.city, state: b.state, zip: b.zip,
+        lat: b.lat, lng: b.lng, phone: b.phone, website: b.website,
+        logoUrl: b.logo_url, featured: b.featured,
+      })));
+    } catch (err) {
+      console.error("[public/local-businesses] error:", err);
+      res.status(500).json({ error: "Failed to fetch businesses" });
+    }
+  });
+
+  app.get("/api/admin/local-businesses", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    try {
+      const r = await pool.query(`SELECT * FROM local_business_pins ORDER BY created_at DESC`);
+      res.json(r.rows.map((b) => ({
+        id: b.id, name: b.name, category: b.category, description: b.description,
+        address: b.address, city: b.city, state: b.state, zip: b.zip,
+        lat: b.lat, lng: b.lng, phone: b.phone, website: b.website,
+        logoUrl: b.logo_url, status: b.status, featured: b.featured,
+        addedByAdminId: b.added_by_admin_id, createdAt: b.created_at,
+      })));
+    } catch (err) {
+      console.error("[admin/local-businesses GET] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.post("/api/admin/local-businesses", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const { name, category, description, address, city, state, zip, lat, lng, phone, website, logoUrl, status, featured } = req.body;
+    if (!name || lat == null || lng == null) return res.status(400).json({ error: "name, lat, lng required" });
+    try {
+      const r = await pool.query(
+        `INSERT INTO local_business_pins
+           (name,category,description,address,city,state,zip,lat,lng,phone,website,logo_url,status,featured,added_by_admin_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [name, category ?? "Business", description ?? null, address ?? null,
+         city ?? null, state ?? null, zip ?? null, lat, lng,
+         phone ?? null, website ?? null, logoUrl ?? null,
+         status ?? "active", featured ?? false, user.id]
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (err) {
+      console.error("[admin/local-businesses POST] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.patch("/api/admin/local-businesses/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const { name, category, description, address, city, state, zip, lat, lng, phone, website, logoUrl, status, featured } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE local_business_pins SET
+           name        = COALESCE($1,  name),
+           category    = COALESCE($2,  category),
+           description = COALESCE($3,  description),
+           address     = COALESCE($4,  address),
+           city        = COALESCE($5,  city),
+           state       = COALESCE($6,  state),
+           zip         = COALESCE($7,  zip),
+           lat         = COALESCE($8,  lat),
+           lng         = COALESCE($9,  lng),
+           phone       = COALESCE($10, phone),
+           website     = COALESCE($11, website),
+           logo_url    = COALESCE($12, logo_url),
+           status      = COALESCE($13, status),
+           featured    = COALESCE($14, featured)
+         WHERE id = $15 RETURNING *`,
+        [name ?? null, category ?? null, description ?? null, address ?? null,
+         city ?? null, state ?? null, zip ?? null, lat ?? null, lng ?? null,
+         phone ?? null, website ?? null, logoUrl ?? null, status ?? null, featured ?? null, id]
+      );
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      res.json(r.rows[0]);
+    } catch (err) {
+      console.error("[admin/local-businesses PATCH] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.delete("/api/admin/local-businesses/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    try {
+      await pool.query(`DELETE FROM local_business_pins WHERE id = $1`, [id]);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[admin/local-businesses DELETE] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
   // ─────────────────────────────────────────────
 
   app.get("/api/geocode", async (req: Request, res: Response) => {

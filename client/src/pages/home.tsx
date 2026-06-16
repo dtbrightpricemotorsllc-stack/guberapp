@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -6,13 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SocialLinks } from "@/components/social-links";
 import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
-  Crown, MapPin, DollarSign, Clock, ChevronRight, X,
+  Crown, MapPin, DollarSign, Clock, ChevronRight, ChevronLeft, X,
   Briefcase, ShieldCheck, Zap, Star, ArrowRight, Lock,
-  Globe, Hammer, Wrench, ShoppingBag, Repeat, Truck, Bot,
-  Share2, Gift, CheckCircle,
+  Globe, Truck, Share2, Gift, CheckCircle,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
-import { GridDemo } from "@/components/grid-demo";
+import { OpportunityMap } from "@/components/opportunity-map";
 import { SignUpWall } from "@/components/signup-wall";
 
 import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
@@ -39,7 +38,55 @@ interface PublicJob {
   _demo?: boolean;
 }
 
-// Demo tiles — shown when real listings are sparse so the feed always looks alive.
+// ── Slideshow ─────────────────────────────────────────────────────────────────
+const SLIDES = [
+  { label: "EARN",       color: "#00E576", headline: "Your city is hiring.",         sub: "Real cash, real neighbors. No resume, no friction.",            cta: "BROWSE JOBS",     href: "/browse-jobs" },
+  { label: "HIRE",       color: "#3B82F6", headline: "Get help in hours.",           sub: "Vetted local workers ready right now in your area.",            cta: "POST A JOB",      href: "/post-job" },
+  { label: "VERIFY",     color: "#8B5CF6", headline: "Eyes on the ground.",          sub: "Photo proof & property inspections. Earn $40–$120+.",           cta: "SEE V&I JOBS",    href: "/browse-jobs?category=Verify+%26+Inspect" },
+  { label: "LOAD BOARD", color: "#0891b2", headline: "Move it. Haul it. Ship it.",   sub: "Vehicles, boats, RVs — posted by real buyers near you.",        cta: "VIEW LOAD BOARD", href: "/load-board" },
+  { label: "EXPLORE",    color: "#EC4899", headline: "Something for everyone.",      sub: "Barter labor, marketplace, AI games & community rewards.",      cta: "EXPLORE ALL",     href: "/browse-jobs" },
+];
+
+// ── Five Doors ────────────────────────────────────────────────────────────────
+const FIVE_DOORS = [
+  {
+    id: "earn",      color: "#00E576", icon: DollarSign, label: "EARN",
+    headline: "Your neighborhood is hiring.",
+    tagline: "Turn free time into real cash.",
+    features: ["Real jobs posted near you", "GPS-verified check-ins", "Get paid same day"],
+    cta: "BROWSE JOBS", href: "/browse-jobs",
+  },
+  {
+    id: "hire",      color: "#3B82F6", icon: Briefcase,  label: "HIRE",
+    headline: "Get help in hours, not weeks.",
+    tagline: "Vetted local workers, any task.",
+    features: ["Post for free", "Workers apply instantly", "Payment held in escrow"],
+    cta: "POST A JOB", href: "/post-job",
+  },
+  {
+    id: "verify",    color: "#8B5CF6", icon: ShieldCheck, label: "VERIFY",
+    headline: "Eyes on the ground.",
+    tagline: "Photo proof, property inspections.",
+    features: ["Pre-purchase vehicle photos", "Property walk-throughs", "$40–$120+ per job"],
+    cta: "SEE V&I JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",
+  },
+  {
+    id: "loadboard", color: "#0891b2", icon: Truck,      label: "LOAD BOARD",
+    headline: "Move it. Haul it. Ship it.",
+    tagline: "Vehicles, boats, RVs & freight.",
+    features: ["Cars, boats & equipment", "Partial + full loads", "Direct shipper contact"],
+    cta: "VIEW LOAD BOARD", href: "/load-board",
+  },
+  {
+    id: "explore",   color: "#EC4899", icon: Zap,        label: "EXPLORE",
+    headline: "There's more inside.",
+    tagline: "Barter, marketplace, AI games.",
+    features: ["Trade skills, no cash needed", "Buy & sell locally", "Earn playing AI or Not?"],
+    cta: "EXPLORE ALL", href: "/browse-jobs",
+  },
+];
+
+// ── Demo job tiles ────────────────────────────────────────────────────────────
 const DEMO_JOBS: PublicJob[] = [
   { id: -1, title: "Help Move a Sectional Sofa",   category: "On-Demand Help",  budget: 75, locationApprox: "Near you", zip: "", urgentSwitch: true,  payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  8 * 60_000).toISOString(), appUrl: "", _demo: true },
   { id: -2, title: "Pre-Purchase Vehicle Photos",  category: "Verify & Inspect", budget: 45, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: true,  serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() - 23 * 60_000).toISOString(), appUrl: "", _demo: true },
@@ -47,17 +94,6 @@ const DEMO_JOBS: PublicJob[] = [
   { id: -4, title: "Furniture Assembly — IKEA",    category: "Skilled Labor",    budget: 90, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  2 * 3_600_000).toISOString(), appUrl: "", _demo: true },
   { id: -5, title: "Grocery Pickup & Delivery",    category: "On-Demand Help",   budget: 30, locationApprox: "Near you", zip: "", urgentSwitch: true,  payType: "flat", jobType: "one-time", proofRequired: false, serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() - 18 * 60_000).toISOString(), appUrl: "", _demo: true },
   { id: -6, title: "Property Walk-Through Photos", category: "Verify & Inspect", budget: 55, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: true,  serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  3 * 3_600_000).toISOString(), appUrl: "", _demo: true },
-];
-
-const CATEGORIES = [
-  { label: "On-Demand Help",   desc: "Get help fast for any task",          icon: Zap,         bg: "linear-gradient(135deg,#78350f,#92400e,#c2410c)", href: "/browse-jobs?category=On-Demand Help" },
-  { label: "Skilled Labor",    desc: "Find skilled pros for the job",        icon: Hammer,      bg: "linear-gradient(135deg,#7f1d1d,#991b1b,#b91c1c)", href: "/browse-jobs?category=Skilled Labor" },
-  { label: "General Labor",    desc: "Everyday tasks, done right",           icon: Wrench,      bg: "linear-gradient(135deg,#14532d,#166534,#15803d)", href: "/browse-jobs?category=General Labor" },
-  { label: "Verify & Inspect", desc: "Verify assets & inspections",          icon: ShieldCheck, bg: "linear-gradient(135deg,#2e1065,#4c1d95,#5b21b6)", href: "/verify-inspect" },
-  { label: "Marketplace",      desc: "Buy, sell & verify local items",       icon: ShoppingBag, bg: "linear-gradient(135deg,#5C3E07,#8B6010,#A87418)", href: "/marketplace",  badge: "BETA" },
-  { label: "Barter Labor",     desc: "Trade skills. No cash needed",         icon: Repeat,      bg: "linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb)", href: "/browse-jobs?category=Barter Labor" },
-  { label: "Load Board",       desc: "Cars, boats, RVs, equipment & more",   icon: Truck,       bg: "linear-gradient(135deg,#0A3D3D,#105252,#186868)", href: "/load-board",   badge: "NEW" },
-  { label: "AI or Not?",       desc: "Can you spot the fake? 🤖",            icon: Bot,         bg: "linear-gradient(135deg,#0E0E0F,#141417,#1A1A1F)", href: "/ai-or-not",    border: "1.5px solid rgba(0,229,118,0.55)" },
 ];
 
 const QUOTES = [
@@ -75,6 +111,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// ── Gate Modal ────────────────────────────────────────────────────────────────
 function GateModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="modal-gate">
@@ -102,6 +139,7 @@ function GateModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Job Card ──────────────────────────────────────────────────────────────────
 function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col relative" data-testid={`card-job-${job.id}`}>
@@ -149,6 +187,134 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
   );
 }
 
+// ── Hero Slideshow ────────────────────────────────────────────────────────────
+function HeroSlideshow() {
+  const [current, setCurrent] = useState(0);
+  const [paused,  setPaused]  = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (paused) return;
+    timerRef.current = setInterval(() => setCurrent((c) => (c + 1) % SLIDES.length), 4000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [paused]);
+
+  const slide = SLIDES[current];
+
+  return (
+    <section
+      className="relative z-10 overflow-hidden w-full"
+      style={{ background: "#050508", height: "clamp(330px, 42vw, 510px)" }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      data-testid="section-hero-slideshow"
+    >
+      {SLIDES.map((s, i) => (
+        <div
+          key={s.label}
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{ opacity: i === current ? 1 : 0, pointerEvents: i === current ? "auto" : "none" }}
+          aria-hidden={i !== current}
+        >
+          {/* Radial accent glow */}
+          <div className="absolute inset-0"
+            style={{ background: `radial-gradient(ellipse 68% 95% at 78% 55%, ${s.color}18 0%, transparent 66%)` }} />
+          {/* Subtle grid overlay */}
+          <div className="absolute inset-0 opacity-[0.022]"
+            style={{ backgroundImage: `linear-gradient(${s.color} 1px,transparent 1px),linear-gradient(90deg,${s.color} 1px,transparent 1px)`, backgroundSize: "48px 48px" }} />
+          {/* Bottom gradient to page bg */}
+          <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-background to-transparent" />
+
+          {/* Content */}
+          <div className="relative h-full flex items-center px-6 sm:px-10 max-w-6xl mx-auto gap-8">
+            {/* Left: copy */}
+            <div className="flex-1 max-w-xl">
+              <div className="inline-flex items-center gap-2 mb-5">
+                <span className="w-2 h-2 rounded-full animate-pulse"
+                  style={{ background: s.color, boxShadow: `0 0 8px ${s.color}` }} />
+                <span className="text-[11px] font-display font-black tracking-[0.35em]" style={{ color: s.color }}>
+                  {s.label}
+                </span>
+              </div>
+              <h1
+                className="font-display font-black tracking-tight leading-[1.03] mb-4 text-white"
+                style={{ fontSize: "clamp(1.85rem, 4.6vw, 3.3rem)" }}
+              >
+                {s.headline}
+              </h1>
+              <p className="text-white/55 text-sm sm:text-[1rem] leading-relaxed mb-7 max-w-md">{s.sub}</p>
+              <Link
+                href={s.href}
+                className="inline-flex items-center gap-2 h-12 px-8 rounded-xl font-display tracking-[0.15em] text-sm font-black text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: s.color, boxShadow: `0 0 28px ${s.color}50, 0 4px 16px rgba(0,0,0,0.3)` }}
+                data-testid={`link-slide-cta-${s.label.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                {s.cta} <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {/* Right: mascot */}
+            <div className="hidden lg:flex shrink-0 items-center justify-center w-52 xl:w-68">
+              <img
+                src={logoImg}
+                alt="GUBER"
+                className="w-44 xl:w-60 h-auto object-contain select-none"
+                draggable={false}
+                style={{
+                  mixBlendMode: "screen",
+                  filter: `drop-shadow(0 0 44px ${s.color}) drop-shadow(0 0 90px ${s.color}55) drop-shadow(0 0 150px ${s.color}1a)`,
+                  transition: "filter 0.5s ease",
+                }}
+                data-testid="img-hero-mascot"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {/* Dot indicators */}
+      <div className="absolute bottom-5 inset-x-0 flex justify-center gap-2.5" data-testid="slideshow-dots">
+        {SLIDES.map((s, i) => (
+          <button
+            key={s.label}
+            onClick={() => setCurrent(i)}
+            className="rounded-full transition-all duration-300"
+            style={{
+              width: i === current ? "22px" : "7px",
+              height: "7px",
+              background: i === current ? s.color : "rgba(255,255,255,0.18)",
+              boxShadow: i === current ? `0 0 8px ${s.color}88` : "none",
+            }}
+            data-testid={`dot-slide-${i}`}
+            aria-label={`Slide ${i + 1}: ${s.label}`}
+          />
+        ))}
+      </div>
+
+      {/* Prev/Next arrows */}
+      <button
+        onClick={() => setCurrent((c) => (c - 1 + SLIDES.length) % SLIDES.length)}
+        className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full items-center justify-center transition-all hover:scale-110 active:scale-95 hidden sm:flex"
+        style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
+        data-testid="button-prev-slide"
+        aria-label="Previous slide"
+      >
+        <ChevronLeft className="w-4 h-4 text-white/60" />
+      </button>
+      <button
+        onClick={() => setCurrent((c) => (c + 1) % SLIDES.length)}
+        className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full items-center justify-center transition-all hover:scale-110 active:scale-95 hidden sm:flex"
+        style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
+        data-testid="button-next-slide"
+        aria-label="Next slide"
+      >
+        <ChevronRight className="w-4 h-4 text-white/60" />
+      </button>
+    </section>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const [gateOpen, setGateOpen] = useState(false);
   const [wallOpen, setWallOpen] = useState(false);
@@ -160,15 +326,11 @@ export default function Home() {
     queryKey: ["/api/public/jobs"],
   });
 
-  // Blend real jobs with demo tiles — feed always shows 6 cards to hook visitors.
   const displayJobs = useMemo(() => {
     const real = jobs ?? [];
     if (real.length >= 6) return real.slice(0, 6);
     return [...real, ...DEMO_JOBS.slice(0, Math.max(0, 6 - real.length))];
   }, [jobs]);
-
-  const scrollToJobs = () =>
-    jobsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const handleShare = async () => {
     const url  = "https://guberapp.com";
@@ -210,157 +372,127 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="relative z-10 px-5 pt-6 pb-10 max-w-6xl mx-auto w-full">
-        <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-14">
+      {/* ── Hero Slideshow ── */}
+      <HeroSlideshow />
 
-          {/* Mascot */}
-          <div className="shrink-0">
-            <img
-              src={logoImg}
-              alt="GUBER"
-              className="w-32 h-32 sm:w-44 sm:h-44 object-contain"
-              style={{ mixBlendMode: "screen", filter: "drop-shadow(0 0 40px rgba(0,229,118,0.35))" }}
-              data-testid="img-hero-mascot"
-            />
+      {/* ── Platform availability strip ── */}
+      <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
+        <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-web">
+          <span className="online-dot" aria-hidden /><Globe className="w-3.5 h-3.5" />
+          Web App <span className="text-emerald-400 font-bold">(Live)</span>
+        </span>
+        <span className="text-muted-foreground/40">|</span>
+        <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-android">
+          <SiGoogleplay className="w-3.5 h-3.5" />
+          Google Play <span className="text-emerald-400 font-bold">(Live)</span>
+        </span>
+        <span className="text-muted-foreground/40">|</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-platform-ios">
+          <SiApple className="w-3.5 h-3.5" />
+          iOS <span className="text-amber-400/80 font-bold">(Soon)</span>
+        </span>
+        <span className="hidden sm:flex items-center gap-1.5 text-muted-foreground text-[10px]">
+          <span className="text-muted-foreground/40">|</span>
+          <span className="online-dot" aria-hidden />
+          Always <span className="text-emerald-400 font-bold ml-1">free to join</span>
+          &nbsp;· No card · No resume
+        </span>
+      </div>
+
+      {/* ── Opportunity Map ── */}
+      <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
+            style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}>
+            <span className="online-dot" aria-hidden />LIVE NEAR YOU
           </div>
-
-          {/* Copy + search */}
-          <div className="flex-1 flex flex-col items-center lg:items-start text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-5 text-[10px] font-display tracking-widest"
-              style={{ background: "rgba(0,229,118,0.08)", border: "1px solid rgba(0,229,118,0.22)", color: "#00e576" }}>
-              FIND WORK · POST JOBS · VERIFY ANYTHING
-            </div>
-
-            <h1 className="font-display font-black tracking-tight leading-[1.05] mb-4 text-[clamp(2rem,7vw,3.5rem)]">
-              Find help{" "}
-              <span style={{ color: "hsl(152 100% 44%)" }}>near</span>{" "}
-              <span style={{ color: "hsl(275 85% 72%)" }}>you.</span>
-            </h1>
-
-            <p className="text-sm sm:text-base text-foreground/70 leading-relaxed mb-6 max-w-lg">
-              Real local work. Real people. Verified, GPS-checked, and paid through the app —
-              no resumes, no gatekeepers, no friction.
-            </p>
-
-            {/* Search bar */}
-            <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xl mb-4" data-testid="form-hero-search">
-              <input
-                type="text"
-                placeholder="What do you need help with?"
-                className="flex-1 h-12 rounded-xl px-4 text-sm bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/50 transition-colors"
-                data-testid="input-search-what"
-              />
-              <input
-                type="text"
-                placeholder="ZIP or city"
-                className="w-full sm:w-36 h-12 rounded-xl px-4 text-sm bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/50 transition-colors"
-                data-testid="input-search-zip"
-              />
-              <button
-                onClick={scrollToJobs}
-                className="h-12 px-6 rounded-xl font-display tracking-[0.15em] text-sm premium-btn flex items-center justify-center gap-2 whitespace-nowrap"
-                data-testid="button-see-the-map"
-              >
-                See the map <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Free badge */}
-            <div className="inline-flex items-center gap-2 text-[11px] font-display tracking-wider text-muted-foreground mb-6">
-              <span className="online-dot" aria-hidden />
-              Always <span className="text-emerald-400 font-bold">free to join</span>
-              &nbsp;· No card · No resume
-            </div>
-
-            {/* Platform badges */}
-            <div className="flex items-center gap-4 sm:gap-6 flex-wrap text-[11px] font-display tracking-wider" data-testid="row-platform-availability">
-              <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-web">
-                <span className="online-dot" aria-hidden />
-                <Globe className="w-3.5 h-3.5" />
-                Web App <span className="text-emerald-400 font-bold">(Live)</span>
-              </span>
-              <span className="text-muted-foreground/40">|</span>
-              <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-android">
-                <SiGoogleplay className="w-3.5 h-3.5" />
-                Google Play <span className="text-emerald-400 font-bold">(Live)</span>
-              </span>
-              <span className="text-muted-foreground/40">|</span>
-              <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-platform-ios">
-                <SiApple className="w-3.5 h-3.5" />
-                iOS <span className="text-amber-400/80 font-bold">(Soon)</span>
-              </span>
-            </div>
-          </div>
+          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-2">Land of Opportunities</h2>
+          <p className="text-muted-foreground text-sm max-w-md mx-auto">
+            Jobs, cash drops, local businesses & more — all in your neighborhood, all on one map.
+          </p>
         </div>
-
-        {/* Day-1 OG banner */}
-        <div className="mt-8">
-          <a
-            href="/day1og.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="gold-shine-wrap flex items-center gap-3 rounded-xl px-4 py-3 w-full max-w-2xl mx-auto group transition-all hover:scale-[1.01] active:scale-[0.99]"
-            style={{
-              background: "linear-gradient(135deg, rgba(180,120,0,0.2) 0%, rgba(245,165,0,0.12) 100%)",
-              border: "1.5px solid rgba(245,175,0,0.5)",
-            }}
-            data-testid="link-hero-day1og"
-          >
-            <img src={day1OGImg} alt="Day-1 OG" className="w-9 h-9 object-contain rounded-lg shrink-0 relative z-[2]" />
-            <div className="flex-1 min-w-0 relative z-[2]">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-display font-black tracking-wider text-amber-300">💎 DAY-1 OG ADVANTAGE</span>
-                <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
-                  style={{ background: "rgba(245,158,11,0.2)", color: "#fbbf24" }}>LIMITED</span>
-              </div>
-              <p className="text-[10px] text-amber-100/70 mt-0.5">Permanent 5% platform fee discount — locked in for life</p>
-            </div>
-            <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0 relative z-[2]" />
-          </a>
-        </div>
+        <OpportunityMap onClaim={() => setWallOpen(true)} />
       </section>
 
-      {/* ── Interactive Map — always visible ── */}
-      <section className="relative z-10 px-5 pb-12 max-w-2xl mx-auto w-full" data-testid="section-live-map">
-        <div className="mb-4 text-center">
-          <h2 className="text-xl font-display font-black tracking-wider mb-1">THE GRID — LIVE NEAR YOU</h2>
-          <p className="text-muted-foreground text-xs">Real local jobs &amp; cash drops dropping around you. Tap any pin to claim it.</p>
+      {/* ── Five Doors ── */}
+      <section className="relative z-10 px-5 pb-16 max-w-6xl mx-auto w-full" data-testid="section-five-doors">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
+            style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", color: "#8B5CF6" }}>
+            YOUR FIVE DOORS
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-2">Pick your door.</h2>
+          <p className="text-muted-foreground text-sm">Every door leads to a different kind of opportunity.</p>
         </div>
-        <GridDemo onClaim={() => setWallOpen(true)} />
-      </section>
 
-      {/* ── Categories ── */}
-      <section className="relative z-10 px-5 pb-12 max-w-6xl mx-auto w-full">
-        <div className="mb-6 text-center">
-          <h2 className="text-xl font-display font-black tracking-wider mb-1">WORK IN EVERY CATEGORY</h2>
-          <p className="text-muted-foreground text-xs">Whatever your skills — there's a job waiting.</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {CATEGORIES.map(({ label, desc, icon: Icon, bg, badge, border, href }) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {FIVE_DOORS.map((door) => (
             <Link
-              key={label}
-              href={href}
-              className="relative rounded-2xl p-4 flex flex-col gap-1 items-start text-left active:scale-[0.97] transition-transform overflow-hidden"
-              style={{ background: bg, border: border ?? "1px solid rgba(255,255,255,0.06)" }}
-              data-testid={`card-category-${label.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`}
+              key={door.id}
+              href={door.href}
+              className="group relative rounded-2xl p-5 flex flex-col gap-3 overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              style={{ background: "rgba(8,8,16,0.97)", border: `1.5px solid ${door.color}28` }}
+              data-testid={`door-${door.id}`}
             >
-              {badge && (
-                <span className="absolute top-2.5 right-2.5 text-[9px] font-display font-black px-1.5 py-0.5 rounded-md"
-                  style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)" }}>
-                  {badge}
-                </span>
-              )}
-              <Icon className="w-5 h-5 mb-1 text-white/80" />
-              <p className="text-sm font-display font-black text-white leading-tight">{label}</p>
-              <p className="text-[10px] text-white/60 leading-tight">{desc}</p>
-              <ChevronRight className="w-3.5 h-3.5 text-white/30 mt-1" />
+              {/* Top accent bar */}
+              <div className="absolute top-0 inset-x-0 h-0.5 rounded-t-2xl"
+                style={{ background: `linear-gradient(90deg,transparent,${door.color},transparent)` }} />
+              {/* Hover glow */}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
+                style={{ background: `radial-gradient(ellipse 80% 60% at 50% 0%,${door.color}0c 0%,transparent 100%)` }} />
+
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center relative z-10 transition-all duration-300 group-hover:scale-110"
+                style={{ background: `${door.color}14`, border: `1px solid ${door.color}28` }}>
+                <door.icon className="w-5 h-5" style={{ color: door.color }} />
+              </div>
+
+              <div className="relative z-10">
+                <span className="text-[10px] font-display font-black tracking-[0.3em]" style={{ color: door.color }}>{door.label}</span>
+                <h3 className="text-sm font-display font-black text-white leading-snug mt-1">{door.headline}</h3>
+                <p className="text-[11px] text-white/45 leading-snug mt-0.5">{door.tagline}</p>
+              </div>
+
+              <ul className="space-y-1.5 relative z-10 flex-1">
+                {door.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-[11px] text-white/55">
+                    <span className="w-1 h-1 rounded-full shrink-0" style={{ background: door.color }} />{f}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex items-center gap-1.5 text-[11px] font-display font-black relative z-10 mt-1 transition-all duration-200 group-hover:gap-2.5"
+                style={{ color: door.color }}>
+                {door.cta} <ArrowRight className="w-3 h-3" />
+              </div>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* ── Live Job Feed (real jobs + demo fill) ── */}
+      {/* ── Day-1 OG banner ── */}
+      <div className="relative z-10 px-5 pb-10 max-w-2xl mx-auto w-full">
+        <a
+          href="/day1og.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="gold-shine-wrap flex items-center gap-3 rounded-xl px-4 py-3 w-full group transition-all hover:scale-[1.01] active:scale-[0.99]"
+          style={{ background: "linear-gradient(135deg,rgba(180,120,0,0.2) 0%,rgba(245,165,0,0.12) 100%)", border: "1.5px solid rgba(245,175,0,0.5)" }}
+          data-testid="link-hero-day1og"
+        >
+          <img src={day1OGImg} alt="Day-1 OG" className="w-9 h-9 object-contain rounded-lg shrink-0 relative z-[2]" />
+          <div className="flex-1 min-w-0 relative z-[2]">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-display font-black tracking-wider text-amber-300">💎 DAY-1 OG ADVANTAGE</span>
+              <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: "rgba(245,158,11,0.2)", color: "#fbbf24" }}>LIMITED</span>
+            </div>
+            <p className="text-[10px] text-amber-100/70 mt-0.5">Permanent 5% platform fee discount — locked in for life</p>
+          </div>
+          <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0 relative z-[2]" />
+        </a>
+      </div>
+
+      {/* ── Live Job Feed ── */}
       <section ref={jobsSectionRef} className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full scroll-mt-4">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -394,38 +526,27 @@ export default function Home() {
       {/* ── City Activation ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full" data-testid="section-city-activation">
         <div className="rounded-2xl p-8 sm:p-12 text-center"
-          style={{
-            background: "linear-gradient(135deg, rgba(0,229,118,0.06) 0%, rgba(0,200,255,0.04) 100%)",
-            border: "1px solid rgba(0,229,118,0.15)",
-          }}>
+          style={{ background: "linear-gradient(135deg,rgba(0,229,118,0.06) 0%,rgba(0,200,255,0.04) 100%)", border: "1px solid rgba(0,229,118,0.15)" }}>
           <div className="inline-flex items-center gap-2 mb-5 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
             style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.2)", color: "#00e576" }}>
-            <span className="online-dot" aria-hidden />
-            ACTIVATING CITY BY CITY
+            <span className="online-dot" aria-hidden />ACTIVATING CITY BY CITY
           </div>
-
-          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-3">
-            Your city is going live.
-          </h2>
+          <h2 className="text-2xl sm:text-3xl font-display font-black tracking-wider mb-3">Your city is going live.</h2>
           <p className="text-muted-foreground text-sm leading-relaxed max-w-lg mx-auto mb-8">
             GUBER grows neighborhood by neighborhood. The more people who join your area,
             the more jobs, cash drops, and opportunities appear on your local grid.
             Be a founding member — claim your spot before your city fills up.
           </p>
-
-          {/* Step indicator */}
           <div className="flex items-center justify-center gap-2 sm:gap-4 mb-8 flex-wrap">
             {["Sign Up Free", "Verify ID", "City Goes Live", "Get Paid"].map((step, i) => (
               <div key={step} className="flex items-center gap-2">
                 <div className="flex flex-col items-center gap-1">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-display font-black"
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-display font-black"
                     style={{
                       background: i === 0 ? "rgba(0,229,118,0.2)" : "rgba(255,255,255,0.06)",
                       border: i === 0 ? "1.5px solid rgba(0,229,118,0.5)" : "1.5px solid rgba(255,255,255,0.1)",
                       color: i === 0 ? "#00e576" : "rgba(255,255,255,0.4)",
-                    }}
-                  >
+                    }}>
                     {i + 1}
                   </div>
                   <span className="text-[9px] font-display tracking-wider text-muted-foreground whitespace-nowrap">{step}</span>
@@ -434,7 +555,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-
           <Link href="/signup" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm premium-btn" data-testid="link-activate-city">
             ACTIVATE YOUR CITY <ArrowRight className="w-4 h-4" />
           </Link>
@@ -444,16 +564,12 @@ export default function Home() {
       {/* ── $5 Share & Earn ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full" data-testid="section-referral">
         <div className="rounded-2xl p-8 sm:p-12"
-          style={{
-            background: "linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(180,83,9,0.04) 100%)",
-            border: "1px solid rgba(245,158,11,0.2)",
-          }}>
+          style={{ background: "linear-gradient(135deg,rgba(245,158,11,0.06) 0%,rgba(180,83,9,0.04) 100%)", border: "1px solid rgba(245,158,11,0.2)" }}>
           <div className="flex flex-col sm:flex-row items-center gap-8">
             <div className="shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center"
               style={{ background: "rgba(245,158,11,0.15)", border: "1.5px solid rgba(245,158,11,0.3)" }}>
               <Gift className="w-8 h-8 text-amber-400" />
             </div>
-
             <div className="flex-1 text-center sm:text-left">
               <h2 className="text-2xl font-display font-black tracking-wider mb-2">
                 Earn <span className="text-amber-400">$5</span> for every share
@@ -463,21 +579,14 @@ export default function Home() {
                 automatically added to your wallet. No limits. Share with your whole neighborhood.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-3">
-                <button
-                  onClick={handleShare}
-                  className="flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm premium-btn"
-                  data-testid="button-share-guber"
-                >
-                  {copied
-                    ? <><CheckCircle className="w-4 h-4" />LINK COPIED!</>
-                    : <><Share2 className="w-4 h-4" />SHARE GUBER</>}
+                <button onClick={handleShare} className="flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="button-share-guber">
+                  {copied ? <><CheckCircle className="w-4 h-4" />LINK COPIED!</> : <><Share2 className="w-4 h-4" />SHARE GUBER</>}
                 </button>
                 <Link href="/signup" className="flex items-center gap-2 h-11 px-6 rounded-xl font-display tracking-[0.15em] text-sm btn-glass-premium" data-testid="link-referral-signup">
                   GET YOUR REFERRAL LINK
                 </Link>
               </div>
             </div>
-
             <div className="shrink-0 text-center hidden lg:flex flex-col items-center gap-1 px-6 py-4 rounded-xl"
               style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)" }}>
               <span className="text-3xl font-display font-black text-amber-400">$5</span>
@@ -491,7 +600,7 @@ export default function Home() {
       {/* ── Verify & Inspect callout ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full">
         <div className="rounded-2xl overflow-hidden relative"
-          style={{ background: "linear-gradient(135deg, rgba(0,229,229,0.06) 0%, rgba(0,229,229,0.02) 100%)", border: "1px solid rgba(0,229,229,0.15)" }}>
+          style={{ background: "linear-gradient(135deg,rgba(0,229,229,0.06) 0%,rgba(0,229,229,0.02) 100%)", border: "1px solid rgba(0,229,229,0.15)" }}>
           <div className="p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-8">
             <div className="relative w-full sm:w-64 h-48 sm:h-48 shrink-0">
               <img src={verifyInspectImg} alt="Verify & Inspect" className="w-full h-full object-cover rounded-xl" />
@@ -541,10 +650,7 @@ export default function Home() {
       {/* ── Final CTA ── */}
       <section className="relative z-10 px-5 pb-20 max-w-3xl mx-auto w-full text-center">
         <div className="rounded-2xl p-10 sm:p-14"
-          style={{
-            background: "linear-gradient(135deg, rgba(0,229,229,0.05) 0%, rgba(152,255,152,0.04) 100%)",
-            border: "1px solid rgba(0,229,229,0.12)",
-          }}>
+          style={{ background: "linear-gradient(135deg,rgba(0,229,229,0.05) 0%,rgba(152,255,152,0.04) 100%)", border: "1px solid rgba(0,229,229,0.12)" }}>
           <h2 className="text-3xl font-display font-black tracking-wider mb-4">READY TO START EARNING?</h2>
           <p className="text-muted-foreground text-sm leading-relaxed mb-8 max-w-md mx-auto">
             Join thousands of people who are turning their neighborhood into a paycheck. No experience required — just show up.

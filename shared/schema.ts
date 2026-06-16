@@ -2663,3 +2663,27 @@ export const growthRewardConfig = pgTable("growth_reward_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type GrowthRewardConfig = typeof growthRewardConfig.$inferSelect;
+
+// ── Local Business Pins ───────────────────────────────────────────────────────
+// Admin-curated local business map pins shown on the public Opportunity Map.
+export const localBusinessPins = pgTable("local_business_pins", {
+  id:              serial("id").primaryKey(),
+  name:            text("name").notNull(),
+  category:        text("category").notNull().default("Business"),
+  description:     text("description"),
+  address:         text("address"),
+  city:            text("city"),
+  state:           text("state"),
+  zip:             text("zip"),
+  lat:             real("lat").notNull(),
+  lng:             real("lng").notNull(),
+  phone:           text("phone"),
+  website:         text("website"),
+  logoUrl:         text("logo_url"),
+  status:          text("status").notNull().default("active"),    // active | pending | inactive
+  featured:        boolean("featured").notNull().default(false),
+  addedByAdminId:  integer("added_by_admin_id"),
+  createdAt:       timestamp("created_at").defaultNow(),
+});
+export type LocalBusinessPin    = typeof localBusinessPins.$inferSelect;
+export type InsertLocalBusinessPin = typeof localBusinessPins.$inferInsert;

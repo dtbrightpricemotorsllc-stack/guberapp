@@ -737,6 +737,28 @@ app.use((req, res, next) => {
     ON CONFLICT DO NOTHING;
   `).catch(e => console.error("[migration] growth_score_ranks error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS local_business_pins (
+      id                SERIAL PRIMARY KEY,
+      name              TEXT NOT NULL,
+      category          TEXT NOT NULL DEFAULT 'Business',
+      description       TEXT,
+      address           TEXT,
+      city              TEXT,
+      state             TEXT,
+      zip               TEXT,
+      lat               REAL NOT NULL,
+      lng               REAL NOT NULL,
+      phone             TEXT,
+      website           TEXT,
+      logo_url          TEXT,
+      status            TEXT NOT NULL DEFAULT 'active',
+      featured          BOOLEAN NOT NULL DEFAULT FALSE,
+      added_by_admin_id INTEGER,
+      created_at        TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] local_business_pins error:", e));
+
   // Seed default growth task templates (6 canonical tasks)
   await pool.query(`
     INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order) VALUES
