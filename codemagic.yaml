@@ -34,35 +34,45 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Apply provisioning profiles
-        script: |
-          # ios_signing downloaded the App Store profile via the connected ASC
-          # key and installed it into ~/Library/MobileDevice/Provisioning Profiles/.
-          # xcode-project use-profiles matches it to the bundle ID and writes
-          # the profile UUID + CODE_SIGN_IDENTITY into the project.pbxproj.
-          # The project already has CODE_SIGN_STYLE=Manual committed.
-          xcode-project use-profiles \
-            --workspace "$XCODE_WORKSPACE" \
-            --scheme    "$XCODE_SCHEME"
-
       - name: Archive and Export
         script: |
           set -euo pipefail
           ARCHIVE_PATH="$CM_BUILD_DIR/App.xcarchive"
           IPA_DIR="$CM_BUILD_DIR/ipa"
-          mkdir -p "$ARCHIVE_PATH" "$IPA_DIR"
+          mkdir -p "$IPA_DIR"
 
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
+          echo "=== project.pbxproj signing at archive time ==="
+          grep -n "CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE" \
+            ios/App/App.xcodeproj/project.pbxproj || echo "(none)"
+
+          echo "=== Keychain identities ==="
+          security find-identity -v -p codesigning || true
+
+          # CODE_SIGN_STYLE=Manual + CODE_SIGN_IDENTITY="Apple Distribution"
+          # is a consistent, non-conflicting pair. Command-line build settings
+          # have the highest priority in xcodebuild (above project file and env
+          # vars), so whatever ios_signing or cap sync wrote to the project is
+          # irrelevant. -allowProvisioningUpdates + the ASC key downloads the
+          # matching App Store distribution profile automatically.
           xcodebuild archive \
             -workspace   "$XCODE_WORKSPACE" \
             -scheme      "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath "$ARCHIVE_PATH" \
             -destination "generic/platform=iOS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            -authenticationKeyPath     "$KEY_FILE" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            2>&1 | tee /tmp/xcodebuild_archive.log
+            2>&1 | tee /tmp/archive.log
           test "${PIPESTATUS[0]}" -eq 0
 
           cat > /tmp/ExportOptions.plist << 'EOF'
@@ -84,7 +94,7 @@ EOF
             -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             -authenticationKeyPath     "$KEY_FILE" \
-            2>&1 | tee /tmp/xcodebuild_export.log
+            2>&1 | tee /tmp/export.log
           test "${PIPESTATUS[0]}" -eq 0
 
           echo "=== IPA ==="
@@ -92,8 +102,8 @@ EOF
 
     artifacts:
       - $CM_BUILD_DIR/ipa/*.ipa
-      - /tmp/xcodebuild_archive.log
-      - /tmp/xcodebuild_export.log
+      - /tmp/archive.log
+      - /tmp/export.log
 
     publishing:
       app_store_connect:
