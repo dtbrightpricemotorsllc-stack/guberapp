@@ -36,71 +36,47 @@ workflows:
 
       - name: Apply provisioning profiles
         script: |
-          # Codemagic's ios_signing downloaded the App Store profile via the
-          # connected ASC key and installed it in ~/Library/MobileDevice/
-          # Provisioning Profiles/. xcode-project use-profiles writes the
-          # correct UUID + CODE_SIGN_IDENTITY + CODE_SIGN_STYLE=Manual into
-          # project.pbxproj so xcodebuild archive uses Manual signing.
-          xcode-project use-profiles
-
-          echo "=== project.pbxproj after use-profiles ==="
-          grep -n "CODE_SIGN\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" \
-            ios/App/App.xcodeproj/project.pbxproj || echo "(none)"
-
-          echo "=== Installed provisioning profiles ==="
-          ls -1 ~/Library/MobileDevice/Provisioning\ Profiles/ 2>/dev/null \
-            | head -20 || echo "(none)"
-
-          echo "=== Keychain identities ==="
-          security find-identity -v -p codesigning | head -10
+          # ios_signing downloaded the App Store profile via the connected ASC
+          # key and installed it into ~/Library/MobileDevice/Provisioning Profiles/.
+          # xcode-project use-profiles matches it to the bundle ID and writes
+          # the profile UUID + CODE_SIGN_IDENTITY into the project.pbxproj.
+          # The project already has CODE_SIGN_STYLE=Manual committed.
+          xcode-project use-profiles \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme    "$XCODE_SCHEME"
 
       - name: Archive and Export
         script: |
           set -euo pipefail
-          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
-          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
-          mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
-
-          printf 'SWIFT_STRICT_CONCURRENCY = minimal\n' > /tmp/spm_override.xcconfig
+          ARCHIVE_PATH="$CM_BUILD_DIR/App.xcarchive"
+          IPA_DIR="$CM_BUILD_DIR/ipa"
+          mkdir -p "$ARCHIVE_PATH" "$IPA_DIR"
 
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
-          # Manual signing: ios_signing installed the cert; xcode-project
-          # use-profiles wrote the profile UUID into the project.
-          # No CODE_SIGN_STYLE override — let the project setting drive it.
-          xcodebuild \
-            -workspace     "$XCODE_WORKSPACE" \
-            -scheme        "$XCODE_SCHEME" \
+          xcodebuild archive \
+            -workspace   "$XCODE_WORKSPACE" \
+            -scheme      "$XCODE_SCHEME" \
             -configuration Release \
-            -archivePath   "$ARCHIVE_PATH" \
-            -destination   "generic/platform=iOS" \
-            -xcconfig      /tmp/spm_override.xcconfig \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
+            -archivePath "$ARCHIVE_PATH" \
+            -destination "generic/platform=iOS" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            SWIFT_STRICT_CONCURRENCY=minimal \
-            archive 2>&1 | tee /tmp/xcodebuild_archive.log
-          ARCHIVE_STATUS=${PIPESTATUS[0]}
+            2>&1 | tee /tmp/xcodebuild_archive.log
+          test "${PIPESTATUS[0]}" -eq 0
 
-          if [ "$ARCHIVE_STATUS" -ne 0 ]; then
-            echo "====== ARCHIVE FAILED — last 80 lines ======"
-            tail -80 /tmp/xcodebuild_archive.log
-            exit "$ARCHIVE_STATUS"
-          fi
-          echo "** ARCHIVE SUCCEEDED **"
-
-          cat > /tmp/ExportOptions.plist << 'PLIST_EOF'
+          cat > /tmp/ExportOptions.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>method</key><string>app-store-connect</string>
   <key>teamID</key><string>7MC93QFW6Q</string>
   <key>signingStyle</key><string>manual</string>
 </dict></plist>
-PLIST_EOF
+EOF
 
-          xcodebuild \
-            -exportArchive \
+          xcodebuild -exportArchive \
             -archivePath        "$ARCHIVE_PATH" \
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath         "$IPA_DIR" \
@@ -109,19 +85,13 @@ PLIST_EOF
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             -authenticationKeyPath     "$KEY_FILE" \
             2>&1 | tee /tmp/xcodebuild_export.log
-          EXPORT_STATUS=${PIPESTATUS[0]}
+          test "${PIPESTATUS[0]}" -eq 0
 
-          if [ "$EXPORT_STATUS" -ne 0 ]; then
-            echo "====== EXPORT FAILED — last 40 lines ======"
-            tail -40 /tmp/xcodebuild_export.log
-            exit "$EXPORT_STATUS"
-          fi
-
-          echo "=== IPA exported ==="
+          echo "=== IPA ==="
           find "$IPA_DIR" -name "*.ipa"
 
     artifacts:
-      - build/ios/ipa/*.ipa
+      - $CM_BUILD_DIR/ipa/*.ipa
       - /tmp/xcodebuild_archive.log
       - /tmp/xcodebuild_export.log
 
