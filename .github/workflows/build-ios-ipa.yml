@@ -50,28 +50,35 @@ jobs:
           # Use Python to reliably normalise the PEM regardless of how it was stored:
           # handles CRLF endings, literal \n sequences, and missing trailing newline.
           python3 - <<'PYEOF'
-          import os, re, sys
-          key = os.environ['ASC_PRIVATE_KEY']
-          # Normalise: strip CR, expand literal \n sequences
-          key = key.replace('\r', '').replace('\\n', '\n').strip()
-          # If the whole key landed on one line (no newlines), reconstruct proper PEM
-          if '\n' not in key:
-              m = re.search(r'-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----', key)
-              if not m:
-                  print('ERROR: cannot locate PEM markers in ASC_PRIVATE_KEY secret')
-                  sys.exit(1)
-              b64 = m.group(1).strip().replace(' ', '')
-              key = f'-----BEGIN PRIVATE KEY-----\n{b64}\n-----END PRIVATE KEY-----'
-          key = key + '\n'
-          kid = os.environ['ASC_KEY_ID']
-          path = f'/tmp/asc/AuthKey_{kid}.p8'
-          with open(path, 'w') as f:
-              f.write(key)
-          lines = key.splitlines()
-          print(f'Key written: {len(lines)} lines')
-          print(f'Line 1: {lines[0]}')
-          print(f'Last line: {lines[-1]}')
-          PYEOF
+import os, re, sys, base64
+key = os.environ['ASC_PRIVATE_KEY']
+key = key.replace('\r', '').replace('\\n', '\n').strip()
+if '\n' not in key:
+    m = re.search(r'-----BEGIN PRIVATE KEY-----(.+?)-----END PRIVATE KEY-----', key)
+    if not m:
+        print('ERROR: cannot locate PEM markers')
+        sys.exit(1)
+    b64 = m.group(1).strip().replace(' ', '')
+    key = f'-----BEGIN PRIVATE KEY-----\n{b64}\n-----END PRIVATE KEY-----'
+key = key + '\n'
+kid = os.environ['ASC_KEY_ID']
+path = f'/tmp/asc/AuthKey_{kid}.p8'
+with open(path, 'w') as f:
+    f.write(key)
+lines = key.splitlines()
+print(f'Key lines: {len(lines)}')
+print(f'Line 1: {lines[0]}')
+print(f'Last: {lines[-1]}')
+b64_body = lines[1] if len(lines) >= 3 else ''
+print(f'Body length: {len(b64_body)} chars')
+try:
+    decoded = base64.b64decode(b64_body + '==')
+    print(f'Decoded bytes: {len(decoded)}')
+    print(f'First 4 bytes hex: {decoded[:4].hex()}')
+except Exception as e:
+    print(f'Base64 ERROR: {e}')
+    sys.exit(1)
+PYEOF
           cp /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
              ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
 
