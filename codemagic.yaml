@@ -74,6 +74,19 @@ workflows:
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
+          # ios_signing sets CODE_SIGN_IDENTITY=Apple Distribution as a shell
+          # env var. xcodebuild inherits it and sees it conflict with
+          # CODE_SIGN_STYLE=Automatic. Unset before archiving so Automatic
+          # signing picks the identity itself via -allowProvisioningUpdates.
+          unset CODE_SIGN_IDENTITY
+          unset PROVISIONING_PROFILE
+          unset PROVISIONING_PROFILE_SPECIFIER
+
+          echo "=== Env signing vars after unset ==="
+          echo "CODE_SIGN_IDENTITY='${CODE_SIGN_IDENTITY:-}'"
+          echo "PROVISIONING_PROFILE='${PROVISIONING_PROFILE:-}'"
+          echo "PROVISIONING_PROFILE_SPECIFIER='${PROVISIONING_PROFILE_SPECIFIER:-}'"
+
           xcodebuild \
             -workspace     "$XCODE_WORKSPACE" \
             -scheme        "$XCODE_SCHEME" \
@@ -86,7 +99,6 @@ workflows:
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             -authenticationKeyPath     "$KEY_FILE" \
             CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
