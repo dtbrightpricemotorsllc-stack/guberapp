@@ -47,9 +47,16 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
         run: |
           mkdir -p /tmp/asc ~/.appstoreconnect/private_keys
-          printf '%s' "$ASC_PRIVATE_KEY" > /tmp/asc/AuthKey_${ASC_KEY_ID}.p8
+          # Convert literal \n to real newlines in case the secret lost line breaks
+          printf '%s' "$ASC_PRIVATE_KEY" \
+            | sed 's/\\n/\n/g' \
+            | sed 's/-----BEGIN PRIVATE KEY----- /-----BEGIN PRIVATE KEY-----\n/' \
+            | sed 's/ -----END PRIVATE KEY-----/\n-----END PRIVATE KEY-----/' \
+            > /tmp/asc/AuthKey_${ASC_KEY_ID}.p8
           cp /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
              ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          # Verify PEM looks valid
+          head -1 /tmp/asc/AuthKey_${ASC_KEY_ID}.p8
 
       - name: Archive
         env:
