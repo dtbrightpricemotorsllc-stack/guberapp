@@ -1126,6 +1126,25 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch cash drops" });
     }
   });
+  // ── Public platform stats ──────────────────────────────────────────────────
+  app.get("/api/public/stats", async (_req: Request, res: Response) => {
+    try {
+      const [membersRes, jobsRes, citiesRes] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE deleted_at IS NULL`),
+        pool.query(`SELECT COUNT(*)::int AS n FROM jobs WHERE deleted_at IS NULL`),
+        pool.query(`SELECT COUNT(DISTINCT state)::int AS n FROM users WHERE state IS NOT NULL AND deleted_at IS NULL`),
+      ]);
+      res.json({
+        members: membersRes.rows[0]?.n ?? 0,
+        jobs: jobsRes.rows[0]?.n ?? 0,
+        states: citiesRes.rows[0]?.n ?? 0,
+      });
+    } catch (err) {
+      console.error("[public/stats] error:", err);
+      res.status(500).json({ members: 0, jobs: 0, states: 0 });
+    }
+  });
+
   // ── Local Business Pins (public + admin CRUD) ─────────────────────────────
 
   app.get("/api/public/local-businesses", async (req: Request, res: Response) => {

@@ -138,6 +138,7 @@ const GrowthTasks = lazy(() => import("@/pages/growth-tasks"));
 const GrowthLeaderboard = lazy(() => import("@/pages/leaderboard"));
 const AdminGrowthEngine = lazy(() => import("@/pages/admin-growth-engine"));
 const AdminLocalBusinesses = lazy(() => import("@/pages/admin-local-businesses"));
+const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 
@@ -339,6 +340,7 @@ function Router() {
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
+      <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
       <Route path="/community-tasks" component={() => <ProtectedRoute component={GrowthTasks} />} />
       <Route path="/growth/leaderboard" component={GrowthLeaderboard} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />

@@ -436,6 +436,11 @@ export default function Home() {
     queryKey: ["/api/public/jobs"],
   });
 
+  const { data: stats } = useQuery<{ members: number; jobs: number; states: number }>({
+    queryKey: ["/api/public/stats"],
+    staleTime: 5 * 60_000,
+  });
+
   const displayJobs = useMemo(() => {
     const real = jobs ?? [];
     if (real.length >= 6) return real.slice(0, 6);
@@ -543,10 +548,8 @@ export default function Home() {
 
       {/* ── Day-1 OG banner ── */}
       <div className="relative z-10 px-5 pb-10 max-w-2xl mx-auto w-full">
-        <a
-          href="/day1og.html"
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/og-advantage"
           className="gold-shine-wrap flex items-center gap-3 rounded-xl px-4 py-3 w-full group transition-all hover:scale-[1.01] active:scale-[0.99]"
           style={{ background: "linear-gradient(135deg,rgba(180,120,0,0.2) 0%,rgba(245,165,0,0.12) 100%)", border: "1.5px solid rgba(245,175,0,0.5)" }}
           data-testid="link-hero-day1og"
@@ -561,7 +564,7 @@ export default function Home() {
             <p className="text-[10px] text-amber-100/70 mt-0.5">Permanent 5% platform fee discount — locked in for life</p>
           </div>
           <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0 relative z-[2]" />
-        </a>
+        </Link>
       </div>
 
       {/* ── Live Job Feed ── */}
@@ -610,7 +613,7 @@ export default function Home() {
             Be a founding member — claim your spot before your city fills up.
           </p>
           <div className="flex items-center justify-center gap-2 sm:gap-4 mb-8 flex-wrap">
-            {["Sign Up Free", "Verify ID", "City Goes Live", "Get Paid"].map((step, i) => (
+            {["Sign Up Free", "Verify ID", "City Goes Live", "Start Earning"].map((step, i) => (
               <div key={step} className="flex items-center gap-2">
                 <div className="flex flex-col items-center gap-1">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-display font-black"
@@ -633,7 +636,45 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── $5 Share & Earn ── */}
+      {/* ── Community Stats ── */}
+      <section className="relative z-10 px-5 pb-14 max-w-6xl mx-auto w-full" data-testid="section-community-stats">
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            {
+              value: stats?.members ? stats.members.toLocaleString() : "—",
+              label: "MEMBERS",
+              sub: stats?.members ? "and growing daily" : "Growing daily across local communities",
+              color: "#00E576",
+            },
+            {
+              value: stats?.jobs ? stats.jobs.toLocaleString() : "—",
+              label: "JOBS POSTED",
+              sub: "real work, real pay",
+              color: "#3B82F6",
+            },
+            {
+              value: stats?.states ? `${stats.states}+` : "—",
+              label: "STATES ACTIVE",
+              sub: "more cities going live",
+              color: "#8B5CF6",
+            },
+          ].map((s) => (
+            <div key={s.label} className="rounded-2xl p-5 text-center"
+              style={{ background: `${s.color}07`, border: `1px solid ${s.color}20` }}
+              data-testid={`stat-${s.label.toLowerCase().replace(/\s+/g, "-")}`}>
+              <div className="text-2xl sm:text-3xl font-display font-black mb-0.5" style={{ color: s.color }}>
+                {s.value}
+              </div>
+              <div className="text-[10px] font-display font-black tracking-widest mb-1" style={{ color: s.color }}>
+                {s.label}
+              </div>
+              <div className="text-[10px] text-muted-foreground leading-snug">{s.sub}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Referral / Credits ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full" data-testid="section-referral">
         <div className="rounded-2xl p-8 sm:p-12"
           style={{ background: "linear-gradient(135deg,rgba(245,158,11,0.06) 0%,rgba(180,83,9,0.04) 100%)", border: "1px solid rgba(245,158,11,0.2)" }}>
@@ -644,11 +685,11 @@ export default function Home() {
             </div>
             <div className="flex-1 text-center sm:text-left">
               <h2 className="text-2xl font-display font-black tracking-wider mb-2">
-                Earn <span className="text-amber-400">$5</span> for every share
+                Earn <span className="text-amber-400">GUBER Credits</span>
               </h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-5 max-w-md">
-                When a friend you invite completes their first job on GUBER, you earn $5 cash —
-                automatically added to your wallet. No limits. Share with your whole neighborhood.
+                Invite friends and earn GUBER Credits when they become active members on GUBER.
+                Credits may be used for platform perks, visibility boosts, premium features, and future rewards.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <button onClick={handleShare} className="flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm premium-btn" data-testid="button-share-guber">
@@ -658,12 +699,6 @@ export default function Home() {
                   GET YOUR REFERRAL LINK
                 </Link>
               </div>
-            </div>
-            <div className="shrink-0 text-center hidden lg:flex flex-col items-center gap-1 px-6 py-4 rounded-xl"
-              style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.15)" }}>
-              <span className="text-3xl font-display font-black text-amber-400">$5</span>
-              <span className="text-[10px] font-display tracking-wider text-muted-foreground">PER INVITE</span>
-              <span className="text-[9px] text-muted-foreground/60">no cap</span>
             </div>
           </div>
         </div>
