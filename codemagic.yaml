@@ -34,33 +34,25 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      - name: Reset project signing to Automatic
+      - name: Apply provisioning profiles
         script: |
-          set -euo pipefail
-          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
+          # Codemagic's ios_signing downloaded the App Store profile via the
+          # connected ASC key and installed it in ~/Library/MobileDevice/
+          # Provisioning Profiles/. xcode-project use-profiles writes the
+          # correct UUID + CODE_SIGN_IDENTITY + CODE_SIGN_STYLE=Manual into
+          # project.pbxproj so xcodebuild archive uses Manual signing.
+          xcode-project use-profiles
 
-          echo "=== BEFORE reset ==="
-          grep -n "CODE_SIGN_IDENTITY\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" \
-            "$PBXPROJ" || echo "(none found)"
+          echo "=== project.pbxproj after use-profiles ==="
+          grep -n "CODE_SIGN\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" \
+            ios/App/App.xcodeproj/project.pbxproj || echo "(none)"
 
-          # macOS BSD sed (mac_mini_m1): -i '' is required for in-place editing.
+          echo "=== Installed provisioning profiles ==="
+          ls -1 ~/Library/MobileDevice/Provisioning\ Profiles/ 2>/dev/null \
+            | head -20 || echo "(none)"
 
-          # 1. Force every CODE_SIGN_STYLE value to Automatic
-          sed -i '' \
-            's/CODE_SIGN_STYLE = [A-Za-z]*/CODE_SIGN_STYLE = Automatic/g' \
-            "$PBXPROJ"
-
-          # 2. Delete every CODE_SIGN_IDENTITY line — any value, any sdk variant.
-          #    ios_signing injects these; they conflict with Automatic signing.
-          sed -i '' '/CODE_SIGN_IDENTITY/d' "$PBXPROJ"
-
-          # 3. Delete PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE lines.
-          #    -allowProvisioningUpdates manages profiles; hardcoded values conflict.
-          sed -i '' '/PROVISIONING_PROFILE/d' "$PBXPROJ"
-
-          echo "=== AFTER reset ==="
-          grep -n "CODE_SIGN_IDENTITY\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" \
-            "$PBXPROJ" || echo "(none — clean)"
+          echo "=== Keychain identities ==="
+          security find-identity -v -p codesigning | head -10
 
       - name: Archive and Export
         script: |
@@ -74,19 +66,9 @@ workflows:
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
-          # ios_signing sets CODE_SIGN_IDENTITY=Apple Distribution as a shell
-          # env var. xcodebuild inherits it and sees it conflict with
-          # CODE_SIGN_STYLE=Automatic. Unset before archiving so Automatic
-          # signing picks the identity itself via -allowProvisioningUpdates.
-          unset CODE_SIGN_IDENTITY
-          unset PROVISIONING_PROFILE
-          unset PROVISIONING_PROFILE_SPECIFIER
-
-          echo "=== Env signing vars after unset ==="
-          echo "CODE_SIGN_IDENTITY='${CODE_SIGN_IDENTITY:-}'"
-          echo "PROVISIONING_PROFILE='${PROVISIONING_PROFILE:-}'"
-          echo "PROVISIONING_PROFILE_SPECIFIER='${PROVISIONING_PROFILE_SPECIFIER:-}'"
-
+          # Manual signing: ios_signing installed the cert; xcode-project
+          # use-profiles wrote the profile UUID into the project.
+          # No CODE_SIGN_STYLE override — let the project setting drive it.
           xcodebuild \
             -workspace     "$XCODE_WORKSPACE" \
             -scheme        "$XCODE_SCHEME" \
@@ -94,11 +76,6 @@ workflows:
             -archivePath   "$ARCHIVE_PATH" \
             -destination   "generic/platform=iOS" \
             -xcconfig      /tmp/spm_override.xcconfig \
-            -allowProvisioningUpdates \
-            -authenticationKeyID       "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-            -authenticationKeyPath     "$KEY_FILE" \
-            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
@@ -118,7 +95,7 @@ workflows:
 <plist version="1.0"><dict>
   <key>method</key><string>app-store-connect</string>
   <key>teamID</key><string>7MC93QFW6Q</string>
-  <key>signingStyle</key><string>automatic</string>
+  <key>signingStyle</key><string>manual</string>
 </dict></plist>
 PLIST_EOF
 
