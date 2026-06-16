@@ -92,6 +92,7 @@ jobs:
             -authenticationKeyPath     /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=7MC93QFW6Q \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Export IPA
