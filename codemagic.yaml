@@ -72,6 +72,23 @@ workflows:
       - name: Sync Capacitor iOS
         script: npx cap sync ios
 
+      - name: Clean conflicting iOS signing settings
+        script: |
+          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
+
+          echo "Before cleanup:"
+          grep -nE "CODE_SIGN|PROVISIONING|DEVELOPMENT_TEAM" "$PBXPROJ" || true
+
+          /usr/libexec/PlistBuddy -c "Print" "$PBXPROJ" >/dev/null 2>&1 || true
+
+          sed -i '' '/CODE_SIGN_IDENTITY/d' "$PBXPROJ"
+          sed -i '' '/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]"/d' "$PBXPROJ"
+          sed -i '' '/PROVISIONING_PROFILE/d' "$PBXPROJ"
+          sed -i '' '/PROVISIONING_PROFILE_SPECIFIER/d' "$PBXPROJ"
+
+          echo "After cleanup:"
+          grep -nE "CODE_SIGN|PROVISIONING|DEVELOPMENT_TEAM" "$PBXPROJ" || true
+
       - name: Resolve Swift Package Manager dependencies
         script: |
           xcodebuild -resolvePackageDependencies \
@@ -87,6 +104,12 @@ workflows:
 
           mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive" "$IPA_DIR"
 
+          echo "Final signing settings before archive:"
+          xcodebuild -showBuildSettings \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release | grep -E "CODE_SIGN|PROVISIONING|DEVELOPMENT_TEAM" || true
+
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
@@ -96,6 +119,9 @@ workflows:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
             CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="" \
+            "CODE_SIGN_IDENTITY[sdk=iphoneos*]"="" \
+            PROVISIONING_PROFILE="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_STRICT_CONCURRENCY=minimal \
