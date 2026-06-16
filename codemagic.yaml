@@ -34,52 +34,33 @@ workflows:
             -workspace "$XCODE_WORKSPACE" \
             -scheme     "$XCODE_SCHEME"
 
-      # ios_signing (above) installs the distribution certificate into the
-      # keychain, but also patches project.pbxproj to Manual + "Apple
-      # Distribution". We reset that here so xcodebuild sees only Automatic.
       - name: Reset project signing to Automatic
         script: |
           set -euo pipefail
           PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
 
-          python3 << 'PYEOF'
-          import re
+          echo "=== BEFORE reset ==="
+          grep -n "CODE_SIGN_IDENTITY\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" \
+            "$PBXPROJ" || echo "(none found)"
 
-          path = "ios/App/App.xcodeproj/project.pbxproj"
-          with open(path) as f:
-              text = f.read()
+          # macOS BSD sed (mac_mini_m1): -i '' is required for in-place editing.
 
-          original = text
+          # 1. Force every CODE_SIGN_STYLE value to Automatic
+          sed -i '' \
+            's/CODE_SIGN_STYLE = [A-Za-z]*/CODE_SIGN_STYLE = Automatic/g' \
+            "$PBXPROJ"
 
-          # 1. Force every CODE_SIGN_STYLE to Automatic
-          text = re.sub(r'(CODE_SIGN_STYLE\s*=\s*)\w+;', r'\1Automatic;', text)
+          # 2. Delete every CODE_SIGN_IDENTITY line — any value, any sdk variant.
+          #    ios_signing injects these; they conflict with Automatic signing.
+          sed -i '' '/CODE_SIGN_IDENTITY/d' "$PBXPROJ"
 
-          # 2. Remove ALL CODE_SIGN_IDENTITY lines — any value, any sdk variant.
-          #    Setting any explicit identity conflicts with Automatic signing.
-          #    Codemagic must choose the identity; we must not specify one.
-          text = re.sub(r'[ \t]*CODE_SIGN_IDENTITY(?:\[sdk=[^\]]*\])?\s*=\s*"[^"]*";\n?', '', text)
+          # 3. Delete PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE lines.
+          #    -allowProvisioningUpdates manages profiles; hardcoded values conflict.
+          sed -i '' '/PROVISIONING_PROFILE/d' "$PBXPROJ"
 
-          # 3. Remove PROVISIONING_PROFILE_SPECIFIER and PROVISIONING_PROFILE
-          #    (UUID). Not needed with Automatic + -allowProvisioningUpdates.
-          text = re.sub(r'[ \t]*PROVISIONING_PROFILE_SPECIFIER\s*=\s*"[^"]*";\n?', '', text)
-          text = re.sub(r'[ \t]*PROVISIONING_PROFILE\s*=\s*"[^"]*";\n?', '', text)
-
-          with open(path, 'w') as f:
-              f.write(text)
-
-          changes = []
-          if 'CODE_SIGN_STYLE = Automatic' in text:
-              changes.append('CODE_SIGN_STYLE → Automatic everywhere')
-          if text != original:
-              print('Signing reset applied:\n  ' + '\n  '.join(changes) if changes else 'Changes made')
-          else:
-              print('project.pbxproj already clean — no changes needed')
-
-          print('\n=== Final signing state ===')
-          for i, line in enumerate(text.splitlines(), 1):
-              if any(k in line for k in ('CODE_SIGN', 'PROVISIONING', 'DEVELOPMENT_TEAM')):
-                  print(f'  {i}: {line.strip()}')
-          PYEOF
+          echo "=== AFTER reset ==="
+          grep -n "CODE_SIGN_IDENTITY\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" \
+            "$PBXPROJ" || echo "(none — clean)"
 
       - name: Archive and Export
         script: |
@@ -90,16 +71,9 @@ workflows:
 
           printf 'SWIFT_STRICT_CONCURRENCY = minimal\n' > /tmp/spm_override.xcconfig
 
-          # Write ASC key for -allowProvisioningUpdates
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
-          echo "Key ID : $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Issuer : $APP_STORE_CONNECT_ISSUER_ID"
 
-          # CODE_SIGN_STYLE=Automatic + CODE_SIGN_IDENTITY="" as command-line
-          # overrides ensure no residual Manual setting from ios_signing or
-          # cap sync can sneak through.  -allowProvisioningUpdates fetches the
-          # correct App Store distribution profile from ASC automatically.
           xcodebuild \
             -workspace     "$XCODE_WORKSPACE" \
             -scheme        "$XCODE_SCHEME" \
@@ -127,14 +101,14 @@ workflows:
           echo "** ARCHIVE SUCCEEDED **"
 
           cat > /tmp/ExportOptions.plist << 'PLIST_EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>teamID</key><string>7MC93QFW6Q</string>
-            <key>signingStyle</key><string>automatic</string>
-          </dict></plist>
-          PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>teamID</key><string>7MC93QFW6Q</string>
+  <key>signingStyle</key><string>automatic</string>
+</dict></plist>
+PLIST_EOF
 
           xcodebuild \
             -exportArchive \
