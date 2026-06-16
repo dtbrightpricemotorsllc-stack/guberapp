@@ -45,20 +45,31 @@ workflows:
           KEY_FILE="/tmp/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
           printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 
-          # Enforce clean Automatic signing in the project file.
-          # ios_signing patches the project before our scripts run;
-          # cap sync may then reset CODE_SIGN_STYLE. Regardless, remove
-          # CODE_SIGN_IDENTITY and set Automatic so there is nothing to
-          # conflict with -allowProvisioningUpdates.
-          sed -i '' '/CODE_SIGN_IDENTITY/d'        "$PBXPROJ"
-          sed -i '' '/PROVISIONING_PROFILE/d'      "$PBXPROJ"
+          # Strip every CODE_SIGN_IDENTITY line ios_signing may have injected
+          # (including the sdk=iphoneos* conditional variant).
+          # grep -v is safer than sed for lines with square brackets.
+          grep -v "CODE_SIGN_IDENTITY" "$PBXPROJ" > /tmp/pbxproj.tmp \
+            && mv /tmp/pbxproj.tmp "$PBXPROJ"
+
+          # Ensure CODE_SIGN_STYLE is Automatic for both configurations.
           sed -i '' \
             's/CODE_SIGN_STYLE = [A-Za-z]*/CODE_SIGN_STYLE = Automatic/g' \
             "$PBXPROJ"
 
-          # Archive — Automatic signing, no explicit CODE_SIGN_IDENTITY,
-          # fresh DerivedData so no stale cached settings.
-          # -allowProvisioningUpdates fetches cert+profile from ASC via the key.
+          echo "=== grep -R CODE_SIGN_IDENTITY ios/App ==="
+          grep -Rn "CODE_SIGN_IDENTITY" ios/App/ || echo "(none — clean)"
+
+          echo "=== CODE_SIGN_STYLE lines in pbxproj ==="
+          grep -n "CODE_SIGN_STYLE" "$PBXPROJ" || echo "(none)"
+
+          echo "=== CODE_SIGN env vars ==="
+          env | grep -i "code_sign\|provisioning\|certificate" || echo "(none)"
+
+          echo "=== Keychain identities ==="
+          security find-identity -v -p codesigning 2>/dev/null || echo "(none)"
+
+          # Archive — pure Automatic signing, -allowProvisioningUpdates manages
+          # certificate + profile via the connected ASC key.
           xcodebuild archive \
             -workspace        "$XCODE_WORKSPACE" \
             -scheme           "$XCODE_SCHEME" \
@@ -78,25 +89,20 @@ workflows:
 
           if [ "$ARCHIVE_RC" -ne 0 ]; then
             echo ""
-            echo "====== DIAGNOSTICS ======"
-            echo "--- pbxproj signing lines ---"
-            grep -n "CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE" \
-              "$PBXPROJ" || echo "(none)"
-            echo "--- CODE_SIGN env vars ---"
-            env | grep -i "code_sign\|provisioning\|certificate" || echo "(none)"
-            echo "--- Keychain identities ---"
-            security find-identity -v -p codesigning 2>/dev/null || echo "(error)"
-            echo "--- Effective build settings for App target ---"
+            echo "====== POST-FAILURE DIAGNOSTICS ======"
+            echo "--- pbxproj CODE_SIGN lines ---"
+            grep -n "CODE_SIGN\|PROVISIONING_PROFILE" "$PBXPROJ" || echo "(none)"
+            echo "--- Effective build settings ---"
             xcodebuild -showBuildSettings \
-              -workspace "$XCODE_WORKSPACE" \
-              -scheme    "$XCODE_SCHEME" \
+              -workspace     "$XCODE_WORKSPACE" \
+              -scheme        "$XCODE_SCHEME" \
               -configuration Release \
               2>/dev/null \
               | grep -E "CODE_SIGN|PROVISIONING|DEVELOPMENT_TEAM" \
-              || echo "(error)"
+              || echo "(error running showBuildSettings)"
             echo "--- archive.log tail ---"
-            tail -40 /tmp/archive.log
-            echo "========================="
+            tail -30 /tmp/archive.log
+            echo "======================================"
             exit "$ARCHIVE_RC"
           fi
           echo "** ARCHIVE SUCCEEDED **"
