@@ -385,7 +385,17 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
     mountedRef.current = true;
     watchCancelledRef.current = false;
     startWatchPosition();
+
+    // Hard fallback: if GPS + IP locate both take > 8 s, show map at US center
+    const locatingTimeout = setTimeout(() => {
+      if (!mountedRef.current) return;
+      if (userPosRef.current) return; // already have a fix
+      setLocating(false);
+      setLocationDenied(true);
+    }, 8000);
+
     return () => {
+      clearTimeout(locatingTimeout);
       // Block any in-flight async callbacks from touching React state after
       // unmount, and tear down every map resource we created so nothing keeps
       // running (watchers, listeners, markers, overlays) once the screen is gone.

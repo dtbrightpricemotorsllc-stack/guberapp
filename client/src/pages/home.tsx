@@ -92,57 +92,66 @@ const FIVE_DOORS = [
 ];
 
 // ── Door SVG shape ────────────────────────────────────────────────────────────
-function DoorShape({ color, icon: Icon, label, number, isHovered }: {
+function DoorShape({ color, icon: Icon, number, isHovered }: {
   color: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string; number: string; isHovered: boolean;
 }) {
-  const w = 120;
-  const h = 180;
-  const r = 30; // arch radius
-  const frameW = 7;
-
   return (
     <div className="flex flex-col items-center gap-3">
-      <svg
-        width={w} height={h} viewBox={`0 0 ${w} ${h}`}
-        style={{ filter: isHovered ? `drop-shadow(0 0 18px ${color}99) drop-shadow(0 0 6px ${color}66)` : `drop-shadow(0 0 6px ${color}33)`, transition: "filter 0.3s ease" }}
+      {/* CSS arch door — no SVG panels */}
+      <div
+        style={{
+          width: 96,
+          height: 136,
+          borderRadius: "48px 48px 6px 6px",
+          border: `2px solid ${isHovered ? color + "90" : color + "35"}`,
+          background: `linear-gradient(180deg, ${color}12 0%, ${color}06 60%, transparent 100%)`,
+          boxShadow: isHovered
+            ? `0 0 24px ${color}50, 0 0 8px ${color}30, inset 0 0 24px ${color}08`
+            : `0 0 8px ${color}18`,
+          transition: "all 0.3s ease",
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
-        {/* Door frame (outer) */}
-        <path
-          d={`M4,${h - 4} L4,${r + 4} Q4,4 ${r + 4},4 L${w - r - 4},4 Q${w - 4},4 ${w - 4},${r + 4} L${w - 4},${h - 4} Z`}
-          fill="none"
-          stroke={color}
-          strokeWidth={frameW}
-          strokeLinejoin="round"
-        />
-        {/* Door fill (inner panel) */}
-        <path
-          d={`M${frameW + 2},${h - 2} L${frameW + 2},${r + frameW} Q${frameW + 2},${frameW + 2} ${r + frameW},${frameW + 2} L${w - r - frameW},${frameW + 2} Q${w - frameW - 2},${frameW + 2} ${w - frameW - 2},${r + frameW} L${w - frameW - 2},${h - 2} Z`}
-          fill={`${color}0f`}
-        />
-        {/* Door panel lines (upper decorative rectangle) */}
-        <rect x={frameW + 10} y={frameW + 14} width={w - (frameW * 2) - 20} height={Math.round(h * 0.28)}
-          rx="4" fill="none" stroke={`${color}40`} strokeWidth="1.5" />
-        {/* Door panel lines (lower decorative rectangle) */}
-        <rect x={frameW + 10} y={frameW + 14 + Math.round(h * 0.28) + 8} width={w - (frameW * 2) - 20} height={Math.round(h * 0.32)}
-          rx="4" fill="none" stroke={`${color}40`} strokeWidth="1.5" />
-        {/* Keyhole circle */}
-        <circle cx={w - frameW - 16} cy={h / 2 + 10} r={5} fill={color} opacity="0.9" />
-        <rect x={w - frameW - 17} cy={h / 2 + 15} width={6} height={8} rx="1" fill={color} opacity="0.9" y={h / 2 + 13} />
-        {/* Door number */}
-        <text x={w / 2} y={h - 14} textAnchor="middle" fontSize="11" fontWeight="900"
-          fontFamily="system-ui, sans-serif" fill={color} opacity="0.6" letterSpacing="2">
+        {/* Big faded number */}
+        <span style={{
+          fontFamily: "system-ui, sans-serif",
+          fontWeight: 900,
+          fontSize: 48,
+          color,
+          opacity: isHovered ? 0.22 : 0.12,
+          lineHeight: 1,
+          transition: "opacity 0.3s ease",
+          userSelect: "none",
+        }}>
           {number}
-        </text>
-      </svg>
+        </span>
+        {/* Keyhole dot */}
+        <div style={{
+          position: "absolute",
+          right: 14,
+          top: "52%",
+          transform: "translateY(-50%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 1,
+        }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, opacity: isHovered ? 1 : 0.55 }} />
+          <div style={{ width: 5, height: 7, borderRadius: "0 0 3px 3px", background: color, opacity: isHovered ? 1 : 0.55 }} />
+        </div>
+      </div>
 
       {/* Icon badge */}
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300"
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center"
         style={{
           background: `${color}18`,
           border: `1.5px solid ${color}40`,
-          boxShadow: isHovered ? `0 0 12px ${color}44` : "none",
-          transition: "box-shadow 0.3s ease",
+          boxShadow: isHovered ? `0 0 14px ${color}55` : "none",
+          transition: "all 0.3s ease",
         }}>
         <Icon className="w-4 h-4" style={{ color }} />
       </div>
@@ -654,7 +663,7 @@ export default function Home() {
             },
             {
               value: stats?.states ? `${stats.states}+` : "—",
-              label: "STATES ACTIVE",
+              label: "AREAS ACTIVE",
               sub: "more cities going live",
               color: "#8B5CF6",
             },

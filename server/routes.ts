@@ -1131,8 +1131,8 @@ export async function registerRoutes(
     try {
       const [membersRes, jobsRes, citiesRes] = await Promise.all([
         pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE deleted_at IS NULL`),
-        pool.query(`SELECT COUNT(*)::int AS n FROM jobs WHERE deleted_at IS NULL`),
-        pool.query(`SELECT COUNT(DISTINCT state)::int AS n FROM users WHERE state IS NOT NULL AND deleted_at IS NULL`),
+        pool.query(`SELECT COUNT(*)::int AS n FROM jobs`),
+        pool.query(`SELECT COUNT(DISTINCT LEFT(zipcode, 3))::int AS n FROM users WHERE zipcode IS NOT NULL AND deleted_at IS NULL`),
       ]);
       res.json({
         members: membersRes.rows[0]?.n ?? 0,
