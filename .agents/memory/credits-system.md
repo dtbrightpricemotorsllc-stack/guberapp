@@ -34,4 +34,14 @@ All seeded via `ON CONFLICT DO NOTHING`. Old 6 placeholders deactivated (is_acti
 - `/og-advantage` — updated to show ReferralPanel for logged-in users (referral link + stats + credits)
 - `/admin/growth-engine` → Credits tab added (first tab, cashout queue + stats + manual grant)
 
+## Standby / Availability Mission (200 cr)
+- `source_type = 'profile_availability'` in credit_ledger
+- Triggered non-blocking after `PATCH /api/users/:id` when `isAvailable` or `skills` change
+- Gates: `id_verified=true`, `is_available=true`, `skills` ≥ 10 chars
+- Skilled-trade gate: if skills text contains any skilled labor keyword → `credential_verified=true` required
+- Keywords list lives in `SKILLED_KEYWORDS` constant in `maybeAwardAvailabilitySkillsMission()`
+- `getCreditBalance()` returns `profileMissionEarned: bool` (checked via credit_ledger)
+- UI: `StandbyMissionCard` component in account-settings.tsx — shows live checklist; flips to green banner once earned
+- Template category: `profile_mission` (separate from `map_mission`)
+
 **Why:** Needed a way to surface credit earnings and provide the cashout flow that previously had no UI or persistence layer.

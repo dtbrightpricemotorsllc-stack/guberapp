@@ -818,6 +818,12 @@ app.use((req, res, next) => {
     ON CONFLICT DO NOTHING;
   `).catch(e => console.error("[seed] Phase 1 map mission templates error:", e));
 
+  await pool.query(`
+    INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order)
+    VALUES ('📡', 'Set Your Availability + Skills', 'Mark yourself available and describe what tasks or services you can do so hirers know you are on standby. Skilled trade workers must have valid credentials on file.', 200, 200, 25, 'profile_mission', 1)
+    ON CONFLICT DO NOTHING;
+  `).catch(e => console.error("[seed] profile_mission template error:", e));
+
   // Seed global fallback setting (enabled by default once feature flag is on)
   await pool.query(`
     INSERT INTO zip_fallback_settings (scope, scope_value, enabled, show_when_real_jobs_exist, max_tasks_shown)

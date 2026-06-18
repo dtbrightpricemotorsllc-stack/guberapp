@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -45,6 +45,75 @@ async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(img, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, size, size);
   return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+function StandbyMissionCard({ user, form }: { user: any; form: any }) {
+  const { data: balance } = useQuery<any>({
+    queryKey: ["/api/credits/balance"],
+    enabled: !!user,
+  });
+
+  if (balance?.profileMissionEarned) {
+    return (
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/30" data-testid="card-standby-mission-done">
+        <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+        <div>
+          <p className="font-display font-semibold text-sm text-green-400">Standby Mission Complete</p>
+          <p className="text-[11px] text-muted-foreground">+200 credits earned — you're on the standby roster.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const hasSkills = (form.skills || "").trim().length >= 10;
+  const isAvailable = !!form.isAvailable;
+  const idVerified = !!user?.idVerified;
+  const credVerified = !!user?.credentialVerified;
+
+  const SKILLED_KEYWORDS = [
+    "plumb", "electric", "hvac", "carpent", "drywall", "weld",
+    "auto repair", "roof", "marine", "boat repair", "towing", "haul",
+    "electrician", "plumber", "carpenter", "welder", "roofer",
+  ];
+  const mentionsSkilled = SKILLED_KEYWORDS.some(kw =>
+    (form.skills || "").toLowerCase().includes(kw)
+  );
+  const needsCred = mentionsSkilled && !credVerified;
+
+  const conditions = [
+    { label: "ID verified", met: idVerified },
+    { label: "Marked available for work", met: isAvailable },
+    { label: "Skills filled in (10+ chars)", met: hasSkills },
+    ...(mentionsSkilled ? [{ label: "Credentials verified (required for skilled trades)", met: credVerified }] : []),
+  ];
+  const allMet = conditions.every(c => c.met);
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3" data-testid="card-standby-mission">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-amber-400" />
+          <span className="font-display font-semibold text-sm">Standby Mission</span>
+          <span className="text-[11px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-display font-bold">+200 CR</span>
+        </div>
+        {allMet && <span className="text-[10px] text-green-400 font-display">Save to claim →</span>}
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        Set yourself on standby and describe what you can do. Hirers will know you're ready.
+        {needsCred && <span className="text-amber-400"> Skilled trades require verified credentials.</span>}
+      </p>
+      <div className="space-y-1.5">
+        {conditions.map((c) => (
+          <div key={c.label} className="flex items-center gap-2">
+            {c.met
+              ? <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+              : <Circle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+            <span className={`text-[11px] ${c.met ? "text-foreground" : "text-muted-foreground"}`}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function AccountSettings() {
@@ -373,6 +442,8 @@ export default function AccountSettings() {
             </div>
             <Switch checked={form.isAvailable} onCheckedChange={(v) => setForm((f) => ({ ...f, isAvailable: v }))} data-testid="switch-available" />
           </div>
+
+          <StandbyMissionCard user={user} form={form} />
 
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
             className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl" data-testid="button-save-settings">

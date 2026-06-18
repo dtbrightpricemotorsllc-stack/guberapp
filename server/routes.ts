@@ -35,6 +35,7 @@ import {
   approveReferralPendingCredits,
   getCreditBalance, submitCashoutRequest,
   listCashoutRequests, reviewCashoutRequest, getCreditAdminStats,
+  maybeAwardAvailabilitySkillsMission,
 } from "./growth-engine";
 import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
@@ -3161,6 +3162,12 @@ export async function registerRoutes(
       const user = await storage.updateUser(id, updates);
       if (!user) return res.status(404).json({ message: "User not found" });
       res.json(sanitizeUser(user));
+      // Non-blocking: check if the standby/availability mission should be awarded
+      if (updates.isAvailable !== undefined || updates.skills !== undefined) {
+        maybeAwardAvailabilitySkillsMission(id).catch((e: Error) =>
+          console.error("[credits] availability mission check failed:", e.message)
+        );
+      }
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

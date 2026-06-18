@@ -483,6 +483,11 @@ export async function getCreditBalance(userId: number) {
   const idVerified  = !!u.id_verified;
   const eligible    = cashoutEnabled && idVerified && stripeReady && available >= minCashout;
 
+  const profileMissionRow = await pool.query(
+    `SELECT id FROM credit_ledger WHERE user_id = $1 AND source_type = 'profile_availability' AND status = 'approved' LIMIT 1`,
+    [userId]
+  );
+
   return {
     available, pending, earned, redeemed,
     dollarValue,
@@ -490,6 +495,7 @@ export async function getCreditBalance(userId: number) {
     stripeReady, idVerified,
     eligibleForCashout: eligible,
     stripeAccountStatus: u.stripe_account_status ?? null,
+    profileMissionEarned: profileMissionRow.rows.length > 0,
   };
 }
 
@@ -937,6 +943,68 @@ export async function getGrowthAnalytics(): Promise<GrowthAnalytics> {
       count: parseInt(r.count, 10), totalCredits: parseInt(r.total_credits, 10),
     })),
   };
+}
+
+// ── Availability + Skills Mission ─────────────────────────────────────────────
+// Skilled-labor keywords (matches Skilled Labor service types in routes.ts).
+const SKILLED_KEYWORDS = [
+  "plumb", "electric", "hvac", "carpent", "drywall", "weld",
+  "auto repair", "roof", "marine", "boat repair", "towing", "haul",
+  "electrician", "plumber", "carpenter", "welder", "roofer",
+];
+
+export async function maybeAwardAvailabilitySkillsMission(
+  userId: number
+): Promise<{ awarded: boolean; reason: string }> {
+  // Idempotency — already credited?
+  const existing = await pool.query(
+    `SELECT id FROM credit_ledger WHERE user_id = $1 AND source_type = 'profile_availability' AND status = 'approved' LIMIT 1`,
+    [userId]
+  );
+  if (existing.rows.length > 0) return { awarded: false, reason: "already_earned" };
+
+  // Load user fields needed for eligibility
+  const userRes = await pool.query(
+    `SELECT is_available, skills, id_verified, credential_verified FROM users WHERE id = $1`,
+    [userId]
+  );
+  const u = userRes.rows[0];
+  if (!u) return { awarded: false, reason: "user_not_found" };
+  if (!u.id_verified)  return { awarded: false, reason: "id_not_verified" };
+  if (!u.is_available) return { awarded: false, reason: "not_available" };
+
+  const skillsText = (u.skills || "").trim().toLowerCase();
+  if (skillsText.length < 10) return { awarded: false, reason: "skills_too_short" };
+
+  // Skilled-trade gate: if any skilled keyword is mentioned, credentials are required
+  const mentionsSkilled = SKILLED_KEYWORDS.some(kw => skillsText.includes(kw));
+  if (mentionsSkilled && !u.credential_verified) {
+    return { awarded: false, reason: "skilled_needs_credential" };
+  }
+
+  const AWARD = 200;
+  const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 1000);
+
+  await pool.query("BEGIN");
+  try {
+    await pool.query(
+      `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, reason)
+       VALUES ($1, $2, $3, 'profile_availability', 'approved', 'Set availability + skills standby')`,
+      [userId, AWARD, +(AWARD / creditsPerDollar).toFixed(4)]
+    );
+    await pool.query(
+      `UPDATE users SET growth_credits = growth_credits + $1,
+                        lifetime_credits_earned = lifetime_credits_earned + $1
+       WHERE id = $2`,
+      [AWARD, userId]
+    );
+    await pool.query("COMMIT");
+  } catch (e) {
+    await pool.query("ROLLBACK");
+    throw e;
+  }
+
+  return { awarded: true, reason: "awarded" };
 }
 
 export async function listGrowthCompletions(page = 1, pageSize = 50) {
