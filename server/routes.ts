@@ -24259,18 +24259,21 @@ OUTPUT STYLE:
         }
       }
 
-      const { offerAmount, message } = req.body;
+      const { offerAmount, message, instantBook } = req.body;
       if (!offerAmount || offerAmount <= 0) return res.status(400).json({ message: "Valid offer amount required" });
 
-      // Check for existing pending offer
+      // Check for existing pending/accepted offer
       const existingOffers = await storage.getLoadBoardOffersByListing(listingId);
-      const existing = existingOffers.find(o => o.carrierId === carrierId && o.status === "pending");
+      const existing = existingOffers.find(o => o.carrierId === carrierId && (o.status === "pending" || o.status === "accepted"));
       if (existing) return res.status(400).json({ message: "You already have a pending offer. Wait for a response." });
+
+      // Instant book: carrier accepts at the posted price — auto-accept without shipper approval
+      const isInstantBook = instantBook === true && listing.postedPrice && offerAmount >= listing.postedPrice;
 
       const offer = await storage.createLoadBoardOffer({
         listingId,
         carrierId,
-        status: "pending",
+        status: isInstantBook ? "accepted" : "pending",
         offerAmount,
         actionCount: 1,
         lastMovedBy: "carrier",
@@ -24279,20 +24282,39 @@ OUTPUT STYLE:
       });
 
       // Update listing status
-      if (listing.status === "posted") {
-        await storage.updateLoadBoardListing(listingId, { status: "offer_received" });
-      }
-
-      // Notify poster
-      await storage.createNotification({
-        userId: listing.posterId,
-        title: "New Load Offer Received",
-        body: `A carrier offered $${offerAmount.toLocaleString()} on your ${listing.transportType} transport (${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}).`,
-        type: "load_board",
-        jobId: null,
+      await storage.updateLoadBoardListing(listingId, {
+        status: isInstantBook ? "offer_accepted" : "offer_received",
       });
 
-      res.json({ offer });
+      if (isInstantBook) {
+        // Notify poster that someone booked at their price
+        await storage.createNotification({
+          userId: listing.posterId,
+          title: "Load Booked at Listed Price",
+          body: `A carrier instantly booked your ${listing.transportType} transport at your listed price of $${offerAmount.toLocaleString()}. Proceed to checkout to confirm.`,
+          type: "load_board",
+          jobId: null,
+        });
+        // Notify carrier to proceed to checkout
+        await storage.createNotification({
+          userId: carrierId,
+          title: "Load Booked!",
+          body: `You booked the ${listing.transportType} transport (${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}) at $${offerAmount.toLocaleString()}. Proceed to checkout.`,
+          type: "load_board",
+          jobId: null,
+        });
+      } else {
+        // Notify poster of new offer
+        await storage.createNotification({
+          userId: listing.posterId,
+          title: "New Load Offer Received",
+          body: `A carrier offered $${offerAmount.toLocaleString()} on your ${listing.transportType} transport (${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}).`,
+          type: "load_board",
+          jobId: null,
+        });
+      }
+
+      res.json({ offer, instantBook: isInstantBook });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

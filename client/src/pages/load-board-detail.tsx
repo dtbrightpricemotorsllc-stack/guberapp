@@ -1101,6 +1101,29 @@ export default function LoadBoardDetail() {
             {/* Submit new offer */}
             {!myOffer && isOpen && (
               <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}>
+
+                {/* Instant book at posted price */}
+                {listing.postedPrice && (
+                  <>
+                    <Button
+                      className="w-full rounded-xl h-12 font-display font-black text-sm mb-3"
+                      style={{ background: "linear-gradient(135deg,#00e576,#00b8d9)", color: "#000", boxShadow: "0 0 18px rgba(0,229,118,0.35)" }}
+                      onClick={() => offerMutation.mutate({ offerAmount: listing.postedPrice, instantBook: true })}
+                      disabled={offerMutation.isPending}
+                      data-testid="button-book-now"
+                    >
+                      {offerMutation.isPending
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <>⚡ Book at ${listing.postedPrice.toLocaleString()} — No negotiation</>}
+                    </Button>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex-1 h-px bg-border/30" />
+                      <span className="text-[9px] text-muted-foreground/30 font-display font-black uppercase tracking-wider">or send a different offer</span>
+                      <div className="flex-1 h-px bg-border/30" />
+                    </div>
+                  </>
+                )}
+
                 <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Submit Your Offer</p>
                 <div className="relative mb-3">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
