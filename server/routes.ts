@@ -3503,6 +3503,15 @@ export async function registerRoutes(
               type: "system",
             });
             console.log(`[GUBER][webhook/main] day1og: user ${ogUser.id} (${ogUser.email}) updated → day1OG=true`);
+            // Award referral credits if this buyer was referred
+            if (ogUser.referredBy) {
+              awardReferralGrowthCredits("referral_og_purchase_referrer", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referrer (main webhook) failed:", e.message)
+              );
+              awardReferralGrowthCredits("referral_og_purchase_referred", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referred (main webhook) failed:", e.message)
+              );
+            }
             if (ogUser.email) {
               try {
                 const { Resend } = await import("resend");
@@ -4326,6 +4335,15 @@ export async function registerRoutes(
               type: "system",
             });
             console.log(`[GUBER][webhook/connect] day1og: user ${ogUser.id} (${ogUser.email}) updated → day1OG=true`);
+            // Award referral credits if this buyer was referred
+            if (ogUser.referredBy) {
+              awardReferralGrowthCredits("referral_og_purchase_referrer", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referrer (connect webhook) failed:", e.message)
+              );
+              awardReferralGrowthCredits("referral_og_purchase_referred", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referred (connect webhook) failed:", e.message)
+              );
+            }
             if (ogUser.email) {
               try {
                 const { Resend } = await import("resend");
@@ -11004,6 +11022,13 @@ export async function registerRoutes(
             }
 
             await storage.updateUser(helper.id, resumeFields);
+
+            // First completed job → award referral credit to whoever referred this worker
+            if ((helper.jobsCompleted || 0) === 0 && helper.referredBy) {
+              awardReferralGrowthCredits("referral_first_paid_job", helper.referredBy, helper.id).catch((e: Error) =>
+                console.error("[credits] referral_first_paid_job award failed:", e.message)
+              );
+            }
 
             // Notify the worker of their badge regardless of who triggered final confirm
             if (confirmNewBadge) {
