@@ -1048,7 +1048,7 @@ export default function LoadBoardDetail() {
         )}
 
         {/* ════════ CARRIER VIEW ════════ */}
-        {!isPoster && (
+        {!isPoster && listing.status !== "connected" && listing.status !== "completed" && (
           <>
             {/* My existing offer */}
             {myOffer && (
