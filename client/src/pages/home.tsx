@@ -18,6 +18,11 @@ import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_177254352629
 import day1OGImg        from "@assets/Gubergoldday1_1772434950756.png";
 import viLogoImg        from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import verifyInspectImg from "@assets/category-images/verify_inspect.png";
+import heroEarnImg      from "@assets/file_00000000acf4720cbdee0df300204ecc_1781794028373.png";
+import heroHireImg      from "@assets/file_000000001b68722fa9b9a139b8832496_1781794028432.png";
+import heroVerifyImg    from "@assets/file_00000000563471f5a72bc4c3624229c7_1781794028404.png";
+import heroLoadImg      from "@assets/file_0000000048c471f5be4d6d0fbf5eb94c_1781794028448.png";
+import heroExploreImg   from "@assets/file_000000009960720ca77a90e111b70876_1781794028463.png";
 
 interface PublicJob {
   id: number;
@@ -40,11 +45,11 @@ interface PublicJob {
 
 // ── Slideshow ─────────────────────────────────────────────────────────────────
 const SLIDES = [
-  { label: "EARN",       color: "#00E576", headline: "Your city is hiring.",         sub: "Real cash, real neighbors. No resume, no friction.",            cta: "BROWSE JOBS",     href: "/browse-jobs" },
-  { label: "HIRE",       color: "#3B82F6", headline: "Get help in hours.",           sub: "Vetted local workers ready right now in your area.",            cta: "POST A JOB",      href: "/post-job" },
-  { label: "VERIFY",     color: "#8B5CF6", headline: "Eyes on the ground.",          sub: "Photo proof & property inspections. Earn $40–$120+.",           cta: "SEE V&I JOBS",    href: "/browse-jobs?category=Verify+%26+Inspect" },
-  { label: "LOAD BOARD", color: "#0891b2", headline: "Move it. Haul it. Ship it.",   sub: "Vehicles, boats, RVs — posted by real buyers near you.",        cta: "VIEW LOAD BOARD", href: "/load-board" },
-  { label: "EXPLORE",    color: "#EC4899", headline: "Something for everyone.",      sub: "Barter labor, marketplace, AI games & community rewards.",      cta: "EXPLORE ALL",     href: "/browse-jobs" },
+  { label: "EARN",       color: "#00E576", cta: "BROWSE JOBS",     href: "/browse-jobs",                                        img: heroEarnImg,    focus: "center" },
+  { label: "HIRE",       color: "#3B82F6", cta: "POST A JOB",      href: "/post-job",                                           img: heroHireImg,    focus: "center" },
+  { label: "VERIFY",     color: "#8B5CF6", cta: "SEE V&I JOBS",    href: "/browse-jobs?category=Verify+%26+Inspect",            img: heroVerifyImg,  focus: "center" },
+  { label: "LOAD BOARD", color: "#0891b2", cta: "VIEW LOAD BOARD", href: "/load-board",                                         img: heroLoadImg,    focus: "center" },
+  { label: "EXPLORE",    color: "#EC4899", cta: "EXPLORE ALL",     href: "/browse-jobs",                                        img: heroExploreImg, focus: "center" },
 ];
 
 // ── Five Doors ────────────────────────────────────────────────────────────────
@@ -314,7 +319,7 @@ function HeroSlideshow() {
 
   useEffect(() => {
     if (paused) return;
-    timerRef.current = setInterval(() => setCurrent((c) => (c + 1) % SLIDES.length), 4000);
+    timerRef.current = setInterval(() => setCurrent((c) => (c + 1) % SLIDES.length), 4500);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [paused]);
 
@@ -323,111 +328,78 @@ function HeroSlideshow() {
   return (
     <section
       className="relative z-10 overflow-hidden w-full"
-      style={{ background: "#050508", height: "clamp(330px, 42vw, 510px)" }}
+      style={{ height: "clamp(240px, 50vw, 560px)" }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       data-testid="section-hero-slideshow"
     >
+      {/* Slides — image only, no text overlay */}
       {SLIDES.map((s, i) => (
         <div
           key={s.label}
-          className="absolute inset-0 transition-opacity duration-500"
+          className="absolute inset-0 transition-opacity duration-700"
           style={{ opacity: i === current ? 1 : 0, pointerEvents: i === current ? "auto" : "none" }}
           aria-hidden={i !== current}
         >
-          {/* Radial accent glow */}
-          <div className="absolute inset-0"
-            style={{ background: `radial-gradient(ellipse 68% 95% at 78% 55%, ${s.color}18 0%, transparent 66%)` }} />
-          {/* Subtle grid overlay */}
-          <div className="absolute inset-0 opacity-[0.022]"
-            style={{ backgroundImage: `linear-gradient(${s.color} 1px,transparent 1px),linear-gradient(90deg,${s.color} 1px,transparent 1px)`, backgroundSize: "48px 48px" }} />
-          {/* Bottom gradient to page bg */}
-          <div className="absolute bottom-0 inset-x-0 h-20 bg-gradient-to-t from-background to-transparent" />
-
-          {/* Content */}
-          <div className="relative h-full flex items-center px-6 sm:px-10 max-w-6xl mx-auto gap-8">
-            {/* Left: copy */}
-            <div className="flex-1 max-w-xl">
-              <div className="inline-flex items-center gap-2 mb-5">
-                <span className="w-2 h-2 rounded-full animate-pulse"
-                  style={{ background: s.color, boxShadow: `0 0 8px ${s.color}` }} />
-                <span className="text-[11px] font-display font-black tracking-[0.35em]" style={{ color: s.color }}>
-                  {s.label}
-                </span>
-              </div>
-              <h1
-                className="font-display font-black tracking-tight leading-[1.03] mb-4 text-white"
-                style={{ fontSize: "clamp(1.85rem, 4.6vw, 3.3rem)" }}
-              >
-                {s.headline}
-              </h1>
-              <p className="text-white/55 text-sm sm:text-[1rem] leading-relaxed mb-7 max-w-md">{s.sub}</p>
-              <Link
-                href={s.href}
-                className="inline-flex items-center gap-2 h-12 px-8 rounded-xl font-display tracking-[0.15em] text-sm font-black text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: s.color, boxShadow: `0 0 28px ${s.color}50, 0 4px 16px rgba(0,0,0,0.3)` }}
-                data-testid={`link-slide-cta-${s.label.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                {s.cta} <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-
-            {/* Right: mascot */}
-            <div className="hidden lg:flex shrink-0 items-center justify-center w-52 xl:w-68">
-              <img
-                src={logoImg}
-                alt="GUBER"
-                className="w-44 xl:w-60 h-auto object-contain select-none"
-                draggable={false}
-                style={{
-                  mixBlendMode: "screen",
-                  filter: `drop-shadow(0 0 44px ${s.color}) drop-shadow(0 0 90px ${s.color}55) drop-shadow(0 0 150px ${s.color}1a)`,
-                  transition: "filter 0.5s ease",
-                }}
-                data-testid="img-hero-mascot"
-              />
-            </div>
-          </div>
+          <img
+            src={s.img}
+            alt={s.label}
+            className="absolute inset-0 w-full h-full object-cover object-center select-none"
+            draggable={false}
+          />
+          {/* Bottom gradient — fades image into page bg and gives CTA a clean landing zone */}
+          <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-background via-background/70 to-transparent" />
         </div>
       ))}
 
-      {/* Dot indicators */}
-      <div className="absolute bottom-5 inset-x-0 flex justify-center gap-2.5" data-testid="slideshow-dots">
-        {SLIDES.map((s, i) => (
-          <button
-            key={s.label}
-            onClick={() => setCurrent(i)}
-            className="rounded-full transition-all duration-300"
-            style={{
-              width: i === current ? "22px" : "7px",
-              height: "7px",
-              background: i === current ? s.color : "rgba(255,255,255,0.18)",
-              boxShadow: i === current ? `0 0 8px ${s.color}88` : "none",
-            }}
-            data-testid={`dot-slide-${i}`}
-            aria-label={`Slide ${i + 1}: ${s.label}`}
-          />
-        ))}
+      {/* CTA + dots — sit in the bottom gradient zone, never over faces or key visuals */}
+      <div className="absolute bottom-5 inset-x-0 z-10 flex flex-col items-center gap-3">
+        <Link
+          href={slide.href}
+          className="inline-flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm font-black text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: slide.color, boxShadow: `0 0 24px ${slide.color}55, 0 4px 14px rgba(0,0,0,0.5)` }}
+          data-testid={`link-slide-cta-${slide.label.toLowerCase().replace(/\s+/g, "-")}`}
+        >
+          {slide.cta} <ArrowRight className="w-4 h-4" />
+        </Link>
+
+        <div className="flex gap-2.5" data-testid="slideshow-dots">
+          {SLIDES.map((s, i) => (
+            <button
+              key={s.label}
+              onClick={() => setCurrent(i)}
+              className="rounded-full transition-all duration-300"
+              style={{
+                width: i === current ? "22px" : "7px",
+                height: "7px",
+                background: i === current ? s.color : "rgba(255,255,255,0.30)",
+                boxShadow: i === current ? `0 0 8px ${s.color}99` : "none",
+              }}
+              data-testid={`dot-slide-${i}`}
+              aria-label={`Slide ${i + 1}: ${s.label}`}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Prev/Next arrows */}
       <button
         onClick={() => setCurrent((c) => (c - 1 + SLIDES.length) % SLIDES.length)}
         className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full items-center justify-center transition-all hover:scale-110 active:scale-95 hidden sm:flex"
-        style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.15)" }}
         data-testid="button-prev-slide"
         aria-label="Previous slide"
       >
-        <ChevronLeft className="w-4 h-4 text-white/60" />
+        <ChevronLeft className="w-4 h-4 text-white/70" />
       </button>
       <button
         onClick={() => setCurrent((c) => (c + 1) % SLIDES.length)}
         className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full items-center justify-center transition-all hover:scale-110 active:scale-95 hidden sm:flex"
-        style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.15)" }}
         data-testid="button-next-slide"
         aria-label="Next slide"
       >
-        <ChevronRight className="w-4 h-4 text-white/60" />
+        <ChevronRight className="w-4 h-4 text-white/70" />
       </button>
     </section>
   );
