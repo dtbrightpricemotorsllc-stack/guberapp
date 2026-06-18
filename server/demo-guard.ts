@@ -25,6 +25,7 @@ export function invalidateDemoIdCache() {
  * Express middleware: blocks demo accounts from mutating real-user data.
  * Demo-to-demo interactions ARE allowed so the demo can be used as a full walkthrough.
  * For job routes, checks if the target job belongs to a demo user.
+ * For load board routes, checks if the target listing belongs to a demo user.
  * For non-job routes, blocks all mutations.
  */
 export async function demoGuard(req: Request, res: Response, next: NextFunction) {
@@ -33,12 +34,15 @@ export async function demoGuard(req: Request, res: Response, next: NextFunction)
   const demoIds = await getDemoUserIds();
   if (!demoIds.has(userId)) return next();
 
-  const jobId = parseInt(req.params?.id);
-  if (!isNaN(jobId)) {
-    const job = await storage.getJob(jobId);
-    if (job && demoIds.has(job.postedById)) {
-      return next();
-    }
+  const resourceId = parseInt(req.params?.id);
+  if (!isNaN(resourceId)) {
+    // Check jobs
+    const job = await storage.getJob(resourceId);
+    if (job && demoIds.has(job.postedById)) return next();
+
+    // Check load board listings (poster is demo user → allow demo carrier to interact)
+    const listing = await storage.getLoadBoardListing(resourceId);
+    if (listing && demoIds.has(listing.posterId)) return next();
   }
 
   return res.status(403).json({ message: "Demo account — this action is not available in demo mode." });
