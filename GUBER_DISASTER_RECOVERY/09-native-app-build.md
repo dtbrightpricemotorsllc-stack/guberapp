@@ -13,36 +13,31 @@ npx cap sync android   → copies web assets into android/app/
 
 ---
 
-## iOS Build (Codemagic CI/CD)
+## iOS Build (GitHub Actions)
 
-iOS builds are done via Codemagic, not locally. The configuration is in `codemagic.yaml`.
+iOS builds are done via GitHub Actions. The workflow is in `.github/workflows/build-ios-ipa.yml`.
 
-### Prerequisites (set in Codemagic environment)
+### Prerequisites (set in GitHub repository secrets)
 
-1. **Code signing certificate** — `GUBER_iOS_Distribution` (uploaded to Codemagic → Code Signing Identities)
+1. **Code signing certificate** — `GUBER_iOS_Distribution` (P12, stored in GitHub secrets)
 2. **Provisioning profile** — `GUBER_Profile_v3` (com.guber.app, App Store distribution)
-3. **App Store Connect API credentials** (in Codemagic "Default" environment group):
+3. **App Store Connect API credentials** (in GitHub Actions secrets):
    ```
    APP_STORE_CONNECT_ISSUER_ID=
    APP_STORE_CONNECT_KEY_IDENTIFIER=
    APP_STORE_CONNECT_PRIVATE_KEY=  (contents of AuthKey_XXXXXX.p8)
    ```
 
-### Codemagic build pipeline (from `codemagic.yaml`)
+### GitHub Actions build pipeline (`.github/workflows/build-ios-ipa.yml`)
 
-```yaml
-scripts:
+```
+steps:
   1. npm ci                        # Install Node deps (reads package-lock.json)
   2. npm run build                 # Build React app to dist/public/
   3. npx cap sync ios              # Sync web assets into Xcode project
-  4. xcodebuild -resolvePackageDependencies   # SPM deps
-  5. keychain initialize           # Set up macOS keychain for signing
-  6. Wipe pre-installed profiles   # Remove stale Codemagic profiles
-  7. app-store-connect fetch-signing-files    # Fetch current App Store profile from Apple
-  8. xcode-project use-profiles    # Apply profiles
-  9. xcodebuild archive            # Build .xcarchive
-  10. xcodebuild -exportArchive    # Export .ipa
-  11. app-store-connect publish    # Upload to App Store Connect / TestFlight
+  4. xcodebuild archive            # Build .xcarchive
+  5. xcodebuild -exportArchive     # Export .ipa
+  6. Upload to App Store Connect / TestFlight
 ```
 
 ### Key Xcode settings
@@ -50,16 +45,14 @@ scripts:
 Workspace: ios/App/App.xcworkspace
 Scheme: App
 Bundle ID: com.guber.app
-Xcode version: 16.2 (set in codemagic.yaml)
 Minimum iOS: 14.0 (set in Info.plist)
 ```
 
 ### Triggering a build
-1. Push to the `main` branch → Codemagic auto-triggers (if webhook configured)
-2. Or: Codemagic Dashboard → Start new build → select `ios-app-store` workflow
+1. GitHub → Actions → **Build iOS IPA** → **Run workflow** → select `main` → Run
 
 ### App Store submission
-After Codemagic uploads to App Store Connect:
+After the workflow uploads to App Store Connect:
 1. App Store Connect → TestFlight → distribute to testers
 2. App Store Connect → App Store → submit for review
 3. Typical review time: 1-3 business days
@@ -100,7 +93,7 @@ Only `aps-environment` is present. Do NOT add:
 | `ios/App/App/AppDelegate.swift` | App lifecycle, deep link handling |
 | `ios/App/App/capacitor.config.json` | Platform-specific Capacitor config |
 | `capacitor.config.ts` | Root Capacitor config (shared) |
-| `codemagic.yaml` | Full CI/CD pipeline definition |
+| `.github/workflows/build-ios-ipa.yml` | GitHub Actions iOS build pipeline |
 
 ---
 
@@ -120,7 +113,7 @@ NSFaceIDUsageDescription — Biometric auth (optional)
 
 ## Android Build
 
-Android builds can be done locally or via Codemagic.
+Android builds can be done locally or via GitHub Actions.
 
 ### Local Android build
 
@@ -146,14 +139,14 @@ npx cap open android
 ### Android keystore
 
 The Android keystore (`*.jks` / `*.keystore`) is gitignored and must be stored securely.
-In Codemagic: **Code Signing** → **Android Keystores** → upload your `.jks` file.
+Store the keystore file securely (not in git). Add to GitHub Actions secrets if using CI for Android.
 
 Keystore details (you must know these to sign new builds):
 ```
-Keystore file: guber.jks  (stored in Codemagic or secure vault)
+Keystore file: guber.jks  (stored in secure vault / GitHub secrets)
 Keystore alias: guber
-Keystore password: (stored in Codemagic secrets)
-Key password: (stored in Codemagic secrets)
+Keystore password: (stored in GitHub secrets)
+Key password: (stored in GitHub secrets)
 ```
 
 ### Android key files
@@ -240,10 +233,10 @@ Configured in:
 
 | Issue | Fix |
 |-------|-----|
-| `npm ci` fails on Codemagic | Run `npm install` locally and commit updated `package-lock.json` |
-| Stale provisioning profile | Codemagic fetches fresh profile from Apple — clear cached profiles step handles this |
+| `npm ci` fails in GitHub Actions | Run `npm install` locally and commit updated `package-lock.json` |
+| Stale provisioning profile | Re-download from Apple Developer Portal and update the GitHub secret |
 | Push notifications not working | Check `aps-environment=production` in entitlements, verify APNs key is correct |
 | App rejected for external purchase | Verify `ExternalPurchaseSheet` shows Apple's required disclosure text before redirecting |
-| Android build fails — keystore not found | Upload keystore to Codemagic Code Signing section |
+| Android build fails — keystore not found | Add keystore as a GitHub Actions secret |
 | `google-services.json` missing | Download from Firebase Console and place at `android/app/google-services.json` |
 | Capacitor sync fails | Run `npm run build` first, then `npx cap sync` |

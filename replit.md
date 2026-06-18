@@ -92,4 +92,4 @@ Local visibility network connecting hirers with workers, emphasizing trust and e
 - **Autoscale timers:** No in-process recurring timers in production — use `DISABLE_BACKGROUND_JOBS=true` + scheduled cron curl.
 - **Google Maps server-side:** Requires a key with no HTTP-referer restrictions (use IP-restriction key or unrestricted).
 - **Account deletion:** Soft-delete only. Public lookups for deleted users return 404.
-- **`npm ci` on Codemagic:** Reads `package-lock.json` strictly. Keep it in sync with `package.json` — run `npm install` locally after any dependency change.
+- **`package-lock.json`:** Keep it in sync with `package.json` — run `npm install` locally after any dependency change.
