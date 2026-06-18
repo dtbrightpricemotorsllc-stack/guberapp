@@ -32,6 +32,9 @@ import {
   listGrowthCompletions,
   getScoreRanks, updateScoreRank,
   getLeaderboard, getGrowthAnalytics,
+  approveReferralPendingCredits,
+  getCreditBalance, submitCashoutRequest,
+  listCashoutRequests, reviewCashoutRequest, getCreditAdminStats,
 } from "./growth-engine";
 import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
@@ -5155,10 +5158,23 @@ export async function registerRoutes(
       await storage.updateUser(log.userId, updates);
       await db.update(auditLogsTable).set({ reviewStatus: "approved", reviewedAt: new Date() }).where(sqlEq(auditLogsTable.id, parseInt(logId)));
 
-      // Ambassador bounty: an ID-verified signup is a qualifying join. If this
-      // user was referred, credit their referrer any newly-completed milestone.
+      // Ambassador bounty + credit pending approval: ID verify is the trigger.
       if (isId) {
         await maybeAwardAmbassadorForReferredUser(log.userId);
+        // Move any pending referral_creates_account credits → approved for the referrer.
+        approveReferralPendingCredits(log.userId).catch((e: Error) =>
+          console.error("[credits] approveReferralPendingCredits failed:", e.message)
+        );
+        // Award verified milestone credits to the referrer (non-blocking).
+        pool.query(
+          `SELECT referred_by FROM users WHERE id = $1`,
+          [log.userId]
+        ).then(async (r: any) => {
+          const referrerId: number | null = r.rows[0]?.referred_by ?? null;
+          if (referrerId) {
+            await awardReferralGrowthCredits("referral_verifies_id", referrerId, log.userId);
+          }
+        }).catch((e: Error) => console.error("[credits] referral_verifies_id award failed:", e.message));
       }
 
       await notify(log.userId, {
@@ -14719,11 +14735,12 @@ export async function registerRoutes(
       finalUser = (await storage.updateUser(id, { aiOrNotCredits: 5 })) ?? user;
     }
 
-    // Ambassador bounty: if an admin manually marks this user ID-verified, treat
-    // it as a qualifying join and credit their referrer (idempotent — recounts
-    // under a lock, so a no-op if already counted).
+    // Ambassador bounty + referral credit approval for admin-manual ID verify.
     if (data.idVerified === true) {
       await maybeAwardAmbassadorForReferredUser(id);
+      approveReferralPendingCredits(id).catch((e: Error) =>
+        console.error("[credits] admin approveReferralPendingCredits failed:", e.message)
+      );
     }
 
     // If admin is force-activating a business account, ensure a stub profile exists
@@ -25192,6 +25209,169 @@ OUTPUT STYLE:
   app.get("/api/admin/growth-engine/analytics", requireAdmin, async (_req: Request, res: Response) => {
     try { res.json(await getGrowthAnalytics()); }
     catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── GUBER Credits API ──────────────────────────────────────────────────────
+
+  // GET /api/credits/referral-stats — credits earned from referrals (for OG page)
+  app.get("/api/credits/referral-stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [refs, credits] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*) AS total,
+                  COUNT(CASE WHEN id_verified THEN 1 END) AS verified
+           FROM users WHERE referred_by = $1`,
+          [userId]
+        ),
+        pool.query(
+          `SELECT COALESCE(SUM(amount), 0) AS credits
+           FROM credit_ledger
+           WHERE user_id = $1
+             AND source_type LIKE 'referral_%'
+             AND status IN ('approved','redeemed')`,
+          [userId]
+        ),
+      ]);
+      res.json({
+        totalReferrals:     parseInt(refs.rows[0]?.total    ?? "0", 10),
+        verifiedReferrals:  parseInt(refs.rows[0]?.verified ?? "0", 10),
+        creditsFromReferrals: parseInt(credits.rows[0]?.credits ?? "0", 10),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/credits/balance — authenticated user's full credit wallet state
+  app.get("/api/credits/balance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const balance = await getCreditBalance(req.session.userId!);
+      if (!balance) return res.status(404).json({ error: "User not found" });
+      res.json(balance);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/credits/ledger — paginated credit history for the authenticated user
+  app.get("/api/credits/ledger", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const limit  = Math.min(parseInt(String(req.query.limit  ?? 20), 10), 100);
+      const offset = parseInt(String(req.query.offset ?? 0),  10);
+      const rows = await pool.query(
+        `SELECT id, amount, dollar_equivalent, source_type, status, reason, created_at
+         FROM credit_ledger
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.session.userId!, limit, offset]
+      );
+      res.json(rows.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/credits/cashout-request — submit a cashout request
+  app.post("/api/credits/cashout-request", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { credits, payoutMethod, payoutDetails } = req.body;
+      if (!credits || typeof credits !== "number" || credits <= 0) {
+        return res.status(400).json({ error: "Invalid credits amount" });
+      }
+      if (!payoutMethod) {
+        return res.status(400).json({ error: "Payout method required" });
+      }
+      const result = await submitCashoutRequest(req.session.userId!, credits, payoutMethod, payoutDetails);
+      res.json({ ok: true, dollarAmount: result.dollarAmount });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Admin: Credits & Cashout ────────────────────────────────────────────────
+
+  // GET /api/admin/credits/stats — liability dashboard
+  app.get("/api/admin/credits/stats", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await getCreditAdminStats()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // GET /api/admin/credits/cashout-requests — queue of cashout requests
+  app.get("/api/admin/credits/cashout-requests", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status ? String(req.query.status) : "pending";
+      res.json(await listCashoutRequests(status));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/credits/cashout-requests/:id/approve
+  app.post("/api/admin/credits/cashout-requests/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { adminNote } = req.body;
+      await reviewCashoutRequest(id, req.session.userId!, "approved", adminNote);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/credits/cashout-requests/:id/deny
+  app.post("/api/admin/credits/cashout-requests/:id/deny", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { adminNote } = req.body;
+      await reviewCashoutRequest(id, req.session.userId!, "denied", adminNote);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/admin/credits/cashout-toggle — enable/disable cashout globally
+  app.patch("/api/admin/credits/cashout-toggle", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body;
+      await pool.query(
+        `INSERT INTO growth_reward_config (key, value_int, label, description)
+         VALUES ('cashout_enabled', $1, 'Cashout Enabled', 'Global toggle: 1 = cashout allowed, 0 = disabled')
+         ON CONFLICT (key) DO UPDATE SET value_int = $1, updated_at = NOW()`,
+        [enabled ? 1 : 0]
+      );
+      res.json({ ok: true, cashoutEnabled: !!enabled });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/credits/grant — manually grant credits to a user
+  app.post("/api/admin/credits/grant", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId, amount, reason } = req.body;
+      if (!userId || !amount || amount <= 0) return res.status(400).json({ error: "userId and positive amount required" });
+      const cfgRow = await pool.query(`SELECT value_int FROM growth_reward_config WHERE key = 'credits_per_dollar'`);
+      const creditsPerDollar: number = cfgRow.rows[0]?.value_int ?? 1000;
+      const dollarEq = (amount / creditsPerDollar).toFixed(4);
+      await pool.query(`
+        UPDATE users
+        SET growth_credits = COALESCE(growth_credits,0) + $1,
+            lifetime_credits_earned = COALESCE(lifetime_credits_earned,0) + $1
+        WHERE id = $2`,
+        [amount, userId]
+      );
+      await pool.query(
+        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+         VALUES ($1, $2, $3, 'admin_grant', 'approved', NOW(), $4)`,
+        [userId, amount, dollarEq, reason ?? `Admin grant by user #${req.session.userId}`]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return httpServer;

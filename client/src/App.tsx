@@ -139,6 +139,7 @@ const GrowthLeaderboard = lazy(() => import("@/pages/leaderboard"));
 const AdminGrowthEngine = lazy(() => import("@/pages/admin-growth-engine"));
 const AdminLocalBusinesses = lazy(() => import("@/pages/admin-local-businesses"));
 const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
+const CreditsPage = lazy(() => import("@/pages/credits"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 
@@ -412,6 +413,7 @@ function Router() {
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
+      <Route path="/credits" component={() => <ProtectedRoute component={CreditsPage} />} />
       <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
       <Route component={NotFound} />
     </Switch>

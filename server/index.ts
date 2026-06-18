@@ -759,17 +759,64 @@ app.use((req, res, next) => {
     );
   `).catch(e => console.error("[migration] local_business_pins error:", e));
 
-  // Seed default growth task templates (6 canonical tasks)
+  // ── Credit Ledger + Cashout tables (Phase 1 credits rollout) ─────────────
   await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_credits           INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_credits_earned   INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_credits_redeemed INTEGER DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS credit_ledger (
+      id                 SERIAL PRIMARY KEY,
+      user_id            INTEGER NOT NULL,
+      amount             INTEGER NOT NULL,
+      dollar_equivalent  NUMERIC(10,4) NOT NULL DEFAULT 0,
+      source_type        TEXT NOT NULL,
+      task_completion_id INTEGER,
+      status             TEXT NOT NULL DEFAULT 'approved',
+      reason             TEXT,
+      created_at         TIMESTAMP DEFAULT NOW(),
+      approved_at        TIMESTAMP,
+      redeemed_at        TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_credit_ledger_user   ON credit_ledger(user_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_ledger_status ON credit_ledger(status);
+    CREATE INDEX IF NOT EXISTS idx_credit_ledger_created ON credit_ledger(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS cashout_requests (
+      id                SERIAL PRIMARY KEY,
+      user_id           INTEGER NOT NULL,
+      credits_requested INTEGER NOT NULL,
+      dollar_amount     NUMERIC(10,2) NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      payout_method     TEXT,
+      payout_details    TEXT,
+      admin_note        TEXT,
+      created_at        TIMESTAMP DEFAULT NOW(),
+      reviewed_at       TIMESTAMP,
+      reviewed_by       INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_cashout_requests_user   ON cashout_requests(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cashout_requests_status ON cashout_requests(status);
+  `).catch(e => console.error("[migration] credit ledger / cashout tables error:", e));
+
+  // Seed Phase 1 map mission templates — deactivate old placeholders first
+  await pool.query(`
+    UPDATE growth_task_templates SET is_active = false, paused = true
+    WHERE title IN (
+      'Best Place To Eat','Trusted Local Business','Cheapest Fuel Report',
+      'Hiring Alert','Share GUBER','Invite A User'
+    );
     INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order) VALUES
-      ('🍔', 'Best Place To Eat',       'Nominate the best local restaurant or food spot in your ZIP.',       25, 50,  25, 'community', 1),
-      ('🔧', 'Trusted Local Business',   'Share a local business you trust and would recommend to neighbors.', 25, 50,  25, 'community', 2),
-      ('⛽', 'Cheapest Fuel Report',     'Report today''s cheapest gas price you''ve spotted in your area.',   20, 40,  25, 'community', 3),
-      ('💼', 'Hiring Alert',             'Know someone who''s hiring locally? Share the opportunity.',         30, 60,  25, 'community', 4),
-      ('📢', 'Share GUBER',             'Tell a neighbor about GUBER and what it does for your community.',   15, 30,  25, 'community', 5),
-      ('👥', 'Invite A User',           'Invite a friend or neighbor to join GUBER with your referral link.', 50, 100, 25, 'referral',  6)
+      ('🗺️', 'Submit Local Recommendation',   'Share a trusted local business, restaurant, or service you would recommend to neighbors in your area.',  25,  25, 25, 'map_mission', 1),
+      ('⛽', 'Fuel Price Report',              'Report today''s cheapest gas price you have spotted nearby. Include the station name and price.',           50,  50, 25, 'map_mission', 2),
+      ('🏪', 'Verify Business Hours',          'Confirm a local business''s hours are correct. Take a photo of their door sign or hours display.',         75,  75, 25, 'map_mission', 3),
+      ('📍', 'Add Useful Local Info',          'Share helpful information about a local spot — parking notes, access tips, or anything the community needs to know.', 100, 100, 25, 'map_mission', 4),
+      ('📅', 'Submit Local Event',             'Know of a local event, market, job fair, or community opportunity? Share it so neighbors can take advantage.', 100, 100, 25, 'map_mission', 5),
+      ('❌', 'Report Wrong or Closed Business','Found a business listed incorrectly or permanently closed? Help keep the map accurate.',                    100, 100, 25, 'map_mission', 6),
+      ('📷', 'Add Storefront Photo',           'Take a clear photo of a local business storefront. Helps the community recognize and find it.',             100, 100, 25, 'map_mission', 7),
+      ('⭐', 'High-Value Verified Local Intel','Submit exceptionally useful, verified local information. Admin-reviewed. Up to 500 credits for top-tier intel.', 500, 500, 25, 'map_mission', 8)
     ON CONFLICT DO NOTHING;
-  `).catch(e => console.error("[seed] growth task templates error:", e));
+  `).catch(e => console.error("[seed] Phase 1 map mission templates error:", e));
 
   // Seed global fallback setting (enabled by default once feature flag is on)
   await pool.query(`
@@ -778,25 +825,37 @@ app.use((req, res, next) => {
     ON CONFLICT (scope, scope_value) DO NOTHING;
   `).catch(e => console.error("[seed] zip fallback global setting error:", e));
 
-  // Seed reward config keys (admin can edit values; defaults are conservative)
+  // Seed/update reward config — ON CONFLICT DO UPDATE so ratio changes apply to existing DBs
   await pool.query(`
     INSERT INTO growth_reward_config (key, value_int, label, description) VALUES
-      ('referral_signup_credits',             2,    'Referral: Signup Credits',              'Credits awarded to referrer when referred user creates account'),
-      ('referral_signup_score',               25,   'Referral: Signup Score',                'Score awarded to referrer when referred user creates account'),
-      ('referral_verified_credits',           10,   'Referral: ID Verified Credits',         'Credits awarded to referrer when referred user verifies ID'),
-      ('referral_verified_score',             100,  'Referral: ID Verified Score',           'Score awarded to referrer when referred user verifies ID'),
-      ('referral_stripe_connected_credits',   25,   'Referral: Stripe Connected Credits',    'Credits awarded when referred user connects Stripe payout'),
-      ('referral_stripe_connected_score',     250,  'Referral: Stripe Connected Score',      'Score awarded when referred user connects Stripe payout'),
-      ('referral_first_paid_job_credits',     100,  'Referral: First Paid Job Credits',      'Credits awarded to referrer when referred user completes first paid job'),
-      ('referral_first_paid_job_score',       1000, 'Referral: First Paid Job Score',        'Score awarded to referrer when referred user completes first paid job'),
-      ('referral_og_purchase_referrer_credits', 50, 'Referral: OG Purchase (Referrer) Credits', 'Credits to referrer when referred user buys Day-1 OG'),
-      ('referral_og_purchase_referrer_score',  500, 'Referral: OG Purchase (Referrer) Score',   'Score to referrer when referred user buys Day-1 OG'),
-      ('referral_og_purchase_referred_credits', 25, 'Referral: OG Purchase (Referred) Credits', 'Credits to referred user for purchasing Day-1 OG via referral'),
-      ('referral_og_purchase_referred_score',  250, 'Referral: OG Purchase (Referred) Score',   'Score to referred user for purchasing Day-1 OG via referral'),
-      ('cashout_minimum_credits',             1000, 'Cashout Minimum Credits',               'Minimum growth credits required to request a cashout (100 cr = $1)'),
-      ('credits_per_dollar',                  100,  'Credits Per Dollar',                    'Number of growth credits equal to $1 USD'),
-      ('og_bonus_pct',                        25,   'Day-1 OG Bonus %',                      'Extra % credits/score earned by Day-1 OG members on growth tasks')
-    ON CONFLICT (key) DO NOTHING;
+      ('referral_signup_credits',               250,   'Referral: Signup Credits (pending)',    'Credits awarded (pending) to referrer when referred user creates account'),
+      ('referral_signup_score',                  25,   'Referral: Signup Score',                'Score awarded to referrer when referred user creates account'),
+      ('referral_verified_credits',             500,   'Referral: ID Verified Credits',         'Credits approved to referrer when referred user verifies ID'),
+      ('referral_verified_score',               100,   'Referral: ID Verified Score',           'Score awarded to referrer when referred user verifies ID'),
+      ('referral_stripe_connected_credits',     500,   'Referral: Stripe Connected Credits',    'Credits awarded when referred user connects Stripe payout'),
+      ('referral_stripe_connected_score',       250,   'Referral: Stripe Connected Score',      'Score awarded when referred user connects Stripe payout'),
+      ('referral_first_paid_job_credits',      1500,   'Referral: First Paid Job Credits',      'Credits awarded to referrer when referred user completes first paid job'),
+      ('referral_first_paid_job_score',        1000,   'Referral: First Paid Job Score',        'Score awarded to referrer when referred user completes first paid job'),
+      ('referral_og_purchase_referrer_credits', 2500,  'Referral: OG Purchase (Referrer) Credits', 'Credits to referrer when referred user buys Day-1 OG'),
+      ('referral_og_purchase_referrer_score',   500,   'Referral: OG Purchase (Referrer) Score',   'Score to referrer when referred user buys Day-1 OG'),
+      ('referral_og_purchase_referred_credits', 1000,  'Referral: OG Purchase (Referred) Credits', 'Credits to referred user for purchasing Day-1 OG via referral'),
+      ('referral_og_purchase_referred_score',   250,   'Referral: OG Purchase (Referred) Score',   'Score to referred user for purchasing Day-1 OG via referral'),
+      ('cashout_minimum_credits',              25000,  'Cashout Minimum Credits',               'Minimum approved credits required to request a cashout (1000 cr = $1)'),
+      ('credits_per_dollar',                    1000,  'Credits Per Dollar',                    'Number of growth credits equal to $1 USD'),
+      ('og_bonus_pct',                            25,  'Day-1 OG Bonus %',                      'Extra % credits/score earned by Day-1 OG members on growth tasks'),
+      ('cashout_enabled',                          0,  'Cashout Enabled',                       'Global toggle: 1 = cashout requests allowed, 0 = disabled')
+    ON CONFLICT (key) DO UPDATE
+      SET value_int = EXCLUDED.value_int,
+          label     = EXCLUDED.label,
+          description = EXCLUDED.description,
+          updated_at  = NOW()
+    WHERE growth_reward_config.key IN (
+      'credits_per_dollar','cashout_minimum_credits',
+      'referral_signup_credits','referral_verified_credits',
+      'referral_stripe_connected_credits','referral_first_paid_job_credits',
+      'referral_og_purchase_referrer_credits','referral_og_purchase_referred_credits',
+      'cashout_enabled'
+    );
   `).catch(e => console.error("[seed] growth reward config error:", e));
 
   await registerRoutes(httpServer, app);

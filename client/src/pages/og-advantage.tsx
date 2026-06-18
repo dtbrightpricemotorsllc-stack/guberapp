@@ -1,5 +1,8 @@
 import { Link } from "wouter";
-import { Crown, CheckCircle, Zap, Lock, Star, ArrowRight, ChevronLeft, Shield, Gift } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Crown, CheckCircle, Zap, Lock, Star, ArrowRight, ChevronLeft, Shield, Gift, Copy, Coins, Users } from "lucide-react";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import logoImg from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg from "@assets/Gubergoldday1_1772434950756.png";
 
@@ -49,7 +52,145 @@ const HOW_TO_QUALIFY = [
   "Remain an active community member",
 ];
 
+interface AuthUser {
+  id: number;
+  username: string;
+  referralCode: string | null;
+  day1OG?: boolean;
+  growthCredits?: number;
+  pendingCredits?: number;
+}
+
+interface ReferralSummary {
+  totalReferrals: number;
+  verifiedReferrals: number;
+  creditsFromReferrals: number;
+}
+
+function ReferralPanel({ user }: { user: AuthUser }) {
+  const { toast } = useToast();
+  const referralLink = user.referralCode
+    ? `${window.location.origin}/join/${user.referralCode}`
+    : null;
+
+  const { data: refStats } = useQuery<ReferralSummary>({
+    queryKey: ["/api/credits/referral-stats"],
+    enabled: !!user,
+  });
+
+  function copyLink() {
+    if (!referralLink) return;
+    navigator.clipboard.writeText(referralLink).then(() =>
+      toast({ title: "Referral link copied!", description: "Share it to earn credits." })
+    );
+  }
+
+  return (
+    <div className="rounded-2xl p-6 mb-10"
+      style={{ background: "linear-gradient(135deg,rgba(245,158,11,0.1) 0%,rgba(180,83,9,0.06) 100%)", border: "1.5px solid rgba(245,158,11,0.35)" }}
+      data-testid="card-referral-panel">
+
+      <div className="flex items-center gap-2 mb-4">
+        <Users className="w-5 h-5 text-amber-400" />
+        <h2 className="text-lg font-display font-black tracking-wider text-amber-300">YOUR REFERRAL LINK</h2>
+        {user.day1OG && (
+          <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-display font-bold"
+            style={{ background: "rgba(245,158,11,0.2)", border: "1px solid rgba(245,158,11,0.4)", color: "#fbbf24" }}>
+            +25% OG BONUS
+          </span>
+        )}
+      </div>
+
+      {/* Referral stats */}
+      {refStats && (
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)" }}>
+            <div className="text-xl font-display font-black text-amber-400">{refStats.totalReferrals}</div>
+            <div className="text-[10px] font-display tracking-wider text-amber-300/70">Signups</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)" }}>
+            <div className="text-xl font-display font-black text-amber-400">{refStats.verifiedReferrals}</div>
+            <div className="text-[10px] font-display tracking-wider text-amber-300/70">Verified</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)" }}>
+            <div className="text-xl font-display font-black text-amber-400">{(refStats.creditsFromReferrals ?? 0).toLocaleString()}</div>
+            <div className="text-[10px] font-display tracking-wider text-amber-300/70">Credits</div>
+          </div>
+        </div>
+      )}
+
+      {/* Credit balances */}
+      <div className="flex items-center gap-4 mb-5 p-3 rounded-xl"
+        style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(245,158,11,0.15)" }}>
+        <Coins className="w-5 h-5 text-amber-400 shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-bold text-amber-300">
+            {(user.growthCredits ?? 0).toLocaleString()} credits available
+            {(user.pendingCredits ?? 0) > 0 && (
+              <span className="text-yellow-400/70 ml-1 text-xs">
+                + {(user.pendingCredits ?? 0).toLocaleString()} pending
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">1,000 credits = $1.00 · min $25 cashout</div>
+        </div>
+        <Link href="/credits" className="text-xs text-amber-400 font-medium hover:text-amber-300 underline" data-testid="link-og-view-credits">
+          Wallet →
+        </Link>
+      </div>
+
+      {/* Earn breakdown */}
+      <div className="text-xs text-muted-foreground space-y-1 mb-5">
+        <div className="flex justify-between">
+          <span>👤 Referral signs up</span>
+          <span className="text-amber-400 font-medium">250 cr (pending)</span>
+        </div>
+        <div className="flex justify-between">
+          <span>✅ Referral verifies ID</span>
+          <span className="text-amber-400 font-medium">500 cr approved</span>
+        </div>
+        <div className="flex justify-between">
+          <span>💼 Referral completes first job</span>
+          <span className="text-amber-400 font-medium">1,500 cr</span>
+        </div>
+        <div className="flex justify-between">
+          <span>👑 Referral buys Day-1 OG</span>
+          <span className="text-amber-400 font-medium">2,500 cr</span>
+        </div>
+      </div>
+
+      {referralLink ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 p-3 rounded-xl text-xs font-mono break-all"
+            style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(245,158,11,0.2)", color: "#fbbf24" }}
+            data-testid="text-referral-link">
+            {referralLink}
+          </div>
+          <button
+            onClick={copyLink}
+            className="w-full h-10 rounded-xl text-sm font-display tracking-wider font-bold flex items-center justify-center gap-2"
+            style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000" }}
+            data-testid="btn-copy-referral-link">
+            <Copy className="w-4 h-4" /> COPY LINK
+          </button>
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground text-center">
+          Referral code not set — contact support.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OgAdvantage() {
+  const { data: me } = useQuery<AuthUser>({
+    queryKey: ["/api/auth/me"],
+  });
+
+  const isLoggedIn = !!me;
+  const isOG = !!(me as any)?.day1OG;
+
   return (
     <div className="min-h-screen bg-background text-foreground" data-testid="page-og-advantage">
       {/* Background glow */}
@@ -64,9 +205,15 @@ export default function OgAdvantage() {
           <ChevronLeft className="w-4 h-4" /> BACK
         </Link>
         <img src={logoImg} alt="GUBER" className="h-9 object-contain" style={{ mixBlendMode: "screen" }} />
-        <Link href="/signup" className="h-8 px-4 rounded-xl text-xs font-display tracking-widest premium-btn flex items-center" data-testid="link-og-signup">
-          JOIN
-        </Link>
+        {isLoggedIn ? (
+          <Link href="/credits" className="h-8 px-4 rounded-xl text-xs font-display tracking-widest premium-btn flex items-center gap-1.5" data-testid="link-og-credits">
+            <Coins className="w-3.5 h-3.5" /> CREDITS
+          </Link>
+        ) : (
+          <Link href="/signup" className="h-8 px-4 rounded-xl text-xs font-display tracking-widest premium-btn flex items-center" data-testid="link-og-signup">
+            JOIN
+          </Link>
+        )}
       </nav>
 
       <div className="relative z-10 max-w-4xl mx-auto px-5 pb-20">
@@ -91,12 +238,25 @@ export default function OgAdvantage() {
             You found GUBER early. That means something. Day-1 OG status is a permanent designation
             for the founding members who helped build this community from the ground up.
           </p>
-          <Link href="/profile" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
-            style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
-            data-testid="link-og-get-started">
-            CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
-          </Link>
+          {isLoggedIn ? (
+            <Link href="/credits" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
+              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
+              data-testid="link-og-get-started">
+              VIEW YOUR CREDITS <ArrowRight className="w-4 h-4" />
+            </Link>
+          ) : (
+            <Link href="/profile" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
+              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
+              data-testid="link-og-get-started">
+              CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
+
+        {/* Referral panel — only for logged-in users */}
+        {isLoggedIn && me && (
+          <ReferralPanel user={me} />
+        )}
 
         {/* Perks grid */}
         <div className="mb-14">
@@ -175,11 +335,19 @@ export default function OgAdvantage() {
             that communities have always needed. Get in early and be remembered for it.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/profile" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
-              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
-              data-testid="link-og-cta-signup">
-              CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
-            </Link>
+            {isLoggedIn ? (
+              <Link href="/community-tasks" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
+                style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
+                data-testid="link-og-cta-missions">
+                BROWSE MISSIONS <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <Link href="/profile" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
+                style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
+                data-testid="link-og-cta-signup">
+                CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
             <Link href="/" className="h-12 px-8 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center" data-testid="link-og-cta-home">
               EXPLORE GUBER
             </Link>

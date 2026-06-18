@@ -6,8 +6,13 @@
  * Admin controls every tunable value via growth_reward_config; nothing is
  * hardcoded in this module.
  *
- * Credit math: 100 growthCredits = $1. Min cashout = 1,000 credits ($10).
+ * Credit math: 1000 growthCredits = $1. Min cashout = 25,000 credits ($25).
  * Day-1 OG members receive a per-template ogBonusPct bonus (default +25%).
+ *
+ * Referral pending flow:
+ *   referral_creates_account  → status='pending', increments pending_credits
+ *   referral_verifies_id      → approves pending signup credits; adds verified credits
+ *   All other milestones       → direct approved credit grant + lifetime_credits_earned
  */
 
 import { pool } from "./db";
@@ -266,24 +271,36 @@ export async function completeGrowthTask(params: CompleteGrowthTaskParams): Prom
     score   = Math.round(score   * (1 + bonusPct / 100));
   }
 
-  // 6. Record + award atomically
+  // 6. Record + award atomically (also writes credit_ledger)
+  const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 1000);
+  const dollarEq = (credits / creditsPerDollar).toFixed(4);
+
   await pool.query("BEGIN");
   try {
-    await pool.query(
+    const completionRes = await pool.query(
       `INSERT INTO growth_task_completions
          (user_id, template_id, zip, credits_awarded, score_awarded, submission_data,
           device_fingerprint, ip_address, lat, lng, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approved')`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'approved')
+       RETURNING id`,
       [userId, templateId, zip, credits, score,
        JSON.stringify(submissionData ?? {}),
        deviceFingerprint ?? null, ipAddress ?? null, lat ?? null, lng ?? null]
     );
+    const completionId: number = completionRes.rows[0].id;
     await pool.query(
       `UPDATE users
-       SET growth_credits = COALESCE(growth_credits, 0) + $1,
-           guber_score    = COALESCE(guber_score, 0)    + $2
+       SET growth_credits          = COALESCE(growth_credits, 0)          + $1,
+           guber_score             = COALESCE(guber_score, 0)             + $2,
+           lifetime_credits_earned = COALESCE(lifetime_credits_earned, 0) + $1
        WHERE id = $3`,
       [credits, score, userId]
+    );
+    await pool.query(
+      `INSERT INTO credit_ledger
+         (user_id, amount, dollar_equivalent, source_type, task_completion_id, status, approved_at)
+       VALUES ($1, $2, $3, 'map_mission', $4, 'approved', NOW())`,
+      [userId, credits, dollarEq, completionId]
     );
     await pool.query("COMMIT");
   } catch (e) {
@@ -311,28 +328,332 @@ export async function awardReferralGrowthCredits(
   referredId?: number
 ): Promise<void> {
   const cfg = REFERRAL_CONFIG_KEYS[event];
-  const [rCr, rSc] = await Promise.all([
+  const [rCr, rSc, creditsPerDollar] = await Promise.all([
     getRewardConfigValue(cfg.referrerCr, 0),
     getRewardConfigValue(cfg.referrerSc, 0),
+    getRewardConfigValue("credits_per_dollar", 1000),
   ]);
-  if (rCr > 0 || rSc > 0) {
+
+  // referral_creates_account → credits go PENDING (wait for ID verify before approving)
+  const isPending = event === "referral_creates_account";
+  const sourceType = event.replace(/^referral_/, "referral_");
+
+  if (rCr > 0) {
+    const dollarEq = (rCr / creditsPerDollar).toFixed(4);
+    if (isPending) {
+      await pool.query(
+        `UPDATE users SET pending_credits = COALESCE(pending_credits,0)+$1, guber_score = COALESCE(guber_score,0)+$2 WHERE id = $3`,
+        [rCr, rSc, referrerId]
+      );
+      await pool.query(
+        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, reason)
+         VALUES ($1, $2, $3, $4, 'pending', $5)`,
+        [referrerId, rCr, dollarEq, sourceType, `Referred user #${referredId ?? "?"} — pending ID verify`]
+      );
+    } else {
+      await pool.query(
+        `UPDATE users
+         SET growth_credits          = COALESCE(growth_credits,0)          + $1,
+             guber_score             = COALESCE(guber_score,0)             + $2,
+             lifetime_credits_earned = COALESCE(lifetime_credits_earned,0) + $1
+         WHERE id = $3`,
+        [rCr, rSc, referrerId]
+      );
+      await pool.query(
+        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+         VALUES ($1, $2, $3, $4, 'approved', NOW(), $5)`,
+        [referrerId, rCr, dollarEq, sourceType, `Referred user #${referredId ?? "?"} milestone: ${event}`]
+      );
+    }
+  } else if (rSc > 0) {
+    // score only, no credit
     await pool.query(
-      `UPDATE users SET growth_credits = COALESCE(growth_credits,0)+$1, guber_score = COALESCE(guber_score,0)+$2 WHERE id = $3`,
-      [rCr, rSc, referrerId]
+      `UPDATE users SET guber_score = COALESCE(guber_score,0)+$1 WHERE id = $2`,
+      [rSc, referrerId]
     );
   }
+
   if ((event === "referral_og_purchase_referred") && referredId && cfg.referredCr && cfg.referredSc) {
     const [refCr, refSc] = await Promise.all([
       getRewardConfigValue(cfg.referredCr, 0),
       getRewardConfigValue(cfg.referredSc, 0),
     ]);
     if (refCr > 0 || refSc > 0) {
+      const dollarEqRef = (refCr / creditsPerDollar).toFixed(4);
       await pool.query(
-        `UPDATE users SET growth_credits = COALESCE(growth_credits,0)+$1, guber_score = COALESCE(guber_score,0)+$2 WHERE id = $3`,
+        `UPDATE users
+         SET growth_credits          = COALESCE(growth_credits,0)          + $1,
+             guber_score             = COALESCE(guber_score,0)             + $2,
+             lifetime_credits_earned = COALESCE(lifetime_credits_earned,0) + $1
+         WHERE id = $3`,
         [refCr, refSc, referredId]
+      );
+      await pool.query(
+        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+         VALUES ($1, $2, $3, 'referral_og_purchase_referred', 'approved', NOW(), 'Purchased Day-1 OG via referral link')`,
+        [referredId, refCr, dollarEqRef]
       );
     }
   }
+}
+
+/**
+ * Called when a referred user verifies their ID.
+ * Moves all 'pending' referral_creates_account ledger rows for their referrer to 'approved',
+ * shifts pending_credits → growth_credits + lifetime_credits_earned.
+ */
+export async function approveReferralPendingCredits(referredUserId: number): Promise<void> {
+  // Find who referred this user
+  const refRow = await pool.query(
+    `SELECT referred_by FROM users WHERE id = $1`,
+    [referredUserId]
+  );
+  const referrerId: number | null = refRow.rows[0]?.referred_by ?? null;
+  if (!referrerId) return;
+
+  // Find pending ledger rows for this referrer from a referral_creates_account source
+  // that haven't been approved yet and are tied to the referred user
+  const pendingRows = await pool.query(
+    `SELECT id, amount FROM credit_ledger
+     WHERE user_id = $1
+       AND source_type = 'referral_creates_account'
+       AND status = 'pending'
+       AND reason LIKE $2`,
+    [referrerId, `Referred user #${referredUserId}%`]
+  );
+  if (pendingRows.rows.length === 0) return;
+
+  const totalToApprove: number = pendingRows.rows.reduce((sum: number, r: any) => sum + r.amount, 0);
+  const ids: number[] = pendingRows.rows.map((r: any) => r.id);
+
+  await pool.query("BEGIN");
+  try {
+    await pool.query(
+      `UPDATE credit_ledger
+       SET status = 'approved', approved_at = NOW()
+       WHERE id = ANY($1::int[])`,
+      [ids]
+    );
+    await pool.query(
+      `UPDATE users
+       SET pending_credits         = GREATEST(0, COALESCE(pending_credits,0)         - $1),
+           growth_credits          = COALESCE(growth_credits,0)                       + $1,
+           lifetime_credits_earned = COALESCE(lifetime_credits_earned,0)              + $1
+       WHERE id = $2`,
+      [totalToApprove, referrerId]
+    );
+    await pool.query("COMMIT");
+  } catch (e) {
+    await pool.query("ROLLBACK");
+    throw e;
+  }
+}
+
+// ── Credit wallet balance ─────────────────────────────────────────────────────
+
+export async function getCreditBalance(userId: number) {
+  const [userRow, configRows] = await Promise.all([
+    pool.query(
+      `SELECT growth_credits, pending_credits, lifetime_credits_earned, lifetime_credits_redeemed,
+              stripe_account_id, stripe_account_status, id_verified
+       FROM users WHERE id = $1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT key, value_int FROM growth_reward_config
+       WHERE key IN ('credits_per_dollar','cashout_minimum_credits','cashout_enabled')`
+    ),
+  ]);
+  const u = userRow.rows[0];
+  if (!u) return null;
+  const cfg: Record<string, number> = {};
+  for (const r of configRows.rows) cfg[r.key] = r.value_int;
+
+  const creditsPerDollar = cfg["credits_per_dollar"] ?? 1000;
+  const minCashout       = cfg["cashout_minimum_credits"] ?? 25000;
+  const cashoutEnabled   = (cfg["cashout_enabled"] ?? 0) === 1;
+
+  const available  = u.growth_credits ?? 0;
+  const pending    = u.pending_credits ?? 0;
+  const earned     = u.lifetime_credits_earned ?? 0;
+  const redeemed   = u.lifetime_credits_redeemed ?? 0;
+  const dollarValue = (available / creditsPerDollar).toFixed(2);
+
+  const stripeReady = u.stripe_account_status === "active" || u.stripe_account_status === "verified";
+  const idVerified  = !!u.id_verified;
+  const eligible    = cashoutEnabled && idVerified && stripeReady && available >= minCashout;
+
+  return {
+    available, pending, earned, redeemed,
+    dollarValue,
+    creditsPerDollar, minCashout, cashoutEnabled,
+    stripeReady, idVerified,
+    eligibleForCashout: eligible,
+    stripeAccountStatus: u.stripe_account_status ?? null,
+  };
+}
+
+// ── Cashout request ───────────────────────────────────────────────────────────
+
+export async function submitCashoutRequest(userId: number, credits: number, payoutMethod: string, payoutDetails?: string) {
+  const balance = await getCreditBalance(userId);
+  if (!balance) throw new Error("User not found");
+  if (!balance.cashoutEnabled) throw new Error("Cashout is currently disabled");
+  if (!balance.idVerified) throw new Error("ID verification required");
+  if (!balance.stripeReady) throw new Error("Stripe Connect payout account required");
+  if (credits < balance.minCashout) throw new Error(`Minimum cashout is ${balance.minCashout.toLocaleString()} credits`);
+  if (credits > balance.available) throw new Error("Insufficient credits");
+
+  // Check no open cashout request already pending
+  const existing = await pool.query(
+    `SELECT id FROM cashout_requests WHERE user_id = $1 AND status = 'pending' LIMIT 1`,
+    [userId]
+  );
+  if (existing.rows.length > 0) throw new Error("You already have a pending cashout request");
+
+  const dollarAmount = (credits / balance.creditsPerDollar).toFixed(2);
+
+  await pool.query("BEGIN");
+  try {
+    await pool.query(
+      `INSERT INTO cashout_requests (user_id, credits_requested, dollar_amount, status, payout_method, payout_details)
+       VALUES ($1, $2, $3, 'pending', $4, $5)`,
+      [userId, credits, dollarAmount, payoutMethod, payoutDetails ?? null]
+    );
+    // Reserve credits immediately — deduct from available, not lifetime
+    await pool.query(
+      `UPDATE users
+       SET growth_credits = COALESCE(growth_credits,0) - $1
+       WHERE id = $2`,
+      [credits, userId]
+    );
+    await pool.query(
+      `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, reason)
+       VALUES ($1, $2, $3, 'cashout', 'pending', 'Cashout request submitted — awaiting admin approval')`,
+      [userId, -credits, `-${(credits / balance.creditsPerDollar).toFixed(4)}`]
+    );
+    await pool.query("COMMIT");
+  } catch (e) {
+    await pool.query("ROLLBACK");
+    throw e;
+  }
+  return { dollarAmount };
+}
+
+// ── Admin: cashout queue ──────────────────────────────────────────────────────
+
+export async function listCashoutRequests(status?: string) {
+  const where = status ? `WHERE cr.status = $1` : `WHERE cr.status = 'pending'`;
+  const params = status ? [status] : [];
+  const res = await pool.query(
+    `SELECT cr.*, u.username, u.email, u.stripe_account_id, u.stripe_account_status
+     FROM cashout_requests cr
+     JOIN users u ON u.id = cr.user_id
+     ${where}
+     ORDER BY cr.created_at ASC`,
+    params
+  );
+  return res.rows;
+}
+
+export async function reviewCashoutRequest(
+  requestId: number,
+  adminId: number,
+  decision: "approved" | "denied",
+  adminNote?: string
+) {
+  const reqRow = await pool.query(
+    `SELECT * FROM cashout_requests WHERE id = $1`,
+    [requestId]
+  );
+  const req = reqRow.rows[0];
+  if (!req) throw new Error("Request not found");
+  if (req.status !== "pending") throw new Error("Request already reviewed");
+
+  const creditsPerDollar = await getRewardConfigValue("credits_per_dollar", 1000);
+
+  await pool.query("BEGIN");
+  try {
+    await pool.query(
+      `UPDATE cashout_requests
+       SET status = $1, admin_note = $2, reviewed_at = NOW(), reviewed_by = $3
+       WHERE id = $4`,
+      [decision, adminNote ?? null, adminId, requestId]
+    );
+
+    if (decision === "denied") {
+      // Refund credits back to user
+      await pool.query(
+        `UPDATE users
+         SET growth_credits = COALESCE(growth_credits,0) + $1
+         WHERE id = $2`,
+        [req.credits_requested, req.user_id]
+      );
+      await pool.query(
+        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+         VALUES ($1, $2, $3, 'cashout', 'denied', NOW(), $4)`,
+        [req.user_id, req.credits_requested, (req.credits_requested / creditsPerDollar).toFixed(4),
+         `Cashout denied by admin: ${adminNote ?? "no reason"}`]
+      );
+    } else {
+      // approved — admin will pay out manually; mark ledger redeemed
+      await pool.query(
+        `UPDATE users
+         SET lifetime_credits_redeemed = COALESCE(lifetime_credits_redeemed,0) + $1
+         WHERE id = $2`,
+        [req.credits_requested, req.user_id]
+      );
+      await pool.query(
+        `UPDATE credit_ledger
+         SET status = 'redeemed', redeemed_at = NOW()
+         WHERE user_id = $1 AND source_type = 'cashout' AND status = 'pending'
+           AND amount = -$2`,
+        [req.user_id, req.credits_requested]
+      );
+    }
+    await pool.query("COMMIT");
+  } catch (e) {
+    await pool.query("ROLLBACK");
+    throw e;
+  }
+}
+
+export async function getCreditAdminStats() {
+  const res = await pool.query(`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'approved' AND amount > 0 THEN amount ELSE 0 END), 0) AS total_credits_approved,
+      COALESCE(SUM(CASE WHEN status = 'redeemed' AND amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS total_credits_redeemed,
+      COALESCE(SUM(CASE WHEN status = 'pending' AND amount > 0 THEN amount ELSE 0 END), 0) AS total_credits_pending,
+      COUNT(CASE WHEN status = 'pending' AND amount > 0 THEN 1 END) AS pending_ledger_count
+    FROM credit_ledger
+  `);
+  const cashouts = await pool.query(`
+    SELECT
+      COUNT(CASE WHEN status = 'pending'  THEN 1 END) AS pending_cashouts,
+      COUNT(CASE WHEN status = 'approved' THEN 1 END) AS approved_cashouts,
+      COUNT(CASE WHEN status = 'denied'   THEN 1 END) AS denied_cashouts,
+      COALESCE(SUM(CASE WHEN status = 'approved' THEN dollar_amount ELSE 0 END), 0) AS total_paid_out_usd
+    FROM cashout_requests
+  `);
+  const cfgRow = await pool.query(
+    `SELECT value_int FROM growth_reward_config WHERE key = 'credits_per_dollar'`
+  );
+  const creditsPerDollar = cfgRow.rows[0]?.value_int ?? 1000;
+  const s = res.rows[0];
+  const c = cashouts.rows[0];
+  const liability = (parseInt(s.total_credits_approved) - parseInt(s.total_credits_redeemed));
+  return {
+    totalCreditsApproved:  parseInt(s.total_credits_approved),
+    totalCreditsRedeemed:  parseInt(s.total_credits_redeemed),
+    totalCreditsPending:   parseInt(s.total_credits_pending),
+    outstandingLiability:  liability,
+    estimatedLiabilityUsd: (liability / creditsPerDollar).toFixed(2),
+    pendingCashouts:       parseInt(c.pending_cashouts),
+    approvedCashouts:      parseInt(c.approved_cashouts),
+    deniedCashouts:        parseInt(c.denied_cashouts),
+    totalPaidOutUsd:       parseFloat(c.total_paid_out_usd).toFixed(2),
+    creditsPerDollar,
+  };
 }
 
 // ── Admin helpers ─────────────────────────────────────────────────────────────

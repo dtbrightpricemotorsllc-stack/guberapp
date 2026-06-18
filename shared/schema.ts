@@ -228,9 +228,12 @@ export const users = pgTable("users", {
   mktBuyerRatingSum: integer("mkt_buyer_rating_sum").default(0),
   mktBuyerRatingCount: integer("mkt_buyer_rating_count").default(0),
   // ── GUBER Growth Engine ──────────────────────────────────────────────────
-  // Separate from studioCredits/aiOrNotCredits. 100 growthCredits = $1.
-  // Min cashout 1,000 credits ($10). Earned via growth tasks + referral milestones.
+  // Separate from studioCredits/aiOrNotCredits. 1000 growthCredits = $1.
+  // Min cashout 25,000 credits ($25). Earned via map missions + referral milestones.
   growthCredits: integer("growth_credits").default(0),
+  pendingCredits: integer("pending_credits").default(0),
+  lifetimeCreditsEarned: integer("lifetime_credits_earned").default(0),
+  lifetimeCreditsRedeemed: integer("lifetime_credits_redeemed").default(0),
   // guberScore: engagement/reputation metric separate from trustScore.
   guberScore: integer("guber_score").default(0),
 });
@@ -2602,7 +2605,7 @@ export type FoundersClubState = typeof foundersClubState.$inferSelect;
 
 // ── GUBER Growth Engine ───────────────────────────────────────────────────────
 // Growth tasks are NOT marketplace jobs. They are community engagement missions
-// that earn credits (100 cr = $1, min 1000 cr cashout) and guberScore.
+// that earn credits (1000 cr = $1, min 25000 cr cashout) and guberScore.
 // They never appear in real job counts or the paid-work flow.
 
 export const growthTaskTemplates = pgTable("growth_task_templates", {
@@ -2663,6 +2666,42 @@ export const growthRewardConfig = pgTable("growth_reward_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type GrowthRewardConfig = typeof growthRewardConfig.$inferSelect;
+
+// GUBER Credit Ledger — append-only audit trail for every credit event.
+export const creditLedger = pgTable("credit_ledger", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(), // positive = earned, negative = spent/redeemed
+  dollarEquivalent: text("dollar_equivalent").notNull().default("0.0000"),
+  sourceType: text("source_type").notNull(),
+  // map_mission | referral_signup | referral_verified | referral_first_job |
+  // referral_biz | referral_og | admin_grant | cashout | boost_spend
+  taskCompletionId: integer("task_completion_id"),
+  status: text("status").notNull().default("approved"),
+  // pending | approved | denied | redeemed
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  redeemedAt: timestamp("redeemed_at"),
+});
+export type CreditLedgerRow = typeof creditLedger.$inferSelect;
+
+// Cashout requests — user-initiated, require admin approval.
+export const cashoutRequests = pgTable("cashout_requests", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  creditsRequested: integer("credits_requested").notNull(),
+  dollarAmount: text("dollar_amount").notNull(),
+  status: text("status").notNull().default("pending"),
+  // pending | approved | denied | paid
+  payoutMethod: text("payout_method"), // stripe | cash_app | venmo | other
+  payoutDetails: text("payout_details"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: integer("reviewed_by"),
+});
+export type CashoutRequest = typeof cashoutRequests.$inferSelect;
 
 // ── Local Business Pins ───────────────────────────────────────────────────────
 // Admin-curated local business map pins shown on the public Opportunity Map.
