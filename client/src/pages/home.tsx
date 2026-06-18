@@ -101,65 +101,100 @@ function DoorShape({ color, icon: Icon, number, isHovered }: {
   color: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string; number: string; isHovered: boolean;
 }) {
-  return (
-    <div className="flex flex-col items-center gap-3">
-      {/* CSS arch door — no SVG panels */}
-      <div
-        style={{
-          width: 96,
-          height: 136,
-          borderRadius: "48px 48px 6px 6px",
-          border: `2px solid ${isHovered ? color + "90" : color + "35"}`,
-          background: `linear-gradient(180deg, ${color}12 0%, ${color}06 60%, transparent 100%)`,
-          boxShadow: isHovered
-            ? `0 0 24px ${color}50, 0 0 8px ${color}30, inset 0 0 24px ${color}08`
-            : `0 0 8px ${color}18`,
-          transition: "all 0.3s ease",
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {/* Big faded number */}
-        <span style={{
-          fontFamily: "system-ui, sans-serif",
-          fontWeight: 900,
-          fontSize: 48,
-          color,
-          opacity: isHovered ? 0.22 : 0.12,
-          lineHeight: 1,
-          transition: "opacity 0.3s ease",
-          userSelect: "none",
-        }}>
-          {number}
-        </span>
-        {/* Keyhole dot */}
-        <div style={{
-          position: "absolute",
-          right: 14,
-          top: "52%",
-          transform: "translateY(-50%)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 1,
-        }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, opacity: isHovered ? 1 : 0.55 }} />
-          <div style={{ width: 5, height: 7, borderRadius: "0 0 3px 3px", background: color, opacity: isHovered ? 1 : 0.55 }} />
-        </div>
-      </div>
+  const W = 88, H = 148;
+  const pad = 8;          // frame padding
+  const panelGap = 6;     // gap between upper & lower panels
+  const panelX = pad + 6;
+  const panelW = W - 2 * panelX;
+  const upperH = 52;
+  const upperY = pad + 6;
+  const lowerY = upperY + upperH + panelGap;
+  const lowerH = H - lowerY - pad - 14; // leave room for threshold
+  const knobX = W - pad - 10;
+  const knobY = H * 0.52;
 
-      {/* Icon badge */}
-      <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-        style={{
-          background: `${color}18`,
-          border: `1.5px solid ${color}40`,
-          boxShadow: isHovered ? `0 0 14px ${color}55` : "none",
-          transition: "all 0.3s ease",
-        }}>
-        <Icon className="w-4 h-4" style={{ color }} />
-      </div>
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+      <svg
+        width={W} height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ overflow: "visible", transition: "filter 0.3s ease",
+          filter: isHovered ? `drop-shadow(0 0 18px ${color}60)` : `drop-shadow(0 0 4px ${color}22)` }}
+      >
+        {/* Door frame / outer body */}
+        <rect
+          x={1} y={1} width={W - 2} height={H - 2}
+          rx={4} ry={4}
+          fill={`${color}0d`}
+          stroke={isHovered ? `${color}95` : `${color}40`}
+          strokeWidth={1.5}
+          style={{ transition: "all 0.3s" }}
+        />
+
+        {/* Upper panel */}
+        <rect
+          x={panelX} y={upperY} width={panelW} height={upperH}
+          rx={3} ry={3}
+          fill={`${color}${isHovered ? "18" : "0a"}`}
+          stroke={isHovered ? `${color}70` : `${color}28`}
+          strokeWidth={1}
+          style={{ transition: "all 0.3s" }}
+        />
+
+        {/* Icon centered in upper panel */}
+        <foreignObject x={panelX + panelW / 2 - 10} y={upperY + upperH / 2 - 10} width={20} height={20}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20 }}>
+            <Icon className="w-[18px] h-[18px]" style={{ color, opacity: isHovered ? 1 : 0.55, transition: "opacity 0.3s" }} />
+          </div>
+        </foreignObject>
+
+        {/* Lower panel */}
+        <rect
+          x={panelX} y={lowerY} width={panelW} height={lowerH}
+          rx={3} ry={3}
+          fill={`${color}${isHovered ? "10" : "06"}`}
+          stroke={isHovered ? `${color}55` : `${color}22`}
+          strokeWidth={1}
+          style={{ transition: "all 0.3s" }}
+        />
+
+        {/* Door number — faint, in lower panel center */}
+        <text
+          x={panelX + panelW / 2} y={lowerY + lowerH / 2 + 8}
+          textAnchor="middle"
+          fontFamily="system-ui, sans-serif" fontWeight={900} fontSize={28}
+          fill={color} opacity={isHovered ? 0.18 : 0.08}
+          style={{ transition: "opacity 0.3s", userSelect: "none" }}
+        >
+          {number}
+        </text>
+
+        {/* Knob — circle */}
+        <circle
+          cx={knobX} cy={knobY} r={4}
+          fill={isHovered ? color : `${color}55`}
+          style={{ transition: "fill 0.3s" }}
+        />
+        {/* Knob backplate */}
+        <rect
+          x={knobX - 3} y={knobY - 8} width={6} height={16}
+          rx={3} ry={3}
+          fill="none"
+          stroke={isHovered ? `${color}80` : `${color}30`}
+          strokeWidth={1}
+          style={{ transition: "stroke 0.3s" }}
+        />
+
+        {/* Threshold / step at bottom */}
+        <rect
+          x={0} y={H - 6} width={W} height={6}
+          rx={2} ry={2}
+          fill={isHovered ? `${color}22` : `${color}0e`}
+          stroke={isHovered ? `${color}60` : `${color}25`}
+          strokeWidth={1}
+          style={{ transition: "all 0.3s" }}
+        />
+      </svg>
     </div>
   );
 }
