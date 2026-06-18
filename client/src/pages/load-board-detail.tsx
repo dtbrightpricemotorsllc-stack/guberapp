@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { taskTrackingService } from "@/services/location/TaskTrackingService";
+import { isIOS } from "@/lib/platform";
 import {
   Truck, MapPin, Loader2, ShieldCheck,
-  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil,
+  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil, Navigation,
 } from "lucide-react";
 
 // ── constants ──────────────────────────────────────────────────────────────────
@@ -134,14 +136,46 @@ export default function LoadBoardDetail() {
     }
   }, [listingId]);
 
-  // Request background location for the carrier once the load is connected.
-  // Non-blocking — transport proceeds even if the carrier declines.
+  // Tracking state — mirrors the service singleton so the UI re-renders on change.
+  const [isTracking, setIsTracking] = useState(() => taskTrackingService.isTracking());
+
+  // Start / stop background GPS for the carrier during active Load Board transport.
+  //
+  // - iOS: uses @capacitor-community/background-geolocation so fixes continue
+  //   when the app is backgrounded or the screen is locked.
+  // - Android: fires the in-app background-location disclosure then relies on
+  //   the foreground service notification for continued delivery.
+  // - Web: standard foreground watch (no background needed).
+  //
+  // Tracking is gated on: status === "connected" AND user is the carrier.
+  // It stops automatically when the server reports { active: false } (job ended /
+  // cancelled) or when the component sees the status leave "connected".
   useEffect(() => {
     if (!data?.listing) return;
-    if (data.listing.status !== "connected") return;
-    if (data.isPoster) return; // poster doesn't need tracking
-    void ensureBackgroundLocation("load_board");
-  }, [data?.listing?.status, data?.isPoster]);
+    const isCarrier = !data.isPoster;
+    const shouldTrack = data.listing.status === "connected" && isCarrier;
+
+    if (shouldTrack) {
+      if (isIOS) {
+        void taskTrackingService.startTask(listingId);
+      } else {
+        void ensureBackgroundLocation("load_board").then(() =>
+          taskTrackingService.startTask(listingId)
+        );
+      }
+    } else {
+      // Status left "connected" (completed / cancelled) — stop immediately.
+      if (taskTrackingService.getActiveJobId() === listingId) {
+        void taskTrackingService.stopTask(listingId);
+      }
+    }
+
+    // Keep UI in sync with service state.
+    const tick = () => setIsTracking(taskTrackingService.isTracking());
+    const interval = setInterval(tick, 2000);
+    tick();
+    return () => clearInterval(interval);
+  }, [data?.listing?.status, data?.isPoster, listingId]);
 
   // ── Mutations ──
   const offerMutation = useMutation({
@@ -697,6 +731,42 @@ export default function LoadBoardDetail() {
             <p className="text-[10px] font-display font-black text-cyan-400/70 uppercase tracking-wider mb-2">Full Addresses</p>
             {listing.pickupAddress && <p className="text-xs text-foreground/80 mb-1">📍 Pickup: {listing.pickupAddress}</p>}
             {listing.deliveryAddress && <p className="text-xs text-foreground/80">📍 Delivery: {listing.deliveryAddress}</p>}
+          </div>
+        )}
+
+        {/* ── Carrier GPS tracking status ── */}
+        {isConnected && !data.isPoster && (
+          <div
+            className="rounded-2xl p-3.5 flex items-center justify-between gap-3"
+            style={isTracking
+              ? { background: "rgba(6,182,212,0.10)", border: "1px solid rgba(6,182,212,0.35)" }
+              : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            data-testid="tracking-status-banner"
+          >
+            <div className="flex items-center gap-2">
+              <Navigation className={`w-4 h-4 shrink-0 ${isTracking ? "text-cyan-400" : "text-muted-foreground/40"}`} />
+              <div>
+                <p className={`text-xs font-display font-bold ${isTracking ? "text-cyan-400" : "text-muted-foreground/50"}`}>
+                  {isTracking ? "Location tracking ON" : "Location tracking OFF"}
+                </p>
+                <p className="text-[9px] text-muted-foreground/30 mt-0.5">
+                  {isTracking
+                    ? "Your location is being shared with the shipper for this transport job."
+                    : "Tracking starts automatically when transport is active."}
+                </p>
+              </div>
+            </div>
+            {isTracking && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-[10px] text-muted-foreground/50 hover:text-red-400 px-2 h-7 shrink-0"
+                data-testid="button-stop-tracking"
+                onClick={() => { void taskTrackingService.stopTask(listingId); setIsTracking(false); }}
+              >
+                Stop
+              </Button>
+            )}
           </div>
         )}
 

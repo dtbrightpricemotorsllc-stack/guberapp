@@ -1,12 +1,43 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 
 // Background-capable location watcher for iOS.
-// Uses @capacitor-community/background-geolocation which keeps delivering
-// fixes when the app is backgrounded (home button, switching apps, screen
-// locked). Android uses the ForegroundTracking foreground-service path instead.
-// Web falls back to navigator.geolocation.watchPosition.
+// The @capacitor-community/background-geolocation plugin registers itself as
+// "BackgroundGeolocation" in the native layer. We call it via Capacitor's
+// registerPlugin() bridge — no direct package import needed, which means Vite
+// never tries to bundle the native-only package for the web build.
+//
+// On Android and web this module always returns null (caller falls back to
+// gpsStartWatchPosition + foreground service).
 
 const isIOSNative = Capacitor.getPlatform() === "ios" && Capacitor.isNativePlatform();
+
+interface BgGeoPlugin {
+  addWatcher(
+    options: {
+      backgroundMessage: string;
+      backgroundTitle: string;
+      requestPermissions: boolean;
+      stale: boolean;
+      distanceFilter: number;
+    },
+    callback: (location: BgLocation | null, error: BgError | null) => void
+  ): Promise<string>;
+  removeWatcher(options: { id: string }): Promise<void>;
+}
+
+interface BgLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  time: number;
+}
+
+interface BgError {
+  code: string;
+  message: string;
+}
+
+const BackgroundGeolocation = registerPlugin<BgGeoPlugin>("BackgroundGeolocation");
 
 const bgWatchMap = new Map<number, string>();
 let bgWatchSeq = 2_000_000;
@@ -20,8 +51,8 @@ export interface BgCoords {
 
 /**
  * Start a background-capable location watch on iOS.
- * Returns a synthetic numeric watch ID, or null if not on iOS (caller
- * should fall back to gpsStartWatchPosition).
+ * Returns a synthetic numeric watch ID on iOS native, or null on other
+ * platforms so the caller falls back to gpsStartWatchPosition.
  */
 export async function bgStartWatch(
   onLocation: (c: BgCoords) => void,
@@ -30,17 +61,15 @@ export async function bgStartWatch(
 ): Promise<number | null> {
   if (!isIOSNative) return null;
   try {
-    const mod = await import("@capacitor-community/background-geolocation");
-    const BackgroundGeolocation = (mod as any).default ?? mod;
-    const watcherId: string = await BackgroundGeolocation.addWatcher(
+    const watcherId = await BackgroundGeolocation.addWatcher(
       {
-        backgroundMessage: "GUBER is tracking your location for your active job.",
+        backgroundMessage: "GUBER is tracking your location for your active transport job.",
         backgroundTitle: "Job in Progress",
         requestPermissions: true,
         stale: false,
         distanceFilter,
       },
-      (location: any, error: any) => {
+      (location, error) => {
         if (error) {
           onError(error.code ?? "UNKNOWN");
           return;
@@ -69,8 +98,6 @@ export async function bgStopWatch(id: number): Promise<void> {
   if (!watcherId) return;
   bgWatchMap.delete(id);
   try {
-    const mod = await import("@capacitor-community/background-geolocation");
-    const BackgroundGeolocation = (mod as any).default ?? mod;
     await BackgroundGeolocation.removeWatcher({ id: watcherId });
   } catch {}
 }

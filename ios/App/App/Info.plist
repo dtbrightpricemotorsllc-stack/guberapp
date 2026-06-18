@@ -50,7 +50,7 @@
         <key>NSLocationWhenInUseUsageDescription</key>
         <string>GUBER uses your location to show nearby jobs, listings, workers, transport requests, and local opportunities.</string>
         <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-        <string>GUBER uses background location only during active Asset Protection and Transport jobs. Tracking begins when you start a protected trip and ends when the trip is completed or cancelled. Location is used for shipment visibility, ETA updates, safety, and asset protection.</string>
+        <string>GUBER uses background location only during active Load Board transport jobs so customers can track active deliveries and protect assigned assets. Location tracking stops when the job is completed, cancelled, or tracking is turned off.</string>
         <key>NSCameraUsageDescription</key>
         <string>GUBER uses the camera to capture proof photos and videos for job completion, ID verification, and Verify &amp; Inspect tasks.</string>
         <key>NSPhotoLibraryUsageDescription</key>

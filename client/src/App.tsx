@@ -567,7 +567,12 @@ function SplashWrapper({ onDone }: { onDone: () => void }) {
 function TaskTrackingResumer() {
   const { user } = useAuth();
   useEffect(() => {
-    if (user) void taskTrackingService.resumeIfActive();
+    if (user) {
+      void taskTrackingService.resumeIfActive();
+    } else {
+      // User logged out — stop any active tracking immediately.
+      void taskTrackingService.stopTask();
+    }
   }, [user?.id]);
   return null;
 }
