@@ -521,3 +521,21 @@ id = "VVbb_w5Xgj-dlKKTF06GW"
 uri = "file://investor-deck.pdf"
 type = "pdf"
 title = "GUBER Investor Deck — PDF"
+
+[[outputs]]
+id = "_B2wdXnxyd5dxd3YeoacI"
+uri = "file://attached_assets/generated_audio/guber_gps_narration.mp3"
+type = "audio"
+title = "guber_gps_narration"
+
+[[outputs]]
+id = "Sch9UJr_ufU0iTxc_iegE"
+uri = "file://attached_assets/generated_audio/guber_bg_music.mp3"
+type = "audio"
+title = "guber_bg_music"
+
+[[outputs]]
+id = "ZzpeyAKqfP8PeZ5VXfIl6"
+uri = "file://attached_assets/generated_videos/final/guber_gps_explainer.mp4"
+type = "video"
+title = "GUBER GPS Explainer — Google Play Store"
