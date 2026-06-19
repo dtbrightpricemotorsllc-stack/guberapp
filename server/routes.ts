@@ -10497,7 +10497,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/proof/wearable-upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  app.post("/api/proof/wearable-upload", requireAuth, async (req: Request, res: Response) => {
     try {
       // Dual-gate: legacy kill-switch + new feature-flag console.
       const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
