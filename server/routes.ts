@@ -5498,6 +5498,54 @@ export async function registerRoutes(
     return res.json(result);
   });
 
+  // Public ZIP founder status — used by day1og.html
+  app.get("/api/zip-founder-status", async (req: Request, res: Response) => {
+    try {
+      const zip = ((req.query.zip as string) || "").trim().replace(/\D/g, "").slice(0, 5);
+      if (!zip || zip.length !== 5) return res.status(400).json({ message: "Valid 5-digit ZIP required" });
+
+      const OG_SPOTS_PER_ZIP = 100;
+      const USER_ACTIVATION_THRESHOLD = 250;
+
+      const [ogResult, totalResult] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*)::int AS count FROM users WHERE zipcode = ${zip} AND day1_og = true AND deleted_at IS NULL`),
+        db.execute(sql`SELECT COUNT(*)::int AS count FROM users WHERE zipcode = ${zip} AND deleted_at IS NULL`),
+      ]);
+
+      const ogCount = Number((ogResult.rows[0] as any)?.count ?? 0);
+      const totalCount = Number((totalResult.rows[0] as any)?.count ?? 0);
+      const spotsRemaining = Math.max(0, OG_SPOTS_PER_ZIP - ogCount);
+      const founderClassClosed = ogCount >= OG_SPOTS_PER_ZIP;
+      const activated = founderClassClosed || totalCount >= USER_ACTIVATION_THRESHOLD;
+
+      const ogProgress = Math.min(100, Math.round((ogCount / OG_SPOTS_PER_ZIP) * 100));
+      const userProgress = Math.min(100, Math.round((totalCount / USER_ACTIVATION_THRESHOLD) * 100));
+      const overallProgress = Math.max(ogProgress, userProgress);
+
+      let status: "Building" | "Activated" | "Founder Class Closed";
+      if (founderClassClosed) status = "Founder Class Closed";
+      else if (activated) status = "Activated";
+      else status = "Building";
+
+      return res.json({
+        zip,
+        ogCount,
+        totalCount,
+        spotsRemaining,
+        founderClassClosed,
+        activated,
+        ogProgress,
+        userProgress,
+        overallProgress,
+        status,
+        ogSpotsTotal: OG_SPOTS_PER_ZIP,
+        userActivationThreshold: USER_ACTIVATION_THRESHOLD,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/marketplace", async (req: Request, res: Response) => {
     try {
       const items = await storage.getMarketplaceItems({

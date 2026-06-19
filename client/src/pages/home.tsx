@@ -24,6 +24,11 @@ import heroVerifyImg    from "@assets/file_00000000563471f5a72bc4c3624229c7_1781
 import heroLoadImg      from "@assets/file_0000000048c471f5be4d6d0fbf5eb94c_1781794028448.png";
 import heroExploreImg   from "@assets/file_000000009960720ca77a90e111b70876_1781794028463.png";
 
+import proofImg1 from "@assets/Screenshot_20260331_102503_Facebook_1778199034115.jpg";
+import proofImg2 from "@assets/Screenshot_20260426_064718_Facebook_1778199034048.jpg";
+import proofImg3 from "@assets/Screenshot_20260426_064907_Facebook_1778199034017.jpg";
+import proofImg4 from "@assets/Screenshot_20260426_064624_Facebook_1778199034059.jpg";
+
 interface PublicJob {
   id: number;
   title: string;
@@ -255,10 +260,11 @@ const DEMO_JOBS: PublicJob[] = [
   { id: -6, title: "Property Walk-Through Photos", category: "Verify & Inspect", budget: 55, locationApprox: "Near you", zip: "", urgentSwitch: false, payType: "flat", jobType: "one-time", proofRequired: true,  serviceType: null, verifyInspectCategory: null, jobImage: null, createdAt: new Date(Date.now() -  3 * 3_600_000).toISOString(), appUrl: "", _demo: true },
 ];
 
-const QUOTES = [
-  { text: "Made $140 in one weekend doing yard work. GUBER made it dead simple.", name: "Marcus T.", location: "Mobile, AL" },
-  { text: "Posted my first V&I request and had someone at the property taking photos the same day.", name: "Janelle R.", location: "Saraland, AL" },
-  { text: "Finally a platform that pays fast and keeps sketchy people out.", name: "Devon W.", location: "Daphne, AL" },
+const COMMUNITY_PROOF = [
+  { img: proofImg1, caption: "James Ellis — Cash Drop Winner", sub: "Mobile, AL · Found &amp; claimed" },
+  { img: proofImg2, caption: "Quandala — Cash Drop Found", sub: "Pensacola, FL · Real community drop" },
+  { img: proofImg3, caption: "Klin Brantley — \"It's been found!\"", sub: "85 reactions · 8 shares" },
+  { img: proofImg4, caption: "Kyle Holley — Drop Hunt", sub: "Pensacola area · 31 reactions" },
 ];
 
 function timeAgo(iso: string) {
@@ -754,17 +760,22 @@ export default function Home() {
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full">
         <div className="text-center mb-8">
           <h2 className="text-2xl font-display font-black tracking-wider mb-2">REAL PEOPLE. REAL EARNINGS.</h2>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">GUBER Cash Drops happening in real communities — real finds, real winners.</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {QUOTES.map((q, i) => (
-            <div key={i} className="rounded-2xl p-6 bg-card border border-border" data-testid={`card-quote-${i}`}>
-              <div className="flex gap-0.5 mb-4">
-                {Array.from({ length: 5 }).map((_, s) => <Star key={s} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />)}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {COMMUNITY_PROOF.map((p, i) => (
+            <div key={i} className="rounded-2xl overflow-hidden bg-card border border-border flex flex-col" data-testid={`card-proof-${i}`}>
+              <div className="relative overflow-hidden" style={{ aspectRatio: "9/16", maxHeight: 340 }}>
+                <img
+                  src={p.img}
+                  alt={p.caption}
+                  className="w-full h-full object-cover object-top"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed mb-4">&ldquo;{q.text}&rdquo;</p>
-              <div>
-                <p className="text-xs font-display font-bold tracking-wider">{q.name}</p>
-                <p className="text-[10px] text-muted-foreground font-display">{q.location}</p>
+              <div className="p-3">
+                <p className="text-xs font-display font-bold tracking-wide text-foreground leading-snug" dangerouslySetInnerHTML={{ __html: p.caption }} />
+                <p className="text-[10px] text-muted-foreground mt-0.5" dangerouslySetInnerHTML={{ __html: p.sub }} />
               </div>
             </div>
           ))}
