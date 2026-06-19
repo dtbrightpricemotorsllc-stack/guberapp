@@ -363,7 +363,7 @@ function HeroSlideshow() {
   return (
     <section
       className="relative z-10 overflow-hidden w-full"
-      style={{ height: "clamp(240px, 50vw, 560px)" }}
+      style={{ height: "clamp(200px, 40vw, 500px)" }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       data-testid="section-hero-slideshow"
@@ -379,7 +379,8 @@ function HeroSlideshow() {
           <img
             src={s.img}
             alt={s.label}
-            className="absolute inset-0 w-full h-full object-cover object-center select-none"
+            className="absolute inset-0 w-full h-full object-cover select-none"
+            style={{ objectPosition: "60% center" }}
             draggable={false}
           />
           {/* Bottom gradient — fades image into page bg and gives CTA a clean landing zone */}
