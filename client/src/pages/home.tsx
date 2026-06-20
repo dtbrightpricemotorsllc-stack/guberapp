@@ -598,51 +598,141 @@ export default function Home() {
           <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </a>
 
-        {/* ── Mascot transformation ── */}
-        <div className="flex flex-col items-center gap-2 pt-6" data-testid="section-mascot-transform">
-          <p className="text-[10px] font-display tracking-widest text-amber-400/70 mb-1">DAY-1 OG GIVES HIM SUPERPOWERS</p>
+        {/* ── Mascot power-up transformation ── */}
+        <div className="flex flex-col items-center gap-2 pt-6 pb-2" data-testid="section-mascot-transform">
+          <p className="text-[10px] font-display tracking-widest text-amber-400/70 mb-1">ACTIVATE YOUR SUPERPOWERS</p>
 
-          {/* Stacked morph — both images overlap, CSS alternates them */}
-          <div className="relative w-44 h-44">
-            {/* Flash overlay */}
-            <div className="absolute inset-0 rounded-full pointer-events-none z-10"
-              style={{ animation: "og-flash 6s ease-in-out infinite", background: "radial-gradient(circle, rgba(255,215,80,0.9) 0%, rgba(245,158,11,0.4) 40%, transparent 70%)" }} />
-            {/* Plain mascot */}
+          <div className="relative flex items-center justify-center" style={{ width: 200, height: 200 }}>
+
+            {/* ── Energy ring 1 — spinning neon green/purple conic ── */}
+            <div className="absolute rounded-full" style={{
+              width: 190, height: 190,
+              background: "conic-gradient(from 0deg, #00ff6a, #9b6dff, #f59e0b, #00ff6a)",
+              animation: "surge-spin 1.8s linear infinite, surge-ring-show 8s ease-in-out infinite",
+              opacity: 0,
+            }} />
+
+            {/* ── Energy ring 2 — counter-spin, offset colors ── */}
+            <div className="absolute rounded-full" style={{
+              width: 174, height: 174,
+              background: "conic-gradient(from 180deg, #f59e0b, #00ff6a, #9b6dff, #f59e0b)",
+              animation: "surge-spin-rev 1.2s linear infinite, surge-ring-show 8s ease-in-out infinite 0.15s",
+              opacity: 0,
+            }} />
+
+            {/* ── Inner mask (keeps rings looking like a ring not a disc) ── */}
+            <div className="absolute rounded-full z-[2]" style={{
+              width: 158, height: 158,
+              background: "hsl(var(--background))",
+            }} />
+
+            {/* ── Shockwave pulses (3 expanding rings) ── */}
+            <div className="absolute rounded-full z-[3]" style={{
+              width: 168, height: 168,
+              border: "2px solid #00ff6a",
+              animation: "shockwave 8s ease-in-out infinite",
+              opacity: 0,
+            }} />
+            <div className="absolute rounded-full z-[3]" style={{
+              width: 168, height: 168,
+              border: "2px solid #9b6dff",
+              animation: "shockwave 8s ease-in-out infinite 0.25s",
+              opacity: 0,
+            }} />
+            <div className="absolute rounded-full z-[3]" style={{
+              width: 168, height: 168,
+              border: "2px solid #f59e0b",
+              animation: "shockwave 8s ease-in-out infinite 0.5s",
+              opacity: 0,
+            }} />
+
+            {/* ── Blast flash ── */}
+            <div className="absolute inset-0 rounded-full z-[8]" style={{
+              background: "radial-gradient(circle, rgba(255,230,100,1) 0%, rgba(245,158,11,0.7) 35%, rgba(155,109,255,0.3) 60%, transparent 75%)",
+              animation: "blast-flash 8s ease-in-out infinite",
+              opacity: 0,
+            }} />
+
+            {/* ── Plain mascot ── */}
             <img
               src="/mascot-plain-neon.png"
               alt="GUBER badger"
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{ mixBlendMode: "screen", animation: "og-plain 6s ease-in-out infinite" }}
+              className="absolute z-[5] object-contain"
+              style={{
+                width: 152, height: 152,
+                mixBlendMode: "screen",
+                animation: "plain-mascot 8s ease-in-out infinite",
+              }}
             />
-            {/* OG caped mascot */}
+
+            {/* ── OG caped mascot ── */}
             <img
               src="/mascot-day1og-hero.png"
               alt="GUBER Day-1 OG mascot"
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{ mixBlendMode: "screen", animation: "og-hero 6s ease-in-out infinite" }}
+              className="absolute z-[6] object-contain"
+              style={{
+                width: 160, height: 160,
+                mixBlendMode: "screen",
+                animation: "og-mascot 8s ease-in-out infinite",
+                opacity: 0,
+              }}
             />
           </div>
 
-          <span className="text-[10px] font-display tracking-widest text-amber-400 mt-1">✨ BECOME A FOUNDER</span>
+          <span className="text-[11px] font-display tracking-widest text-amber-400 mt-1">⚡ BECOME A DAY-1 OG</span>
         </div>
 
         <style>{`
-          @keyframes og-plain {
-            0%,35%  { opacity:1; transform:scale(1); filter:drop-shadow(0 0 10px rgba(0,229,118,0.5)); }
-            45%,55% { opacity:0; transform:scale(1.15) rotate(-4deg); filter:drop-shadow(0 0 30px rgba(255,220,50,1)); }
-            65%,95% { opacity:0; transform:scale(1); filter:none; }
-            100%    { opacity:1; transform:scale(1); filter:drop-shadow(0 0 10px rgba(0,229,118,0.5)); }
+          /* ── Rotation helpers ── */
+          @keyframes surge-spin     { to { transform: rotate(360deg);  } }
+          @keyframes surge-spin-rev { to { transform: rotate(-360deg); } }
+
+          /* ── Energy rings appear during charge phase (0-50%) ── */
+          @keyframes surge-ring-show {
+            0%,5%   { opacity:0; }
+            20%,45% { opacity:1; }
+            52%     { opacity:0; }
+            100%    { opacity:0; }
           }
-          @keyframes og-hero {
-            0%,35%  { opacity:0; transform:scale(0.85); filter:none; }
-            45%,55% { opacity:0; transform:scale(1.15) rotate(4deg); filter:drop-shadow(0 0 30px rgba(255,220,50,1)); }
-            65%,95% { opacity:1; transform:scale(1); filter:drop-shadow(0 0 22px rgba(245,158,11,0.7)); }
-            100%    { opacity:0; transform:scale(0.85); filter:none; }
+
+          /* ── Shockwave pulses expand outward during charge ── */
+          @keyframes shockwave {
+            0%,18%  { opacity:0; transform:scale(1); }
+            22%     { opacity:0.9; transform:scale(1); }
+            42%     { opacity:0; transform:scale(1.9); }
+            100%    { opacity:0; transform:scale(1); }
           }
-          @keyframes og-flash {
-            0%,38%  { opacity:0; }
-            48%     { opacity:1; }
-            58%     { opacity:0; }
+
+          /* ── Blast: one bright burst at the moment of transformation ── */
+          @keyframes blast-flash {
+            0%,47%  { opacity:0; transform:scale(0.8); }
+            51%     { opacity:1; transform:scale(1.1); }
+            56%     { opacity:0; transform:scale(1.4); }
+            100%    { opacity:0; transform:scale(1); }
+          }
+
+          /* ── Plain mascot: visible → shakes → vanishes in blast ── */
+          @keyframes plain-mascot {
+            0%,40%  { opacity:1; transform:scale(1) rotate(0deg);
+                      filter:drop-shadow(0 0 10px #00ff6a); }
+            44%     { opacity:1; transform:scale(1.05) rotate(-3deg);
+                      filter:drop-shadow(0 0 24px #9b6dff) drop-shadow(0 0 8px #f59e0b); }
+            47%     { opacity:1; transform:scale(1.1) rotate(3deg);
+                      filter:drop-shadow(0 0 32px #f59e0b); }
+            52%     { opacity:0; transform:scale(0.5) rotate(-6deg); }
+            95%     { opacity:0; }
+            100%    { opacity:1; transform:scale(1) rotate(0deg);
+                      filter:drop-shadow(0 0 10px #00ff6a); }
+          }
+
+          /* ── OG mascot: hidden → bursts in after blast → glows → fades ── */
+          @keyframes og-mascot {
+            0%,53%  { opacity:0; transform:scale(0.6); filter:none; }
+            58%     { opacity:1; transform:scale(1.15);
+                      filter:drop-shadow(0 0 30px #f59e0b) drop-shadow(0 0 12px #9b6dff); }
+            65%,88% { opacity:1; transform:scale(1);
+                      filter:drop-shadow(0 0 18px rgba(245,158,11,0.8)); }
+            97%     { opacity:0; transform:scale(0.9); }
             100%    { opacity:0; }
           }
         `}</style>
