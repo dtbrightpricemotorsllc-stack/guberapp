@@ -599,36 +599,53 @@ export default function Home() {
         </a>
 
         {/* ── Mascot transformation ── */}
-        <div className="flex items-end justify-center gap-4 pt-5" data-testid="section-mascot-transform">
-          {/* Plain badger */}
-          <div className="flex flex-col items-center gap-1">
+        <div className="flex flex-col items-center gap-2 pt-6" data-testid="section-mascot-transform">
+          <p className="text-[10px] font-display tracking-widest text-amber-400/70 mb-1">DAY-1 OG GIVES HIM SUPERPOWERS</p>
+
+          {/* Stacked morph — both images overlap, CSS alternates them */}
+          <div className="relative w-44 h-44">
+            {/* Flash overlay */}
+            <div className="absolute inset-0 rounded-full pointer-events-none z-10"
+              style={{ animation: "og-flash 6s ease-in-out infinite", background: "radial-gradient(circle, rgba(255,215,80,0.9) 0%, rgba(245,158,11,0.4) 40%, transparent 70%)" }} />
+            {/* Plain mascot */}
             <img
-              src="/loading-badger.png"
+              src="/mascot-plain-neon.png"
               alt="GUBER badger"
-              className="w-20 h-20 object-contain opacity-70"
-              style={{ filter: "drop-shadow(0 0 8px rgba(255,255,255,0.15))", animation: "float-mascot 5s ease-in-out infinite" }}
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ mixBlendMode: "screen", animation: "og-plain 6s ease-in-out infinite" }}
             />
-            <span className="text-[9px] font-display tracking-widest text-muted-foreground">YOU TODAY</span>
-          </div>
-
-          {/* Arrow + spark */}
-          <div className="flex flex-col items-center gap-0.5 pb-6">
-            <span className="text-lg">⚡</span>
-            <span className="text-[8px] font-display tracking-widest text-amber-400 whitespace-nowrap">DAY-1 OG</span>
-          </div>
-
-          {/* OG badger */}
-          <div className="flex flex-col items-center gap-1">
+            {/* OG caped mascot */}
             <img
               src="/mascot-day1og-hero.png"
               alt="GUBER Day-1 OG mascot"
-              className="w-28 h-28 object-contain"
-              style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.6)) drop-shadow(0 0 6px rgba(245,158,11,0.3))", animation: "float-mascot 5s ease-in-out infinite 0.4s" }}
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ mixBlendMode: "screen", animation: "og-hero 6s ease-in-out infinite" }}
             />
-            <span className="text-[9px] font-display tracking-widest text-amber-400">DAY-1 OG</span>
           </div>
+
+          <span className="text-[10px] font-display tracking-widest text-amber-400 mt-1">✨ BECOME A FOUNDER</span>
         </div>
-        <style>{`@keyframes float-mascot { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }`}</style>
+
+        <style>{`
+          @keyframes og-plain {
+            0%,35%  { opacity:1; transform:scale(1); filter:drop-shadow(0 0 10px rgba(0,229,118,0.5)); }
+            45%,55% { opacity:0; transform:scale(1.15) rotate(-4deg); filter:drop-shadow(0 0 30px rgba(255,220,50,1)); }
+            65%,95% { opacity:0; transform:scale(1); filter:none; }
+            100%    { opacity:1; transform:scale(1); filter:drop-shadow(0 0 10px rgba(0,229,118,0.5)); }
+          }
+          @keyframes og-hero {
+            0%,35%  { opacity:0; transform:scale(0.85); filter:none; }
+            45%,55% { opacity:0; transform:scale(1.15) rotate(4deg); filter:drop-shadow(0 0 30px rgba(255,220,50,1)); }
+            65%,95% { opacity:1; transform:scale(1); filter:drop-shadow(0 0 22px rgba(245,158,11,0.7)); }
+            100%    { opacity:0; transform:scale(0.85); filter:none; }
+          }
+          @keyframes og-flash {
+            0%,38%  { opacity:0; }
+            48%     { opacity:1; }
+            58%     { opacity:0; }
+            100%    { opacity:0; }
+          }
+        `}</style>
       </div>
 
       {/* ── Live Job Feed ── */}
