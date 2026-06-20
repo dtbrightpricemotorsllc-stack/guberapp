@@ -539,3 +539,9 @@ id = "ZzpeyAKqfP8PeZ5VXfIl6"
 uri = "file://attached_assets/generated_videos/final/guber_gps_explainer.mp4"
 type = "video"
 title = "GUBER GPS Explainer — Google Play Store"
+
+[[outputs]]
+id = "OPGVej377bN1dgpqfp59Y"
+uri = "file://client/public/mascot-spec/GUBER_VRM_Spec.md"
+type = "text"
+title = "GUBER Mascot — VRM Production Specification"
