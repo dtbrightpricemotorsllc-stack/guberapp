@@ -519,17 +519,6 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* ── Mascot hero ── */}
-      <div className="relative z-10 flex justify-center pt-2 pb-1" data-testid="img-mascot-hero">
-        <img
-          src="/loading-badger.png"
-          alt="GUBER mascot"
-          className="w-28 h-28 object-contain"
-          style={{ filter: "drop-shadow(0 0 18px rgba(0,229,118,0.45)) drop-shadow(0 0 6px rgba(155,109,255,0.3))", animation: "float-mascot 5s ease-in-out infinite" }}
-        />
-        <style>{`@keyframes float-mascot { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }`}</style>
-      </div>
-
       {/* ── Platform availability strip ── */}
       <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
         <a
@@ -608,6 +597,38 @@ export default function Home() {
           </div>
           <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </a>
+
+        {/* ── Mascot transformation ── */}
+        <div className="flex items-end justify-center gap-4 pt-5" data-testid="section-mascot-transform">
+          {/* Plain badger */}
+          <div className="flex flex-col items-center gap-1">
+            <img
+              src="/loading-badger.png"
+              alt="GUBER badger"
+              className="w-20 h-20 object-contain opacity-70"
+              style={{ filter: "drop-shadow(0 0 8px rgba(255,255,255,0.15))", animation: "float-mascot 5s ease-in-out infinite" }}
+            />
+            <span className="text-[9px] font-display tracking-widest text-muted-foreground">YOU TODAY</span>
+          </div>
+
+          {/* Arrow + spark */}
+          <div className="flex flex-col items-center gap-0.5 pb-6">
+            <span className="text-lg">⚡</span>
+            <span className="text-[8px] font-display tracking-widest text-amber-400 whitespace-nowrap">DAY-1 OG</span>
+          </div>
+
+          {/* OG badger */}
+          <div className="flex flex-col items-center gap-1">
+            <img
+              src="/mascot-day1og-hero.png"
+              alt="GUBER Day-1 OG mascot"
+              className="w-28 h-28 object-contain"
+              style={{ filter: "drop-shadow(0 0 18px rgba(245,158,11,0.6)) drop-shadow(0 0 6px rgba(245,158,11,0.3))", animation: "float-mascot 5s ease-in-out infinite 0.4s" }}
+            />
+            <span className="text-[9px] font-display tracking-widest text-amber-400">DAY-1 OG</span>
+          </div>
+        </div>
+        <style>{`@keyframes float-mascot { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }`}</style>
       </div>
 
       {/* ── Live Job Feed ── */}
