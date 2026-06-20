@@ -578,8 +578,8 @@ export default function Home() {
 
       {/* ── Day-1 OG banner ── */}
       <div className="relative z-10 px-5 pb-10 max-w-2xl mx-auto w-full">
-        <Link
-          href="/og-advantage"
+        <a
+          href="https://guberapp.com/day1og.html"
           className="gold-shine-wrap flex items-center gap-3 rounded-xl px-4 py-4 w-full group transition-all hover:scale-[1.01] active:scale-[0.99]"
           style={{ background: "linear-gradient(135deg,rgba(180,120,0,0.25) 0%,rgba(245,165,0,0.15) 100%)", border: "2px solid rgba(245,175,0,0.6)", boxShadow: "0 0 20px rgba(245,158,11,0.15)" }}
           data-testid="link-hero-day1og"
@@ -596,7 +596,7 @@ export default function Home() {
             <p className="text-[10px] text-amber-100/80 mt-0.5">Permanent 5% fee discount + OG badge · <span className="text-amber-300 font-bold">$2 one-time fee</span></p>
           </div>
           <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
-        </Link>
+        </a>
       </div>
 
       {/* ── Live Job Feed ── */}
