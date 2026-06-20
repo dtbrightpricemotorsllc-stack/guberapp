@@ -545,3 +545,9 @@ id = "OPGVej377bN1dgpqfp59Y"
 uri = "file://client/public/mascot-spec/GUBER_VRM_Spec.md"
 type = "text"
 title = "GUBER Mascot — VRM Production Specification"
+
+[[outputs]]
+id = "6WQupC3we4Gns6Lrv4faf"
+uri = "file://client/public/mascot-spec/GUBER_mascot_bundle.tar.gz"
+type = "unspecified"
+title = "GUBER Mascot — Complete Bundle (.vrm + .glb + spec + preview)"
