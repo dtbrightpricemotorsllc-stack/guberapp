@@ -8,7 +8,7 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, ChevronLeft, X,
   Briefcase, ShieldCheck, Zap, Star, ArrowRight, Lock,
-  Globe, Truck, Share2, Gift, CheckCircle,
+  Truck, Share2, Gift, CheckCircle,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
@@ -353,18 +353,20 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
 }
 
 // ── Hero Slideshow ────────────────────────────────────────────────────────────
-function HeroSlideshow() {
+function HeroSlideshow({ onSlideChange }: { onSlideChange: (slide: typeof SLIDES[number]) => void }) {
   const [current, setCurrent] = useState(0);
   const [paused,  setPaused]  = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    onSlideChange(SLIDES[current]);
+  }, [current]);
 
   useEffect(() => {
     if (paused) return;
     timerRef.current = setInterval(() => setCurrent((c) => (c + 1) % SLIDES.length), 4500);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [paused]);
-
-  const slide = SLIDES[current];
 
   return (
     <section
@@ -374,7 +376,7 @@ function HeroSlideshow() {
       onMouseLeave={() => setPaused(false)}
       data-testid="section-hero-slideshow"
     >
-      {/* Slides — image only, no text overlay */}
+      {/* Slides — image only, no overlay */}
       {SLIDES.map((s, i) => (
         <div
           key={s.label}
@@ -389,22 +391,13 @@ function HeroSlideshow() {
             style={{ objectPosition: "60% center" }}
             draggable={false}
           />
-          {/* Bottom gradient — fades image into page bg and gives CTA a clean landing zone */}
-          <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-background via-background/70 to-transparent" />
+          {/* Subtle bottom fade — just enough to blend into background */}
+          <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-background to-transparent" />
         </div>
       ))}
 
-      {/* CTA + dots — sit in the bottom gradient zone, never over faces or key visuals */}
-      <div className="absolute bottom-5 inset-x-0 z-10 flex flex-col items-center gap-3">
-        <Link
-          href={slide.href}
-          className="inline-flex items-center gap-2 h-11 px-7 rounded-xl font-display tracking-[0.15em] text-sm font-black text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
-          style={{ background: slide.color, boxShadow: `0 0 24px ${slide.color}55, 0 4px 14px rgba(0,0,0,0.5)` }}
-          data-testid={`link-slide-cta-${slide.label.toLowerCase().replace(/\s+/g, "-")}`}
-        >
-          {slide.cta} <ArrowRight className="w-4 h-4" />
-        </Link>
-
+      {/* Dots only — no CTA button overlapping images */}
+      <div className="absolute bottom-4 inset-x-0 z-10 flex justify-center">
         <div className="flex gap-2.5" data-testid="slideshow-dots">
           {SLIDES.map((s, i) => (
             <button
@@ -449,9 +442,10 @@ function HeroSlideshow() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [gateOpen, setGateOpen] = useState(false);
-  const [wallOpen, setWallOpen] = useState(false);
-  const [copied,   setCopied]   = useState(false);
+  const [gateOpen,      setGateOpen]      = useState(false);
+  const [wallOpen,      setWallOpen]      = useState(false);
+  const [copied,        setCopied]        = useState(false);
+  const [currentSlide,  setCurrentSlide]  = useState(SLIDES[0]);
   const jobsSectionRef = useRef<HTMLDivElement>(null);
   const { enabled: investorPitchPublic } = useFeatureFlag("investor_pitch_public");
 
@@ -511,23 +505,36 @@ export default function Home() {
       </nav>
 
       {/* ── Hero Slideshow ── */}
-      <HeroSlideshow />
+      <HeroSlideshow onSlideChange={setCurrentSlide} />
+
+      {/* ── Slide CTA — below images, never overlapping ── */}
+      <div className="relative z-10 flex justify-center px-5 pt-4 pb-2">
+        <Link
+          href={currentSlide.href}
+          className="inline-flex items-center gap-2 h-12 px-8 rounded-xl font-display tracking-[0.15em] text-sm font-black text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: currentSlide.color, boxShadow: `0 0 24px ${currentSlide.color}55, 0 4px 14px rgba(0,0,0,0.4)` }}
+          data-testid="link-slide-cta"
+        >
+          {currentSlide.cta} <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
 
       {/* ── Platform availability strip ── */}
       <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
-        <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-web">
-          <span className="online-dot" aria-hidden /><Globe className="w-3.5 h-3.5" />
-          Web App <span className="text-emerald-400 font-bold">(Live)</span>
-        </span>
-        <span className="text-muted-foreground/40">|</span>
-        <span className="flex items-center gap-1.5 text-foreground/90" data-testid="text-platform-android">
+        <a
+          href="https://play.google.com/store/apps/details?id=com.guber.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-foreground/90 hover:text-emerald-400 transition-colors"
+          data-testid="link-platform-android"
+        >
           <SiGoogleplay className="w-3.5 h-3.5" />
           Google Play <span className="text-emerald-400 font-bold">(Live)</span>
-        </span>
+        </a>
         <span className="text-muted-foreground/40">|</span>
         <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-platform-ios">
           <SiApple className="w-3.5 h-3.5" />
-          iOS <span className="text-amber-400/80 font-bold">(Soon)</span>
+          App Store <span className="text-amber-400/80 font-bold">(Coming Soon)</span>
         </span>
         <span className="hidden sm:flex items-center gap-1.5 text-muted-foreground text-[10px]">
           <span className="text-muted-foreground/40">|</span>
@@ -573,20 +580,22 @@ export default function Home() {
       <div className="relative z-10 px-5 pb-10 max-w-2xl mx-auto w-full">
         <Link
           href="/og-advantage"
-          className="gold-shine-wrap flex items-center gap-3 rounded-xl px-4 py-3 w-full group transition-all hover:scale-[1.01] active:scale-[0.99]"
-          style={{ background: "linear-gradient(135deg,rgba(180,120,0,0.2) 0%,rgba(245,165,0,0.12) 100%)", border: "1.5px solid rgba(245,175,0,0.5)" }}
+          className="gold-shine-wrap flex items-center gap-3 rounded-xl px-4 py-4 w-full group transition-all hover:scale-[1.01] active:scale-[0.99]"
+          style={{ background: "linear-gradient(135deg,rgba(180,120,0,0.25) 0%,rgba(245,165,0,0.15) 100%)", border: "2px solid rgba(245,175,0,0.6)", boxShadow: "0 0 20px rgba(245,158,11,0.15)" }}
           data-testid="link-hero-day1og"
         >
-          <img src={day1OGImg} alt="Day-1 OG" className="w-9 h-9 object-contain rounded-lg shrink-0 relative z-[2]" />
+          <img src={day1OGImg} alt="Day-1 OG" className="w-11 h-11 object-contain rounded-lg shrink-0 relative z-[2]" style={{ filter: "drop-shadow(0 0 8px rgba(245,158,11,0.5))" }} />
           <div className="flex-1 min-w-0 relative z-[2]">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-display font-black tracking-wider text-amber-300">💎 DAY-1 OG ADVANTAGE</span>
-              <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(245,158,11,0.2)", color: "#fbbf24" }}>LIMITED</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[12px] font-display font-black tracking-wider text-amber-300">💎 DAY-1 OG ADVANTAGE</span>
+              <span className="text-[9px] font-display font-bold px-2 py-0.5 rounded-full animate-pulse"
+                style={{ background: "rgba(239,68,68,0.2)", color: "#f87171", border: "1px solid rgba(239,68,68,0.4)" }}>
+                ⏳ LIMITED TIME
+              </span>
             </div>
-            <p className="text-[10px] text-amber-100/70 mt-0.5">Permanent 5% platform fee discount — locked in for life</p>
+            <p className="text-[10px] text-amber-100/80 mt-0.5">Permanent 5% fee discount + OG badge · <span className="text-amber-300 font-bold">$2 one-time fee</span></p>
           </div>
-          <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0 relative z-[2]" />
+          <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </Link>
       </div>
 
@@ -804,6 +813,27 @@ export default function Home() {
       {/* ── Footer ── */}
       <footer className="relative z-10 border-t border-border py-8 px-5">
         <div className="max-w-6xl mx-auto flex flex-col items-center gap-5">
+          {/* Store badges */}
+          <div className="flex items-center gap-4 flex-wrap justify-center">
+            <a
+              href="https://play.google.com/store/apps/details?id=com.guber.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 h-10 px-4 rounded-xl text-[11px] font-display tracking-wider font-bold transition-colors hover:opacity-80"
+              style={{ background: "rgba(0,229,118,0.1)", border: "1px solid rgba(0,229,118,0.3)", color: "#00e576" }}
+              data-testid="link-footer-google-play"
+            >
+              <SiGoogleplay className="w-4 h-4" /> GET IT ON GOOGLE PLAY
+            </a>
+            <span
+              className="flex items-center gap-2 h-10 px-4 rounded-xl text-[11px] font-display tracking-wider font-bold opacity-50 cursor-default"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
+              data-testid="text-footer-app-store"
+            >
+              <SiApple className="w-4 h-4" /> APP STORE — COMING SOON
+            </span>
+          </div>
+
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
             <img src={logoImg} alt="GUBER" className="h-8 object-contain" style={{ mixBlendMode: "screen" }} />
             <div className="flex items-center gap-6 text-[10px] font-display tracking-wider text-muted-foreground">

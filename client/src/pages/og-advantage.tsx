@@ -245,11 +245,19 @@ export default function OgAdvantage() {
               VIEW YOUR CREDITS <ArrowRight className="w-4 h-4" />
             </Link>
           ) : (
-            <Link href="/profile" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
-              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
-              data-testid="link-og-get-started">
-              CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-display tracking-wider"
+                style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", color: "#fbbf24" }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                One-time founding fee: <span className="font-black ml-1">$2.00</span> — that&apos;s it, forever
+              </div>
+              <Link href="/profile" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
+                style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
+                data-testid="link-og-get-started">
+                CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
+              </Link>
+              <p className="text-[10px] text-muted-foreground">Secure payment via Stripe · No subscription · No hidden fees</p>
+            </div>
           )}
         </div>
 
@@ -334,23 +342,30 @@ export default function OgAdvantage() {
             Be part of something real. GUBER is building the local opportunity network
             that communities have always needed. Get in early and be remembered for it.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            {isLoggedIn ? (
-              <Link href="/community-tasks" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
-                data-testid="link-og-cta-missions">
-                BROWSE MISSIONS <ArrowRight className="w-4 h-4" />
-              </Link>
-            ) : (
-              <Link href="/profile" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
-                data-testid="link-og-cta-signup">
-                CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
-              </Link>
+          <div className="flex flex-col items-center gap-3">
+            {!isLoggedIn && (
+              <p className="text-amber-400 text-sm font-display font-bold tracking-wide">
+                $2 one-time fee · Secure checkout via Stripe
+              </p>
             )}
-            <Link href="/" className="h-12 px-8 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center" data-testid="link-og-cta-home">
-              EXPLORE GUBER
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              {isLoggedIn ? (
+                <Link href="/community-tasks" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
+                  style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
+                  data-testid="link-og-cta-missions">
+                  BROWSE MISSIONS <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <Link href="/profile" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
+                  style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
+                  data-testid="link-og-cta-signup">
+                  CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
+              <Link href="/" className="h-12 px-8 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center" data-testid="link-og-cta-home">
+                EXPLORE GUBER
+              </Link>
+            </div>
           </div>
         </div>
 
