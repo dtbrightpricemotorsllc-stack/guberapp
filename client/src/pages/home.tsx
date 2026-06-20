@@ -519,6 +519,17 @@ export default function Home() {
         </Link>
       </div>
 
+      {/* ── Mascot hero ── */}
+      <div className="relative z-10 flex justify-center pt-2 pb-1" data-testid="img-mascot-hero">
+        <img
+          src="/loading-badger.png"
+          alt="GUBER mascot"
+          className="w-28 h-28 object-contain"
+          style={{ filter: "drop-shadow(0 0 18px rgba(0,229,118,0.45)) drop-shadow(0 0 6px rgba(155,109,255,0.3))", animation: "float-mascot 5s ease-in-out infinite" }}
+        />
+        <style>{`@keyframes float-mascot { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }`}</style>
+      </div>
+
       {/* ── Platform availability strip ── */}
       <div className="relative z-10 flex items-center justify-center gap-4 sm:gap-6 flex-wrap px-5 py-4 text-[11px] font-display tracking-wider border-b border-border/30">
         <a
@@ -593,7 +604,7 @@ export default function Home() {
                 ⏳ LIMITED TIME
               </span>
             </div>
-            <p className="text-[10px] text-amber-100/80 mt-0.5">Permanent 5% fee discount + OG badge · <span className="text-amber-300 font-bold">$2 one-time fee</span></p>
+            <p className="text-[10px] text-amber-100/80 mt-0.5">Permanent 5% fee discount + OG badge · <span className="text-amber-300 font-bold">you can't lose</span></p>
           </div>
           <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </a>
