@@ -440,6 +440,330 @@ function HeroSlideshow({ onSlideChange }: { onSlideChange: (slide: typeof SLIDES
   );
 }
 
+// ── MascotPowerUp ─────────────────────────────────────────────────────────────
+
+const ORBIT_PARTICLES = [
+  { r: 82,  sz: 4,   c: '#8B4DFF', spd: 4.2, deg: 0   },
+  { r: 108, sz: 2.5, c: '#39FF14', spd: 6.1, deg: 22  },
+  { r: 90,  sz: 5,   c: '#8B4DFF', spd: 3.8, deg: 45  },
+  { r: 122, sz: 2,   c: '#39FF14', spd: 7.3, deg: 67  },
+  { r: 94,  sz: 4,   c: '#8B4DFF', spd: 5.5, deg: 90  },
+  { r: 104, sz: 3,   c: '#39FF14', spd: 4.8, deg: 112 },
+  { r: 78,  sz: 5,   c: '#8B4DFF', spd: 6.7, deg: 135 },
+  { r: 114, sz: 2,   c: '#39FF14', spd: 3.5, deg: 157 },
+  { r: 86,  sz: 4,   c: '#8B4DFF', spd: 5.1, deg: 180 },
+  { r: 100, sz: 3,   c: '#39FF14', spd: 4.3, deg: 202 },
+  { r: 92,  sz: 4.5, c: '#8B4DFF', spd: 7.0, deg: 225 },
+  { r: 118, sz: 2,   c: '#39FF14', spd: 3.9, deg: 247 },
+  { r: 80,  sz: 3.5, c: '#8B4DFF', spd: 5.8, deg: 270 },
+  { r: 106, sz: 3,   c: '#39FF14', spd: 6.4, deg: 292 },
+  { r: 96,  sz: 4,   c: '#8B4DFF', spd: 4.6, deg: 315 },
+  { r: 116, sz: 2,   c: '#39FF14', spd: 7.2, deg: 337 },
+];
+
+const LIGHTNING_ARCS = [
+  { d: "M0,0 L18,-30 L8,-48 L26,-74 L38,-92",  c: '#8B4DFF' },
+  { d: "M0,0 L30,-6  L24,-22 L52,-30 L62,-46", c: '#39FF14' },
+  { d: "M0,0 L-24,20 L-14,38 L-36,56 L-50,72", c: '#8B4DFF' },
+  { d: "M0,0 L-26,-18 L-18,-36 L-42,-52 L-54,-66", c: '#39FF14' },
+  { d: "M0,0 L6,32 L-6,42 L8,68 L2,86",         c: '#8B4DFF' },
+];
+
+const OG_PERKS = [
+  "Lifetime 5% Platform Fee Discount",
+  "Double GUBER Credits",
+  "Free Urgent Posts Every Month",
+  "Free Buyer's Order Every Month",
+  "Future Founder Perks",
+];
+
+function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
+  const [phase,        setPhase]        = useState(0);
+  const [visiblePerks, setVisiblePerks] = useState(0);
+  const [swKey,        setSwKey]        = useState(0);
+  const cbRef = useRef(onComplete);
+  cbRef.current = onComplete;
+
+  useEffect(() => {
+    const T = [
+      setTimeout(() => setPhase(1), 800),
+      setTimeout(() => setPhase(2), 2500),
+      setTimeout(() => setPhase(3), 3500),
+      setTimeout(() => { setPhase(4); setSwKey(k => k + 1); }, 4200),
+      setTimeout(() => setPhase(5), 5500),
+      setTimeout(() => setPhase(6), 7000),
+      setTimeout(() => { setPhase(7); setVisiblePerks(1); }, 8000),
+      setTimeout(() => setVisiblePerks(2),  9200),
+      setTimeout(() => setVisiblePerks(3), 10400),
+      setTimeout(() => setVisiblePerks(4), 11600),
+      setTimeout(() => setVisiblePerks(5), 12800),
+      setTimeout(() => setPhase(8), 14200),
+      setTimeout(() => cbRef.current(), 18500),
+    ];
+    return () => T.forEach(clearTimeout);
+  }, []);
+
+  const p1 = phase >= 1;
+  const p2 = phase === 2;
+  const p3 = phase === 3;
+  const p4 = phase >= 4;
+  const p5 = phase >= 5;
+  const p6 = phase >= 6;
+  const p7 = phase >= 7;
+  const p8 = phase >= 8;
+
+  return (
+    <div
+      data-testid="section-mascot-transform"
+      className="relative flex flex-col items-center select-none overflow-hidden"
+      style={{
+        background: 'linear-gradient(to bottom, #020008 0%, #07001e 50%, #020008 100%)',
+        padding: '52px 0 40px',
+        margin: '0 -20px',
+        width: 'calc(100% + 40px)',
+      }}
+    >
+      {/* ── orb + particle viewport ── */}
+      <div className="relative" style={{ width: 280, height: 280 }}>
+
+        {/* ambient radial glow */}
+        <div className="absolute rounded-full pointer-events-none" style={{
+          inset: 0,
+          background: 'radial-gradient(circle, rgba(139,77,255,0.13) 0%, transparent 68%)',
+          animation: 'pu-ambient 2.8s ease-in-out infinite',
+        }} />
+
+        {/* orbiting particles */}
+        {ORBIT_PARTICLES.map((p, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width:  p.r * 2,
+            height: p.r * 2,
+            top:  `calc(50% - ${p.r}px)`,
+            left: `calc(50% - ${p.r}px)`,
+            animation: `pu-orbit ${p.spd}s linear infinite`,
+            animationDelay: `${-(p.spd * p.deg / 360)}s`,
+            opacity: p1 ? 1 : 0,
+            transition: 'opacity 0.7s ease',
+          }}>
+            <div style={{
+              position: 'absolute',
+              width: p.sz, height: p.sz,
+              top: '50%', right: 0,
+              transform: 'translateY(-50%)',
+              background: p.c,
+              borderRadius: '50%',
+              boxShadow: `0 0 ${p.sz * 3}px ${p.c}, 0 0 ${p.sz * 7}px ${p.c}88`,
+            }} />
+          </div>
+        ))}
+
+        {/* lightning arcs */}
+        {p2 && (
+          <svg
+            className="absolute pointer-events-none"
+            style={{ top: '50%', left: '50%', transform: 'translate(-50%,-50%)', overflow: 'visible', zIndex: 15 }}
+            width="1" height="1" viewBox="0 0 1 1"
+          >
+            {LIGHTNING_ARCS.map((arc, i) => (
+              <path key={i} d={arc.d}
+                stroke={arc.c} strokeWidth="1.5" fill="none"
+                strokeLinecap="round" strokeLinejoin="round"
+                strokeDasharray="220" strokeDashoffset="220"
+                style={{
+                  filter: `drop-shadow(0 0 5px ${arc.c})`,
+                  animation: 'pu-arc-draw 0.4s ease forwards',
+                  animationDelay: `${i * 75}ms`,
+                }}
+              />
+            ))}
+          </svg>
+        )}
+
+        {/* dark energy orb */}
+        <div className="absolute rounded-full" style={{
+          width: 114, height: 114,
+          top: '50%', left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'radial-gradient(circle at 38% 32%, #2a0055 0%, #130022 48%, #060010 100%)',
+          boxShadow: '0 0 34px #8B4DFF,0 0 75px rgba(139,77,255,0.45),0 0 145px rgba(139,77,255,0.18),inset 0 0 28px rgba(139,77,255,0.4)',
+          animation: 'pu-orb-pulse 1.6s ease-in-out infinite, pu-orb-float 3.2s ease-in-out infinite',
+          opacity: p4 ? 0 : 1,
+          transition: 'opacity 0.35s ease',
+          zIndex: 10,
+        }} />
+
+        {/* flash burst */}
+        {p3 && (
+          <div className="absolute inset-0 rounded-full pointer-events-none" style={{
+            background: 'radial-gradient(circle, rgba(255,255,255,0.96) 0%, rgba(139,77,255,0.75) 28%, rgba(57,255,20,0.3) 55%, transparent 72%)',
+            animation: 'pu-flash 0.72s ease-out forwards',
+            zIndex: 20,
+          }} />
+        )}
+
+        {/* shockwave ring 1 */}
+        <div key={`sw1-${swKey}`} className="absolute rounded-full pointer-events-none" style={{
+          width: 114, height: 114,
+          top: '50%', left: '50%',
+          transform: 'translate(-50%,-50%)',
+          border: '2px solid #8B4DFF',
+          boxShadow: '0 0 14px #8B4DFF,0 0 28px rgba(57,255,20,0.5)',
+          animation: swKey > 0 ? 'pu-shockwave 1.1s ease-out forwards' : 'none',
+          zIndex: 8,
+        }} />
+
+        {/* shockwave ring 2 */}
+        <div key={`sw2-${swKey}`} className="absolute rounded-full pointer-events-none" style={{
+          width: 114, height: 114,
+          top: '50%', left: '50%',
+          transform: 'translate(-50%,-50%)',
+          border: '1.5px solid #39FF14',
+          boxShadow: '0 0 10px #39FF14',
+          animation: swKey > 0 ? 'pu-shockwave 1.1s ease-out 0.16s forwards' : 'none',
+          zIndex: 7,
+        }} />
+
+        {/* OG mascot */}
+        <img
+          src="/mascot-day1og-hero.png"
+          alt="GUBER Day-1 OG"
+          className="absolute pointer-events-none"
+          style={{
+            width: 232, height: 232,
+            top: '50%', left: '50%',
+            mixBlendMode: 'screen',
+            zIndex: 12,
+            opacity: p4 ? 1 : 0,
+            animation: p4
+              ? 'pu-mascot-in 0.95s cubic-bezier(0.34,1.2,0.64,1) forwards, pu-breathe 3.8s ease-in-out 10s infinite'
+              : 'none',
+          }}
+        />
+
+        {/* idle soft aura */}
+        {p8 && (
+          <div className="absolute rounded-full pointer-events-none" style={{
+            width: 268, height: 268,
+            top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: 'radial-gradient(circle, rgba(139,77,255,0.09) 0%, transparent 65%)',
+            animation: 'pu-idle-aura 2.4s ease-in-out infinite',
+            zIndex: 3,
+          }} />
+        )}
+      </div>
+
+      {/* ── text + perks ── */}
+      <div className="flex flex-col items-center gap-3 w-full px-8" style={{ maxWidth: 340, marginTop: 20 }}>
+
+        {p5 && (
+          <p className="text-[10px] font-display tracking-[0.3em] text-center"
+            style={{ color: '#8B4DFF', filter: 'drop-shadow(0 0 6px #8B4DFF)', animation: 'pu-slide-up 0.5s ease forwards' }}>
+            UNLOCK YOUR SUPER POWERS
+          </p>
+        )}
+
+        {p6 && (
+          <h3 className="text-[24px] font-display font-black tracking-wide text-center leading-tight"
+            style={{ color: '#39FF14', filter: 'drop-shadow(0 0 12px #39FF14) drop-shadow(0 0 30px rgba(57,255,20,0.4))', animation: 'pu-slide-up 0.5s ease forwards' }}>
+            BECOME A DAY-1 OG
+          </h3>
+        )}
+
+        {p7 && (
+          <ul className="w-full mt-1 flex flex-col gap-2">
+            {OG_PERKS.slice(0, visiblePerks).map((perk, i) => (
+              <li key={i} className="flex items-center gap-3"
+                style={{ animation: 'pu-perk-in 0.4s ease forwards' }}>
+                <span style={{
+                  width: 20, height: 20, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '50%',
+                  background: 'rgba(57,255,20,0.1)',
+                  border: '1px solid rgba(57,255,20,0.5)',
+                  color: '#39FF14',
+                  fontSize: 11, fontWeight: 900, lineHeight: 1,
+                  filter: 'drop-shadow(0 0 5px #39FF14)',
+                }}>✓</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.88)', lineHeight: 1.35 }}>
+                  {perk}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes pu-ambient {
+          0%,100% { opacity:0.55; transform:scale(1);    }
+          50%     { opacity:1;    transform:scale(1.08); }
+        }
+        @keyframes pu-orbit { to { transform:rotate(360deg); } }
+        @keyframes pu-orb-float {
+          0%,100% { transform:translate(-50%,-50%) translateY(0px);  }
+          50%     { transform:translate(-50%,-50%) translateY(-9px); }
+        }
+        @keyframes pu-orb-pulse {
+          0%,100% {
+            box-shadow:0 0 34px #8B4DFF,0 0 75px rgba(139,77,255,0.45),
+                       0 0 145px rgba(139,77,255,0.18),inset 0 0 28px rgba(139,77,255,0.4);
+          }
+          50% {
+            box-shadow:0 0 55px #8B4DFF,0 0 115px rgba(139,77,255,0.65),
+                       0 0 210px rgba(139,77,255,0.28),inset 0 0 44px rgba(139,77,255,0.58);
+          }
+        }
+        @keyframes pu-arc-draw {
+          from { stroke-dashoffset:220; }
+          to   { stroke-dashoffset:0;   }
+        }
+        @keyframes pu-flash {
+          0%   { opacity:0; transform:scale(0.3);  }
+          38%  { opacity:1; transform:scale(1.06); }
+          100% { opacity:0; transform:scale(2.5);  }
+        }
+        @keyframes pu-shockwave {
+          from { opacity:0.85; transform:translate(-50%,-50%) scale(1);   }
+          to   { opacity:0;    transform:translate(-50%,-50%) scale(3.9); }
+        }
+        @keyframes pu-mascot-in {
+          0%  { opacity:0; transform:translate(-50%,-50%) scale(0.62);
+                filter:blur(24px) brightness(5.5) saturate(0.2); }
+          55% { opacity:1; transform:translate(-50%,-50%) scale(1.07);
+                filter:blur(3px) brightness(1.5) saturate(1);   }
+          75% { transform:translate(-50%,-50%) scale(0.97);
+                filter:blur(0px) brightness(1)   saturate(1);   }
+          100%{ opacity:1; transform:translate(-50%,-50%) scale(1);
+                filter:blur(0px) brightness(1)   saturate(1);   }
+        }
+        @keyframes pu-breathe {
+          0%,100% { transform:translate(-50%,-50%) scale(1);     }
+          50%     { transform:translate(-50%,-50%) scale(1.022); }
+        }
+        @keyframes pu-idle-aura {
+          0%,100% { opacity:0.5; transform:translate(-50%,-50%) scale(1);    }
+          50%     { opacity:1;   transform:translate(-50%,-50%) scale(1.12); }
+        }
+        @keyframes pu-slide-up {
+          from { opacity:0; transform:translateY(16px); }
+          to   { opacity:1; transform:translateY(0);    }
+        }
+        @keyframes pu-perk-in {
+          from { opacity:0; transform:translateX(-20px); }
+          to   { opacity:1; transform:translateX(0);     }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function MascotPowerUp() {
+  const [cycle, setCycle] = useState(0);
+  return <MascotPowerUpInner key={cycle} onComplete={() => setCycle(c => c + 1)} />;
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const [gateOpen,      setGateOpen]      = useState(false);
@@ -598,58 +922,7 @@ export default function Home() {
           <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </a>
 
-        {/* ── Mascot morph ── */}
-        <div className="flex justify-center pt-5 pb-3" data-testid="section-mascot-transform">
-          <div className="relative" style={{ width: 260, height: 260 }}>
-            {/* plain neon mascot */}
-            <img src="/mascot-plain-neon.png" alt="GUBER mascot"
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{ mixBlendMode: "screen", animation: "mm-plain 7s ease-in-out infinite" }} />
-            {/* OG caped mascot */}
-            <img src="/mascot-day1og-hero.png" alt="GUBER Day-1 OG"
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{ mixBlendMode: "screen", animation: "mm-og 7s ease-in-out infinite", opacity: 0 }} />
-          </div>
-        </div>
-
-        <style>{`
-          /* plain: hold → charge up (blur+brighten) → dissolve into white blob → gone */
-          @keyframes mm-plain {
-            0%,38%  { opacity:1; transform:scale(1);
-                      filter:drop-shadow(0 0 14px #00ff6a) blur(0px); }
-            46%     { opacity:1; transform:scale(1.07);
-                      filter:drop-shadow(0 0 28px #9b6dff) blur(3px) brightness(2); }
-            52%     { opacity:0.6; transform:scale(1.1);
-                      filter:blur(14px) brightness(4) saturate(0.2); }
-            56%     { opacity:0; transform:scale(1.12);
-                      filter:blur(20px) brightness(5) saturate(0); }
-            88%     { opacity:0; filter:blur(20px) brightness(5) saturate(0); }
-            93%     { opacity:0.6; transform:scale(1.1);
-                      filter:blur(12px) brightness(3) saturate(0.2); }
-            97%     { opacity:1; transform:scale(1.05);
-                      filter:drop-shadow(0 0 20px #00ff6a) blur(2px) brightness(1.6); }
-            100%    { opacity:1; transform:scale(1);
-                      filter:drop-shadow(0 0 14px #00ff6a) blur(0px); }
-          }
-
-          /* OG: emerges from the same white blob the plain dissolved into */
-          @keyframes mm-og {
-            0%,53%  { opacity:0; transform:scale(1.12);
-                      filter:blur(20px) brightness(5) saturate(0); }
-            58%     { opacity:0.6; transform:scale(1.1);
-                      filter:blur(12px) brightness(3) saturate(0.2); }
-            64%     { opacity:1; transform:scale(1.07);
-                      filter:drop-shadow(0 0 30px #f59e0b) blur(2px) brightness(1.8); }
-            70%,85% { opacity:1; transform:scale(1);
-                      filter:drop-shadow(0 0 22px rgba(245,158,11,0.9))
-                              drop-shadow(0 0 44px rgba(155,109,255,0.35)); }
-            91%     { opacity:0.6; transform:scale(1.08);
-                      filter:blur(10px) brightness(3) saturate(0.2); }
-            95%     { opacity:0; transform:scale(1.12);
-                      filter:blur(20px) brightness(5) saturate(0); }
-            100%    { opacity:0; }
-          }
-        `}</style>
+        <MascotPowerUp />
       </div>
 
       {/* ── Live Job Feed ── */}
