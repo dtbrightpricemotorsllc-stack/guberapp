@@ -8,7 +8,7 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, ChevronLeft, X,
   Briefcase, ShieldCheck, Zap, Star, ArrowRight, Lock,
-  Truck, Share2, Gift, CheckCircle, Wrench, ShoppingBag,
+  Truck, Share2, Gift, CheckCircle,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
@@ -440,150 +440,6 @@ function HeroSlideshow({ onSlideChange }: { onSlideChange: (slide: typeof SLIDES
   );
 }
 
-// ── Morph Animation ───────────────────────────────────────────────────────────
-const MORPH_STAGES = [
-  { id: "mascot",  label: "ONE PLATFORM",      color: "#00ff6a", shadow: "0,255,106"   },
-  { id: "earn",    label: "EARN LOCALLY",       color: "#00ff6a", shadow: "0,255,106"   },
-  { id: "load",    label: "LOAD BOARD",         color: "#00e5ff", shadow: "0,229,255"   },
-  { id: "market",  label: "MARKETPLACE",        color: "#9b6dff", shadow: "155,109,255" },
-  { id: "verify",  label: "VERIFY & INSPECT",   color: "#f59e0b", shadow: "245,158,11"  },
-];
-
-const BURST_DIRS = [
-  [0,-1],[0.7,-0.7],[1,0],[0.7,0.7],[0,-1],[-0.7,0.7],[-1,0],[-0.7,-0.7],
-];
-
-function MorphAnimation() {
-  const [idx,       setIdx]       = useState(0);
-  const [outgoing,  setOutgoing]  = useState(false);
-  const [incoming,  setIncoming]  = useState(false);
-  const [burstKey,  setBurstKey]  = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setOutgoing(true);
-      const t1 = setTimeout(() => {
-        setIdx(i => (i + 1) % MORPH_STAGES.length);
-        setBurstKey(k => k + 1);
-        setOutgoing(false);
-        setIncoming(true);
-        const t2 = setTimeout(() => setIncoming(false), 500);
-        return () => clearTimeout(t2);
-      }, 440);
-      return () => clearTimeout(t1);
-    }, 3200);
-    return () => clearInterval(id);
-  }, []);
-
-  const stage    = MORPH_STAGES[idx];
-  const busy     = outgoing || incoming;
-  const iconSize = 118;
-  const SZ       = 300;
-
-  const iconStyle: React.CSSProperties = {
-    display: "flex", alignItems: "center", justifyContent: "center",
-    transform: outgoing
-      ? "scale(1.5) rotate(22deg)"
-      : incoming
-        ? "scale(0.55) rotate(-18deg)"
-        : "scale(1) rotate(0deg)",
-    opacity: busy ? 0 : 1,
-    filter: `drop-shadow(0 0 22px ${stage.color}) drop-shadow(0 0 44px rgba(${stage.shadow},0.35))`,
-    transition: "transform 0.44s cubic-bezier(0.34,1.4,0.64,1), opacity 0.36s ease-in-out, filter 0.4s ease",
-    willChange: "transform,opacity",
-  };
-
-  const ringStyle: React.CSSProperties = {
-    position: "absolute", inset: 0, borderRadius: "50%",
-    border: `2px solid ${stage.color}`,
-    boxShadow: busy
-      ? `0 0 48px rgba(${stage.shadow},0.9), 0 0 18px rgba(${stage.shadow},0.5), inset 0 0 30px rgba(${stage.shadow},0.12)`
-      : `0 0 20px rgba(${stage.shadow},0.4), inset 0 0 12px rgba(${stage.shadow},0.06)`,
-    transition: "box-shadow 0.25s ease, border-color 0.4s ease",
-  };
-
-  const ring2Style: React.CSSProperties = {
-    position: "absolute", inset: 10, borderRadius: "50%",
-    border: `1px solid rgba(${stage.shadow},0.3)`,
-    transform: busy ? "rotate(45deg) scale(1.06)" : "rotate(0deg) scale(1)",
-    transition: "transform 0.45s ease, border-color 0.4s ease",
-  };
-
-  return (
-    <section className="relative z-10 flex flex-col items-center py-10" data-testid="section-morph">
-      <div className="relative" style={{ width: SZ, height: SZ }}>
-        {/* outer glow ring */}
-        <div style={ringStyle} />
-        {/* inner spinning ring */}
-        <div style={ring2Style} />
-
-        {/* radial bg tint */}
-        <div className="absolute rounded-full pointer-events-none" style={{
-          inset: 2,
-          background: `radial-gradient(circle, rgba(${stage.shadow},0.07) 0%, transparent 68%)`,
-          transition: "background 0.5s ease",
-        }} />
-
-        {/* burst particles — remount on burstKey to re-trigger animation */}
-        {BURST_DIRS.map((dir, i) => (
-          <div key={`${burstKey}-${i}`}
-            className="absolute rounded-full pointer-events-none"
-            style={{
-              width: i % 2 === 0 ? 7 : 5,
-              height: i % 2 === 0 ? 7 : 5,
-              top: "50%", left: "50%",
-              background: stage.color,
-              boxShadow: `0 0 8px ${stage.color}`,
-              animation: `mburst 0.58s ease-out forwards`,
-              ["--dx" as string]: `${dir[0] * 134}px`,
-              ["--dy" as string]: `${dir[1] * 134}px`,
-              animationDelay: `${i * 18}ms`,
-            }}
-          />
-        ))}
-
-        {/* icon / mascot */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div style={iconStyle}>
-            {stage.id === "mascot" && (
-              <img src="/mascot-plain-neon.png" alt="GUBER mascot"
-                style={{ width: 248, height: 248, objectFit: "contain", mixBlendMode: "screen" }} />
-            )}
-            {stage.id === "earn" && (
-              <Wrench style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
-            )}
-            {stage.id === "load" && (
-              <Truck style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
-            )}
-            {stage.id === "market" && (
-              <ShoppingBag style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
-            )}
-            {stage.id === "verify" && (
-              <ShieldCheck style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
-            )}
-          </div>
-        </div>
-
-        {/* bottom label */}
-        <div className="absolute -bottom-8 left-0 right-0 flex justify-center">
-          <span className="text-[10px] font-display tracking-[0.25em] font-black transition-colors duration-500"
-            style={{ color: stage.color }}>
-            {stage.label}
-          </span>
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes mburst {
-          0%   { transform:translate(-50%,-50%) scale(1.8); opacity:1; }
-          60%  { opacity:0.6; }
-          100% { transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); opacity:0; }
-        }
-      `}</style>
-    </section>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const [gateOpen,      setGateOpen]      = useState(false);
@@ -688,9 +544,6 @@ export default function Home() {
         </span>
       </div>
 
-      {/* ── Morph animation ── */}
-      <MorphAnimation />
-
       {/* ── Opportunity Map ── */}
       <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">
         <div className="text-center mb-8">
@@ -745,141 +598,55 @@ export default function Home() {
           <Crown className="w-4 h-4 text-amber-300 shrink-0 relative z-[2]" />
         </a>
 
-        {/* ── Mascot power-up transformation ── */}
-        <div className="flex flex-col items-center gap-2 pt-6 pb-2" data-testid="section-mascot-transform">
-          <p className="text-[10px] font-display tracking-widest text-amber-400/70 mb-1">ACTIVATE YOUR SUPERPOWERS</p>
-
-          <div className="relative flex items-center justify-center" style={{ width: 200, height: 200 }}>
-
-            {/* ── Energy ring 1 — spinning neon green/purple conic ── */}
-            <div className="absolute rounded-full" style={{
-              width: 190, height: 190,
-              background: "conic-gradient(from 0deg, #00ff6a, #9b6dff, #f59e0b, #00ff6a)",
-              animation: "surge-spin 1.8s linear infinite, surge-ring-show 8s ease-in-out infinite",
-              opacity: 0,
-            }} />
-
-            {/* ── Energy ring 2 — counter-spin, offset colors ── */}
-            <div className="absolute rounded-full" style={{
-              width: 174, height: 174,
-              background: "conic-gradient(from 180deg, #f59e0b, #00ff6a, #9b6dff, #f59e0b)",
-              animation: "surge-spin-rev 1.2s linear infinite, surge-ring-show 8s ease-in-out infinite 0.15s",
-              opacity: 0,
-            }} />
-
-            {/* ── Inner mask (keeps rings looking like a ring not a disc) ── */}
-            <div className="absolute rounded-full z-[2]" style={{
-              width: 158, height: 158,
-              background: "hsl(var(--background))",
-            }} />
-
-            {/* ── Shockwave pulses (3 expanding rings) ── */}
-            <div className="absolute rounded-full z-[3]" style={{
-              width: 168, height: 168,
-              border: "2px solid #00ff6a",
-              animation: "shockwave 8s ease-in-out infinite",
-              opacity: 0,
-            }} />
-            <div className="absolute rounded-full z-[3]" style={{
-              width: 168, height: 168,
-              border: "2px solid #9b6dff",
-              animation: "shockwave 8s ease-in-out infinite 0.25s",
-              opacity: 0,
-            }} />
-            <div className="absolute rounded-full z-[3]" style={{
-              width: 168, height: 168,
-              border: "2px solid #f59e0b",
-              animation: "shockwave 8s ease-in-out infinite 0.5s",
-              opacity: 0,
-            }} />
-
-            {/* ── Blast flash ── */}
-            <div className="absolute inset-0 rounded-full z-[8]" style={{
-              background: "radial-gradient(circle, rgba(255,230,100,1) 0%, rgba(245,158,11,0.7) 35%, rgba(155,109,255,0.3) 60%, transparent 75%)",
-              animation: "blast-flash 8s ease-in-out infinite",
-              opacity: 0,
-            }} />
-
-            {/* ── Plain mascot ── */}
-            <img
-              src="/mascot-plain-neon.png"
-              alt="GUBER badger"
-              className="absolute z-[5] object-contain"
-              style={{
-                width: 152, height: 152,
-                mixBlendMode: "screen",
-                animation: "plain-mascot 8s ease-in-out infinite",
-              }}
-            />
-
-            {/* ── OG caped mascot ── */}
-            <img
-              src="/mascot-day1og-hero.png"
-              alt="GUBER Day-1 OG mascot"
-              className="absolute z-[6] object-contain"
-              style={{
-                width: 160, height: 160,
-                mixBlendMode: "screen",
-                animation: "og-mascot 8s ease-in-out infinite",
-                opacity: 0,
-              }}
-            />
+        {/* ── Mascot morph ── */}
+        <div className="flex justify-center pt-5 pb-3" data-testid="section-mascot-transform">
+          <div className="relative" style={{ width: 260, height: 260 }}>
+            {/* plain neon mascot */}
+            <img src="/mascot-plain-neon.png" alt="GUBER mascot"
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ mixBlendMode: "screen", animation: "mm-plain 7s ease-in-out infinite" }} />
+            {/* OG caped mascot */}
+            <img src="/mascot-day1og-hero.png" alt="GUBER Day-1 OG"
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ mixBlendMode: "screen", animation: "mm-og 7s ease-in-out infinite", opacity: 0 }} />
           </div>
-
-          <span className="text-[11px] font-display tracking-widest text-amber-400 mt-1">⚡ BECOME A DAY-1 OG</span>
         </div>
 
         <style>{`
-          /* ── Rotation helpers ── */
-          @keyframes surge-spin     { to { transform: rotate(360deg);  } }
-          @keyframes surge-spin-rev { to { transform: rotate(-360deg); } }
-
-          /* ── Energy rings appear during charge phase (0-50%) ── */
-          @keyframes surge-ring-show {
-            0%,5%   { opacity:0; }
-            20%,45% { opacity:1; }
-            52%     { opacity:0; }
-            100%    { opacity:0; }
+          /* plain: hold → charge up (blur+brighten) → dissolve into white blob → gone */
+          @keyframes mm-plain {
+            0%,38%  { opacity:1; transform:scale(1);
+                      filter:drop-shadow(0 0 14px #00ff6a) blur(0px); }
+            46%     { opacity:1; transform:scale(1.07);
+                      filter:drop-shadow(0 0 28px #9b6dff) blur(3px) brightness(2); }
+            52%     { opacity:0.6; transform:scale(1.1);
+                      filter:blur(14px) brightness(4) saturate(0.2); }
+            56%     { opacity:0; transform:scale(1.12);
+                      filter:blur(20px) brightness(5) saturate(0); }
+            88%     { opacity:0; filter:blur(20px) brightness(5) saturate(0); }
+            93%     { opacity:0.6; transform:scale(1.1);
+                      filter:blur(12px) brightness(3) saturate(0.2); }
+            97%     { opacity:1; transform:scale(1.05);
+                      filter:drop-shadow(0 0 20px #00ff6a) blur(2px) brightness(1.6); }
+            100%    { opacity:1; transform:scale(1);
+                      filter:drop-shadow(0 0 14px #00ff6a) blur(0px); }
           }
 
-          /* ── Shockwave pulses expand outward during charge ── */
-          @keyframes shockwave {
-            0%,18%  { opacity:0; transform:scale(1); }
-            22%     { opacity:0.9; transform:scale(1); }
-            42%     { opacity:0; transform:scale(1.9); }
-            100%    { opacity:0; transform:scale(1); }
-          }
-
-          /* ── Blast: one bright burst at the moment of transformation ── */
-          @keyframes blast-flash {
-            0%,47%  { opacity:0; transform:scale(0.8); }
-            51%     { opacity:1; transform:scale(1.1); }
-            56%     { opacity:0; transform:scale(1.4); }
-            100%    { opacity:0; transform:scale(1); }
-          }
-
-          /* ── Plain mascot: visible → shakes → vanishes in blast ── */
-          @keyframes plain-mascot {
-            0%,40%  { opacity:1; transform:scale(1) rotate(0deg);
-                      filter:drop-shadow(0 0 10px #00ff6a); }
-            44%     { opacity:1; transform:scale(1.05) rotate(-3deg);
-                      filter:drop-shadow(0 0 24px #9b6dff) drop-shadow(0 0 8px #f59e0b); }
-            47%     { opacity:1; transform:scale(1.1) rotate(3deg);
-                      filter:drop-shadow(0 0 32px #f59e0b); }
-            52%     { opacity:0; transform:scale(0.5) rotate(-6deg); }
-            95%     { opacity:0; }
-            100%    { opacity:1; transform:scale(1) rotate(0deg);
-                      filter:drop-shadow(0 0 10px #00ff6a); }
-          }
-
-          /* ── OG mascot: hidden → bursts in after blast → glows → fades ── */
-          @keyframes og-mascot {
-            0%,53%  { opacity:0; transform:scale(0.6); filter:none; }
-            58%     { opacity:1; transform:scale(1.15);
-                      filter:drop-shadow(0 0 30px #f59e0b) drop-shadow(0 0 12px #9b6dff); }
-            65%,88% { opacity:1; transform:scale(1);
-                      filter:drop-shadow(0 0 18px rgba(245,158,11,0.8)); }
-            97%     { opacity:0; transform:scale(0.9); }
+          /* OG: emerges from the same white blob the plain dissolved into */
+          @keyframes mm-og {
+            0%,53%  { opacity:0; transform:scale(1.12);
+                      filter:blur(20px) brightness(5) saturate(0); }
+            58%     { opacity:0.6; transform:scale(1.1);
+                      filter:blur(12px) brightness(3) saturate(0.2); }
+            64%     { opacity:1; transform:scale(1.07);
+                      filter:drop-shadow(0 0 30px #f59e0b) blur(2px) brightness(1.8); }
+            70%,85% { opacity:1; transform:scale(1);
+                      filter:drop-shadow(0 0 22px rgba(245,158,11,0.9))
+                              drop-shadow(0 0 44px rgba(155,109,255,0.35)); }
+            91%     { opacity:0.6; transform:scale(1.08);
+                      filter:blur(10px) brightness(3) saturate(0.2); }
+            95%     { opacity:0; transform:scale(1.12);
+                      filter:blur(20px) brightness(5) saturate(0); }
             100%    { opacity:0; }
           }
         `}</style>
