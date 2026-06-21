@@ -8,7 +8,7 @@ import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import {
   Crown, MapPin, DollarSign, Clock, ChevronRight, ChevronLeft, X,
   Briefcase, ShieldCheck, Zap, Star, ArrowRight, Lock,
-  Truck, Share2, Gift, CheckCircle,
+  Truck, Share2, Gift, CheckCircle, Wrench, ShoppingBag,
 } from "lucide-react";
 import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
@@ -440,6 +440,150 @@ function HeroSlideshow({ onSlideChange }: { onSlideChange: (slide: typeof SLIDES
   );
 }
 
+// ── Morph Animation ───────────────────────────────────────────────────────────
+const MORPH_STAGES = [
+  { id: "mascot",  label: "ONE PLATFORM",      color: "#00ff6a", shadow: "0,255,106"   },
+  { id: "earn",    label: "EARN LOCALLY",       color: "#00ff6a", shadow: "0,255,106"   },
+  { id: "load",    label: "LOAD BOARD",         color: "#00e5ff", shadow: "0,229,255"   },
+  { id: "market",  label: "MARKETPLACE",        color: "#9b6dff", shadow: "155,109,255" },
+  { id: "verify",  label: "VERIFY & INSPECT",   color: "#f59e0b", shadow: "245,158,11"  },
+];
+
+const BURST_DIRS = [
+  [0,-1],[0.7,-0.7],[1,0],[0.7,0.7],[0,-1],[-0.7,0.7],[-1,0],[-0.7,-0.7],
+];
+
+function MorphAnimation() {
+  const [idx,       setIdx]       = useState(0);
+  const [outgoing,  setOutgoing]  = useState(false);
+  const [incoming,  setIncoming]  = useState(false);
+  const [burstKey,  setBurstKey]  = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setOutgoing(true);
+      const t1 = setTimeout(() => {
+        setIdx(i => (i + 1) % MORPH_STAGES.length);
+        setBurstKey(k => k + 1);
+        setOutgoing(false);
+        setIncoming(true);
+        const t2 = setTimeout(() => setIncoming(false), 500);
+        return () => clearTimeout(t2);
+      }, 440);
+      return () => clearTimeout(t1);
+    }, 3200);
+    return () => clearInterval(id);
+  }, []);
+
+  const stage    = MORPH_STAGES[idx];
+  const busy     = outgoing || incoming;
+  const iconSize = 118;
+  const SZ       = 300;
+
+  const iconStyle: React.CSSProperties = {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    transform: outgoing
+      ? "scale(1.5) rotate(22deg)"
+      : incoming
+        ? "scale(0.55) rotate(-18deg)"
+        : "scale(1) rotate(0deg)",
+    opacity: busy ? 0 : 1,
+    filter: `drop-shadow(0 0 22px ${stage.color}) drop-shadow(0 0 44px rgba(${stage.shadow},0.35))`,
+    transition: "transform 0.44s cubic-bezier(0.34,1.4,0.64,1), opacity 0.36s ease-in-out, filter 0.4s ease",
+    willChange: "transform,opacity",
+  };
+
+  const ringStyle: React.CSSProperties = {
+    position: "absolute", inset: 0, borderRadius: "50%",
+    border: `2px solid ${stage.color}`,
+    boxShadow: busy
+      ? `0 0 48px rgba(${stage.shadow},0.9), 0 0 18px rgba(${stage.shadow},0.5), inset 0 0 30px rgba(${stage.shadow},0.12)`
+      : `0 0 20px rgba(${stage.shadow},0.4), inset 0 0 12px rgba(${stage.shadow},0.06)`,
+    transition: "box-shadow 0.25s ease, border-color 0.4s ease",
+  };
+
+  const ring2Style: React.CSSProperties = {
+    position: "absolute", inset: 10, borderRadius: "50%",
+    border: `1px solid rgba(${stage.shadow},0.3)`,
+    transform: busy ? "rotate(45deg) scale(1.06)" : "rotate(0deg) scale(1)",
+    transition: "transform 0.45s ease, border-color 0.4s ease",
+  };
+
+  return (
+    <section className="relative z-10 flex flex-col items-center py-10" data-testid="section-morph">
+      <div className="relative" style={{ width: SZ, height: SZ }}>
+        {/* outer glow ring */}
+        <div style={ringStyle} />
+        {/* inner spinning ring */}
+        <div style={ring2Style} />
+
+        {/* radial bg tint */}
+        <div className="absolute rounded-full pointer-events-none" style={{
+          inset: 2,
+          background: `radial-gradient(circle, rgba(${stage.shadow},0.07) 0%, transparent 68%)`,
+          transition: "background 0.5s ease",
+        }} />
+
+        {/* burst particles — remount on burstKey to re-trigger animation */}
+        {BURST_DIRS.map((dir, i) => (
+          <div key={`${burstKey}-${i}`}
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              width: i % 2 === 0 ? 7 : 5,
+              height: i % 2 === 0 ? 7 : 5,
+              top: "50%", left: "50%",
+              background: stage.color,
+              boxShadow: `0 0 8px ${stage.color}`,
+              animation: `mburst 0.58s ease-out forwards`,
+              ["--dx" as string]: `${dir[0] * 134}px`,
+              ["--dy" as string]: `${dir[1] * 134}px`,
+              animationDelay: `${i * 18}ms`,
+            }}
+          />
+        ))}
+
+        {/* icon / mascot */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div style={iconStyle}>
+            {stage.id === "mascot" && (
+              <img src="/mascot-plain-neon.png" alt="GUBER mascot"
+                style={{ width: 248, height: 248, objectFit: "contain", mixBlendMode: "screen" }} />
+            )}
+            {stage.id === "earn" && (
+              <Wrench style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
+            )}
+            {stage.id === "load" && (
+              <Truck style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
+            )}
+            {stage.id === "market" && (
+              <ShoppingBag style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
+            )}
+            {stage.id === "verify" && (
+              <ShieldCheck style={{ width: iconSize, height: iconSize, color: stage.color }} strokeWidth={1.4} />
+            )}
+          </div>
+        </div>
+
+        {/* bottom label */}
+        <div className="absolute -bottom-8 left-0 right-0 flex justify-center">
+          <span className="text-[10px] font-display tracking-[0.25em] font-black transition-colors duration-500"
+            style={{ color: stage.color }}>
+            {stage.label}
+          </span>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes mburst {
+          0%   { transform:translate(-50%,-50%) scale(1.8); opacity:1; }
+          60%  { opacity:0.6; }
+          100% { transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); opacity:0; }
+        }
+      `}</style>
+    </section>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Home() {
   const [gateOpen,      setGateOpen]      = useState(false);
@@ -543,6 +687,9 @@ export default function Home() {
           &nbsp;· No card · No resume
         </span>
       </div>
+
+      {/* ── Morph animation ── */}
+      <MorphAnimation />
 
       {/* ── Opportunity Map ── */}
       <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">
