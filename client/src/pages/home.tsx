@@ -581,7 +581,7 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
         )}
 
         {/* dark energy orb */}
-        <div className="absolute rounded-full" style={{
+        <div className="absolute rounded-full flex items-center justify-center" style={{
           width: 114, height: 114,
           top: '50%', left: '50%',
           transform: 'translate(-50%,-50%)',
@@ -591,7 +591,11 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
           opacity: p4 ? 0 : 1,
           transition: 'opacity 0.35s ease',
           zIndex: 10,
-        }} />
+        }}>
+          <img src={logoImg} alt="GUBER"
+            style={{ width: 68, height: 68, objectFit: 'contain', mixBlendMode: 'screen',
+              filter: 'drop-shadow(0 0 8px #8B4DFF) drop-shadow(0 0 18px rgba(57,255,20,0.4))' }} />
+        </div>
 
         {/* flash burst */}
         {p3 && (
@@ -630,7 +634,7 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
           alt="GUBER Day-1 OG"
           className="absolute pointer-events-none"
           style={{
-            width: 232, height: 232,
+            width: 188, height: 232,
             top: '50%', left: '50%',
             mixBlendMode: 'screen',
             zIndex: 12,
