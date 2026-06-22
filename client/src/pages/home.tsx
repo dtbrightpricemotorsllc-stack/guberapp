@@ -641,17 +641,13 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
           }} />
         )}
 
-        {/* OG mascot video — masked so no hard rectangle shows */}
+        {/* OG mascot video — clip-path ellipse + radial overlay for cross-browser edge blending */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: 192, height: 192,
+            width: 200, height: 200,
             top: '50%', left: '50%',
             zIndex: 12,
-            mixBlendMode: 'screen' as const,
-            /* radial mask: opaque centre, fades to transparent at edges */
-            WebkitMaskImage: 'radial-gradient(ellipse 78% 78% at 50% 50%, black 28%, rgba(0,0,0,0.6) 55%, transparent 100%)',
-            maskImage: 'radial-gradient(ellipse 78% 78% at 50% 50%, black 28%, rgba(0,0,0,0.6) 55%, transparent 100%)',
             opacity: p4 ? 1 : 0,
             transition: 'opacity 0.5s ease',
             animation: p4
@@ -659,6 +655,7 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
               : 'none',
           }}
         >
+          {/* The video — clip-path cuts it into a circle, mix-blend-mode drops dark background pixels */}
           <video
             src="/mascot-hero.mp4"
             autoPlay
@@ -671,10 +668,19 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
               height: '100%',
               objectFit: 'cover',
               display: 'block',
-              borderRadius: 28,
-              animation: 'pu-video-loop-fade 4s ease-in-out infinite',
+              mixBlendMode: 'screen' as const,
+              clipPath: 'ellipse(48% 48% at 50% 50%)',
+              WebkitClipPath: 'ellipse(48% 48% at 50% 50%)',
+              willChange: 'transform',
             }}
           />
+          {/* Radial overlay — paints the section bg colour over the edges on every browser */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse 72% 72% at 50% 50%, transparent 38%, #07001e 66%, #020008 85%)',
+            pointerEvents: 'none',
+          }} />
         </div>
 
         {/* idle soft aura */}
