@@ -25490,36 +25490,49 @@ OUTPUT STYLE:
       `);
 
       let activeMap: Record<number, string> = {};
+      let completedSet = new Set<number>();
       let isOG = false;
       if (userId) {
-        const [ai, ogRow] = await Promise.all([
+        const [ai, done, ogRow] = await Promise.all([
           pool.query(
             `SELECT template_id, status FROM mission_instances
              WHERE user_id = $1 AND status NOT IN ('approved','rejected','expired')`,
             [userId]
           ),
+          pool.query(
+            `SELECT DISTINCT template_id FROM mission_instances
+             WHERE user_id = $1 AND status = 'approved'`,
+            [userId]
+          ),
           pool.query(`SELECT day1_og FROM users WHERE id = $1`, [userId]),
         ]);
         for (const r of ai.rows) activeMap[r.template_id] = r.status;
+        for (const r of done.rows) completedSet.add(r.template_id);
         isOG = !!ogRow.rows[0]?.day1_og;
       }
 
-      const missions = tplRows.rows.map((t: any) => ({
-        id: t.id,
-        emoji: t.emoji,
-        title: t.title,
-        description: t.description,
-        rewardCredits: t.reward_credits,
-        rewardScore: t.reward_score,
-        ogBonusPct: t.og_bonus_pct,
-        category: t.category,
-        sortOrder: t.sort_order,
-        activeStatus: activeMap[t.id] ?? null,
-        effectiveCredits: isOG
-          ? Math.round(t.reward_credits * (1 + t.og_bonus_pct / 100))
-          : t.reward_credits,
-        isOG,
-      }));
+      const missions = tplRows.rows
+        .filter((t: any) => {
+          // Referral tasks are repeatable; all other categories are one-and-done
+          if (t.category === 'referral') return true;
+          return !completedSet.has(t.id);
+        })
+        .map((t: any) => ({
+          id: t.id,
+          emoji: t.emoji,
+          title: t.title,
+          description: t.description,
+          rewardCredits: t.reward_credits,
+          rewardScore: t.reward_score,
+          ogBonusPct: t.og_bonus_pct,
+          category: t.category,
+          sortOrder: t.sort_order,
+          activeStatus: activeMap[t.id] ?? null,
+          effectiveCredits: isOG
+            ? Math.round(t.reward_credits * (1 + t.og_bonus_pct / 100))
+            : t.reward_credits,
+          isOG,
+        }));
 
       res.json(missions);
     } catch (err: any) {

@@ -171,6 +171,7 @@ export default function MapExplore() {
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const hasCenteredRef = useRef(false);
   const hasUpdatedLocationRef = useRef(false);
+  const gpsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadErr, setMapLoadErr] = useState<string | null>(null);
@@ -288,9 +289,25 @@ export default function MapExplore() {
   const startWatchPosition = () => {
     setLocating(true);
     setLocationDenied(false);
+
+    // Safety net: if GPS doesn't resolve within 8 s, unblock the map anyway
+    if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
+    gpsTimeoutRef.current = setTimeout(() => {
+      setLocating(false);
+      gpsTimeoutRef.current = null;
+    }, 8000);
+
+    const clearGpsTimeout = () => {
+      if (gpsTimeoutRef.current) {
+        clearTimeout(gpsTimeoutRef.current);
+        gpsTimeoutRef.current = null;
+      }
+    };
+
     gpsStartWatchPosition(
       (pos) => {
         if (pos.coords.accuracy > 300) return;
+        clearGpsTimeout();
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserPos(coords);
         setLocating(false);
@@ -307,11 +324,10 @@ export default function MapExplore() {
         }
       },
       (err) => {
+        clearGpsTimeout();
         const labels: Record<number, string> = { 1: "PERMISSION_DENIED", 2: "POSITION_UNAVAILABLE", 3: "TIMEOUT" };
         console.warn(`[GUBER] map-explore geolocation: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}`);
         setLocating(false);
-        // Only show "location denied" banner for true permission denial (code 1).
-        // Transient errors (code 2 = unavailable, code 3 = timeout) may self-recover.
         if (err.code === 1) setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
@@ -321,7 +337,7 @@ export default function MapExplore() {
         return;
       }
       watchIdRef2.current = id;
-    }).catch(() => { setLocating(false); setLocationDenied(true); });
+    }).catch(() => { clearGpsTimeout(); setLocating(false); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {
