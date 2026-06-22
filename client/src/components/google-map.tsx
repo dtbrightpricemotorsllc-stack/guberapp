@@ -186,7 +186,7 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
 
       const map = new mapsLib.Map(mapDivRef.current, {
         center: mapCenter,
-        zoom: denied ? US_DENIED_ZOOM : 11,
+        zoom: (denied && !center) ? US_DENIED_ZOOM : 11,
         maxZoom: 12,
         styles: (mapStyles ?? DAYLIGHT_STYLES) as google.maps.MapTypeStyle[],
         zoomControl: true,
@@ -215,6 +215,13 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
       mapListenersRef.current.push(clickListener, idleListener);
 
       mapRef.current = map;
+      // If a center prop was already supplied before the map instance existed
+      // (common on native when the dashboard sets mapCenter from GPS/zip before
+      // the Maps SDK finishes loading), apply it now so the zoom is correct.
+      if (center) {
+        map.panTo(center);
+        map.setZoom(11);
+      }
       setMapReady(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
