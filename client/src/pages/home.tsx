@@ -712,11 +712,16 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
             />
           ))}
 
-          {/* Soft vignette — paints section bg over the outermost corners only */}
+          {/* Edge blender — inset box-shadow kills all 4 rectangular edges on
+              every browser, radial gradient handles the mid-corners */}
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'radial-gradient(ellipse 74% 68% at 50% 48%, transparent 60%, #07001e 82%, #020008 95%)',
+            background: 'radial-gradient(ellipse 70% 64% at 50% 48%, transparent 52%, rgba(7,0,30,0.85) 72%, #020008 90%)',
+            boxShadow: [
+              'inset 0 0 28px 18px #020008',        /* all-edge dark frame  */
+              'inset 0 0 55px 12px rgba(2,0,8,0.9)',/* second softer pass   */
+            ].join(','),
             pointerEvents: 'none',
             zIndex: 2,
           }} />
