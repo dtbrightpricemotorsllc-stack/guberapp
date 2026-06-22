@@ -628,19 +628,24 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
           zIndex: 7,
         }} />
 
-        {/* OG mascot */}
-        <img
-          src="/mascot-day1og-hero.png"
-          alt="GUBER Day-1 OG"
+        {/* OG mascot video */}
+        <video
+          src="/mascot-hero.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
           className="absolute pointer-events-none"
           style={{
-            width: 188, height: 232,
+            width: 220, height: 220,
             top: '50%', left: '50%',
+            objectFit: 'contain',
             mixBlendMode: 'screen',
             zIndex: 12,
             opacity: p4 ? 1 : 0,
+            transform: 'translate(-50%, -50%)',
             animation: p4
-              ? 'pu-mascot-in 0.95s cubic-bezier(0.34,1.2,0.64,1) forwards, pu-breathe 3.8s ease-in-out 10s infinite'
+              ? 'pu-mascot-in 0.95s cubic-bezier(0.34,1.2,0.64,1) forwards'
               : 'none',
           }}
         />
