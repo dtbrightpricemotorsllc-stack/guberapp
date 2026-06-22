@@ -41,15 +41,15 @@ const ADDON_PRICES: Record<string, { label: string; price: number; hint: string 
   urgent_boost:         { label: "Urgent Boost",             price: 10,  hint: "Priority placement" },
   premium_carrier_only: { label: "Verified Carriers Only",   price: 10,  hint: "Credential-gated" },
   photo_proof:          { label: "Photo Proof at Pickup",    price: 25,  hint: "GUBER documents asset" },
-  loading_help:         { label: "Loading Assistance",       price: 10,  hint: "GUBER worker helps load" },
-  unloading_help:       { label: "Unloading Assistance",     price: 10,  hint: "GUBER worker helps unload" },
+  loading_help:         { label: "Loading Assistance",       price: 10,  hint: "GUBER helper assists with loading" },
+  unloading_help:       { label: "Unloading Assistance",     price: 10,  hint: "GUBER helper assists with unloading" },
   vin_verification:     { label: "VIN Verification",         price: 15,  hint: "Confirms VIN matches vehicle" },
   gps_tracking:         { label: "GPS Tracking",             price: 15,  hint: "Real-time transport updates" },
 };
 
 // Field services (purchasable after posting via cart)
 const FIELD_SERVICES: { key: string; label: string; price: number; desc: string }[] = [
-  { key: "pre_transport_verification", label: "Pre-Transport Verification", price: 25, desc: "GUBER worker inspects vehicle before transport" },
+  { key: "pre_transport_verification", label: "Pre-Transport Verification", price: 25, desc: "GUBER helper inspects vehicle before transport" },
   { key: "loading_witness",            label: "Loading Witness",            price: 25, desc: "GUBER witnesses and documents loading" },
   { key: "unloading_witness",          label: "Unloading Witness",          price: 25, desc: "GUBER witnesses and documents unloading" },
   { key: "premium_bundle",             label: "Premium Bundle (all 3)",     price: 65, desc: "All 3 GUBER field services at once" },
@@ -933,7 +933,7 @@ export default function LoadBoardDetail() {
               >
                 <div>
                   <p className="text-sm font-display font-bold text-foreground">Field Services</p>
-                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER workers — add to cart, pay together</p>
+                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER helpers — add to cart, pay together</p>
                 </div>
                 {fieldCart.length > 0 && (
                   <span className="text-[10px] font-display font-black px-2 py-0.5 rounded-full text-cyan-400"

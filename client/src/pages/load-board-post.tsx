@@ -167,9 +167,9 @@ const VEHICLE_TYPES_HAULER = [
 const ADDON_OPTIONS: { key: string; label: string; price: number; hint: string }[] = [
   { key: "urgent_boost",         label: "⚡ Urgent Boost",           price: 10, hint: "Pin your listing at the top for faster responses" },
   { key: "premium_carrier_only", label: "🛡️ Verified Carriers Only", price: 10, hint: "Restrict offers to GUBER-credentialed carriers" },
-  { key: "photo_proof",          label: "📸 Photo Proof at Pickup",   price: 25, hint: "GUBER worker documents freight before transport" },
-  { key: "loading_help",         label: "🤝 Loading Assistance",      price: 10, hint: "GUBER worker helps load freight onto carrier" },
-  { key: "unloading_help",       label: "🤝 Unloading Assistance",    price: 10, hint: "GUBER worker helps unload at destination" },
+  { key: "photo_proof",          label: "📸 Photo Proof at Pickup",   price: 25, hint: "GUBER helper documents freight before transport" },
+  { key: "loading_help",         label: "🤝 Loading Assistance",      price: 10, hint: "GUBER helper assists with loading freight onto carrier" },
+  { key: "unloading_help",       label: "🤝 Unloading Assistance",    price: 10, hint: "GUBER helper assists with unloading at destination" },
   { key: "gps_tracking",         label: "📡 GPS Tracking",            price: 15, hint: "Real-time location updates during transport" },
 ];
 
@@ -1627,7 +1627,7 @@ export default function LoadBoardPost() {
               type="button"
               className="flex-1 rounded-2xl h-12 font-display font-black text-sm tracking-wide"
               style={canAdvance()
-                ? (activeType ? { background: `linear-gradient(135deg,${activeType.accent}dd,${activeType.accent}99)` } : CYAN_ACTIVE)
+                ? { background: "linear-gradient(135deg,#00e576,#00c864)", color: "#0a1a0f" }
                 : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)" }
               }
               onClick={advance}
