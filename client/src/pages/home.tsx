@@ -641,11 +641,11 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
           }} />
         )}
 
-        {/* OG mascot video — clip-path ellipse + radial overlay for cross-browser edge blending */}
+        {/* OG mascot video — full figure visible, edges faded by overlay */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: 200, height: 200,
+            width: 260, height: 300,
             top: '50%', left: '50%',
             zIndex: 12,
             opacity: p4 ? 1 : 0,
@@ -655,7 +655,7 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
               : 'none',
           }}
         >
-          {/* The video — clip-path cuts it into a circle, mix-blend-mode drops dark background pixels */}
+          {/* Video — contain so the full mascot shows, screen blend drops dark bg */}
           <video
             src="/mascot-hero.mp4"
             autoPlay
@@ -666,19 +666,17 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: 'contain',
               display: 'block',
               mixBlendMode: 'screen' as const,
-              clipPath: 'ellipse(48% 48% at 50% 50%)',
-              WebkitClipPath: 'ellipse(48% 48% at 50% 50%)',
               willChange: 'transform',
             }}
           />
-          {/* Radial overlay — paints the section bg colour over the edges on every browser */}
+          {/* Radial overlay — fades edges into section background, leaves centre untouched */}
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'radial-gradient(ellipse 72% 72% at 50% 50%, transparent 38%, #07001e 66%, #020008 85%)',
+            background: 'radial-gradient(ellipse 68% 62% at 50% 48%, transparent 55%, #07001e 78%, #020008 92%)',
             pointerEvents: 'none',
           }} />
         </div>
