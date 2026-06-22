@@ -25476,5 +25476,281 @@ OUTPUT STYLE:
     }
   });
 
+  // ── GUBER Missions ─────────────────────────────────────────────────────────
+
+  // GET /api/missions — list active mission templates, with per-user state
+  app.get("/api/missions", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId ?? null;
+      const tplRows = await pool.query(`
+        SELECT id, emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order
+        FROM growth_task_templates
+        WHERE is_active = true AND paused = false
+        ORDER BY sort_order ASC, id ASC
+      `);
+
+      let activeMap: Record<number, string> = {};
+      let isOG = false;
+      if (userId) {
+        const [ai, ogRow] = await Promise.all([
+          pool.query(
+            `SELECT template_id, status FROM mission_instances
+             WHERE user_id = $1 AND status NOT IN ('approved','rejected','expired')`,
+            [userId]
+          ),
+          pool.query(`SELECT day1_og FROM users WHERE id = $1`, [userId]),
+        ]);
+        for (const r of ai.rows) activeMap[r.template_id] = r.status;
+        isOG = !!ogRow.rows[0]?.day1_og;
+      }
+
+      const missions = tplRows.rows.map((t: any) => ({
+        id: t.id,
+        emoji: t.emoji,
+        title: t.title,
+        description: t.description,
+        rewardCredits: t.reward_credits,
+        rewardScore: t.reward_score,
+        ogBonusPct: t.og_bonus_pct,
+        category: t.category,
+        sortOrder: t.sort_order,
+        activeStatus: activeMap[t.id] ?? null,
+        effectiveCredits: isOG
+          ? Math.round(t.reward_credits * (1 + t.og_bonus_pct / 100))
+          : t.reward_credits,
+        isOG,
+      }));
+
+      res.json(missions);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/missions/:templateId/accept — user accepts a mission
+  app.post("/api/missions/:templateId/accept", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const templateId = parseInt(req.params.templateId);
+      const { zip, lat, lng } = req.body;
+
+      const tpl = await pool.query(
+        `SELECT id, is_active, paused FROM growth_task_templates WHERE id = $1`,
+        [templateId]
+      );
+      if (!tpl.rows[0] || !tpl.rows[0].is_active || tpl.rows[0].paused) {
+        return res.status(404).json({ message: "Mission not available" });
+      }
+
+      const existing = await pool.query(
+        `SELECT id, status FROM mission_instances
+         WHERE user_id = $1 AND template_id = $2 AND status NOT IN ('approved','rejected','expired')`,
+        [userId, templateId]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ message: "Mission already active", instanceId: existing.rows[0].id });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO mission_instances (user_id, template_id, zip, lat, lng, status)
+         VALUES ($1, $2, $3, $4, $5, 'accepted') RETURNING id`,
+        [userId, templateId, zip ?? null, lat ?? null, lng ?? null]
+      );
+      res.json({ ok: true, instanceId: result.rows[0].id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/missions/active — user's active mission instances
+  app.get("/api/missions/active", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const result = await pool.query(`
+        SELECT mi.id, mi.template_id, mi.status, mi.zip, mi.lat, mi.lng,
+               mi.accepted_at, mi.submitted_at, mi.admin_note, mi.credits_awarded,
+               t.emoji, t.title, t.description, t.reward_credits, t.og_bonus_pct, t.category
+        FROM mission_instances mi
+        JOIN growth_task_templates t ON t.id = mi.template_id
+        WHERE mi.user_id = $1 AND mi.status NOT IN ('approved','rejected','expired')
+        ORDER BY mi.created_at DESC
+      `, [userId]);
+
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        templateId: r.template_id,
+        status: r.status,
+        zip: r.zip,
+        acceptedAt: r.accepted_at,
+        submittedAt: r.submitted_at,
+        adminNote: r.admin_note,
+        creditsAwarded: r.credits_awarded,
+        template: {
+          emoji: r.emoji,
+          title: r.title,
+          description: r.description,
+          rewardCredits: r.reward_credits,
+          ogBonusPct: r.og_bonus_pct,
+          category: r.category,
+        },
+      })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/missions/instances/:id/submit — upload photo proof + GPS
+  app.post("/api/missions/instances/:id/submit", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const instanceId = parseInt(req.params.id);
+      const { photoDataUrl, gpsLat, gpsLng, businessName, address, notes } = req.body;
+
+      const inst = await pool.query(
+        `SELECT id, user_id, status FROM mission_instances WHERE id = $1`,
+        [instanceId]
+      );
+      if (!inst.rows[0]) return res.status(404).json({ message: "Mission not found" });
+      if (inst.rows[0].user_id !== userId) return res.status(403).json({ message: "Not your mission" });
+      if (!["accepted", "in_progress"].includes(inst.rows[0].status)) {
+        return res.status(409).json({ message: `Cannot submit in status '${inst.rows[0].status}'` });
+      }
+      if (!photoDataUrl) return res.status(400).json({ message: "Photo is required" });
+      if (!gpsLat || !gpsLng) return res.status(400).json({ message: "GPS location is required" });
+
+      let photoUrl: string = "[dev-no-cloudinary]";
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const up = await cloudinary.uploader.upload(photoDataUrl, {
+          resource_type: "image",
+          folder: "guber-missions",
+          transformation: [{ width: 1200, crop: "limit" }],
+        });
+        photoUrl = up.secure_url;
+      }
+
+      await pool.query("BEGIN");
+      try {
+        await pool.query(
+          `INSERT INTO mission_proofs (instance_id, photo_url, gps_lat, gps_lng, captured_at, business_name, address, notes)
+           VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)`,
+          [instanceId, photoUrl, gpsLat, gpsLng, businessName ?? null, address ?? null, notes ?? null]
+        );
+        await pool.query(
+          `UPDATE mission_instances SET status = 'proof_submitted', submitted_at = NOW() WHERE id = $1`,
+          [instanceId]
+        );
+        await pool.query("COMMIT");
+      } catch (e) {
+        await pool.query("ROLLBACK");
+        throw e;
+      }
+
+      res.json({ ok: true, message: "Proof submitted — admin will review within 24–48 hours." });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/admin/missions/queue — review queue
+  app.get("/api/admin/missions/queue", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const result = await pool.query(`
+        SELECT mi.id, mi.user_id, mi.template_id, mi.status, mi.zip,
+               mi.submitted_at, mi.created_at, mi.admin_note,
+               u.username, u.display_name, u.email, u.day1_og,
+               t.emoji, t.title, t.reward_credits, t.og_bonus_pct,
+               mp.photo_url, mp.gps_lat, mp.gps_lng, mp.business_name, mp.address, mp.notes
+        FROM mission_instances mi
+        JOIN users u ON u.id = mi.user_id
+        JOIN growth_task_templates t ON t.id = mi.template_id
+        LEFT JOIN mission_proofs mp ON mp.instance_id = mi.id
+        WHERE mi.status = 'proof_submitted'
+        ORDER BY mi.submitted_at ASC
+      `);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/admin/missions/instances/:id/review — approve or reject
+  app.post("/api/admin/missions/instances/:id/review", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const adminId = req.session!.userId!;
+      const instanceId = parseInt(req.params.id);
+      const { decision, adminNote } = req.body;
+      if (!["approved", "rejected"].includes(decision)) {
+        return res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
+      }
+
+      const instRow = await pool.query(`
+        SELECT mi.*, t.reward_credits, t.reward_score, t.og_bonus_pct, t.title,
+               u.day1_og, u.id AS uid
+        FROM mission_instances mi
+        JOIN growth_task_templates t ON t.id = mi.template_id
+        JOIN users u ON u.id = mi.user_id
+        WHERE mi.id = $1
+      `, [instanceId]);
+
+      if (!instRow.rows[0]) return res.status(404).json({ message: "Instance not found" });
+      const inst = instRow.rows[0];
+      if (inst.status !== "proof_submitted") {
+        return res.status(409).json({ message: `Instance is in status '${inst.status}', not 'proof_submitted'` });
+      }
+
+      if (decision === "approved") {
+        let credits: number = inst.reward_credits;
+        let score: number = inst.reward_score;
+        if (inst.day1_og) {
+          const bonusPct: number = inst.og_bonus_pct ?? 100;
+          credits = Math.round(credits * (1 + bonusPct / 100));
+          score = Math.round(score * (1 + bonusPct / 100));
+        }
+        const cfgRow = await pool.query(
+          `SELECT value_int FROM growth_reward_config WHERE key = 'credits_per_dollar'`
+        );
+        const creditsPerDollar = cfgRow.rows[0]?.value_int ?? 1000;
+        const dollarEq = (credits / creditsPerDollar).toFixed(4);
+
+        await pool.query("BEGIN");
+        try {
+          await pool.query(
+            `UPDATE mission_instances
+             SET status='approved', reviewed_at=NOW(), reviewed_by=$1, credits_awarded=$2, admin_note=$3
+             WHERE id=$4`,
+            [adminId, credits, adminNote ?? null, instanceId]
+          );
+          await pool.query(
+            `UPDATE users
+             SET growth_credits = COALESCE(growth_credits,0) + $1,
+                 guber_score    = COALESCE(guber_score,0)    + $2,
+                 lifetime_credits_earned = COALESCE(lifetime_credits_earned,0) + $1
+             WHERE id=$3`,
+            [credits, score, inst.user_id]
+          );
+          await pool.query(
+            `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+             VALUES ($1,$2,$3,'map_mission','approved',NOW(),$4)`,
+            [inst.user_id, credits, dollarEq, `Mission approved: ${inst.title} (instance #${instanceId})`]
+          );
+          await pool.query("COMMIT");
+        } catch (e) {
+          await pool.query("ROLLBACK");
+          throw e;
+        }
+      } else {
+        await pool.query(
+          `UPDATE mission_instances SET status='rejected', reviewed_at=NOW(), reviewed_by=$1, admin_note=$2 WHERE id=$3`,
+          [adminId, adminNote ?? null, instanceId]
+        );
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }

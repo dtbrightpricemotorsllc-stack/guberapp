@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Search, Briefcase, SlidersHorizontal, Plus, Map, List, ShieldCheck, MapPin as MapPinIcon, Clock, X, Lock } from "lucide-react";
+import { Search, Briefcase, SlidersHorizontal, Plus, Map, List, ShieldCheck, MapPin as MapPinIcon, Clock, X, Lock, Zap } from "lucide-react";
+import { MissionCard, type MissionTemplate } from "@/components/mission-card";
 import { useState, useMemo } from "react";
 import { useSearch, useLocation } from "wouter";
 import { Link } from "wouter";
@@ -125,6 +126,11 @@ export default function BrowseJobs() {
   const { data: mapPins } = useQuery<JobPin[]>({
     queryKey: ["/api/map-jobs"],
     enabled: viewMode === "map",
+  });
+
+  const { data: missions = [] } = useQuery<MissionTemplate[]>({
+    queryKey: ["/api/missions"],
+    refetchInterval: 120000,
   });
 
   const filtered = useMemo(() => {
@@ -367,35 +373,56 @@ export default function BrowseJobs() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 animate-fade-in" data-testid="section-empty-state">
-            <p className="text-2xl mb-3">💰</p>
-            <p className="font-display font-bold text-foreground text-base mb-2" data-testid="text-empty-title">Waiting on the next move</p>
-            <p className="text-sm text-muted-foreground mb-1">Jobs appear in real-time based on your area.</p>
-            {(alertsOff || availableOff) && (
-              <div className="mt-5 flex flex-col gap-2 items-center">
-                {alertsOff && (
-                  <Button
-                    className="w-full max-w-xs gap-2 premium-btn rounded-xl font-display tracking-wider text-xs h-11"
-                    onClick={handleEnableAlerts}
-                    data-testid="button-turn-on-alerts"
-                  >
-                    TURN ON ALERTS
-                  </Button>
-                )}
-                {availableOff && (
-                  <Button
-                    variant="outline"
-                    className="w-full max-w-xs rounded-xl font-display tracking-wider text-xs h-11 border-white/[0.15] hover:border-white/25"
-                    onClick={() => availabilityMutation.mutate()}
-                    disabled={availabilityMutation.isPending}
-                    data-testid="button-set-available"
-                  >
-                    SET AVAILABLE FOR WORK
-                  </Button>
-                )}
+          <div className="animate-fade-in" data-testid="section-empty-state">
+            <div className="text-center py-10">
+              <p className="text-2xl mb-3">💰</p>
+              <p className="font-display font-bold text-foreground text-base mb-2" data-testid="text-empty-title">Waiting on the next move</p>
+              <p className="text-sm text-muted-foreground mb-1">Jobs appear in real-time based on your area.</p>
+              {(alertsOff || availableOff) && (
+                <div className="mt-5 flex flex-col gap-2 items-center">
+                  {alertsOff && (
+                    <Button
+                      className="w-full max-w-xs gap-2 premium-btn rounded-xl font-display tracking-wider text-xs h-11"
+                      onClick={handleEnableAlerts}
+                      data-testid="button-turn-on-alerts"
+                    >
+                      TURN ON ALERTS
+                    </Button>
+                  )}
+                  {availableOff && (
+                    <Button
+                      variant="outline"
+                      className="w-full max-w-xs rounded-xl font-display tracking-wider text-xs h-11 border-white/[0.15] hover:border-white/25"
+                      onClick={() => availabilityMutation.mutate()}
+                      disabled={availabilityMutation.isPending}
+                      data-testid="button-set-available"
+                    >
+                      SET AVAILABLE FOR WORK
+                    </Button>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground/35 mt-4">Stay ready so you don't miss the next opportunity.</p>
+            </div>
+
+            {missions.length > 0 && (
+              <div className="mt-2 mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="w-3.5 h-3.5" style={{ color: "#a78bfa" }} />
+                  <p className="text-[11px] font-black tracking-widest uppercase" style={{ color: "#a78bfa", fontFamily: "Inter, sans-serif" }}>
+                    GUBER Missions — Earn While You Wait
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {missions.map(m => (
+                    <MissionCard
+                      key={m.id}
+                      mission={m}
+                    />
+                  ))}
+                </div>
               </div>
             )}
-            <p className="text-xs text-muted-foreground/35 mt-4">Stay ready so you don't miss the next opportunity.</p>
           </div>
         ) : (
           <div className="space-y-3">

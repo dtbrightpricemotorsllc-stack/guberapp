@@ -2726,3 +2726,43 @@ export const localBusinessPins = pgTable("local_business_pins", {
 });
 export type LocalBusinessPin    = typeof localBusinessPins.$inferSelect;
 export type InsertLocalBusinessPin = typeof localBusinessPins.$inferInsert;
+
+// ── Mission Instances ─────────────────────────────────────────────────────────
+// Tracks a user's accepted mission through its full lifecycle.
+// status: accepted → in_progress → proof_submitted → approved | rejected | expired
+export const missionInstances = pgTable("mission_instances", {
+  id:            serial("id").primaryKey(),
+  userId:        integer("user_id").notNull(),
+  templateId:    integer("template_id").notNull(),
+  status:        text("status").notNull().default("accepted"),
+  zip:           text("zip"),
+  lat:           real("lat"),
+  lng:           real("lng"),
+  acceptedAt:    timestamp("accepted_at").defaultNow(),
+  submittedAt:   timestamp("submitted_at"),
+  reviewedAt:    timestamp("reviewed_at"),
+  reviewedBy:    integer("reviewed_by"),
+  creditsAwarded: integer("credits_awarded").default(0),
+  adminNote:     text("admin_note"),
+  createdAt:     timestamp("created_at").defaultNow(),
+});
+export type MissionInstance       = typeof missionInstances.$inferSelect;
+export type InsertMissionInstance = typeof missionInstances.$inferInsert;
+
+// ── Mission Proofs ────────────────────────────────────────────────────────────
+// One proof record per mission submission: photo (live camera only), GPS, notes.
+export const missionProofs = pgTable("mission_proofs", {
+  id:                serial("id").primaryKey(),
+  instanceId:        integer("instance_id").notNull(),
+  photoUrl:          text("photo_url"),
+  gpsLat:            real("gps_lat"),
+  gpsLng:            real("gps_lng"),
+  capturedAt:        timestamp("captured_at"),
+  businessName:      text("business_name"),
+  address:           text("address"),
+  notes:             text("notes"),
+  deviceFingerprint: text("device_fingerprint"),
+  createdAt:         timestamp("created_at").defaultNow(),
+});
+export type MissionProof       = typeof missionProofs.$inferSelect;
+export type InsertMissionProof = typeof missionProofs.$inferInsert;
