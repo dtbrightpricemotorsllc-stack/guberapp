@@ -379,6 +379,7 @@ export default function Dashboard() {
   });
 
   const [cityCardDismissed, setCityCardDismissed] = useState(false);
+  const [showCityCardPostTour, setShowCityCardPostTour] = useState(false);
   const cityCardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [promoOpen, setPromoOpen] = useState(false);
@@ -766,8 +767,8 @@ export default function Dashboard() {
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
 
-        {/* ── Activate Your City (shown when the local grid is dark, auto-dismisses after 5s) ── */}
-        {!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0 && !cityCardDismissed && (
+        {/* ── Activate Your City (shown post-tour OR when local grid is dark, auto-dismisses after 5s) ── */}
+        {(showCityCardPostTour || (!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0)) && !cityCardDismissed && (
           <CityDarkCard
             onDismiss={() => setCityCardDismissed(true)}
             onWakeUp={handleWakeUpCity}
@@ -1372,7 +1373,7 @@ export default function Dashboard() {
       {showTour && !!user && !gpsBlocking && (
         <DashboardTour
           accountType={(user as any)?.accountType || "individual"}
-          onComplete={() => setShowTour(false)}
+          onComplete={() => { setShowTour(false); setShowCityCardPostTour(true); }}
           onModeChange={(m) => setMode(m as DashboardMode)}
         />
       )}
