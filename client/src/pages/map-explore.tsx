@@ -138,6 +138,18 @@ function makeWorkerDroneSvg(): string {
   );
 }
 
+function makeMissionSvg(emoji: string): string {
+  const size = 44;
+  const label = encodeURIComponent(emoji || "⚡");
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 8}" viewBox="0 0 ${size} ${size + 8}">
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="#7c3aed" stroke="#ffffff" stroke-width="2.5"/>
+      <text x="${size/2}" y="${size/2}" text-anchor="middle" dominant-baseline="central" font-size="20">${label}</text>
+      <polygon points="${size/2 - 6},${size - 2} ${size/2 + 6},${size - 2} ${size/2},${size + 8}" fill="#7c3aed"/>
+    </svg>`
+  );
+}
+
 function makeBubbleSvg(total: number, color: string, hasUrgent: boolean): string {
   const count = total > 999 ? "999+" : String(total);
   const size = Math.max(36, Math.min(64, 36 + Math.floor(Math.log2(total + 1)) * 7));
@@ -167,6 +179,7 @@ export default function MapExplore() {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const missionMarkersRef = useRef<google.maps.Marker[]>([]);
   const initStartedRef = useRef(false);
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const hasCenteredRef = useRef(false);
@@ -461,6 +474,32 @@ export default function MapExplore() {
       });
     }
   }, [mapReady, filteredGroups, categoryFilter, workerPins, mapViewMode]);
+
+  // Mission pins — scattered around user position in jobs mode
+  useEffect(() => {
+    const g = window.google?.maps;
+    missionMarkersRef.current.forEach((m) => m.setMap(null));
+    missionMarkersRef.current = [];
+    if (!mapReady || !mapRef.current || !g) return;
+    if (mapViewMode !== "jobs" || !userPos || missions.length === 0) return;
+
+    missions.slice(0, 5).forEach((mission, i) => {
+      const angle = (i * 137.5 * Math.PI) / 180;
+      const radius = 0.018 + (i % 3) * 0.01;
+      const lat = userPos.lat + Math.sin(angle) * radius;
+      const lng = userPos.lng + Math.cos(angle) * radius;
+      const svgUrl = makeMissionSvg(mission.emoji);
+      const marker = new g.Marker({
+        position: { lat, lng },
+        map: mapRef.current!,
+        title: mission.title,
+        icon: { url: svgUrl, scaledSize: new g.Size(44, 52), anchor: new g.Point(22, 52) },
+        zIndex: 50,
+      });
+      marker.addListener("click", () => setBottomOpen(true));
+      missionMarkersRef.current.push(marker);
+    });
+  }, [mapReady, missions, userPos, mapViewMode]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -884,6 +923,9 @@ export default function MapExplore() {
             background: DARK_CTRL_SOLID,
             boxShadow: "0 -4px 24px rgba(0,0,0,0.5)",
             borderTop: `1px solid ${DARK_BORDER}`,
+            maxHeight: "52vh",
+            display: "flex",
+            flexDirection: "column",
           }}
           data-testid="panel-bottom-sheet"
         >
@@ -923,7 +965,7 @@ export default function MapExplore() {
 
           {/* Expandable content */}
           {bottomOpen && (
-            <div className="px-5 pb-5">
+            <div className="px-5 pb-5 overflow-y-auto flex-1">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-base font-bold" style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}>
