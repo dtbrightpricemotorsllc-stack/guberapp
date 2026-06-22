@@ -382,6 +382,16 @@ export default function Dashboard() {
   const [showCityCardPostTour, setShowCityCardPostTour] = useState(false);
   const cityCardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Track dashboard visits so the City Dark card is hidden on first visit.
+  // We increment once on mount; city card only renders from visit 2 onward.
+  const [dashVisitCount] = useState<number>(() => {
+    const VISIT_KEY = "guber_dashboard_visit_count";
+    const prev = parseInt(localStorage.getItem(VISIT_KEY) || "0", 10);
+    const next = prev + 1;
+    localStorage.setItem(VISIT_KEY, String(next));
+    return next;
+  });
+
   const [promoOpen, setPromoOpen] = useState(false);
   const [activePromo, setActivePromo] = useState<PromoCard | null>(null);
   const [zipOverride, setZipOverride] = useState("");
@@ -768,7 +778,7 @@ export default function Dashboard() {
         <InstallHint />
 
         {/* ── Activate Your City (shown post-tour OR when local grid is dark, auto-dismisses after 5s) ── */}
-        {(showCityCardPostTour || (!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0)) && !cityCardDismissed && (
+        {dashVisitCount >= 2 && (showCityCardPostTour || (!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0)) && !cityCardDismissed && (
           <CityDarkCard
             onDismiss={() => setCityCardDismissed(true)}
             onWakeUp={handleWakeUpCity}
