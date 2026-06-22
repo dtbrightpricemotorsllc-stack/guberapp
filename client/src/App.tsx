@@ -173,6 +173,21 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
+// Like ProtectedRoute but lets ?demo=1 through without auth (for store video demos)
+function DemoRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  const [currentPath] = useLocation();
+  const isDemo = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
+
+  if (isDemo) return <Suspense fallback={<PageLoader />}><Component /></Suspense>;
+  if (isLoading) return <PageLoader />;
+  if (!user) {
+    const returnTo = encodeURIComponent(currentPath);
+    return <Redirect to={`/login?returnTo=${returnTo}`} />;
+  }
+  return <Suspense fallback={<PageLoader />}><Component /></Suspense>;
+}
+
 // Admin-only route wrapper (task-462). Backend already gates every
 // /api/admin/* route, but we also block the client surface so non-admins
 // don't see the dashboard load-and-flash empty data, and so navigation never
@@ -395,11 +410,11 @@ function Router() {
       <Route path="/biz/offers" component={() => <BizRoute component={BizOffers} />} />
       <Route path="/biz/verify-inspect" component={() => <BizRoute component={BizVerifyInspect} />} />
       <Route path="/biz/account" component={() => <BizRoute component={BizAccount} />} />
-      <Route path="/load-board/carrier" component={() => <ProtectedRoute component={LoadBoardCarrierHub} />} />
-      <Route path="/load-board/post" component={() => <ProtectedRoute component={LoadBoardPost} />} />
-      <Route path="/load-board/:id/edit" component={() => <ProtectedRoute component={LoadBoardEdit} />} />
-      <Route path="/load-board/:id" component={() => <ProtectedRoute component={LoadBoardDetail} />} />
-      <Route path="/load-board" component={() => <ProtectedRoute component={LoadBoard} />} />
+      <Route path="/load-board/carrier" component={() => <DemoRoute component={LoadBoardCarrierHub} />} />
+      <Route path="/load-board/post" component={() => <DemoRoute component={LoadBoardPost} />} />
+      <Route path="/load-board/:id/edit" component={() => <DemoRoute component={LoadBoardEdit} />} />
+      <Route path="/load-board/:id" component={() => <DemoRoute component={LoadBoardDetail} />} />
+      <Route path="/load-board" component={() => <DemoRoute component={LoadBoard} />} />
       <Route path="/custody/carrier" component={() => <ProtectedRoute component={CustodyCarrier} />} />
       <Route path="/custody/witness" component={() => <ProtectedRoute component={CustodyWitness} />} />
       <Route path="/custody/asset/:id" component={() => <ProtectedRoute component={CustodyAsset} />} />

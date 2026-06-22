@@ -832,7 +832,7 @@ function CategoriesScreen({
 }
 
 // ── Load List (filtered) ───────────────────────────────────────────────────────
-function LoadList({ listings, isLoading }: { listings: any[]; isLoading: boolean }) {
+function LoadList({ listings, isLoading, isDemo }: { listings: any[]; isLoading: boolean; isDemo?: boolean }) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -863,7 +863,7 @@ function LoadList({ listings, isLoading }: { listings: any[]; isLoading: boolean
           ? `${l.year} ${l.make}${l.model ? " " + l.model : ""}`.trim()
           : l.assetDescription || "Transport Load";
         return (
-          <Link key={l.id} href={`/load-board/${l.id}`}>
+          <Link key={l.id} href={isDemo ? `/load-board/${l.id}?demo=1` : `/load-board/${l.id}`}>
             <div
               className="rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-all"
               style={{
@@ -979,12 +979,23 @@ function LoadList({ listings, isLoading }: { listings: any[]; isLoading: boolean
   );
 }
 
+// ── Demo mode seed data ──────────────────────────────────────────────────────
+const DEMO_LISTINGS: any[] = [
+  { id: 9001, transportType: "vehicle", year: 2023, make: "Porsche", model: "911 GT3", pickupCity: "Atlanta", pickupState: "GA", deliveryCity: "Miami", deliveryState: "FL", postedPrice: 1800, ownershipProofStatus: "title_in_hand", status: "offer_received", urgent: true, addonFlags: ["urgent_boost", "photo_proof"], estimatedMiles: 662, poster: { guberId: "MIKE_R", rating: 4.9, reviewCount: 47 }, createdAt: new Date(Date.now() - 2 * 3600000).toISOString() },
+  { id: 9002, transportType: "boat", assetDescription: "2020 Sea Ray 350SLX", pickupCity: "Dallas", pickupState: "TX", deliveryCity: "Houston", deliveryState: "TX", postedPrice: 480, ownershipProofStatus: "bill_of_sale", status: "posted", urgent: false, addonFlags: [], estimatedMiles: 239, poster: { guberId: "COASTAL_J", rating: 4.7, reviewCount: 12 }, createdAt: new Date(Date.now() - 5 * 3600000).toISOString() },
+  { id: 9003, transportType: "rv", year: 2021, make: "Airstream", model: "Classic 33FB", pickupCity: "Nashville", pickupState: "TN", deliveryCity: "Orlando", deliveryState: "FL", postedPrice: 650, ownershipProofStatus: "title_in_hand", status: "posted", urgent: false, addonFlags: ["gps_tracking"], estimatedMiles: 558, poster: { guberId: "TRAVEL_K", rating: 5.0, reviewCount: 8 }, createdAt: new Date(Date.now() - 8 * 3600000).toISOString() },
+  { id: 9004, transportType: "equipment", assetDescription: "John Deere 310L Backhoe", pickupCity: "Denver", pickupState: "CO", deliveryCity: "Phoenix", deliveryState: "AZ", postedPrice: 1250, ownershipProofStatus: "dealer_owned", status: "posted", urgent: false, addonFlags: ["premium_carrier_only", "vin_verification"], estimatedMiles: 602, poster: { guberId: "EQUIP_PRO", rating: 4.8, reviewCount: 23 }, createdAt: new Date(Date.now() - 12 * 3600000).toISOString() },
+  { id: 9005, transportType: "freight", freightTrailerType: "dry_van", assetDescription: "Electronics — Dry Van", pickupCity: "Chicago", pickupState: "IL", deliveryCity: "Detroit", deliveryState: "MI", postedPrice: 950, status: "posted", urgent: false, addonFlags: [], estimatedMiles: 281, poster: { guberId: "FREIGHT_CO", rating: 4.6, reviewCount: 91 }, createdAt: new Date(Date.now() - 18 * 3600000).toISOString() },
+];
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function LoadBoard() {
   const [, navigate] = useLocation();
   // null = categories screen; "all"|"vehicle"|… = list screen; "mine" = my postings
   const [screen, setScreen] = useState<CategoryValue | "mine" | null>(null);
   const [view, setView] = useState<"list" | "map">("list");
+
+  const isDemo = new URLSearchParams(window.location.search).has("demo");
 
   const { data: configData } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
   const apiKey = configData?.googleMapsApiKey ?? "";
@@ -994,6 +1005,7 @@ export default function LoadBoard() {
     queryKey: ["/api/load-board"],
     queryFn: () => fetch("/api/load-board", { credentials: "include" }).then(r => r.json()),
     staleTime: 30_000,
+    enabled: !isDemo,
   });
 
   // My postings
@@ -1001,10 +1013,11 @@ export default function LoadBoard() {
     queryKey: ["/api/load-board/my"],
     queryFn: () => fetch("/api/load-board/my", { credentials: "include" }).then(r => r.json()),
     staleTime: 30_000,
+    enabled: !isDemo,
   });
 
-  const allListings = allData?.listings ?? [];
-  const myListings  = myData?.listings ?? [];
+  const allListings = isDemo ? DEMO_LISTINGS : (allData?.listings ?? []);
+  const myListings  = isDemo ? [] : (myData?.listings ?? []);
 
   // Filtered list for selected category
   const filteredListings = screen === "mine"
@@ -1033,6 +1046,14 @@ export default function LoadBoard() {
       onBack={screen ? () => setScreen(null) : undefined}
     >
       <div className="px-4 pt-2" style={{ paddingBottom: "calc(68px + env(safe-area-inset-bottom,0px) + 16px)" }}>
+
+        {/* ── Demo mode banner ── */}
+        {isDemo && (
+          <div className="flex items-center gap-2 rounded-xl px-3 py-2 mb-4 text-xs font-display font-black"
+            style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)", color: "#fbbf24" }}>
+            🎬 DEMO MODE — Sample loads for video preview
+          </div>
+        )}
 
         {/* ── Categories screen ── */}
         {screen === null && (
@@ -1099,7 +1120,7 @@ export default function LoadBoard() {
             {view === "map" && screen !== "mine" ? (
               <LoadBoardMap listings={filteredListings} apiKey={apiKey} />
             ) : (
-              <LoadList listings={filteredListings} isLoading={isLoading} />
+              <LoadList listings={filteredListings} isLoading={isLoading} isDemo={isDemo} />
             )}
           </>
         )}
