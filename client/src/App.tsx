@@ -299,7 +299,13 @@ function PublicOnly({ component: Component }: { component: React.ComponentType }
 function ScrollToTop() {
   const [location] = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
+    // On Capacitor native the scroll container is often document.body or
+    // document.documentElement rather than window. Reset all three so every
+    // environment is covered. Use scrollTop (not scrollTo) to bypass the
+    // css scroll-behavior:smooth that can delay the jump.
+    try { window.scrollTo(0, 0); } catch {}
+    try { document.documentElement.scrollTop = 0; } catch {}
+    try { document.body.scrollTop = 0; } catch {}
   }, [location]);
   return null;
 }
