@@ -30,6 +30,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      // @capacitor/camera is only available inside the Capacitor native shell
+      // (iOS / Android). The web production build cannot bundle it, so we mark
+      // it external. The dynamic import in mission-proof-sheet.tsx already
+      // guards calls with an isNative check, so this is safe for web users.
+      external: ["@capacitor/camera"],
+    },
   },
   esbuild: {
     drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
