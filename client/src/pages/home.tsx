@@ -477,6 +477,23 @@ const OG_PERKS = [
   "Future Founder Perks",
 ];
 
+// Light rays that radiate from the mascot centre, extending past the video
+// rectangle so no hard edge is visible. Purple/green/gold match the section palette.
+const MASCOT_RAYS: { a: number; c1: string; c2: string; l: number; h: number }[] = [
+  { a: 0,   c1: 'rgba(139,77,255,0.72)', c2: 'rgba(139,77,255,0)', l: 250, h: 3.5 },
+  { a: 27,  c1: 'rgba(57,255,20,0.55)',  c2: 'rgba(57,255,20,0)',   l: 225, h: 2.5 },
+  { a: 54,  c1: 'rgba(255,255,255,0.22)',c2: 'rgba(255,255,255,0)', l: 200, h: 1.5 },
+  { a: 81,  c1: 'rgba(139,77,255,0.62)', c2: 'rgba(139,77,255,0)', l: 240, h: 3   },
+  { a: 108, c1: 'rgba(57,255,20,0.50)',  c2: 'rgba(57,255,20,0)',   l: 220, h: 2.5 },
+  { a: 135, c1: 'rgba(255,215,0,0.38)',  c2: 'rgba(255,215,0,0)',   l: 230, h: 1.5 },
+  { a: 162, c1: 'rgba(139,77,255,0.68)', c2: 'rgba(139,77,255,0)', l: 250, h: 3.5 },
+  { a: 189, c1: 'rgba(57,255,20,0.48)',  c2: 'rgba(57,255,20,0)',   l: 225, h: 2.5 },
+  { a: 216, c1: 'rgba(255,255,255,0.18)',c2: 'rgba(255,255,255,0)', l: 200, h: 1.5 },
+  { a: 243, c1: 'rgba(139,77,255,0.60)', c2: 'rgba(139,77,255,0)', l: 240, h: 3   },
+  { a: 270, c1: 'rgba(57,255,20,0.50)',  c2: 'rgba(57,255,20,0)',   l: 220, h: 2.5 },
+  { a: 297, c1: 'rgba(255,215,0,0.32)',  c2: 'rgba(255,215,0,0)',   l: 230, h: 1.5 },
+];
+
 function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
   const [phase,        setPhase]        = useState(0);
   const [visiblePerks, setVisiblePerks] = useState(0);
@@ -655,7 +672,7 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
               : 'none',
           }}
         >
-          {/* Video — contain so the full mascot shows, screen blend drops dark bg */}
+          {/* Video — full mascot, screen blend drops dark bg pixels */}
           <video
             src="/mascot-hero.mp4"
             autoPlay
@@ -670,14 +687,38 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
               display: 'block',
               mixBlendMode: 'screen' as const,
               willChange: 'transform',
+              position: 'relative',
+              zIndex: 0,
             }}
           />
-          {/* Radial overlay — fades edges into section background, leaves centre untouched */}
+
+          {/* Rays — radiate from centre past the rectangle boundary, masking hard edges */}
+          {MASCOT_RAYS.map((r, i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: r.l,
+                height: r.h,
+                transformOrigin: 'left center',
+                transform: `translateY(-50%) rotate(${r.a}deg)`,
+                background: `linear-gradient(to right, transparent 0%, ${r.c1} 38%, ${r.c2} 100%)`,
+                animation: `pu-ray-pulse 3.2s ease-in-out ${(i * 0.22).toFixed(2)}s infinite`,
+                pointerEvents: 'none',
+                zIndex: 1,
+              }}
+            />
+          ))}
+
+          {/* Soft vignette — paints section bg over the outermost corners only */}
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'radial-gradient(ellipse 68% 62% at 50% 48%, transparent 55%, #07001e 78%, #020008 92%)',
+            background: 'radial-gradient(ellipse 74% 68% at 50% 48%, transparent 60%, #07001e 82%, #020008 95%)',
             pointerEvents: 'none',
+            zIndex: 2,
           }} />
         </div>
 
@@ -801,6 +842,10 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
         @keyframes pu-video-loop-fade {
           0%,85%,100% { opacity:1;    }
           92%         { opacity:0.82; }
+        }
+        @keyframes pu-ray-pulse {
+          0%,100% { opacity:0.55; }
+          50%     { opacity:1;    }
         }
       `}</style>
     </div>
