@@ -628,27 +628,54 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
           zIndex: 7,
         }} />
 
-        {/* OG mascot video */}
-        <video
-          src="/mascot-hero.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
+        {/* OG mascot glow bed — sits behind the video, gives it a heroic halo */}
+        {p4 && (
+          <div className="absolute rounded-full pointer-events-none" style={{
+            width: 260, height: 260,
+            top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: 'radial-gradient(circle, rgba(139,77,255,0.48) 0%, rgba(57,255,20,0.22) 38%, rgba(139,77,255,0.06) 65%, transparent 80%)',
+            filter: 'blur(22px)',
+            zIndex: 11,
+            animation: 'pu-mascot-glow 3.2s ease-in-out infinite',
+          }} />
+        )}
+
+        {/* OG mascot video — masked so no hard rectangle shows */}
+        <div
           className="absolute pointer-events-none"
           style={{
-            width: 220, height: 220,
+            width: 192, height: 192,
             top: '50%', left: '50%',
-            objectFit: 'contain',
-            mixBlendMode: 'screen',
             zIndex: 12,
+            mixBlendMode: 'screen' as const,
+            /* radial mask: opaque centre, fades to transparent at edges */
+            WebkitMaskImage: 'radial-gradient(ellipse 78% 78% at 50% 50%, black 28%, rgba(0,0,0,0.6) 55%, transparent 100%)',
+            maskImage: 'radial-gradient(ellipse 78% 78% at 50% 50%, black 28%, rgba(0,0,0,0.6) 55%, transparent 100%)',
             opacity: p4 ? 1 : 0,
-            transform: 'translate(-50%, -50%)',
+            transition: 'opacity 0.5s ease',
             animation: p4
               ? 'pu-mascot-in 0.95s cubic-bezier(0.34,1.2,0.64,1) forwards'
               : 'none',
           }}
-        />
+        >
+          <video
+            src="/mascot-hero.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+              borderRadius: 28,
+              animation: 'pu-video-loop-fade 4s ease-in-out infinite',
+            }}
+          />
+        </div>
 
         {/* idle soft aura */}
         {p8 && (
@@ -762,6 +789,14 @@ function MascotPowerUpInner({ onComplete }: { onComplete: () => void }) {
         @keyframes pu-perk-in {
           from { opacity:0; transform:translateX(-20px); }
           to   { opacity:1; transform:translateX(0);     }
+        }
+        @keyframes pu-mascot-glow {
+          0%,100% { opacity:0.7; transform:translate(-50%,-50%) scale(1);    }
+          50%     { opacity:1;   transform:translate(-50%,-50%) scale(1.10); }
+        }
+        @keyframes pu-video-loop-fade {
+          0%,85%,100% { opacity:1;    }
+          92%         { opacity:0.82; }
         }
       `}</style>
     </div>
