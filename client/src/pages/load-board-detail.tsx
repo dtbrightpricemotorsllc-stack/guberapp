@@ -611,6 +611,9 @@ export default function LoadBoardDetail() {
                 {sc && <span className={`text-[10px] font-display font-bold ${sc.color}`}>{sc.label}</span>}
               </div>
               <p className="text-base font-display font-black text-foreground leading-tight">{assetTitle}</p>
+              {listing.assetDescription && listing.assetDescription !== assetTitle && (
+                <p className="text-xs text-muted-foreground/60 mt-0.5 leading-snug">{listing.assetDescription}</p>
+              )}
               {listing.vinVerified && listing.vin && (
                 <p className="text-[9px] text-cyan-400/60 mt-0.5 font-mono flex items-center gap-1">
                   <Check className="w-2.5 h-2.5" /> VIN verified: {listing.vin}
@@ -672,6 +675,17 @@ export default function LoadBoardDetail() {
           </div>
         </div>
 
+        {/* ── Shipper notes ── */}
+        {listing.notes && (
+          <div className="rounded-2xl p-4 flex items-start gap-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}>
+            <Info className="w-4 h-4 text-muted-foreground/40 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-1">Shipper Notes</p>
+              <p className="text-xs text-foreground/70 leading-relaxed">{listing.notes}</p>
+            </div>
+          </div>
+        )}
+
         {/* ── Asset requirements ── */}
         {(listing.vehicleCondition?.length || listing.trailerPreference || listing.weightRange ||
           listing.loadingMethod?.length || listing.pickupAccess?.length) && (
@@ -706,6 +720,27 @@ export default function LoadBoardDetail() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Non-freight transport details (vehicle / boat / rv / equipment) ── */}
+        {!listing.freightTrailerType && (listing.vehicleType || listing.boatType || listing.rvClass ||
+          listing.equipmentType || listing.carrierType || listing.vehicleCount ||
+          listing.pickupDate || listing.deliveryDate || listing.weightLbs ||
+          listing.weatherSensitive || listing.sideLoadRequired) && (
+          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Transport Details</p>
+            {listing.vehicleType && <DetailRow label="Vehicle Type" value={listing.vehicleType.replace(/_/g, " ")} />}
+            {listing.boatType && <DetailRow label="Boat Type" value={listing.boatType.replace(/_/g, " ")} />}
+            {listing.rvClass && <DetailRow label="RV Class" value={listing.rvClass.replace(/_/g, " ")} />}
+            {listing.equipmentType && <DetailRow label="Equipment Type" value={listing.equipmentType.replace(/_/g, " ")} />}
+            {listing.carrierType && <DetailRow label="Carrier Type" value={listing.carrierType === "open" ? "Open Carrier" : "Enclosed Carrier"} />}
+            {listing.vehicleCount && <DetailRow label="Vehicle Count" value={String(listing.vehicleCount)} />}
+            {listing.weightLbs && <DetailRow label="Weight" value={`${listing.weightLbs.toLocaleString()} lbs`} />}
+            {listing.pickupDate && <DetailRow label="Pickup Date" value={listing.pickupDate} />}
+            {listing.deliveryDate && <DetailRow label="Delivery Date" value={listing.deliveryDate} />}
+            {listing.weatherSensitive && <DetailRow label="Weather Sensitive" value="⚠️ Yes — enclosed or covered transport required" />}
+            {listing.sideLoadRequired && <DetailRow label="Side Load" value="⚠️ Required" />}
           </div>
         )}
 
@@ -841,6 +876,8 @@ export default function LoadBoardDetail() {
             {listing.carrierType && <DetailRow label="Carrier Type" value={listing.carrierType === "open" ? "Open Carrier" : "Enclosed Carrier"} />}
             {listing.pickupDate && <DetailRow label="Pickup Date" value={listing.pickupDate} />}
             {listing.deliveryDate && <DetailRow label="Delivery Date" value={listing.deliveryDate} />}
+            {listing.weatherSensitive && <DetailRow label="Weather Sensitive" value="⚠️ Yes" />}
+            {listing.sideLoadRequired && <DetailRow label="Side Load" value="⚠️ Required" />}
             {listing.customFreightType && <DetailRow label="Freight Type" value={listing.customFreightType} />}
           </div>
         )}
