@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Wallet, ArrowUpRight, ArrowDownLeft, RefreshCcw, DollarSign, AlertCircle, ExternalLink, Info, Banknote, Shield, Lock, Clock, CheckCircle, ChevronRight, Star } from "lucide-react";
+import { Wallet, ArrowUpRight, ArrowDownLeft, RefreshCcw, DollarSign, AlertCircle, ExternalLink, Info, Banknote, Shield, Lock, Clock, CheckCircle, ChevronRight, Star, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { WalletTransaction } from "@shared/schema";
