@@ -163,14 +163,17 @@ export function GUBERAssistant() {
         messages: msgs.map((m) => ({ role: m.role, content: m.content })),
       });
       const data = await res.json();
-      return data as { reply: string; route?: string | null; actions?: Array<{ label: string; message: string }> };
+      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }> };
     },
     onSuccess: (data) => {
       const msg: Message = {
         role: "assistant",
         content: data.reply ?? "I'm having trouble right now — please try again.",
         route: typeof data.route === "string" ? data.route : null,
-        actions: Array.isArray(data.actions) ? data.actions : [],
+        actions: [
+          ...(Array.isArray(data.actions) ? data.actions : []),
+          ...(Array.isArray(data.options) ? data.options : []),
+        ].filter((a: any) => a?.label && a?.message).slice(0, 5),
       };
       setMessages((prev) => [...prev, msg]);
       if (!muted) speak(msg.content);

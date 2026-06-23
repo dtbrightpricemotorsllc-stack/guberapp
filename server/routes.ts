@@ -15627,6 +15627,179 @@ Input body: ${JSON.stringify((body || "").trim())}`;
 
   // ── GUBER AI ASSISTANT ────────────────────────────────────────────────────
 
+  // ── Jac Onboarding (PUBLIC — new visitors, no auth required) ────────────────
+  const _jacOnboardRL = new Map<string, { count: number; reset: number }>();
+
+  app.post("/api/jac/onboard", async (req: Request, res: Response) => {
+    try {
+      const ip =
+        ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim() ||
+        req.socket.remoteAddress ||
+        "unknown";
+      const now = Date.now();
+      const rl = _jacOnboardRL.get(ip);
+      if (rl && now < rl.reset) {
+        if (rl.count >= 30) {
+          return res.status(429).json({
+            reply: "Slow down a bit — try again in a moment.",
+            confidence: "low", route: null, actions: [], options: [],
+          });
+        }
+        rl.count++;
+      } else {
+        _jacOnboardRL.set(ip, { count: 1, reset: now + 60_000 });
+      }
+
+      const { messages } = req.body;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ message: "messages required" });
+      }
+
+      const ALLOWED = new Set(["user", "assistant"]);
+      const sanitized: Array<{ role: "user" | "assistant"; content: string }> = [];
+      for (const m of messages.slice(-12)) {
+        if (!m || typeof m !== "object" || !ALLOWED.has(m.role)) continue;
+        const c = typeof m.content === "string" ? m.content.slice(0, 500).trim() : "";
+        if (c) sanitized.push({ role: m.role as "user" | "assistant", content: c });
+      }
+      if (!sanitized.length) return res.status(400).json({ message: "No valid messages" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const onboardPrompt = `You are Jac — GUBER's Job Assistance Coordinator. You are talking to a NEW VISITOR who has NOT signed up yet. Understand what they need from natural, messy real-world language. Guide them to create the right account.
+
+GUBER is a US-based local labor marketplace: workers earn money on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Day-1 OG founding membership.
+
+═══════════════════════════════════
+INTENT ENGINE
+═══════════════════════════════════
+
+WORK / EARN MONEY → route: /signup?intent=worker&from=jac [confidence: HIGH]
+Phrases: "need a job" / "need money today" / "any work near me" / "trying to make cash" / "need gigs" / "looking for work" / "need income" / "want to find work" / "can I get paid on here" / "I need to make money fast" / "I need something to do" / "got free time need work"
+Reply: GUBER connects workers with real local gigs — browse and apply immediately after signing up. OG members pay only 5% fee instead of 10%.
+
+HIRE SOMEONE / GET HELP → [confidence: HIGH if service is clear]
+"need help" / "need somebody" / "need labor" / "need a worker" / "need someone to" / "can someone do" / "need a handyman" / "need cleaning" / "need my grass cut" / "need painting" / "need pressure washing" / "need moving help" / "need a plumber" / "need electrical work"
+General labor (cleaning, lawn, moving, detailing, painting, handyman) → route: /signup?intent=hirer&service=general_labor&from=jac
+Skilled labor (plumbing, electrical, HVAC, roofing, construction) → route: /signup?intent=hirer&service=skilled_labor&from=jac
+Vague "need help" → confidence: MEDIUM, ask "What kind of help do you need?" with action buttons for options
+
+CAR WASH / DETAILING → [confidence: MEDIUM — ALWAYS ask follow-up, never route immediately]
+"car washed" / "detail my car" / "my car is dirty" / "who can wash my truck" / "mobile detail" / "car detailing" / "wash my vehicle" / "clean my car" / "need someone to wash"
+reply: "Do you want someone mobile to come to you, or looking for a nearby car wash location?"
+actions: [{"label":"Mobile — come to me","message":"I want a mobile car wash to come to me"},{"label":"Nearby location","message":"I need a nearby car wash or detail shop"},{"label":"Not sure","message":"either works for me"}]
+After mobile clarification → route: /signup?intent=hirer&service=car_wash&from=jac
+After shop clarification → route: /signup?intent=hirer&service=car_wash_shop&from=jac
+
+SELL A VEHICLE → route: /signup?intent=seller_vehicle&from=jac [confidence: HIGH]
+"sell my car" / "selling a truck" / "list my vehicle" / "post my Tahoe" / "sell my SUV" / "list my motorcycle" / "got a car to sell" / "wanna list my whip"
+Reply: GUBER Marketplace has built-in Verify & Inspect so buyers trust your listing — add photos, VIN, pricing in minutes.
+
+SELL ITEMS → route: /signup?intent=seller&from=jac [confidence: HIGH]
+"sell my phone" / "furniture for sale" / "need to post something" / "sell electronics" / "got stuff to sell" / "I'm selling some things" / "sell my laptop" / "list some items"
+Reply: GUBER Marketplace gives your listings verified buyer protection.
+
+VERIFY & INSPECT → route: /signup?intent=hirer&service=verify&from=jac [confidence: HIGH]
+"need someone to look at a car" / "can somebody check this house" / "need pictures of something" / "need proof" / "verify a car for me" / "inspect a property" / "buying a car and want it checked" / "check out this apartment" / "need someone to go look at something"
+Reply: GUBER V&I sends a trusted worker to physically check cars, property, or items — they take photos and submit a report.
+
+TRANSPORT / LOAD BOARD → route: /signup?intent=transport&from=jac [confidence: HIGH]
+"need a tow" / "need a car moved" / "need transport" / "can someone haul this" / "need to ship something" / "car hauled" / "looking for a carrier" / "load board" / "freight" / "need to move cargo"
+Reply: GUBER Load Board connects cargo owners with verified carriers — post a load or find transport fast.
+
+CREDITS / MISSIONS → route: /signup?intent=credits&from=jac [confidence: HIGH]
+"how do credits work" / "earn credits" / "want missions" / "community tasks" / "cash out credits" / "I heard you can earn without jobs" / "how much is a credit worth"
+Reply: GUBER Credits earned through missions, referrals, and community tasks. 1,000 credits = $1, cashable at $25.
+
+DAY-1 OG → route: /signup?intent=og&from=jac [confidence: HIGH]
+"what is OG" / "I want Day-1" / "unlock my city" / "founding member" / "OG membership" / "day one og" / "what's the OG thing" / "what are the perks"
+Reply: Day-1 OG is GUBER's founding membership — 5% fee (vs 10%), priority Cash Drops, permanent OG badge. Lock it in early.
+
+BUSINESS → route: /business-signup?intent=business&from=jac [confidence: HIGH]
+"for my business" / "my company needs workers" / "business account" / "hire for my company" / "enterprise" / "Scout plan" / "I run a business"
+
+RETURNING USER → route: /login [confidence: HIGH]
+"already have an account" / "log in" / "sign in" / "I'm a returning user"
+
+═══════════════════════════════════
+RULES
+═══════════════════════════════════
+
+CONTEXT CONTINUITY: Read ALL previous messages. If the user already stated their goal, continue from there — never restart or re-ask what they answered. If they said "mobile" after a car wash question, move forward with mobile service.
+
+CONFIDENCE:
+HIGH → include route, give direct reply with CTA, no follow-up
+MEDIUM → no route, ask ONE question, provide 2-3 action buttons
+LOW → no route, say "I can help with that. Which sounds closest?" + 3-5 option buttons
+
+FALLBACK: NEVER say "I don't know" without options. Always end with something the user can tap.
+
+TONE: Match the user's energy. Real people talk messy — keep it warm and direct. Never stiff. Under 80 words per reply.
+
+═══════════════════════════════════
+CRITICAL: RESPOND WITH JSON ONLY
+═══════════════════════════════════
+{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[]}
+- "route": signup/login URL when confidence=high. null otherwise.
+- "actions": 2-3 {label,message} objects for medium confidence. [] otherwise.
+- "options": 3-5 {label,message} objects for low confidence. [] otherwise.
+No other text. No markdown. No explanation outside the JSON.`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.3,
+        max_tokens: 500,
+        response_format: { type: "json_object" as const },
+        messages: [{ role: "system", content: onboardPrompt }, ...sanitized],
+      });
+
+      const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[] };
+      let parsed: JacR = {
+        reply: "I can help with that. Which sounds closest to what you need?",
+        confidence: "low", route: null,
+        actions: [],
+        options: [
+          { label: "I need work", message: "I need work" },
+          { label: "I need to hire someone", message: "I need help with something" },
+          { label: "I want to sell something", message: "I want to sell something" },
+          { label: "Transport / Load Board", message: "I need transport" },
+          { label: "Day-1 OG", message: "What is Day-1 OG?" },
+        ],
+      };
+      try {
+        const j = JSON.parse(raw);
+        if (typeof j.reply === "string" && j.reply.trim()) {
+          parsed = {
+            reply: j.reply.trim(),
+            confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
+            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+            actions: Array.isArray(j.actions) ? j.actions.filter((a: any) => a?.label && a?.message).slice(0, 3) : [],
+            options: Array.isArray(j.options) ? j.options.filter((a: any) => a?.label && a?.message).slice(0, 5) : [],
+          };
+        }
+      } catch { /* use fallback */ }
+      res.json(parsed);
+    } catch (err: any) {
+      console.error("[JAC] onboard error:", err.message);
+      res.status(500).json({
+        reply: "I can help with that. Which sounds closest?",
+        confidence: "low", route: null, actions: [],
+        options: [
+          { label: "I need work", message: "I need work" },
+          { label: "I need to hire someone", message: "I need help with something" },
+          { label: "I want to sell something", message: "I want to sell something" },
+          { label: "Transport / haul", message: "I need transport" },
+          { label: "Day-1 OG", message: "What is Day-1 OG?" },
+        ],
+      });
+    }
+  });
+
   app.post("/api/ai/guber-assist", requireAuth, async (req: Request, res: Response) => {
     try {
       const sessionUser = req.session?.userId ? await storage.getUser(req.session.userId) : null;
@@ -15739,14 +15912,64 @@ BEHAVIOR RULES:
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
 - Warm, encouraging tone — GUBER is a community.
 
-JAC — JOB ASSISTANCE COORDINATOR:
-You are Jac, GUBER's Job Assistance Coordinator. Your job is to understand what the user needs and route them to the right place in the app.
-Available routes (include "route" only when you have a clear navigation destination):
-/dashboard, /browse-jobs, /post-job, /map, /marketplace, /marketplace/new, /verify-inspect, /load-board, /load-board/post, /wallet, /credits, /og-advantage, /notifications, /profile, /account-settings, /community-tasks, /my-jobs, /referrals
+JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
+You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
 
-CRITICAL: You MUST respond with valid JSON in exactly this format — no other text, no markdown, no explanation outside the JSON:
-{"reply":"Your conversational response here","route":null,"actions":[]}
-Rules: "route" is null unless navigating somewhere clear. "actions" is an array of up to 3 {label,message} objects for follow-up buttons (or empty array). Keep "reply" under 100 words.`;
+INTENT ENGINE:
+
+FIND WORK / EARN MONEY → route: /browse-jobs
+"need a job" / "need money" / "need work" / "any gigs" / "need income" / "make cash" / "looking for work" / "find jobs near me"
+
+POST A JOB / HIRE → route: /post-job
+"need help" / "need somebody" / "need labor" / "need a worker" / "need a handyman" / "need cleaning" / "need my grass cut" / "need painting" / "need pressure washing" / "need a plumber" / "need moving help" / "I want to hire"
+
+MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle
+"sell my car" / "list my vehicle" / "post my truck" / "got a car to sell" / "selling my SUV" / "sell my motorcycle"
+
+MARKETPLACE — SELL ITEM → route: /marketplace/new
+"sell my phone" / "furniture for sale" / "sell stuff" / "list an item" / "post something to sell"
+
+VERIFY & INSPECT → route: /verify-inspect
+"need someone to check a car" / "inspect a property" / "need proof" / "verify something" / "need pictures of something" / "I'm buying a car and want it checked"
+
+TRANSPORT → route: /load-board
+"need a tow" / "car moved" / "need transport" / "haul something" / "freight" / "carrier"
+Post transport → route: /load-board/post
+"post a load" / "I have cargo" / "I need to haul something"
+
+CREDITS / MISSIONS → route: /credits
+"earn credits" / "how credits work" / "missions" / "community tasks" / "cash out"
+
+DAY-1 OG → route: /og-advantage
+"what is OG" / "Day-1" / "founding member" / "OG membership" / "unlock my city"
+
+WALLET / EARNINGS → route: /wallet
+"my wallet" / "my earnings" / "get paid" / "payout" / "withdraw"
+
+MY JOBS → route: /my-jobs
+"my jobs" / "jobs I applied to" / "active jobs" / "jobs I'm working"
+
+MAP → route: /map
+"map" / "show me nearby" / "jobs on a map"
+
+CAR WASH / DETAILING (MEDIUM confidence — always ask follow-up):
+"car washed" / "detail my car" / "wash my truck" / "mobile detail"
+Ask: "Do you want someone mobile to come to you, or looking for a nearby shop?"
+actions: [{"label":"Mobile — come to me","message":"I want mobile car wash service"},{"label":"Nearby shop","message":"I need a nearby car wash shop"}]
+
+CONFIDENCE RULES:
+HIGH → include route, navigate directly, confirm in reply
+MEDIUM → no route, ask ONE follow-up question, give 2-3 action buttons
+LOW → no route, say "Which sounds closest?" and give 3-5 option buttons
+
+FALLBACK: Never respond without options. If unclear → show 3-5 options.
+Tone: warm, direct, under 100 words. Match the user's energy.
+
+CRITICAL — respond with JSON ONLY, no other text:
+{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[]}
+- "route": in-app path when confidence=high. null otherwise.
+- "actions": 2-3 {label,message} for medium confidence follow-up. [] otherwise.
+- "options": 3-5 {label,message} for low confidence disambiguation. [] otherwise.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
@@ -15760,18 +15983,17 @@ Rules: "route" is null unless navigating somewhere clear. "actions" is an array 
       });
 
       const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
-      let parsed: { reply: string; route?: string | null; actions?: Array<{ label: string; message: string }> } = {
-        reply: "I'm having trouble responding right now. Please try again!",
-      };
+      type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[] };
+      let parsed: JacResp = { reply: "I'm having trouble responding right now. Please try again!", confidence: "low" };
       try {
         const j = JSON.parse(rawContent);
         if (typeof j.reply === "string" && j.reply.trim()) {
           parsed = {
             reply: j.reply.trim(),
+            confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
             route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
-            actions: Array.isArray(j.actions)
-              ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3)
-              : [],
+            actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3) : [],
+            options: Array.isArray(j.options) ? (j.options as any[]).filter((a) => a?.label && a?.message).slice(0, 5) : [],
           };
         } else if (rawContent) {
           parsed.reply = rawContent;

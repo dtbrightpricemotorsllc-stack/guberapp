@@ -2,129 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "@/components/guber-logo";
-import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, ChevronRight, ArrowRight } from "lucide-react";
+import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, ArrowRight } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 
 interface OnboardingMessage {
   role: "user" | "assistant";
   content: string;
   signupRoute?: string;
-  chips?: string[];
-}
-
-interface IntentResult {
-  reply: string;
-  signupRoute?: string;
-  chips?: string[];
-}
-
-function matchIntent(raw: string): IntentResult {
-  const s = raw.toLowerCase().trim();
-
-  if (/\b(need work|find work|want work|looking for work|get a job|earn money|employment|i need a job|find a job)\b/.test(s)
-    || s === "i need work" || s === "work") {
-    return {
-      reply: "GUBER connects workers with local hirers every day. Sign up as an Individual and start browsing jobs near you right away.",
-      signupRoute: "/signup?intent=worker&from=dd",
-    };
-  }
-
-  if (/\b(need help|hire someone|find someone|need someone|task|errand|chore|handyman|need a worker|get help)\b/.test(s)
-    || s === "i need help" || s === "post a job") {
-    return {
-      reply: "Verified local workers are on standby. Post a job and someone near you will respond fast. Let's create your account.",
-      signupRoute: "/signup?intent=hirer&from=dd",
-    };
-  }
-
-  if (/\b(sell.*car|car.*sell|vehicle|automobile|car.*list|list.*car|my car|used car|list a vehicle)\b/.test(s)
-    || s === "i want to sell my car") {
-    return {
-      reply: "The GUBER Marketplace has built-in Verify & Inspect so buyers trust your listing. Add photos, VIN, and pricing — it takes minutes.",
-      signupRoute: "/signup?intent=seller_vehicle&from=dd",
-    };
-  }
-
-  if (/\b(sell|marketplace|list.*item|item.*sell|phone|electronics|furniture|sell something|selling)\b/.test(s)
-    || s === "i want to sell something") {
-    return {
-      reply: "GUBER Marketplace gives your items verified buyer protection — more trust than generic listings. Let's get you set up.",
-      signupRoute: "/signup?intent=seller&from=dd",
-    };
-  }
-
-  if (/\b(wash|detail|detailing|car.*wash|clean.*car)\b/.test(s)
-    || s === "i need my car washed") {
-    return {
-      reply: "Do you want a mobile worker to come to you, or are you looking for a local car wash shop?",
-      chips: ["Mobile car wash — come to me", "Looking for a local shop", "Either works"],
-    };
-  }
-
-  if (/\b(mobile.*wash|come to me|mobile detail)\b/.test(s)) {
-    return {
-      reply: "Perfect. You'll post a General Labor job for on-demand car washing. Sign up and GUBER routes you there.",
-      signupRoute: "/signup?intent=hirer&service=car_wash&from=dd",
-    };
-  }
-
-  if (/\b(local shop|local car wash|shop)\b/.test(s)) {
-    return {
-      reply: "Got it — GUBER's map shows verified local businesses. Sign up to browse the area and leave reviews.",
-      signupRoute: "/signup?intent=hirer&from=dd",
-    };
-  }
-
-  if (/\b(verify|inspect|inspection|check.*car|check.*item|check.*property|someone.*check|v&i)\b/.test(s)
-    || s === "i need something verified") {
-    return {
-      reply: "GUBER's Verify & Inspect sends a trusted worker to physically check cars, property, or marketplace items on your behalf. Quick, affordable, reliable.",
-      signupRoute: "/signup?intent=hirer&service=verify&from=dd",
-    };
-  }
-
-  if (/\b(transport|tow|haul|move.*stuff|load.*board|freight|truck|cargo|shipping|need transport|load board)\b/.test(s)
-    || s === "i need transport") {
-    return {
-      reply: "GUBER's Load Board connects cargo owners with verified carriers. Post a load or find transport fast.",
-      signupRoute: "/signup?intent=transport&from=dd",
-    };
-  }
-
-  if (/\b(credit|earn credit|earn.*reward|points|cash out|missions|community task)\b/.test(s)
-    || s === "i want to earn credits") {
-    return {
-      reply: "GUBER Credits are earned by completing local missions, referring friends, and supporting the community. 1,000 credits = $1 — cashable once you hit $25.",
-      signupRoute: "/signup?intent=credits&from=dd",
-    };
-  }
-
-  if (/\b(day.?1|og\b|founding|original|membership|upgrade|og member)\b/.test(s)
-    || s === "i want day-1 og" || s === "i want day-1 og membership") {
-    return {
-      reply: "Day-1 OG is GUBER's founding membership. You get a 5% platform fee instead of 10%, priority Cash Drop access, and a permanent OG badge. Lock it in early.",
-      signupRoute: "/signup?intent=og&from=dd",
-    };
-  }
-
-  if (/\b(business|company|employer|biz\b|enterprise|startup|for my business)\b/.test(s)) {
-    return {
-      reply: "GUBER Business gives companies dedicated hiring tools, team management, Scout plans, and verified worker access at scale.",
-      signupRoute: "/business-signup?intent=business&from=dd",
-    };
-  }
-
-  if (/\b(already.*account|have account|log in|login|sign in|returning)\b/.test(s)) {
-    return {
-      reply: "Welcome back! Head straight to login.",
-      signupRoute: "/login",
-    };
-  }
-
-  return {
-    reply: "GUBER connects people who need things done with people who can do them — locally and on demand. What are you trying to accomplish?",
-    chips: ["I need work", "I need help", "I want to sell something", "I want Day-1 OG"],
-  };
+  buttons?: Array<{ label: string; message: string }>;
 }
 
 const QUICK_OPTIONS = [
@@ -139,7 +24,7 @@ const QUICK_OPTIONS = [
   "I want Day-1 OG",
 ];
 
-const DD_GREETING: OnboardingMessage = {
+const JAC_GREETING: OnboardingMessage = {
   role: "assistant",
   content: "Welcome to GUBER — the Land of Opportunities. Tell Jac what you're trying to do and I'll point you exactly where you need to go.",
 };
@@ -150,7 +35,7 @@ export default function GetStarted() {
 
   useEffect(() => { if (user) navigate("/"); }, [user, navigate]);
 
-  const [messages, setMessages] = useState<OnboardingMessage[]>([DD_GREETING]);
+  const [messages, setMessages] = useState<OnboardingMessage[]>([JAC_GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -164,9 +49,8 @@ export default function GetStarted() {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }, [messages, typing]);
 
-  // Speak the greeting on first load
   useEffect(() => {
-    setTimeout(() => speak(DD_GREETING.content), 600);
+    setTimeout(() => speak(JAC_GREETING.content), 600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -175,23 +59,52 @@ export default function GetStarted() {
     if (!trimmed || typing) return;
 
     const userMsg: OnboardingMessage = { role: "user", content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setInput("");
     setTyping(true);
     cancelSpeech();
 
-    setTimeout(() => {
-      const result = matchIntent(trimmed);
-      const assistantMsg: OnboardingMessage = {
-        role: "assistant",
-        content: result.reply,
-        signupRoute: result.signupRoute,
-        chips: result.chips,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-      setTyping(false);
-      setTimeout(() => speak(result.reply), 100);
-    }, 700 + Math.random() * 300);
+    (async () => {
+      try {
+        const res = await fetch("/api/jac/onboard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+          }),
+        });
+        const data = await res.json();
+        const assistantMsg: OnboardingMessage = {
+          role: "assistant",
+          content: data.reply || "I can help with that. Which sounds closest to what you need?",
+          signupRoute: typeof data.route === "string" && data.route ? data.route : undefined,
+          buttons: [
+            ...(Array.isArray(data.actions) ? data.actions : []),
+            ...(Array.isArray(data.options) ? data.options : []),
+          ].filter((b: any) => b?.label && b?.message).slice(0, 5),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        if (!muted) speak(assistantMsg.content);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "I can help with that. Which sounds closest to what you need?",
+            buttons: [
+              { label: "I need work", message: "I need work" },
+              { label: "I need to hire someone", message: "I need help with something" },
+              { label: "I want to sell something", message: "I want to sell something" },
+              { label: "Earn credits / missions", message: "I want to earn credits" },
+              { label: "Day-1 OG", message: "What is Day-1 OG?" },
+            ],
+          },
+        ]);
+      } finally {
+        setTyping(false);
+      }
+    })();
   }
 
   function handleSend() { processInput(input); }
@@ -315,22 +228,22 @@ export default function GetStarted() {
                 </button>
               )}
 
-              {/* Follow-up chips */}
-              {msg.role === "assistant" && msg.chips && msg.chips.length > 0 && (
+              {/* Follow-up / disambiguation buttons */}
+              {msg.role === "assistant" && msg.buttons && msg.buttons.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {msg.chips.map((chip) => (
+                  {msg.buttons.map((btn) => (
                     <button
-                      key={chip}
-                      onClick={() => handleChip(chip)}
+                      key={btn.label}
+                      onClick={() => handleChip(btn.message)}
                       className="rounded-2xl px-3 py-1.5 text-xs font-display font-semibold transition-all active:scale-95"
                       style={{
                         background: "rgba(255,255,255,0.05)",
                         border: "1px solid rgba(255,255,255,0.12)",
                         color: "rgba(255,255,255,0.8)",
                       }}
-                      data-testid={`chip-followup-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                      data-testid={`chip-followup-${btn.label.toLowerCase().replace(/\s+/g, "-")}`}
                     >
-                      {chip}
+                      {btn.label}
                     </button>
                   ))}
                 </div>
