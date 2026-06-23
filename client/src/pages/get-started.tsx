@@ -2,8 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "@/components/guber-logo";
-import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, ArrowRight } from "lucide-react";
+import { Send, Mic, MicOff, Volume2, VolumeX, ArrowRight } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
+import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
+import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 
 interface OnboardingMessage {
   role: "user" | "assistant";
@@ -137,13 +139,10 @@ export default function GetStarted() {
         style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
         <div className="flex items-center gap-2.5">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{
-              background: "linear-gradient(135deg, hsl(270 100% 65% / 0.22), hsl(152 100% 44% / 0.18))",
-              border: "1px solid hsl(270 100% 65% / 0.3)",
-            }}
+            className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0"
+            style={{ border: "1.5px solid hsl(270 100% 65% / 0.45)" }}
           >
-            <Sparkles className="w-4 h-4" style={{ color: "hsl(270 100% 75%)" }} />
+            <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
           </div>
           <div>
             <p className="text-[11px] font-display font-black tracking-widest text-white uppercase leading-none">Jac</p>
@@ -169,12 +168,20 @@ export default function GetStarted() {
         </div>
       </header>
 
-      {/* ── Title ── */}
-      <div className="relative z-10 px-5 pt-5 pb-2">
-        <h1 className="font-display font-black text-2xl text-white tracking-tight leading-tight">
-          Welcome to GUBER
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">Tell Jac what you're trying to do.</p>
+      {/* ── Title + Jac hero ── */}
+      <div className="relative z-10 px-5 pt-4 pb-0 flex items-end justify-between overflow-hidden">
+        <div className="pb-2">
+          <h1 className="font-display font-black text-2xl text-white tracking-tight leading-tight">
+            Welcome to GUBER
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Tell Jac what you need.</p>
+        </div>
+        <img
+          src={jacFull}
+          alt="Jac"
+          className="h-[140px] w-auto object-contain object-bottom flex-shrink-0 -mb-1"
+          style={{ filter: "drop-shadow(0 4px 24px hsl(270 100% 65% / 0.35))" }}
+        />
       </div>
 
       {/* ── Chat area ── */}
@@ -187,13 +194,10 @@ export default function GetStarted() {
           >
             {msg.role === "assistant" && (
               <div
-                className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                style={{
-                  background: "linear-gradient(135deg, hsl(270 100% 65% / 0.22), hsl(152 100% 44% / 0.18))",
-                  border: "1px solid hsl(270 100% 65% / 0.3)",
-                }}
+                className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 mt-0.5"
+                style={{ border: "1px solid hsl(270 100% 65% / 0.4)" }}
               >
-                <Sparkles className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 75%)" }} />
+                <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
               </div>
             )}
             <div className="max-w-[82%] space-y-2 flex flex-col">
@@ -256,13 +260,10 @@ export default function GetStarted() {
         {typing && (
           <div className="flex gap-2.5 justify-start" data-testid="onboarding-typing">
             <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{
-                background: "linear-gradient(135deg, hsl(270 100% 65% / 0.22), hsl(152 100% 44% / 0.18))",
-                border: "1px solid hsl(270 100% 65% / 0.3)",
-              }}
+              className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0"
+              style={{ border: "1px solid hsl(270 100% 65% / 0.4)" }}
             >
-              <Sparkles className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 75%)" }} />
+              <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
             </div>
             <div
               className="px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1.5"

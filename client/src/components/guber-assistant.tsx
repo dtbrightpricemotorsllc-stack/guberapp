@@ -6,9 +6,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Send, Loader2, Sparkles, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation,
+  Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
+import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 interface Message {
   role: "user" | "assistant";
@@ -83,13 +84,10 @@ export function GUBERAssistantHeaderButton() {
       data-testid="button-guber-assistant"
     >
       <span
-        className="w-8 h-8 rounded-full flex items-center justify-center"
-        style={{
-          background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
-          boxShadow: "0 2px 10px hsl(270 100% 65% / 0.45), 0 1px 4px rgba(0,0,0,0.35)",
-        }}
+        className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0"
+        style={{ boxShadow: "0 2px 10px hsl(270 100% 65% / 0.45), 0 1px 4px rgba(0,0,0,0.35)" }}
       >
-        <Sparkles className="w-[15px] h-[15px] text-black" strokeWidth={2.5} />
+        <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
       </span>
       {showBadge && (
         <span
@@ -114,17 +112,17 @@ export function DDFloatingButton() {
     <button
       type="button"
       onClick={() => { markSeen(); patchStore({ open: true }); }}
-      className="fixed z-[150] w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
+      className="fixed z-[150] w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
       style={{
         bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
         right: "16px",
-        background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))",
-        boxShadow: "0 4px 24px hsl(270 100% 65% / 0.50), 0 2px 8px rgba(0,0,0,0.55)",
+        boxShadow: "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
+        border: "2px solid hsl(270 100% 65% / 0.6)",
       }}
       data-testid="button-dd-floating"
       aria-label="Open Jac"
     >
-      <Sparkles className="w-6 h-6 text-black" strokeWidth={2.5} />
+      <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
     </button>
   );
 }
@@ -230,13 +228,10 @@ export function GUBERAssistant() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div
-                className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{
-                  background: "linear-gradient(135deg, hsl(270 100% 65% / 0.25), hsl(152 100% 44% / 0.2))",
-                  border: "1px solid hsl(270 100% 65% / 0.35)",
-                }}
+                className="w-10 h-10 rounded-2xl overflow-hidden flex-shrink-0"
+                style={{ border: "1.5px solid hsl(270 100% 65% / 0.4)" }}
               >
-                <Sparkles className="w-4.5 h-4.5" style={{ color: "hsl(270 100% 75%)" }} />
+                <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
               </div>
               <div>
                 <SheetTitle className="text-left text-base font-display font-black text-white tracking-tight">
@@ -288,13 +283,10 @@ export function GUBERAssistant() {
             >
               {msg.role === "assistant" && (
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{
-                    background: "linear-gradient(135deg, hsl(270 100% 65% / 0.2), hsl(152 100% 44% / 0.2))",
-                    border: "1px solid hsl(270 100% 65% / 0.3)",
-                  }}
+                  className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 mt-0.5"
+                  style={{ border: "1px solid hsl(270 100% 65% / 0.35)" }}
                 >
-                  <Sparkles className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 75%)" }} />
+                  <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
                 </div>
               )}
               <div className={`max-w-[80%] space-y-1.5 ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
@@ -358,13 +350,10 @@ export function GUBERAssistant() {
           {sendMutation.isPending && (
             <div className="flex gap-2 justify-start" data-testid="assistant-typing">
               <div
-                className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{
-                  background: "linear-gradient(135deg, hsl(270 100% 65% / 0.2), hsl(152 100% 44% / 0.2))",
-                  border: "1px solid hsl(270 100% 65% / 0.3)",
-                }}
+                className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0"
+                style={{ border: "1px solid hsl(270 100% 65% / 0.35)" }}
               >
-                <Sparkles className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 75%)" }} />
+                <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
               </div>
               <div
                 className="px-3.5 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1.5"
