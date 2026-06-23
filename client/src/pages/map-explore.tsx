@@ -140,11 +140,11 @@ function makeWorkerDroneSvg(): string {
 
 function makeMissionSvg(emoji: string): string {
   const size = 44;
-  const label = encodeURIComponent(emoji || "⚡");
+  const safe = (emoji || "⚡").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 8}" viewBox="0 0 ${size} ${size + 8}">
       <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="#7c3aed" stroke="#ffffff" stroke-width="2.5"/>
-      <text x="${size/2}" y="${size/2}" text-anchor="middle" dominant-baseline="central" font-size="20">${label}</text>
+      <text x="${size/2}" y="${size/2}" text-anchor="middle" dominant-baseline="central" font-size="20">${safe}</text>
       <polygon points="${size/2 - 6},${size - 2} ${size/2 + 6},${size - 2} ${size/2},${size + 8}" fill="#7c3aed"/>
     </svg>`
   );
@@ -481,13 +481,14 @@ export default function MapExplore() {
     missionMarkersRef.current.forEach((m) => m.setMap(null));
     missionMarkersRef.current = [];
     if (!mapReady || !mapRef.current || !g) return;
-    if (mapViewMode !== "jobs" || !userPos || missions.length === 0) return;
+    const missionBase = userPos || jumpCenter;
+    if (mapViewMode !== "jobs" || !missionBase || missions.length === 0) return;
 
     missions.slice(0, 5).forEach((mission, i) => {
       const angle = (i * 137.5 * Math.PI) / 180;
       const radius = 0.018 + (i % 3) * 0.01;
-      const lat = userPos.lat + Math.sin(angle) * radius;
-      const lng = userPos.lng + Math.cos(angle) * radius;
+      const lat = missionBase.lat + Math.sin(angle) * radius;
+      const lng = missionBase.lng + Math.cos(angle) * radius;
       const svgUrl = makeMissionSvg(mission.emoji);
       const marker = new g.Marker({
         position: { lat, lng },
@@ -499,7 +500,7 @@ export default function MapExplore() {
       marker.addListener("click", () => setBottomOpen(true));
       missionMarkersRef.current.push(marker);
     });
-  }, [mapReady, missions, userPos, mapViewMode]);
+  }, [mapReady, missions, userPos, jumpCenter, mapViewMode]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
