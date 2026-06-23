@@ -141,6 +141,8 @@ export async function createProtectedAsset(input: {
   geofenceLat?: number | null;
   geofenceLng?: number | null;
   geofenceRadiusMeters?: number | null;
+  witnessAddon?: boolean;
+  packageTier?: string;
 }): Promise<ProtectedAsset> {
   const [row] = await db
     .insert(protectedAssets)
@@ -159,6 +161,8 @@ export async function createProtectedAsset(input: {
       geofenceLng: input.geofenceLng ?? null,
       geofenceRadiusMeters: input.geofenceRadiusMeters ?? 250,
       status: "pending",
+      ...(input.witnessAddon !== undefined ? { witnessAddon: input.witnessAddon } : {}),
+      ...(input.packageTier !== undefined ? { packageTier: input.packageTier } : {}),
     } as any)
     .returning();
   // Owner role + opening custody event (append-only).

@@ -138,6 +138,7 @@ async function makeUser(id: number, over: Record<string, unknown> = {}) {
 async function makeAsset(opts: {
   estimatedValue?: number | null;
   carrier?: boolean;
+  witnessAddon?: boolean;
 } = {}): Promise<number> {
   const asset = await assetCustody.createProtectedAsset({
     ownerId: OWNER_ID,
@@ -147,6 +148,7 @@ async function makeAsset(opts: {
     make: "Honda",
     model: "Civic",
     estimatedValue: opts.estimatedValue ?? 12000,
+    witnessAddon: opts.witnessAddon,
   });
   if (opts.carrier) await assetCustody.assignRole(asset.id, CARRIER_ID, "carrier");
   createdAssetIds.push(asset.id);
@@ -314,7 +316,7 @@ describe("Verified Release System™ — lifecycle transitions", () => {
 
 describe("Verified Release System™ — witness payout idempotency", () => {
   async function setupAcceptedAssignment(): Promise<{ assetId: number; assignmentId: number }> {
-    const assetId = await makeAsset();
+    const assetId = await makeAsset({ witnessAddon: true });
     // Owner requests a witness; witness accepts; then files a report → payout.
     const assignment = await assetCustody.requestWitness({
       assetId,

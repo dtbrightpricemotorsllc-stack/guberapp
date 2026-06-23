@@ -933,6 +933,21 @@ app.use((req, res, next) => {
   seedBarterChecklists().catch(e => console.error("[seed] Barter checklists seed error:", e));
   reseedOnlineItemsSituations().catch(e => console.error("[seed] Online Items reseed error:", e));
   seedPlatformSettings().catch(e => console.error("[seed] Platform settings seed error:", e));
+
+  pool.query(`
+    INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES
+      ('listing_video', 'Listing Video',
+       'Property or product listing walkthrough video (35 cr).',
+       'composite:listing_video', 35, true),
+      ('promo_clip', 'Promo Clip',
+       'Short promotional video clip for any business type (35 cr).',
+       'composite:promo_clip', 35, true),
+      ('ai_director', 'AI Director',
+       'Automated commercial director — script → clips → assembled ad (200–2240 cr based on duration).',
+       'composite:ai_director', 200, true)
+    ON CONFLICT (tool_key) DO NOTHING
+  `).catch(e => console.error("[seed] Studio model pricing seed error:", e));
+
   seedDemoAccounts().then(() => invalidateDemoIdCache()).catch(e => console.error("[seed] Demo accounts seed error:", e));
   seedMarketplaceSamples().catch(e => console.error("[seed] Marketplace samples seed error:", e));
   pool.query("UPDATE jobs SET status = 'posted_public' WHERE status = 'open'").then((r: any) => {
