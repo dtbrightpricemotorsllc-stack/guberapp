@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatJobTime } from "@/lib/job-time";
-import { shouldShowAlertPrompt } from "@/components/alert-prompt-modal";
+import { shouldShowAlertPrompt, setAlertStatus } from "@/components/alert-prompt-modal";
 import { subscribeToPush } from "@/lib/push";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import type { Job, ServiceType } from "@shared/schema";
@@ -82,6 +82,7 @@ export default function BrowseJobs() {
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [selectedPin, setSelectedPin] = useState<JobPin | null>(null);
   const [alertsJustEnabled, setAlertsJustEnabled] = useState(false);
+  const [pendingAlerts, setPendingAlerts] = useState(false);
 
   const alertsOff = !alertsJustEnabled && shouldShowAlertPrompt();
   const availableOff = !(user as any)?.isAvailable;
@@ -112,11 +113,23 @@ export default function BrowseJobs() {
   });
 
   const handleEnableAlerts = async () => {
-    if (!user?.id) return;
-    // Use the boolean return from subscribeToPush — getPushStatus() always
-    // returns "default" on native and would never trigger the success state.
-    const granted = await subscribeToPush(user.id);
-    if (granted) setAlertsJustEnabled(true);
+    if (!user?.id || pendingAlerts) return;
+    setPendingAlerts(true);
+    try {
+      const granted = await subscribeToPush(user.id, { promptIfNeeded: true });
+      if (granted) {
+        setAlertStatus("granted");
+        setAlertsJustEnabled(true);
+      } else {
+        toast({
+          title: "Notifications blocked",
+          description: "Open your phone's Settings → Apps → GUBER → Notifications and turn them on.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setPendingAlerts(false);
+    }
   };
 
   const { data: jobs, isLoading } = useQuery<Job[]>({
@@ -384,9 +397,10 @@ export default function BrowseJobs() {
                     <Button
                       className="w-full max-w-xs gap-2 premium-btn rounded-xl font-display tracking-wider text-xs h-11"
                       onClick={handleEnableAlerts}
+                      disabled={pendingAlerts}
                       data-testid="button-turn-on-alerts"
                     >
-                      TURN ON ALERTS
+                      {pendingAlerts ? "Enabling…" : "TURN ON ALERTS"}
                     </Button>
                   )}
                   {availableOff && (
