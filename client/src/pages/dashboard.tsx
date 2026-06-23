@@ -284,7 +284,7 @@ function HostDropCta({ testIdSuffix }: { testIdSuffix: string }) {
 function DDMissedSection() {
   const [visible, setVisible] = useState(() => {
     try {
-      const until = parseInt(localStorage.getItem("dd_missed_until") || "0", 10);
+      const until = parseInt(localStorage.getItem("jac_missed_until") || "0", 10);
       return Date.now() > until;
     } catch { return true; }
   });
@@ -298,11 +298,11 @@ function DDMissedSection() {
     <DDMissedCard
       items={items}
       onDismiss={() => {
-        try { localStorage.setItem("dd_missed_until", String(Date.now() + 24 * 60 * 60 * 1000)); } catch {}
+        try { localStorage.setItem("jac_missed_until", String(Date.now() + 24 * 60 * 60 * 1000)); } catch {}
         setVisible(false);
       }}
       onRemindLater={() => {
-        try { localStorage.setItem("dd_missed_until", String(Date.now() + 4 * 60 * 60 * 1000)); } catch {}
+        try { localStorage.setItem("jac_missed_until", String(Date.now() + 4 * 60 * 60 * 1000)); } catch {}
         setVisible(false);
       }}
     />
@@ -806,7 +806,7 @@ export default function Dashboard() {
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
 
-        {/* ── D.D. "What You Missed" ── */}
+        {/* ── Jac "What You Missed" ── */}
         <DDMissedSection />
 
         {/* ── Activate Your City (shown post-tour OR when local grid is dark, auto-dismisses after 5s) ── */}

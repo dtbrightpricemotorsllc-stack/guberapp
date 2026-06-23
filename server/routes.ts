@@ -15739,8 +15739,8 @@ BEHAVIOR RULES:
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
 - Warm, encouraging tone — GUBER is a community.
 
-D.D. — DESTINATION DETERMINATION:
-You are D.D., GUBER's Destination Determination guide. Your job is to understand what the user needs and route them to the right place in the app.
+JAC — JOB ASSISTANCE COORDINATOR:
+You are Jac, GUBER's Job Assistance Coordinator. Your job is to understand what the user needs and route them to the right place in the app.
 Available routes (include "route" only when you have a clear navigation destination):
 /dashboard, /browse-jobs, /post-job, /map, /marketplace, /marketplace/new, /verify-inspect, /load-board, /load-board/post, /wallet, /credits, /og-advantage, /notifications, /profile, /account-settings, /community-tasks, /my-jobs, /referrals
 
@@ -15786,7 +15786,7 @@ Rules: "route" is null unless navigating somewhere clear. "actions" is an array 
     }
   });
 
-  // ── D.D. "What You Missed" ──────────────────────────────────────────────────
+  // ── Jac "What You Missed" ───────────────────────────────────────────────────
   app.get("/api/dd/missed-items", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session?.userId;

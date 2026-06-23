@@ -18,9 +18,9 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Hey — I'm D.D., your Destination Determination guide. Tell me what you need and I'll take you there. What's on your mind?";
-const SESSION_KEY = "dd_v1_messages";
-const SEEN_KEY = "dd_v1_seen";
+  "Hey — I'm Jac, your Job Assistance Coordinator. Tell me what you need and I'll take you there. What's on your mind?";
+const SESSION_KEY = "jac_v1_messages";
+const SEEN_KEY = "jac_v1_seen";
 
 const INITIAL_CHIPS = [
   "I need work",
@@ -79,7 +79,7 @@ export function GUBERAssistantHeaderButton() {
       type="button"
       onClick={() => { markSeen(); patchStore({ open: true }); }}
       className="relative w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-white/[0.04] active:scale-95"
-      aria-label={showBadge ? "Open D.D. Assistant (saved conversation)" : "Open D.D. Assistant"}
+      aria-label={showBadge ? "Open Jac (saved conversation)" : "Open Jac"}
       data-testid="button-guber-assistant"
     >
       <span
@@ -106,7 +106,7 @@ export function GUBERAssistantHeaderButton() {
   );
 }
 
-// ── Floating D.D. bubble (FAB, rendered in guber-layout) ─────────────────────
+// ── Floating Jac bubble (FAB, rendered in guber-layout) ─────────────────────
 export function DDFloatingButton() {
   const s = useAssistantStore();
   if (s.open) return null;
@@ -122,14 +122,14 @@ export function DDFloatingButton() {
         boxShadow: "0 4px 24px hsl(270 100% 65% / 0.50), 0 2px 8px rgba(0,0,0,0.55)",
       }}
       data-testid="button-dd-floating"
-      aria-label="Open D.D. Assistant"
+      aria-label="Open Jac"
     >
       <Sparkles className="w-6 h-6 text-black" strokeWidth={2.5} />
     </button>
   );
 }
 
-// ── Main D.D. Sheet ──────────────────────────────────────────────────────────
+// ── Main Jac Sheet ──────────────────────────────────────────────────────────
 export function GUBERAssistant() {
   const s = useAssistantStore();
   const [, navigate] = useLocation();
@@ -237,10 +237,10 @@ export function GUBERAssistant() {
               </div>
               <div>
                 <SheetTitle className="text-left text-base font-display font-black text-white tracking-tight">
-                  D.D.
+                  Jac
                 </SheetTitle>
                 <p className="text-[10px] text-muted-foreground font-display tracking-wider">
-                  Destination Determination
+                  Job Assistance Coordinator
                 </p>
               </div>
             </div>
@@ -251,7 +251,7 @@ export function GUBERAssistant() {
                   className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
                   style={{ background: "rgba(255,255,255,0.04)" }}
                   data-testid="button-dd-mute"
-                  aria-label={muted ? "Unmute D.D." : "Mute D.D."}
+                  aria-label={muted ? "Unmute Jac" : "Mute Jac"}
                 >
                   {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                 </button>
@@ -264,7 +264,7 @@ export function GUBERAssistant() {
                 className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
                 style={{ background: "rgba(255,255,255,0.04)" }}
                 data-testid="button-dd-close"
-                aria-label="Close D.D."
+                aria-label="Close Jac"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -368,7 +368,7 @@ export function GUBERAssistant() {
                 style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}
               >
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">D.D. is thinking…</span>
+                <span className="text-xs text-muted-foreground">Jac is thinking…</span>
               </div>
             </div>
           )}
@@ -413,7 +413,7 @@ export function GUBERAssistant() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Tell D.D. what you need…"
+              placeholder="Tell Jac what you need…"
               className="flex-1 bg-transparent border-0 resize-none text-sm text-white placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[36px] max-h-[120px] py-1.5 px-0"
               rows={1}
               data-testid="input-assistant-message"
@@ -434,7 +434,7 @@ export function GUBERAssistant() {
                   color: listening ? "white" : "hsl(0 0% 45%)",
                 }}
                 data-testid="button-dd-mic"
-                aria-label={listening ? "Stop listening" : "Speak to D.D."}
+                aria-label={listening ? "Stop listening" : "Speak to Jac"}
                 disabled={sendMutation.isPending}
               >
                 {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
@@ -460,7 +460,7 @@ export function GUBERAssistant() {
             </Button>
           </div>
           <p className="text-center text-[10px] text-muted-foreground/40 mt-2 font-display tracking-wider">
-            D.D. · Destination Determination
+            Jac · Job Assistance Coordinator
           </p>
         </div>
       </SheetContent>

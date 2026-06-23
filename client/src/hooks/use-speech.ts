@@ -48,7 +48,7 @@ export function useSpeechInput(onResult: (text: string) => void) {
 
 export function useSpeechOutput() {
   const [muted, setMuted] = useState(() => {
-    try { return localStorage.getItem("dd_muted") === "1"; } catch { return false; }
+    try { return localStorage.getItem("jac_muted") === "1"; } catch { return false; }
   });
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
@@ -72,7 +72,7 @@ export function useSpeechOutput() {
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
       const next = !prev;
-      try { localStorage.setItem("dd_muted", next ? "1" : "0"); } catch {}
+      try { localStorage.setItem("jac_muted", next ? "1" : "0"); } catch {}
       if (next) try { window.speechSynthesis?.cancel(); } catch {}
       return next;
     });

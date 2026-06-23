@@ -43,7 +43,7 @@ export function DDMissedCard({ items, onDismiss, onRemindLater }: Props) {
       <div>
         <p className="text-[10px] font-display font-bold tracking-widest uppercase mb-0.5"
            style={{ color: "hsl(270 100% 75%)" }}>
-          D.D. · Welcome Back
+          Jac · Welcome Back
         </p>
         <p className="text-sm font-display font-bold text-white">Here's what you missed.</p>
       </div>

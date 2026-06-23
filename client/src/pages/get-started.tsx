@@ -141,7 +141,7 @@ const QUICK_OPTIONS = [
 
 const DD_GREETING: OnboardingMessage = {
   role: "assistant",
-  content: "Welcome to GUBER — the Land of Opportunities. Tell D.D. what you're trying to do and I'll point you exactly where you need to go.",
+  content: "Welcome to GUBER — the Land of Opportunities. Tell Jac what you're trying to do and I'll point you exactly where you need to go.",
 };
 
 export default function GetStarted() {
@@ -233,9 +233,9 @@ export default function GetStarted() {
             <Sparkles className="w-4 h-4" style={{ color: "hsl(270 100% 75%)" }} />
           </div>
           <div>
-            <p className="text-[11px] font-display font-black tracking-widest text-white uppercase leading-none">D.D.</p>
+            <p className="text-[11px] font-display font-black tracking-widest text-white uppercase leading-none">Jac</p>
             <p className="text-[9px] text-muted-foreground font-display tracking-wider leading-none mt-0.5">
-              Destination Determination
+              Job Assistance Coordinator
             </p>
           </div>
         </div>
@@ -247,7 +247,7 @@ export default function GetStarted() {
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
               style={{ background: "rgba(255,255,255,0.04)" }}
               data-testid="button-onboarding-mute"
-              aria-label={muted ? "Unmute D.D." : "Mute D.D."}
+              aria-label={muted ? "Unmute Jac" : "Mute Jac"}
             >
               {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
             </button>
@@ -261,7 +261,7 @@ export default function GetStarted() {
         <h1 className="font-display font-black text-2xl text-white tracking-tight leading-tight">
           Welcome to GUBER
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">Tell D.D. what you're trying to do.</p>
+        <p className="text-sm text-muted-foreground mt-1">Tell Jac what you're trying to do.</p>
       </div>
 
       {/* ── Chat area ── */}
@@ -400,7 +400,7 @@ export default function GetStarted() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            placeholder="Tell D.D. what you need…"
+            placeholder="Tell Jac what you need…"
             className="flex-1 bg-transparent border-0 resize-none text-sm text-white placeholder:text-muted-foreground outline-none min-h-[36px] max-h-[100px] py-1.5 px-0 leading-relaxed"
             rows={1}
             data-testid="input-dd-onboarding"
