@@ -15630,8 +15630,8 @@ Input body: ${JSON.stringify((body || "").trim())}`;
   app.post("/api/ai/guber-assist", requireAuth, async (req: Request, res: Response) => {
     try {
       const sessionUser = req.session?.userId ? await storage.getUser(req.session.userId) : null;
-      if (!sessionUser || sessionUser.role === "business") {
-        return res.status(403).json({ message: "GUBER Assistant is only available to consumer accounts." });
+      if (!sessionUser) {
+        return res.status(403).json({ message: "Session expired. Please log in." });
       }
 
       const { messages } = req.body;
@@ -15737,23 +15737,219 @@ BEHAVIOR RULES:
 - Be friendly, concise, under 120 words unless truly needed.
 - Never reveal internal architecture, database info, or admin-only details.
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
-- Warm, encouraging tone — GUBER is a community.`;
+- Warm, encouraging tone — GUBER is a community.
+
+D.D. — DESTINATION DETERMINATION:
+You are D.D., GUBER's Destination Determination guide. Your job is to understand what the user needs and route them to the right place in the app.
+Available routes (include "route" only when you have a clear navigation destination):
+/dashboard, /browse-jobs, /post-job, /map, /marketplace, /marketplace/new, /verify-inspect, /load-board, /load-board/post, /wallet, /credits, /og-advantage, /notifications, /profile, /account-settings, /community-tasks, /my-jobs, /referrals
+
+CRITICAL: You MUST respond with valid JSON in exactly this format — no other text, no markdown, no explanation outside the JSON:
+{"reply":"Your conversational response here","route":null,"actions":[]}
+Rules: "route" is null unless navigating somewhere clear. "actions" is an array of up to 3 {label,message} objects for follow-up buttons (or empty array). Keep "reply" under 100 words.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_tokens: 400,
+        max_tokens: 600,
+        response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
           ...sanitized,
         ],
       });
 
-      const reply = completion.choices[0]?.message?.content?.trim() || "I'm having trouble responding right now. Please try again!";
-      res.json({ reply });
+      const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
+      let parsed: { reply: string; route?: string | null; actions?: Array<{ label: string; message: string }> } = {
+        reply: "I'm having trouble responding right now. Please try again!",
+      };
+      try {
+        const j = JSON.parse(rawContent);
+        if (typeof j.reply === "string" && j.reply.trim()) {
+          parsed = {
+            reply: j.reply.trim(),
+            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+            actions: Array.isArray(j.actions)
+              ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3)
+              : [],
+          };
+        } else if (rawContent) {
+          parsed.reply = rawContent;
+        }
+      } catch {
+        if (rawContent) parsed.reply = rawContent;
+      }
+      res.json(parsed);
     } catch (err: any) {
       console.error("[GUBER] guber-assist error:", err.message);
       res.status(500).json({ message: "Assistant unavailable, please try again." });
+    }
+  });
+
+  // ── D.D. "What You Missed" ──────────────────────────────────────────────────
+  app.get("/api/dd/missed-items", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json([]);
+
+      // Gather data in parallel for performance
+      const [userRes, listingRes, pendingJobsRes, missionsRes, referralRes] = await Promise.all([
+        pool.query<{ day1_og: boolean; zip: string | null; id_verified: boolean }>(
+          `SELECT day1_og, zip, id_verified FROM users WHERE id = $1`,
+          [userId]
+        ),
+        pool.query<{ id: number; display_title: string }>(
+          `SELECT id,
+            COALESCE(title,
+              CONCAT(COALESCE(year::text||' ',''), COALESCE(make||' ',''), COALESCE(model,'')),
+              'Your Listing'
+            ) AS display_title
+           FROM marketplace_listings
+           WHERE seller_id = $1
+             AND status NOT IN ('sold', 'removed', 'cancelled', 'hidden')
+             AND (photos IS NULL OR cardinality(photos) = 0)
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId]
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM job_applications ja
+           JOIN jobs j ON j.id = ja.job_id
+           WHERE ja.applicant_id = $1
+             AND ja.status = 'approved'
+             AND j.status NOT IN ('completed', 'cancelled', 'disputed')`,
+          [userId]
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM growth_task_templates
+           WHERE is_active = true AND (paused = false OR paused IS NULL)`,
+          []
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM referral_relationships
+           WHERE referrer_id = $1`,
+          [userId]
+        ).catch(() => ({ rows: [{ count: "0" }] })),
+      ]);
+
+      const u = userRes.rows[0];
+      const nearbyJobsRes = u?.zip
+        ? await pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count
+             FROM jobs
+             WHERE zip = $1
+               AND status = 'open'
+               AND created_at > NOW() - INTERVAL '7 days'
+               AND id NOT IN (
+                 SELECT job_id FROM job_applications WHERE applicant_id = $2
+               )`,
+            [u.zip, userId]
+          ).catch(() => ({ rows: [{ count: "0" }] }))
+        : { rows: [{ count: "0" }] };
+
+      interface MissedItem {
+        id: string;
+        emoji: string;
+        title: string;
+        description: string;
+        action: string;
+        route: string;
+        priority: number;
+      }
+
+      const items: MissedItem[] = [];
+
+      // Unfinished listing (highest signal — user left money on the table)
+      if (listingRes.rows.length > 0) {
+        const t = listingRes.rows[0].display_title?.trim() || "Your listing";
+        items.push({
+          id: "listing",
+          emoji: "📸",
+          title: `${t} is missing photos`,
+          description: "Listings with photos get 5× more views.",
+          action: "Add Photos",
+          route: `/marketplace/${listingRes.rows[0].id}`,
+          priority: 9,
+        });
+      }
+
+      // Pending approved job — worker needs to act
+      const pendingCount = parseInt(pendingJobsRes.rows[0]?.count ?? "0", 10);
+      if (pendingCount > 0) {
+        items.push({
+          id: "pending-jobs",
+          emoji: "⚡",
+          title: `${pendingCount} approved job${pendingCount !== 1 ? "s" : ""} need${pendingCount === 1 ? "s" : ""} your action`,
+          description: "You've been approved — don't leave the hirer waiting.",
+          action: "View Jobs",
+          route: "/my-jobs",
+          priority: 10,
+        });
+      }
+
+      // Nearby new jobs
+      const nearbyCount = parseInt(nearbyJobsRes.rows[0]?.count ?? "0", 10);
+      if (nearbyCount > 0) {
+        items.push({
+          id: "nearby-jobs",
+          emoji: "💼",
+          title: `${nearbyCount} new job${nearbyCount !== 1 ? "s" : ""} posted near you`,
+          description: "Fresh work in your area in the last 7 days.",
+          action: "Browse",
+          route: "/browse-jobs",
+          priority: 8,
+        });
+      }
+
+      // Active missions
+      const missionCount = parseInt(missionsRes.rows[0]?.count ?? "0", 10);
+      if (missionCount > 0) {
+        items.push({
+          id: "missions",
+          emoji: "🗺️",
+          title: `${missionCount} mission${missionCount !== 1 ? "s" : ""} available`,
+          description: "Complete local missions to earn credits.",
+          action: "Show Missions",
+          route: "/community-tasks",
+          priority: 5,
+        });
+      }
+
+      // Day-1 OG upsell (if not OG)
+      if (u && !u.day1_og) {
+        items.push({
+          id: "og",
+          emoji: "👑",
+          title: "Day-1 OG membership is still available",
+          description: "5% platform fee instead of 10% — and a permanent badge.",
+          action: "Learn More",
+          route: "/og-advantage",
+          priority: 3,
+        });
+      }
+
+      // Referral progress (only show when close to 25)
+      const referralCount = parseInt(referralRes.rows[0]?.count ?? "0", 10);
+      const referralsLeft = 25 - referralCount;
+      if (referralsLeft > 0 && referralsLeft <= 15) {
+        items.push({
+          id: "referrals",
+          emoji: "🤝",
+          title: `Invite ${referralsLeft} more friend${referralsLeft !== 1 ? "s" : ""} to unlock cash drops`,
+          description: `You're at ${referralCount}/25 referrals.`,
+          action: "Invite",
+          route: "/og-advantage",
+          priority: 4,
+        });
+      }
+
+      items.sort((a, b) => b.priority - a.priority);
+      res.json(items.slice(0, 5));
+    } catch (err: any) {
+      console.error("[DD] missed-items error:", err.message);
+      res.json([]);
     }
   });
 

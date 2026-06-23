@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "rea
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
 import { InstallHint, InstallMascot } from "@/components/install-prompt";
+import { DDMissedCard, type DDMissedItem } from "@/components/dd-missed-card";
 import { GoogleMap, type JobPin, type WorkerPin, type MapBounds } from "@/components/google-map";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -277,6 +278,34 @@ function HostDropCta({ testIdSuffix }: { testIdSuffix: string }) {
         <ChevronRight className="w-4 h-4 ml-auto opacity-60" />
       </button>
     </Link>
+  );
+}
+
+function DDMissedSection() {
+  const [visible, setVisible] = useState(() => {
+    try {
+      const until = parseInt(localStorage.getItem("dd_missed_until") || "0", 10);
+      return Date.now() > until;
+    } catch { return true; }
+  });
+  const { data: items = [] } = useQuery<DDMissedItem[]>({
+    queryKey: ["/api/dd/missed-items"],
+    enabled: visible,
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!visible || !items.length) return null;
+  return (
+    <DDMissedCard
+      items={items}
+      onDismiss={() => {
+        try { localStorage.setItem("dd_missed_until", String(Date.now() + 24 * 60 * 60 * 1000)); } catch {}
+        setVisible(false);
+      }}
+      onRemindLater={() => {
+        try { localStorage.setItem("dd_missed_until", String(Date.now() + 4 * 60 * 60 * 1000)); } catch {}
+        setVisible(false);
+      }}
+    />
   );
 }
 
@@ -776,6 +805,9 @@ export default function Dashboard() {
 
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
+
+        {/* ── D.D. "What You Missed" ── */}
+        <DDMissedSection />
 
         {/* ── Activate Your City (shown post-tour OR when local grid is dark, auto-dismisses after 5s) ── */}
         {dashVisitCount >= 2 && (showCityCardPostTour || (!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0)) && !cityCardDismissed && (
