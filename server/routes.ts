@@ -25392,6 +25392,20 @@ OUTPUT STYLE:
     }
   });
 
+  // GET /api/credits/cashout-requests/mine — user's own cashout request history
+  app.get("/api/credits/cashout-requests/mine", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const rows = await pool.query(
+        `SELECT id, credits_requested, dollar_amount, status, payout_method, admin_note, created_at, reviewed_at
+         FROM cashout_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
+        [req.session.userId!]
+      );
+      res.json(rows.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Admin: Credits & Cashout ────────────────────────────────────────────────
 
   // GET /api/admin/credits/stats — liability dashboard

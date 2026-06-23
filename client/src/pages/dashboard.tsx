@@ -999,9 +999,9 @@ export default function Dashboard() {
                 </p>
                 <div className="px-4 pb-3">
                   <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
+                    <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ Your Cash Drops</p>
                     <p className="text-[9px] font-display text-muted-foreground/35">
-                      {referralData?.referredCount ?? 0} / 25 to unlock cash drops
+                      {referralData?.referredCount ?? 0} / 25 referrals to unlock yours
                     </p>
                   </div>
                   <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
@@ -1227,9 +1227,9 @@ export default function Dashboard() {
                   {/* Progress bar row */}
                   <div className="px-4 pb-3">
                     <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
+                      <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ Your Cash Drops</p>
                       <p className="text-[9px] font-display text-muted-foreground/35">
-                        {referralData?.referredCount ?? 0} / 25 to unlock cash drops
+                        {referralData?.referredCount ?? 0} / 25 referrals to unlock yours
                       </p>
                     </div>
                     <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>

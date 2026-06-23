@@ -38,6 +38,17 @@ interface LedgerRow {
   created_at: string;
 }
 
+interface MyCashoutRequest {
+  id: number;
+  credits_requested: number;
+  dollar_amount: string;
+  status: string;
+  payout_method: string | null;
+  admin_note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
 const SOURCE_LABELS: Record<string, { label: string; emoji: string }> = {
   map_mission:                     { label: "Map Mission",         emoji: "🗺️" },
   referral_creates_account:        { label: "Referral Signup",     emoji: "👤" },
@@ -79,13 +90,18 @@ export default function CreditsPage() {
     queryFn: () => fetch(`/api/credits/ledger?offset=${ledgerPage * 20}&limit=20`).then(r => r.json()),
   });
 
+  const { data: myCashouts = [] } = useQuery<MyCashoutRequest[]>({
+    queryKey: ["/api/credits/cashout-requests/mine"],
+  });
+
   const cashoutMutation = useMutation({
     mutationFn: (body: { credits: number; payoutMethod: string; payoutDetails?: string }) =>
       apiRequest("POST", "/api/credits/cashout-request", body),
     onSuccess: () => {
-      toast({ title: "Cashout request submitted", description: "Admin will review and process your payment." });
+      toast({ title: "Cashout request submitted", description: "Admin will review and process your payment within 1–3 business days." });
       qc.invalidateQueries({ queryKey: ["/api/credits/balance"] });
       qc.invalidateQueries({ queryKey: ["/api/credits/ledger"] });
+      qc.invalidateQueries({ queryKey: ["/api/credits/cashout-requests/mine"] });
       setShowCashoutForm(false);
       setCashoutCredits("");
     },
@@ -265,6 +281,30 @@ export default function CreditsPage() {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Cashout request history */}
+        {myCashouts.length > 0 && (
+          <Card data-testid="card-cashout-history">
+            <CardContent className="p-4 space-y-2">
+              <p className="text-sm font-semibold mb-1">Cashout Requests</p>
+              {myCashouts.map(r => (
+                <div key={r.id} className="flex items-center justify-between text-xs py-1.5 border-b border-border/20 last:border-0">
+                  <div className="space-y-0.5">
+                    <p className="font-medium">${r.dollar_amount} · {r.credits_requested.toLocaleString()} cr</p>
+                    <p className="text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}{r.payout_method ? ` · ${r.payout_method}` : ""}</p>
+                    {r.admin_note && <p className="text-muted-foreground italic">{r.admin_note}</p>}
+                  </div>
+                  <div className="ml-3 shrink-0">
+                    {r.status === "pending" && <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 text-[10px]">pending · 1–3 days</Badge>}
+                    {r.status === "approved" && <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px]">approved</Badge>}
+                    {r.status === "paid" && <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px]">paid out</Badge>}
+                    {r.status === "denied" && <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">denied</Badge>}
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}

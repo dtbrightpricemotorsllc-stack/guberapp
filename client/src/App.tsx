@@ -416,11 +416,11 @@ function Router() {
       <Route path="/biz/offers" component={() => <BizRoute component={BizOffers} />} />
       <Route path="/biz/verify-inspect" component={() => <BizRoute component={BizVerifyInspect} />} />
       <Route path="/biz/account" component={() => <BizRoute component={BizAccount} />} />
-      <Route path="/load-board/carrier" component={() => <DemoRoute component={LoadBoardCarrierHub} />} />
-      <Route path="/load-board/post" component={() => <DemoRoute component={LoadBoardPost} />} />
-      <Route path="/load-board/:id/edit" component={() => <DemoRoute component={LoadBoardEdit} />} />
-      <Route path="/load-board/:id" component={() => <DemoRoute component={LoadBoardDetail} />} />
-      <Route path="/load-board" component={() => <DemoRoute component={LoadBoard} />} />
+      <Route path="/load-board/carrier" component={() => <ProtectedRoute component={LoadBoardCarrierHub} />} />
+      <Route path="/load-board/post" component={() => <ProtectedRoute component={LoadBoardPost} />} />
+      <Route path="/load-board/:id/edit" component={() => <ProtectedRoute component={LoadBoardEdit} />} />
+      <Route path="/load-board/:id" component={() => <ProtectedRoute component={LoadBoardDetail} />} />
+      <Route path="/load-board" component={() => <ProtectedRoute component={LoadBoard} />} />
       <Route path="/custody/carrier" component={() => <ProtectedRoute component={CustodyCarrier} />} />
       <Route path="/custody/witness" component={() => <ProtectedRoute component={CustodyWitness} />} />
       <Route path="/custody/asset/:id" component={() => <ProtectedRoute component={CustodyAsset} />} />
