@@ -12,21 +12,36 @@ interface JacMsg {
   signupRoute?: string;
 }
 
-const QUICK_CHIPS = [
-  "I need work",
-  "I need help",
-  "I want to sell something",
-  "I need transport",
-  "I need something verified",
-  "I want to earn credits",
-  "I create content",
-  "I'm just exploring",
-  "I'm not sure yet",
+interface JacTracking {
+  intent?: string;
+  user_type?: string;
+  service_requested?: string | null;
+  transport_need?: boolean;
+  content_creator?: boolean;
+  business_owner?: boolean;
+  retired?: boolean;
+  zip?: string | null;
+  confusing_point?: string | null;
+}
+
+const OPENING_OPTIONS = [
+  { label: "I need help",           message: "I need help" },
+  { label: "I need work",           message: "I need work" },
+  { label: "I need money today",    message: "I need money today" },
+  { label: "I want to sell something", message: "I want to sell something" },
+  { label: "I need transport",      message: "I need transport" },
+  { label: "I own a business",      message: "I own a business" },
+  { label: "I provide services",    message: "I provide services" },
+  { label: "I create content",      message: "I create content" },
+  { label: "I'm retired",           message: "I'm retired" },
+  { label: "I'm just exploring",    message: "I'm just exploring" },
+  { label: "I'm not sure yet",      message: "I'm not sure yet" },
 ];
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Hi! I'm JAC — your Job Assisting Coordinator. Tell me what brought you here today and I'll help you find the right path inside GUBER.",
+  content: "What brings you to GUBER today?",
+  buttons: OPENING_OPTIONS,
 };
 
 function getVisitorId(): string {
@@ -38,16 +53,23 @@ function getVisitorId(): string {
 }
 
 let _interactionId: number | null = null;
+let _lastTracking: JacTracking = {};
 
-async function logInteraction(msgs: JacMsg[], extra: { intent?: string; zip?: string; converted?: boolean } = {}) {
+async function logInteraction(
+  msgs: JacMsg[],
+  extra: { intent?: string; zip?: string; converted?: boolean; userType?: string; tracking?: JacTracking } = {}
+) {
   try {
+    const merged: JacTracking = { ..._lastTracking, ...extra.tracking };
     const body = {
       visitorId: getVisitorId(),
       messages: msgs.map(m => ({ role: m.role, content: m.content })),
-      ...(extra.intent && { intent: extra.intent }),
-      ...(extra.zip && { zip: extra.zip }),
-      ...(extra.converted !== undefined && { converted: extra.converted }),
-      ...(_interactionId && { id: _interactionId }),
+      ...(extra.intent || merged.intent ? { intent: extra.intent ?? merged.intent } : {}),
+      ...(extra.zip || merged.zip ? { zip: extra.zip ?? merged.zip } : {}),
+      ...(extra.converted !== undefined ? { converted: extra.converted } : {}),
+      ...(extra.userType || merged.user_type ? { userType: extra.userType ?? merged.user_type } : {}),
+      ...(Object.keys(merged).length ? { tracking: merged } : {}),
+      ...(_interactionId ? { id: _interactionId } : {}),
     };
     const res = await fetch("/api/jac/interaction", {
       method: "POST",
@@ -90,30 +112,34 @@ export function JacHomepage() {
         body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })) }),
       });
       const data = await res.json();
+
+      if (data.tracking && typeof data.tracking === "object") {
+        _lastTracking = { ..._lastTracking, ...data.tracking };
+      }
+
       const aMsg: JacMsg = {
         role: "assistant",
-        content: data.reply || "Tell me a bit more and I'll help guide you.",
+        content: data.reply || "What brings you to GUBER today?",
         signupRoute: typeof data.route === "string" && data.route ? data.route : undefined,
         buttons: [
           ...(Array.isArray(data.actions) ? data.actions : []),
           ...(Array.isArray(data.options) ? data.options : []),
-        ].filter((b: any) => b?.label && b?.message).slice(0, 5),
+        ].filter((b: any) => b?.label && b?.message).slice(0, 11),
       };
+
       const final = [...next, aMsg];
       setMessages(final);
       if (!muted) speak(aMsg.content);
-      const zipMatch = final.map(m => m.content).join(" ").match(/\b\d{5}\b/);
-      await logInteraction(final, { zip: zipMatch?.[0], converted: !!aMsg.signupRoute });
+
+      await logInteraction(final, {
+        tracking: data.tracking,
+        converted: !!aMsg.signupRoute,
+      });
     } catch {
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: "I'm here to help. What sounds closest to why you're here?",
-        buttons: [
-          { label: "I need work", message: "I need work" },
-          { label: "I need help", message: "I need help with something" },
-          { label: "I want to sell something", message: "I want to sell something" },
-          { label: "I'm not sure", message: "I'm not sure what I need" },
-        ],
+        content: "What brings you to GUBER today?",
+        buttons: OPENING_OPTIONS,
       }]);
     } finally {
       setTyping(false);
@@ -179,7 +205,7 @@ export function JacHomepage() {
                 Your Job Assisting Coordinator.
               </p>
               <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto md:mx-0">
-                Tell me what you need and I'll help you get started inside GUBER — no account required to start.
+                Tell me what you need and I'll guide you step by step — no account required to start.
               </p>
 
               {/* CTA buttons */}
@@ -220,17 +246,17 @@ export function JacHomepage() {
                 </Link>
               </div>
 
-              {/* Quick chips */}
+              {/* Quick chips — the 11 opening options */}
               <div className="flex flex-wrap gap-1.5 justify-center md:justify-start">
-                {QUICK_CHIPS.map((chip) => (
+                {OPENING_OPTIONS.map((opt) => (
                   <button
-                    key={chip}
-                    onClick={() => openChat(chip)}
+                    key={opt.label}
+                    onClick={() => openChat(opt.message)}
                     className="px-3 py-1.5 rounded-full text-xs font-display font-semibold transition-all active:scale-95 hover:border-purple-500/40"
                     style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 20%)", color: "rgba(255,255,255,0.65)" }}
-                    data-testid={`chip-jac-${chip.toLowerCase().replace(/[\s']+/g, "-")}`}
+                    data-testid={`chip-jac-${opt.label.toLowerCase().replace(/[\s']+/g, "-")}`}
                   >
-                    {chip}
+                    {opt.label}
                   </button>
                 ))}
               </div>
@@ -271,8 +297,12 @@ export function JacHomepage() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {ttsSupported && (
-              <button onClick={toggleMute} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-white transition-colors text-[10px]"
-                style={{ background: "hsl(222 47% 12%)" }} aria-label={muted ? "Unmute" : "Mute"}>
+              <button
+                onClick={toggleMute}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-white transition-colors text-[10px]"
+                style={{ background: "hsl(222 47% 12%)" }}
+                aria-label={muted ? "Unmute" : "Mute"}
+              >
                 {muted ? "🔇" : "🔊"}
               </button>
             )}
@@ -284,7 +314,7 @@ export function JacHomepage() {
         </div>
 
         {/* Messages */}
-        <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight: "380px" }}>
+        <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight: "420px" }}>
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               data-testid={`jac-msg-${i}`}>
@@ -293,7 +323,7 @@ export function JacHomepage() {
                   <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />
                 </div>
               )}
-              <div className="max-w-[82%] space-y-2 flex flex-col">
+              <div className="max-w-[85%] space-y-2 flex flex-col">
                 <div
                   className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "rounded-tr-sm font-medium text-black" : "rounded-tl-sm text-white/90"}`}
                   style={
@@ -304,6 +334,8 @@ export function JacHomepage() {
                 >
                   {msg.content}
                 </div>
+
+                {/* Signup CTA */}
                 {msg.role === "assistant" && msg.signupRoute && ctaLabel(msg.signupRoute) && (
                   <Link
                     href={msg.signupRoute}
@@ -315,6 +347,8 @@ export function JacHomepage() {
                     {ctaLabel(msg.signupRoute)} <ArrowRight className="w-4 h-4" />
                   </Link>
                 )}
+
+                {/* Follow-up buttons / option chips */}
                 {msg.role === "assistant" && msg.buttons && msg.buttons.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {msg.buttons.map((btn) => (

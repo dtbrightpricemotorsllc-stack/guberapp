@@ -852,6 +852,8 @@ app.use((req, res, next) => {
     );
     CREATE INDEX IF NOT EXISTS idx_jac_interactions_visitor ON jac_interactions(visitor_id);
     CREATE INDEX IF NOT EXISTS idx_jac_interactions_created ON jac_interactions(created_at);
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS user_type TEXT;
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS tracking JSONB DEFAULT '{}';
   `).catch(e => console.error("[migration] jac_interactions error:", e));
 
   // Seed Phase 1 map mission templates — deactivate old placeholders first
