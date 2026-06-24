@@ -44,6 +44,10 @@ const GREETING: JacMsg = {
   buttons: OPENING_OPTIONS,
 };
 
+function toSpeechText(text: string): string {
+  return text.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober").replace(/guber/g, "goober");
+}
+
 function getVisitorId(): string {
   try {
     let id = localStorage.getItem("jac_visitor_id");
@@ -129,7 +133,7 @@ export function JacHomepage() {
 
       const final = [...next, aMsg];
       setMessages(final);
-      if (!muted) speak(aMsg.content);
+      if (!muted) speak(toSpeechText(aMsg.content));
 
       await logInteraction(final, {
         tracking: data.tracking,

@@ -52,7 +52,7 @@ export default function GetStarted() {
   }, [messages, typing]);
 
   useEffect(() => {
-    setTimeout(() => speak(JAC_GREETING.content), 600);
+    setTimeout(() => speak(JAC_GREETING.content.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober")), 600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -87,7 +87,7 @@ export default function GetStarted() {
           ].filter((b: any) => b?.label && b?.message).slice(0, 5),
         };
         setMessages((prev) => [...prev, assistantMsg]);
-        if (!muted) speak(assistantMsg.content);
+        if (!muted) speak(assistantMsg.content.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober"));
       } catch {
         setMessages((prev) => [
           ...prev,

@@ -174,7 +174,7 @@ export function GUBERAssistant() {
         ].filter((a: any) => a?.label && a?.message).slice(0, 5),
       };
       setMessages((prev) => [...prev, msg]);
-      if (!muted) speak(msg.content);
+      if (!muted) speak(msg.content.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober"));
     },
     onError: () => {
       setMessages((prev) => [
