@@ -13,6 +13,7 @@ import {
 import { SiGoogleplay, SiApple } from "react-icons/si";
 import { OpportunityMap } from "@/components/opportunity-map";
 import { SignUpWall } from "@/components/signup-wall";
+import { JacHomepage } from "@/components/jac-homepage";
 
 import logoImg          from "@assets/Picsart_25-10-05_02-32-00-877_1772543526293.png";
 import day1OGImg        from "@assets/Gubergoldday1_1772434950756.png";
@@ -965,6 +966,9 @@ export default function Home() {
           &nbsp;· No card · No resume
         </span>
       </div>
+
+      {/* ── JAC Homepage Assistant ── */}
+      <JacHomepage />
 
       {/* ── Opportunity Map ── */}
       <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">

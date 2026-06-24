@@ -16008,6 +16008,42 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── Jac Homepage Interaction Tracking (public, no auth) ────────────────────
+  app.post("/api/jac/interaction", async (req: Request, res: Response) => {
+    try {
+      const { visitorId, id: existingId, messages, intent, zip, converted } = req.body;
+      if (!visitorId || typeof visitorId !== "string") {
+        return res.status(400).json({ message: "visitorId required" });
+      }
+      const userId = (req.session as any)?.userId ?? null;
+      const safeMessages = Array.isArray(messages) ? messages.slice(-20) : [];
+      const safeIntent = typeof intent === "string" ? intent.slice(0, 100) : null;
+      const safeZip = typeof zip === "string" ? zip.slice(0, 10) : null;
+      const safeConverted = typeof converted === "boolean" ? converted : false;
+
+      if (existingId && typeof existingId === "number") {
+        await pool.query(
+          `UPDATE jac_interactions
+           SET messages = $1, intent = COALESCE($2, intent), zip = COALESCE($3, zip),
+               converted = (converted OR $4), updated_at = NOW()
+           WHERE id = $5 AND visitor_id = $6`,
+          [JSON.stringify(safeMessages), safeIntent, safeZip, safeConverted, existingId, visitorId]
+        );
+        return res.json({ id: existingId });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO jac_interactions (visitor_id, user_id, messages, intent, zip, converted)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [visitorId, userId, JSON.stringify(safeMessages), safeIntent, safeZip, safeConverted]
+      );
+      res.json({ id: result.rows[0].id });
+    } catch (err: any) {
+      console.error("[jac/interaction]", err.message);
+      res.status(500).json({ message: "Failed to log interaction" });
+    }
+  });
+
   // ── Jac "What You Missed" ───────────────────────────────────────────────────
   app.get("/api/dd/missed-items", requireAuth, async (req: Request, res: Response) => {
     try {

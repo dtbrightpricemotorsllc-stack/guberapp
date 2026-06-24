@@ -9,6 +9,7 @@ import {
   real,
   serial,
   json,
+  jsonb,
   uniqueIndex,
   date,
 } from "drizzle-orm/pg-core";
@@ -2766,3 +2767,19 @@ export const missionProofs = pgTable("mission_proofs", {
 });
 export type MissionProof       = typeof missionProofs.$inferSelect;
 export type InsertMissionProof = typeof missionProofs.$inferInsert;
+
+// ── Jac Homepage Interactions ─────────────────────────────────────────────────
+export const jacInteractions = pgTable("jac_interactions", {
+  id:          serial("id").primaryKey(),
+  visitorId:   text("visitor_id").notNull(),
+  userId:      integer("user_id").references(() => users.id),
+  sessionId:   text("session_id"),
+  intent:      text("intent"),
+  messages:    jsonb("messages").$type<Array<{ role: string; content: string }>>().default([]),
+  zip:         text("zip"),
+  converted:   boolean("converted").default(false),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+});
+export type JacInteraction       = typeof jacInteractions.$inferSelect;
+export type InsertJacInteraction = typeof jacInteractions.$inferInsert;

@@ -837,6 +837,23 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_mission_proofs_instance ON mission_proofs(instance_id);
   `).catch(e => console.error("[migration] mission_instances/proofs error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_interactions (
+      id          SERIAL PRIMARY KEY,
+      visitor_id  TEXT NOT NULL,
+      user_id     INTEGER REFERENCES users(id),
+      session_id  TEXT,
+      intent      TEXT,
+      messages    JSONB DEFAULT '[]',
+      zip         TEXT,
+      converted   BOOLEAN DEFAULT FALSE,
+      created_at  TIMESTAMP DEFAULT NOW(),
+      updated_at  TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_interactions_visitor ON jac_interactions(visitor_id);
+    CREATE INDEX IF NOT EXISTS idx_jac_interactions_created ON jac_interactions(created_at);
+  `).catch(e => console.error("[migration] jac_interactions error:", e));
+
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`
     UPDATE growth_task_templates SET is_active = false, paused = true
