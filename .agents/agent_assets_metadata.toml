@@ -593,3 +593,9 @@ id = "IhpRDzoPC5KnPlm6jcWgg"
 uri = "file://public/jac-audio/test-confirm.mp3"
 type = "audio"
 title = "Does this sound right?"
+
+[[outputs]]
+id = "fqh_q1H0GvICN5ln7hODr"
+uri = "file://public/jac-audio/test-fix.mp3"
+type = "audio"
+title = "Aria — speaker boost OFF, does this sound better?"
