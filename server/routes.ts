@@ -15850,6 +15850,20 @@ JUST EXPLORING: Explain GUBER simply. Ask what interests them. Route after conve
 RETURNING USER: route: /login [HIGH]
 
 ═══════════════════════════════════
+MULTILINGUAL SUPPORT
+═══════════════════════════════════
+
+Detect the user's language from their messages.
+- If the user writes in Spanish (español), respond ENTIRELY in Spanish — reply text AND all button labels/options.
+- All other messages default to English.
+- Once detected, continue in that language for the full conversation.
+- If the user switches language mid-conversation, match them immediately.
+- Supported launch languages: English (default), Spanish.
+- Add "detected_language": "en" or "es" to tracking.
+
+Spanish example: if user says "necesito trabajo" → respond in Spanish, translate all options too.
+
+═══════════════════════════════════
 LANGUAGE RULES
 ═══════════════════════════════════
 
@@ -15889,7 +15903,8 @@ TRACKING — include in every response
   "treasure_hunt_interest": true/false,
   "promotion_interest": true/false,
   "misunderstood_as_job": true/false,
-  "confusing_point": "<string or null>"
+  "confusing_point": "<string or null>",
+  "detected_language": "en|es"
 }
 
 ═══════════════════════════════════
@@ -16204,6 +16219,168 @@ CRITICAL — respond with JSON ONLY, no other text:
     } catch (err: any) {
       console.error("[jac/interaction]", err.message);
       res.status(500).json({ message: "Failed to log interaction" });
+    }
+  });
+
+  // ── JAC User Profile (GET + POST) ──────────────────────────────────────────
+  app.get("/api/jac/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const r = await pool.query(
+        `SELECT * FROM jac_user_profile WHERE user_id = $1`,
+        [userId]
+      );
+      res.json(r.rows[0] ?? null);
+    } catch (err: any) {
+      console.error("[jac/profile GET]", err.message);
+      res.status(500).json({ message: "Failed to load JAC profile" });
+    }
+  });
+
+  app.post("/api/jac/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const {
+        primaryGoal, userType, zipCode, interests, serviceNeeds, workInterests,
+        transportInterest, creatorInterest, creatorPlatforms, businessOwner,
+        serviceProvider, retired, prefersVoice, assistantMode, startupBehavior,
+        voiceEnabled, language, tutorialStatus,
+      } = req.body;
+      await pool.query(
+        `INSERT INTO jac_user_profile (
+          user_id, primary_goal, user_type, zip_code, interests, service_needs,
+          work_interests, transport_interest, creator_interest, creator_platforms,
+          business_owner, service_provider, retired, prefers_voice, assistant_mode,
+          startup_behavior, voice_enabled, language, tutorial_status, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          primary_goal     = COALESCE($2, jac_user_profile.primary_goal),
+          user_type        = COALESCE($3, jac_user_profile.user_type),
+          zip_code         = COALESCE($4, jac_user_profile.zip_code),
+          interests        = COALESCE($5::jsonb, jac_user_profile.interests),
+          service_needs    = COALESCE($6::jsonb, jac_user_profile.service_needs),
+          work_interests   = COALESCE($7::jsonb, jac_user_profile.work_interests),
+          transport_interest = COALESCE($8, jac_user_profile.transport_interest),
+          creator_interest = COALESCE($9, jac_user_profile.creator_interest),
+          creator_platforms= COALESCE($10::jsonb, jac_user_profile.creator_platforms),
+          business_owner   = COALESCE($11, jac_user_profile.business_owner),
+          service_provider = COALESCE($12, jac_user_profile.service_provider),
+          retired          = COALESCE($13, jac_user_profile.retired),
+          prefers_voice    = COALESCE($14, jac_user_profile.prefers_voice),
+          assistant_mode   = COALESCE($15, jac_user_profile.assistant_mode),
+          startup_behavior = COALESCE($16, jac_user_profile.startup_behavior),
+          voice_enabled    = COALESCE($17, jac_user_profile.voice_enabled),
+          language         = COALESCE($18, jac_user_profile.language),
+          tutorial_status  = COALESCE($19, jac_user_profile.tutorial_status),
+          updated_at       = NOW()`,
+        [
+          userId,
+          typeof primaryGoal === "string" ? primaryGoal : null,
+          typeof userType === "string" ? userType : null,
+          typeof zipCode === "string" ? zipCode.slice(0, 10) : null,
+          Array.isArray(interests) ? JSON.stringify(interests) : null,
+          Array.isArray(serviceNeeds) ? JSON.stringify(serviceNeeds) : null,
+          Array.isArray(workInterests) ? JSON.stringify(workInterests) : null,
+          typeof transportInterest === "boolean" ? transportInterest : null,
+          typeof creatorInterest === "boolean" ? creatorInterest : null,
+          Array.isArray(creatorPlatforms) ? JSON.stringify(creatorPlatforms) : null,
+          typeof businessOwner === "boolean" ? businessOwner : null,
+          typeof serviceProvider === "boolean" ? serviceProvider : null,
+          typeof retired === "boolean" ? retired : null,
+          typeof prefersVoice === "boolean" ? prefersVoice : null,
+          typeof assistantMode === "string" ? assistantMode : null,
+          typeof startupBehavior === "string" ? startupBehavior : null,
+          typeof voiceEnabled === "boolean" ? voiceEnabled : null,
+          typeof language === "string" && ["en","es"].includes(language) ? language : null,
+          typeof tutorialStatus === "string" ? tutorialStatus : null,
+        ]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[jac/profile POST]", err.message);
+      res.status(500).json({ message: "Failed to save JAC profile" });
+    }
+  });
+
+  // ── JAC Tutorial State (GET + POST + RESET) ─────────────────────────────────
+  app.get("/api/jac/tutorial", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const r = await pool.query(
+        `SELECT * FROM jac_tutorial_state WHERE user_id = $1`,
+        [userId]
+      );
+      res.json(r.rows[0] ?? null);
+    } catch (err: any) {
+      console.error("[jac/tutorial GET]", err.message);
+      res.status(500).json({ message: "Failed to load tutorial state" });
+    }
+  });
+
+  app.post("/api/jac/tutorial", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const {
+        tutorialStarted, tutorialCompleted, selectedGoal,
+        completedSteps, skippedSteps, lastTutorialScreen, needsFollowup,
+      } = req.body;
+      await pool.query(
+        `INSERT INTO jac_tutorial_state (user_id, tutorial_started, tutorial_completed, selected_goal, completed_steps, skipped_steps, last_tutorial_screen, needs_followup, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           tutorial_started    = COALESCE($2, jac_tutorial_state.tutorial_started),
+           tutorial_completed  = COALESCE($3, jac_tutorial_state.tutorial_completed),
+           selected_goal       = COALESCE($4, jac_tutorial_state.selected_goal),
+           completed_steps     = COALESCE($5::jsonb, jac_tutorial_state.completed_steps),
+           skipped_steps       = COALESCE($6::jsonb, jac_tutorial_state.skipped_steps),
+           last_tutorial_screen= COALESCE($7, jac_tutorial_state.last_tutorial_screen),
+           needs_followup      = COALESCE($8, jac_tutorial_state.needs_followup),
+           updated_at          = NOW()`,
+        [
+          userId,
+          typeof tutorialStarted === "boolean" ? tutorialStarted : null,
+          typeof tutorialCompleted === "boolean" ? tutorialCompleted : null,
+          typeof selectedGoal === "string" ? selectedGoal : null,
+          Array.isArray(completedSteps) ? JSON.stringify(completedSteps) : null,
+          Array.isArray(skippedSteps) ? JSON.stringify(skippedSteps) : null,
+          typeof lastTutorialScreen === "string" ? lastTutorialScreen : null,
+          typeof needsFollowup === "boolean" ? needsFollowup : null,
+        ]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[jac/tutorial POST]", err.message);
+      res.status(500).json({ message: "Failed to save tutorial state" });
+    }
+  });
+
+  app.post("/api/jac/tutorial/reset", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      await pool.query(
+        `INSERT INTO jac_tutorial_state (user_id, tutorial_started, tutorial_completed, selected_goal, completed_steps, skipped_steps, last_tutorial_screen, needs_followup, reset_count, updated_at)
+         VALUES ($1, FALSE, FALSE, NULL, '[]', '[]', NULL, FALSE, 1, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           tutorial_started    = FALSE,
+           tutorial_completed  = FALSE,
+           selected_goal       = NULL,
+           completed_steps     = '[]',
+           skipped_steps       = '[]',
+           last_tutorial_screen= NULL,
+           needs_followup      = FALSE,
+           reset_count         = jac_tutorial_state.reset_count + 1,
+           updated_at          = NOW()`,
+        [userId]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[jac/tutorial/reset]", err.message);
+      res.status(500).json({ message: "Failed to reset tutorial" });
     }
   });
 

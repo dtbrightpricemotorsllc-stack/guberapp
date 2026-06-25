@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -111,6 +111,132 @@ function StandbyMissionCard({ user, form }: { user: any; form: any }) {
             <span className={`text-[11px] ${c.met ? "text-foreground" : "text-muted-foreground"}`}>{c.label}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── JAC Settings Section ─────────────────────────────────────────────────────
+function JacSettingsSection() {
+  const { toast } = useToast();
+  const [assistantMode, setAssistantMode] = useState("full");
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [language, setLanguage] = useState("en");
+  const [resetting, setResetting] = useState(false);
+
+  const profileQ = useQuery<any>({
+    queryKey: ["/api/jac/profile"],
+    queryFn: () => fetch("/api/jac/profile").then(r => r.ok ? r.json() : null),
+  });
+
+  useEffect(() => {
+    if (profileQ.data) {
+      setAssistantMode(profileQ.data.assistant_mode ?? "full");
+      setVoiceEnabled(profileQ.data.voice_enabled ?? true);
+      setLanguage(profileQ.data.language ?? "en");
+    }
+  }, [profileQ.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiRequest("POST", "/api/jac/profile", body),
+    onSuccess: () => toast({ title: "JAC settings saved" }),
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  async function resetTutorial() {
+    setResetting(true);
+    try {
+      await apiRequest("POST", "/api/jac/tutorial/reset", {});
+      toast({ title: "Tutorial reset — JAC will guide you through onboarding again." });
+    } catch {
+      toast({ title: "Reset failed", variant: "destructive" });
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  return (
+    <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4" data-testid="card-jac-settings">
+      <h3 className="font-display font-semibold text-sm flex items-center gap-2">
+        <Bot className="w-4 h-4 text-primary" /> JAC — Assistant Settings
+      </h3>
+
+      {/* Assistant Mode */}
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Assistant Mode</Label>
+        <Select
+          value={assistantMode}
+          onValueChange={(v) => {
+            setAssistantMode(v);
+            saveMutation.mutate({ assistantMode: v });
+          }}
+        >
+          <SelectTrigger className="h-9 text-xs border-border/20" data-testid="select-jac-assistant-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="full">Full — JAC greets, guides, and follows up</SelectItem>
+            <SelectItem value="smart">Smart — JAC activates only on key events</SelectItem>
+            <SelectItem value="on_demand">On-Demand Only — I'll open JAC myself</SelectItem>
+            <SelectItem value="mute">Mute — disable voice and auto-prompts</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Language */}
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Language</Label>
+        <Select
+          value={language}
+          onValueChange={(v) => {
+            setLanguage(v);
+            saveMutation.mutate({ language: v });
+          }}
+        >
+          <SelectTrigger className="h-9 text-xs border-border/20" data-testid="select-jac-language">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="es">Español</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Voice toggle */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+        <div>
+          <p className="font-display font-semibold text-sm">Voice Responses</p>
+          <p className="text-xs text-muted-foreground">JAC reads replies aloud</p>
+        </div>
+        <Switch
+          checked={voiceEnabled}
+          onCheckedChange={(v) => {
+            setVoiceEnabled(v);
+            saveMutation.mutate({ voiceEnabled: v });
+          }}
+          data-testid="switch-jac-voice"
+        />
+      </div>
+
+      {/* Tutorial reset */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+        <div>
+          <p className="font-display font-semibold text-sm">Restart Onboarding Tutorial</p>
+          <p className="text-xs text-muted-foreground">JAC will guide you through setup again</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-border/30 font-display gap-1 text-xs"
+          onClick={resetTutorial}
+          disabled={resetting}
+          data-testid="button-jac-tutorial-reset"
+        >
+          {resetting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+          Reset
+        </Button>
       </div>
     </div>
   );
@@ -959,6 +1085,9 @@ export default function AccountSettings() {
             </div>
           )}
         </div>
+
+        {/* ── JAC Settings ─────────────────────────────────────── */}
+        <JacSettingsSection />
 
         <div className="bg-card rounded-2xl border border-destructive/20 p-5 space-y-3">
           <h3 className="font-display font-semibold text-sm text-destructive">Danger Zone</h3>

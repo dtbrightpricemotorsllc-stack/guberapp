@@ -2783,3 +2783,65 @@ export const jacInteractions = pgTable("jac_interactions", {
 });
 export type JacInteraction       = typeof jacInteractions.$inferSelect;
 export type InsertJacInteraction = typeof jacInteractions.$inferInsert;
+
+// ── JAC User Profile ──────────────────────────────────────────────────────────
+export const jacUserProfile = pgTable("jac_user_profile", {
+  userId:            integer("user_id").primaryKey().references(() => users.id),
+  primaryGoal:       text("primary_goal"),
+  userType:          text("user_type"),
+  zipCode:           text("zip_code"),
+  interests:         jsonb("interests").$type<string[]>().default([]),
+  serviceNeeds:      jsonb("service_needs").$type<string[]>().default([]),
+  workInterests:     jsonb("work_interests").$type<string[]>().default([]),
+  transportInterest: boolean("transport_interest").default(false),
+  creatorInterest:   boolean("creator_interest").default(false),
+  creatorPlatforms:  jsonb("creator_platforms").$type<string[]>().default([]),
+  businessOwner:     boolean("business_owner").default(false),
+  serviceProvider:   boolean("service_provider").default(false),
+  retired:           boolean("retired").default(false),
+  prefersVoice:      boolean("prefers_voice").default(false),
+  assistantMode:     text("assistant_mode").default("full"),
+  startupBehavior:   text("startup_behavior").default("show_summary"),
+  voiceEnabled:      boolean("voice_enabled").default(true),
+  language:          text("language").default("en"),
+  tutorialStatus:    text("tutorial_status").default("not_started"),
+  lastJacSummary:    jsonb("last_jac_summary").$type<Record<string, unknown>>().default({}),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+});
+export type JacUserProfile       = typeof jacUserProfile.$inferSelect;
+export type InsertJacUserProfile = typeof jacUserProfile.$inferInsert;
+
+// ── JAC Tutorial State ────────────────────────────────────────────────────────
+export const jacTutorialState = pgTable("jac_tutorial_state", {
+  userId:                 integer("user_id").primaryKey().references(() => users.id),
+  tutorialStarted:        boolean("tutorial_started").default(false),
+  tutorialCompleted:      boolean("tutorial_completed").default(false),
+  selectedGoal:           text("selected_goal"),
+  completedSteps:         jsonb("completed_steps").$type<string[]>().default([]),
+  skippedSteps:           jsonb("skipped_steps").$type<string[]>().default([]),
+  lastTutorialScreen:     text("last_tutorial_screen"),
+  needsFollowup:          boolean("needs_followup").default(false),
+  resetCount:             integer("reset_count").default(0),
+  lastSeenFeatureVersion: text("last_seen_feature_version").default("1.0"),
+  updatedAt:              timestamp("updated_at").defaultNow(),
+});
+export type JacTutorialState       = typeof jacTutorialState.$inferSelect;
+export type InsertJacTutorialState = typeof jacTutorialState.$inferInsert;
+
+// ── JAC Missed Actions ────────────────────────────────────────────────────────
+export const jacMissedActions = pgTable("jac_missed_actions", {
+  id:          serial("id").primaryKey(),
+  userId:      integer("user_id").references(() => users.id).notNull(),
+  actionType:  text("action_type").notNull(),
+  priority:    text("priority").default("medium"),
+  title:       text("title").notNull(),
+  description: text("description"),
+  route:       text("route"),
+  ctaLabel:    text("cta_label"),
+  status:      text("status").default("active"),
+  createdAt:   timestamp("created_at").defaultNow(),
+  dismissedAt: timestamp("dismissed_at"),
+  remindAt:    timestamp("remind_at"),
+});
+export type JacMissedAction       = typeof jacMissedActions.$inferSelect;
+export type InsertJacMissedAction = typeof jacMissedActions.$inferInsert;

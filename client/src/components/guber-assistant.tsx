@@ -19,18 +19,18 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Hey — I'm Jac, your Job Assistance Coordinator. Tell me what you need and I'll take you there. What's on your mind?";
+  "Hi — I'm JAC, your Job Assisting Coordinator. Tell me what you need and I'll guide you exactly where to go.";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 
 const INITIAL_CHIPS = [
-  "I need work",
-  "Post a job",
-  "Nearby jobs",
+  "Find work nearby",
+  "Hire help",
   "Earn credits",
+  "Cash Drops",
   "Day-1 OG",
-  "My wallet",
   "Verify & Inspect",
+  "Transport / Load Board",
   "Start a listing",
 ];
 
@@ -133,8 +133,20 @@ export function GUBERAssistant() {
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── "jac:prefill" — quick-action chips pre-load a message ──
+  useEffect(() => {
+    function onPrefill(e: Event) {
+      const msg = (e as CustomEvent<{ message: string }>).detail?.message;
+      if (!msg) return;
+      setInput(msg);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+    window.addEventListener("jac:prefill", onPrefill);
+    return () => window.removeEventListener("jac:prefill", onPrefill);
+  }, []);
 
   const { speak, cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
     useSpeechOutput();
@@ -152,7 +164,10 @@ export function GUBERAssistant() {
   }, [messages]);
 
   useEffect(() => {
-    if (s.open) setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+    if (!s.open) return;
+    const el = messagesRef.current;
+    if (!el) return;
+    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
   const sendMutation = useMutation({
@@ -235,10 +250,10 @@ export function GUBERAssistant() {
               </div>
               <div>
                 <SheetTitle className="text-left text-base font-display font-black text-white tracking-tight">
-                  Jac
+                  JAC
                 </SheetTitle>
                 <p className="text-[10px] text-muted-foreground font-display tracking-wider">
-                  Job Assistance Coordinator
+                  Job Assisting Coordinator
                 </p>
               </div>
             </div>
@@ -272,6 +287,7 @@ export function GUBERAssistant() {
 
         {/* ── Messages ── */}
         <div
+          ref={messagesRef}
           className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
           data-testid="assistant-message-thread"
         >
@@ -388,7 +404,6 @@ export function GUBERAssistant() {
             </div>
           )}
 
-          <div ref={bottomRef} />
         </div>
 
         {/* ── Input bar ── */}

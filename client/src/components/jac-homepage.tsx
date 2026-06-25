@@ -40,7 +40,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "What brings you to GUBER today?",
+  content: "Hi — I'm JAC, your Job Assisting Coordinator. What brings you to GUBER today?",
   buttons: OPENING_OPTIONS,
 };
 
@@ -144,7 +144,7 @@ export function JacHomepage() {
     } catch {
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: "What brings you to GUBER today?",
+        content: "Something went sideways — I'm JAC, still here. What brings you to GUBER today?",
         buttons: OPENING_OPTIONS,
       }]);
     } finally {

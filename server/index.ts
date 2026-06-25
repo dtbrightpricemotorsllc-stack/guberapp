@@ -856,6 +856,60 @@ app.use((req, res, next) => {
     ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS tracking JSONB DEFAULT '{}';
   `).catch(e => console.error("[migration] jac_interactions error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_user_profile (
+      user_id            INTEGER PRIMARY KEY REFERENCES users(id),
+      primary_goal       TEXT,
+      user_type          TEXT,
+      zip_code           TEXT,
+      interests          JSONB DEFAULT '[]',
+      service_needs      JSONB DEFAULT '[]',
+      work_interests     JSONB DEFAULT '[]',
+      transport_interest BOOLEAN DEFAULT FALSE,
+      creator_interest   BOOLEAN DEFAULT FALSE,
+      creator_platforms  JSONB DEFAULT '[]',
+      business_owner     BOOLEAN DEFAULT FALSE,
+      service_provider   BOOLEAN DEFAULT FALSE,
+      retired            BOOLEAN DEFAULT FALSE,
+      prefers_voice      BOOLEAN DEFAULT FALSE,
+      assistant_mode     TEXT DEFAULT 'full',
+      startup_behavior   TEXT DEFAULT 'show_summary',
+      voice_enabled      BOOLEAN DEFAULT TRUE,
+      language           TEXT DEFAULT 'en',
+      tutorial_status    TEXT DEFAULT 'not_started',
+      last_jac_summary   JSONB DEFAULT '{}',
+      updated_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS jac_tutorial_state (
+      user_id                  INTEGER PRIMARY KEY REFERENCES users(id),
+      tutorial_started         BOOLEAN DEFAULT FALSE,
+      tutorial_completed       BOOLEAN DEFAULT FALSE,
+      selected_goal            TEXT,
+      completed_steps          JSONB DEFAULT '[]',
+      skipped_steps            JSONB DEFAULT '[]',
+      last_tutorial_screen     TEXT,
+      needs_followup           BOOLEAN DEFAULT FALSE,
+      reset_count              INTEGER DEFAULT 0,
+      last_seen_feature_version TEXT DEFAULT '1.0',
+      updated_at               TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS jac_missed_actions (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id),
+      action_type  TEXT NOT NULL,
+      priority     TEXT DEFAULT 'medium',
+      title        TEXT NOT NULL,
+      description  TEXT,
+      route        TEXT,
+      cta_label    TEXT,
+      status       TEXT DEFAULT 'active',
+      created_at   TIMESTAMP DEFAULT NOW(),
+      dismissed_at TIMESTAMP,
+      remind_at    TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_missed_user ON jac_missed_actions(user_id, status);
+  `).catch(e => console.error("[migration] jac tables error:", e));
+
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`
     UPDATE growth_task_templates SET is_active = false, paused = true

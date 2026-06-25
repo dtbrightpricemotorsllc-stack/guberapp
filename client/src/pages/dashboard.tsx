@@ -28,6 +28,7 @@ import {
   hasAutoShownAlertModal, markAlertModalAutoShown,
 } from "@/components/alert-prompt-modal";
 import { gpsGetCurrentPosition, isGpsDisclaimerAccepted, isGpsDisclaimerPending } from "@/lib/gps";
+import { JacDashboardCard } from "@/components/jac-dashboard-card";
 
 // ─── Promo Modal System ───────────────────────────────────────────────────────
 
@@ -805,6 +806,9 @@ export default function Dashboard() {
 
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
+
+        {/* ── JAC Dashboard Card ── */}
+        <JacDashboardCard />
 
         {/* ── Jac "What You Missed" ── */}
         <DDMissedSection />
