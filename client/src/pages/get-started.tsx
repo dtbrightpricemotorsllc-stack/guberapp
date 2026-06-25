@@ -28,7 +28,7 @@ const QUICK_OPTIONS = [
 
 const JAC_GREETING: OnboardingMessage = {
   role: "assistant",
-  content: "Welcome to GUBER — the Land of Opportunities. Tell Jac what you're trying to do and I'll point you exactly where you need to go.",
+  content: "Hi, I'm JAC — your Job Assisting Coordinator. Tell me what you need and I'll guide you exactly where to go.",
 };
 
 export default function GetStarted() {
@@ -40,7 +40,7 @@ export default function GetStarted() {
   const [messages, setMessages] = useState<OnboardingMessage[]>([JAC_GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { speak, cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } = useSpeechOutput();
@@ -48,7 +48,9 @@ export default function GetStarted() {
     useSpeechInput((text) => { setInput(text); });
 
   useEffect(() => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
+    const el = messagesRef.current;
+    if (!el) return;
+    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 60);
   }, [messages, typing]);
 
   useEffect(() => {
@@ -174,7 +176,7 @@ export default function GetStarted() {
           <h1 className="font-display font-black text-2xl text-white tracking-tight leading-tight">
             Welcome to GUBER
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Tell Jac what you need.</p>
+          <p className="text-sm text-muted-foreground mt-1">I'm JAC. Ask me anything.</p>
         </div>
         <img
           src={jacFull}
@@ -185,7 +187,7 @@ export default function GetStarted() {
       </div>
 
       {/* ── Chat area ── */}
-      <div className="relative z-10 flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-4">
+      <div ref={messagesRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-4">
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -297,7 +299,6 @@ export default function GetStarted() {
           </div>
         )}
 
-        <div ref={bottomRef} />
       </div>
 
       {/* ── Input bar ── */}
