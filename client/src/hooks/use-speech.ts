@@ -63,9 +63,12 @@ export function useSpeechOutput() {
     if (!supported || muted) return;
     try {
       window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(
-        text.replace(/[*_#`[\]]/g, "").slice(0, 500)
-      );
+      const normalized = text
+        .replace(/[*_#`[\]]/g, "")
+        // Pronunciation overrides — must run before slice
+        .replace(/\bOG\b/g, "Oh Gee")
+        .slice(0, 500);
+      const utt = new SpeechSynthesisUtterance(normalized);
       // Voice settings — warm, expressive, slightly sparkly
       applyJacVoice(utt);   // sets .voice + .lang
       utt.rate  = 1.05;     // normal-to-slightly-lively
