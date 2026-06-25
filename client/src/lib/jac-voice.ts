@@ -141,8 +141,25 @@ export function loadJacVoice(): Promise<void> {
 }
 
 export function applyJacVoice(utt: SpeechSynthesisUtterance) {
-  if (_resolvedVoice) utt.voice = _resolvedVoice;
   utt.lang = "en-US";
+
+  // Always check the live voice list so admin overrides take effect immediately
+  // without needing a cache reset or page reload.
+  const voices = (typeof window !== "undefined" && "speechSynthesis" in window)
+    ? window.speechSynthesis.getVoices() : [];
+
+  if (voices.length) {
+    const override = (() => { try { return localStorage.getItem(LS_KEY); } catch { return null; } })();
+    if (override) {
+      const v = voices.find((x) => x.name === override || x.voiceURI === override);
+      if (v) { utt.voice = v; return; }
+    }
+    // No override — use the module-cached pick (or re-pick if cache is empty)
+    if (!_resolvedVoice) resolveAndLog(voices);
+    if (_resolvedVoice) utt.voice = _resolvedVoice;
+  } else if (_resolvedVoice) {
+    utt.voice = _resolvedVoice;
+  }
 }
 
 export function getVoiceDebugInfo(): VoiceDebugInfo {

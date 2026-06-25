@@ -65,7 +65,9 @@ export function useSpeechOutput() {
       window.speechSynthesis.cancel();
       const normalized = text
         .replace(/[*_#`[\]]/g, "")
-        // Pronunciation overrides — order matters: longer phrases first
+        // Zip codes: exactly 5 digits → space-separated digits (e.g. 27405 → "2 7 4 0 5")
+        .replace(/(?<!\d)(\d{5})(?!\d)/g, (_, z) => z.split("").join(" "))
+        // Pronunciation overrides — longer phrases first
         .replace(/\bDay[-\s]?1\s+OG\b/gi, "Day One Oh Gee")
         .replace(/\bOG\b/g, "Oh Gee")
         .replace(/\bJAC\b/g, "Jack")

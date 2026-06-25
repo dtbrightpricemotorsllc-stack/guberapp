@@ -1841,6 +1841,7 @@ function JacVoiceDebugTab() {
         <CardContent>
           <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
             {[
+              ["5-digit zip (e.g. 27405)", "2 7 4 0 5"],
               ["Day-1 OG", "Day One Oh Gee"],
               ["OG", "Oh Gee"],
               ["JAC", "Jack"],
