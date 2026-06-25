@@ -116,6 +116,29 @@ function StandbyMissionCard({ user, form }: { user: any; form: any }) {
   );
 }
 
+// ── Active JAC Voice Row (shown inside JAC Settings) ─────────────────────────
+function ActiveJacVoiceRow() {
+  const [voiceName, setVoiceName] = useState("Loading…");
+
+  useEffect(() => {
+    import("@/lib/jac-voice").then(({ loadJacVoice, getActiveJacVoiceName }) => {
+      loadJacVoice().then(() => setVoiceName(getActiveJacVoiceName()));
+    });
+  }, []);
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+      <div>
+        <p className="font-display font-semibold text-sm">Active JAC Voice</p>
+        <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{voiceName}</p>
+      </div>
+      <span className="text-[10px] px-2 py-1 rounded-full border border-border/30 text-muted-foreground font-display">
+        TTS
+      </span>
+    </div>
+  );
+}
+
 // ── JAC Settings Section ─────────────────────────────────────────────────────
 function JacSettingsSection() {
   const { toast } = useToast();
@@ -219,6 +242,9 @@ function JacSettingsSection() {
           data-testid="switch-jac-voice"
         />
       </div>
+
+      {/* Active voice display */}
+      <ActiveJacVoiceRow />
 
       {/* Tutorial reset */}
       <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">

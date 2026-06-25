@@ -10,7 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2 } from "lucide-react";
+import {
+  JAC_TARGET_VOICE, loadJacVoice, getActiveJacVoiceName,
+  listAvailableVoices, resetJacVoiceCache,
+} from "@/lib/jac-voice";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
 
@@ -1746,6 +1750,154 @@ function FeaturedClipsTab() {
   );
 }
 
+// ── JAC Voice Debug Tab ───────────────────────────────────────────────────────
+function JacVoiceDebugTab() {
+  const [activeName, setActiveName] = useState(getActiveJacVoiceName());
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [override, setOverride] = useState(() => {
+    try { return localStorage.getItem("jac_voice_override") ?? ""; } catch { return ""; }
+  });
+  const [testText, setTestText] = useState("Hi — I'm JAC, your Job Assisting Coordinator!");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadJacVoice().then(() => {
+      setActiveName(getActiveJacVoiceName());
+      setVoices(listAvailableVoices());
+    });
+  }, []);
+
+  function applyOverride() {
+    try {
+      if (override.trim()) {
+        localStorage.setItem("jac_voice_override", override.trim());
+      } else {
+        localStorage.removeItem("jac_voice_override");
+      }
+    } catch {}
+    resetJacVoiceCache();
+    loadJacVoice().then(() => {
+      setActiveName(getActiveJacVoiceName());
+      setVoices(listAvailableVoices());
+      toast({ title: `JAC voice updated: "${getActiveJacVoiceName()}"` });
+    });
+  }
+
+  function testSpeak() {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(testText);
+    const v = voices.find((v) => v.name === getActiveJacVoiceName());
+    if (v) utt.voice = v;
+    utt.rate = 1.05;
+    utt.pitch = 1.1;
+    window.speechSynthesis.speak(utt);
+  }
+
+  const isTargetFound = activeName === JAC_TARGET_VOICE;
+
+  return (
+    <div className="space-y-4">
+      {/* Status card */}
+      <Card className={isTargetFound ? "border-green-500 bg-green-50 dark:bg-green-950/20" : "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"}>
+        <CardContent className="p-4 space-y-1">
+          <p className="text-sm font-bold flex items-center gap-2">
+            <Volume2 className="w-4 h-4" />
+            {isTargetFound ? "✓ Target voice found" : "⚠ Target voice not available"}
+          </p>
+          <p className="text-xs">Target: <code className="font-mono bg-black/10 px-1 rounded">{JAC_TARGET_VOICE}</code></p>
+          <p className="text-xs">Active: <code className="font-mono bg-black/10 px-1 rounded font-bold">{activeName}</code></p>
+          {!isTargetFound && (
+            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+              "{JAC_TARGET_VOICE}" is not in this browser's voice list. JAC is using the closest cheerful/feminine fallback. See DevTools console for full voice list.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Test TTS */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Test JAC Voice</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          <Input
+            value={testText}
+            onChange={(e) => setTestText(e.target.value)}
+            className="text-sm"
+            data-testid="input-jac-voice-test"
+          />
+          <Button size="sm" onClick={testSpeak} data-testid="button-jac-voice-play">
+            <Volume2 className="w-3 h-3 mr-1" /> Play
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Manual override */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Voice Override (Admin)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Type an exact voice name from the list below. Leave blank to use the auto-selected voice. Saved to localStorage.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={override}
+              onChange={(e) => setOverride(e.target.value)}
+              placeholder="e.g. Google UK English Female"
+              className="text-xs font-mono"
+              data-testid="input-jac-voice-override"
+            />
+            <Button size="sm" onClick={applyOverride} data-testid="button-jac-voice-override-apply">Apply</Button>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {["", "Google UK English Female", "Google US English", "Samantha", "Karen"].map((v) => (
+              <button
+                key={v || "auto"}
+                onClick={() => { setOverride(v); }}
+                className="text-[10px] px-2 py-1 rounded border border-border/40 hover:border-primary/40 transition-colors"
+              >
+                {v || "Auto (clear override)"}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Available voices */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">All Available Voices ({voices.length})</CardTitle></CardHeader>
+        <CardContent>
+          {voices.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Voices not yet loaded — try clicking "Play" first.</p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto space-y-1 text-xs font-mono">
+              {voices.map((v) => (
+                <div
+                  key={v.name}
+                  className={`flex items-center gap-2 p-1.5 rounded ${v.name === activeName ? "bg-primary/10 font-bold" : ""}`}
+                  data-testid={`voice-row-${v.name.replace(/\s+/g,"-")}`}
+                >
+                  <span className="text-[9px] text-muted-foreground w-14 shrink-0">{v.lang}</span>
+                  <span className="flex-1 truncate">{v.name}</span>
+                  {v.name === activeName && <Badge variant="outline" className="text-[9px] shrink-0">ACTIVE</Badge>}
+                  {v.name === JAC_TARGET_VOICE && <Badge className="text-[9px] shrink-0 bg-green-500">TARGET</Badge>}
+                  <button
+                    className="text-[9px] underline text-primary shrink-0"
+                    onClick={() => { setOverride(v.name); }}
+                  >
+                    use
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function CashDropDebuggerTab() {
   const [id, setId] = useState("");
   return (
@@ -1785,6 +1937,7 @@ export default function AdminQa() {
           <TabsTrigger value="studio-tiles" data-testid="tab-studio-tiles"><ImageIcon className="mr-1 h-3 w-3" />Studio Tiles</TabsTrigger>
           <TabsTrigger value="featured-clips" data-testid="tab-featured-clips"><Film className="mr-1 h-3 w-3" />Trends Rail</TabsTrigger>
           <TabsTrigger value="growth-engine" data-testid="tab-growth-engine">🌱 Growth Engine</TabsTrigger>
+          <TabsTrigger value="jac-voice" data-testid="tab-jac-voice"><Volume2 className="mr-1 h-3 w-3" />JAC Voice</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -1823,6 +1976,7 @@ export default function AdminQa() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="jac-voice"><JacVoiceDebugTab /></TabsContent>
       </Tabs>
     </div>
   );

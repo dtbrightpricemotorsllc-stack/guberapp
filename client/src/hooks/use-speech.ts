@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { loadJacVoice, applyJacVoice } from "@/lib/jac-voice";
 
 const SR: typeof SpeechRecognition | null =
   typeof window !== "undefined"
@@ -52,6 +53,12 @@ export function useSpeechOutput() {
   });
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
+  // Kick off voice loading as soon as the hook mounts so the voice is ready
+  // before the first utterance.
+  useEffect(() => {
+    if (supported) loadJacVoice();
+  }, [supported]);
+
   const speak = useCallback((text: string) => {
     if (!supported || muted) return;
     try {
@@ -59,8 +66,11 @@ export function useSpeechOutput() {
       const utt = new SpeechSynthesisUtterance(
         text.replace(/[*_#`[\]]/g, "").slice(0, 500)
       );
-      utt.rate = 1.05;
-      utt.pitch = 1.0;
+      // Voice settings — warm, expressive, slightly sparkly
+      applyJacVoice(utt);   // sets .voice + .lang
+      utt.rate  = 1.05;     // normal-to-slightly-lively
+      utt.pitch = 1.1;      // a touch brighter / friendlier
+      utt.volume = 1.0;
       window.speechSynthesis.speak(utt);
     } catch {}
   }, [supported, muted]);
