@@ -12,8 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
 import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2 } from "lucide-react";
 import {
-  JAC_TARGET_VOICE, loadJacVoice, getActiveJacVoiceName,
-  listAvailableVoices, resetJacVoiceCache,
+  TTS_PROVIDER, JAC_TARGET_VOICE,
+  loadJacVoice, getVoiceDebugInfo, resetJacVoiceCache,
+  type VoiceDebugInfo,
 } from "@/lib/jac-voice";
 
 type Check = { key: string; label: string; status: "pass" | "fail" | "skip"; detail?: string };
@@ -1752,72 +1753,111 @@ function FeaturedClipsTab() {
 
 // ── JAC Voice Debug Tab ───────────────────────────────────────────────────────
 function JacVoiceDebugTab() {
-  const [activeName, setActiveName] = useState(getActiveJacVoiceName());
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [info, setInfo] = useState<VoiceDebugInfo | null>(null);
   const [override, setOverride] = useState(() => {
     try { return localStorage.getItem("jac_voice_override") ?? ""; } catch { return ""; }
   });
-  const [testText, setTestText] = useState("Hi — I'm JAC, your Job Assisting Coordinator!");
+  const [testText, setTestText] = useState("Hi — I'm Jack, your Goober Job Assisting Coordinator! Day One Oh Gee members get priority access.");
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadJacVoice().then(() => {
-      setActiveName(getActiveJacVoiceName());
-      setVoices(listAvailableVoices());
-    });
-  }, []);
+  function refresh() {
+    loadJacVoice().then(() => setInfo(getVoiceDebugInfo()));
+  }
+
+  useEffect(() => { refresh(); }, []);
 
   function applyOverride() {
     try {
-      if (override.trim()) {
-        localStorage.setItem("jac_voice_override", override.trim());
-      } else {
-        localStorage.removeItem("jac_voice_override");
-      }
+      if (override.trim()) localStorage.setItem("jac_voice_override", override.trim());
+      else localStorage.removeItem("jac_voice_override");
     } catch {}
     resetJacVoiceCache();
     loadJacVoice().then(() => {
-      setActiveName(getActiveJacVoiceName());
-      setVoices(listAvailableVoices());
-      toast({ title: `JAC voice updated: "${getActiveJacVoiceName()}"` });
+      const d = getVoiceDebugInfo();
+      setInfo(d);
+      toast({ title: `JAC voice updated: "${d.activeVoiceName}"` });
     });
   }
 
   function testSpeak() {
-    if (!("speechSynthesis" in window)) return;
+    if (!("speechSynthesis" in window) || !info) return;
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(testText);
-    const v = voices.find((v) => v.name === getActiveJacVoiceName());
+    const v = window.speechSynthesis.getVoices().find(
+      (x) => x.voiceURI === info.activeVoiceId || x.name === info.activeVoiceName
+    );
     if (v) utt.voice = v;
+    utt.lang = "en-US";
     utt.rate = 1.05;
     utt.pitch = 1.1;
     window.speechSynthesis.speak(utt);
   }
 
-  const isTargetFound = activeName === JAC_TARGET_VOICE;
+  const Row = ({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) => (
+    <div className="flex gap-2 items-start text-xs">
+      <span className="text-muted-foreground w-36 shrink-0">{label}</span>
+      <span className={mono ? "font-mono font-semibold break-all" : "font-semibold"}>{value}</span>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
-      {/* Status card */}
-      <Card className={isTargetFound ? "border-green-500 bg-green-50 dark:bg-green-950/20" : "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"}>
-        <CardContent className="p-4 space-y-1">
-          <p className="text-sm font-bold flex items-center gap-2">
-            <Volume2 className="w-4 h-4" />
-            {isTargetFound ? "✓ Target voice found" : "⚠ Target voice not available"}
-          </p>
-          <p className="text-xs">Target: <code className="font-mono bg-black/10 px-1 rounded">{JAC_TARGET_VOICE}</code></p>
-          <p className="text-xs">Active: <code className="font-mono bg-black/10 px-1 rounded font-bold">{activeName}</code></p>
-          {!isTargetFound && (
-            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-              "{JAC_TARGET_VOICE}" is not in this browser's voice list. JAC is using the closest cheerful/feminine fallback. See DevTools console for full voice list.
-            </p>
-          )}
+      {/* ── Status card ── */}
+      {info ? (
+        <Card className={
+          info.targetFound
+            ? "border-green-500 bg-green-50 dark:bg-green-950/20"
+            : "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20"
+        }>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Volume2 className="w-4 h-4" />
+              {info.targetFound ? "✓ Target voice active" : "⚠ Target voice NOT available — fallback in use"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            <Row label="TTS Provider"      value={info.provider} />
+            <Row label="Requested voice"   value={info.requestedVoice} />
+            <Row label="Target found"      value={info.targetFound ? "YES" : "NO — not in browser voice list"} />
+            <Row label="Active voice name" value={info.activeVoiceName} />
+            <Row label="Active voice ID"   value={info.activeVoiceId} />
+            <Row label="Active lang"       value={info.activeLang} />
+            <Row label="Fallback used"     value={info.fallbackUsed ? "YES" : "NO"} />
+            <Row label="Voices available"  value={String(info.allVoices.length)} mono={false} />
+            {!info.targetFound && (
+              <p className="text-[11px] text-yellow-700 dark:text-yellow-400 pt-1">
+                "{JAC_TARGET_VOICE}" was not found. Check the voice list below — click "use" on any row to set an override, or see DevTools console for the full dump.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card><CardContent className="p-4 text-xs text-muted-foreground">Loading voice info…</CardContent></Card>
+      )}
+
+      {/* ── Pronunciation overrides reference ── */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Active Pronunciation Overrides</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
+            {[
+              ["Day-1 OG", "Day One Oh Gee"],
+              ["OG", "Oh Gee"],
+              ["JAC", "Jack"],
+              ["GUBER", "Goober"],
+            ].map(([from, to]) => (
+              <div key={from} className="flex gap-2">
+                <span className="text-muted-foreground w-24 shrink-0">{from}</span>
+                <span>→ {to}</span>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Test TTS */}
+      {/* ── Test TTS ── */}
       <Card>
-        <CardHeader><CardTitle className="text-sm">Test JAC Voice</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Test JAC Voice (with pronunciation overrides)</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <Input
             value={testText}
@@ -1831,14 +1871,12 @@ function JacVoiceDebugTab() {
         </CardContent>
       </Card>
 
-      {/* Manual override */}
+      {/* ── Override ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Voice Override (Admin)</CardTitle>
-        </CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Voice Override (Admin)</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Type an exact voice name from the list below. Leave blank to use the auto-selected voice. Saved to localStorage.
+            Paste an exact voice name or voice ID from the list below. Leave blank to use auto-selection. Saved to localStorage.
           </p>
           <div className="flex gap-2">
             <Input
@@ -1849,47 +1887,51 @@ function JacVoiceDebugTab() {
               data-testid="input-jac-voice-override"
             />
             <Button size="sm" onClick={applyOverride} data-testid="button-jac-voice-override-apply">Apply</Button>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {["", "Google UK English Female", "Google US English", "Samantha", "Karen"].map((v) => (
-              <button
-                key={v || "auto"}
-                onClick={() => { setOverride(v); }}
-                className="text-[10px] px-2 py-1 rounded border border-border/40 hover:border-primary/40 transition-colors"
-              >
-                {v || "Auto (clear override)"}
-              </button>
-            ))}
+            <Button size="sm" variant="ghost" onClick={() => { setOverride(""); }} data-testid="button-jac-voice-clear">Clear</Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Available voices */}
+      {/* ── All voices ── */}
       <Card>
-        <CardHeader><CardTitle className="text-sm">All Available Voices ({voices.length})</CardTitle></CardHeader>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span>All Available Voices ({info?.allVoices.length ?? "…"})</span>
+            <button className="text-[10px] underline text-primary" onClick={refresh}>Refresh</button>
+          </CardTitle>
+        </CardHeader>
         <CardContent>
-          {voices.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Voices not yet loaded — try clicking "Play" first.</p>
+          {!info || info.allVoices.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No voices loaded yet — click Refresh or Play to trigger loading.</p>
           ) : (
-            <div className="max-h-64 overflow-y-auto space-y-1 text-xs font-mono">
-              {voices.map((v) => (
-                <div
-                  key={v.name}
-                  className={`flex items-center gap-2 p-1.5 rounded ${v.name === activeName ? "bg-primary/10 font-bold" : ""}`}
-                  data-testid={`voice-row-${v.name.replace(/\s+/g,"-")}`}
-                >
-                  <span className="text-[9px] text-muted-foreground w-14 shrink-0">{v.lang}</span>
-                  <span className="flex-1 truncate">{v.name}</span>
-                  {v.name === activeName && <Badge variant="outline" className="text-[9px] shrink-0">ACTIVE</Badge>}
-                  {v.name === JAC_TARGET_VOICE && <Badge className="text-[9px] shrink-0 bg-green-500">TARGET</Badge>}
-                  <button
-                    className="text-[9px] underline text-primary shrink-0"
-                    onClick={() => { setOverride(v.name); }}
+            <div className="max-h-72 overflow-y-auto space-y-0.5 text-[11px] font-mono">
+              {/* Header */}
+              <div className="grid grid-cols-[60px_1fr_minmax(0,1.5fr)_40px] gap-1 px-1.5 py-1 text-[9px] text-muted-foreground uppercase tracking-wide border-b">
+                <span>Lang</span><span>Name</span><span>Voice ID (voiceURI)</span><span></span>
+              </div>
+              {info.allVoices.map((v) => {
+                const isActive = v.voiceId === info.activeVoiceId;
+                const isTarget = v.name === JAC_TARGET_VOICE;
+                return (
+                  <div
+                    key={v.voiceId}
+                    className={`grid grid-cols-[60px_1fr_minmax(0,1.5fr)_40px] gap-1 items-center px-1.5 py-1 rounded ${isActive ? "bg-primary/10 font-bold" : "hover:bg-muted/40"}`}
+                    data-testid={`voice-row-${v.name.replace(/\s+/g, "-")}`}
                   >
-                    use
-                  </button>
-                </div>
-              ))}
+                    <span className="text-muted-foreground truncate">{v.lang}</span>
+                    <span className="truncate">{v.name}</span>
+                    <span className="truncate text-muted-foreground">{v.voiceId}</span>
+                    <div className="flex gap-1 items-center justify-end shrink-0">
+                      {isActive && <Badge variant="outline" className="text-[8px] px-1 py-0">ACTIVE</Badge>}
+                      {isTarget && <Badge className="text-[8px] px-1 py-0 bg-green-500">TARGET</Badge>}
+                      <button
+                        className="text-[9px] underline text-primary"
+                        onClick={() => setOverride(v.name)}
+                      >use</button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

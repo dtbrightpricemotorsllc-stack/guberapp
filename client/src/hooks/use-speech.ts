@@ -65,8 +65,11 @@ export function useSpeechOutput() {
       window.speechSynthesis.cancel();
       const normalized = text
         .replace(/[*_#`[\]]/g, "")
-        // Pronunciation overrides — must run before slice
+        // Pronunciation overrides — order matters: longer phrases first
+        .replace(/\bDay[-\s]?1\s+OG\b/gi, "Day One Oh Gee")
         .replace(/\bOG\b/g, "Oh Gee")
+        .replace(/\bJAC\b/g, "Jack")
+        .replace(/\bGUBER\b/g, "Goober")
         .slice(0, 500);
       const utt = new SpeechSynthesisUtterance(normalized);
       // Voice settings — warm, expressive, slightly sparkly

@@ -1,11 +1,24 @@
 /**
  * JAC Voice Selector — Web Speech API voice picker
  *
- * Priority: "Flicker" (target) → ranked cheerful/bright/feminine fallbacks.
- * Logs the selected voice on every resolution so it shows in DevTools console.
+ * TTS Provider: Web Speech API (browser built-in, no external service)
+ * Voice resolution: attempts "Flicker" first; if not found, scores
+ * available voices for feminine / cheerful / bright qualities.
  */
 
+export const TTS_PROVIDER = "Web Speech API (browser built-in)";
 export const JAC_TARGET_VOICE = "Flicker";
+
+export interface VoiceDebugInfo {
+  provider: string;
+  requestedVoice: string;
+  targetFound: boolean;
+  activeVoiceId: string;   // voiceURI — the actual ID the browser uses
+  activeVoiceName: string;
+  activeLang: string;
+  fallbackUsed: boolean;
+  allVoices: Array<{ name: string; voiceId: string; lang: string; local: boolean }>;
+}
 
 /** Ordered fallback list — first match in getVoices() wins */
 const FALLBACK_VOICE_NAMES: string[] = [
@@ -17,29 +30,29 @@ const FALLBACK_VOICE_NAMES: string[] = [
   "Microsoft Zira Desktop - English (United States)",
   "Microsoft Zira",
   // macOS / iOS
-  "Samantha",                // warm, clear, friendly
-  "Karen",                   // Australian, bright and cheerful
+  "Samantha",
+  "Karen",
   "Victoria",
-  "Moira",                   // Irish, warm
-  // Android fallbacks
+  "Moira",
+  // Android
   "en-us-x-sfg-local",
   "en-US-language",
-  // Generic feminine signals (matched by substring)
+  // Generic feminine signals (substring match)
   "Female",
   "female",
   "Girl",
   "girl",
-  // Absolute last resort — just needs to be English
+  // Last resort
   "Google US English",
   "en-US",
   "en_US",
 ];
 
-/** localStorage key — admin can override */
 const LS_KEY = "jac_voice_override";
 
 let _resolvedVoice: SpeechSynthesisVoice | null = null;
-let _resolvedName = "(not yet loaded)";
+let _targetFound = false;
+let _fallbackUsed = false;
 let _loadPromise: Promise<void> | null = null;
 
 function score(v: SpeechSynthesisVoice): number {
@@ -49,18 +62,19 @@ function score(v: SpeechSynthesisVoice): number {
     const cand = FALLBACK_VOICE_NAMES[i];
     if (cand.length > 6 ? n === cand : n.includes(cand)) return 900 - i;
   }
-  // Boost any English voice with "female"/"girl" anywhere in name
-  if (/female|girl|woman/i.test(n) && /en[-_]?/i.test(v.lang)) return 200;
+  if (/female|girl|woman/i.test(n) && /^en/i.test(v.lang)) return 200;
   return 0;
 }
 
 function pickFromList(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  // Check admin override first
   const override = (() => { try { return localStorage.getItem(LS_KEY); } catch { return null; } })();
   if (override) {
-    const found = voices.find((v) => v.name === override);
-    if (found) return found;
-    console.warn(`[JAC voice] Override "${override}" not found — ignoring`);
+    const found = voices.find((v) => v.name === override || v.voiceURI === override);
+    if (found) {
+      console.info(`[JAC voice] ✓ Admin override active: "${found.name}" (ID: ${found.voiceURI})`);
+      return found;
+    }
+    console.warn(`[JAC voice] ⚠ Override "${override}" not found in browser voice list — ignoring.`);
   }
 
   const english = voices.filter((v) => /^en/i.test(v.lang) || v.lang === "");
@@ -72,34 +86,38 @@ function pickFromList(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | nu
     const s = score(v);
     if (s > bestScore) { bestScore = s; best = v; }
   }
-
   return best;
 }
 
 function resolveAndLog(voices: SpeechSynthesisVoice[]) {
   _resolvedVoice = pickFromList(voices);
-  _resolvedName = _resolvedVoice?.name ?? "(none)";
+  _targetFound   = _resolvedVoice?.name === JAC_TARGET_VOICE;
+  _fallbackUsed  = !_targetFound;
 
-  const wasFlicker = _resolvedVoice?.name === JAC_TARGET_VOICE;
+  const flickerExists = voices.some((v) => v.name === JAC_TARGET_VOICE);
 
-  if (!wasFlicker) {
+  if (!flickerExists) {
     console.warn(
-      `[JAC voice] ⚠ Target voice "${JAC_TARGET_VOICE}" not available in this browser/OS.\n` +
-      `[JAC voice]   Active voice: "${_resolvedName}" (${_resolvedVoice?.lang ?? "?"}).\n` +
-      `[JAC voice]   Available voices: ${voices.map((v) => `"${v.name}"`).join(", ")}\n` +
-      `[JAC voice]   To override, run: localStorage.setItem("jac_voice_override", "<voice name>") and reload.`
+      `[JAC voice] ✗ "${JAC_TARGET_VOICE}" does NOT exist in this browser's voice list.\n` +
+      `[JAC voice]   Provider: ${TTS_PROVIDER}\n` +
+      `[JAC voice]   Active voice: "${_resolvedVoice?.name ?? "(none)"}" | ID: ${_resolvedVoice?.voiceURI ?? "?"} | Lang: ${_resolvedVoice?.lang ?? "?"}\n` +
+      `[JAC voice]   Fallback used: YES\n` +
+      `[JAC voice]   All voices:\n` +
+      voices.map((v) => `    ${v.lang.padEnd(8)} ${v.voiceURI.padEnd(50)} "${v.name}"`).join("\n") + "\n" +
+      `[JAC voice]   To override: localStorage.setItem("jac_voice_override", "<exact name or voiceURI>") then reload.`
     );
   } else {
-    console.info(`[JAC voice] ✓ Using target voice "${JAC_TARGET_VOICE}".`);
+    console.info(
+      `[JAC voice] ✓ Target voice "${JAC_TARGET_VOICE}" found and active.\n` +
+      `[JAC voice]   ID: ${_resolvedVoice?.voiceURI} | Lang: ${_resolvedVoice?.lang}`
+    );
   }
 }
 
-/** Returns a promise that resolves when voices are loaded and picked. */
 export function loadJacVoice(): Promise<void> {
   if (_loadPromise) return _loadPromise;
   _loadPromise = new Promise<void>((resolve) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      _resolvedName = "(not supported)";
       resolve();
       return;
     }
@@ -115,37 +133,51 @@ export function loadJacVoice(): Promise<void> {
     }
 
     if (!tryLoad()) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        tryLoad();
-        resolve();
-      };
-      // Some browsers fire the event synchronously — belt-and-suspenders
-      setTimeout(() => {
-        tryLoad();
-        resolve();
-      }, 800);
+      window.speechSynthesis.onvoiceschanged = () => { tryLoad(); resolve(); };
+      setTimeout(() => { tryLoad(); resolve(); }, 900);
     }
   });
   return _loadPromise;
 }
 
-/** Apply JAC's chosen voice to a SpeechSynthesisUtterance. */
 export function applyJacVoice(utt: SpeechSynthesisUtterance) {
   if (_resolvedVoice) utt.voice = _resolvedVoice;
   utt.lang = "en-US";
 }
 
-/** For display in admin/debug UI. */
-export function getActiveJacVoiceName(): string { return _resolvedName; }
-
-/** Reset cache (used after admin override change). */
-export function resetJacVoiceCache() {
-  _resolvedVoice = null;
-  _resolvedName = "(not yet loaded)";
-  _loadPromise = null;
+export function getVoiceDebugInfo(): VoiceDebugInfo {
+  const voices = (typeof window !== "undefined" && "speechSynthesis" in window)
+    ? window.speechSynthesis.getVoices()
+    : [];
+  return {
+    provider:        TTS_PROVIDER,
+    requestedVoice:  JAC_TARGET_VOICE,
+    targetFound:     _targetFound,
+    activeVoiceId:   _resolvedVoice?.voiceURI   ?? "(not loaded)",
+    activeVoiceName: _resolvedVoice?.name        ?? "(not loaded)",
+    activeLang:      _resolvedVoice?.lang        ?? "(not loaded)",
+    fallbackUsed:    _fallbackUsed,
+    allVoices:       voices.map((v) => ({
+      name:    v.name,
+      voiceId: v.voiceURI,
+      lang:    v.lang,
+      local:   v.localService,
+    })),
+  };
 }
 
-/** List all voices available in this browser (for admin UI). */
+/** @deprecated use getVoiceDebugInfo().activeVoiceName */
+export function getActiveJacVoiceName(): string {
+  return _resolvedVoice?.name ?? "(not yet loaded)";
+}
+
+export function resetJacVoiceCache() {
+  _resolvedVoice = null;
+  _targetFound   = false;
+  _fallbackUsed  = false;
+  _loadPromise   = null;
+}
+
 export function listAvailableVoices(): SpeechSynthesisVoice[] {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
   return window.speechSynthesis.getVoices();
