@@ -16437,7 +16437,7 @@ CRITICAL — respond with JSON ONLY, no other text:
           headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             text: cleaned,
-            model_id: "eleven_flash_v2_5",
+            model_id: "eleven_multilingual_v2",
             voice_settings: { stability: 0.38, similarity_boost: 0.80, style: 0.45, use_speaker_boost: true },
           }),
         }
@@ -16451,8 +16451,13 @@ CRITICAL — respond with JSON ONLY, no other text:
 
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
-      const buf = await upstream.arrayBuffer();
-      res.end(Buffer.from(buf));
+      if (upstream.body) {
+        const { Readable } = await import("stream");
+        Readable.fromWeb(upstream.body as any).pipe(res);
+      } else {
+        const buf = await upstream.arrayBuffer();
+        res.end(Buffer.from(buf));
+      }
     } catch (e: any) {
       console.error("[JAC TTS] error:", e.message);
       res.status(500).json({ message: "TTS error" });
@@ -16510,7 +16515,7 @@ CRITICAL — respond with JSON ONLY, no other text:
               headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 text,
-                model_id: "eleven_flash_v2_5",
+                model_id: "eleven_multilingual_v2",
                 voice_settings: { stability: 0.38, similarity_boost: 0.80, style: 0.45, use_speaker_boost: true },
               }),
             }
