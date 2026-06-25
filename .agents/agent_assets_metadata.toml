@@ -575,3 +575,15 @@ id = "mKZahsUMRlwjUJW1iWnZ_"
 uri = "file://public/jac-audio/test-lily.mp3"
 type = "audio"
 title = "Lily — bubbly, upbeat American"
+
+[[outputs]]
+id = "NuOJtSKsdT9RCq3PFKKvS"
+uri = "file://public/jac-audio/test-aria-mature.mp3"
+type = "audio"
+title = "Aria — toned down, more mature"
+
+[[outputs]]
+id = "WD7x4UupiuCK0Kcjn-SNl"
+uri = "file://public/jac-audio/test-rachel.mp3"
+type = "audio"
+title = "Rachel — warm, calm adult American"
