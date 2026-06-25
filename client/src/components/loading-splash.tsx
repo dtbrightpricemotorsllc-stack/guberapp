@@ -20,6 +20,7 @@ const SOLO_MESSAGES: string[] = [
   "KNOW INSTANTLY",
   "CHECK BEFORE YOU TRUST",
   "SEE THE TRUTH",
+  "CREATE VALUE IN YOURSELF.",
 ];
 
 const PAIR_MESSAGES: Array<readonly [string, string]> = [
@@ -29,6 +30,7 @@ const PAIR_MESSAGES: Array<readonly [string, string]> = [
   ["NEED HELP?", "HIRE."],
   ["AI OR NOT", "KNOW INSTANTLY"],
   ["REAL OR FAKE", "SEE THE TRUTH"],
+  ["CREATE VALUE", "IN YOURSELF."],
 ];
 
 type SoloSlide = { kind: "solo"; line: string };

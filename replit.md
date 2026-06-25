@@ -1,6 +1,6 @@
-# GUBER — Trust-Enforced Local Visibility Network
+# GUBER — Global Unlimited Business & Employment Resources
 
-Local visibility network connecting hirers with workers, emphasizing trust and efficient local service delivery. U.S.-only launch.
+"Create Value In Yourself." — Trust-enforced local visibility network connecting hirers with workers, emphasizing trust and efficient local service delivery. U.S.-only launch.
 
 ## Run & Operate
 - **Dev server:** `npm run dev` (port 5000, Express + Vite)
