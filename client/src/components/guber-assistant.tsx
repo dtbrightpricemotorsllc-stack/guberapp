@@ -171,6 +171,31 @@ export function GUBERAssistant() {
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
+  // Personalise first-open greeting for returning logged-in users
+  useEffect(() => {
+    if (!s.open) return;
+    if (messages.length !== 1) return; // already has a thread
+    const returning = localStorage.getItem("jac_returning") === "1";
+    if (!returning) return;
+    fetch("/api/jac/updates")
+      .then((r) => r.json())
+      .then((data: { loggedIn: boolean; firstName?: string | null; workerActive?: number; hirerOpen?: number; unreadNotifs?: number; walletBalance?: number }) => {
+        const name = data.firstName ? `, ${data.firstName}` : "";
+        const parts: string[] = [];
+        if ((data.workerActive ?? 0) > 0) parts.push(`${data.workerActive} active job${data.workerActive! > 1 ? "s" : ""} in progress`);
+        if ((data.hirerOpen ?? 0) > 0) parts.push(`${data.hirerOpen} open job${data.hirerOpen! > 1 ? "s" : ""} you posted`);
+        if ((data.unreadNotifs ?? 0) > 0) parts.push(`${data.unreadNotifs} new notification${data.unreadNotifs! > 1 ? "s" : ""}`);
+        if ((data.walletBalance ?? 0) > 0) parts.push(`$${(data.walletBalance!).toFixed(2)} in your wallet`);
+        let content: string;
+        if (parts.length === 0) content = `Welcome back${name}! Good to see you. What can I help you with?`;
+        else if (parts.length === 1) content = `Welcome back${name}! Quick update — ${parts[0]}. What else can I help you with?`;
+        else { const last = parts.pop(); content = `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`; }
+        setMessages([{ role: "assistant", content }]);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.open]);
+
   const sendMutation = useMutation({
     mutationFn: async (msgs: Message[]) => {
       const res = await apiRequest("POST", "/api/ai/guber-assist", {

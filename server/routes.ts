@@ -16222,6 +16222,37 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── JAC Returning-user updates ────────────────────────────────────────────
+  app.get("/api/jac/updates", async (req: Request, res: Response) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.json({ loggedIn: false });
+    try {
+      const [jobsRes, notifsRes, walletRes, userRes] = await Promise.all([
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed')) AS worker_active,
+            COUNT(*) FILTER (WHERE posted_by = $1 AND status = 'open') AS hirer_open
+          FROM jobs WHERE deleted_at IS NULL
+        `, [userId]),
+        pool.query(`SELECT COUNT(*) AS unread FROM notifications WHERE user_id = $1 AND read = false`, [userId]),
+        pool.query(`SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_transactions WHERE user_id = $1 AND status = 'completed'`, [userId]),
+        pool.query(`SELECT full_name FROM users WHERE id = $1`, [userId]),
+      ]);
+      const firstName = (userRes.rows[0]?.full_name || "").split(" ")[0] || null;
+      return res.json({
+        loggedIn: true,
+        firstName,
+        workerActive: parseInt(jobsRes.rows[0].worker_active) || 0,
+        hirerOpen:    parseInt(jobsRes.rows[0].hirer_open)    || 0,
+        unreadNotifs: parseInt(notifsRes.rows[0].unread)      || 0,
+        walletBalance: parseFloat(walletRes.rows[0].balance)  || 0,
+      });
+    } catch (e: any) {
+      console.error("[JAC updates]", e.message);
+      return res.json({ loggedIn: true, firstName: null, workerActive: 0, hirerOpen: 0, unreadNotifs: 0, walletBalance: 0 });
+    }
+  });
+
   // ── JAC User Profile (GET + POST) ──────────────────────────────────────────
   app.get("/api/jac/profile", requireAuth, async (req: Request, res: Response) => {
     try {

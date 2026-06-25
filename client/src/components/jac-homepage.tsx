@@ -85,6 +85,34 @@ async function logInteraction(
   } catch {}
 }
 
+interface JacUpdates {
+  loggedIn: boolean;
+  firstName?: string | null;
+  workerActive?: number;
+  hirerOpen?: number;
+  unreadNotifs?: number;
+  walletBalance?: number;
+}
+
+function buildReturningGreeting(data: JacUpdates): string {
+  const name = data.firstName ? `, ${data.firstName}` : "";
+  const parts: string[] = [];
+  if ((data.workerActive ?? 0) > 0)
+    parts.push(`${data.workerActive} active job${data.workerActive! > 1 ? "s" : ""} in progress`);
+  if ((data.hirerOpen ?? 0) > 0)
+    parts.push(`${data.hirerOpen} open job${data.hirerOpen! > 1 ? "s" : ""} you posted`);
+  if ((data.unreadNotifs ?? 0) > 0)
+    parts.push(`${data.unreadNotifs} new notification${data.unreadNotifs! > 1 ? "s" : ""}`);
+  if ((data.walletBalance ?? 0) > 0)
+    parts.push(`$${(data.walletBalance!).toFixed(2)} in your wallet`);
+  if (parts.length === 0)
+    return `Welcome back${name}! Good to see you again. What can I help you with today?`;
+  if (parts.length === 1)
+    return `Welcome back${name}! Quick update — ${parts[0]}. What else can I help you with?`;
+  const last = parts.pop();
+  return `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`;
+}
+
 export function JacHomepage() {
   const [mode, setMode] = useState<"intro" | "chat">("intro");
   const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
@@ -96,6 +124,21 @@ export function JacHomepage() {
   const { cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
   const { listening, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => setInput(text));
+
+  // Personalise greeting for returning visitors
+  useEffect(() => {
+    const returning = localStorage.getItem("jac_returning") === "1";
+    if (!returning) return;
+    fetch("/api/jac/updates")
+      .then((r) => r.json())
+      .then((data: JacUpdates) => {
+        const content = buildReturningGreeting(data);
+        setMessages([{ role: "assistant", content }]);
+      })
+      .catch(() => {
+        setMessages([{ role: "assistant", content: "Welcome back! Good to see you again. What can I help you with today?" }]);
+      });
+  }, []);
 
   useEffect(() => {
     const el = messagesRef.current;
@@ -139,6 +182,7 @@ export function JacHomepage() {
       const final = [...next, aMsg];
       setMessages(final);
       if (!muted) jacSpeak(aMsg.content, { muted });
+      try { localStorage.setItem("jac_returning", "1"); } catch {}
 
       await logInteraction(final, {
         tracking: data.tracking,
