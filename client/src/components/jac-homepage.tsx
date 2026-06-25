@@ -89,7 +89,7 @@ export function JacHomepage() {
   const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { speak, cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
@@ -97,7 +97,9 @@ export function JacHomepage() {
     useSpeechInput((text) => setInput(text));
 
   useEffect(() => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
+    const el = messagesRef.current;
+    if (!el) return;
+    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 60);
   }, [messages, typing]);
 
   async function processInput(text: string) {
@@ -318,7 +320,7 @@ export function JacHomepage() {
         </div>
 
         {/* Messages */}
-        <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight: "420px" }}>
+        <div ref={messagesRef} className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight: "420px" }}>
           {messages.map((msg, i) => (
             <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               data-testid={`jac-msg-${i}`}>
@@ -386,7 +388,6 @@ export function JacHomepage() {
               </div>
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
 
         {/* Input bar */}
