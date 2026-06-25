@@ -16437,7 +16437,7 @@ CRITICAL — respond with JSON ONLY, no other text:
           headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             text: cleaned,
-            model_id: "eleven_multilingual_v2",
+            model_id: "eleven_flash_v2_5",
             voice_settings: { stability: 0.38, similarity_boost: 0.80, style: 0.45, use_speaker_boost: true },
           }),
         }
@@ -16510,7 +16510,7 @@ CRITICAL — respond with JSON ONLY, no other text:
               headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 text,
-                model_id: "eleven_multilingual_v2",
+                model_id: "eleven_flash_v2_5",
                 voice_settings: { stability: 0.38, similarity_boost: 0.80, style: 0.45, use_speaker_boost: true },
               }),
             }
