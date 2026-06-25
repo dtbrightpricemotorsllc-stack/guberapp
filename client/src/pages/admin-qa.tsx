@@ -1758,6 +1758,8 @@ function JacVoiceDebugTab() {
     try { return localStorage.getItem("jac_voice_override") ?? ""; } catch { return ""; }
   });
   const [testText, setTestText] = useState("Hi — I'm Jack, your Goober Job Assisting Coordinator! Day One Oh Gee members get priority access.");
+  const [pregenStatus, setPregenStatus] = useState<Record<string, string> | null>(null);
+  const [pregenLoading, setPregenLoading] = useState(false);
   const { toast } = useToast();
 
   function refresh() {
@@ -1765,6 +1767,25 @@ function JacVoiceDebugTab() {
   }
 
   useEffect(() => { refresh(); }, []);
+
+  async function runPregen() {
+    setPregenLoading(true);
+    setPregenStatus(null);
+    try {
+      const res = await fetch("/api/jac/tts/pregen", { method: "POST" });
+      const data = await res.json();
+      if (data.results) {
+        setPregenStatus(data.results);
+        toast({ title: "Pre-generation complete" });
+      } else {
+        toast({ title: "Error", description: data.message || "Unknown error", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setPregenLoading(false);
+    }
+  }
 
   function applyOverride() {
     try {
@@ -1834,6 +1855,32 @@ function JacVoiceDebugTab() {
       ) : (
         <Card><CardContent className="p-4 text-xs text-muted-foreground">Loading voice info…</CardContent></Card>
       )}
+
+      {/* ── ElevenLabs pre-cache ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">ElevenLabs Cache — Pre-generate Top 20 Clips</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Generates static MP3s in <code className="font-mono">/jac-audio/</code> for the 20 most common JAC responses.
+            These play instantly with zero API cost. Already-generated clips are skipped.
+          </p>
+          <Button size="sm" onClick={runPregen} disabled={pregenLoading} data-testid="button-jac-pregen">
+            {pregenLoading ? "Generating…" : "Generate Cache Now"}
+          </Button>
+          {pregenStatus && (
+            <div className="max-h-48 overflow-y-auto space-y-0.5 text-[11px] font-mono mt-2">
+              {Object.entries(pregenStatus).map(([key, status]) => (
+                <div key={key} className="flex gap-2">
+                  <span className={`w-28 shrink-0 ${status === "generated" ? "text-green-600" : status.startsWith("error") ? "text-red-500" : "text-muted-foreground"}`}>{status}</span>
+                  <span>{key}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Pronunciation overrides reference ── */}
       <Card>

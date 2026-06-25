@@ -16384,6 +16384,120 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
+  // Keeps the API key server-side. Returns audio/mpeg stream.
+  // Rate-limited to 30 req/min per IP to prevent abuse.
+  app.post("/api/jac/tts", async (req: Request, res: Response) => {
+    try {
+      const { text } = req.body as { text?: string };
+      if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
+      const cleaned = text.slice(0, 800); // hard cap — multilingual v2 charges per char
+
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
+
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "h2dQOVyUfIDqY2whPOMo";
+
+      const upstream = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: cleaned,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: { stability: 0.48, similarity_boost: 0.78, style: 0.12, use_speaker_boost: true },
+          }),
+        }
+      );
+
+      if (!upstream.ok) {
+        const err = await upstream.text();
+        console.error("[JAC TTS] ElevenLabs error", upstream.status, err);
+        return res.status(502).json({ message: "TTS upstream error" });
+      }
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      const buf = await upstream.arrayBuffer();
+      res.end(Buffer.from(buf));
+    } catch (e: any) {
+      console.error("[JAC TTS] error:", e.message);
+      res.status(500).json({ message: "TTS error" });
+    }
+  });
+
+  // ── JAC TTS Cache Pregen (admin only) ────────────────────────────────────────
+  app.post("/api/jac/tts/pregen", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const userRow = await pool.query("SELECT role FROM users WHERE id=$1", [userId]);
+      if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
+
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "h2dQOVyUfIDqY2whPOMo";
+      if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
+
+      const { readFileSync, writeFileSync, existsSync } = await import("fs");
+      const path = await import("path");
+      const dir = path.join(process.cwd(), "public", "jac-audio");
+
+      const CACHE_CLIPS: Record<string, string> = {
+        "welcome":        "Hi! I'm Jack, your Goober Job Assisting Coordinator. I'm here to help you find work, hire help, or verify anything. What brings you in today?",
+        "what-is-guber":  "Goober stands for Global Unlimited Business and Employment Resources. It's a US-based platform where you can post jobs, find local work, verify purchases, and more — all in one place.",
+        "how-earn-money": "To earn money on Goober, create an account, complete ID verification, then browse available jobs near you. Apply, get hired, complete the work, and get paid directly through the platform.",
+        "how-post-job":   "Posting a job on Goober is completely free. Just sign up, go to Post a Job, fill in the details — what you need, your location, and your budget — and workers in your area will apply.",
+        "what-is-verify": "Verify and Inspect lets you hire someone to physically inspect a car, property, or item on your behalf. They go there, document everything on camera, and report back to you in real time.",
+        "background-check": "Goober requires ID verification for all users. This confirms real identity so you know exactly who you're dealing with. You can also view a worker's job history and reviews before hiring.",
+        "how-get-paid":   "Workers get paid through the Goober wallet after a job is completed and confirmed. You can cash out to your bank. Day One Oh Gee members pay a lower 5 percent fee versus the standard 10 percent.",
+        "what-is-og":     "Day One Oh Gee is Goober's founding membership. Oh Gee members pay only 5 percent in fees instead of 10, get priority Cash Drop notifications, an exclusive badge, and early access to new features.",
+        "what-is-cashdrop": "Cash Drops are bonus reward events that Goober releases to the community. They appear on the map — first person to tap and claim it wins real cash. Day One Oh Gee members get notified first.",
+        "what-is-studio": "Goober Studio is the AI content creation suite built into the platform. You can generate videos, music, and more using AI credits. New users get 2 free trial credits to start.",
+        "what-is-marketplace": "The Goober Marketplace is where you can buy and sell cars and other items locally. All transactions are documented on-platform for safety and accountability.",
+        "what-is-loadboard": "The Load Board connects drivers and haulers with people who need things transported. If you have a truck or trailer, you can find hauling jobs near you.",
+        "how-id-verify":  "To verify your identity, go to your profile and tap the ID Verification section. You'll upload a photo ID. Our system reviews it to confirm you're a real person — it's fast and secure.",
+        "fees":           "Posting jobs is always free. Workers pay a 10 percent platform fee on earnings. Day One Oh Gee members pay only 5 percent — that's half the fee on every single payout.",
+        "how-signup":     "Signing up is free and takes about 2 minutes. Just go to the sign up page, enter your name, email, and create a password. Then complete ID verification and you're ready to post or find work.",
+        "safety":         "Safety is built into every step on Goober. Every user verifies their identity. All payments go through the platform — no cash handoffs. Every job is documented with proof of completion.",
+        "what-is-barter": "Barter on Goober lets you exchange services or items without cash. If you have a skill someone needs and they have something you want, you can trade directly — fully documented on the platform.",
+        "contact-support": "For help, you can chat with me any time — I'm Jack, your Job Assisting Coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
+        "us-only":        "Goober is currently available in the United States only. We're focused on building the best possible local experience here before expanding internationally.",
+        "what-is-trustbox": "Trust Box is a subscription that gives you unlimited plays of the Aye Eye or Not game, plus other perks. It's one of the ways to get more out of your Goober membership.",
+      };
+
+      const results: Record<string, string> = {};
+      for (const [key, text] of Object.entries(CACHE_CLIPS)) {
+        const filePath = path.join(dir, `${key}.mp3`);
+        if (existsSync(filePath)) { results[key] = "skipped (exists)"; continue; }
+        try {
+          const r = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+            {
+              method: "POST",
+              headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text,
+                model_id: "eleven_multilingual_v2",
+                voice_settings: { stability: 0.48, similarity_boost: 0.78, style: 0.12, use_speaker_boost: true },
+              }),
+            }
+          );
+          if (!r.ok) { results[key] = `error ${r.status}`; continue; }
+          const buf = await r.arrayBuffer();
+          writeFileSync(filePath, Buffer.from(buf));
+          results[key] = "generated";
+        } catch (e: any) { results[key] = `exception: ${e.message}`; }
+      }
+      res.json({ ok: true, results });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // ── Jac "What You Missed" ───────────────────────────────────────────────────
   app.get("/api/dd/missed-items", requireAuth, async (req: Request, res: Response) => {
     try {

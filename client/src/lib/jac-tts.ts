@@ -1,0 +1,138 @@
+/**
+ * JAC TTS — ElevenLabs via server proxy, with static cache + Web Speech fallback.
+ *
+ * Priority per utterance:
+ *   1. /jac-audio/<slug>.mp3  — pre-generated static file (free, instant)
+ *   2. POST /api/jac/tts      — live ElevenLabs proxy (real voice, costs credits)
+ *   3. Web Speech API         — browser built-in (always works, no cost)
+ */
+
+import { applyJacVoice } from "./jac-voice";
+
+/** Pronunciation rewrites applied before any TTS call */
+export function normalizeTtsText(text: string): string {
+  return text
+    .replace(/[*_#`[\]]/g, "")
+    .replace(/(?<!\d)(\d{5})(?!\d)/g, (_, z) => z.split("").join(" "))
+    .replace(/\bDay[-\s]?1\s+OG\b/gi, "Day One Oh Gee")
+    .replace(/\bOG\b/g, "Oh Gee")
+    .replace(/\bJAC\b/g, "Jack")
+    .replace(/\bGUBER\b/gi, "Goober")
+    .slice(0, 800);
+}
+
+/**
+ * Topic slug → static audio file mapping.
+ * Keys are matched against the normalized text via simple keyword detection.
+ */
+const CACHE_MAP: Array<{ slug: string; keywords: string[] }> = [
+  { slug: "welcome",           keywords: ["job assisting coordinator", "what brings you"] },
+  { slug: "what-is-guber",     keywords: ["what is guber", "what does guber do", "guber stand for", "global unlimited"] },
+  { slug: "how-earn-money",    keywords: ["how do i earn", "how to earn", "make money", "earn money"] },
+  { slug: "how-post-job",      keywords: ["how do i post", "post a job", "posting a job"] },
+  { slug: "what-is-verify",    keywords: ["verify and inspect", "inspection", "inspect a car", "inspect a property"] },
+  { slug: "background-check",  keywords: ["background check", "id verification", "identity verify"] },
+  { slug: "how-get-paid",      keywords: ["how do i get paid", "when do i get paid", "payout", "get paid"] },
+  { slug: "what-is-og",        keywords: ["day-1 og", "day 1 og", "founding member", "og membership", "og member"] },
+  { slug: "what-is-cashdrop",  keywords: ["cash drop", "cashdrop"] },
+  { slug: "what-is-studio",    keywords: ["guber studio", "ai content", "studio"] },
+  { slug: "what-is-marketplace", keywords: ["marketplace", "buy and sell", "cars for sale"] },
+  { slug: "what-is-loadboard", keywords: ["load board", "loadboard", "hauling", "transport"] },
+  { slug: "how-id-verify",     keywords: ["verify my id", "id verify", "upload id", "photo id"] },
+  { slug: "fees",              keywords: ["how much does it cost", "what are the fees", "platform fee", "how much is"] },
+  { slug: "how-signup",        keywords: ["how do i sign up", "how to sign up", "create account", "get started"] },
+  { slug: "safety",            keywords: ["is it safe", "how safe", "safety", "secure"] },
+  { slug: "what-is-barter",    keywords: ["barter", "exchange services", "trade"] },
+  { slug: "contact-support",   keywords: ["contact support", "get help", "customer service", "help me"] },
+  { slug: "us-only",           keywords: ["available in", "what country", "international", "us only"] },
+  { slug: "what-is-trustbox",  keywords: ["trust box", "trustbox", "unlimited plays"] },
+];
+
+function detectCacheSlug(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const { slug, keywords } of CACHE_MAP) {
+    if (keywords.some((k) => lower.includes(k))) return slug;
+  }
+  return null;
+}
+
+let _currentAudio: HTMLAudioElement | null = null;
+
+export function cancelElevenLabsAudio() {
+  if (_currentAudio) {
+    _currentAudio.pause();
+    _currentAudio.src = "";
+    _currentAudio = null;
+  }
+}
+
+/**
+ * Speak text using ElevenLabs (cached → live → Web Speech fallback).
+ * Returns a promise that resolves when audio ends (or immediately on error).
+ */
+export async function jacSpeak(
+  rawText: string,
+  opts: { muted?: boolean; onFallback?: () => void } = {}
+): Promise<void> {
+  if (opts.muted) return;
+
+  cancelElevenLabsAudio();
+
+  const text = normalizeTtsText(rawText);
+  if (!text.trim()) return;
+
+  // ── 1. Try static cache ───────────────────────────────────────────────────
+  const slug = detectCacheSlug(rawText); // match against original for keyword detection
+  if (slug) {
+    const played = await tryPlayStaticAudio(`/jac-audio/${slug}.mp3`);
+    if (played) return;
+  }
+
+  // ── 2. Try live ElevenLabs proxy ─────────────────────────────────────────
+  try {
+    const res = await fetch("/api/jac/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const played = await tryPlayStaticAudio(url, true);
+      if (played) return;
+    } else {
+      console.warn("[JAC TTS] proxy returned", res.status, "— falling back to Web Speech");
+    }
+  } catch (e) {
+    console.warn("[JAC TTS] proxy fetch failed:", e);
+  }
+
+  // ── 3. Web Speech API fallback ───────────────────────────────────────────
+  opts.onFallback?.();
+  webSpeechFallback(text);
+}
+
+function tryPlayStaticAudio(url: string, isBlob = false): Promise<boolean> {
+  return new Promise((resolve) => {
+    const audio = new Audio(url);
+    _currentAudio = audio;
+    const cleanup = () => {
+      if (isBlob) URL.revokeObjectURL(url);
+      _currentAudio = null;
+    };
+    audio.onended  = () => { cleanup(); resolve(true); };
+    audio.onerror  = () => { cleanup(); resolve(false); };
+    audio.play().catch(() => { cleanup(); resolve(false); });
+  });
+}
+
+function webSpeechFallback(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  applyJacVoice(utt);
+  utt.rate   = 1.05;
+  utt.pitch  = 1.1;
+  utt.volume = 1.0;
+  window.speechSynthesis.speak(utt);
+}

@@ -9,6 +9,7 @@ import {
   Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
+import { jacSpeak, cancelElevenLabsAudio } from "@/lib/jac-tts";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 interface Message {
@@ -148,7 +149,7 @@ export function GUBERAssistant() {
     return () => window.removeEventListener("jac:prefill", onPrefill);
   }, []);
 
-  const { speak, cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
+  const { cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
     useSpeechOutput();
 
   const handleVoiceResult = useCallback((text: string) => {
@@ -189,7 +190,7 @@ export function GUBERAssistant() {
         ].filter((a: any) => a?.label && a?.message).slice(0, 5),
       };
       setMessages((prev) => [...prev, msg]);
-      if (!muted) speak(msg.content.replace(/GUBER/g, "Goober").replace(/Guber/g, "Goober"));
+      if (!muted) jacSpeak(msg.content, { muted });
     },
     onError: () => {
       setMessages((prev) => [
@@ -206,6 +207,7 @@ export function GUBERAssistant() {
     setMessages(newMsgs);
     setInput("");
     cancelSpeech();
+    cancelElevenLabsAudio();
     sendMutation.mutate(newMsgs);
   }
 
@@ -219,6 +221,7 @@ export function GUBERAssistant() {
   function handleRoute(route: string) {
     patchStore({ open: false });
     cancelSpeech();
+    cancelElevenLabsAudio();
     navigate(route);
   }
 

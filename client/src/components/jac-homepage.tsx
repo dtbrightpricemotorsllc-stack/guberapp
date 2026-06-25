@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { Send, Mic, MicOff, ArrowLeft, ArrowRight, MessageSquare } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
+import { jacSpeak, cancelElevenLabsAudio } from "@/lib/jac-tts";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
@@ -92,7 +93,7 @@ export function JacHomepage() {
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { speak, cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
+  const { cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
   const { listening, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => setInput(text));
 
@@ -111,6 +112,7 @@ export function JacHomepage() {
     setInput("");
     setTyping(true);
     cancelSpeech();
+    cancelElevenLabsAudio();
     try {
       const res = await fetch("/api/jac/onboard", {
         method: "POST",
@@ -135,7 +137,7 @@ export function JacHomepage() {
 
       const final = [...next, aMsg];
       setMessages(final);
-      if (!muted) speak(toSpeechText(aMsg.content));
+      if (!muted) jacSpeak(aMsg.content, { muted });
 
       await logInteraction(final, {
         tracking: data.tracking,
