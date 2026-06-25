@@ -16427,7 +16427,7 @@ CRITICAL — respond with JSON ONLY, no other text:
         return res.status(429).json({ message: "Voice budget reached for this session." });
       }
 
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "Nggzl2QAXh3OijoXD116";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
       console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
       const upstream = await fetch(
@@ -16468,7 +16468,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "Nggzl2QAXh3OijoXD116";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
       const { readFileSync, writeFileSync, existsSync } = await import("fs");
