@@ -57,6 +57,7 @@ function detectCacheSlug(text: string): string | null {
 }
 
 let _currentAudio: HTMLAudioElement | null = null;
+let _audioUnlocked = false;
 
 export function cancelElevenLabsAudio() {
   if (_currentAudio) {
@@ -64,6 +65,19 @@ export function cancelElevenLabsAudio() {
     _currentAudio.src = "";
     _currentAudio = null;
   }
+}
+
+/**
+ * Call this on ANY user interaction (button tap, send, mic press) before speaking.
+ * Unlocks audio playback on mobile browsers that require a gesture.
+ */
+export function unlockAudioContext() {
+  if (_audioUnlocked) return;
+  // Tiny silent MP3 (base64) — triggers browser audio permission without audible sound
+  const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+  const a = new Audio(SILENT_MP3);
+  a.volume = 0;
+  a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
 }
 
 /**
@@ -82,9 +96,9 @@ export async function jacSpeak(
   if (!text.trim()) return;
 
   // ── 1. Try static cache ───────────────────────────────────────────────────
-  const slug = detectCacheSlug(rawText); // match against original for keyword detection
+  const slug = detectCacheSlug(rawText);
   if (slug) {
-    const played = await tryPlayStaticAudio(`/jac-audio/${slug}.mp3`);
+    const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`);
     if (played) return;
   }
 
@@ -98,7 +112,7 @@ export async function jacSpeak(
     if (res.ok) {
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
-      const played = await tryPlayStaticAudio(url, true);
+      const played = await tryPlayAudio(url, true);
       if (played) return;
     } else {
       console.warn("[JAC TTS] proxy returned", res.status, "— falling back to Web Speech");
@@ -112,9 +126,10 @@ export async function jacSpeak(
   webSpeechFallback(text);
 }
 
-function tryPlayStaticAudio(url: string, isBlob = false): Promise<boolean> {
+function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
+    audio.preload = "auto";
     _currentAudio = audio;
     const cleanup = () => {
       if (isBlob) URL.revokeObjectURL(url);

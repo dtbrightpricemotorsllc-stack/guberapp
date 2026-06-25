@@ -587,3 +587,9 @@ id = "WD7x4UupiuCK0Kcjn-SNl"
 uri = "file://public/jac-audio/test-rachel.mp3"
 type = "audio"
 title = "Rachel — warm, calm adult American"
+
+[[outputs]]
+id = "IhpRDzoPC5KnPlm6jcWgg"
+uri = "file://public/jac-audio/test-confirm.mp3"
+type = "audio"
+title = "Does this sound right?"
