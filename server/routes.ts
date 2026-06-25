@@ -16386,26 +16386,55 @@ CRITICAL — respond with JSON ONLY, no other text:
 
   // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
   // Keeps the API key server-side. Returns audio/mpeg stream.
-  // Rate-limited to 30 req/min per IP to prevent abuse.
+  // ── TTS cost guards ───────────────────────────────────────────────────────
+  // Guard 1: IP rate limit — max 10 live calls per IP per 60 s
+  const _ttsIpBucket = new Map<string, { count: number; resetAt: number }>();
+  const TTS_IP_MAX   = 10;
+  const TTS_IP_WINDOW_MS = 60_000;
+  // Guard 2: Session character budget — max 1 500 chars of live TTS per session
+  const TTS_SESSION_CHAR_BUDGET = 1_500;
+  // Guard 3: Per-request text cap — never send more than 400 chars to ElevenLabs
+  const TTS_MAX_CHARS = 400;
+
   app.post("/api/jac/tts", async (req: Request, res: Response) => {
     try {
       const { text } = req.body as { text?: string };
       if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
-      const cleaned = text.slice(0, 800); // hard cap — multilingual v2 charges per char
+
+      // Guard 3: hard character cap per request
+      const cleaned = text.slice(0, TTS_MAX_CHARS);
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
+      // Guard 1: IP rate limit
+      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const bucket = _ttsIpBucket.get(ip) ?? { count: 0, resetAt: now + TTS_IP_WINDOW_MS };
+      if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + TTS_IP_WINDOW_MS; }
+      if (bucket.count >= TTS_IP_MAX) {
+        console.warn(`[JAC TTS] rate-limited IP ${ip}`);
+        return res.status(429).json({ message: "Too many TTS requests — slow down." });
+      }
+      bucket.count++;
+      _ttsIpBucket.set(ip, bucket);
+
+      // Guard 2: session character budget
+      const sess = req.session as any;
+      sess.ttsCharsUsed = (sess.ttsCharsUsed ?? 0) + cleaned.length;
+      if (sess.ttsCharsUsed > TTS_SESSION_CHAR_BUDGET) {
+        console.warn(`[JAC TTS] session budget exceeded (${sess.ttsCharsUsed} chars)`);
+        return res.status(429).json({ message: "Voice budget reached for this session." });
+      }
+
       const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "Nggzl2QAXh3OijoXD116";
+      console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
       const upstream = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
         {
           method: "POST",
-          headers: {
-            "xi-api-key": apiKey,
-            "Content-Type": "application/json",
-          },
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             text: cleaned,
             model_id: "eleven_multilingual_v2",
