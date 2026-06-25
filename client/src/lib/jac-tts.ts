@@ -105,14 +105,19 @@ export async function jacSpeak(
   const text = normalizeTtsText(rawText);
   if (!text.trim()) return;
 
-  // ── 1. Try static cache ───────────────────────────────────────────────────
+  // ── ElevenLabs disabled — using Web Speech directly ──────────────────────
+  // To re-enable: uncomment tiers 1 & 2 below and remove this block.
+  opts.onFallback?.();
+  webSpeechFallback(text);
+
+  /* ── Tier 1: static cache ────────────────────────────────────────────────
   const slug = detectCacheSlug(rawText);
   if (slug) {
     const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`);
     if (played) return;
   }
 
-  // ── 2. Try live ElevenLabs proxy ─────────────────────────────────────────
+  // ── Tier 2: live ElevenLabs proxy ────────────────────────────────────────
   try {
     const res = await fetch("/api/jac/tts", {
       method: "POST",
@@ -131,9 +136,10 @@ export async function jacSpeak(
     console.warn("[JAC TTS] proxy fetch failed:", e);
   }
 
-  // ── 3. Web Speech API fallback ───────────────────────────────────────────
+  // ── Tier 3: Web Speech fallback ──────────────────────────────────────────
   opts.onFallback?.();
   webSpeechFallback(text);
+  */ 
 }
 
 function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
