@@ -16396,7 +16396,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       const apiKey = process.env.ELEVENLABS_API_KEY;
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "h2dQOVyUfIDqY2whPOMo";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "Nggzl2QAXh3OijoXD116";
 
       const upstream = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
@@ -16439,7 +16439,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "h2dQOVyUfIDqY2whPOMo";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "Nggzl2QAXh3OijoXD116";
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
       const { readFileSync, writeFileSync, existsSync } = await import("fs");
