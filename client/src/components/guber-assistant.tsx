@@ -9,7 +9,7 @@ import {
   Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
-import { jacSpeak, cancelElevenLabsAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 interface Message {
@@ -233,7 +233,7 @@ export function GUBERAssistant() {
     setMessages(newMsgs);
     setInput("");
     cancelSpeech();
-    cancelElevenLabsAudio();
+    cancelAllJacAudio();
     sendMutation.mutate(newMsgs);
   }
 
@@ -247,7 +247,7 @@ export function GUBERAssistant() {
   function handleRoute(route: string) {
     patchStore({ open: false });
     cancelSpeech();
-    cancelElevenLabsAudio();
+    cancelAllJacAudio();
     navigate(route);
   }
 

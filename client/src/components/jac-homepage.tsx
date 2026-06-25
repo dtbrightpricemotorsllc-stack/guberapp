@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { Send, Mic, MicOff, ArrowLeft, ArrowRight, MessageSquare } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
-import { jacSpeak, cancelElevenLabsAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
@@ -156,7 +156,7 @@ export function JacHomepage() {
     setInput("");
     setTyping(true);
     cancelSpeech();
-    cancelElevenLabsAudio();
+    cancelAllJacAudio();
     try {
       const res = await fetch("/api/jac/onboard", {
         method: "POST",

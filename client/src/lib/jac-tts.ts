@@ -81,6 +81,15 @@ export function unlockAudioContext() {
 }
 
 /**
+ * Cancel ALL active JAC audio — both ElevenLabs and Web Speech.
+ * Safe to call from any component; prevents simultaneous speech.
+ */
+export function cancelAllJacAudio() {
+  cancelElevenLabsAudio();
+  try { window.speechSynthesis?.cancel(); } catch {}
+}
+
+/**
  * Speak text using ElevenLabs (cached → live → Web Speech fallback).
  * Returns a promise that resolves when audio ends (or immediately on error).
  */
@@ -90,7 +99,8 @@ export async function jacSpeak(
 ): Promise<void> {
   if (opts.muted) return;
 
-  cancelElevenLabsAudio();
+  // Cancel any ongoing speech from either JAC component before starting
+  cancelAllJacAudio();
 
   const text = normalizeTtsText(rawText);
   if (!text.trim()) return;
