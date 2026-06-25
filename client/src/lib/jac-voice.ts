@@ -22,19 +22,24 @@ export interface VoiceDebugInfo {
 
 /** Ordered fallback list — first match in getVoices() wins */
 const FALLBACK_VOICE_NAMES: string[] = [
-  // Chrome / Chromium
-  "Google UK English Female",
+  // Google cloud voices — best quality, sound most natural
   "Google US English Female",
-  // Windows SAPI / Edge
+  "Google UK English Female",
+  "Google US English",
+  // Microsoft Edge neural voices
+  "Microsoft Aria Online (Natural) - English (United States)",
+  "Microsoft Jenny Online (Natural) - English (United States)",
+  "Microsoft Aria - English (United States)",
+  // Windows SAPI / Edge desktop
   "Microsoft Zira - English (United States)",
   "Microsoft Zira Desktop - English (United States)",
   "Microsoft Zira",
-  // macOS / iOS
+  // macOS / iOS — Apple voices are high quality
   "Samantha",
   "Karen",
   "Victoria",
   "Moira",
-  // Android
+  // Android local (lower quality but better than nothing)
   "en-us-x-sfg-local",
   "en-US-language",
   // Generic feminine signals (substring match)
@@ -43,7 +48,6 @@ const FALLBACK_VOICE_NAMES: string[] = [
   "Girl",
   "girl",
   // Last resort
-  "Google US English",
   "en-US",
   "en_US",
 ];
@@ -58,11 +62,14 @@ let _loadPromise: Promise<void> | null = null;
 function score(v: SpeechSynthesisVoice): number {
   const n = v.name;
   if (n === JAC_TARGET_VOICE) return 1000;
+  // Cloud/network voices sound significantly better than local TTS engines
+  const cloudBonus = v.localService ? 0 : 150;
   for (let i = 0; i < FALLBACK_VOICE_NAMES.length; i++) {
     const cand = FALLBACK_VOICE_NAMES[i];
-    if (cand.length > 6 ? n === cand : n.includes(cand)) return 900 - i;
+    if (cand.length > 6 ? n === cand : n.includes(cand)) return 900 - i + cloudBonus;
   }
-  if (/female|girl|woman/i.test(n) && /^en/i.test(v.lang)) return 200;
+  if (/female|girl|woman/i.test(n) && /^en/i.test(v.lang)) return 200 + cloudBonus;
+  if (!v.localService && /^en/i.test(v.lang)) return 100; // any cloud en voice beats local
   return 0;
 }
 

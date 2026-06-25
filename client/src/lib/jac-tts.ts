@@ -162,8 +162,8 @@ function webSpeechFallback(text: string) {
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   applyJacVoice(utt);
-  utt.rate   = 1.05;
-  utt.pitch  = 1.1;
+  utt.rate   = 0.92;
+  utt.pitch  = 1.0;
   utt.volume = 1.0;
   window.speechSynthesis.speak(utt);
 }
