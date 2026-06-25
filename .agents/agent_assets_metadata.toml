@@ -551,3 +551,27 @@ id = "6WQupC3we4Gns6Lrv4faf"
 uri = "file://client/public/mascot-spec/GUBER_mascot_bundle.tar.gz"
 type = "unspecified"
 title = "GUBER Mascot — Fixed Bundle v2 (VRM + GLB + standalone preview)"
+
+[[outputs]]
+id = "sKICdmUMoROHWTbSFbk4E"
+uri = "file://public/jac-audio/test-aria.mp3"
+type = "audio"
+title = "Aria — warm, expressive American"
+
+[[outputs]]
+id = "NlOfpwk7Baq7PyrkBgSVU"
+uri = "file://public/jac-audio/test-sarah.mp3"
+type = "audio"
+title = "Sarah — soft, natural American"
+
+[[outputs]]
+id = "YpMVWePwvgRjBrIFHH3yQ"
+uri = "file://public/jac-audio/test-charlotte.mp3"
+type = "audio"
+title = "Charlotte — warm, soulful British"
+
+[[outputs]]
+id = "mKZahsUMRlwjUJW1iWnZ_"
+uri = "file://public/jac-audio/test-lily.mp3"
+type = "audio"
+title = "Lily — bubbly, upbeat American"
