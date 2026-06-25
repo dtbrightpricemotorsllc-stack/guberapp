@@ -16462,14 +16462,14 @@ CRITICAL — respond with JSON ONLY, no other text:
       console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
       const upstream = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
         {
           method: "POST",
           headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             text: cleaned,
             model_id: "eleven_multilingual_v2",
-            voice_settings: { stability: 0.50, similarity_boost: 0.75, style: 0.12, use_speaker_boost: true },
+            voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
           }),
         }
       );
@@ -16540,14 +16540,14 @@ CRITICAL — respond with JSON ONLY, no other text:
         if (existsSync(filePath)) { results[key] = "skipped (exists)"; continue; }
         try {
           const r = await fetch(
-            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
             {
               method: "POST",
               headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 text,
                 model_id: "eleven_multilingual_v2",
-                voice_settings: { stability: 0.50, similarity_boost: 0.75, style: 0.12, use_speaker_boost: true },
+                voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
               }),
             }
           );
