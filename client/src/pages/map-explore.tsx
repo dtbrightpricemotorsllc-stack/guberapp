@@ -303,12 +303,13 @@ export default function MapExplore() {
     setLocating(true);
     setLocationDenied(false);
 
-    // Safety net: if GPS doesn't resolve within 8 s, unblock the map anyway
+    // Safety net: start the timeout FIRST — before any async disclaimer/permission
+    // check — so the map always unblocks even if GPS hangs indefinitely.
     if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
     gpsTimeoutRef.current = setTimeout(() => {
       setLocating(false);
       gpsTimeoutRef.current = null;
-    }, 8000);
+    }, 10000);
 
     const clearGpsTimeout = () => {
       if (gpsTimeoutRef.current) {

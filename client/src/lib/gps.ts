@@ -2,6 +2,12 @@ import { Capacitor } from "@capacitor/core";
 
 const SESSION_KEY = "guber_gps_ok";
 
+// On native (iOS/Android) the OS shows its own permission dialog — our web
+// disclaimer modal is redundant and blocks the GPS flow. Auto-accept it.
+if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+  try { localStorage.setItem(SESSION_KEY, "1"); } catch {}
+}
+
 type Resolver = () => void;
 type Rejector = (err: Error) => void;
 const pendingResolvers: Resolver[] = [];
