@@ -106,19 +106,30 @@ export async function jacSpeak(
   const text = normalizeTtsText(rawText);
   if (!text.trim()) return;
 
-  // ── Tier 1: static cache (free, works on native iOS too) ─────────────────
+  // ── Tier 1: static cache (free, instant, all platforms) ──────────────────
   const slug = detectCacheSlug(rawText);
   if (slug) {
     const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`);
     if (played) return;
   }
 
-  // ── iOS: speechSynthesis doesn't work in WKWebView — stop here ──────────
-  // Android WebView supports it fine, so only skip on iOS native.
-  if (isIOS) return;
+  // ── Tier 2: ElevenLabs live proxy (real JAC voice, all platforms) ─────────
+  try {
+    const res = await fetch("/api/jac/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const played = await tryPlayAudio(url, true);
+      if (played) return;
+    }
+  } catch {}
 
-  // ── Web Speech fallback (web + Android only) ──────────────────────────────
-  // ElevenLabs proxy is parked. To re-enable, add tier 2 fetch above this line.
+  // ── Tier 3: Web Speech fallback (Android + web; iOS WKWebView doesn't support it) ──
+  if (isIOS) return;
   opts.onFallback?.();
   webSpeechFallback(text);
 }
