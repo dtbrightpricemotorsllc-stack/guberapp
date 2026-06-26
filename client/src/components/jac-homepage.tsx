@@ -89,7 +89,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Hi — I'm JAC, your Job Assisting Coordinator. What brings you to GUBER today?",
+  content: "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. Whether you need to earn, hire, sell, or just explore — I'm here. You can minimize me anytime, but I'll always be in the bottom right corner. What brings you in today?",
   buttons: OPENING_OPTIONS,
 };
 
@@ -161,17 +161,45 @@ function buildReturningGreeting(data: JacUpdates): string {
   return `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`;
 }
 
+const JAC_FLOAT_HINT_KEY = "jac_float_hint_shown";
+
 export function JacHomepage() {
-  const [mode, setMode] = useState<"intro" | "chat">("intro");
+  // Start in chat immediately — JAC speaks on load
+  const [mode, setMode] = useState<"intro" | "chat">("chat");
   const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [showFloatHint, setShowFloatHint] = useState(() => {
+    try { return localStorage.getItem(JAC_FLOAT_HINT_KEY) !== "1"; } catch { return false; }
+  });
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+
+  // Auto-speak greeting on mount — grabs the user immediately
+  useEffect(() => {
+    const t = setTimeout(() => {
+      jacSpeak(messages[0].content, { muted: mutedRef.current });
+    }, 350);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-send when mic result arrives — no send button tap required
   const { listening, start: startListening, stop: stopListening, supported: micSupported } =
-    useSpeechInput((text) => setInput(text));
+    useSpeechInput((text) => processInput(text));
+
+  // Dismiss float hint after 4s
+  useEffect(() => {
+    if (!showFloatHint) return;
+    const t = setTimeout(() => {
+      setShowFloatHint(false);
+      try { localStorage.setItem(JAC_FLOAT_HINT_KEY, "1"); } catch {}
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [showFloatHint]);
 
   // Personalise greeting for returning visitors
   useEffect(() => {
@@ -273,6 +301,7 @@ export function JacHomepage() {
 
   if (mode === "intro") {
     return (
+      <>
       <section className="relative z-10 px-4 sm:px-5 py-8 sm:py-12 max-w-6xl mx-auto w-full" data-testid="section-jac-homepage">
         <div
           className="rounded-3xl overflow-hidden"
@@ -371,6 +400,32 @@ export function JacHomepage() {
           </div>
         </div>
       </section>
+
+      {/* Floating JAC bubble — visible while minimized so users know she's always available */}
+
+      <button
+        onClick={() => { unlockAudioContext(); setMode("chat"); }}
+        className="fixed z-[150] w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
+        style={{
+          bottom: "24px",
+          right: "16px",
+          boxShadow: "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
+          border: "2px solid hsl(270 100% 65% / 0.6)",
+        }}
+        data-testid="button-jac-float-mini"
+        aria-label="Open JAC"
+      >
+        <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />
+        {showFloatHint && (
+          <span
+            className="absolute bottom-16 right-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-[11px] font-display font-semibold text-white animate-fade-in"
+            style={{ background: "hsl(270 100% 65% / 0.95)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
+          >
+            I'm always here ↓
+          </span>
+        )}
+      </button>
+      </>
     );
   }
 
@@ -388,12 +443,16 @@ export function JacHomepage() {
         <div className="flex items-center gap-3 px-5 py-4 flex-shrink-0" style={{ borderBottom: "1px solid hsl(222 47% 13%)" }}>
           <button
             onClick={() => setMode("intro")}
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-colors flex-shrink-0"
+            className="group relative w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-colors flex-shrink-0"
             style={{ background: "hsl(222 47% 12%)" }}
-            data-testid="button-jac-back"
-            aria-label="Back"
+            data-testid="button-jac-minimize"
+            aria-label="Minimize JAC"
+            title="Minimize — I'll be in the corner"
           >
             <ArrowLeft className="w-4 h-4" />
+            <span className="absolute left-10 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-display text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              Minimize me
+            </span>
           </button>
           <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0" style={{ border: "1.5px solid hsl(270 100% 65% / 0.4)" }}>
             <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />

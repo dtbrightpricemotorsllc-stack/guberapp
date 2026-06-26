@@ -20,9 +20,10 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Hi — I'm JAC, your Job Assisting Coordinator. Tell me what you need and I'll guide you exactly where to go.";
+  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. Whether you need to earn, hire, sell, or just explore — I'm here. You can minimize me anytime, but I'll always be in the bottom right corner. What can I do for you today?";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
+const FAB_HINT_KEY = "jac_fab_hint_shown";
 
 const INITIAL_CHIPS = [
   "Find work nearby",
@@ -108,23 +109,47 @@ export function GUBERAssistantHeaderButton() {
 // ── Floating Jac bubble (FAB, rendered in guber-layout) ─────────────────────
 export function DDFloatingButton() {
   const s = useAssistantStore();
+  const [showHint, setShowHint] = useState(() => {
+    try { return localStorage.getItem(FAB_HINT_KEY) !== "1"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    if (!showHint) return;
+    const t = setTimeout(() => {
+      setShowHint(false);
+      try { localStorage.setItem(FAB_HINT_KEY, "1"); } catch {}
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [showHint]);
+
   if (s.open) return null;
   return (
-    <button
-      type="button"
-      onClick={() => { markSeen(); patchStore({ open: true }); }}
-      className="fixed z-[150] w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
-      style={{
-        bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
-        right: "16px",
-        boxShadow: "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
-        border: "2px solid hsl(270 100% 65% / 0.6)",
-      }}
-      data-testid="button-dd-floating"
-      aria-label="Open Jac"
+    <div
+      className="fixed z-[150]"
+      style={{ bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", right: "16px" }}
     >
-      <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
-    </button>
+      {showHint && (
+        <div
+          className="absolute bottom-16 right-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-[11px] font-display font-semibold text-white animate-fade-in mb-1"
+          style={{ background: "hsl(270 100% 65% / 0.95)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
+        >
+          I'm always here — just tap!
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => { markSeen(); patchStore({ open: true }); }}
+        className="w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
+        style={{
+          boxShadow: "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
+          border: "2px solid hsl(270 100% 65% / 0.6)",
+        }}
+        data-testid="button-dd-floating"
+        aria-label="Open Jac"
+      >
+        <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
+      </button>
+    </div>
   );
 }
 
@@ -152,12 +177,9 @@ export function GUBERAssistant() {
   const { cancel: cancelSpeech, muted, toggleMute, supported: ttsSupported } =
     useSpeechOutput();
 
-  const handleVoiceResult = useCallback((text: string) => {
-    setInput(text);
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  }, []);
+  // Auto-send when mic result arrives — no send button tap needed
   const { listening, start: startListening, stop: stopListening, supported: micSupported } =
-    useSpeechInput(handleVoiceResult);
+    useSpeechInput((text) => doSend(text));
 
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages)); } catch {}
@@ -171,12 +193,16 @@ export function GUBERAssistant() {
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 80);
   }, [messages, s.open]);
 
-  // Personalise first-open greeting for returning logged-in users
+  // Speak greeting + personalise for returning users on first open
   useEffect(() => {
     if (!s.open) return;
     if (messages.length !== 1) return; // already has a thread
     const returning = localStorage.getItem("jac_returning") === "1";
-    if (!returning) return;
+    if (!returning) {
+      // First-time visitor — speak the greeting immediately
+      setTimeout(() => jacSpeak(DD_GREETING, { muted }), 300);
+      return;
+    }
     fetch("/api/jac/updates")
       .then((r) => r.json())
       .then((data: { loggedIn: boolean; firstName?: string | null; workerActive?: number; hirerOpen?: number; unreadNotifs?: number; walletBalance?: number }) => {
