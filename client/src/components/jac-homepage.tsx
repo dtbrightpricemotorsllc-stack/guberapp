@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
-import { Send, Mic, MicOff, ArrowLeft, ArrowRight, MessageSquare } from "lucide-react";
+import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
@@ -502,19 +502,6 @@ export function JacHomepage() {
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 flex-shrink-0" style={{ borderBottom: "1px solid hsl(222 47% 13%)" }}>
-          <button
-            onClick={() => setMode("intro")}
-            className="group relative w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white transition-colors flex-shrink-0"
-            style={{ background: "hsl(222 47% 12%)" }}
-            data-testid="button-jac-minimize"
-            aria-label="Minimize JAC"
-            title="Minimize — I'll be in the corner"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="absolute left-10 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-display text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              Minimize me
-            </span>
-          </button>
           <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0" style={{ border: "1.5px solid hsl(270 100% 65% / 0.4)" }}>
             <img src={jacPortrait} alt="JAC" className="w-full h-full object-cover object-top" />
           </div>
@@ -533,10 +520,16 @@ export function JacHomepage() {
                 {muted ? "🔇" : "🔊"}
               </button>
             )}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-display tracking-widest"
-              style={{ background: "hsl(270 100% 65% / 0.1)", border: "1px solid hsl(270 100% 65% / 0.2)", color: "hsl(270 100% 78%)" }}>
-              ✦ JUST ASK JAC
-            </div>
+            <button
+              onClick={() => setMode("intro")}
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-muted-foreground hover:text-white transition-colors text-[10px] font-display tracking-wide"
+              style={{ background: "hsl(222 47% 12%)" }}
+              data-testid="button-jac-minimize"
+              aria-label="Minimize JAC to corner"
+            >
+              <Minus className="w-3 h-3" />
+              Minimize
+            </button>
           </div>
         </div>
 
