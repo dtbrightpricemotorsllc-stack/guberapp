@@ -8,7 +8,7 @@
  */
 
 import { applyJacVoice } from "./jac-voice";
-import { isNativeApp } from "./platform";
+import { isIOS } from "./platform";
 
 /** Pronunciation rewrites applied before any TTS call */
 export function normalizeTtsText(text: string): string {
@@ -113,8 +113,9 @@ export async function jacSpeak(
     if (played) return;
   }
 
-  // ── Native iOS: speechSynthesis doesn't work in WKWebView — stop here ────
-  if (isNativeApp) return;
+  // ── iOS: speechSynthesis doesn't work in WKWebView — stop here ──────────
+  // Android WebView supports it fine, so only skip on iOS native.
+  if (isIOS) return;
 
   // ── Web Speech fallback (web + Android only) ──────────────────────────────
   // ElevenLabs proxy is parked. To re-enable, add tier 2 fetch above this line.
