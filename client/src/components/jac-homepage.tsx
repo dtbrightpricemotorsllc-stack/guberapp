@@ -200,12 +200,14 @@ export function JacHomepage() {
   }
 
   function openChat(initial?: string) {
+    unlockAudioContext(); // must run synchronously inside gesture handler
     setMode("chat");
     if (initial) { setTimeout(() => processInput(initial), 120); }
     else { setTimeout(() => inputRef.current?.focus(), 120); }
   }
 
   function openChatMic() {
+    unlockAudioContext(); // must run synchronously inside gesture handler
     setMode("chat");
     setTimeout(() => startListening(), 300);
   }

@@ -342,7 +342,8 @@ export default function MapExplore() {
         const labels: Record<number, string> = { 1: "PERMISSION_DENIED", 2: "POSITION_UNAVAILABLE", 3: "TIMEOUT" };
         console.warn(`[GUBER] map-explore geolocation: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}`);
         setLocating(false);
-        if (err.code === 1) setLocationDenied(true);
+        // code 1 = PERMISSION_DENIED, code 2 = POSITION_UNAVAILABLE (device GPS off)
+        if (err.code === 1 || err.code === 2) setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
     ).then((id) => {
@@ -369,6 +370,20 @@ export default function MapExplore() {
       if (watchIdRef2.current !== null) void gpsClearWatch(watchIdRef2.current);
     };
   }, []);
+
+  // When user returns from Settings (after granting location), auto-retry GPS
+  useEffect(() => {
+    if (!isNativeApp) return;
+    let cleanup: (() => void) | null = null;
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("appStateChange", ({ isActive }) => {
+        if (isActive && locationDenied) {
+          handleRetryLocation();
+        }
+      }).then((handle) => { cleanup = () => handle.remove(); });
+    }).catch(() => {});
+    return () => { cleanup?.(); };
+  }, [locationDenied]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current || !userPos) return;
@@ -771,7 +786,7 @@ export default function MapExplore() {
         </div>
       )}
 
-      {/* LOCATION DENIED BANNER — only shown on genuine permission denial (code 1) */}
+      {/* LOCATION DENIED BANNER */}
       {locationDenied && mapReady && (
         <div
           className="absolute left-3 right-3 flex items-center gap-2 px-3 py-2 rounded-xl pointer-events-auto"
@@ -780,9 +795,25 @@ export default function MapExplore() {
         >
           <LocateOff className="w-3.5 h-3.5 shrink-0" style={{ color: "#f59e0b" }} />
           <span className="flex-1 text-[10px] font-bold tracking-wide" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "Inter, sans-serif" }}>
-            {isNativeApp ? "Location disabled — enable in device Settings" : "Location disabled — search by ZIP code above"}
+            {isNativeApp ? "Location off — tap to enable" : "Location disabled — search by ZIP code above"}
           </span>
-          {!isNativeApp && (
+          {isNativeApp ? (
+            <button
+              onClick={async () => {
+                try {
+                  const { App } = await import("@capacitor/app");
+                  // Android: opens app permissions page; iOS: opens app settings
+                  const url = isAndroid ? "package:com.guber.app" : "app-settings:";
+                  await App.openUrl({ url });
+                } catch {}
+              }}
+              className="flex items-center gap-1 text-[10px] font-bold whitespace-nowrap"
+              style={{ color: "#f59e0b" }}
+              data-testid="button-open-location-settings"
+            >
+              Open Settings
+            </button>
+          ) : (
             <button
               onClick={handleRetryLocation}
               className="flex items-center gap-1 text-[10px] font-bold"
