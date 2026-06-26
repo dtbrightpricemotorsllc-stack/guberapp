@@ -64,16 +64,13 @@ async function nativeGetCurrent(opts?: PositionOptions): Promise<GeolocationPosi
   try {
     const perm = await Geolocation.checkPermissions();
     console.log(`[GUBER GPS] getCurrentPosition checkPermissions: ${perm.location}`);
-    if (perm.location === "denied") {
-      const err: any = new Error("Location permission denied — enable in device Settings");
-      err.code = 1;
-      throw err;
-    }
     if (perm.location !== "granted") {
+      // Always request regardless of checkPermissions — handles Samsung reinstall
+      // where old denial lingers; OS will show dialog or return denied silently.
       const r = await Geolocation.requestPermissions();
       console.log(`[GUBER GPS] requestPermissions (getCurrentPosition): ${r.location}`);
       if (r.location !== "granted") {
-        const err: any = new Error("Location permission denied");
+        const err: any = new Error("Location permission denied — enable in device Settings");
         err.code = 1;
         throw err;
       }
@@ -131,15 +128,15 @@ export async function gpsStartWatchPosition(
       const perm = await Geolocation.checkPermissions();
       console.log(`[GUBER GPS] watchPosition checkPermissions: location=${perm.location}`);
 
-      if (perm.location === "denied") {
-        // OS will NOT show a dialog — user must go to Settings.
-        console.warn("[GUBER GPS] Location permission permanently denied — Settings required");
-        permissionDenied = true;
-      } else if (perm.location !== "granted") {
+      if (perm.location !== "granted") {
+        // Always call requestPermissions regardless of checkPermissions result.
+        // On Android, a previous install's denial may linger after reinstall —
+        // requestPermissions() lets the OS decide whether to show the dialog
+        // or return "denied" silently (permanently blocked / "Don't ask again").
         const r = await Geolocation.requestPermissions();
         console.log(`[GUBER GPS] requestPermissions: ${r.location}`);
         if (r.location !== "granted") {
-          console.warn("[GUBER GPS] User declined location permission prompt");
+          console.warn("[GUBER GPS] Location permission not granted — Settings required");
           permissionDenied = true;
         }
       }
