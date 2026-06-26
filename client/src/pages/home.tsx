@@ -927,6 +927,9 @@ export default function Home() {
         </div>
       </nav>
 
+      {/* ── JAC Homepage Assistant — first thing users see ── */}
+      <JacHomepage />
+
       {/* ── Hero Slideshow ── */}
       <HeroSlideshow onSlideChange={setCurrentSlide} />
 
@@ -967,8 +970,7 @@ export default function Home() {
         </span>
       </div>
 
-      {/* ── JAC Homepage Assistant ── */}
-      <JacHomepage />
+      {/* JAC moved above hero — removed from here */}
 
       {/* ── Opportunity Map ── */}
       <section className="relative z-10 px-5 pt-14 pb-14 max-w-6xl mx-auto w-full" data-testid="section-opportunity-map">

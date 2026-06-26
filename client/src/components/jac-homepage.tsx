@@ -164,8 +164,10 @@ function buildReturningGreeting(data: JacUpdates): string {
 const JAC_FLOAT_HINT_KEY = "jac_float_hint_shown";
 
 export function JacHomepage() {
-  // Start in chat immediately — JAC speaks on load
-  const [mode, setMode] = useState<"intro" | "chat">("chat");
+  // "splash" = gesture gate (required by browsers before any audio)
+  // "chat"   = full chat panel + auto-speak fires immediately on enter
+  // "intro"  = minimized chip selector (reached via minimize button)
+  const [mode, setMode] = useState<"splash" | "intro" | "chat">("splash");
   const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -178,14 +180,6 @@ export function JacHomepage() {
   const { cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
-
-  // Auto-speak greeting on mount — grabs the user immediately
-  useEffect(() => {
-    const t = setTimeout(() => {
-      jacSpeak(messages[0].content, { muted: mutedRef.current });
-    }, 350);
-    return () => clearTimeout(t);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-send when mic result arrives — no send button tap required
   const { listening, start: startListening, stop: stopListening, supported: micSupported } =
@@ -200,6 +194,13 @@ export function JacHomepage() {
     }, 4000);
     return () => clearTimeout(t);
   }, [showFloatHint]);
+
+  // Tap → gesture unlocked → enter chat → speak immediately
+  function enterChat() {
+    unlockAudioContext();
+    setMode("chat");
+    setTimeout(() => jacSpeak(GREETING.content, { muted: mutedRef.current }), 120);
+  }
 
   // Personalise greeting for returning visitors
   useEffect(() => {
@@ -298,6 +299,66 @@ export function JacHomepage() {
     if (route.includes("business")) return "Set Up Business Account";
     return "Create Free Account";
   };
+
+  if (mode === "splash") {
+    return (
+      <section className="relative z-10 px-4 sm:px-5 py-8 sm:py-12 max-w-6xl mx-auto w-full" data-testid="section-jac-splash">
+        <button
+          onClick={enterChat}
+          className="w-full rounded-3xl overflow-hidden text-left transition-all active:scale-[0.99] cursor-pointer"
+          style={{
+            background: "linear-gradient(160deg, hsl(222 47% 8%), hsl(270 60% 6%))",
+            border: "1px solid hsl(270 100% 65% / 0.28)",
+            boxShadow: "0 8px 64px hsl(270 100% 65% / 0.12), 0 2px 20px rgba(0,0,0,0.5)",
+          }}
+          data-testid="button-jac-splash"
+          aria-label="Tap to meet JAC"
+        >
+          <div className="flex flex-col md:flex-row items-center gap-0 md:gap-8">
+            {/* JAC portrait */}
+            <div className="relative flex-shrink-0 w-full md:w-56 h-52 md:h-64 overflow-hidden">
+              <img
+                src={jacFull}
+                alt="JAC"
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-0 h-full w-auto object-contain object-bottom"
+                style={{ filter: "drop-shadow(0 0 40px hsl(270 100% 65% / 0.35))" }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(to top, hsl(222 47% 8%) 0%, transparent 40%)" }}
+              />
+            </div>
+
+            {/* Text + CTA */}
+            <div className="flex-1 px-6 pb-8 md:py-10 md:px-0 md:pr-10 text-center md:text-left">
+              <p
+                className="text-[10px] font-display font-black tracking-[0.25em] mb-2"
+                style={{ color: "hsl(270 100% 65%)" }}
+              >
+                GUBER — THE LAND OF OPPORTUNITIES
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-display font-black text-white leading-tight mb-2">
+                Meet JAC
+              </h2>
+              <p className="text-sm text-white/60 font-display leading-relaxed mb-6">
+                Your Job Assisting Coordinator. She'll guide you to work, income, or anything GUBER has to offer — all by voice or tap.
+              </p>
+              {/* Pulsing CTA */}
+              <div className="flex items-center gap-3 justify-center md:justify-start">
+                <span
+                  className="inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-display font-black tracking-wide text-black animate-pulse"
+                  style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))" }}
+                >
+                  🎙 Tap to hear JAC
+                </span>
+                <span className="text-xs text-white/30 font-display">or scroll past →</span>
+              </div>
+            </div>
+          </div>
+        </button>
+      </section>
+    );
+  }
 
   if (mode === "intro") {
     return (
