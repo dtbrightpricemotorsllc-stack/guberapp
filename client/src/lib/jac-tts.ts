@@ -113,22 +113,8 @@ export async function jacSpeak(
     if (played) return;
   }
 
-  // ── Tier 2: ElevenLabs live proxy (real JAC voice, all platforms) ─────────
-  try {
-    const res = await fetch("/api/jac/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (res.ok) {
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const played = await tryPlayAudio(url, true);
-      if (played) return;
-    }
-  } catch {}
-
-  // ── Tier 3: Web Speech fallback (Android + web; iOS WKWebView doesn't support it) ──
+  // ── Tier 2: Web Speech (Android + web; iOS WKWebView doesn't support it) ───
+  // ElevenLabs parked — latency + voice inconsistency across responses.
   if (isIOS) return;
   opts.onFallback?.();
   webSpeechFallback(text);
