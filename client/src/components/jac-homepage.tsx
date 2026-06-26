@@ -13,6 +13,20 @@ interface JacMsg {
   signupRoute?: string;
 }
 
+interface JacJobPrefill {
+  category?: string | null;
+  serviceType?: string | null;
+  descriptionSeed?: string | null;
+  budgetHint?: number | null;
+  details?: Record<string, any>;
+  readyToPost?: boolean;
+  zip?: string | null;
+  user_type?: string | null;
+  business_owner?: boolean;
+  intent?: string | null;
+  detected_language?: string;
+}
+
 interface JacTracking {
   intent?: string;
   user_type?: string;
@@ -23,6 +37,40 @@ interface JacTracking {
   retired?: boolean;
   zip?: string | null;
   confusing_point?: string | null;
+  cash_drop_interest?: boolean;
+  treasure_hunt_interest?: boolean;
+  promotion_interest?: boolean;
+  misunderstood_as_job?: boolean;
+  detected_language?: string;
+  job_prefill?: JacJobPrefill;
+}
+
+export function saveJacPrefill(tracking: JacTracking) {
+  try {
+    const pf = tracking.job_prefill;
+    if (!pf?.category && !pf?.serviceType && !pf?.readyToPost) return;
+    const stored: JacJobPrefill = {
+      ...pf,
+      zip: pf.zip ?? tracking.zip ?? null,
+      user_type: tracking.user_type ?? null,
+      business_owner: tracking.business_owner ?? false,
+      intent: tracking.intent ?? null,
+      detected_language: tracking.detected_language ?? "en",
+    };
+    localStorage.setItem("jac_job_prefill", JSON.stringify(stored));
+  } catch {}
+}
+
+export function readJacPrefill(): JacJobPrefill | null {
+  try {
+    const raw = localStorage.getItem("jac_job_prefill");
+    if (!raw) return null;
+    return JSON.parse(raw) as JacJobPrefill;
+  } catch { return null; }
+}
+
+export function clearJacPrefill() {
+  try { localStorage.removeItem("jac_job_prefill"); } catch {}
 }
 
 const OPENING_OPTIONS = [
@@ -167,6 +215,7 @@ export function JacHomepage() {
 
       if (data.tracking && typeof data.tracking === "object") {
         _lastTracking = { ..._lastTracking, ...data.tracking };
+        saveJacPrefill(_lastTracking);
       }
 
       const aMsg: JacMsg = {
@@ -215,6 +264,9 @@ export function JacHomepage() {
   const ctaLabel = (route?: string) => {
     if (!route) return null;
     if (route.startsWith("/login")) return "Log In";
+    if (route.startsWith("/post-job")) return "Post This Job";
+    if (route.includes("seller_vehicle")) return "List Your Vehicle";
+    if (route.includes("seller")) return "List on Marketplace";
     if (route.includes("business")) return "Set Up Business Account";
     return "Create Free Account";
   };

@@ -15,7 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, AlertTriangle, Lock, FileText, Zap, DollarSign, MapPin, Navigation, ShieldCheck, Check, TrendingUp, Users, Clock, Camera, Video, MapPinned, Layers } from "lucide-react";
+import { Loader2, AlertTriangle, Lock, FileText, Zap, DollarSign, MapPin, Navigation, ShieldCheck, Check, TrendingUp, Users, Clock, Camera, Video, MapPinned, Layers, Bot, X as XIcon } from "lucide-react";
+import { readJacPrefill, clearJacPrefill } from "@/components/jac-homepage";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { type DetailOptionSet } from "@shared/schema";
 import { TASK_TIERS, PRICING_MODES, type TaskTierId, type PricingModeId } from "@shared/task-tiers";
@@ -97,12 +98,50 @@ export default function PostJob() {
 
   const isVIJob = initialCategory === "Verify & Inspect" && !!viTitle;
 
-  const [category, setCategory] = useState(initialCategory);
-  const [serviceType, setServiceType] = useState(initialService);
-  const [generalNotes, setGeneralNotes] = useState("");
+  const fromJac = params.get("from") === "jac";
+  const [jacBannerDismissed, setJacBannerDismissed] = useState(false);
+
+  const [category, setCategory] = useState(() => {
+    if (initialCategory) return initialCategory;
+    if (params.get("from") === "jac") {
+      try {
+        const raw = localStorage.getItem("jac_job_prefill");
+        if (raw) return JSON.parse(raw).category || "";
+      } catch {}
+    }
+    return "";
+  });
+  const [serviceType, setServiceType] = useState(() => {
+    if (initialService) return initialService;
+    if (params.get("from") === "jac") {
+      try {
+        const raw = localStorage.getItem("jac_job_prefill");
+        if (raw) return JSON.parse(raw).serviceType || "";
+      } catch {}
+    }
+    return "";
+  });
+  const [generalNotes, setGeneralNotes] = useState(() => {
+    if (params.get("from") === "jac") {
+      try {
+        const raw = localStorage.getItem("jac_job_prefill");
+        if (raw) return JSON.parse(raw).descriptionSeed || "";
+      } catch {}
+    }
+    return "";
+  });
   const [budget, setBudget] = useState("");
   const [location_, setJobLocation] = useState("");
-  const [zip, setZip] = useState(user?.zipcode || "");
+  const [zip, setZip] = useState(() => {
+    if (user?.zipcode) return user.zipcode;
+    if (params.get("from") === "jac") {
+      try {
+        const raw = localStorage.getItem("jac_job_prefill");
+        if (raw) return JSON.parse(raw).zip || "";
+      } catch {}
+    }
+    return "";
+  });
   const [exactLat, setExactLat] = useState<number | null>(null);
   const [exactLng, setExactLng] = useState<number | null>(null);
   const [urgentSwitch, setUrgentSwitch] = useState(false);
@@ -457,6 +496,7 @@ export default function PostJob() {
         return;
       }
       toast({ title: "Job Posted!", description: "Your job is now live. You'll pay when you confirm a worker." });
+      try { localStorage.setItem("guber_first_post_done", "true"); clearJacPrefill(); } catch {}
       setLocation("/my-jobs");
     },
     onError: (err: any) => {
@@ -656,6 +696,23 @@ export default function PostJob() {
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-post-job">
         <h1 className="text-xl font-display font-bold mb-1 tracking-tight animate-fade-in">Post a Job</h1>
         <p className="text-sm text-muted-foreground mb-5 animate-fade-in">Fill in the details below to create your job listing</p>
+
+        {fromJac && !jacBannerDismissed && (category || generalNotes) && (
+          <div className="relative rounded-2xl px-4 py-3 mb-4 flex items-center gap-3"
+            style={{ background: "hsl(270 100% 65% / 0.08)", border: "1px solid hsl(270 100% 65% / 0.25)" }}
+            data-testid="jac-prefill-banner">
+            <Bot className="w-4 h-4 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+            <p className="text-[11px] text-white/80 flex-1">
+              <span className="font-display font-black" style={{ color: "hsl(270 100% 88%)" }}>JAC pre-filled this form</span>
+              {serviceType ? ` for ${serviceType}` : ""}. Review and adjust before posting.
+            </p>
+            <button onClick={() => setJacBannerDismissed(true)}
+              className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-white transition-colors flex-shrink-0"
+              data-testid="jac-prefill-banner-dismiss">
+              <XIcon className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
         <Card className="glass-card rounded-xl p-6 space-y-5 animate-slide-up">
 

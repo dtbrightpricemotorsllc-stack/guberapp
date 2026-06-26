@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Eye, EyeOff, Check, X, ShieldCheck } from "lucide-react";
+import { Loader2, ArrowLeft, Eye, EyeOff, Check, X, ShieldCheck, Bot, Building2 } from "lucide-react";
+import { readJacPrefill } from "@/components/jac-homepage";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
 import { isIOS } from "@/lib/platform";
@@ -40,7 +41,22 @@ export default function Signup() {
   const rawReturnTo = new URLSearchParams(search).get("returnTo") || "";
   const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "";
   const { toast } = useToast();
-  const [form, setForm] = useState({ email: "", username: "", fullName: "", password: "", zipcode: "" });
+  const [form, setForm] = useState(() => {
+    try {
+      const raw = localStorage.getItem("jac_job_prefill");
+      if (raw) {
+        const pf = JSON.parse(raw);
+        return { email: "", username: "", fullName: "", password: "", zipcode: pf.zip || "" };
+      }
+    } catch {}
+    return { email: "", username: "", fullName: "", password: "", zipcode: "" };
+  });
+  const [jacPrefill] = useState(() => {
+    try {
+      const raw = localStorage.getItem("jac_job_prefill");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -261,6 +277,27 @@ export default function Signup() {
                 Secure Apple sign-in — your email stays private if you choose.
               </p>
             </>
+          )}
+
+          {jacPrefill?.serviceType && (
+            <div className="rounded-xl px-4 py-3 flex items-center gap-3 mt-3"
+              style={{ background: "hsl(270 100% 65% / 0.08)", border: "1px solid hsl(270 100% 65% / 0.2)" }}
+              data-testid="jac-context-strip">
+              <Bot className="w-5 h-5 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-display font-black tracking-wide" style={{ color: "hsl(270 100% 88%)" }}>JAC saved your details</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  {jacPrefill.serviceType}{jacPrefill.zip ? ` · ${jacPrefill.zip}` : ""}
+                </p>
+              </div>
+              {jacPrefill.business_owner && (
+                <a href="/biz/signup"
+                  className="text-[10px] font-display font-semibold flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
+                  style={{ color: "hsl(270 100% 78%)" }}>
+                  <Building2 className="w-3 h-3" /> Business →
+                </a>
+              )}
+            </div>
           )}
 
           <div className="flex items-center gap-3 my-5">
