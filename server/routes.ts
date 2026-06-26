@@ -26470,10 +26470,11 @@ OUTPUT STYLE:
     try {
       const userId = req.session?.userId ?? null;
       const tplRows = await pool.query(`
-        SELECT id, emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order
+        SELECT DISTINCT ON (lower(trim(title)))
+          id, emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order
         FROM growth_task_templates
         WHERE is_active = true AND paused = false
-        ORDER BY sort_order ASC, id ASC
+        ORDER BY lower(trim(title)), sort_order ASC, id ASC
       `);
 
       let activeMap: Record<number, string> = {};

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Zap, CheckCircle, Clock, Camera, ChevronRight, Star, Coins, MapPin, ArrowRight } from "lucide-react";
+import { Zap, CheckCircle, Clock, Camera, ChevronRight, Star, Coins, MapPin, ArrowRight, Banknote } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 
 export interface MissionTemplate {
   id: number;
@@ -26,6 +27,8 @@ interface MissionCardProps {
   onAccepted?: (instanceId: number) => void;
   onOpenProof?: (instanceId: number, missionTitle: string) => void;
   compact?: boolean;
+  /** Render as a regular job card — no mission branding, credits shown as pay */
+  jobMode?: boolean;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -58,6 +61,7 @@ export function MissionCard({
   onAccepted,
   onOpenProof,
   compact = false,
+  jobMode = false,
 }: MissionCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -79,97 +83,148 @@ export function MissionCard({
       setAcceptedInstanceId(data.instanceId);
       await queryClient.invalidateQueries({ queryKey: ["/api/missions"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/missions/active"] });
-      toast({ title: "Mission accepted!", description: "Tap 'Submit Proof' when you're ready." });
+      toast({ title: "Job accepted!", description: "Complete it and submit a photo to earn your credits." });
       onAccepted?.(data.instanceId);
     },
     onError: (err: any) => {
-      toast({ title: "Could not accept mission", description: err.message, variant: "destructive" });
+      toast({ title: "Could not accept job", description: err.message, variant: "destructive" });
     },
   });
 
   const displayCredits = mission.effectiveCredits;
+  // 1000 credits = $1.00
+  const dollarEquiv = (displayCredits / 1000).toFixed(2);
+
+  const summaryCard = jobMode ? (
+    /* ── Job-style card ─────────────────────────────────────────────────── */
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setOpen(true)}
+      onKeyDown={e => e.key === "Enter" && setOpen(true)}
+      className="glass-card rounded-xl p-4 cursor-pointer active:scale-[0.99] transition-transform select-none"
+      data-testid={`card-mission-job-${mission.id}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <span className="text-2xl leading-none mt-0.5 flex-shrink-0">{mission.emoji}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-display font-extrabold text-foreground text-sm leading-tight truncate">
+              {mission.title}
+            </p>
+            {mission.description && (
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-snug">
+                {mission.description}
+              </p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-green-500/30 text-green-400 bg-green-500/10 font-bold no-default-hover-elevate gap-1">
+                <Banknote className="w-2.5 h-2.5" />
+                Pays in Credits
+              </Badge>
+              {isActive && (
+                <Badge variant="outline" className="text-[10px] h-5 px-1.5 no-default-hover-elevate" style={{ borderColor: `${STATUS_COLOR[currentStatus] ?? "#6b7280"}44`, color: STATUS_COLOR[currentStatus] ?? "#9ca3af", background: `${STATUS_COLOR[currentStatus] ?? "#6b7280"}15` }}>
+                  {STATUS_LABEL[currentStatus] ?? currentStatus}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <p className="font-display font-black text-base guber-text-green" data-testid={`text-mission-credits-${mission.id}`}>
+            ${dollarEquiv}
+          </p>
+          <p className="text-[9px] text-muted-foreground/60 font-medium">
+            {displayCredits.toLocaleString()} cr
+          </p>
+        </div>
+      </div>
+    </div>
+  ) : (
+    /* ── Original mission-style card ────────────────────────────────────── */
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setOpen(true)}
+      onKeyDown={e => e.key === "Enter" && setOpen(true)}
+      className="rounded-2xl overflow-hidden cursor-pointer active:scale-[0.98] transition-transform select-none"
+      style={{
+        background: "rgba(14,15,22,0.85)",
+        border: "1px solid rgba(139,92,246,0.25)",
+        backdropFilter: "blur(12px)",
+      }}
+      data-testid={`card-mission-${mission.id}`}
+    >
+      {/* Header strip */}
+      <div
+        className="flex items-center gap-2 px-3 py-1.5"
+        style={{ background: "rgba(139,92,246,0.18)", borderBottom: "1px solid rgba(139,92,246,0.2)" }}
+      >
+        <Zap className="w-3 h-3" style={{ color: "#a78bfa" }} />
+        <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "#a78bfa", fontFamily: "Inter, sans-serif" }}>
+          {categoryLabel(mission.category)}
+        </span>
+        {isDouble && (
+          <span
+            className="ml-auto text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
+            style={{ background: "rgba(234,179,8,0.2)", color: "#fbbf24", border: "1px solid rgba(234,179,8,0.35)" }}
+          >
+            2× OG
+          </span>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="px-3 py-3">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl leading-none mt-0.5">{mission.emoji}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold leading-tight" style={{ color: "#f3f4f6", fontFamily: "Inter, sans-serif" }}>
+              {mission.title}
+            </p>
+            {!compact && mission.description && (
+              <p className="text-xs mt-0.5 leading-snug line-clamp-2" style={{ color: "rgba(243,244,246,0.55)", fontFamily: "Inter, sans-serif" }}>
+                {mission.description}
+              </p>
+            )}
+          </div>
+
+          {/* Right side: credit + chevron */}
+          <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
+            <span className="text-sm font-black" style={{ color: "#4ade80", fontFamily: "Inter, sans-serif" }} data-testid={`text-mission-credits-${mission.id}`}>
+              +{displayCredits.toLocaleString()}
+            </span>
+            <span className="text-[9px] font-semibold" style={{ color: "rgba(74,222,128,0.65)" }}>
+              credits
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 self-center ml-1 flex-shrink-0" style={{ color: "rgba(139,92,246,0.6)" }} />
+        </div>
+
+        {/* Status row (if already accepted) */}
+        {isActive && (
+          <div className="mt-2 flex items-center gap-2">
+            <div
+              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold"
+              style={{
+                background: `${STATUS_COLOR[currentStatus] ?? "#6b7280"}22`,
+                border: `1px solid ${STATUS_COLOR[currentStatus] ?? "#6b7280"}44`,
+                color: STATUS_COLOR[currentStatus] ?? "#9ca3af",
+              }}
+              data-testid={`badge-mission-status-${mission.id}`}
+            >
+              {currentStatus === "proof_submitted" ? <Clock className="w-2.5 h-2.5" /> : <CheckCircle className="w-2.5 h-2.5" />}
+              {STATUS_LABEL[currentStatus] ?? currentStatus}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <>
-      {/* ── Tappable summary card ── */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => setOpen(true)}
-        onKeyDown={e => e.key === "Enter" && setOpen(true)}
-        className="rounded-2xl overflow-hidden cursor-pointer active:scale-[0.98] transition-transform select-none"
-        style={{
-          background: "rgba(14,15,22,0.85)",
-          border: "1px solid rgba(139,92,246,0.25)",
-          backdropFilter: "blur(12px)",
-        }}
-        data-testid={`card-mission-${mission.id}`}
-      >
-        {/* Header strip */}
-        <div
-          className="flex items-center gap-2 px-3 py-1.5"
-          style={{ background: "rgba(139,92,246,0.18)", borderBottom: "1px solid rgba(139,92,246,0.2)" }}
-        >
-          <Zap className="w-3 h-3" style={{ color: "#a78bfa" }} />
-          <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "#a78bfa", fontFamily: "Inter, sans-serif" }}>
-            {categoryLabel(mission.category)}
-          </span>
-          {isDouble && (
-            <span
-              className="ml-auto text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded-full"
-              style={{ background: "rgba(234,179,8,0.2)", color: "#fbbf24", border: "1px solid rgba(234,179,8,0.35)" }}
-            >
-              2× OG
-            </span>
-          )}
-        </div>
-
-        {/* Body */}
-        <div className="px-3 py-3">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl leading-none mt-0.5">{mission.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold leading-tight" style={{ color: "#f3f4f6", fontFamily: "Inter, sans-serif" }}>
-                {mission.title}
-              </p>
-              {!compact && mission.description && (
-                <p className="text-xs mt-0.5 leading-snug line-clamp-2" style={{ color: "rgba(243,244,246,0.55)", fontFamily: "Inter, sans-serif" }}>
-                  {mission.description}
-                </p>
-              )}
-            </div>
-
-            {/* Right side: credit + chevron */}
-            <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
-              <span className="text-sm font-black" style={{ color: "#4ade80", fontFamily: "Inter, sans-serif" }} data-testid={`text-mission-credits-${mission.id}`}>
-                +{displayCredits.toLocaleString()}
-              </span>
-              <span className="text-[9px] font-semibold" style={{ color: "rgba(74,222,128,0.65)" }}>
-                credits
-              </span>
-            </div>
-            <ChevronRight className="w-4 h-4 self-center ml-1 flex-shrink-0" style={{ color: "rgba(139,92,246,0.6)" }} />
-          </div>
-
-          {/* Status row (if already accepted) */}
-          {isActive && (
-            <div className="mt-2 flex items-center gap-2">
-              <div
-                className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold"
-                style={{
-                  background: `${STATUS_COLOR[currentStatus] ?? "#6b7280"}22`,
-                  border: `1px solid ${STATUS_COLOR[currentStatus] ?? "#6b7280"}44`,
-                  color: STATUS_COLOR[currentStatus] ?? "#9ca3af",
-                }}
-                data-testid={`badge-mission-status-${mission.id}`}
-              >
-                {currentStatus === "proof_submitted" ? <Clock className="w-2.5 h-2.5" /> : <CheckCircle className="w-2.5 h-2.5" />}
-                {STATUS_LABEL[currentStatus] ?? currentStatus}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      {summaryCard}
 
       {/* ── Detail Sheet ── */}
       <Sheet open={open} onOpenChange={setOpen}>

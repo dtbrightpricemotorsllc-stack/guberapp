@@ -8,6 +8,7 @@
  */
 
 import { applyJacVoice } from "./jac-voice";
+import { isNativeApp } from "./platform";
 
 /** Pronunciation rewrites applied before any TTS call */
 export function normalizeTtsText(text: string): string {
@@ -105,41 +106,20 @@ export async function jacSpeak(
   const text = normalizeTtsText(rawText);
   if (!text.trim()) return;
 
-  // ── ElevenLabs disabled — using Web Speech directly ──────────────────────
-  // To re-enable: uncomment tiers 1 & 2 below and remove this block.
-  opts.onFallback?.();
-  webSpeechFallback(text);
-
-  /* ── Tier 1: static cache ────────────────────────────────────────────────
+  // ── Tier 1: static cache (free, works on native iOS too) ─────────────────
   const slug = detectCacheSlug(rawText);
   if (slug) {
     const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`);
     if (played) return;
   }
 
-  // ── Tier 2: live ElevenLabs proxy ────────────────────────────────────────
-  try {
-    const res = await fetch("/api/jac/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (res.ok) {
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const played = await tryPlayAudio(url, true);
-      if (played) return;
-    } else {
-      console.warn("[JAC TTS] proxy returned", res.status, "— falling back to Web Speech");
-    }
-  } catch (e) {
-    console.warn("[JAC TTS] proxy fetch failed:", e);
-  }
+  // ── Native iOS: speechSynthesis doesn't work in WKWebView — stop here ────
+  if (isNativeApp) return;
 
-  // ── Tier 3: Web Speech fallback ──────────────────────────────────────────
+  // ── Web Speech fallback (web + Android only) ──────────────────────────────
+  // ElevenLabs proxy is parked. To re-enable, add tier 2 fetch above this line.
   opts.onFallback?.();
   webSpeechFallback(text);
-  */ 
 }
 
 function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
