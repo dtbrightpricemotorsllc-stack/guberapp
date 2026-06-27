@@ -31,6 +31,7 @@ export interface GrowthTask {
   ogBonusPct: number;
   category: string;
   sortOrder: number;
+  requiresPhoto: boolean;
 }
 
 export interface ZipFallbackResult {
@@ -127,14 +128,18 @@ export async function getZipFallbackTasks(
   }
 
   const res = await pool.query(
-    `SELECT id, emoji, title, description, reward_credits, reward_score,
+    `SELECT DISTINCT ON (lower(trim(title)))
+            id, emoji, title, description, reward_credits, reward_score,
             og_bonus_pct, category, sort_order
      FROM growth_task_templates
      WHERE is_active = true AND paused = false
-     ORDER BY sort_order ASC, id ASC
+     ORDER BY lower(trim(title)), sort_order ASC, id ASC
      LIMIT $1`,
     [cfg.maxTasksShown]
   );
+
+  const isPhotoTask = (r: any): boolean =>
+    r.emoji === "📷" || /photo|storefront/i.test(r.title);
 
   const tasks: GrowthTask[] = res.rows.map((r: any) => ({
     id: r.id,
@@ -146,6 +151,7 @@ export async function getZipFallbackTasks(
     ogBonusPct: r.og_bonus_pct,
     category: r.category,
     sortOrder: r.sort_order,
+    requiresPhoto: isPhotoTask(r),
   }));
 
   return {
