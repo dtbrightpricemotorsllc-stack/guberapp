@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -44,9 +38,9 @@
 
         </activity>
 
-        <!-- Live-task foreground tracking service: shows a persistent
-             notification while sharing the worker's location for an active job.
-             Started/stopped explicitly by the JS tracking layer. -->
+        <!-- Live-task foreground location service.
+             foregroundServiceType="location" satisfies Android 14+ (API 34)
+             requirements for the FOREGROUND_SERVICE_LOCATION permission. -->
         <service
             android:name=".GuberTrackingService"
             android:exported="false"
@@ -59,26 +53,50 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
+                android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Tell FCM which channel to use for notifications that arrive
-             before the JS channel-creation code has run (e.g. first cold boot).
-             The channel itself is created at runtime via PushNotifications.createChannel(). -->
+        <!-- Default FCM notification channel used on cold-boot before JS runs -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="guber_default" />
+
     </application>
 
-    <!-- Permissions -->
-
+    <!-- ── Network ───────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Background location: only requested when transporter starts an Asset Protection trip -->
+
+    <!-- ── Location ──────────────────────────────────────────────────────── -->
+    <!-- Foreground precise and coarse location for map display and job matching -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Background location: active only while GuberTrackingService is running
+         during an accepted job (worker shares position with hirer in real time).
+         Requested at runtime after foreground location is already granted. -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- ── Foreground Service (Android 9+ / Android 14+) ─────────────────── -->
+    <!-- Required to start any foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required on Android 14+ for a foreground service declared with
+         foregroundServiceType="location" -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- ── Camera ────────────────────────────────────────────────────────── -->
+    <!-- Used for job photo capture, Verify & Inspect, and hands-free POV mode -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- ── Microphone ────────────────────────────────────────────────────── -->
+    <!-- Used by JAC (GUBER AI voice assistant) for voice input -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- ── Notifications ─────────────────────────────────────────────────── -->
+    <!-- Required on Android 13+ to display push notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ── Hardware features ─────────────────────────────────────────────── -->
+    <!-- GPS preferred; falls back to network location on devices without GPS -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
 </manifest>
