@@ -223,6 +223,10 @@ export function GUBERAssistant() {
   useEffect(() => {
     if (!s.open) return;
     if (messages.length !== 1) return; // already has a thread
+    // Unlock audio on open — the user tapped the FAB which is a valid gesture.
+    // Without this, static MP3 playback is blocked by autoplay policy and the
+    // greeting falls back to Web Speech before the context is unlocked.
+    unlockAudioContext();
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
       // First-time visitor — speak the greeting immediately
@@ -349,6 +353,18 @@ export function GUBERAssistant() {
   }
 
   function doSend(text: string) {
+    // Mic-denied sentinel from use-speech: show guidance instead of sending
+    if (text === "__mic_denied__") {
+      const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
+      const guide = platform === "android"
+        ? "Microphone access is blocked. Go to Settings → Apps → GUBER → Permissions → Microphone and allow it, then try again."
+        : platform === "ios"
+          ? "Microphone access is blocked. Go to Settings → Privacy → Microphone → GUBER and allow it, then try again."
+          : "Microphone access was denied. Please allow microphone access in your browser settings.";
+      setMessages((prev) => [...prev, { role: "assistant", content: guide }]);
+      jacSpeak(guide, { muted });
+      return;
+    }
     unlockAudioContext();
     const trimmed = text.trim();
     if (!trimmed || anyPending) return;

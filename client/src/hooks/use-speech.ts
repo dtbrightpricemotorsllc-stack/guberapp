@@ -28,7 +28,18 @@ export function useSpeechInput(onResult: (text: string) => void) {
         if (text) cbRef.current(text);
       };
       rec.onend = () => setListening(false);
-      rec.onerror = () => setListening(false);
+      rec.onerror = (e) => {
+        setListening(false);
+        // Surface actionable guidance for the two most common native failures
+        if ((e as any).error === "not-allowed") {
+          // Android: go to Settings → Apps → GUBER → Permissions → Microphone
+          // iOS:     Settings → Privacy → Microphone → GUBER
+          cbRef.current("__mic_denied__");
+        }
+        // "network" = webkitSpeechRecognition hit Google's cloud endpoint —
+        // this only fires in WebView if the audio capture was actually granted
+        // but the network call failed (offline, etc.). No user action needed.
+      };
       rec.start();
       recRef.current = rec;
       setListening(true);

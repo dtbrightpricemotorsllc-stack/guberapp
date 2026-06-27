@@ -137,11 +137,16 @@ function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
 
 function webSpeechFallback(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  applyJacVoice(utt);
-  utt.rate   = 1.08;
-  utt.pitch  = 1.15;
-  utt.volume = 1.0;
-  window.speechSynthesis.speak(utt);
+  const ss = window.speechSynthesis;
+  ss.cancel();
+  // Chrome/WebView bug: cancel() followed immediately by speak() can silently
+  // drop the utterance. A 60 ms gap lets cancel() finish before we enqueue.
+  setTimeout(() => {
+    const utt = new SpeechSynthesisUtterance(text);
+    applyJacVoice(utt);
+    utt.rate   = 1.08;
+    utt.pitch  = 1.15;
+    utt.volume = 1.0;
+    ss.speak(utt);
+  }, 60);
 }
