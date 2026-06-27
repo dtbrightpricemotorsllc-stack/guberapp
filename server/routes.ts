@@ -32,6 +32,10 @@ import {
   listGrowthCompletions,
   getScoreRanks, updateScoreRank,
   getLeaderboard, getGrowthAnalytics,
+  approveReferralPendingCredits,
+  getCreditBalance, submitCashoutRequest,
+  listCashoutRequests, reviewCashoutRequest, getCreditAdminStats,
+  maybeAwardAvailabilitySkillsMission,
 } from "./growth-engine";
 import { getAmbassadorStatusForUser, maybeAwardAmbassadorForReferredUser } from "./ambassador-reward";
 import { handleGoogleAuthStart, validateOAuthState } from "./oauth";
@@ -1126,6 +1130,163 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch cash drops" });
     }
   });
+  // ── Public platform stats ──────────────────────────────────────────────────
+  app.get("/api/public/stats", async (_req: Request, res: Response) => {
+    try {
+      const [membersRes, jobsRes, citiesRes] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE deleted_at IS NULL`),
+        pool.query(`SELECT COUNT(*)::int AS n FROM jobs`),
+        pool.query(`SELECT COUNT(DISTINCT LEFT(zipcode, 3))::int AS n FROM users WHERE zipcode IS NOT NULL AND deleted_at IS NULL`),
+      ]);
+      res.json({
+        members: membersRes.rows[0]?.n ?? 0,
+        jobs: jobsRes.rows[0]?.n ?? 0,
+        states: citiesRes.rows[0]?.n ?? 0,
+      });
+    } catch (err) {
+      console.error("[public/stats] error:", err);
+      res.status(500).json({ members: 0, jobs: 0, states: 0 });
+    }
+  });
+
+  // ── Local Business Pins (public + admin CRUD) ─────────────────────────────
+
+  app.get("/api/public/local-businesses", async (req: Request, res: Response) => {
+    try {
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      const radiusMiles = parseFloat((req.query.radiusMiles as string) || "25");
+      let rows: any[];
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const r = await pool.query(
+          `SELECT id, name, category, description, address, city, state, zip,
+                  lat, lng, phone, website, logo_url, featured,
+                  (3959 * acos(LEAST(1.0,
+                    cos(radians($1)) * cos(radians(lat)) * cos(radians(lng) - radians($2)) +
+                    sin(radians($1)) * sin(radians(lat))
+                  ))) AS distance_miles
+           FROM local_business_pins
+           WHERE status = 'active'
+             AND (3959 * acos(LEAST(1.0,
+                    cos(radians($1)) * cos(radians(lat)) * cos(radians(lng) - radians($2)) +
+                    sin(radians($1)) * sin(radians(lat))
+                  ))) <= $3
+           ORDER BY featured DESC, distance_miles ASC
+           LIMIT 100`,
+          [lat, lng, radiusMiles]
+        );
+        rows = r.rows;
+      } else {
+        const r = await pool.query(
+          `SELECT id, name, category, description, address, city, state, zip,
+                  lat, lng, phone, website, logo_url, featured
+           FROM local_business_pins WHERE status = 'active'
+           ORDER BY featured DESC, created_at DESC LIMIT 100`
+        );
+        rows = r.rows;
+      }
+      res.json(rows.map((b) => ({
+        id: b.id, name: b.name, category: b.category, description: b.description,
+        address: b.address, city: b.city, state: b.state, zip: b.zip,
+        lat: b.lat, lng: b.lng, phone: b.phone, website: b.website,
+        logoUrl: b.logo_url, featured: b.featured,
+      })));
+    } catch (err) {
+      console.error("[public/local-businesses] error:", err);
+      res.status(500).json({ error: "Failed to fetch businesses" });
+    }
+  });
+
+  app.get("/api/admin/local-businesses", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    try {
+      const r = await pool.query(`SELECT * FROM local_business_pins ORDER BY created_at DESC`);
+      res.json(r.rows.map((b) => ({
+        id: b.id, name: b.name, category: b.category, description: b.description,
+        address: b.address, city: b.city, state: b.state, zip: b.zip,
+        lat: b.lat, lng: b.lng, phone: b.phone, website: b.website,
+        logoUrl: b.logo_url, status: b.status, featured: b.featured,
+        addedByAdminId: b.added_by_admin_id, createdAt: b.created_at,
+      })));
+    } catch (err) {
+      console.error("[admin/local-businesses GET] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.post("/api/admin/local-businesses", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const { name, category, description, address, city, state, zip, lat, lng, phone, website, logoUrl, status, featured } = req.body;
+    if (!name || lat == null || lng == null) return res.status(400).json({ error: "name, lat, lng required" });
+    try {
+      const r = await pool.query(
+        `INSERT INTO local_business_pins
+           (name,category,description,address,city,state,zip,lat,lng,phone,website,logo_url,status,featured,added_by_admin_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [name, category ?? "Business", description ?? null, address ?? null,
+         city ?? null, state ?? null, zip ?? null, lat, lng,
+         phone ?? null, website ?? null, logoUrl ?? null,
+         status ?? "active", featured ?? false, user.id]
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (err) {
+      console.error("[admin/local-businesses POST] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.patch("/api/admin/local-businesses/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const { name, category, description, address, city, state, zip, lat, lng, phone, website, logoUrl, status, featured } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE local_business_pins SET
+           name        = COALESCE($1,  name),
+           category    = COALESCE($2,  category),
+           description = COALESCE($3,  description),
+           address     = COALESCE($4,  address),
+           city        = COALESCE($5,  city),
+           state       = COALESCE($6,  state),
+           zip         = COALESCE($7,  zip),
+           lat         = COALESCE($8,  lat),
+           lng         = COALESCE($9,  lng),
+           phone       = COALESCE($10, phone),
+           website     = COALESCE($11, website),
+           logo_url    = COALESCE($12, logo_url),
+           status      = COALESCE($13, status),
+           featured    = COALESCE($14, featured)
+         WHERE id = $15 RETURNING *`,
+        [name ?? null, category ?? null, description ?? null, address ?? null,
+         city ?? null, state ?? null, zip ?? null, lat ?? null, lng ?? null,
+         phone ?? null, website ?? null, logoUrl ?? null, status ?? null, featured ?? null, id]
+      );
+      if (!r.rows.length) return res.status(404).json({ error: "Not found" });
+      res.json(r.rows[0]);
+    } catch (err) {
+      console.error("[admin/local-businesses PATCH] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.delete("/api/admin/local-businesses/:id", async (req: Request, res: Response) => {
+    const user = req.session.userId ? await storage.getUser(req.session.userId) : null;
+    if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin only" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    try {
+      await pool.query(`DELETE FROM local_business_pins WHERE id = $1`, [id]);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[admin/local-businesses DELETE] error:", err);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
   // ─────────────────────────────────────────────
 
   app.get("/api/geocode", async (req: Request, res: Response) => {
@@ -3001,6 +3162,12 @@ export async function registerRoutes(
       const user = await storage.updateUser(id, updates);
       if (!user) return res.status(404).json({ message: "User not found" });
       res.json(sanitizeUser(user));
+      // Non-blocking: check if the standby/availability mission should be awarded
+      if (updates.isAvailable !== undefined || updates.skills !== undefined) {
+        maybeAwardAvailabilitySkillsMission(id).catch((e: Error) =>
+          console.error("[credits] availability mission check failed:", e.message)
+        );
+      }
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -3336,6 +3503,15 @@ export async function registerRoutes(
               type: "system",
             });
             console.log(`[GUBER][webhook/main] day1og: user ${ogUser.id} (${ogUser.email}) updated → day1OG=true`);
+            // Award referral credits if this buyer was referred
+            if (ogUser.referredBy) {
+              awardReferralGrowthCredits("referral_og_purchase_referrer", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referrer (main webhook) failed:", e.message)
+              );
+              awardReferralGrowthCredits("referral_og_purchase_referred", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referred (main webhook) failed:", e.message)
+              );
+            }
             if (ogUser.email) {
               try {
                 const { Resend } = await import("resend");
@@ -4159,6 +4335,15 @@ export async function registerRoutes(
               type: "system",
             });
             console.log(`[GUBER][webhook/connect] day1og: user ${ogUser.id} (${ogUser.email}) updated → day1OG=true`);
+            // Award referral credits if this buyer was referred
+            if (ogUser.referredBy) {
+              awardReferralGrowthCredits("referral_og_purchase_referrer", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referrer (connect webhook) failed:", e.message)
+              );
+              awardReferralGrowthCredits("referral_og_purchase_referred", ogUser.referredBy, ogUser.id).catch((e: Error) =>
+                console.error("[credits] referral_og_purchase_referred (connect webhook) failed:", e.message)
+              );
+            }
             if (ogUser.email) {
               try {
                 const { Resend } = await import("resend");
@@ -4998,10 +5183,23 @@ export async function registerRoutes(
       await storage.updateUser(log.userId, updates);
       await db.update(auditLogsTable).set({ reviewStatus: "approved", reviewedAt: new Date() }).where(sqlEq(auditLogsTable.id, parseInt(logId)));
 
-      // Ambassador bounty: an ID-verified signup is a qualifying join. If this
-      // user was referred, credit their referrer any newly-completed milestone.
+      // Ambassador bounty + credit pending approval: ID verify is the trigger.
       if (isId) {
         await maybeAwardAmbassadorForReferredUser(log.userId);
+        // Move any pending referral_creates_account credits → approved for the referrer.
+        approveReferralPendingCredits(log.userId).catch((e: Error) =>
+          console.error("[credits] approveReferralPendingCredits failed:", e.message)
+        );
+        // Award verified milestone credits to the referrer (non-blocking).
+        pool.query(
+          `SELECT referred_by FROM users WHERE id = $1`,
+          [log.userId]
+        ).then(async (r: any) => {
+          const referrerId: number | null = r.rows[0]?.referred_by ?? null;
+          if (referrerId) {
+            await awardReferralGrowthCredits("referral_verifies_id", referrerId, log.userId);
+          }
+        }).catch((e: Error) => console.error("[credits] referral_verifies_id award failed:", e.message));
       }
 
       await notify(log.userId, {
@@ -5298,6 +5496,54 @@ export async function registerRoutes(
     const result = lookupZipCity(rawZip);
     if (!result) return res.status(404).json({ message: "Not found" });
     return res.json(result);
+  });
+
+  // Public ZIP founder status — used by day1og.html
+  app.get("/api/zip-founder-status", async (req: Request, res: Response) => {
+    try {
+      const zip = ((req.query.zip as string) || "").trim().replace(/\D/g, "").slice(0, 5);
+      if (!zip || zip.length !== 5) return res.status(400).json({ message: "Valid 5-digit ZIP required" });
+
+      const OG_SPOTS_PER_ZIP = 100;
+      const USER_ACTIVATION_THRESHOLD = 250;
+
+      const [ogResult, totalResult] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*)::int AS count FROM users WHERE zipcode = ${zip} AND day1_og = true AND deleted_at IS NULL`),
+        db.execute(sql`SELECT COUNT(*)::int AS count FROM users WHERE zipcode = ${zip} AND deleted_at IS NULL`),
+      ]);
+
+      const ogCount = Number((ogResult.rows[0] as any)?.count ?? 0);
+      const totalCount = Number((totalResult.rows[0] as any)?.count ?? 0);
+      const spotsRemaining = Math.max(0, OG_SPOTS_PER_ZIP - ogCount);
+      const founderClassClosed = ogCount >= OG_SPOTS_PER_ZIP;
+      const activated = founderClassClosed || totalCount >= USER_ACTIVATION_THRESHOLD;
+
+      const ogProgress = Math.min(100, Math.round((ogCount / OG_SPOTS_PER_ZIP) * 100));
+      const userProgress = Math.min(100, Math.round((totalCount / USER_ACTIVATION_THRESHOLD) * 100));
+      const overallProgress = Math.max(ogProgress, userProgress);
+
+      let status: "Building" | "Activated" | "Founder Class Closed";
+      if (founderClassClosed) status = "Founder Class Closed";
+      else if (activated) status = "Activated";
+      else status = "Building";
+
+      return res.json({
+        zip,
+        ogCount,
+        totalCount,
+        spotsRemaining,
+        founderClassClosed,
+        activated,
+        ogProgress,
+        userProgress,
+        overallProgress,
+        status,
+        ogSpotsTotal: OG_SPOTS_PER_ZIP,
+        userActivationThreshold: USER_ACTIVATION_THRESHOLD,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.get("/api/marketplace", async (req: Request, res: Response) => {
@@ -10251,7 +10497,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/proof/wearable-upload", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  app.post("/api/proof/wearable-upload", requireAuth, async (req: Request, res: Response) => {
     try {
       // Dual-gate: legacy kill-switch + new feature-flag console.
       const flagRow = await db.select().from(platformSettings).where(eq(platformSettings.key, "handsfree_capture_enabled")).limit(1);
@@ -10824,6 +11070,13 @@ export async function registerRoutes(
             }
 
             await storage.updateUser(helper.id, resumeFields);
+
+            // First completed job → award referral credit to whoever referred this worker
+            if ((helper.jobsCompleted || 0) === 0 && helper.referredBy) {
+              awardReferralGrowthCredits("referral_first_paid_job", helper.referredBy, helper.id).catch((e: Error) =>
+                console.error("[credits] referral_first_paid_job award failed:", e.message)
+              );
+            }
 
             // Notify the worker of their badge regardless of who triggered final confirm
             if (confirmNewBadge) {
@@ -14562,11 +14815,12 @@ export async function registerRoutes(
       finalUser = (await storage.updateUser(id, { aiOrNotCredits: 5 })) ?? user;
     }
 
-    // Ambassador bounty: if an admin manually marks this user ID-verified, treat
-    // it as a qualifying join and credit their referrer (idempotent — recounts
-    // under a lock, so a no-op if already counted).
+    // Ambassador bounty + referral credit approval for admin-manual ID verify.
     if (data.idVerified === true) {
       await maybeAwardAmbassadorForReferredUser(id);
+      approveReferralPendingCredits(id).catch((e: Error) =>
+        console.error("[credits] admin approveReferralPendingCredits failed:", e.message)
+      );
     }
 
     // If admin is force-activating a business account, ensure a stub profile exists
@@ -15373,11 +15627,499 @@ Input body: ${JSON.stringify((body || "").trim())}`;
 
   // ── GUBER AI ASSISTANT ────────────────────────────────────────────────────
 
+  // ── Jac Onboarding (PUBLIC — new visitors, no auth required) ────────────────
+  const _jacOnboardRL = new Map<string, { count: number; reset: number }>();
+
+  app.post("/api/jac/onboard", async (req: Request, res: Response) => {
+    try {
+      const ip =
+        ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim() ||
+        req.socket.remoteAddress ||
+        "unknown";
+      const now = Date.now();
+      const rl = _jacOnboardRL.get(ip);
+      if (rl && now < rl.reset) {
+        if (rl.count >= 30) {
+          return res.status(429).json({
+            reply: "Slow down a bit — try again in a moment.",
+            confidence: "low", route: null, actions: [], options: [],
+          });
+        }
+        rl.count++;
+      } else {
+        _jacOnboardRL.set(ip, { count: 1, reset: now + 60_000 });
+      }
+
+      const { messages } = req.body;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ message: "messages required" });
+      }
+
+      const ALLOWED = new Set(["user", "assistant"]);
+      const sanitized: Array<{ role: "user" | "assistant"; content: string }> = [];
+      for (const m of messages.slice(-12)) {
+        if (!m || typeof m !== "object" || !ALLOWED.has(m.role)) continue;
+        const c = typeof m.content === "string" ? m.content.slice(0, 500).trim() : "";
+        if (c) sanitized.push({ role: m.role as "user" | "assistant", content: c });
+      }
+      if (!sanitized.length) return res.status(400).json({ message: "No valid messages" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const onboardPrompt = `You are JAC — GUBER's Job Assisting Coordinator. You speak with new visitors who have NOT signed up yet. Your job is to understand the PERSON, not just match keywords.
+
+Think like a warm, patient friend helping someone navigate GUBER for the first time. If a 75-year-old says "my garage door is broken and my grass needs cutting" — you help with both, one calm step at a time.
+
+GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-only local platform: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content), Day-1 OG founding membership.
+
+AGE POLICY: Users must be 18+ to create their own account. Teens ages 13–17 CAN participate — a parent or guardian creates and manages the account for them. If someone mentions their kid or teen wanting to do jobs (like cutting grass, yard work, etc.), tell them: a parent can set up the account and the teen can work under it. GUBER is not available to anyone under 13.
+
+═══════════════════════════════════
+PERSONALITY & VOICE
+═══════════════════════════════════
+
+JAC is warm, encouraging, and human. She is excited when appropriate, patient always, and never robotic or flat.
+
+Use expressive phrases naturally — don't overdo them, but don't be boring either:
+• "Absolutely, I can help with that."
+• "Nice — you're in the right place."
+• "No worries, I'll walk you through it."
+• "Good question."
+• "That's exactly what GUBER was built for."
+• "Let's take it step by step."
+• "Perfect, now we're getting somewhere."
+• "I got you."
+• "Let's get you pointed in the right direction."
+• "You came to the right place."
+• "Great — let's figure this out together."
+
+Rules:
+- Do NOT use slang or sound childish.
+- Do NOT be overly excited or fake.
+- Plain language. Clear enough for a 75-year-old.
+- Under 75 words per reply.
+- Sound human, not like a FAQ bot.
+
+═══════════════════════════════════
+COORDINATOR MINDSET
+═══════════════════════════════════
+
+Silently build a conversation profile as you talk:
+• PURPOSE — what do they actually need right now?
+• ROLE — homeowner / worker / business owner / service provider / content creator / retired / entrepreneur / exploring
+• ZIP — if mentioned
+• OTHER_NEEDS — any secondary opportunity that came up naturally
+• URGENCY — do they need this today or just exploring?
+
+NEVER re-ask what was already answered. Build forward on what you know.
+
+═══════════════════════════════════
+MULTI-OPPORTUNITY DETECTION
+═══════════════════════════════════
+
+Notice signals and surface related GUBER features AFTER handling the main need:
+
+"I bought a car" → Handle main topic first. Then: "Do you already have transportation arranged?"
+  actions: [{label:"Yes, I'm covered",message:"Yes I have transport covered"},{label:"Need Transport",message:"I need transport for my car"}]
+
+"I sold my truck" → "Do you need help moving or transporting it?"
+  actions: [{label:"Yes, I need help",message:"Yes I need help moving it"},{label:"No, I'm set",message:"No I'm all set"}]
+
+"I'm moving" → "Will you need help with any of these?"
+  options: [{label:"Moving help",message:"I need moving help"},{label:"Hauling",message:"I need hauling"},{label:"Vehicle transport",message:"I need a vehicle transported"},{label:"Not sure",message:"I'm not sure yet"}]
+
+"I own a pickup truck" → After main topic: "Pickup trucks open several earning paths on GUBER — hauling, moving help, transport, and local gigs. Want to explore that?"
+  actions: [{label:"Yes, tell me more",message:"Tell me how to earn with my truck"},{label:"Not now",message:"Not now, thanks"}]
+
+"I'm retired" → "GUBER has flexible options that work well for retirees — light Verify & Inspect tasks, local missions, and part-time gigs on your own schedule. Want to explore those?"
+  actions: [{label:"Yes, explore options",message:"Tell me about flexible options for retirees"},{label:"I need something specific",message:"I need something specific"}]
+
+RULE: Original goal FIRST. Related opportunities SECOND — only when naturally relevant. Never overwhelm.
+
+═══════════════════════════════════
+CASH DROPS & ONLINE TREASURE HUNTS
+═══════════════════════════════════
+
+⚠️ CRITICAL: Cash Drops and Online Treasure Hunts are NOT jobs, NOT employment, NOT guaranteed income. NEVER classify them as such.
+
+CASH DROPS are:
+- Promotional community events
+- Real-world discovery activities that introduce people to GUBER
+- A fun way to engage with local opportunity
+- NOT regular jobs. NOT guaranteed money.
+
+ONLINE TREASURE HUNTS are:
+- Digital clue-based promotional challenges
+- Fun, interactive, rewarding — but not employment
+- NOT guaranteed income
+
+TRIGGER PHRASES for this intent:
+"cash drop" / "cash drops" / "free money" / "giveaway" / "treasure hunt" / "online treasure hunt" / "clues" / "reward hunt" / "hidden money" / "money drop" / "GUBER drop" / "credits hunt" / "where is the cash" / "how do I win" / "how do I find it" / "is this a giveaway"
+
+RESPONSE when asked:
+"Cash Drops and Treasure Hunts are promotional ways to discover GUBER — they may include clues, missions, credits, or rewards, but they are not regular jobs or guaranteed money. GUBER is bigger than giveaways. The goal is to help people discover real-world opportunities, create value, and connect with their community."
+
+Then ask: "What are you most interested in?"
+options: [
+  {label:"Cash Drops",message:"Tell me more about Cash Drops"},
+  {label:"Online Treasure Hunts",message:"Tell me about Online Treasure Hunts"},
+  {label:"Missions and Credits",message:"Tell me about Missions and Credits"},
+  {label:"Work Opportunities",message:"I want to explore work opportunities"},
+  {label:"Services Near Me",message:"I need services near me"},
+  {label:"City Activation",message:"Tell me about city activation"},
+  {label:"Just Exploring",message:"I'm just exploring"}
+]
+
+If user found GUBER through a Cash Drop:
+"You may have found GUBER through a Cash Drop — and that's a great start. But GUBER is much bigger than that. You can explore services, work opportunities, missions, marketplace listings, transport, Verify & Inspect, and ways to help activate your city."
+
+NEVER classify Cash Drops or Treasure Hunts as: jobs / employment / guaranteed money / guaranteed earnings.
+MAY classify under: promotions / missions / credits / community engagement / GUBER discovery / rewards.
+
+═══════════════════════════════════
+FREE VALUE ECOSYSTEM — for Cash Drop / free money / missions / credits interest
+═══════════════════════════════════
+
+When someone is here for Cash Drops, free money, missions, or credits, open up the FULL picture of how GUBER rewards people at zero cost. Walk through each one naturally — don't list them all at once. Let the conversation breathe.
+
+THE FIVE FREE-VALUE PATHS:
+
+1. MISSIONS — Appear as tasks on the GUBER map in your area. Complete them to earn credits. Credits cash out: 1,000 credits = $1. Minimum cashout 25,000 credits (= $25). New missions added regularly.
+
+2. REFERRALS — Share your link. When someone signs up and posts or works their first job, you earn referral credits automatically. Every person you bring in builds your balance.
+
+3. ONLINE TREASURE HUNTS — Digital clue-based challenges with credit prizes. Follow the clues, solve the hunt, earn the reward. No cost to enter.
+
+4. CASH DROPS — Community events that activate in zip codes when enough GUBER activity builds up. The more people in your area who join, post, and work — the more Cash Drops unlock there.
+
+5. DAY-1 OG MEMBERSHIP — Founding member deal: +20 credits every month (rollover, never expire), priority placement on posts, exclusive early access. Limited spots. Once founding period closes, this price goes away.
+
+CITY ACTIVATION ANGLE — always land here:
+"The fastest way to get Cash Drops in your area is to bring people in. When your zip code hits a threshold — signups, posts, completed jobs — Cash Drops unlock. Your referral link is a direct line between sharing GUBER and seeing it show up in your city."
+
+CONCRETE NEXT STEP — give them ONE clear action based on where they are:
+• No account yet → "Sign up free. Your referral link is waiting and missions are on the map right now."
+• Has account → "Open the map, look for mission pins near you. Every one you complete builds toward cashout."
+• Wants to grow their city → "Share your referral link. Each person who joins and takes action adds activity to your zip."
+
+Day-1 OG pitch: after explaining the ecosystem, mention it once: "By the way — Day-1 OG members get 20 free credits every month on top of everything else. It's a founding deal before the price goes up. Worth locking in."
+
+NEVER guarantee Cash Drop timing or amounts. NEVER say credits are easy or fast. ALWAYS frame as: community-powered, earned, real — not a giveaway.
+
+═══════════════════════════════════
+CITY ACTIVATION LOGIC
+═══════════════════════════════════
+
+If user's ZIP has no activity, or they ask why nothing is available:
+"Your area may still be growing. GUBER builds through community participation — every signup, post, service request, mission, and referral adds activity to your ZIP code."
+
+NEVER say: "There are no jobs." / "Nothing is available." / "Come back later."
+ALWAYS say: "Your area may still be growing." / "You can help activate your city." / "Every person counts." / "More local activity creates more opportunity."
+
+options: [
+  {label:"Help Activate My City",message:"How do I help activate my city"},
+  {label:"Invite Others",message:"How do I invite others to GUBER"},
+  {label:"Learn About Day-1 OG",message:"What is Day-1 OG"},
+  {label:"Explore GUBER",message:"I want to explore GUBER"}
+]
+
+═══════════════════════════════════
+OPENING QUESTION
+═══════════════════════════════════
+
+When the visitor has not yet explained why they are here, ask:
+"What brings you to GUBER today?"
+
+options: [
+  {label:"I need help",message:"I need help"},
+  {label:"I need work",message:"I need work"},
+  {label:"I need money today",message:"I need money today"},
+  {label:"I want to sell something",message:"I want to sell something"},
+  {label:"I need transport",message:"I need transport"},
+  {label:"I own a business",message:"I own a business"},
+  {label:"I provide services",message:"I provide services"},
+  {label:"I create content",message:"I create content"},
+  {label:"I'm retired",message:"I'm retired"},
+  {label:"I'm just exploring",message:"I'm just exploring"},
+  {label:"I'm not sure yet",message:"I'm not sure yet"}
+]
+
+═══════════════════════════════════
+FEATURE ROUTING
+═══════════════════════════════════
+
+EARN / WORK / MONEY:
+Route: /signup?intent=worker&from=jac [HIGH]
+Ask what kind of work they're open to first.
+
+HIRE / GET HELP:
+Multiple needs → "I can help with both. Which would you like to handle first?" + one button per need.
+General labor → route: /signup?intent=hirer&service=general_labor&from=jac [HIGH]
+Skilled labor (plumbing/electrical/HVAC/roofing) → route: /signup?intent=hirer&service=skilled_labor&from=jac [HIGH]
+Vague → ask follow-up: Lawn/Yard · Cleaning · Moving · Handyman · Pressure Washing · Something else
+
+CAR WASH / DETAILING — always ask first:
+"Do you want someone to come to you, or are you looking for a nearby shop?"
+actions: [{label:"Mobile — come to me",message:"I want a mobile car wash to come to me"},{label:"Nearby shop",message:"I need a nearby car wash or detail shop"},{label:"Either works",message:"either works"}]
+After "come to me" → route: /signup?intent=hirer&service=car_wash&from=jac
+
+SELL VEHICLE: route: /signup?intent=seller_vehicle&from=jac [HIGH]
+SELL ITEMS: route: /signup?intent=seller&from=jac [HIGH]
+VERIFY & INSPECT: route: /signup?intent=hirer&service=verify&from=jac [HIGH]
+TRANSPORT / LOAD BOARD: route: /signup?intent=transport&from=jac [HIGH]
+CREDITS / MISSIONS: route: /signup?intent=credits&from=jac [HIGH]
+CASH DROPS / TREASURE HUNTS: route: /signup?intent=explore&from=jac (only AFTER education) — see CASH DROPS section above
+DAY-1 OG: route: /signup?intent=og&from=jac [HIGH]
+BUSINESS OWNER: route: /business-signup?intent=business&from=jac [HIGH]
+SERVICE PROVIDER: route: /signup?intent=worker&from=jac [HIGH]
+CONTENT CREATOR: route: /signup?intent=creator&from=jac [HIGH]
+RETIRED: route: /signup?intent=worker&type=flexible&from=jac [HIGH after clarification]
+JUST EXPLORING: Explain GUBER simply. Ask what interests them. Route after conversation.
+RETURNING USER: route: /login [HIGH]
+
+═══════════════════════════════════
+JOB INTAKE PROTOCOL — HIRE MODE
+═══════════════════════════════════
+
+When a user needs a service, conduct a natural conversation to collect enough details
+to pre-fill a complete job post. Ask ONE focused question at a time. Sound genuinely
+interested — not like a form. Build the job_prefill object silently in tracking as
+answers arrive.
+
+MINIMUM to set readyToPost=true: service type identified + zip or area mentioned.
+ROUTE when readyToPost=true: /post-job?from=jac (NOT /signup?intent=hirer)
+CTA when ready: "I've got everything I need. Create a free account and your post goes live in one tap."
+
+SERVICE-SPECIFIC INTAKE:
+
+DOG WALKING / PET CARE:
+  Step 1: "What kind of pet, and do you know the breed?"
+  Step 2: "How often would you need this — a few times a week, daily?"
+  Step 3: "Any special needs — medications, anxiety, anything like that?"
+  Step 4: "What zip code or area?"
+  → category: "On-Demand Help", serviceType: "Dog Walking"
+  Day-1 OG: "One thing worth knowing — Day-1 OG founding members get priority placement on pet care posts in their zip. It's a limited-time founding deal."
+
+LAWN / YARD WORK:
+  Step 1: "Roughly how big is the yard — small, medium, or a larger property?"
+  Step 2: "Just mowing, or do you need edging and cleanup too?"
+  Step 3: "One-time or on a regular schedule?"
+  Step 4: "What zip code?"
+  → category: "On-Demand Help", serviceType: "Lawn / Yard Work"
+  Day-1 OG: "Day-1 OG members get boosted visibility on yard work posts in their area — good timing to mention that."
+
+HOUSE CLEANING:
+  Step 1: "Is this a house, apartment, or something else?"
+  Step 2: "Roughly how many bedrooms?"
+  Step 3: "One-time deep clean or recurring?"
+  Step 4: "What zip code?"
+  → category: "On-Demand Help", serviceType: "House Cleaning"
+
+MOVING HELP:
+  Step 1: "About how many rooms are we talking?"
+  Step 2: "Any large or heavy items — furniture, appliances, piano?"
+  Step 3: "When are you looking to move?"
+  Step 4: "What zip code or city?"
+  → category: "General Labor", serviceType: "Moving Help"
+
+CAR WASH / DETAILING:
+  (If not already asked: mobile vs shop — see Feature Routing above)
+  Step 1: "Just exterior wash or interior detail too?"
+  Step 2: "What kind of vehicle?"
+  Step 3: "What zip code?"
+  → category: "On-Demand Help", serviceType: "Car Wash / Detailing"
+
+HANDYMAN / HOME REPAIRS:
+  Step 1: "What needs to be fixed or done?"
+  Step 2: "Is this urgent, or can it wait a few days?"
+  Step 3: "What zip code?"
+  → category: "General Labor", serviceType: "Handyman"
+
+CHILDCARE / BABYSITTING:
+  Step 1: "How old are the kids?"
+  Step 2: "How many days a week, and roughly how many hours a day?"
+  Step 3: "What zip code?"
+  → category: "On-Demand Help", serviceType: "Childcare / Babysitting"
+  Day-1 OG: "Day-1 OG members get priority visibility on childcare posts — worth locking in while the founding deal is open."
+
+GROCERY / ERRANDS:
+  Step 1: "What do you need picked up or handled?"
+  Step 2: "Is this a one-time thing or will you need this regularly?"
+  Step 3: "What zip code?"
+  → category: "On-Demand Help", serviceType: "Errands / Grocery"
+
+PRESSURE WASHING:
+  Step 1: "Is it a driveway, deck, house exterior, or something else?"
+  Step 2: "Roughly how large an area?"
+  Step 3: "What zip code?"
+  → category: "On-Demand Help", serviceType: "Pressure Washing"
+
+SELLING A VEHICLE (Marketplace — not a job post):
+  Step 1: "What year, make, and model?"
+  Step 2: "What's the condition — runs great, needs some work, or for parts?"
+  Step 3: "What's your asking price or range?"
+  → route: /signup?intent=seller_vehicle&from=jac
+  Note: This becomes a marketplace listing, not a job post.
+
+SELLING ITEMS (Marketplace — not a job post):
+  Step 1: "What are you selling?"
+  Step 2: "What condition is it in?"
+  Step 3: "Any price in mind?"
+  → route: /signup?intent=seller&from=jac
+
+GENERAL RULE:
+• Build job_prefill.descriptionSeed from answers naturally: "Need a dog walker for my [breed], [size] dog, [frequency], in [zip area]."
+• If user gives info voluntarily (mentions zip, breed, etc.) — absorb it without re-asking.
+• NEVER re-ask what was already answered.
+• Day-1 OG pitch: offer ONCE per conversation, after intake is mostly done. One sentence. Not pushy.
+
+═══════════════════════════════════
+MULTILINGUAL SUPPORT
+═══════════════════════════════════
+
+Detect the user's language from their messages.
+- If the user writes in Spanish (español), respond ENTIRELY in Spanish — reply text AND all button labels/options.
+- All other messages default to English.
+- Once detected, continue in that language for the full conversation.
+- If the user switches language mid-conversation, match them immediately.
+- Supported launch languages: English (default), Spanish.
+- Add "detected_language": "en" or "es" to tracking.
+
+Spanish example: if user says "necesito trabajo" → respond in Spanish, translate all options too.
+
+═══════════════════════════════════
+LANGUAGE RULES
+═══════════════════════════════════
+
+ALWAYS SAY:
+✓ "I'll help you explore opportunities inside GUBER."
+✓ "I'll help you create a request."
+✓ "I'll guide you toward the right area."
+✓ "I'll help you get started."
+✓ "I'll check what is available inside GUBER."
+✓ "Create a free account so I can save this and help you continue."
+
+NEVER SAY:
+✗ "I found you work." ✗ "I will get this fixed." ✗ "You will make money." ✗ "Workers are guaranteed." ✗ "There are no jobs." ✗ "Nothing is available." ✗ "Come back later."
+
+SIGNUP TIMING: Only suggest account creation AFTER you understand enough to explain WHY it helps them.
+FALLBACK: Never dead-end. Always end with something the user can tap.
+
+CONFIDENCE:
+HIGH → route provided, direct reply, CTA button
+MEDIUM → no route, ONE follow-up question, 2-4 action buttons
+LOW → no route, "Which sounds closest?" + 3-7 option buttons
+
+═══════════════════════════════════
+TRACKING — include in every response
+═══════════════════════════════════
+
+"tracking": {
+  "intent": "work|hire|sell|transport|verify|credits|business|retired|creator|explore|og|cash_drop_or_treasure_hunt|city_activation|unknown",
+  "user_type": "worker|homeowner|business_owner|service_provider|content_creator|retired|entrepreneur|exploring|unknown",
+  "service_requested": "<string or null>",
+  "transport_need": true/false,
+  "content_creator": true/false,
+  "business_owner": true/false,
+  "retired": true/false,
+  "zip": "<5-digit zip or null>",
+  "cash_drop_interest": true/false,
+  "treasure_hunt_interest": true/false,
+  "promotion_interest": true/false,
+  "misunderstood_as_job": true/false,
+  "confusing_point": "<string or null>",
+  "detected_language": "en|es",
+  "job_prefill": {
+    "category": "<GUBER job category or null>",
+    "serviceType": "<specific service type or null>",
+    "descriptionSeed": "<natural language summary built from answers, or null>",
+    "budgetHint": "<number or null>",
+    "details": {},
+    "readyToPost": false
+  }
+}
+
+IMPORTANT — job_prefill rules:
+• Update job_prefill incrementally as user answers questions. Preserve previously collected fields.
+• Set readyToPost=true only when service type AND zip/area are both known.
+• When readyToPost=true, set confidence="high" and route="/post-job?from=jac".
+• descriptionSeed should be a complete natural sentence: "Need a dog walker for my 3-year-old Golden Retriever, 3x per week, in the 90210 area."
+• For marketplace items (sell vehicle, sell items) — do NOT set readyToPost=true; route to /signup?intent=seller_vehicle or /signup?intent=seller instead.
+
+═══════════════════════════════════
+RESPOND WITH JSON ONLY — NO OTHER TEXT
+═══════════════════════════════════
+{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{}}
+- route: URL string when HIGH, null otherwise
+- actions: [{label,message}] x2-4 for MEDIUM, [] otherwise
+- options: [{label,message}] x3-11 for LOW or opening question, [] otherwise
+- tracking: always present, all fields included`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.3,
+        max_tokens: 500,
+        response_format: { type: "json_object" as const },
+        messages: [{ role: "system", content: onboardPrompt }, ...sanitized],
+      });
+
+      const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+      const FALLBACK_OPTIONS = [
+        { label: "I need help", message: "I need help" },
+        { label: "I need work", message: "I need work" },
+        { label: "I need money today", message: "I need money today" },
+        { label: "I want to sell something", message: "I want to sell something" },
+        { label: "I need transport", message: "I need transport" },
+        { label: "I'm retired", message: "I'm retired" },
+        { label: "I'm just exploring", message: "I'm just exploring" },
+      ];
+      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any };
+      let parsed: JacR = {
+        reply: "What brings you to GUBER today?",
+        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {},
+      };
+      try {
+        const j = JSON.parse(raw);
+        if (typeof j.reply === "string" && j.reply.trim()) {
+          parsed = {
+            reply: j.reply.trim(),
+            confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
+            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+            actions: Array.isArray(j.actions) ? j.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
+            options: Array.isArray(j.options) ? j.options.filter((a: any) => a?.label && a?.message).slice(0, 11) : [],
+            tracking: j.tracking && typeof j.tracking === "object" ? j.tracking : {},
+          };
+        }
+      } catch { /* use fallback */ }
+      res.json(parsed);
+    } catch (err: any) {
+      console.error("[JAC] onboard error:", err.message);
+      res.status(500).json({
+        reply: "What brings you to GUBER today?",
+        confidence: "low", route: null, actions: [],
+        options: [
+          { label: "I need help", message: "I need help" },
+          { label: "I need work", message: "I need work" },
+          { label: "I need money today", message: "I need money today" },
+          { label: "I want to sell something", message: "I want to sell something" },
+          { label: "I need transport", message: "I need transport" },
+          { label: "I'm retired", message: "I'm retired" },
+          { label: "I'm just exploring", message: "I'm just exploring" },
+        ],
+        tracking: {},
+      });
+    }
+  });
+
   app.post("/api/ai/guber-assist", requireAuth, async (req: Request, res: Response) => {
     try {
       const sessionUser = req.session?.userId ? await storage.getUser(req.session.userId) : null;
-      if (!sessionUser || sessionUser.role === "business") {
-        return res.status(403).json({ message: "GUBER Assistant is only available to consumer accounts." });
+      if (!sessionUser) {
+        return res.status(403).json({ message: "Session expired. Please log in." });
       }
 
       const { messages } = req.body;
@@ -15422,7 +16164,7 @@ ABOUT THIS USER:
 KEY PLATFORM KNOWLEDGE:
 
 **What GUBER Is**
-GUBER is a US-based on-demand labor marketplace where workers ("helpers") browse jobs, apply, complete work, and get paid. Individuals and businesses post jobs. All payments flow through GUBER's secure wallet system.
+GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-based on-demand labor marketplace where workers ("helpers") browse jobs, apply, complete work, and get paid. Individuals and businesses post jobs. All payments flow through GUBER's secure wallet system.
 
 **Cash Drops**
 Cash Drops are bonus reward events GUBER releases to the community. They appear on the map and in-app. Members race to claim them by tapping first. Day-1 OG members get priority notifications and first access.
@@ -15483,23 +16225,651 @@ BEHAVIOR RULES:
 - Be friendly, concise, under 120 words unless truly needed.
 - Never reveal internal architecture, database info, or admin-only details.
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
-- Warm, encouraging tone — GUBER is a community.`;
+- Warm, encouraging tone — GUBER is a community.
+
+JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
+You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
+
+INTENT ENGINE:
+
+FIND WORK / EARN MONEY → route: /browse-jobs
+"need a job" / "need money" / "need work" / "any gigs" / "need income" / "make cash" / "looking for work" / "find jobs near me"
+
+POST A JOB / HIRE → route: /post-job
+"need help" / "need somebody" / "need labor" / "need a worker" / "need a handyman" / "need cleaning" / "need my grass cut" / "need painting" / "need pressure washing" / "need a plumber" / "need moving help" / "I want to hire"
+
+MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle
+"sell my car" / "list my vehicle" / "post my truck" / "got a car to sell" / "selling my SUV" / "sell my motorcycle"
+
+MARKETPLACE — SELL ITEM → route: /marketplace/new
+"sell my phone" / "furniture for sale" / "sell stuff" / "list an item" / "post something to sell"
+
+VERIFY & INSPECT → route: /verify-inspect
+"need someone to check a car" / "inspect a property" / "need proof" / "verify something" / "need pictures of something" / "I'm buying a car and want it checked"
+
+TRANSPORT → route: /load-board
+"need a tow" / "car moved" / "need transport" / "haul something" / "freight" / "carrier"
+Post transport → route: /load-board/post
+"post a load" / "I have cargo" / "I need to haul something"
+
+CREDITS / MISSIONS → route: /credits
+"earn credits" / "how credits work" / "missions" / "community tasks" / "cash out"
+
+DAY-1 OG → route: /og-advantage
+"what is OG" / "Day-1" / "founding member" / "OG membership" / "unlock my city"
+
+WALLET / EARNINGS → route: /wallet
+"my wallet" / "my earnings" / "get paid" / "payout" / "withdraw"
+
+MY JOBS → route: /my-jobs
+"my jobs" / "jobs I applied to" / "active jobs" / "jobs I'm working"
+
+MAP → route: /map
+"map" / "show me nearby" / "jobs on a map"
+
+CAR WASH / DETAILING (MEDIUM confidence — always ask follow-up):
+"car washed" / "detail my car" / "wash my truck" / "mobile detail"
+Ask: "Do you want someone mobile to come to you, or looking for a nearby shop?"
+actions: [{"label":"Mobile — come to me","message":"I want mobile car wash service"},{"label":"Nearby shop","message":"I need a nearby car wash shop"}]
+
+CONFIDENCE RULES:
+HIGH → include route, navigate directly, confirm in reply
+MEDIUM → no route, ask ONE follow-up question, give 2-3 action buttons
+LOW → no route, say "Which sounds closest?" and give 3-5 option buttons
+
+FALLBACK: Never respond without options. If unclear → show 3-5 options.
+Tone: warm, direct, under 100 words. Match the user's energy.
+
+CRITICAL — respond with JSON ONLY, no other text:
+{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[]}
+- "route": in-app path when confidence=high. null otherwise.
+- "actions": 2-3 {label,message} for medium confidence follow-up. [] otherwise.
+- "options": 3-5 {label,message} for low confidence disambiguation. [] otherwise.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_tokens: 400,
+        max_tokens: 600,
+        response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
           ...sanitized,
         ],
       });
 
-      const reply = completion.choices[0]?.message?.content?.trim() || "I'm having trouble responding right now. Please try again!";
-      res.json({ reply });
+      const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
+      type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[] };
+      let parsed: JacResp = { reply: "I'm having trouble responding right now. Please try again!", confidence: "low" };
+      try {
+        const j = JSON.parse(rawContent);
+        if (typeof j.reply === "string" && j.reply.trim()) {
+          parsed = {
+            reply: j.reply.trim(),
+            confidence: ["high", "medium", "low"].includes(j.confidence) ? j.confidence : "medium",
+            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
+            actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3) : [],
+            options: Array.isArray(j.options) ? (j.options as any[]).filter((a) => a?.label && a?.message).slice(0, 5) : [],
+          };
+        } else if (rawContent) {
+          parsed.reply = rawContent;
+        }
+      } catch {
+        if (rawContent) parsed.reply = rawContent;
+      }
+      res.json(parsed);
     } catch (err: any) {
       console.error("[GUBER] guber-assist error:", err.message);
       res.status(500).json({ message: "Assistant unavailable, please try again." });
+    }
+  });
+
+  // ── Jac Homepage Interaction Tracking (public, no auth) ────────────────────
+  app.post("/api/jac/interaction", async (req: Request, res: Response) => {
+    try {
+      const { visitorId, id: existingId, messages, intent, zip, converted, userType, tracking } = req.body;
+      if (!visitorId || typeof visitorId !== "string") {
+        return res.status(400).json({ message: "visitorId required" });
+      }
+      const userId = (req.session as any)?.userId ?? null;
+      const safeMessages = Array.isArray(messages) ? messages.slice(-20) : [];
+      const safeIntent = typeof intent === "string" ? intent.slice(0, 100) : null;
+      const safeZip = typeof zip === "string" ? zip.slice(0, 10) : null;
+      const safeConverted = typeof converted === "boolean" ? converted : false;
+      const safeUserType = typeof userType === "string" ? userType.slice(0, 60) : null;
+      const safeTracking = tracking && typeof tracking === "object" ? tracking : null;
+
+      if (existingId && typeof existingId === "number") {
+        await pool.query(
+          `UPDATE jac_interactions
+           SET messages = $1, intent = COALESCE($2, intent), zip = COALESCE($3, zip),
+               converted = (converted OR $4), user_type = COALESCE($5, user_type),
+               tracking = COALESCE($6::jsonb, tracking), updated_at = NOW()
+           WHERE id = $7 AND visitor_id = $8`,
+          [JSON.stringify(safeMessages), safeIntent, safeZip, safeConverted,
+           safeUserType, safeTracking ? JSON.stringify(safeTracking) : null,
+           existingId, visitorId]
+        );
+        return res.json({ id: existingId });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO jac_interactions (visitor_id, user_id, messages, intent, zip, converted, user_type, tracking)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [visitorId, userId, JSON.stringify(safeMessages), safeIntent, safeZip, safeConverted,
+         safeUserType, safeTracking ? JSON.stringify(safeTracking) : '{}']
+      );
+      res.json({ id: result.rows[0].id });
+    } catch (err: any) {
+      console.error("[jac/interaction]", err.message);
+      res.status(500).json({ message: "Failed to log interaction" });
+    }
+  });
+
+  // ── JAC Returning-user updates ────────────────────────────────────────────
+  app.get("/api/jac/updates", async (req: Request, res: Response) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.json({ loggedIn: false });
+    try {
+      const [jobsRes, notifsRes, walletRes, userRes] = await Promise.all([
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed')) AS worker_active,
+            COUNT(*) FILTER (WHERE posted_by = $1 AND status = 'open') AS hirer_open
+          FROM jobs WHERE deleted_at IS NULL
+        `, [userId]),
+        pool.query(`SELECT COUNT(*) AS unread FROM notifications WHERE user_id = $1 AND read = false`, [userId]),
+        pool.query(`SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_transactions WHERE user_id = $1 AND status = 'completed'`, [userId]),
+        pool.query(`SELECT full_name FROM users WHERE id = $1`, [userId]),
+      ]);
+      const firstName = (userRes.rows[0]?.full_name || "").split(" ")[0] || null;
+      return res.json({
+        loggedIn: true,
+        firstName,
+        workerActive: parseInt(jobsRes.rows[0].worker_active) || 0,
+        hirerOpen:    parseInt(jobsRes.rows[0].hirer_open)    || 0,
+        unreadNotifs: parseInt(notifsRes.rows[0].unread)      || 0,
+        walletBalance: parseFloat(walletRes.rows[0].balance)  || 0,
+      });
+    } catch (e: any) {
+      console.error("[JAC updates]", e.message);
+      return res.json({ loggedIn: true, firstName: null, workerActive: 0, hirerOpen: 0, unreadNotifs: 0, walletBalance: 0 });
+    }
+  });
+
+  // ── JAC User Profile (GET + POST) ──────────────────────────────────────────
+  app.get("/api/jac/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const r = await pool.query(
+        `SELECT * FROM jac_user_profile WHERE user_id = $1`,
+        [userId]
+      );
+      res.json(r.rows[0] ?? null);
+    } catch (err: any) {
+      console.error("[jac/profile GET]", err.message);
+      res.status(500).json({ message: "Failed to load JAC profile" });
+    }
+  });
+
+  app.post("/api/jac/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const {
+        primaryGoal, userType, zipCode, interests, serviceNeeds, workInterests,
+        transportInterest, creatorInterest, creatorPlatforms, businessOwner,
+        serviceProvider, retired, prefersVoice, assistantMode, startupBehavior,
+        voiceEnabled, language, tutorialStatus,
+      } = req.body;
+      await pool.query(
+        `INSERT INTO jac_user_profile (
+          user_id, primary_goal, user_type, zip_code, interests, service_needs,
+          work_interests, transport_interest, creator_interest, creator_platforms,
+          business_owner, service_provider, retired, prefers_voice, assistant_mode,
+          startup_behavior, voice_enabled, language, tutorial_status, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+          primary_goal     = COALESCE($2, jac_user_profile.primary_goal),
+          user_type        = COALESCE($3, jac_user_profile.user_type),
+          zip_code         = COALESCE($4, jac_user_profile.zip_code),
+          interests        = COALESCE($5::jsonb, jac_user_profile.interests),
+          service_needs    = COALESCE($6::jsonb, jac_user_profile.service_needs),
+          work_interests   = COALESCE($7::jsonb, jac_user_profile.work_interests),
+          transport_interest = COALESCE($8, jac_user_profile.transport_interest),
+          creator_interest = COALESCE($9, jac_user_profile.creator_interest),
+          creator_platforms= COALESCE($10::jsonb, jac_user_profile.creator_platforms),
+          business_owner   = COALESCE($11, jac_user_profile.business_owner),
+          service_provider = COALESCE($12, jac_user_profile.service_provider),
+          retired          = COALESCE($13, jac_user_profile.retired),
+          prefers_voice    = COALESCE($14, jac_user_profile.prefers_voice),
+          assistant_mode   = COALESCE($15, jac_user_profile.assistant_mode),
+          startup_behavior = COALESCE($16, jac_user_profile.startup_behavior),
+          voice_enabled    = COALESCE($17, jac_user_profile.voice_enabled),
+          language         = COALESCE($18, jac_user_profile.language),
+          tutorial_status  = COALESCE($19, jac_user_profile.tutorial_status),
+          updated_at       = NOW()`,
+        [
+          userId,
+          typeof primaryGoal === "string" ? primaryGoal : null,
+          typeof userType === "string" ? userType : null,
+          typeof zipCode === "string" ? zipCode.slice(0, 10) : null,
+          Array.isArray(interests) ? JSON.stringify(interests) : null,
+          Array.isArray(serviceNeeds) ? JSON.stringify(serviceNeeds) : null,
+          Array.isArray(workInterests) ? JSON.stringify(workInterests) : null,
+          typeof transportInterest === "boolean" ? transportInterest : null,
+          typeof creatorInterest === "boolean" ? creatorInterest : null,
+          Array.isArray(creatorPlatforms) ? JSON.stringify(creatorPlatforms) : null,
+          typeof businessOwner === "boolean" ? businessOwner : null,
+          typeof serviceProvider === "boolean" ? serviceProvider : null,
+          typeof retired === "boolean" ? retired : null,
+          typeof prefersVoice === "boolean" ? prefersVoice : null,
+          typeof assistantMode === "string" ? assistantMode : null,
+          typeof startupBehavior === "string" ? startupBehavior : null,
+          typeof voiceEnabled === "boolean" ? voiceEnabled : null,
+          typeof language === "string" && ["en","es"].includes(language) ? language : null,
+          typeof tutorialStatus === "string" ? tutorialStatus : null,
+        ]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[jac/profile POST]", err.message);
+      res.status(500).json({ message: "Failed to save JAC profile" });
+    }
+  });
+
+  // ── JAC Tutorial State (GET + POST + RESET) ─────────────────────────────────
+  app.get("/api/jac/tutorial", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const r = await pool.query(
+        `SELECT * FROM jac_tutorial_state WHERE user_id = $1`,
+        [userId]
+      );
+      res.json(r.rows[0] ?? null);
+    } catch (err: any) {
+      console.error("[jac/tutorial GET]", err.message);
+      res.status(500).json({ message: "Failed to load tutorial state" });
+    }
+  });
+
+  app.post("/api/jac/tutorial", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const {
+        tutorialStarted, tutorialCompleted, selectedGoal,
+        completedSteps, skippedSteps, lastTutorialScreen, needsFollowup,
+      } = req.body;
+      await pool.query(
+        `INSERT INTO jac_tutorial_state (user_id, tutorial_started, tutorial_completed, selected_goal, completed_steps, skipped_steps, last_tutorial_screen, needs_followup, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           tutorial_started    = COALESCE($2, jac_tutorial_state.tutorial_started),
+           tutorial_completed  = COALESCE($3, jac_tutorial_state.tutorial_completed),
+           selected_goal       = COALESCE($4, jac_tutorial_state.selected_goal),
+           completed_steps     = COALESCE($5::jsonb, jac_tutorial_state.completed_steps),
+           skipped_steps       = COALESCE($6::jsonb, jac_tutorial_state.skipped_steps),
+           last_tutorial_screen= COALESCE($7, jac_tutorial_state.last_tutorial_screen),
+           needs_followup      = COALESCE($8, jac_tutorial_state.needs_followup),
+           updated_at          = NOW()`,
+        [
+          userId,
+          typeof tutorialStarted === "boolean" ? tutorialStarted : null,
+          typeof tutorialCompleted === "boolean" ? tutorialCompleted : null,
+          typeof selectedGoal === "string" ? selectedGoal : null,
+          Array.isArray(completedSteps) ? JSON.stringify(completedSteps) : null,
+          Array.isArray(skippedSteps) ? JSON.stringify(skippedSteps) : null,
+          typeof lastTutorialScreen === "string" ? lastTutorialScreen : null,
+          typeof needsFollowup === "boolean" ? needsFollowup : null,
+        ]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[jac/tutorial POST]", err.message);
+      res.status(500).json({ message: "Failed to save tutorial state" });
+    }
+  });
+
+  app.post("/api/jac/tutorial/reset", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      await pool.query(
+        `INSERT INTO jac_tutorial_state (user_id, tutorial_started, tutorial_completed, selected_goal, completed_steps, skipped_steps, last_tutorial_screen, needs_followup, reset_count, updated_at)
+         VALUES ($1, FALSE, FALSE, NULL, '[]', '[]', NULL, FALSE, 1, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           tutorial_started    = FALSE,
+           tutorial_completed  = FALSE,
+           selected_goal       = NULL,
+           completed_steps     = '[]',
+           skipped_steps       = '[]',
+           last_tutorial_screen= NULL,
+           needs_followup      = FALSE,
+           reset_count         = jac_tutorial_state.reset_count + 1,
+           updated_at          = NOW()`,
+        [userId]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[jac/tutorial/reset]", err.message);
+      res.status(500).json({ message: "Failed to reset tutorial" });
+    }
+  });
+
+  // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
+  // Keeps the API key server-side. Returns audio/mpeg stream.
+  // ── TTS cost guards ───────────────────────────────────────────────────────
+  // Guard 1: IP rate limit — max 10 live calls per IP per 60 s
+  const _ttsIpBucket = new Map<string, { count: number; resetAt: number }>();
+  const TTS_IP_MAX   = 10;
+  const TTS_IP_WINDOW_MS = 60_000;
+  // Guard 2: Session character budget — max 1 500 chars of live TTS per session
+  const TTS_SESSION_CHAR_BUDGET = 1_500;
+  // Guard 3: Per-request text cap — never send more than 400 chars to ElevenLabs
+  const TTS_MAX_CHARS = 400;
+
+  app.post("/api/jac/tts", async (req: Request, res: Response) => {
+    try {
+      const { text } = req.body as { text?: string };
+      if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
+
+      // Guard 3: hard character cap per request
+      const cleaned = text.slice(0, TTS_MAX_CHARS);
+
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
+
+      // Guard 1: IP rate limit
+      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const bucket = _ttsIpBucket.get(ip) ?? { count: 0, resetAt: now + TTS_IP_WINDOW_MS };
+      if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + TTS_IP_WINDOW_MS; }
+      if (bucket.count >= TTS_IP_MAX) {
+        console.warn(`[JAC TTS] rate-limited IP ${ip}`);
+        return res.status(429).json({ message: "Too many TTS requests — slow down." });
+      }
+      bucket.count++;
+      _ttsIpBucket.set(ip, bucket);
+
+      // Guard 2: session character budget
+      const sess = req.session as any;
+      sess.ttsCharsUsed = (sess.ttsCharsUsed ?? 0) + cleaned.length;
+      if (sess.ttsCharsUsed > TTS_SESSION_CHAR_BUDGET) {
+        console.warn(`[JAC TTS] session budget exceeded (${sess.ttsCharsUsed} chars)`);
+        return res.status(429).json({ message: "Voice budget reached for this session." });
+      }
+
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
+      console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
+
+      const upstream = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
+        {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: cleaned,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
+          }),
+        }
+      );
+
+      if (!upstream.ok) {
+        const err = await upstream.text();
+        console.error("[JAC TTS] ElevenLabs error", upstream.status, err);
+        return res.status(502).json({ message: "TTS upstream error" });
+      }
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      if (upstream.body) {
+        const { Readable } = await import("stream");
+        Readable.fromWeb(upstream.body as any).pipe(res);
+      } else {
+        const buf = await upstream.arrayBuffer();
+        res.end(Buffer.from(buf));
+      }
+    } catch (e: any) {
+      console.error("[JAC TTS] error:", e.message);
+      res.status(500).json({ message: "TTS error" });
+    }
+  });
+
+  // ── JAC TTS Cache Pregen (admin only) ────────────────────────────────────────
+  app.post("/api/jac/tts/pregen", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const userRow = await pool.query("SELECT role FROM users WHERE id=$1", [userId]);
+      if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
+
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
+      if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
+
+      const { readFileSync, writeFileSync, existsSync } = await import("fs");
+      const path = await import("path");
+      const dir = path.join(process.cwd(), "public", "jac-audio");
+
+      const CACHE_CLIPS: Record<string, string> = {
+        "welcome":        "Hi! I'm Jack, your Goober Job Assisting Coordinator. I'm here to help you find work, hire help, or verify anything. What brings you in today?",
+        "what-is-guber":  "Goober stands for Global Unlimited Business and Employment Resources. It's a US-based platform where you can post jobs, find local work, verify purchases, and more — all in one place.",
+        "how-earn-money": "To earn money on Goober, create an account, complete ID verification, then browse available jobs near you. Apply, get hired, complete the work, and get paid directly through the platform.",
+        "how-post-job":   "Posting a job on Goober is completely free. Just sign up, go to Post a Job, fill in the details — what you need, your location, and your budget — and workers in your area will apply.",
+        "what-is-verify": "Verify and Inspect lets you hire someone to physically inspect a car, property, or item on your behalf. They go there, document everything on camera, and report back to you in real time.",
+        "background-check": "Goober requires ID verification for all users. This confirms real identity so you know exactly who you're dealing with. You can also view a worker's job history and reviews before hiring.",
+        "how-get-paid":   "Workers get paid through the Goober wallet after a job is completed and confirmed. You can cash out to your bank. Day One Oh Gee members pay a lower 5 percent fee versus the standard 10 percent.",
+        "what-is-og":     "Day One Oh Gee is Goober's founding membership. Oh Gee members pay only 5 percent in fees instead of 10, get priority Cash Drop notifications, an exclusive badge, and early access to new features.",
+        "what-is-cashdrop": "Cash Drops are bonus reward events that Goober releases to the community. They appear on the map — first person to tap and claim it wins real cash. Day One Oh Gee members get notified first.",
+        "what-is-studio": "Goober Studio is the AI content creation suite built into the platform. You can generate videos, music, and more using AI credits. New users get 2 free trial credits to start.",
+        "what-is-marketplace": "The Goober Marketplace is where you can buy and sell cars and other items locally. All transactions are documented on-platform for safety and accountability.",
+        "what-is-loadboard": "The Load Board connects drivers and haulers with people who need things transported. If you have a truck or trailer, you can find hauling jobs near you.",
+        "how-id-verify":  "To verify your identity, go to your profile and tap the ID Verification section. You'll upload a photo ID. Our system reviews it to confirm you're a real person — it's fast and secure.",
+        "fees":           "Posting jobs is always free. Workers pay a 10 percent platform fee on earnings. Day One Oh Gee members pay only 5 percent — that's half the fee on every single payout.",
+        "how-signup":     "Signing up is free and takes about 2 minutes. Just go to the sign up page, enter your name, email, and create a password. Then complete ID verification and you're ready to post or find work.",
+        "safety":         "Safety is built into every step on Goober. Every user verifies their identity. All payments go through the platform — no cash handoffs. Every job is documented with proof of completion.",
+        "what-is-barter": "Barter on Goober lets you exchange services or items without cash. If you have a skill someone needs and they have something you want, you can trade directly — fully documented on the platform.",
+        "contact-support": "For help, you can chat with me any time — I'm Jack, your Job Assisting Coordinator. For account issues, visit the Help section in your profile or reach out through the Contact page.",
+        "us-only":        "Goober is currently available in the United States only. We're focused on building the best possible local experience here before expanding internationally.",
+        "what-is-trustbox": "Trust Box is a subscription that gives you unlimited plays of the Aye Eye or Not game, plus other perks. It's one of the ways to get more out of your Goober membership.",
+      };
+
+      const results: Record<string, string> = {};
+      for (const [key, text] of Object.entries(CACHE_CLIPS)) {
+        const filePath = path.join(dir, `${key}.mp3`);
+        if (existsSync(filePath)) { results[key] = "skipped (exists)"; continue; }
+        try {
+          const r = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
+            {
+              method: "POST",
+              headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text,
+                model_id: "eleven_multilingual_v2",
+                voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
+              }),
+            }
+          );
+          if (!r.ok) { results[key] = `error ${r.status}`; continue; }
+          const buf = await r.arrayBuffer();
+          writeFileSync(filePath, Buffer.from(buf));
+          results[key] = "generated";
+        } catch (e: any) { results[key] = `exception: ${e.message}`; }
+      }
+      res.json({ ok: true, results });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // ── Jac "What You Missed" ───────────────────────────────────────────────────
+  app.get("/api/dd/missed-items", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json([]);
+
+      // Gather data in parallel for performance
+      const [userRes, listingRes, pendingJobsRes, missionsRes, referralRes] = await Promise.all([
+        pool.query<{ day1_og: boolean; zip: string | null; id_verified: boolean }>(
+          `SELECT day1_og, zip, id_verified FROM users WHERE id = $1`,
+          [userId]
+        ),
+        pool.query<{ id: number; display_title: string }>(
+          `SELECT id,
+            COALESCE(title,
+              CONCAT(COALESCE(year::text||' ',''), COALESCE(make||' ',''), COALESCE(model,'')),
+              'Your Listing'
+            ) AS display_title
+           FROM marketplace_listings
+           WHERE seller_id = $1
+             AND status NOT IN ('sold', 'removed', 'cancelled', 'hidden')
+             AND (photos IS NULL OR cardinality(photos) = 0)
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId]
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM job_applications ja
+           JOIN jobs j ON j.id = ja.job_id
+           WHERE ja.applicant_id = $1
+             AND ja.status = 'approved'
+             AND j.status NOT IN ('completed', 'cancelled', 'disputed')`,
+          [userId]
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM growth_task_templates
+           WHERE is_active = true AND (paused = false OR paused IS NULL)`,
+          []
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM referral_relationships
+           WHERE referrer_id = $1`,
+          [userId]
+        ).catch(() => ({ rows: [{ count: "0" }] })),
+      ]);
+
+      const u = userRes.rows[0];
+      const nearbyJobsRes = u?.zip
+        ? await pool.query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count
+             FROM jobs
+             WHERE zip = $1
+               AND status = 'open'
+               AND created_at > NOW() - INTERVAL '7 days'
+               AND id NOT IN (
+                 SELECT job_id FROM job_applications WHERE applicant_id = $2
+               )`,
+            [u.zip, userId]
+          ).catch(() => ({ rows: [{ count: "0" }] }))
+        : { rows: [{ count: "0" }] };
+
+      interface MissedItem {
+        id: string;
+        emoji: string;
+        title: string;
+        description: string;
+        action: string;
+        route: string;
+        priority: number;
+      }
+
+      const items: MissedItem[] = [];
+
+      // Unfinished listing (highest signal — user left money on the table)
+      if (listingRes.rows.length > 0) {
+        const t = listingRes.rows[0].display_title?.trim() || "Your listing";
+        items.push({
+          id: "listing",
+          emoji: "📸",
+          title: `${t} is missing photos`,
+          description: "Listings with photos get 5× more views.",
+          action: "Add Photos",
+          route: `/marketplace/${listingRes.rows[0].id}`,
+          priority: 9,
+        });
+      }
+
+      // Pending approved job — worker needs to act
+      const pendingCount = parseInt(pendingJobsRes.rows[0]?.count ?? "0", 10);
+      if (pendingCount > 0) {
+        items.push({
+          id: "pending-jobs",
+          emoji: "⚡",
+          title: `${pendingCount} approved job${pendingCount !== 1 ? "s" : ""} need${pendingCount === 1 ? "s" : ""} your action`,
+          description: "You've been approved — don't leave the hirer waiting.",
+          action: "View Jobs",
+          route: "/my-jobs",
+          priority: 10,
+        });
+      }
+
+      // Nearby new jobs
+      const nearbyCount = parseInt(nearbyJobsRes.rows[0]?.count ?? "0", 10);
+      if (nearbyCount > 0) {
+        items.push({
+          id: "nearby-jobs",
+          emoji: "💼",
+          title: `${nearbyCount} new job${nearbyCount !== 1 ? "s" : ""} posted near you`,
+          description: "Fresh work in your area in the last 7 days.",
+          action: "Browse",
+          route: "/browse-jobs",
+          priority: 8,
+        });
+      }
+
+      // Active missions
+      const missionCount = parseInt(missionsRes.rows[0]?.count ?? "0", 10);
+      if (missionCount > 0) {
+        items.push({
+          id: "missions",
+          emoji: "🗺️",
+          title: `${missionCount} mission${missionCount !== 1 ? "s" : ""} available`,
+          description: "Complete local missions to earn credits.",
+          action: "Show Missions",
+          route: "/community-tasks",
+          priority: 5,
+        });
+      }
+
+      // Day-1 OG upsell (if not OG)
+      if (u && !u.day1_og) {
+        items.push({
+          id: "og",
+          emoji: "👑",
+          title: "Day-1 OG membership is still available",
+          description: "5% platform fee instead of 10% — and a permanent badge.",
+          action: "Learn More",
+          route: "/og-advantage",
+          priority: 3,
+        });
+      }
+
+      // Referral progress (only show when close to 25)
+      const referralCount = parseInt(referralRes.rows[0]?.count ?? "0", 10);
+      const referralsLeft = 25 - referralCount;
+      if (referralsLeft > 0 && referralsLeft <= 15) {
+        items.push({
+          id: "referrals",
+          emoji: "🤝",
+          title: `Invite ${referralsLeft} more friend${referralsLeft !== 1 ? "s" : ""} to unlock cash drops`,
+          description: `You're at ${referralCount}/25 referrals.`,
+          action: "Invite",
+          route: "/og-advantage",
+          priority: 4,
+        });
+      }
+
+      items.sort((a, b) => b.priority - a.priority);
+      res.json(items.slice(0, 5));
+    } catch (err: any) {
+      console.error("[DD] missed-items error:", err.message);
+      res.json([]);
     }
   });
 
@@ -24053,18 +25423,21 @@ OUTPUT STYLE:
         }
       }
 
-      const { offerAmount, message } = req.body;
+      const { offerAmount, message, instantBook } = req.body;
       if (!offerAmount || offerAmount <= 0) return res.status(400).json({ message: "Valid offer amount required" });
 
-      // Check for existing pending offer
+      // Check for existing pending/accepted offer
       const existingOffers = await storage.getLoadBoardOffersByListing(listingId);
-      const existing = existingOffers.find(o => o.carrierId === carrierId && o.status === "pending");
+      const existing = existingOffers.find(o => o.carrierId === carrierId && (o.status === "pending" || o.status === "accepted"));
       if (existing) return res.status(400).json({ message: "You already have a pending offer. Wait for a response." });
+
+      // Instant book: carrier accepts at the posted price — auto-accept without shipper approval
+      const isInstantBook = instantBook === true && listing.postedPrice && offerAmount >= listing.postedPrice;
 
       const offer = await storage.createLoadBoardOffer({
         listingId,
         carrierId,
-        status: "pending",
+        status: isInstantBook ? "accepted" : "pending",
         offerAmount,
         actionCount: 1,
         lastMovedBy: "carrier",
@@ -24073,20 +25446,39 @@ OUTPUT STYLE:
       });
 
       // Update listing status
-      if (listing.status === "posted") {
-        await storage.updateLoadBoardListing(listingId, { status: "offer_received" });
-      }
-
-      // Notify poster
-      await storage.createNotification({
-        userId: listing.posterId,
-        title: "New Load Offer Received",
-        body: `A carrier offered $${offerAmount.toLocaleString()} on your ${listing.transportType} transport (${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}).`,
-        type: "load_board",
-        jobId: null,
+      await storage.updateLoadBoardListing(listingId, {
+        status: isInstantBook ? "offer_accepted" : "offer_received",
       });
 
-      res.json({ offer });
+      if (isInstantBook) {
+        // Notify poster that someone booked at their price
+        await storage.createNotification({
+          userId: listing.posterId,
+          title: "Load Booked at Listed Price",
+          body: `A carrier instantly booked your ${listing.transportType} transport at your listed price of $${offerAmount.toLocaleString()}. Proceed to checkout to confirm.`,
+          type: "load_board",
+          jobId: null,
+        });
+        // Notify carrier to proceed to checkout
+        await storage.createNotification({
+          userId: carrierId,
+          title: "Load Booked!",
+          body: `You booked the ${listing.transportType} transport (${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}) at $${offerAmount.toLocaleString()}. Proceed to checkout.`,
+          type: "load_board",
+          jobId: null,
+        });
+      } else {
+        // Notify poster of new offer
+        await storage.createNotification({
+          userId: listing.posterId,
+          title: "New Load Offer Received",
+          body: `A carrier offered $${offerAmount.toLocaleString()} on your ${listing.transportType} transport (${listing.pickupCity}, ${listing.pickupState} → ${listing.deliveryCity}, ${listing.deliveryState}).`,
+          type: "load_board",
+          jobId: null,
+        });
+      }
+
+      res.json({ offer, instantBook: isInstantBook });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -25035,6 +26427,473 @@ OUTPUT STYLE:
   app.get("/api/admin/growth-engine/analytics", requireAdmin, async (_req: Request, res: Response) => {
     try { res.json(await getGrowthAnalytics()); }
     catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── GUBER Credits API ──────────────────────────────────────────────────────
+
+  // GET /api/credits/referral-stats — credits earned from referrals (for OG page)
+  app.get("/api/credits/referral-stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [refs, credits] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*) AS total,
+                  COUNT(CASE WHEN id_verified THEN 1 END) AS verified
+           FROM users WHERE referred_by = $1`,
+          [userId]
+        ),
+        pool.query(
+          `SELECT COALESCE(SUM(amount), 0) AS credits
+           FROM credit_ledger
+           WHERE user_id = $1
+             AND source_type LIKE 'referral_%'
+             AND status IN ('approved','redeemed')`,
+          [userId]
+        ),
+      ]);
+      res.json({
+        totalReferrals:     parseInt(refs.rows[0]?.total    ?? "0", 10),
+        verifiedReferrals:  parseInt(refs.rows[0]?.verified ?? "0", 10),
+        creditsFromReferrals: parseInt(credits.rows[0]?.credits ?? "0", 10),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/credits/balance — authenticated user's full credit wallet state
+  app.get("/api/credits/balance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const balance = await getCreditBalance(req.session.userId!);
+      if (!balance) return res.status(404).json({ error: "User not found" });
+      res.json(balance);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/credits/ledger — paginated credit history for the authenticated user
+  app.get("/api/credits/ledger", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const limit  = Math.min(parseInt(String(req.query.limit  ?? 20), 10), 100);
+      const offset = parseInt(String(req.query.offset ?? 0),  10);
+      const rows = await pool.query(
+        `SELECT id, amount, dollar_equivalent, source_type, status, reason, created_at
+         FROM credit_ledger
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.session.userId!, limit, offset]
+      );
+      res.json(rows.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/credits/cashout-request — submit a cashout request
+  app.post("/api/credits/cashout-request", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { credits, payoutMethod, payoutDetails } = req.body;
+      if (!credits || typeof credits !== "number" || credits <= 0) {
+        return res.status(400).json({ error: "Invalid credits amount" });
+      }
+      if (!payoutMethod) {
+        return res.status(400).json({ error: "Payout method required" });
+      }
+      const result = await submitCashoutRequest(req.session.userId!, credits, payoutMethod, payoutDetails);
+      res.json({ ok: true, dollarAmount: result.dollarAmount });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // GET /api/credits/cashout-requests/mine — user's own cashout request history
+  app.get("/api/credits/cashout-requests/mine", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const rows = await pool.query(
+        `SELECT id, credits_requested, dollar_amount, status, payout_method, admin_note, created_at, reviewed_at
+         FROM cashout_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
+        [req.session.userId!]
+      );
+      res.json(rows.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Admin: Credits & Cashout ────────────────────────────────────────────────
+
+  // GET /api/admin/credits/stats — liability dashboard
+  app.get("/api/admin/credits/stats", requireAdmin, async (_req: Request, res: Response) => {
+    try { res.json(await getCreditAdminStats()); }
+    catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // GET /api/admin/credits/cashout-requests — queue of cashout requests
+  app.get("/api/admin/credits/cashout-requests", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status ? String(req.query.status) : "pending";
+      res.json(await listCashoutRequests(status));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/credits/cashout-requests/:id/approve
+  app.post("/api/admin/credits/cashout-requests/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { adminNote } = req.body;
+      await reviewCashoutRequest(id, req.session.userId!, "approved", adminNote);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/credits/cashout-requests/:id/deny
+  app.post("/api/admin/credits/cashout-requests/:id/deny", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { adminNote } = req.body;
+      await reviewCashoutRequest(id, req.session.userId!, "denied", adminNote);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/admin/credits/cashout-toggle — enable/disable cashout globally
+  app.patch("/api/admin/credits/cashout-toggle", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body;
+      await pool.query(
+        `INSERT INTO growth_reward_config (key, value_int, label, description)
+         VALUES ('cashout_enabled', $1, 'Cashout Enabled', 'Global toggle: 1 = cashout allowed, 0 = disabled')
+         ON CONFLICT (key) DO UPDATE SET value_int = $1, updated_at = NOW()`,
+        [enabled ? 1 : 0]
+      );
+      res.json({ ok: true, cashoutEnabled: !!enabled });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/credits/grant — manually grant credits to a user
+  app.post("/api/admin/credits/grant", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId, amount, reason } = req.body;
+      if (!userId || !amount || amount <= 0) return res.status(400).json({ error: "userId and positive amount required" });
+      const cfgRow = await pool.query(`SELECT value_int FROM growth_reward_config WHERE key = 'credits_per_dollar'`);
+      const creditsPerDollar: number = cfgRow.rows[0]?.value_int ?? 1000;
+      const dollarEq = (amount / creditsPerDollar).toFixed(4);
+      await pool.query(`
+        UPDATE users
+        SET growth_credits = COALESCE(growth_credits,0) + $1,
+            lifetime_credits_earned = COALESCE(lifetime_credits_earned,0) + $1
+        WHERE id = $2`,
+        [amount, userId]
+      );
+      await pool.query(
+        `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+         VALUES ($1, $2, $3, 'admin_grant', 'approved', NOW(), $4)`,
+        [userId, amount, dollarEq, reason ?? `Admin grant by user #${req.session.userId}`]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GUBER Missions ─────────────────────────────────────────────────────────
+
+  // GET /api/missions — list active mission templates, with per-user state
+  app.get("/api/missions", async (req: Request, res: Response) => {
+    try {
+      const userId = req.session?.userId ?? null;
+      const tplRows = await pool.query(`
+        SELECT DISTINCT ON (lower(trim(title)))
+          id, emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order
+        FROM growth_task_templates
+        WHERE is_active = true AND paused = false
+        ORDER BY lower(trim(title)), sort_order ASC, id ASC
+      `);
+
+      let activeMap: Record<number, string> = {};
+      let completedSet = new Set<number>();
+      let isOG = false;
+      if (userId) {
+        const [ai, done, ogRow] = await Promise.all([
+          pool.query(
+            `SELECT template_id, status FROM mission_instances
+             WHERE user_id = $1 AND status NOT IN ('approved','rejected','expired')`,
+            [userId]
+          ),
+          pool.query(
+            `SELECT DISTINCT template_id FROM mission_instances
+             WHERE user_id = $1 AND status = 'approved'`,
+            [userId]
+          ),
+          pool.query(`SELECT day1_og FROM users WHERE id = $1`, [userId]),
+        ]);
+        for (const r of ai.rows) activeMap[r.template_id] = r.status;
+        for (const r of done.rows) completedSet.add(r.template_id);
+        isOG = !!ogRow.rows[0]?.day1_og;
+      }
+
+      const missions = tplRows.rows
+        .filter((t: any) => {
+          // Referral tasks are repeatable; all other categories are one-and-done
+          if (t.category === 'referral') return true;
+          return !completedSet.has(t.id);
+        })
+        .map((t: any) => ({
+          id: t.id,
+          emoji: t.emoji,
+          title: t.title,
+          description: t.description,
+          rewardCredits: t.reward_credits,
+          rewardScore: t.reward_score,
+          ogBonusPct: t.og_bonus_pct,
+          category: t.category,
+          sortOrder: t.sort_order,
+          activeStatus: activeMap[t.id] ?? null,
+          effectiveCredits: isOG
+            ? Math.round(t.reward_credits * (1 + t.og_bonus_pct / 100))
+            : t.reward_credits,
+          isOG,
+        }));
+
+      res.json(missions);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/missions/:templateId/accept — user accepts a mission
+  app.post("/api/missions/:templateId/accept", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const templateId = parseInt(req.params.templateId);
+      const { zip, lat, lng } = req.body;
+
+      const tpl = await pool.query(
+        `SELECT id, is_active, paused FROM growth_task_templates WHERE id = $1`,
+        [templateId]
+      );
+      if (!tpl.rows[0] || !tpl.rows[0].is_active || tpl.rows[0].paused) {
+        return res.status(404).json({ message: "Mission not available" });
+      }
+
+      const existing = await pool.query(
+        `SELECT id, status FROM mission_instances
+         WHERE user_id = $1 AND template_id = $2 AND status NOT IN ('approved','rejected','expired')`,
+        [userId, templateId]
+      );
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ message: "Mission already active", instanceId: existing.rows[0].id });
+      }
+
+      const result = await pool.query(
+        `INSERT INTO mission_instances (user_id, template_id, zip, lat, lng, status)
+         VALUES ($1, $2, $3, $4, $5, 'accepted') RETURNING id`,
+        [userId, templateId, zip ?? null, lat ?? null, lng ?? null]
+      );
+      res.json({ ok: true, instanceId: result.rows[0].id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/missions/active — user's active mission instances
+  app.get("/api/missions/active", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const result = await pool.query(`
+        SELECT mi.id, mi.template_id, mi.status, mi.zip, mi.lat, mi.lng,
+               mi.accepted_at, mi.submitted_at, mi.admin_note, mi.credits_awarded,
+               t.emoji, t.title, t.description, t.reward_credits, t.og_bonus_pct, t.category
+        FROM mission_instances mi
+        JOIN growth_task_templates t ON t.id = mi.template_id
+        WHERE mi.user_id = $1 AND mi.status NOT IN ('approved','rejected','expired')
+        ORDER BY mi.created_at DESC
+      `, [userId]);
+
+      res.json(result.rows.map((r: any) => ({
+        id: r.id,
+        templateId: r.template_id,
+        status: r.status,
+        zip: r.zip,
+        acceptedAt: r.accepted_at,
+        submittedAt: r.submitted_at,
+        adminNote: r.admin_note,
+        creditsAwarded: r.credits_awarded,
+        template: {
+          emoji: r.emoji,
+          title: r.title,
+          description: r.description,
+          rewardCredits: r.reward_credits,
+          ogBonusPct: r.og_bonus_pct,
+          category: r.category,
+        },
+      })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/missions/instances/:id/submit — upload photo proof + GPS
+  app.post("/api/missions/instances/:id/submit", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session!.userId!;
+      const instanceId = parseInt(req.params.id);
+      const { photoDataUrl, gpsLat, gpsLng, businessName, address, notes } = req.body;
+
+      const inst = await pool.query(
+        `SELECT id, user_id, status FROM mission_instances WHERE id = $1`,
+        [instanceId]
+      );
+      if (!inst.rows[0]) return res.status(404).json({ message: "Mission not found" });
+      if (inst.rows[0].user_id !== userId) return res.status(403).json({ message: "Not your mission" });
+      if (!["accepted", "in_progress"].includes(inst.rows[0].status)) {
+        return res.status(409).json({ message: `Cannot submit in status '${inst.rows[0].status}'` });
+      }
+      if (!photoDataUrl) return res.status(400).json({ message: "Photo is required" });
+      if (!gpsLat || !gpsLng) return res.status(400).json({ message: "GPS location is required" });
+
+      let photoUrl: string = "[dev-no-cloudinary]";
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        const cloudinary = (await import("./cloudinary.js")).default;
+        const up = await cloudinary.uploader.upload(photoDataUrl, {
+          resource_type: "image",
+          folder: "guber-missions",
+          transformation: [{ width: 1200, crop: "limit" }],
+        });
+        photoUrl = up.secure_url;
+      }
+
+      await pool.query("BEGIN");
+      try {
+        await pool.query(
+          `INSERT INTO mission_proofs (instance_id, photo_url, gps_lat, gps_lng, captured_at, business_name, address, notes)
+           VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)`,
+          [instanceId, photoUrl, gpsLat, gpsLng, businessName ?? null, address ?? null, notes ?? null]
+        );
+        await pool.query(
+          `UPDATE mission_instances SET status = 'proof_submitted', submitted_at = NOW() WHERE id = $1`,
+          [instanceId]
+        );
+        await pool.query("COMMIT");
+      } catch (e) {
+        await pool.query("ROLLBACK");
+        throw e;
+      }
+
+      res.json({ ok: true, message: "Proof submitted — admin will review within 24–48 hours." });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/admin/missions/queue — review queue
+  app.get("/api/admin/missions/queue", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const result = await pool.query(`
+        SELECT mi.id, mi.user_id, mi.template_id, mi.status, mi.zip,
+               mi.submitted_at, mi.created_at, mi.admin_note,
+               u.username, u.display_name, u.email, u.day1_og,
+               t.emoji, t.title, t.reward_credits, t.og_bonus_pct,
+               mp.photo_url, mp.gps_lat, mp.gps_lng, mp.business_name, mp.address, mp.notes
+        FROM mission_instances mi
+        JOIN users u ON u.id = mi.user_id
+        JOIN growth_task_templates t ON t.id = mi.template_id
+        LEFT JOIN mission_proofs mp ON mp.instance_id = mi.id
+        WHERE mi.status = 'proof_submitted'
+        ORDER BY mi.submitted_at ASC
+      `);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/admin/missions/instances/:id/review — approve or reject
+  app.post("/api/admin/missions/instances/:id/review", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const adminId = req.session!.userId!;
+      const instanceId = parseInt(req.params.id);
+      const { decision, adminNote } = req.body;
+      if (!["approved", "rejected"].includes(decision)) {
+        return res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
+      }
+
+      const instRow = await pool.query(`
+        SELECT mi.*, t.reward_credits, t.reward_score, t.og_bonus_pct, t.title,
+               u.day1_og, u.id AS uid
+        FROM mission_instances mi
+        JOIN growth_task_templates t ON t.id = mi.template_id
+        JOIN users u ON u.id = mi.user_id
+        WHERE mi.id = $1
+      `, [instanceId]);
+
+      if (!instRow.rows[0]) return res.status(404).json({ message: "Instance not found" });
+      const inst = instRow.rows[0];
+      if (inst.status !== "proof_submitted") {
+        return res.status(409).json({ message: `Instance is in status '${inst.status}', not 'proof_submitted'` });
+      }
+
+      if (decision === "approved") {
+        let credits: number = inst.reward_credits;
+        let score: number = inst.reward_score;
+        if (inst.day1_og) {
+          const bonusPct: number = inst.og_bonus_pct ?? 100;
+          credits = Math.round(credits * (1 + bonusPct / 100));
+          score = Math.round(score * (1 + bonusPct / 100));
+        }
+        const cfgRow = await pool.query(
+          `SELECT value_int FROM growth_reward_config WHERE key = 'credits_per_dollar'`
+        );
+        const creditsPerDollar = cfgRow.rows[0]?.value_int ?? 1000;
+        const dollarEq = (credits / creditsPerDollar).toFixed(4);
+
+        await pool.query("BEGIN");
+        try {
+          await pool.query(
+            `UPDATE mission_instances
+             SET status='approved', reviewed_at=NOW(), reviewed_by=$1, credits_awarded=$2, admin_note=$3
+             WHERE id=$4`,
+            [adminId, credits, adminNote ?? null, instanceId]
+          );
+          await pool.query(
+            `UPDATE users
+             SET growth_credits = COALESCE(growth_credits,0) + $1,
+                 guber_score    = COALESCE(guber_score,0)    + $2,
+                 lifetime_credits_earned = COALESCE(lifetime_credits_earned,0) + $1
+             WHERE id=$3`,
+            [credits, score, inst.user_id]
+          );
+          await pool.query(
+            `INSERT INTO credit_ledger (user_id, amount, dollar_equivalent, source_type, status, approved_at, reason)
+             VALUES ($1,$2,$3,'map_mission','approved',NOW(),$4)`,
+            [inst.user_id, credits, dollarEq, `Mission approved: ${inst.title} (instance #${instanceId})`]
+          );
+          await pool.query("COMMIT");
+        } catch (e) {
+          await pool.query("ROLLBACK");
+          throw e;
+        }
+      } else {
+        await pool.query(
+          `UPDATE mission_instances SET status='rejected', reviewed_at=NOW(), reviewed_by=$1, admin_note=$2 WHERE id=$3`,
+          [adminId, adminNote ?? null, instanceId]
+        );
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   return httpServer;
