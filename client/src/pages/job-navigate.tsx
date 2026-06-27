@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
-import { ArrowLeft, Navigation, MapPin, MapPinned, Loader2, Car, AlertTriangle, Map as MapIcon } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { ArrowLeft, Navigation, MapPin, MapPinned, Loader2, AlertTriangle, Map as MapIcon, RotateCcw } from "lucide-react";
 import { GuberLayout } from "@/components/guber-layout";
 import { useNavigationCover } from "@/components/navigation-launch-cover";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,7 @@ export default function JobNavigate() {
   const [mapReady, setMapReady] = useState(false);
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const { data: config } = useQuery<{ googleMapsApiKey: string }>({ queryKey: ["/api/config"] });
   const { data: job, isLoading } = useQuery<Job>({
@@ -212,6 +214,19 @@ export default function JobNavigate() {
         .catch(() => { if (!cancelled) setLocationDenied(true); });
     }
     return () => { cancelled = true; unsub(); };
+  }, []);
+
+  const retryGps = useCallback(async () => {
+    setRetrying(true);
+    try {
+      const pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+      setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setLocationDenied(false);
+    } catch {
+      // Still denied — keep banner visible so user can follow instructions
+    } finally {
+      setRetrying(false);
+    }
   }, []);
 
   // Tracking is gated strictly on the task being actively in progress: the
@@ -419,9 +434,25 @@ export default function JobNavigate() {
         </div>
 
         {locationDenied && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-[11px] text-amber-200 flex items-start gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Location is off — ETA and your live position won't show. Enable location for the best experience.</span>
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 flex flex-col gap-2">
+            <div className="flex items-start gap-2 text-[11px] text-amber-200">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>
+                Location is off — ETA and your position won&apos;t show.
+                {Capacitor.getPlatform() === "android"
+                  ? " Go to Settings → Apps → GUBER → Permissions → Location."
+                  : " Go to Settings → Privacy → Location Services → GUBER."}
+              </span>
+            </div>
+            <button
+              onClick={() => void retryGps()}
+              disabled={retrying}
+              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-[11px] font-display font-bold text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+              data-testid="button-retry-gps"
+            >
+              {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+              {retrying ? "Requesting…" : "Retry Location"}
+            </button>
           </div>
         )}
 
@@ -478,63 +509,30 @@ export default function JobNavigate() {
         </div>
 
         <div className="pt-2">
-          <p className="text-[10px] font-display font-bold tracking-widest text-muted-foreground uppercase px-1 mb-2">
-            Or use an external app
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {(() => {
-              // All three buttons open the same in-place handoff sheet — the sheet
-              // itself shows Google Maps + Waze prominently and Apple Maps as a
-              // tertiary option on iOS.
-              const openSheet = () => {
-                const google = googleMapsUrl(job, userPos) || undefined;
-                const waze = wazeUrl(job) || undefined;
-                const apple = appleMapsUrl(job) || undefined;
-                if (!google && !waze && !apple) return;
-                const addr = job.location?.trim()
-                  ? job.location.trim()
-                  : job.lat && job.lng
-                    ? `${job.lat}, ${job.lng}`
-                    : undefined;
-                launchNav({
-                  destLabel: job.title || "Destination",
-                  destAddress: addr,
-                  urls: { google, waze, apple },
-                });
-              };
-              return (
-                <>
-                  <button
-                    onClick={openSheet}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
-                    style={{ background: "rgba(66,133,244,0.10)", border: "1px solid rgba(66,133,244,0.22)" }}
-                    data-testid="link-google-maps"
-                  >
-                    <Navigation className="w-4 h-4 text-blue-400" />
-                    <span className="text-[10px] font-display font-bold text-blue-400">Google Maps</span>
-                  </button>
-                  <button
-                    onClick={openSheet}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
-                    style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.18)" }}
-                    data-testid="link-waze"
-                  >
-                    <Car className="w-4 h-4 text-emerald-400" />
-                    <span className="text-[10px] font-display font-bold text-emerald-400">Waze</span>
-                  </button>
-                  <button
-                    onClick={openSheet}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all active:scale-[0.97]"
-                    style={{ background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.22)" }}
-                    data-testid="link-apple-maps"
-                  >
-                    <MapIcon className="w-4 h-4 text-slate-300" />
-                    <span className="text-[10px] font-display font-bold text-slate-300">Apple Maps</span>
-                  </button>
-                </>
-              );
-            })()}
-          </div>
+          <Button
+            onClick={() => {
+              const google = googleMapsUrl(job, userPos) || undefined;
+              const waze = wazeUrl(job) || undefined;
+              const apple = appleMapsUrl(job) || undefined;
+              if (!google && !waze && !apple) return;
+              const addr = job.location?.trim()
+                ? job.location.trim()
+                : job.lat && job.lng
+                  ? `${job.lat}, ${job.lng}`
+                  : undefined;
+              launchNav({
+                destLabel: job.title || "Destination",
+                destAddress: addr,
+                urls: { google, waze, apple },
+              });
+            }}
+            className="w-full h-12 font-display tracking-wider rounded-2xl text-white font-bold"
+            style={{ background: "rgba(66,133,244,0.18)", border: "1px solid rgba(66,133,244,0.35)" }}
+            data-testid="button-navigate-external"
+          >
+            <MapIcon className="w-4 h-4 mr-2" />
+            Navigate
+          </Button>
         </div>
       </div>
       {navCover}
