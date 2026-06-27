@@ -199,6 +199,7 @@ export class TaskTrackingService {
         this.startFlushTimer();
         void startForegroundTracking();
       }
+      window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: true, jobId } }));
     } finally {
       this.starting = false;
     }
@@ -234,6 +235,7 @@ export class TaskTrackingService {
     // Android: dismiss the persistent foreground-service notification (no-op on
     // iOS/web). Best-effort.
     void stopForegroundTracking();
+    window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: false } }));
   }
 
   private onPosition(pos: GeolocationPosition): void {

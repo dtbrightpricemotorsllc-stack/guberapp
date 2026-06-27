@@ -4721,9 +4721,16 @@ export async function registerRoutes(
       const accountStatus = (user as any).stripeAccountStatus || "none";
 
       if (accountId && accountStatus !== "active") {
-        // Re-check live with Stripe in case webhook was missed
+        // Re-check live with Stripe in case webhook was missed — 5-second timeout
+        // to prevent the wallet page freezing if Stripe is slow.
         try {
-          const account = await stripe.accounts.retrieve(accountId);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 5000)
+          );
+          const account = await Promise.race([
+            stripe.accounts.retrieve(accountId),
+            timeoutPromise,
+          ]);
           if (account.charges_enabled && account.payouts_enabled && account.details_submitted) {
             await storage.updateUser(user.id, { stripeAccountStatus: "active" } as any);
             await creditReferrer(user.id);

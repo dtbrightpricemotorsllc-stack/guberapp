@@ -13,6 +13,7 @@ import { ThemeProvider } from "@/lib/theme-context";
 import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
+import { GpsTrackingBanner } from "@/components/gps-tracking-banner";
 import { Capacitor } from "@capacitor/core";
 import { isStoreBuild } from "@/lib/platform";
 import { App as CapApp } from "@capacitor/app";
@@ -617,6 +618,7 @@ function App() {
             <UploadProgressPill />
             <GoogleAuthOverlay />
             {!splashDone && <SplashWrapper onDone={() => setSplashDone(true)} />}
+            <GpsTrackingBanner />
             <InstallPrompt />
             <AnnouncementPopup />
             <NativeDeepLinkHandler />

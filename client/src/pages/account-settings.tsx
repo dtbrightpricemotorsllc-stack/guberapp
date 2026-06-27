@@ -294,6 +294,7 @@ export default function AccountSettings() {
   const [notifVibrationEnabled, setNotifVibrationEnabledState] = useState(true);
   const [vibrationSupported, setVibrationSupported] = useState(false);
   const [audioBlockedWarning, setAudioBlockedWarning] = useState(false);
+  const [testingSoundType, setTestingSoundType] = useState<SoundType | null>(null);
   const [pushStatus, setPushStatus] = useState<PushStatus | null>(null);
   const [enablingPush, setEnablingPush] = useState(false);
 
@@ -855,6 +856,7 @@ export default function AccountSettings() {
                   variant="outline"
                   size="sm"
                   className="h-9 text-xs font-display border-border/30 justify-start"
+                  disabled={testingSoundType !== null}
                   onClick={async () => {
                     if (!notifSoundEnabled) {
                       toast({
@@ -864,12 +866,20 @@ export default function AccountSettings() {
                       });
                       return;
                     }
-                    unlockAudio();
-                    const ok = await playGuberSound(s.type);
-                    setAudioBlockedWarning(!ok);
+                    setTestingSoundType(s.type);
+                    try {
+                      unlockAudio();
+                      const ok = await playGuberSound(s.type);
+                      setAudioBlockedWarning(!ok);
+                    } finally {
+                      setTestingSoundType(null);
+                    }
                   }}
                   data-testid={`button-test-sound-${s.type}`}
                 >
+                  {testingSoundType === s.type ? (
+                    <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                  ) : null}
                   {s.label}
                 </Button>
               ))}
