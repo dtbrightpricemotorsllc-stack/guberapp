@@ -126,46 +126,63 @@ export default function JobNavigate() {
       toast({ title: "Error", description: err.message || "Could not update status.", variant: "destructive" }),
   });
 
-  const handleOnMyWay = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 })
-      .then((pos) =>
-        milestoneMutation.mutate({
-          statusType: "on_the_way",
-          gpsLat: pos.coords.latitude,
-          gpsLng: pos.coords.longitude,
-        }),
-      )
-      .catch((err: any) => {
+  // GPS is optional for on_the_way (just logged for tracking) — try fast
+  // network/cell location first (works indoors on Android), fall back to
+  // high-accuracy, and if all else fails proceed without GPS rather than
+  // blocking the worker entirely.
+  const handleOnMyWay = async () => {
+    let pos: GeolocationPosition | null = null;
+    try {
+      // Network location: fast, works indoors, good enough for start-point logging
+      pos = await gpsGetCurrentPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 15000 });
+    } catch {
+      try {
+        // High-accuracy fallback (GPS chip) — slower but more precise
+        pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+      } catch (err: any) {
         const denied = err?.code === 1 || /denied|permission|not authorized/i.test(err?.message ?? "");
-        toast({
-          title: "Location required",
-          description: denied
-            ? "Location access is blocked. Go to Settings → Privacy → Location Services → GUBER and set to \"While Using\"."
-            : "GPS is still warming up — wait a moment and tap On My Way again.",
-          variant: "destructive",
-        });
-      });
+        if (denied) {
+          // Soft warn — don't block the action, but tell them how to fix it
+          toast({
+            title: "Location not shared",
+            description: "Go to Settings → Apps → GUBER → Permissions → Location and allow location access. Proceeding without GPS.",
+          });
+        }
+        // GPS unavailable but on_the_way is optional-GPS — proceed anyway
+      }
+    }
+    milestoneMutation.mutate({
+      statusType: "on_the_way",
+      ...(pos ? { gpsLat: pos.coords.latitude, gpsLng: pos.coords.longitude } : {}),
+    });
   };
 
-  const handleArrived = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 })
-      .then((pos) =>
-        milestoneMutation.mutate({
-          statusType: "arrived",
-          gpsLat: pos.coords.latitude,
-          gpsLng: pos.coords.longitude,
-        }),
-      )
-      .catch((err: any) => {
+  // Arrived requires GPS for the 250 m geofence check — try network first
+  // (fast, works indoors), then high-accuracy, then surface a clear error.
+  const handleArrived = async () => {
+    let pos: GeolocationPosition | null = null;
+    try {
+      pos = await gpsGetCurrentPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 15000 });
+    } catch {
+      try {
+        pos = await gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+      } catch (err: any) {
         const denied = err?.code === 1 || /denied|permission|not authorized/i.test(err?.message ?? "");
         toast({
           title: "Location required",
           description: denied
-            ? "Location access is blocked. Go to Settings → Privacy → Location Services → GUBER and set to \"While Using\"."
-            : "GPS is still warming up — wait a moment and tap Arrived again.",
+            ? "Go to Settings → Apps → GUBER → Permissions → Location and allow location access, then tap Arrived again."
+            : "GPS couldn't get a fix — step outside or wait a moment, then tap Arrived again.",
           variant: "destructive",
         });
-      });
+        return;
+      }
+    }
+    milestoneMutation.mutate({
+      statusType: "arrived",
+      gpsLat: pos!.coords.latitude,
+      gpsLng: pos!.coords.longitude,
+    });
   };
 
   // Live position comes from the standalone TaskTrackingService — not a local
