@@ -127,7 +127,7 @@ export default function JobNavigate() {
   });
 
   const handleOnMyWay = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 })
       .then((pos) =>
         milestoneMutation.mutate({
           statusType: "on_the_way",
@@ -135,17 +135,20 @@ export default function JobNavigate() {
           gpsLng: pos.coords.longitude,
         }),
       )
-      .catch(() =>
+      .catch((err: any) => {
+        const denied = err?.code === 1 || /denied|permission|not authorized/i.test(err?.message ?? "");
         toast({
           title: "Location required",
-          description: "Enable GPS so we can share your start location with the hirer, then tap On My Way again.",
+          description: denied
+            ? "Location access is blocked. Go to Settings → Privacy → Location Services → GUBER and set to \"While Using\"."
+            : "GPS is still warming up — wait a moment and tap On My Way again.",
           variant: "destructive",
-        }),
-      );
+        });
+      });
   };
 
   const handleArrived = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 })
       .then((pos) =>
         milestoneMutation.mutate({
           statusType: "arrived",
@@ -153,13 +156,16 @@ export default function JobNavigate() {
           gpsLng: pos.coords.longitude,
         }),
       )
-      .catch(() =>
+      .catch((err: any) => {
+        const denied = err?.code === 1 || /denied|permission|not authorized/i.test(err?.message ?? "");
         toast({
           title: "Location required",
-          description: "Enable GPS so we can verify you're at the job site, then tap Arrived again.",
+          description: denied
+            ? "Location access is blocked. Go to Settings → Privacy → Location Services → GUBER and set to \"While Using\"."
+            : "GPS is still warming up — wait a moment and tap Arrived again.",
           variant: "destructive",
-        }),
-      );
+        });
+      });
   };
 
   // Live position comes from the standalone TaskTrackingService — not a local

@@ -201,6 +201,21 @@ export default function WalletPage() {
 
   const hasPendingConfirms = (pendingConfirms?.length ?? 0) > 0;
 
+  if (isError) {
+    return (
+      <GuberLayout showBack backHref="/dashboard" title="Wallet">
+        <div className="max-w-lg mx-auto px-4 py-6 flex flex-col items-center justify-center min-h-[40vh] text-center" data-testid="page-wallet-error">
+          <AlertCircle className="w-10 h-10 text-destructive mb-3" />
+          <p className="font-display font-bold text-base mb-1">Couldn't load your wallet</p>
+          <p className="text-sm text-muted-foreground mb-4">Check your connection and try again.</p>
+          <Button variant="outline" onClick={() => refetch()} className="rounded-xl" data-testid="button-wallet-retry">
+            Retry
+          </Button>
+        </div>
+      </GuberLayout>
+    );
+  }
+
   return (
     <GuberLayout showBack backHref="/dashboard" title="Wallet">
       <div className="max-w-lg mx-auto px-4 py-6" data-testid="page-wallet">

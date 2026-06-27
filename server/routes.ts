@@ -14138,8 +14138,13 @@ export async function registerRoutes(
 
   // WALLET
   app.get("/api/wallet", requireAuth, async (req: Request, res: Response) => {
-    const txns = await storage.getWalletByUser(req.session.userId!);
-    res.json(txns);
+    try {
+      const txns = await storage.getWalletByUser(req.session.userId!);
+      res.json(txns);
+    } catch (err: any) {
+      console.error("[wallet] GET /api/wallet error:", err.message);
+      res.status(500).json({ message: "Could not load wallet. Please try again." });
+    }
   });
 
   // Jobs where the caller is the poster, has paid/authorized, helper confirmed, but buyer hasn't confirmed yet
@@ -16721,8 +16726,8 @@ CRITICAL — respond with JSON ONLY, no other text:
 
       // Gather data in parallel for performance
       const [userRes, listingRes, pendingJobsRes, missionsRes, referralRes] = await Promise.all([
-        pool.query<{ day1_og: boolean; zip: string | null; id_verified: boolean }>(
-          `SELECT day1_og, zip, id_verified FROM users WHERE id = $1`,
+        pool.query<{ day1_og: boolean; zipcode: string | null; id_verified: boolean }>(
+          `SELECT day1_og, zipcode, id_verified FROM users WHERE id = $1`,
           [userId]
         ),
         pool.query<{ id: number; display_title: string }>(
@@ -16737,7 +16742,7 @@ CRITICAL — respond with JSON ONLY, no other text:
              AND (photos IS NULL OR cardinality(photos) = 0)
            ORDER BY created_at DESC LIMIT 1`,
           [userId]
-        ),
+        ).catch(() => ({ rows: [] as { id: number; display_title: string }[] })),
         pool.query<{ count: string }>(
           `SELECT COUNT(*)::text AS count
            FROM job_applications ja
@@ -16762,7 +16767,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       ]);
 
       const u = userRes.rows[0];
-      const nearbyJobsRes = u?.zip
+      const nearbyJobsRes = u?.zipcode
         ? await pool.query<{ count: string }>(
             `SELECT COUNT(*)::text AS count
              FROM jobs
@@ -16772,7 +16777,7 @@ CRITICAL — respond with JSON ONLY, no other text:
                AND id NOT IN (
                  SELECT job_id FROM job_applications WHERE applicant_id = $2
                )`,
-            [u.zip, userId]
+            [u.zipcode, userId]
           ).catch(() => ({ rows: [{ count: "0" }] }))
         : { rows: [{ count: "0" }] };
 
