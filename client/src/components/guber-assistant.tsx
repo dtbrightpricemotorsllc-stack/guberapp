@@ -35,6 +35,12 @@ const LISTING_PATTERNS = [
   /\b(sell my|list my|post my)\b/i,
   /\b(I want to sell|I'm selling|selling my|I need to sell|looking to sell)\b/i,
   /\b(got a|have a|I have)\b.{0,30}\b(for sale|to sell)\b/i,
+  // job / hiring patterns
+  /\b(hire|hiring|need)\b.{0,40}\b(someone|a worker|a helper|help|a person|somebody)\b/i,
+  /\b(post|create|add)\b.{0,20}\b(a job|my job|a gig|a task)\b/i,
+  /\bneed (help with|someone to|a hand with)\b/i,
+  /\b(looking for|need)\b.{0,30}\b(lawn|cleaning|mowing|moving|plumber|handyman|electrician|painter|cleaner|pet sitter|dog walker|delivery|driver)\b/i,
+  /\bI (want|need) (to hire|to find a worker|to post a job)\b/i,
 ];
 
 function hasListingIntent(text: string): boolean {
@@ -295,11 +301,24 @@ export function GUBERAssistant() {
       if (!muted) jacSpeak(msg.content, { muted });
 
       if (data.ready && data.route) {
-        saveListingPrefill({
-          type: data.listingType as any,
-          collected: newCollected,
-          route: data.route,
-        });
+        if (data.listingType === "job") {
+          // Write to the existing jac_job_prefill format that post-job.tsx already reads
+          try {
+            localStorage.setItem("jac_job_prefill", JSON.stringify({
+              category: newCollected.category || "",
+              serviceType: newCollected.serviceType || newCollected.service_type || "",
+              descriptionSeed: newCollected.descriptionSeed || newCollected.description || "",
+              budgetHint: newCollected.budget ? Number(newCollected.budget) : null,
+              zip: newCollected.zip || "",
+            }));
+          } catch {}
+        } else {
+          saveListingPrefill({
+            type: data.listingType as any,
+            collected: newCollected,
+            route: data.route,
+          });
+        }
         setTimeout(() => {
           patchStore({ open: false });
           cancelSpeech();

@@ -16355,6 +16355,7 @@ LISTING TYPES you handle:
 - "house" — houses, apartments, condos, rentals, property listings
 - "load" — freight, cargo, loads that need shipping or transport (Load Board post)
 - "vi" — Verify & Inspect requests (need a GUBER worker to verify or inspect something)
+- "job" — hiring someone to do a task (lawn care, cleaning, moving, delivery, repairs, pet care, etc.)
 
 REQUIRED FIELDS per type (collect these one at a time, never ask for more than one at once):
 vehicle: year, make, model, condition (excellent/good/fair/poor), mileage (optional — skip if user says unknown), price, zipcode
@@ -16362,6 +16363,7 @@ item: title (what is it exactly?), category (Electronics/Clothing/Furniture/Tool
 house: listing_type (for_sale or for_rent), price (sale price or monthly rent as a number), bedrooms, bathrooms, zipcode
 load: commodity_type (what is being shipped), pickup_zip, delivery_zip, weight_lbs (approximate number), trailer_type (dry_van/flatbed/reefer/other)
 vi: description (what needs to be verified or inspected and why), zipcode
+job: category (General Labor/Skilled Labor/On-Demand Help/Delivery/Moving/Cleaning/Lawn Care/Pet Care/Skilled Trades/Other), serviceType (specific task, e.g. "Lawn Mowing", "House Cleaning", "Furniture Assembly"), descriptionSeed (brief description of what needs doing), budget (how much willing to pay as a number), zip
 
 ROUTING:
 vehicle → /marketplace
@@ -16369,6 +16371,7 @@ item → /marketplace
 house → /marketplace
 load → /load-board/post
 vi → /verify-inspect
+job → /post-job?from=jac
 
 BEHAVIOR:
 1. First detect the listing type from the conversation (or use the provided hint). If unclear, ask.
