@@ -611,3 +611,21 @@ id = "pgpHNcGzgBwwx_JQsz_vy"
 uri = "file://screenshots/ipad_login.jpg"
 type = "image"
 title = "iPad Screenshot 2 — Sign In"
+
+[[outputs]]
+id = "cK49DSbcghuuiqi64qvYJ"
+uri = "file://screenshots/ipad_1_home.jpg"
+type = "image"
+title = "iPad Screenshot 1 — Home / JAC (2064×2752)"
+
+[[outputs]]
+id = "-EAZqYX3P1RDOPFJSSroU"
+uri = "file://screenshots/ipad_2_login.jpg"
+type = "image"
+title = "iPad Screenshot 2 — Sign In (2064×2752)"
+
+[[outputs]]
+id = "I5mCsfGMt3sw30cJau-ux"
+uri = "file://screenshots/ipad_3_signup.jpg"
+type = "image"
+title = "iPad Screenshot 3 — Create Account (2064×2752)"
