@@ -350,10 +350,10 @@ export default function OgAdvantage() {
             )}
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               {isLoggedIn ? (
-                <Link href="/community-tasks" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
+                <Link href="/browse-jobs" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
                   style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
                   data-testid="link-og-cta-missions">
-                  BROWSE MISSIONS <ArrowRight className="w-4 h-4" />
+                  BROWSE OPPORTUNITIES <ArrowRight className="w-4 h-4" />
                 </Link>
               ) : (
                 <Link href="/profile" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"

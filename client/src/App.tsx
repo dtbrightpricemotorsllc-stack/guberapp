@@ -364,7 +364,7 @@ function Router() {
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
       <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
-      <Route path="/community-tasks" component={() => <ProtectedRoute component={GrowthTasks} />} />
+      <Route path="/community-tasks" component={() => { window.location.replace("/browse-jobs"); return null; }} />
       <Route path="/growth/leaderboard" component={GrowthLeaderboard} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />

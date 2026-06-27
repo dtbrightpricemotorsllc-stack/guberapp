@@ -183,9 +183,9 @@ export default function BrowseJobs() {
         {!CATEGORY_IMAGES[category] && (
           <div className="mb-5 animate-fade-in">
             <h1 className="text-xl font-display font-bold tracking-tight mb-1" data-testid="text-browse-title">
-              Browse Jobs
+              Opportunity Feed
             </h1>
-            <p className="text-sm text-muted-foreground">Find opportunities that match your skills</p>
+            <p className="text-sm text-muted-foreground">Jobs, missions &amp; more — always something to earn</p>
           </div>
         )}
 
@@ -403,51 +403,32 @@ export default function BrowseJobs() {
               </div>
             ))}
 
-            {/* Credit-pay gigs — always visible, styled like job postings */}
-            {missions.length > 0 && (
-              <div className={filtered.length > 0 ? "pt-2 border-t border-white/[0.08]" : ""}>
-                {filtered.length === 0 && (
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-display font-bold text-muted-foreground tracking-wider uppercase">
-                      Available in your area
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      {(alertsOff || availableOff) && alertsOff && (
-                        <Button
-                          size="sm"
-                          className="gap-1.5 premium-btn rounded-lg font-display tracking-wider text-[10px] h-8 px-3"
-                          onClick={handleEnableAlerts}
-                          disabled={pendingAlerts}
-                          data-testid="button-turn-on-alerts"
-                        >
-                          {pendingAlerts ? "Enabling…" : "Turn on alerts"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  {missions.map(m => (
-                    <MissionCard
-                      key={m.id}
-                      mission={m}
-                      jobMode
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Missions fill remaining space — max 5, always after all real jobs */}
+            {missions.slice(0, 5).map(m => (
+              <MissionCard key={m.id} mission={m} />
+            ))}
 
-            {/* Only show true empty state if NO jobs AND NO credit gigs */}
+            {/* True empty state — no real jobs AND no missions */}
             {filtered.length === 0 && missions.length === 0 && (
               <div className="text-center py-10 animate-fade-in" data-testid="section-empty-state">
                 <p className="text-2xl mb-3">💰</p>
-                <p className="font-display font-bold text-foreground text-base mb-1" data-testid="text-empty-title">More jobs dropping soon</p>
+                <p className="font-display font-bold text-foreground text-base mb-1" data-testid="text-empty-title">More opportunities dropping soon</p>
                 <p className="text-sm text-muted-foreground">Be the first to grab them when they post.</p>
+                {alertsOff && (
+                  <Button
+                    size="sm"
+                    className="mt-4 gap-1.5 premium-btn rounded-lg font-display tracking-wider text-[10px] h-8 px-3"
+                    onClick={handleEnableAlerts}
+                    disabled={pendingAlerts}
+                    data-testid="button-turn-on-alerts"
+                  >
+                    {pendingAlerts ? "Enabling…" : "Turn on job alerts"}
+                  </Button>
+                )}
                 {availableOff && (
                   <Button
                     variant="outline"
-                    className="mt-4 rounded-xl font-display tracking-wider text-xs h-11 border-white/[0.15] hover:border-white/25"
+                    className="mt-3 rounded-xl font-display tracking-wider text-xs h-11 border-white/[0.15] hover:border-white/25"
                     onClick={() => availabilityMutation.mutate()}
                     disabled={availabilityMutation.isPending}
                     data-testid="button-set-available"

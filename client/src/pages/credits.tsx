@@ -320,8 +320,8 @@ export default function CreditsPage() {
             <span>💼 Your referral completes first paid job — 1,500 cr</span>
             <span>👑 Day-1 OG members earn +25% on all map missions</span>
           </div>
-          <Link href="/community-tasks" className="inline-flex items-center gap-1 text-xs text-amber-400 font-medium mt-1" data-testid="link-go-missions">
-            Browse Missions <ExternalLink className="w-3 h-3" />
+          <Link href="/browse-jobs" className="inline-flex items-center gap-1 text-xs text-amber-400 font-medium mt-1" data-testid="link-go-missions">
+            Browse Opportunities <ExternalLink className="w-3 h-3" />
           </Link>
         </div>
 

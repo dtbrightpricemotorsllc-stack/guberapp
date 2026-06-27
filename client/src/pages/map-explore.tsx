@@ -1381,7 +1381,7 @@ export default function MapExplore() {
               : zipFallback.tasks.map((task, i) => (
                   <button
                     key={task.id}
-                    onClick={() => navigate(`/community-tasks?zip=${encodeURIComponent(zipFallback.zip)}`)}
+                    onClick={() => navigate(`/browse-jobs`)}
                     className="w-full flex items-center gap-3 px-2 py-3 text-left transition-colors active:bg-white/5"
                     style={{ borderBottom: i < zipFallback.tasks.length - 1 ? `1px solid ${DARK_BORDER}` : "none" }}
                     data-testid={`button-growth-task-${task.id}`}
