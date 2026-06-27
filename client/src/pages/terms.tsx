@@ -40,7 +40,7 @@ function TermsContent() {
 
       <div className="space-y-6">
         <Section title="1. Acceptance of Terms">
-          <p>By accessing or using the GUBER platform ("Platform"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Platform. You must be at least 18 years old to create an account.</p>
+          <p>By accessing or using the GUBER platform ("Platform"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Platform. You must be at least 18 years old to create an account. Users between the ages of 13 and 17 may participate on the Platform only with verified parental or legal guardian consent. A parent or legal guardian must create and manage the account on behalf of the minor. GUBER is not directed to children under the age of 13, and we do not knowingly allow anyone under 13 to use the Platform.</p>
           <p>GUBER GLOBAL LLC reserves the right to modify these Terms at any time. Continued use of the Platform after changes are posted constitutes acceptance of the updated Terms.</p>
         </Section>
 
