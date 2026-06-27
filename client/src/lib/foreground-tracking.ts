@@ -3,7 +3,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 // JS interface for the native Android foreground-tracking plugin. Implemented
 // in android/app/src/main/java/com/guber/app/ForegroundTrackingPlugin.java.
 export interface ForegroundTrackingPlugin {
-  start(options: { title?: string; text?: string }): Promise<void>;
+  start(options: { title?: string; text?: string; jobId?: number; authToken?: string }): Promise<void>;
   stop(): Promise<void>;
   /** Returns the current background location permission state without prompting. */
   checkBackgroundLocation(): Promise<{ status: string }>;
@@ -27,13 +27,20 @@ const isAndroidNative = (() => {
   }
 })();
 
-/** Show the persistent tracking notification (Android only). Best-effort. */
-export async function startForegroundTracking(opts?: { title?: string; text?: string }): Promise<void> {
+/** Show the persistent tracking notification and start native GPS (Android only). Best-effort. */
+export async function startForegroundTracking(opts?: {
+  title?: string;
+  text?: string;
+  jobId?: number;
+  authToken?: string;
+}): Promise<void> {
   if (!isAndroidNative) return;
   try {
     await ForegroundTracking.start({
-      title: opts?.title ?? "GUBER — task in progress",
-      text: opts?.text ?? "Sharing your live location for an active task.",
+      title:     opts?.title     ?? "GUBER — task in progress",
+      text:      opts?.text      ?? "Sharing your live location for an active task.",
+      jobId:     opts?.jobId,
+      authToken: opts?.authToken,
     });
   } catch {
     // Non-fatal: in-app tracking still works; the notification is best-effort.

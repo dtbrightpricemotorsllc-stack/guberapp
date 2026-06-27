@@ -2427,6 +2427,67 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ── Background-location bearer token ─────────────────────────────────────
+  // The native Android foreground service (GuberTrackingService.java) needs to
+  // POST location batches while the WebView is throttled / screen locked. It
+  // cannot access the HttpOnly session cookie, so we issue a short-lived HMAC
+  // token tied to the requesting user + job. The service exchanges it as a
+  // Bearer token on /api/jobs/:id/location-batch.
+  //
+  // Format: `${userId}:${jobId}:${exp}:${hmac_hex}`
+  // Secret: SESSION_SECRET (same key, different purpose — safe because the
+  //         token is scoped and time-limited).
+  const BG_LOC_TTL_MS = 45 * 60 * 1000; // 45 min (comfortably covers a long job)
+
+  function bgLocSecret(): string {
+    return (process.env.SESSION_SECRET || "dev-only-insecure-session-secret") + ":bg-loc";
+  }
+
+  function signBgLocToken(userId: number, jobId: number, exp: number): string {
+    const { createHmac } = require("crypto");
+    const payload = `${userId}:${jobId}:${exp}`;
+    const sig = createHmac("sha256", bgLocSecret()).update(payload).digest("hex");
+    return `${payload}:${sig}`;
+  }
+
+  function verifyBgLocToken(token: string, jobId: number): number | null {
+    try {
+      const { createHmac, timingSafeEqual } = require("crypto");
+      const parts = token.split(":");
+      if (parts.length !== 4) return null;
+      const [uStr, jStr, expStr, sig] = parts;
+      const userId   = parseInt(uStr);
+      const tokenJob = parseInt(jStr);
+      const exp      = parseInt(expStr);
+      if (!userId || tokenJob !== jobId || Date.now() > exp) return null;
+      const expected = createHmac("sha256", bgLocSecret())
+        .update(`${userId}:${tokenJob}:${exp}`)
+        .digest("hex");
+      const a = Buffer.from(sig, "hex");
+      const b = Buffer.from(expected, "hex");
+      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+      return userId;
+    } catch {
+      return null;
+    }
+  }
+
+  app.post("/api/auth/bg-location-token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.body?.jobId);
+      if (isNaN(jobId) || jobId <= 0) return res.status(400).json({ message: "jobId required" });
+      const job = await storage.getJob(jobId);
+      if (!job || job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Not assigned to this job" });
+      }
+      const exp   = Date.now() + BG_LOC_TTL_MS;
+      const token = signBgLocToken(req.session.userId!, jobId, exp);
+      res.json({ token, expiresAt: exp });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // Poll-token store for Chrome Custom Tab OAuth flow (no deep link required)
   // The app supplies a random pollKey before opening the browser. After OAuth
@@ -9938,7 +9999,21 @@ export async function registerRoutes(
   // while the job is genuinely trackable (helper en route / on site and the job
   // hasn't ended) — otherwise we reply { active: false } so the client tears
   // its tracker down. This is the server-driven stop signal.
-  app.post("/api/jobs/:id/location-batch", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  // Middleware: accept a short-lived Bearer bg-location token (issued by
+  // /api/auth/bg-location-token) as an alternative to the session cookie.
+  // When valid, injects req.session.userId so downstream requireAuth + the
+  // route's own userId checks work without modification.
+  function acceptBgLocToken(req: Request, res: Response, next: NextFunction): void {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      const jobId = parseInt((req.params as any).id);
+      const userId = verifyBgLocToken(auth.slice(7), jobId);
+      if (userId) req.session.userId = userId;
+    }
+    next();
+  }
+
+  app.post("/api/jobs/:id/location-batch", acceptBgLocToken, requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
       if (isNaN(jobId)) return res.status(400).json({ message: "Invalid job id" });

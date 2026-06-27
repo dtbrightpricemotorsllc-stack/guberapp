@@ -197,7 +197,7 @@ export class TaskTrackingService {
         }
         this.watchId = id;
         this.startFlushTimer();
-        void startForegroundTracking();
+        void this.startForegroundService(jobId);
       }
       window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: true, jobId } }));
     } finally {
@@ -264,6 +264,26 @@ export class TaskTrackingService {
     const movedFar = haversineMeters(this.lastAccepted, c) >= MIN_DISTANCE_M;
     const longEnough = ts - this.lastAccepted.ts >= MIN_INTERVAL_MS;
     return movedFar || longEnough;
+  }
+
+  /**
+   * Fetch a short-lived bg-location token from the server, then start the
+   * native Android foreground service with native GPS. The token lets the Java
+   * service POST location batches directly to the server (bypassing the WebView
+   * session cookie) so tracking continues when the screen locks.
+   */
+  private async startForegroundService(jobId: number): Promise<void> {
+    let authToken: string | undefined;
+    try {
+      const resp = await apiRequest("POST", "/api/auth/bg-location-token", { jobId });
+      if (resp.ok) {
+        const data = await resp.json();
+        authToken = data.token;
+      }
+    } catch {
+      // Non-fatal — foreground service still starts; native GPS just won't post
+    }
+    void startForegroundTracking({ jobId, authToken });
   }
 
   private startFlushTimer(): void {
