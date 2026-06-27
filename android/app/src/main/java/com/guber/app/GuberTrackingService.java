@@ -8,37 +8,90 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.location.Location;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
- * Foreground service that keeps a persistent status-bar notification visible
- * while GUBER is sharing the worker's live location for an active task.
+ * Foreground service that:
+ *   (a) Shows the required persistent status-bar notification while the worker
+ *       is sharing their live location for an active task.
+ *   (b) Runs a native FusedLocationProviderClient GPS listener that posts
+ *       location batches directly to the server — independently of the WebView
+ *       JavaScript layer. This guarantees tracking continues even when the screen
+ *       locks and Android throttles WebView JS execution on Samsung/Xiaomi/etc.
  *
- * This service is intentionally NOT a background-location collector: the GPS
- * watch itself runs in the web/JS layer via @capacitor/geolocation while the
- * app is in the foreground. The service exists to (a) show the user-visible
- * ongoing notification Android requires for location use, and (b) keep the
- * process alive so an active task isn't silently dropped. It is started and
- * stopped explicitly by the JS tracking service — never on its own.
+ * The JS layer passes a jobId and short-lived Bearer token (from
+ * POST /api/auth/bg-location-token) so the service can authenticate with the
+ * server without relying on the WebView's session cookie.
  */
 public class GuberTrackingService extends Service {
-    public static final String ACTION_START = "com.guber.app.tracking.START";
-    public static final String ACTION_STOP = "com.guber.app.tracking.STOP";
-    public static final String EXTRA_TITLE = "title";
-    public static final String EXTRA_TEXT = "text";
 
-    private static final String CHANNEL_ID = "guber_tracking";
-    private static final int NOTIFICATION_ID = 4711;
+    public static final String ACTION_START     = "com.guber.app.tracking.START";
+    public static final String ACTION_STOP      = "com.guber.app.tracking.STOP";
+    public static final String EXTRA_TITLE      = "title";
+    public static final String EXTRA_TEXT       = "text";
+    public static final String EXTRA_JOB_ID     = "job_id";
+    public static final String EXTRA_AUTH_TOKEN = "auth_token";
+
+    private static final String CHANNEL_ID      = "guber_tracking";
+    private static final int    NOTIFICATION_ID = 4711;
+    private static final String SERVER_BASE     = "https://guberapp.app";
+
+    private static final long  LOCATION_INTERVAL_MS = 10_000L;
+    private static final float MIN_DISPLACEMENT_M   = 20f;
+    private static final float MAX_ACCURACY_M       = 80f;
+    private static final long  FLUSH_INTERVAL_MS    = 30_000L;
+    private static final int   FLUSH_MIN_POINTS     = 5;
+
+    private FusedLocationProviderClient fusedClient;
+    private LocationCallback            locationCallback;
+    private HandlerThread               handlerThread;
+    private Handler                     flushHandler;
+    private ExecutorService             httpExecutor;
+
+    private int    activeJobId = -1;
+    private String authToken   = null;
+
+    private final List<double[]> locationQueue = new ArrayList<>();
+
+    private final Runnable flushRunnable = new Runnable() {
+        @Override public void run() {
+            flushQueue();
+            if (flushHandler != null) flushHandler.postDelayed(this, FLUSH_INTERVAL_MS);
+        }
+    };
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
+
         if (ACTION_STOP.equals(action)) {
+            stopTracking();
             stopForegroundCompat();
             stopSelf();
             return START_NOT_STICKY;
@@ -46,7 +99,7 @@ public class GuberTrackingService extends Service {
 
         String title = intent != null && intent.getStringExtra(EXTRA_TITLE) != null
                 ? intent.getStringExtra(EXTRA_TITLE) : "GUBER";
-        String text = intent != null && intent.getStringExtra(EXTRA_TEXT) != null
+        String text  = intent != null && intent.getStringExtra(EXTRA_TEXT) != null
                 ? intent.getStringExtra(EXTRA_TEXT)
                 : "Sharing your live location for an active task.";
 
@@ -54,20 +107,138 @@ public class GuberTrackingService extends Service {
         Notification notification = buildNotification(title, text);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(
-                    this,
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            );
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
         } else {
             startForeground(NOTIFICATION_ID, notification);
         }
 
-        // START_STICKY: if the OS kills us under memory pressure, recreate the
-        // service so the persistent notification (and the location-use
-        // justification it represents) returns alongside the app.
+        int    jobId = intent != null ? intent.getIntExtra(EXTRA_JOB_ID, -1) : -1;
+        String token = intent != null ? intent.getStringExtra(EXTRA_AUTH_TOKEN) : null;
+        if (jobId > 0 && token != null && !token.isEmpty()) {
+            startTracking(jobId, token);
+        }
+
         return START_STICKY;
+    }
+
+    private void startTracking(int jobId, String token) {
+        stopTracking();
+
+        activeJobId = jobId;
+        authToken   = token;
+        synchronized (locationQueue) { locationQueue.clear(); }
+
+        handlerThread = new HandlerThread("GuberLocationThread");
+        handlerThread.start();
+        flushHandler = new Handler(handlerThread.getLooper());
+        httpExecutor = Executors.newSingleThreadExecutor();
+
+        fusedClient = LocationServices.getFusedLocationProviderClient(this);
+
+        LocationRequest request = new LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY, LOCATION_INTERVAL_MS)
+                .setMinUpdateDistanceMeters(MIN_DISPLACEMENT_M)
+                .setWaitForAccurateLocation(false)
+                .build();
+
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult result) {
+                if (result == null) return;
+                for (Location loc : result.getLocations()) {
+                    if (loc.getAccuracy() > MAX_ACCURACY_M) continue;
+                    synchronized (locationQueue) {
+                        locationQueue.add(new double[]{
+                                loc.getLatitude(), loc.getLongitude(), (double) loc.getTime()
+                        });
+                    }
+                    if (locationQueue.size() >= FLUSH_MIN_POINTS) flushQueue();
+                }
+            }
+        };
+
+        try {
+            fusedClient.requestLocationUpdates(request, locationCallback,
+                    handlerThread.getLooper());
+            flushHandler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS);
+        } catch (SecurityException e) {
+            // Permission not granted at the OS level — native GPS unavailable,
+            // but the foreground service still keeps the process alive so the
+            // WebView's JS watch can continue while the screen is on.
+        }
+    }
+
+    private void stopTracking() {
+        if (fusedClient != null && locationCallback != null) {
+            try { fusedClient.removeLocationUpdates(locationCallback); } catch (Exception ignored) {}
+        }
+        if (flushHandler != null) {
+            flushHandler.removeCallbacks(flushRunnable);
+        }
+        flushQueue();
+        if (httpExecutor != null && !httpExecutor.isShutdown()) {
+            httpExecutor.shutdown();
+        }
+        fusedClient      = null;
+        locationCallback = null;
+        activeJobId      = -1;
+        authToken        = null;
+    }
+
+    private void flushQueue() {
+        List<double[]> snapshot;
+        synchronized (locationQueue) {
+            if (locationQueue.isEmpty()) return;
+            snapshot = new ArrayList<>(locationQueue);
+            locationQueue.clear();
+        }
+        final int    jobId = activeJobId;
+        final String token = authToken;
+        if (jobId <= 0 || token == null) return;
+        if (httpExecutor == null || httpExecutor.isShutdown()) return;
+        final List<double[]> points = snapshot;
+        httpExecutor.execute(() -> postLocationBatch(jobId, token, points));
+    }
+
+    private void postLocationBatch(int jobId, String token, List<double[]> points) {
+        try {
+            JSONArray arr = new JSONArray();
+            for (double[] p : points) {
+                JSONObject o = new JSONObject();
+                o.put("lat", p[0]);
+                o.put("lng", p[1]);
+                o.put("ts",  (long) p[2]);
+                arr.put(o);
+            }
+            JSONObject body = new JSONObject();
+            body.put("points", arr);
+
+            byte[]            bodyBytes = body.toString().getBytes("UTF-8");
+            URL               url       = new URL(SERVER_BASE + "/api/jobs/" + jobId + "/location-batch");
+            HttpURLConnection conn      = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+            conn.setConnectTimeout(10_000);
+            conn.setReadTimeout(10_000);
+            conn.setDoOutput(true);
+            conn.setFixedLengthStreamingMode(bodyBytes.length);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(bodyBytes);
+            }
+
+            int code = conn.getResponseCode();
+            if (code == 401 || code == 403 || code == 404) {
+                // Server says this job is done or the token expired — stop posting.
+                authToken = null;
+            }
+            conn.disconnect();
+        } catch (Exception ignored) {
+            // Network error — points are lost but non-critical.
+            // The JS layer's own flush timer will catch any remaining queue.
+        }
     }
 
     private Notification buildNotification(String title, String text) {
@@ -94,14 +265,13 @@ public class GuberTrackingService extends Service {
 
     private void createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager nm =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
                 NotificationChannel channel = new NotificationChannel(
-                        CHANNEL_ID,
-                        "Live task tracking",
-                        NotificationManager.IMPORTANCE_LOW
-                );
-                channel.setDescription("Shows while GUBER is sharing your live location for an active task.");
+                        CHANNEL_ID, "Live task tracking", NotificationManager.IMPORTANCE_LOW);
+                channel.setDescription(
+                        "Shows while GUBER is sharing your live location for an active task.");
                 channel.setShowBadge(false);
                 nm.createNotificationChannel(channel);
             }
@@ -119,13 +289,12 @@ public class GuberTrackingService extends Service {
 
     @Override
     public void onDestroy() {
+        stopTracking();
+        if (handlerThread != null) handlerThread.quit();
         stopForegroundCompat();
         super.onDestroy();
     }
 
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    @Nullable @Override
+    public IBinder onBind(Intent intent) { return null; }
 }
