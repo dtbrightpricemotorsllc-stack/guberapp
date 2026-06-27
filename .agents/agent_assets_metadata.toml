@@ -599,3 +599,15 @@ id = "fqh_q1H0GvICN5ln7hODr"
 uri = "file://public/jac-audio/test-fix.mp3"
 type = "audio"
 title = "Aria — speaker boost OFF, does this sound better?"
+
+[[outputs]]
+id = "JWKucNfx4GHe9UaJXjxmo"
+uri = "file://screenshots/ipad_home.jpg"
+type = "image"
+title = "iPad Screenshot 1 — Home / JAC"
+
+[[outputs]]
+id = "pgpHNcGzgBwwx_JQsz_vy"
+uri = "file://screenshots/ipad_login.jpg"
+type = "image"
+title = "iPad Screenshot 2 — Sign In"
