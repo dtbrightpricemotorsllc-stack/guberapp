@@ -39,13 +39,21 @@ public class ForegroundTrackingPlugin extends Plugin {
 
     @PluginMethod
     public void start(PluginCall call) {
-        String title = call.getString("title", "GUBER");
-        String text = call.getString("text", "Sharing your live location for an active task.");
+        String title     = call.getString("title", "GUBER");
+        String text      = call.getString("text", "Sharing your live location for an active task.");
+        Integer jobIdObj = call.getInt("jobId");
+        String authToken = call.getString("authToken");
 
         Intent intent = new Intent(getContext(), GuberTrackingService.class);
         intent.setAction(GuberTrackingService.ACTION_START);
         intent.putExtra(GuberTrackingService.EXTRA_TITLE, title);
         intent.putExtra(GuberTrackingService.EXTRA_TEXT, text);
+        if (jobIdObj != null && jobIdObj > 0) {
+            intent.putExtra(GuberTrackingService.EXTRA_JOB_ID, jobIdObj.intValue());
+        }
+        if (authToken != null && !authToken.isEmpty()) {
+            intent.putExtra(GuberTrackingService.EXTRA_AUTH_TOKEN, authToken);
+        }
 
         try {
             ContextCompat.startForegroundService(getContext(), intent);
