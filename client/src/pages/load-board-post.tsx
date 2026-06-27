@@ -299,6 +299,7 @@ export default function LoadBoardPost() {
   const [step, setStep] = useState<Step>(1);
 
   // Step 1 — trailer type
+  // statebleed-allow: JAC prefill sets trailerType + all scoped fields together atomically
   const [freightTrailerType, setFreightTrailerType] = useState("");
 
   // Step 2 — route
