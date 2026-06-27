@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { readListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
@@ -1822,6 +1823,50 @@ export function ListingWizard({ onClose, onSuccess }: { onClose: () => void; onS
       })
       .catch(() => {});
   }, [user?.zipcode]);
+
+  // ── JAC prefill: auto-populate form from listing-collect conversation ──
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (!prefill || !["vehicle", "item", "house"].includes(prefill.type)) return;
+    const c = prefill.collected;
+    clearListingPrefill();
+    if (prefill.type === "vehicle") {
+      setForm(f => ({
+        ...f,
+        category: "Vehicles",
+        title: c.title || [c.year, c.make, c.model].filter(Boolean).join(" ") || f.title,
+        vehicleYear: String(c.year || f.vehicleYear),
+        vehicleMake: c.make || f.vehicleMake,
+        vehicleModel: c.model || f.vehicleModel,
+        vehicleMileage: c.mileage ? String(c.mileage) : f.vehicleMileage,
+        condition: c.condition || f.condition,
+        price: c.price ? String(c.price) : f.price,
+        zipcode: c.zipcode || f.zipcode,
+      }));
+    } else if (prefill.type === "item") {
+      setForm(f => ({
+        ...f,
+        category: c.category || f.category,
+        title: c.title || f.title,
+        description: c.description || f.description,
+        condition: c.condition || f.condition,
+        price: c.price ? String(c.price) : f.price,
+        zipcode: c.zipcode || f.zipcode,
+      }));
+    } else if (prefill.type === "house") {
+      setForm(f => ({
+        ...f,
+        category: "Property",
+        listingType: c.listing_type || f.listingType,
+        bedrooms: c.bedrooms ? String(c.bedrooms) : f.bedrooms,
+        bathrooms: c.bathrooms ? String(c.bathrooms) : f.bathrooms,
+        price: c.price ? String(c.price) : f.price,
+        rent: c.price ? String(c.price) : f.rent,
+        zipcode: c.zipcode || f.zipcode,
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const mutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/marketplace", data),

@@ -6,10 +6,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation,
+  Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation, ClipboardList,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 interface Message {
@@ -24,6 +25,21 @@ const DD_GREETING =
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
+
+const LISTING_PATTERNS = [
+  /\bstart a listing\b/i,
+  /\b(sell|selling|list|post)\b.{0,50}\b(car|truck|vehicle|motorcycle|suv|van|boat|rv|trailer|auto|bike)\b/i,
+  /\b(sell|selling|list|post)\b.{0,50}\b(house|home|property|apartment|apt|condo|room|rental|place)\b/i,
+  /\b(sell|selling|list|post)\b.{0,50}\b(phone|laptop|computer|tablet|tv|furniture|electronics|item|stuff|things|equipment|tool|watch|camera)\b/i,
+  /\b(post|add|create)\s+a?\s*(load|cargo|freight|shipment)\b/i,
+  /\b(sell my|list my|post my)\b/i,
+  /\b(I want to sell|I'm selling|selling my|I need to sell|looking to sell)\b/i,
+  /\b(got a|have a|I have)\b.{0,30}\b(for sale|to sell)\b/i,
+];
+
+function hasListingIntent(text: string): boolean {
+  return LISTING_PATTERNS.some((p) => p.test(text));
+}
 
 const INITIAL_CHIPS = [
   "Find work nearby",
@@ -159,6 +175,10 @@ export function GUBERAssistant() {
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
+  const [listingMode, setListingMode] = useState(false);
+  const [listingCollected, setListingCollected] = useState<Record<string, any>>({});
+  const [listingType, setListingType] = useState("");
+  const [listingRoute, setListingRoute] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -251,16 +271,79 @@ export function GUBERAssistant() {
     },
   });
 
+  const listingMutation = useMutation({
+    mutationFn: async (msgs: Message[]) => {
+      const res = await apiRequest("POST", "/api/jac/listing-collect", {
+        messages: msgs.map((m) => ({ role: m.role, content: m.content })),
+        listingType: listingType || undefined,
+      });
+      const data = await res.json();
+      return data as { reply: string; actions?: Array<{ label: string; message: string }>; collected: Record<string, any>; ready: boolean; listingType: string; route: string };
+    },
+    onSuccess: (data) => {
+      const newCollected = { ...listingCollected, ...(data.collected || {}) };
+      setListingCollected(newCollected);
+      if (data.listingType) setListingType(data.listingType);
+      if (data.route) setListingRoute(data.route);
+
+      const msg: Message = {
+        role: "assistant",
+        content: data.reply ?? "Tell me more…",
+        actions: Array.isArray(data.actions) ? data.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
+      };
+      setMessages((prev) => [...prev, msg]);
+      if (!muted) jacSpeak(msg.content, { muted });
+
+      if (data.ready && data.route) {
+        saveListingPrefill({
+          type: data.listingType as any,
+          collected: newCollected,
+          route: data.route,
+        });
+        setTimeout(() => {
+          patchStore({ open: false });
+          cancelSpeech();
+          navigate(data.route);
+          setListingMode(false);
+          setListingCollected({});
+          setListingType("");
+          setListingRoute("");
+        }, 1400);
+      }
+    },
+    onError: () => {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I'm having trouble right now. Please try again in a moment." },
+      ]);
+    },
+  });
+
+  const anyPending = sendMutation.isPending || listingMutation.isPending;
+
+  function exitListingMode() {
+    setListingMode(false);
+    setListingCollected({});
+    setListingType("");
+    setListingRoute("");
+    clearListingPrefill();
+  }
+
   function doSend(text: string) {
     unlockAudioContext();
     const trimmed = text.trim();
-    if (!trimmed || sendMutation.isPending) return;
+    if (!trimmed || anyPending) return;
     const newMsgs: Message[] = [...messages, { role: "user", content: trimmed }];
     setMessages(newMsgs);
     setInput("");
     cancelSpeech();
     cancelAllJacAudio();
-    sendMutation.mutate(newMsgs);
+    if (listingMode || hasListingIntent(trimmed)) {
+      if (!listingMode) setListingMode(true);
+      listingMutation.mutate(newMsgs);
+    } else {
+      sendMutation.mutate(newMsgs);
+    }
   }
 
   function handleSend() { doSend(input); }
@@ -340,6 +423,29 @@ export function GUBERAssistant() {
           </div>
         </SheetHeader>
 
+        {/* ── Listing Builder Banner ── */}
+        {listingMode && (
+          <div
+            className="flex items-center justify-between px-4 py-2 flex-shrink-0"
+            style={{ background: "rgba(0,229,118,0.07)", borderBottom: "1px solid rgba(0,229,118,0.18)" }}
+          >
+            <div className="flex items-center gap-2">
+              <ClipboardList className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              <span className="text-xs font-display font-bold text-primary tracking-wider">
+                LISTING BUILDER{listingType ? ` · ${listingType.toUpperCase()}` : ""}
+              </span>
+            </div>
+            <button
+              onClick={exitListingMode}
+              className="text-[10px] font-display text-muted-foreground hover:text-white transition-colors px-2 py-1 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.05)" }}
+              data-testid="button-exit-listing-mode"
+            >
+              Exit
+            </button>
+          </div>
+        )}
+
         {/* ── Messages ── */}
         <div
           ref={messagesRef}
@@ -418,7 +524,7 @@ export function GUBERAssistant() {
           ))}
 
           {/* Typing indicator */}
-          {sendMutation.isPending && (
+          {anyPending && (
             <div className="flex gap-2 justify-start" data-testid="assistant-typing">
               <div
                 className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0"
@@ -479,7 +585,7 @@ export function GUBERAssistant() {
               className="flex-1 bg-transparent border-0 resize-none text-sm text-white placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[36px] max-h-[120px] py-1.5 px-0"
               rows={1}
               data-testid="input-assistant-message"
-              disabled={sendMutation.isPending}
+              disabled={anyPending}
             />
 
             {/* Mic button */}
@@ -497,7 +603,7 @@ export function GUBERAssistant() {
                 }}
                 data-testid="button-dd-mic"
                 aria-label={listening ? "Stop listening" : "Speak to Jac"}
-                disabled={sendMutation.isPending}
+                disabled={anyPending}
               >
                 {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
               </button>
@@ -506,15 +612,15 @@ export function GUBERAssistant() {
             {/* Send button */}
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || sendMutation.isPending}
+              disabled={!input.trim() || anyPending}
               size="icon"
               className="w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 transition-all duration-150"
               style={{
                 background:
-                  input.trim() && !sendMutation.isPending
+                  input.trim() && !anyPending
                     ? "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
                     : "hsl(222 47% 15%)",
-                color: input.trim() && !sendMutation.isPending ? "black" : "hsl(0 0% 40%)",
+                color: input.trim() && !anyPending ? "black" : "hsl(0 0% 40%)",
               }}
               data-testid="button-send-message"
             >

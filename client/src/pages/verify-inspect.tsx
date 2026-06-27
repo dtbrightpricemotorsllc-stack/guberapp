@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo, useEffect } from "react";
+import { readListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -521,6 +522,18 @@ export default function VerifyInspect() {
   const [referencePhotoUrl, setReferencePhotoUrl] = useState<string>("");
   const [referencePhotoUploading, setReferencePhotoUploading] = useState(false);
   const [referencePhotoPreview, setReferencePhotoPreview] = useState<string>("");
+
+  // ── JAC prefill: auto-populate from listing-collect conversation ──
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (!prefill || prefill.type !== "vi") return;
+    const c = prefill.collected;
+    clearListingPrefill();
+    if (c.description) setViDescription(c.description);
+    if (c.zipcode) setViZip(String(c.zipcode));
+    if (c.urgent) setViUrgent(true);
+    setShowLanding(false);
+  }, []);
 
   const { data: viCategories, isLoading: catsLoading, isError: catsError, refetch: catsRefetch } = useQuery<VICategory[]>({
     queryKey: ["/api/catalog/vi-categories"],

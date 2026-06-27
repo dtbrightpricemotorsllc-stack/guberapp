@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { InfoHint } from "@/components/info-hint";
 import { BuyerOrderDetailsForm, EMPTY_BO_DETAILS } from "@/components/buyer-order-details-form";
@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { isStoreBuild } from "@/lib/platform";
 import { GuberLayout } from "@/components/guber-layout";
 import { ListingWizard } from "@/components/marketplace-wizard";
+import { readListingPrefill } from "@/lib/jac-listing-prefill";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { MarketplaceItem } from "@shared/schema";
@@ -1466,6 +1467,13 @@ export default function Marketplace() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (prefill && ["vehicle", "item", "house"].includes(prefill.type)) {
+      setShowWizard(true);
+    }
+  }, []);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [showFilters, setShowFilters] = useState(false);

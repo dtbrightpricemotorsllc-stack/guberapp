@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { readListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -387,6 +388,22 @@ export default function LoadBoardPost() {
   // the iOS ExternalPurchaseSheet can mount with the right options and fire.
   const [pendingProtection, setPendingProtection] = useState<number | null>(null);
   const iosPurchaseRef = useRef<(() => void) | null>(null);
+
+  // ── JAC prefill: auto-populate from listing-collect conversation ──
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (!prefill || prefill.type !== "load") return;
+    const c = prefill.collected;
+    clearListingPrefill();
+    if (c.trailer_type) setFreightTrailerType(c.trailer_type);
+    if (c.pickup_zip) setPickupZip(String(c.pickup_zip));
+    if (c.delivery_zip) setDeliveryZip(String(c.delivery_zip));
+    if (c.commodity_type) setCommodityType(c.commodity_type);
+    if (c.weight_lbs) setWeightLbs(String(c.weight_lbs));
+    if (c.notes) setNotes(c.notes);
+    if (c.trailer_type) setStep(2);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (pendingProtection != null && isIOS) iosPurchaseRef.current?.();

@@ -16335,6 +16335,111 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── JAC Smart Listing Collect ─────────────────────────────────────────────
+  app.post("/api/jac/listing-collect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { messages, listingType: hintType } = req.body;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ message: "messages required" });
+      }
+      const sanitized = messages
+        .filter((m: any) => m?.role && m?.content)
+        .map((m: any) => ({ role: String(m.role) as "user" | "assistant", content: String(m.content).slice(0, 2000) }))
+        .slice(-20);
+
+      const SYSTEM = `You are JAC — GUBER's listing assistant. Your job is to collect listing info through friendly, one-question-at-a-time conversation so you can pre-fill a posting form for the user.
+
+LISTING TYPES you handle:
+- "vehicle" — cars, trucks, motorcycles, SUVs, vans, boats, trailers, RVs
+- "item" — phones, laptops, furniture, electronics, clothing, tools, any physical non-vehicle item
+- "house" — houses, apartments, condos, rentals, property listings
+- "load" — freight, cargo, loads that need shipping or transport (Load Board post)
+- "vi" — Verify & Inspect requests (need a GUBER worker to verify or inspect something)
+
+REQUIRED FIELDS per type (collect these one at a time, never ask for more than one at once):
+vehicle: year, make, model, condition (excellent/good/fair/poor), mileage (optional — skip if user says unknown), price, zipcode
+item: title (what is it exactly?), category (Electronics/Clothing/Furniture/Tools/Sports/Other), condition (new/like new/good/fair/poor), price, zipcode
+house: listing_type (for_sale or for_rent), price (sale price or monthly rent as a number), bedrooms, bathrooms, zipcode
+load: commodity_type (what is being shipped), pickup_zip, delivery_zip, weight_lbs (approximate number), trailer_type (dry_van/flatbed/reefer/other)
+vi: description (what needs to be verified or inspected and why), zipcode
+
+ROUTING:
+vehicle → /marketplace
+item → /marketplace
+house → /marketplace
+load → /load-board/post
+vi → /verify-inspect
+
+BEHAVIOR:
+1. First detect the listing type from the conversation (or use the provided hint). If unclear, ask.
+2. Ask ONE question at a time to collect missing required fields.
+3. Keep questions short, warm, and conversational. Do not list all fields at once.
+4. Accept natural language — parse into structured fields (e.g. "2019 Honda Civic" → year=2019, make=Honda, model=Civic; "$5000" → price=5000).
+5. When ALL required fields are collected, set ready=true and write a short warm confirmation reply.
+6. For vehicles, auto-generate title as "year make model" (e.g. "2019 Honda Civic").
+7. Store prices as numeric strings without $ or commas (e.g. "5000" not "$5,000").
+8. For mileage on vehicles: if the user skips or says unknown, omit vehicleMileage from collected.
+
+ALWAYS respond with valid JSON only — no markdown, no prose outside the JSON:
+{
+  "reply": "your friendly one-sentence question or confirmation",
+  "actions": [{"label": "button text", "message": "the message sent if tapped"}],
+  "collected": { ...all fields gathered so far as flat key-value pairs },
+  "ready": false,
+  "listingType": "vehicle|item|house|load|vi",
+  "route": "/marketplace|/load-board/post|/verify-inspect"
+}
+
+When ready=true, set reply to something warm like: "Perfect! I have everything. Opening your listing form now — the details will be pre-filled for you!"
+Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). Omit when the answer is open-ended.`;
+
+      const sysMsg = hintType
+        ? `${SYSTEM}\n\nHINT: The listing type is already known to be "${hintType}". Do not ask about listing type.`
+        : SYSTEM;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.45,
+        max_tokens: 700,
+        response_format: { type: "json_object" as const },
+        messages: [
+          { role: "system", content: sysMsg },
+          ...sanitized,
+        ],
+      });
+
+      const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
+      type CollectResp = { reply: string; actions?: any[]; collected: Record<string, any>; ready: boolean; listingType: string; route: string };
+      let parsed: CollectResp = {
+        reply: "What would you like to list?",
+        actions: [],
+        collected: {},
+        ready: false,
+        listingType: typeof hintType === "string" ? hintType : "item",
+        route: "/marketplace",
+      };
+      try {
+        const j = JSON.parse(rawContent);
+        if (typeof j.reply === "string") {
+          parsed = {
+            reply: j.reply.trim() || parsed.reply,
+            actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 4) : [],
+            collected: j.collected && typeof j.collected === "object" ? j.collected : {},
+            ready: j.ready === true,
+            listingType: typeof j.listingType === "string" ? j.listingType : parsed.listingType,
+            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : parsed.route,
+          };
+        }
+      } catch {
+        if (rawContent) parsed.reply = rawContent;
+      }
+      res.json(parsed);
+    } catch (err: any) {
+      console.error("[JAC] listing-collect error:", err.message);
+      res.status(500).json({ message: "Listing assistant unavailable, please try again." });
+    }
+  });
+
   // ── Jac Homepage Interaction Tracking (public, no auth) ────────────────────
   app.post("/api/jac/interaction", async (req: Request, res: Response) => {
     try {
