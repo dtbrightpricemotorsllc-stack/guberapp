@@ -750,7 +750,7 @@ export default function VerifyInspect() {
       setViGpsLat(String(lat.toFixed(6)));
       setViGpsLng(String(lng.toFixed(6)));
       try {
-        const r = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+        const r = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}&caller=verify-inspect-address`);
         const d = await r.json();
         if (d.address) {
           setViAddress(d.address);
@@ -776,7 +776,7 @@ export default function VerifyInspect() {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       try {
-        const r = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+        const r = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}&caller=verify-inspect-zip`);
         const d = await r.json();
         if (d.zip) setViZip(d.zip);
         else toast({ title: "ZIP not found", description: "Could not determine ZIP from your location.", variant: "destructive" });

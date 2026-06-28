@@ -626,7 +626,7 @@ export default function Dashboard() {
     if ((u as any)?.lat && (u as any)?.lng) {
       setMapCenter({ lat: (u as any).lat, lng: (u as any).lng });
     } else if (u?.zipcode) {
-      fetch(`/api/geocode?address=${encodeURIComponent(u.zipcode + ", USA")}`)
+      fetch(`/api/geocode?address=${encodeURIComponent(u.zipcode + ", USA")}&caller=dashboard-zip-fallback`)
         .then(r => r.ok ? r.json() : null)
         .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
         .catch(() => {});
@@ -1235,7 +1235,7 @@ export default function Dashboard() {
                     onChange={(e) => setZipOverride(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && zipOverride.trim()) {
-                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}`)
+                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}&caller=dashboard-zip-override`)
                           .then(r => r.ok ? r.json() : null)
                           .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
                           .catch(() => {});
@@ -1247,7 +1247,7 @@ export default function Dashboard() {
                   <button
                     onClick={() => {
                       if (zipOverride.trim()) {
-                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}`)
+                        fetch(`/api/geocode?address=${encodeURIComponent(zipOverride.trim() + ", USA")}&caller=dashboard-zip-override`)
                           .then(r => r.ok ? r.json() : null)
                           .then(d => { if (d?.lat && d?.lng) setMapCenter({ lat: d.lat, lng: d.lng }); })
                           .catch(() => {});

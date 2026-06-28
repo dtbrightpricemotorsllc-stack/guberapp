@@ -436,7 +436,7 @@ export default function LoadBoardPost() {
       async (pos) => {
         try {
           const res = await fetch(
-            `/api/places/reverse-geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`,
+            `/api/places/reverse-geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&caller=load-board-post`,
             { credentials: "include" }
           );
           if (res.ok) {

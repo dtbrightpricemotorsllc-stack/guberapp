@@ -448,8 +448,60 @@ async function checkStripeForOGStatus(email: string): Promise<{ isOG: boolean; h
   }
 }
 
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+// ── Geocoding caches & rate-limits ────────────────────────────────────────────
+// Forward geocode cache (address → lat/lng). Keyed by lowercase-trimmed address.
+// TTL: 24 h, max 2000 entries. Avoids hitting Google on repeated identical inputs.
+const _fwdGeocodeCache = new Map<string, { lat: number; lng: number; exp: number }>();
+const FWD_GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
+const FWD_GEOCODE_MAX = 2000;
+
+// Reverse geocode cache (lat/lng → address+zip). Keyed by 3-dp grid (~100 m).
+const _revGeocodeCache = new Map<string, { address: string | null; zip: string | null; exp: number }>();
+const REV_GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
+const REV_GEOCODE_MAX = 2000;
+
+// Global hourly cap: never let either geocode call Google more than N times/hour.
+let _geocodeHourCount = 0;
+let _geocodeHourReset = Date.now() + 3_600_000;
+const GEOCODE_HOURLY_HARD_CAP = 500;
+
+function _geocodeCapCheck(caller: string): boolean {
+  const now = Date.now();
+  if (now > _geocodeHourReset) { _geocodeHourCount = 0; _geocodeHourReset = now + 3_600_000; }
+  _geocodeHourCount++;
+  if (_geocodeHourCount > GEOCODE_HOURLY_HARD_CAP) {
+    console.warn(`[geocode-cap] HARD CAP hit (${_geocodeHourCount}/hr) — blocking Google call. caller=${caller}`);
+    return false;
+  }
+  return true;
+}
+
+// Per-user reverse-geocode rate limit: max 6 calls per minute per user.
+const _revRateMap = new Map<string, { count: number; resetAt: number }>();
+function _revRateAllow(userId: string): boolean {
+  const now = Date.now();
+  const entry = _revRateMap.get(userId);
+  if (!entry || now > entry.resetAt) {
+    _revRateMap.set(userId, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > 6) {
+    console.warn(`[reverse-geocode] rate-limit user=${userId} count=${entry.count}`);
+    return false;
+  }
+  return true;
+}
+
+async function geocodeAddress(address: string, caller = "unknown"): Promise<{ lat: number; lng: number } | null> {
   if (!address) return null;
+
+  // Check in-memory cache first
+  const cacheKey = address.toLowerCase().trim();
+  const cached = _fwdGeocodeCache.get(cacheKey);
+  if (cached && Date.now() < cached.exp) {
+    return { lat: cached.lat, lng: cached.lng };
+  }
 
   // Always try Google Maps first — it returns exact street-level coordinates.
   // Prefer GOOGLE_GEOCODING_API_KEY (unrestricted server key) over GOOGLE_MAPS_API_KEY
@@ -457,12 +509,20 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
   const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (apiKey) {
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&region=us&key=${apiKey}`;
-      const resp = await fetch(url);
-      const data = await resp.json() as any;
-      if (data.status === "OK" && data.results?.[0]) {
-        const loc = data.results[0].geometry.location;
-        return { lat: loc.lat, lng: loc.lng };
+      if (!_geocodeCapCheck(`fwd:${caller}`)) {
+        // cap hit — skip Google, fall through to Nominatim
+      } else {
+        console.info(`[geocode] fwd Google call caller=${caller} address="${address.slice(0, 60)}"`);
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&region=us&key=${apiKey}`;
+        const resp = await fetch(url);
+        const data = await resp.json() as any;
+        if (data.status === "OK" && data.results?.[0]) {
+          const loc = data.results[0].geometry.location;
+          const result = { lat: loc.lat, lng: loc.lng };
+          if (_fwdGeocodeCache.size >= FWD_GEOCODE_MAX) _fwdGeocodeCache.delete(_fwdGeocodeCache.keys().next().value!);
+          _fwdGeocodeCache.set(cacheKey, { ...result, exp: Date.now() + FWD_GEOCODE_TTL_MS });
+          return result;
+        }
       }
     } catch {}
   }
@@ -474,7 +534,10 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
     if (nomResp.ok) {
       const nomData = await nomResp.json() as any[];
       if (nomData?.[0]?.lat && nomData?.[0]?.lon) {
-        return { lat: parseFloat(nomData[0].lat), lng: parseFloat(nomData[0].lon) };
+        const result = { lat: parseFloat(nomData[0].lat), lng: parseFloat(nomData[0].lon) };
+        if (_fwdGeocodeCache.size >= FWD_GEOCODE_MAX) _fwdGeocodeCache.delete(_fwdGeocodeCache.keys().next().value!);
+        _fwdGeocodeCache.set(cacheKey, { ...result, exp: Date.now() + FWD_GEOCODE_TTL_MS });
+        return result;
       }
     }
   } catch {}
@@ -490,7 +553,10 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
         const data = await resp.json() as any;
         const place = data.places?.[0];
         if (place?.latitude && place?.longitude) {
-          return { lat: parseFloat(place.latitude), lng: parseFloat(place.longitude) };
+          const result = { lat: parseFloat(place.latitude), lng: parseFloat(place.longitude) };
+          if (_fwdGeocodeCache.size >= FWD_GEOCODE_MAX) _fwdGeocodeCache.delete(_fwdGeocodeCache.keys().next().value!);
+          _fwdGeocodeCache.set(cacheKey, { ...result, exp: Date.now() + FWD_GEOCODE_TTL_MS });
+          return result;
         }
       }
     } catch {}
@@ -1291,9 +1357,10 @@ export async function registerRoutes(
 
   app.get("/api/geocode", async (req: Request, res: Response) => {
     const address = typeof req.query.address === "string" ? req.query.address : "";
+    const caller = typeof req.query.caller === "string" ? req.query.caller : "unknown";
     if (!address) return res.status(400).json({ error: "address required" });
     try {
-      const coords = await geocodeAddress(address);
+      const coords = await geocodeAddress(address, caller);
       if (!coords) return res.status(404).json({ error: "Address not found" });
       res.json(coords);
     } catch (err: any) {
@@ -1339,36 +1406,58 @@ export async function registerRoutes(
   app.get("/api/places/reverse-geocode", async (req: Request, res: Response) => {
     const lat = parseFloat(req.query.lat as string);
     const lng = parseFloat(req.query.lng as string);
+    const caller = typeof req.query.caller === "string" ? req.query.caller : "unknown";
     if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "lat and lng required" });
+
+    // Per-user rate limit (anonymous requests share "anon" bucket)
+    const userId = (req.session as any)?.userId ? String((req.session as any).userId) : "anon";
+    if (!_revRateAllow(userId)) {
+      return res.status(429).json({ address: null, zip: null, error: "rate-limited" });
+    }
+
+    // Cache key: 3 decimal places ≈ 100 m grid — good enough for a ZIP lookup
+    const cacheKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+    const cached = _revGeocodeCache.get(cacheKey);
+    if (cached && Date.now() < cached.exp) {
+      res.set("X-Geocode-Cache", "hit");
+      return res.json({ address: cached.address, zip: cached.zip });
+    }
+
+    const storeResult = (address: string | null, zip: string | null) => {
+      if (_revGeocodeCache.size >= REV_GEOCODE_MAX) _revGeocodeCache.delete(_revGeocodeCache.keys().next().value!);
+      _revGeocodeCache.set(cacheKey, { address, zip, exp: Date.now() + REV_GEOCODE_TTL_MS });
+    };
 
     // Try Google Maps first (server-side). Prefer GOOGLE_GEOCODING_API_KEY (unrestricted
     // server key) over GOOGLE_MAPS_API_KEY which may have HTTP-referer restrictions.
-    // Either failure falls cleanly through to Nominatim.
     const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
     if (apiKey) {
       try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-        const resp = await fetch(url);
-        const text = await resp.text();
-        let data: any = null;
-        try { data = JSON.parse(text); } catch { /* non-JSON body (HTML/XML error page) — ignore */ }
-        if (data?.status === "OK" && data.results?.[0]) {
-          const result = data.results[0];
-          const address = result.formatted_address as string;
-          const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
-          const zip = zipComp?.short_name || null;
-          return res.json({ address, zip });
-        }
-        if (data?.status && data.status !== "OK") {
-          console.warn(`[reverse-geocode] Google returned ${data.status}${data.error_message ? `: ${data.error_message}` : ""}`);
+        if (_geocodeCapCheck(`rev:${caller}`)) {
+          console.info(`[reverse-geocode] Google call caller=${caller} user=${userId} latlng=${lat.toFixed(4)},${lng.toFixed(4)}`);
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+          const resp = await fetch(url);
+          const text = await resp.text();
+          let data: any = null;
+          try { data = JSON.parse(text); } catch { /* non-JSON body — ignore */ }
+          if (data?.status === "OK" && data.results?.[0]) {
+            const result = data.results[0];
+            const address = result.formatted_address as string;
+            const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
+            const zip = zipComp?.short_name || null;
+            storeResult(address, zip);
+            return res.json({ address, zip });
+          }
+          if (data?.status && data.status !== "OK") {
+            console.warn(`[reverse-geocode] Google returned ${data.status}${data.error_message ? `: ${data.error_message}` : ""}`);
+          }
         }
       } catch (err: any) {
         console.warn(`[reverse-geocode] Google call failed: ${err?.message || err}`);
       }
     }
 
-    // Nominatim fallback. Also fully wrapped so we never 500 the client and start
-    // a retry storm — a missing address is a soft failure.
+    // Nominatim fallback — free, no billing.
     try {
       const nomUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
       const nomResp = await fetch(nomUrl, { headers: { "User-Agent": "GUBER/1.0 contact@guberapp.app" } });
@@ -1377,6 +1466,7 @@ export async function registerRoutes(
       try { nomData = JSON.parse(nomText); } catch { /* Nominatim error page or rate-limit HTML — ignore */ }
       if (nomData?.display_name) {
         const zip = nomData.address?.postcode || null;
+        storeResult(nomData.display_name, zip);
         return res.json({ address: nomData.display_name, zip });
       }
     } catch (err: any) {
@@ -1385,6 +1475,7 @@ export async function registerRoutes(
 
     // Soft failure: return null fields with 200 so the client can render the
     // raw GPS coordinates without spamming the endpoint with retries.
+    storeResult(null, null);
     return res.json({ address: null, zip: null });
   });
 

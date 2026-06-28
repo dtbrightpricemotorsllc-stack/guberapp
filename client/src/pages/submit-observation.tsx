@@ -85,7 +85,7 @@ export default function SubmitObservation() {
         setGpsLat(latitude);
         setGpsLng(longitude);
         try {
-          const resp = await fetch(`/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}`, { credentials: "include" });
+          const resp = await fetch(`/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}&caller=submit-observation`, { credentials: "include" });
           if (resp.ok) {
             const data = await resp.json();
             setAddress(data.address || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
