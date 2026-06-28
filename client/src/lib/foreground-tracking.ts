@@ -37,8 +37,8 @@ export async function startForegroundTracking(opts?: {
   if (!isAndroidNative) return;
   try {
     await ForegroundTracking.start({
-      title:     opts?.title     ?? "GUBER — task in progress",
-      text:      opts?.text      ?? "Sharing your live location for an active task.",
+      title:     opts?.title     ?? "GUBER GPS Active",
+      text:      opts?.text      ?? "Tracking your location for an active job. Tap to return to GUBER.",
       jobId:     opts?.jobId,
       authToken: opts?.authToken,
     });

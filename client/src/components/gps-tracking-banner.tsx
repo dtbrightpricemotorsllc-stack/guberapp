@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
-import { Navigation } from "lucide-react";
 import { Link } from "wouter";
+import { isIOS } from "@/lib/platform";
 
+/**
+ * iOS-only in-app banner that appears while the TaskTrackingService is
+ * actively sharing the worker's location for a live job. On Android the
+ * system foreground-service notification (GuberTrackingService) serves
+ * the same purpose, so this banner is suppressed there.
+ */
 export function GpsTrackingBanner() {
   const [trackingJobId, setTrackingJobId] = useState<number | null>(null);
 
@@ -14,18 +20,23 @@ export function GpsTrackingBanner() {
     return () => window.removeEventListener("guber:gps-tracking-changed", handler);
   }, []);
 
-  if (!trackingJobId) return null;
+  // Show only on iOS native builds — Android uses the foreground-service
+  // system notification instead.
+  if (!isIOS || !trackingJobId) return null;
 
   return (
     <Link href={`/jobs/${trackingJobId}`}>
       <div
-        className="fixed top-0 left-0 right-0 z-[300] flex items-center justify-center gap-2 px-4 py-2 text-[11px] font-display font-bold tracking-wider cursor-pointer"
+        className="fixed top-0 left-0 right-0 z-[300] flex flex-col items-center justify-center gap-0.5 px-4 py-2 cursor-pointer"
         style={{ background: "linear-gradient(90deg, #00b4b4, #00E5E5)", color: "#000" }}
         data-testid="banner-gps-tracking"
       >
-        <Navigation className="w-3 h-3 animate-pulse" />
-        GPS ACTIVE — Sharing your location for this job
-        <Navigation className="w-3 h-3 animate-pulse" />
+        <span className="text-[12px] font-display font-bold tracking-wide">
+          🟢 Live GPS Tracking Active
+        </span>
+        <span className="text-[10px] font-medium opacity-80">
+          Tracking for your active GUBER job.
+        </span>
       </div>
     </Link>
   );

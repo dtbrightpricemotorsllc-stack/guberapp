@@ -13,10 +13,10 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- Black status bar background — matches GUBER dark theme -->
-        <item name="android:statusBarColor">#000000</item>
-        <!-- false = white/light icons (time, battery, signal) on dark background -->
-        <item name="android:windowLightStatusBar">false</item>
+        <!-- White status bar background -->
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <!-- true = dark icons (time, battery, signal) on light background -->
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
 
