@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^7.2.0",
+    "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.2",
     "@capacitor/browser": "^7.0.5",
@@ -24,6 +25,9 @@
     "@capacitor/ios": "^7.4.4",
     "@capacitor/preferences": "^7.0.4",
     "@capacitor/push-notifications": "^7.0.6",
+    "@fal-ai/client": "^1.10.1",
+    "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
     "@googlemaps/js-api-loader": "^2.0.2",
     "@googlemaps/markerclusterer": "^2.6.2",
     "@hookform/resolvers": "^3.10.0",
