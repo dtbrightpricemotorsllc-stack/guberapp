@@ -258,12 +258,12 @@ export function HelperStartConfirmModal({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex gap-3">
           <Button
             variant="outline"
             onClick={onCancel}
             disabled={!!isPending}
-            className="h-12 font-display tracking-wider rounded-xl"
+            className="h-12 font-display tracking-wide rounded-xl shrink-0"
             data-testid="button-cancel-helper-start"
           >
             Not yet
@@ -271,7 +271,7 @@ export function HelperStartConfirmModal({
           <Button
             onClick={onConfirm}
             disabled={!!isPending}
-            className="h-12 font-display tracking-wider bg-emerald-500 hover:bg-emerald-600 text-black rounded-xl"
+            className="h-12 font-display tracking-wide bg-emerald-500 hover:bg-emerald-600 text-black rounded-xl flex-1 whitespace-nowrap"
             data-testid="button-confirm-helper-start"
           >
             {isPending ? (

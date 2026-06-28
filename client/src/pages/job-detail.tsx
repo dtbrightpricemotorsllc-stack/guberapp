@@ -913,7 +913,11 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       // tracking works even when the worker switches apps. Non-blocking —
       // the GPS milestone proceeds regardless of the user's choice.
       void ensureBackgroundLocation("job");
-      gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+      // maximumAge: 30000 — accept a cached fix up to 30 s old so indoor users
+      // don't time out waiting for a fresh satellite lock. timeout raised to
+      // 15 s for the same reason. The catch distinguishes permission-denied
+      // (code 1) from timeout so the message isn't misleading.
+      gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
         .then((pos) => {
           milestoneMutation.mutate({
             statusType: "on_the_way",
@@ -922,12 +926,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             safetyConfirmed: true,
           });
         })
-        .catch(() => {
-          // Don't silently fall through. The hirer needs an honest GPS
-          // breadcrumb when the helper marks "on the way".
+        .catch((err: any) => {
+          const isPermission = err?.code === 1 || /permission|denied/i.test(err?.message ?? "");
           toast({
             title: "Location required",
-            description: "Enable GPS so we can share your start location with the hirer, then tap On My Way again.",
+            description: isPermission
+              ? "GUBER needs location permission. Go to Settings → Apps → GUBER → Permissions → Location → Allow."
+              : "Couldn't get your GPS fix in time. Step outside or wait a moment, then tap On My Way again.",
             variant: "destructive",
           });
         });
@@ -984,7 +989,7 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   };
 
   const handleArrived = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
       .then((pos) => {
         milestoneMutation.mutate({
           statusType: "arrived",
@@ -992,13 +997,13 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           gpsLng: pos.coords.longitude,
         });
       })
-      .catch(() => {
-        // Server now requires GPS to verify the worker is at the job site
-        // (geofence). Don't fire the request without coords — surface a
-        // useful message so the user can fix the permission/signal issue.
+      .catch((err: any) => {
+        const isPermission = err?.code === 1 || /permission|denied/i.test(err?.message ?? "");
         toast({
           title: "Location required",
-          description: "Enable GPS so we can verify you're at the job site, then tap Arrived again.",
+          description: isPermission
+            ? "GUBER needs location permission. Go to Settings → Apps → GUBER → Permissions → Location → Allow."
+            : "Couldn't get your GPS fix in time. Step outside or wait a moment, then tap Arrived again.",
           variant: "destructive",
         });
       });
