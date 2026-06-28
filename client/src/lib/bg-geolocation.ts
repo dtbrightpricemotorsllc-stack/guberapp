@@ -61,10 +61,11 @@ export async function bgStartWatch(
 ): Promise<number | null> {
   if (!isIOSNative) return null;
   try {
+    console.info("[GUBER GPS] iOS bg-geo: starting background watch…");
     const watcherId = await BackgroundGeolocation.addWatcher(
       {
-        backgroundMessage: "GUBER is tracking your location for your active transport job.",
-        backgroundTitle: "Job in Progress",
+        backgroundMessage: "GUBER is tracking your location for your active job. Tap to return to GUBER.",
+        backgroundTitle: "GUBER GPS Active",
         requestPermissions: true,
         stale: false,
         distanceFilter,
@@ -98,6 +99,8 @@ export async function bgStopWatch(id: number): Promise<void> {
   if (!watcherId) return;
   bgWatchMap.delete(id);
   try {
+    console.info(`[GUBER GPS] iOS bg-geo: stopping watch id=${id}`);
     await BackgroundGeolocation.removeWatcher({ id: watcherId });
+    console.info("[GUBER GPS] iOS bg-geo: watch stopped");
   } catch {}
 }
