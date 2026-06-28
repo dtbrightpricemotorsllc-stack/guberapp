@@ -13,6 +13,7 @@ import { ThemeProvider } from "@/lib/theme-context";
 import InstallPrompt from "@/components/install-prompt";
 import { GoogleAuthOverlay } from "@/components/google-auth-overlay";
 import AnnouncementPopup from "@/components/announcement-popup";
+import { GpsTrackingBanner } from "@/components/gps-tracking-banner";
 import { Capacitor } from "@capacitor/core";
 import { isStoreBuild } from "@/lib/platform";
 import { App as CapApp } from "@capacitor/app";
@@ -38,6 +39,7 @@ import Privacy from "@/pages/privacy";
 import AcceptableUse from "@/pages/acceptable-use";
 import DeleteAccount from "@/pages/delete-account";
 import JoinPage from "@/pages/join";
+import GpsTest from "@/pages/gps-test";
 import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
@@ -137,6 +139,9 @@ const AdminAssetProtection = lazy(() => import("@/pages/admin-asset-protection")
 const GrowthTasks = lazy(() => import("@/pages/growth-tasks"));
 const GrowthLeaderboard = lazy(() => import("@/pages/leaderboard"));
 const AdminGrowthEngine = lazy(() => import("@/pages/admin-growth-engine"));
+const AdminLocalBusinesses = lazy(() => import("@/pages/admin-local-businesses"));
+const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
+const CreditsPage = lazy(() => import("@/pages/credits"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
 
 
@@ -168,6 +173,21 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
       <Component />
     </Suspense>
   );
+}
+
+// Like ProtectedRoute but lets ?demo=1 through without auth (for store video demos)
+function DemoRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  const [currentPath] = useLocation();
+  const isDemo = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
+
+  if (isDemo) return <Suspense fallback={<PageLoader />}><Component /></Suspense>;
+  if (isLoading) return <PageLoader />;
+  if (!user) {
+    const returnTo = encodeURIComponent(currentPath);
+    return <Redirect to={`/login?returnTo=${returnTo}`} />;
+  }
+  return <Suspense fallback={<PageLoader />}><Component /></Suspense>;
 }
 
 // Admin-only route wrapper (task-462). Backend already gates every
@@ -281,7 +301,13 @@ function PublicOnly({ component: Component }: { component: React.ComponentType }
 function ScrollToTop() {
   const [location] = useLocation();
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
+    // On Capacitor native the scroll container is often document.body or
+    // document.documentElement rather than window. Reset all three so every
+    // environment is covered. Use scrollTop (not scrollTo) to bypass the
+    // css scroll-behavior:smooth that can delay the jump.
+    try { window.scrollTo(0, 0); } catch {}
+    try { document.documentElement.scrollTop = 0; } catch {}
+    try { document.body.scrollTop = 0; } catch {}
   }, [location]);
   return null;
 }
@@ -337,7 +363,9 @@ function Router() {
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
-      <Route path="/community-tasks" component={() => <ProtectedRoute component={GrowthTasks} />} />
+      <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
+      <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
+      <Route path="/community-tasks" component={() => { window.location.replace("/browse-jobs"); return null; }} />
       <Route path="/growth/leaderboard" component={GrowthLeaderboard} />
       <Route path="/ai-or-not" component={() => <ProtectedRoute component={AiOrNot} />} />
       <Route path="/verify-inspect" component={() => <ProtectedRoute component={VerifyInspect} />} />
@@ -402,12 +430,14 @@ function Router() {
       <Route path="/carrier-profile" component={() => <ProtectedRoute component={CarrierProfilePage} />} />
       <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />
+      <Route path="/gps-test" component={GpsTest} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/investors" component={Investors} />
       <Route path="/guber-investor-deck" component={Investors} />
+      <Route path="/credits" component={() => <ProtectedRoute component={CreditsPage} />} />
       <Route path="/mobile-checkout" component={() => <Suspense fallback={<PageLoader />}><MobileCheckout /></Suspense>} />
       <Route component={NotFound} />
     </Switch>
@@ -561,7 +591,12 @@ function SplashWrapper({ onDone }: { onDone: () => void }) {
 function TaskTrackingResumer() {
   const { user } = useAuth();
   useEffect(() => {
-    if (user) void taskTrackingService.resumeIfActive();
+    if (user) {
+      void taskTrackingService.resumeIfActive();
+    } else {
+      // User logged out — stop any active tracking immediately.
+      void taskTrackingService.stopTask();
+    }
   }, [user?.id]);
   return null;
 }
@@ -585,6 +620,7 @@ function App() {
             <UploadProgressPill />
             <GoogleAuthOverlay />
             {!splashDone && <SplashWrapper onDone={() => setSplashDone(true)} />}
+            <GpsTrackingBanner />
             <InstallPrompt />
             <AnnouncementPopup />
             <NativeDeepLinkHandler />
