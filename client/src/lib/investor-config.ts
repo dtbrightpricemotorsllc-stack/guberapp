@@ -10,7 +10,7 @@ export interface InvestorSocial {
 export const INVESTOR_CONFIG = {
   meta: {
     title: "GUBER — Private Investor Brief",
-    description: "Find Work. Hire Help. Verify Things. Live on web and Google Play.",
+    description: "Global Unlimited Business & Employment Resources. Find Work. Hire Help. Verify Things. Live on web and Google Play.",
     contactEmail: "Guberapp.global@gmail.com",
     contactPhone: "+12512849412",
     contactPhoneDisplay: "(251) 284-9412",
@@ -137,7 +137,7 @@ export const INVESTOR_CONFIG = {
   platformPosition: {
     headline: "GUBER Doesn't Inspect. GUBER Doesn't Hire.",
     eyebrow: "PLATFORM POSITION · NOT A LIABILITY",
-    opening: "Let's be direct about what GUBER is — and what it isn't.",
+    opening: "GUBER — Global Unlimited Business & Employment Resources. Let's be direct about what that means and what GUBER isn't.",
     notList: [
       "GUBER is not an employer.",
       "GUBER does not conduct inspections.",

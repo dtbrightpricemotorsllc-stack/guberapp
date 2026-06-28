@@ -9,6 +9,7 @@ import {
   real,
   serial,
   json,
+  jsonb,
   uniqueIndex,
   date,
 } from "drizzle-orm/pg-core";
@@ -228,9 +229,12 @@ export const users = pgTable("users", {
   mktBuyerRatingSum: integer("mkt_buyer_rating_sum").default(0),
   mktBuyerRatingCount: integer("mkt_buyer_rating_count").default(0),
   // ── GUBER Growth Engine ──────────────────────────────────────────────────
-  // Separate from studioCredits/aiOrNotCredits. 100 growthCredits = $1.
-  // Min cashout 1,000 credits ($10). Earned via growth tasks + referral milestones.
+  // Separate from studioCredits/aiOrNotCredits. 1000 growthCredits = $1.
+  // Min cashout 25,000 credits ($25). Earned via map missions + referral milestones.
   growthCredits: integer("growth_credits").default(0),
+  pendingCredits: integer("pending_credits").default(0),
+  lifetimeCreditsEarned: integer("lifetime_credits_earned").default(0),
+  lifetimeCreditsRedeemed: integer("lifetime_credits_redeemed").default(0),
   // guberScore: engagement/reputation metric separate from trustScore.
   guberScore: integer("guber_score").default(0),
 });
@@ -2602,7 +2606,7 @@ export type FoundersClubState = typeof foundersClubState.$inferSelect;
 
 // ── GUBER Growth Engine ───────────────────────────────────────────────────────
 // Growth tasks are NOT marketplace jobs. They are community engagement missions
-// that earn credits (100 cr = $1, min 1000 cr cashout) and guberScore.
+// that earn credits (1000 cr = $1, min 25000 cr cashout) and guberScore.
 // They never appear in real job counts or the paid-work flow.
 
 export const growthTaskTemplates = pgTable("growth_task_templates", {
@@ -2663,3 +2667,181 @@ export const growthRewardConfig = pgTable("growth_reward_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 export type GrowthRewardConfig = typeof growthRewardConfig.$inferSelect;
+
+// GUBER Credit Ledger — append-only audit trail for every credit event.
+export const creditLedger = pgTable("credit_ledger", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(), // positive = earned, negative = spent/redeemed
+  dollarEquivalent: text("dollar_equivalent").notNull().default("0.0000"),
+  sourceType: text("source_type").notNull(),
+  // map_mission | referral_signup | referral_verified | referral_first_job |
+  // referral_biz | referral_og | admin_grant | cashout | boost_spend
+  taskCompletionId: integer("task_completion_id"),
+  status: text("status").notNull().default("approved"),
+  // pending | approved | denied | redeemed
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  redeemedAt: timestamp("redeemed_at"),
+});
+export type CreditLedgerRow = typeof creditLedger.$inferSelect;
+
+// Cashout requests — user-initiated, require admin approval.
+export const cashoutRequests = pgTable("cashout_requests", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  creditsRequested: integer("credits_requested").notNull(),
+  dollarAmount: text("dollar_amount").notNull(),
+  status: text("status").notNull().default("pending"),
+  // pending | approved | denied | paid
+  payoutMethod: text("payout_method"), // stripe | cash_app | venmo | other
+  payoutDetails: text("payout_details"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: integer("reviewed_by"),
+});
+export type CashoutRequest = typeof cashoutRequests.$inferSelect;
+
+// ── Local Business Pins ───────────────────────────────────────────────────────
+// Admin-curated local business map pins shown on the public Opportunity Map.
+export const localBusinessPins = pgTable("local_business_pins", {
+  id:              serial("id").primaryKey(),
+  name:            text("name").notNull(),
+  category:        text("category").notNull().default("Business"),
+  description:     text("description"),
+  address:         text("address"),
+  city:            text("city"),
+  state:           text("state"),
+  zip:             text("zip"),
+  lat:             real("lat").notNull(),
+  lng:             real("lng").notNull(),
+  phone:           text("phone"),
+  website:         text("website"),
+  logoUrl:         text("logo_url"),
+  status:          text("status").notNull().default("active"),    // active | pending | inactive
+  featured:        boolean("featured").notNull().default(false),
+  addedByAdminId:  integer("added_by_admin_id"),
+  createdAt:       timestamp("created_at").defaultNow(),
+});
+export type LocalBusinessPin    = typeof localBusinessPins.$inferSelect;
+export type InsertLocalBusinessPin = typeof localBusinessPins.$inferInsert;
+
+// ── Mission Instances ─────────────────────────────────────────────────────────
+// Tracks a user's accepted mission through its full lifecycle.
+// status: accepted → in_progress → proof_submitted → approved | rejected | expired
+export const missionInstances = pgTable("mission_instances", {
+  id:            serial("id").primaryKey(),
+  userId:        integer("user_id").notNull(),
+  templateId:    integer("template_id").notNull(),
+  status:        text("status").notNull().default("accepted"),
+  zip:           text("zip"),
+  lat:           real("lat"),
+  lng:           real("lng"),
+  acceptedAt:    timestamp("accepted_at").defaultNow(),
+  submittedAt:   timestamp("submitted_at"),
+  reviewedAt:    timestamp("reviewed_at"),
+  reviewedBy:    integer("reviewed_by"),
+  creditsAwarded: integer("credits_awarded").default(0),
+  adminNote:     text("admin_note"),
+  createdAt:     timestamp("created_at").defaultNow(),
+});
+export type MissionInstance       = typeof missionInstances.$inferSelect;
+export type InsertMissionInstance = typeof missionInstances.$inferInsert;
+
+// ── Mission Proofs ────────────────────────────────────────────────────────────
+// One proof record per mission submission: photo (live camera only), GPS, notes.
+export const missionProofs = pgTable("mission_proofs", {
+  id:                serial("id").primaryKey(),
+  instanceId:        integer("instance_id").notNull(),
+  photoUrl:          text("photo_url"),
+  gpsLat:            real("gps_lat"),
+  gpsLng:            real("gps_lng"),
+  capturedAt:        timestamp("captured_at"),
+  businessName:      text("business_name"),
+  address:           text("address"),
+  notes:             text("notes"),
+  deviceFingerprint: text("device_fingerprint"),
+  createdAt:         timestamp("created_at").defaultNow(),
+});
+export type MissionProof       = typeof missionProofs.$inferSelect;
+export type InsertMissionProof = typeof missionProofs.$inferInsert;
+
+// ── Jac Homepage Interactions ─────────────────────────────────────────────────
+export const jacInteractions = pgTable("jac_interactions", {
+  id:          serial("id").primaryKey(),
+  visitorId:   text("visitor_id").notNull(),
+  userId:      integer("user_id").references(() => users.id),
+  sessionId:   text("session_id"),
+  intent:      text("intent"),
+  messages:    jsonb("messages").$type<Array<{ role: string; content: string }>>().default([]),
+  zip:         text("zip"),
+  converted:   boolean("converted").default(false),
+  createdAt:   timestamp("created_at").defaultNow(),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+});
+export type JacInteraction       = typeof jacInteractions.$inferSelect;
+export type InsertJacInteraction = typeof jacInteractions.$inferInsert;
+
+// ── JAC User Profile ──────────────────────────────────────────────────────────
+export const jacUserProfile = pgTable("jac_user_profile", {
+  userId:            integer("user_id").primaryKey().references(() => users.id),
+  primaryGoal:       text("primary_goal"),
+  userType:          text("user_type"),
+  zipCode:           text("zip_code"),
+  interests:         jsonb("interests").$type<string[]>().default([]),
+  serviceNeeds:      jsonb("service_needs").$type<string[]>().default([]),
+  workInterests:     jsonb("work_interests").$type<string[]>().default([]),
+  transportInterest: boolean("transport_interest").default(false),
+  creatorInterest:   boolean("creator_interest").default(false),
+  creatorPlatforms:  jsonb("creator_platforms").$type<string[]>().default([]),
+  businessOwner:     boolean("business_owner").default(false),
+  serviceProvider:   boolean("service_provider").default(false),
+  retired:           boolean("retired").default(false),
+  prefersVoice:      boolean("prefers_voice").default(false),
+  assistantMode:     text("assistant_mode").default("full"),
+  startupBehavior:   text("startup_behavior").default("show_summary"),
+  voiceEnabled:      boolean("voice_enabled").default(true),
+  language:          text("language").default("en"),
+  tutorialStatus:    text("tutorial_status").default("not_started"),
+  lastJacSummary:    jsonb("last_jac_summary").$type<Record<string, unknown>>().default({}),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+});
+export type JacUserProfile       = typeof jacUserProfile.$inferSelect;
+export type InsertJacUserProfile = typeof jacUserProfile.$inferInsert;
+
+// ── JAC Tutorial State ────────────────────────────────────────────────────────
+export const jacTutorialState = pgTable("jac_tutorial_state", {
+  userId:                 integer("user_id").primaryKey().references(() => users.id),
+  tutorialStarted:        boolean("tutorial_started").default(false),
+  tutorialCompleted:      boolean("tutorial_completed").default(false),
+  selectedGoal:           text("selected_goal"),
+  completedSteps:         jsonb("completed_steps").$type<string[]>().default([]),
+  skippedSteps:           jsonb("skipped_steps").$type<string[]>().default([]),
+  lastTutorialScreen:     text("last_tutorial_screen"),
+  needsFollowup:          boolean("needs_followup").default(false),
+  resetCount:             integer("reset_count").default(0),
+  lastSeenFeatureVersion: text("last_seen_feature_version").default("1.0"),
+  updatedAt:              timestamp("updated_at").defaultNow(),
+});
+export type JacTutorialState       = typeof jacTutorialState.$inferSelect;
+export type InsertJacTutorialState = typeof jacTutorialState.$inferInsert;
+
+// ── JAC Missed Actions ────────────────────────────────────────────────────────
+export const jacMissedActions = pgTable("jac_missed_actions", {
+  id:          serial("id").primaryKey(),
+  userId:      integer("user_id").references(() => users.id).notNull(),
+  actionType:  text("action_type").notNull(),
+  priority:    text("priority").default("medium"),
+  title:       text("title").notNull(),
+  description: text("description"),
+  route:       text("route"),
+  ctaLabel:    text("cta_label"),
+  status:      text("status").default("active"),
+  createdAt:   timestamp("created_at").defaultNow(),
+  dismissedAt: timestamp("dismissed_at"),
+  remindAt:    timestamp("remind_at"),
+});
+export type JacMissedAction       = typeof jacMissedActions.$inferSelect;
+export type InsertJacMissedAction = typeof jacMissedActions.$inferInsert;

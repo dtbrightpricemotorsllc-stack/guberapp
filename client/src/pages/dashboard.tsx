@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "rea
 import { useAuth } from "@/lib/auth-context";
 import { GuberLayout } from "@/components/guber-layout";
 import { InstallHint, InstallMascot } from "@/components/install-prompt";
+import { DDMissedCard, type DDMissedItem } from "@/components/dd-missed-card";
 import { GoogleMap, type JobPin, type WorkerPin, type MapBounds } from "@/components/google-map";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -14,8 +15,9 @@ import type { Job } from "@shared/schema";
 import {
   Zap, ShieldCheck, Hammer, Wrench, Repeat,
   Plus, Search, Briefcase, ChevronRight, Bot, MapPin as MapPinIcon,
-  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign, ShoppingBag, Truck,
+  TrendingUp, X, Loader2, Rocket, Users, Bell, DollarSign, ShoppingBag, Truck, ArrowRight,
 } from "lucide-react";
+import { readJacPrefill, clearJacPrefill } from "@/components/jac-homepage";
 import type { CashDropPin } from "@/components/google-map";
 import viLogoImg from "@assets/Picsart_26-04-13_12-33-21-291_1776101665162.png";
 import { subscribeToPush } from "@/lib/push";
@@ -27,6 +29,7 @@ import {
   hasAutoShownAlertModal, markAlertModalAutoShown,
 } from "@/components/alert-prompt-modal";
 import { gpsGetCurrentPosition, isGpsDisclaimerAccepted, isGpsDisclaimerPending } from "@/lib/gps";
+import { JacDashboardCard } from "@/components/jac-dashboard-card";
 
 // ─── Promo Modal System ───────────────────────────────────────────────────────
 
@@ -280,6 +283,34 @@ function HostDropCta({ testIdSuffix }: { testIdSuffix: string }) {
   );
 }
 
+function DDMissedSection() {
+  const [visible, setVisible] = useState(() => {
+    try {
+      const until = parseInt(localStorage.getItem("jac_missed_until") || "0", 10);
+      return Date.now() > until;
+    } catch { return true; }
+  });
+  const { data: items = [] } = useQuery<DDMissedItem[]>({
+    queryKey: ["/api/dd/missed-items"],
+    enabled: visible,
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!visible || !items.length) return null;
+  return (
+    <DDMissedCard
+      items={items}
+      onDismiss={() => {
+        try { localStorage.setItem("jac_missed_until", String(Date.now() + 24 * 60 * 60 * 1000)); } catch {}
+        setVisible(false);
+      }}
+      onRemindLater={() => {
+        try { localStorage.setItem("jac_missed_until", String(Date.now() + 4 * 60 * 60 * 1000)); } catch {}
+        setVisible(false);
+      }}
+    />
+  );
+}
+
 function CityDarkCard({
   onDismiss,
   onWakeUp,
@@ -353,7 +384,36 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const [showTour, setShowTour] = useState(() => !isTourComplete());
+  // Tour deferred until after first job post — avoids overwhelming brand-new users.
+  // Set guber_first_post_done=true in post-job.tsx on successful submission, then
+  // redirect to /dashboard?tour=1 to fire it immediately in-session.
+  const [showTour, setShowTour] = useState(() => {
+    if (isTourComplete()) return false;
+    return localStorage.getItem("guber_first_post_done") === "true";
+  });
+
+  // JAC mission banner — visible when JAC pre-filled a job and user is now logged in
+  const [jacMissionBanner, setJacMissionBanner] = useState(() => {
+    try {
+      const raw = localStorage.getItem("jac_job_prefill");
+      if (!raw) return null;
+      const pf = JSON.parse(raw);
+      return (pf.readyToPost || pf.category) ? pf : null;
+    } catch { return null; }
+  });
+  const dismissJacBanner = () => {
+    setJacMissionBanner(null);
+    clearJacPrefill();
+  };
+
+  // If returning from post-job with ?tour=1, immediately trigger the tour
+  const dashSearch = useSearch();
+  useEffect(() => {
+    const p = new URLSearchParams(dashSearch);
+    if (p.get("tour") === "1" && !isTourComplete()) {
+      setShowTour(true);
+    }
+  }, []); // eslint-disable-line
 
   // GPS-first: never let the onboarding tour and the GPS disclaimer overlap.
   // The tour is suppressed while the GPS notice is open and resumes once the
@@ -379,7 +439,18 @@ export default function Dashboard() {
   });
 
   const [cityCardDismissed, setCityCardDismissed] = useState(false);
+  const [showCityCardPostTour, setShowCityCardPostTour] = useState(false);
   const cityCardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track dashboard visits so the City Dark card is hidden on first visit.
+  // We increment once on mount; city card only renders from visit 2 onward.
+  const [dashVisitCount] = useState<number>(() => {
+    const VISIT_KEY = "guber_dashboard_visit_count";
+    const prev = parseInt(localStorage.getItem(VISIT_KEY) || "0", 10);
+    const next = prev + 1;
+    localStorage.setItem(VISIT_KEY, String(next));
+    return next;
+  });
 
   const [promoOpen, setPromoOpen] = useState(false);
   const [activePromo, setActivePromo] = useState<PromoCard | null>(null);
@@ -766,8 +837,52 @@ export default function Dashboard() {
         {/* ── Subtle install hint (right-aligned, secondary) ── */}
         <InstallHint />
 
-        {/* ── Activate Your City (shown when the local grid is dark, auto-dismisses after 5s) ── */}
-        {!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0 && !cityCardDismissed && (
+        {/* ── JAC Dashboard Card ── */}
+        <JacDashboardCard />
+
+        {/* ── JAC Mission Banner — visible when JAC pre-filled a job and user is logged in ── */}
+        {jacMissionBanner && !!user && (
+          <div
+            className="relative rounded-2xl p-4 mb-4 flex items-center gap-3"
+            style={{ background: "linear-gradient(135deg,hsl(270 100% 65% / 0.12),hsl(152 100% 44% / 0.08))", border: "1px solid hsl(270 100% 65% / 0.3)" }}
+            data-testid="jac-mission-banner"
+          >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: "hsl(270 100% 65% / 0.15)", border: "1px solid hsl(270 100% 65% / 0.3)" }}>
+              <Bot className="w-4 h-4" style={{ color: "hsl(270 100% 78%)" }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-display font-black tracking-wide text-white/90">
+                {jacMissionBanner.serviceType
+                  ? `Your ${jacMissionBanner.serviceType} post is ready`
+                  : "Your job post is ready"}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">JAC filled in the details — go live in one tap</p>
+            </div>
+            <Link
+              href="/post-job?from=jac"
+              className="flex items-center gap-1 rounded-xl px-3 py-1.5 text-[11px] font-display font-black flex-shrink-0 transition-all active:scale-95"
+              style={{ background: "linear-gradient(135deg,hsl(270 100% 65%),hsl(152 100% 44%))", color: "black" }}
+              data-testid="jac-banner-post-btn"
+              onClick={() => setJacMissionBanner(null)}
+            >
+              Post <ArrowRight className="w-3 h-3" />
+            </Link>
+            <button
+              onClick={dismissJacBanner}
+              className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-white transition-colors"
+              data-testid="jac-banner-dismiss"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* ── Jac "What You Missed" ── */}
+        <DDMissedSection />
+
+        {/* ── Activate Your City (shown post-tour OR when local grid is dark, auto-dismisses after 5s) ── */}
+        {dashVisitCount >= 2 && (showCityCardPostTour || (!!mapCenter && mapPins !== undefined && activeCashDrops !== undefined && nearbyCount === 0)) && !cityCardDismissed && (
           <CityDarkCard
             onDismiss={() => setCityCardDismissed(true)}
             onWakeUp={handleWakeUpCity}
@@ -988,9 +1103,9 @@ export default function Dashboard() {
                 </p>
                 <div className="px-4 pb-3">
                   <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
+                    <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ Your Cash Drops</p>
                     <p className="text-[9px] font-display text-muted-foreground/35">
-                      {referralData?.referredCount ?? 0} / 25 to unlock cash drops
+                      {referralData?.referredCount ?? 0} / 25 referrals to unlock yours
                     </p>
                   </div>
                   <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
@@ -1216,9 +1331,9 @@ export default function Dashboard() {
                   {/* Progress bar row */}
                   <div className="px-4 pb-3">
                     <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ City Activation</p>
+                      <p className="text-[9px] font-display font-bold text-amber-400/50 tracking-wider uppercase">⚡ Your Cash Drops</p>
                       <p className="text-[9px] font-display text-muted-foreground/35">
-                        {referralData?.referredCount ?? 0} / 25 to unlock cash drops
+                        {referralData?.referredCount ?? 0} / 25 referrals to unlock yours
                       </p>
                     </div>
                     <div className="h-[3px] w-full rounded-full overflow-hidden" style={{ background: "rgba(201,168,76,0.12)" }}>
@@ -1372,7 +1487,7 @@ export default function Dashboard() {
       {showTour && !!user && !gpsBlocking && (
         <DashboardTour
           accountType={(user as any)?.accountType || "individual"}
-          onComplete={() => setShowTour(false)}
+          onComplete={() => { setShowTour(false); setShowCityCardPostTour(true); }}
           onModeChange={(m) => setMode(m as DashboardMode)}
         />
       )}

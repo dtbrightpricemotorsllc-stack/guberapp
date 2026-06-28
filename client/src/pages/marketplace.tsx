@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { InfoHint } from "@/components/info-hint";
 import { BuyerOrderDetailsForm, EMPTY_BO_DETAILS } from "@/components/buyer-order-details-form";
@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { isStoreBuild } from "@/lib/platform";
 import { GuberLayout } from "@/components/guber-layout";
 import { ListingWizard } from "@/components/marketplace-wizard";
+import { readListingPrefill } from "@/lib/jac-listing-prefill";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { MarketplaceItem } from "@shared/schema";
@@ -520,7 +521,7 @@ function RequestViewingModal({ item, onClose }: { item: MarketplaceItem; onClose
   });
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-request-viewing">
+      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl px-5 pt-5 pb-[calc(20px+env(safe-area-inset-bottom,0px))]" onClick={e => e.stopPropagation()} data-testid="modal-request-viewing">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-display font-extrabold">Request a Viewing</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
@@ -561,7 +562,7 @@ function RequestVIModal({ item, onClose }: { item: MarketplaceItem; onClose: () 
   });
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl p-5" onClick={e => e.stopPropagation()} data-testid="modal-request-vi">
+      <div className="w-full max-w-lg bg-card border border-border rounded-t-3xl px-5 pt-5 pb-[calc(20px+env(safe-area-inset-bottom,0px))]" onClick={e => e.stopPropagation()} data-testid="modal-request-vi">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-display font-extrabold">Request Verify & Inspect</h3>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10"><X className="w-4 h-4 text-muted-foreground" /></button>
@@ -1466,6 +1467,13 @@ export default function Marketplace() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (prefill && ["vehicle", "item", "house"].includes(prefill.type)) {
+      setShowWizard(true);
+    }
+  }, []);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [showFilters, setShowFilters] = useState(false);

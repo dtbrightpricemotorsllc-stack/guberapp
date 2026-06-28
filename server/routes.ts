@@ -2427,6 +2427,67 @@ export async function registerRoutes(
     res.json({ ok: true });
   });
 
+  // ── Background-location bearer token ─────────────────────────────────────
+  // The native Android foreground service (GuberTrackingService.java) needs to
+  // POST location batches while the WebView is throttled / screen locked. It
+  // cannot access the HttpOnly session cookie, so we issue a short-lived HMAC
+  // token tied to the requesting user + job. The service exchanges it as a
+  // Bearer token on /api/jobs/:id/location-batch.
+  //
+  // Format: `${userId}:${jobId}:${exp}:${hmac_hex}`
+  // Secret: SESSION_SECRET (same key, different purpose — safe because the
+  //         token is scoped and time-limited).
+  const BG_LOC_TTL_MS = 45 * 60 * 1000; // 45 min (comfortably covers a long job)
+
+  function bgLocSecret(): string {
+    return (process.env.SESSION_SECRET || "dev-only-insecure-session-secret") + ":bg-loc";
+  }
+
+  function signBgLocToken(userId: number, jobId: number, exp: number): string {
+    const { createHmac } = require("crypto");
+    const payload = `${userId}:${jobId}:${exp}`;
+    const sig = createHmac("sha256", bgLocSecret()).update(payload).digest("hex");
+    return `${payload}:${sig}`;
+  }
+
+  function verifyBgLocToken(token: string, jobId: number): number | null {
+    try {
+      const { createHmac, timingSafeEqual } = require("crypto");
+      const parts = token.split(":");
+      if (parts.length !== 4) return null;
+      const [uStr, jStr, expStr, sig] = parts;
+      const userId   = parseInt(uStr);
+      const tokenJob = parseInt(jStr);
+      const exp      = parseInt(expStr);
+      if (!userId || tokenJob !== jobId || Date.now() > exp) return null;
+      const expected = createHmac("sha256", bgLocSecret())
+        .update(`${userId}:${tokenJob}:${exp}`)
+        .digest("hex");
+      const a = Buffer.from(sig, "hex");
+      const b = Buffer.from(expected, "hex");
+      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+      return userId;
+    } catch {
+      return null;
+    }
+  }
+
+  app.post("/api/auth/bg-location-token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.body?.jobId);
+      if (isNaN(jobId) || jobId <= 0) return res.status(400).json({ message: "jobId required" });
+      const job = await storage.getJob(jobId);
+      if (!job || job.assignedHelperId !== req.session.userId) {
+        return res.status(403).json({ message: "Not assigned to this job" });
+      }
+      const exp   = Date.now() + BG_LOC_TTL_MS;
+      const token = signBgLocToken(req.session.userId!, jobId, exp);
+      res.json({ token, expiresAt: exp });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // Poll-token store for Chrome Custom Tab OAuth flow (no deep link required)
   // The app supplies a random pollKey before opening the browser. After OAuth
@@ -4721,9 +4782,16 @@ export async function registerRoutes(
       const accountStatus = (user as any).stripeAccountStatus || "none";
 
       if (accountId && accountStatus !== "active") {
-        // Re-check live with Stripe in case webhook was missed
+        // Re-check live with Stripe in case webhook was missed — 5-second timeout
+        // to prevent the wallet page freezing if Stripe is slow.
         try {
-          const account = await stripe.accounts.retrieve(accountId);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 5000)
+          );
+          const account = await Promise.race([
+            stripe.accounts.retrieve(accountId),
+            timeoutPromise,
+          ]);
           if (account.charges_enabled && account.payouts_enabled && account.details_submitted) {
             await storage.updateUser(user.id, { stripeAccountStatus: "active" } as any);
             await creditReferrer(user.id);
@@ -9931,7 +9999,21 @@ export async function registerRoutes(
   // while the job is genuinely trackable (helper en route / on site and the job
   // hasn't ended) — otherwise we reply { active: false } so the client tears
   // its tracker down. This is the server-driven stop signal.
-  app.post("/api/jobs/:id/location-batch", requireAuth, demoGuard, async (req: Request, res: Response) => {
+  // Middleware: accept a short-lived Bearer bg-location token (issued by
+  // /api/auth/bg-location-token) as an alternative to the session cookie.
+  // When valid, injects req.session.userId so downstream requireAuth + the
+  // route's own userId checks work without modification.
+  function acceptBgLocToken(req: Request, res: Response, next: NextFunction): void {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      const jobId = parseInt((req.params as any).id);
+      const userId = verifyBgLocToken(auth.slice(7), jobId);
+      if (userId) req.session.userId = userId;
+    }
+    next();
+  }
+
+  app.post("/api/jobs/:id/location-batch", acceptBgLocToken, requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
       if (isNaN(jobId)) return res.status(400).json({ message: "Invalid job id" });
@@ -14131,8 +14213,13 @@ export async function registerRoutes(
 
   // WALLET
   app.get("/api/wallet", requireAuth, async (req: Request, res: Response) => {
-    const txns = await storage.getWalletByUser(req.session.userId!);
-    res.json(txns);
+    try {
+      const txns = await storage.getWalletByUser(req.session.userId!);
+      res.json(txns);
+    } catch (err: any) {
+      console.error("[wallet] GET /api/wallet error:", err.message);
+      res.status(500).json({ message: "Could not load wallet. Please try again." });
+    }
   });
 
   // Jobs where the caller is the poster, has paid/authorized, helper confirmed, but buyer hasn't confirmed yet
@@ -16323,6 +16410,114 @@ CRITICAL — respond with JSON ONLY, no other text:
     }
   });
 
+  // ── JAC Smart Listing Collect ─────────────────────────────────────────────
+  app.post("/api/jac/listing-collect", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { messages, listingType: hintType } = req.body;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ message: "messages required" });
+      }
+      const sanitized = messages
+        .filter((m: any) => m?.role && m?.content)
+        .map((m: any) => ({ role: String(m.role) as "user" | "assistant", content: String(m.content).slice(0, 2000) }))
+        .slice(-20);
+
+      const SYSTEM = `You are JAC — GUBER's listing assistant. Your job is to collect listing info through friendly, one-question-at-a-time conversation so you can pre-fill a posting form for the user.
+
+LISTING TYPES you handle:
+- "vehicle" — cars, trucks, motorcycles, SUVs, vans, boats, trailers, RVs
+- "item" — phones, laptops, furniture, electronics, clothing, tools, any physical non-vehicle item
+- "house" — houses, apartments, condos, rentals, property listings
+- "load" — freight, cargo, loads that need shipping or transport (Load Board post)
+- "vi" — Verify & Inspect requests (need a GUBER worker to verify or inspect something)
+- "job" — hiring someone to do a task (lawn care, cleaning, moving, delivery, repairs, pet care, etc.)
+
+REQUIRED FIELDS per type (collect these one at a time, never ask for more than one at once):
+vehicle: year, make, model, condition (excellent/good/fair/poor), mileage (optional — skip if user says unknown), price, zipcode
+item: title (what is it exactly?), category (Electronics/Clothing/Furniture/Tools/Sports/Other), condition (new/like new/good/fair/poor), price, zipcode
+house: listing_type (for_sale or for_rent), price (sale price or monthly rent as a number), bedrooms, bathrooms, zipcode
+load: commodity_type (what is being shipped), pickup_zip, delivery_zip, weight_lbs (approximate number), trailer_type (dry_van/flatbed/reefer/other)
+vi: description (what needs to be verified or inspected and why), zipcode
+job: category (General Labor/Skilled Labor/On-Demand Help/Delivery/Moving/Cleaning/Lawn Care/Pet Care/Skilled Trades/Other), serviceType (specific task, e.g. "Lawn Mowing", "House Cleaning", "Furniture Assembly"), descriptionSeed (brief description of what needs doing), budget (how much willing to pay as a number), zip
+
+ROUTING:
+vehicle → /marketplace
+item → /marketplace
+house → /marketplace
+load → /load-board/post
+vi → /verify-inspect
+job → /post-job?from=jac
+
+BEHAVIOR:
+1. First detect the listing type from the conversation (or use the provided hint). If unclear, ask.
+2. Ask ONE question at a time to collect missing required fields.
+3. Keep questions short, warm, and conversational. Do not list all fields at once.
+4. Accept natural language — parse into structured fields (e.g. "2019 Honda Civic" → year=2019, make=Honda, model=Civic; "$5000" → price=5000).
+5. When ALL required fields are collected, set ready=true and write a short warm confirmation reply.
+6. For vehicles, auto-generate title as "year make model" (e.g. "2019 Honda Civic").
+7. Store prices as numeric strings without $ or commas (e.g. "5000" not "$5,000").
+8. For mileage on vehicles: if the user skips or says unknown, omit vehicleMileage from collected.
+
+ALWAYS respond with valid JSON only — no markdown, no prose outside the JSON:
+{
+  "reply": "your friendly one-sentence question or confirmation",
+  "actions": [{"label": "button text", "message": "the message sent if tapped"}],
+  "collected": { ...all fields gathered so far as flat key-value pairs },
+  "ready": false,
+  "listingType": "vehicle|item|house|load|vi",
+  "route": "/marketplace|/load-board/post|/verify-inspect"
+}
+
+When ready=true, set reply to something warm like: "Perfect! I have everything. Opening your listing form now — the details will be pre-filled for you!"
+Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). Omit when the answer is open-ended.`;
+
+      const sysMsg = hintType
+        ? `${SYSTEM}\n\nHINT: The listing type is already known to be "${hintType}". Do not ask about listing type.`
+        : SYSTEM;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.45,
+        max_tokens: 700,
+        response_format: { type: "json_object" as const },
+        messages: [
+          { role: "system", content: sysMsg },
+          ...sanitized,
+        ],
+      });
+
+      const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
+      type CollectResp = { reply: string; actions?: any[]; collected: Record<string, any>; ready: boolean; listingType: string; route: string };
+      let parsed: CollectResp = {
+        reply: "What would you like to list?",
+        actions: [],
+        collected: {},
+        ready: false,
+        listingType: typeof hintType === "string" ? hintType : "item",
+        route: "/marketplace",
+      };
+      try {
+        const j = JSON.parse(rawContent);
+        if (typeof j.reply === "string") {
+          parsed = {
+            reply: j.reply.trim() || parsed.reply,
+            actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 4) : [],
+            collected: j.collected && typeof j.collected === "object" ? j.collected : {},
+            ready: j.ready === true,
+            listingType: typeof j.listingType === "string" ? j.listingType : parsed.listingType,
+            route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : parsed.route,
+          };
+        }
+      } catch {
+        if (rawContent) parsed.reply = rawContent;
+      }
+      res.json(parsed);
+    } catch (err: any) {
+      console.error("[JAC] listing-collect error:", err.message);
+      res.status(500).json({ message: "Listing assistant unavailable, please try again." });
+    }
+  });
+
   // ── Jac Homepage Interaction Tracking (public, no auth) ────────────────────
   app.post("/api/jac/interaction", async (req: Request, res: Response) => {
     try {
@@ -16714,8 +16909,8 @@ CRITICAL — respond with JSON ONLY, no other text:
 
       // Gather data in parallel for performance
       const [userRes, listingRes, pendingJobsRes, missionsRes, referralRes] = await Promise.all([
-        pool.query<{ day1_og: boolean; zip: string | null; id_verified: boolean }>(
-          `SELECT day1_og, zip, id_verified FROM users WHERE id = $1`,
+        pool.query<{ day1_og: boolean; zipcode: string | null; id_verified: boolean }>(
+          `SELECT day1_og, zipcode, id_verified FROM users WHERE id = $1`,
           [userId]
         ),
         pool.query<{ id: number; display_title: string }>(
@@ -16730,7 +16925,7 @@ CRITICAL — respond with JSON ONLY, no other text:
              AND (photos IS NULL OR cardinality(photos) = 0)
            ORDER BY created_at DESC LIMIT 1`,
           [userId]
-        ),
+        ).catch(() => ({ rows: [] as { id: number; display_title: string }[] })),
         pool.query<{ count: string }>(
           `SELECT COUNT(*)::text AS count
            FROM job_applications ja
@@ -16755,7 +16950,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       ]);
 
       const u = userRes.rows[0];
-      const nearbyJobsRes = u?.zip
+      const nearbyJobsRes = u?.zipcode
         ? await pool.query<{ count: string }>(
             `SELECT COUNT(*)::text AS count
              FROM jobs
@@ -16765,7 +16960,7 @@ CRITICAL — respond with JSON ONLY, no other text:
                AND id NOT IN (
                  SELECT job_id FROM job_applications WHERE applicant_id = $2
                )`,
-            [u.zip, userId]
+            [u.zipcode, userId]
           ).catch(() => ({ rows: [{ count: "0" }] }))
         : { rows: [{ count: "0" }] };
 

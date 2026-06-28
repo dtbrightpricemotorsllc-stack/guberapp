@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Pencil, Trash2, Plus, ArrowLeft, Loader2, BarChart3 } from "lucide-react";
+import { Pencil, Trash2, Plus, ArrowLeft, Loader2, BarChart3, Coins, CheckCircle2, XCircle } from "lucide-react";
 import { useLocation } from "wouter";
 
 interface Template {
@@ -638,6 +638,201 @@ function AnalyticsTab() {
   );
 }
 
+interface CreditAdminStats {
+  totalCreditsApproved: number; totalCreditsRedeemed: number;
+  totalCreditsPending: number; outstandingLiability: number;
+  estimatedLiabilityUsd: string; pendingCashouts: number;
+  approvedCashouts: number; deniedCashouts: number;
+  totalPaidOutUsd: string; creditsPerDollar: number;
+}
+
+interface CashoutRequestRow {
+  id: number; user_id: number; username: string; email: string;
+  credits_requested: number; dollar_amount: string; status: string;
+  payout_method: string | null; payout_details: string | null;
+  admin_note: string | null; created_at: string;
+  stripe_account_id: string | null; stripe_account_status: string | null;
+}
+
+function CreditsTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState("pending");
+  const [grantUserId, setGrantUserId] = useState("");
+  const [grantAmount, setGrantAmount] = useState("");
+  const [grantReason, setGrantReason] = useState("");
+  const [noteById, setNoteById] = useState<Record<number, string>>({});
+
+  const { data: stats, isLoading: statsLoading } = useQuery<CreditAdminStats>({
+    queryKey: ["/api/admin/credits/stats"],
+  });
+
+  const { data: cashouts = [], isLoading: cashoutsLoading } = useQuery<CashoutRequestRow[]>({
+    queryKey: ["/api/admin/credits/cashout-requests", statusFilter],
+    queryFn: () => fetch(`/api/admin/credits/cashout-requests?status=${statusFilter}`).then(r => r.json()),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => apiRequest("PATCH", "/api/admin/credits/cashout-toggle", { enabled }),
+    onSuccess: () => { toast({ title: "Cashout toggle updated" }); qc.invalidateQueries({ queryKey: ["/api/admin/credits/stats"] }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ id, action, note }: { id: number; action: "approve" | "deny"; note?: string }) =>
+      apiRequest("POST", `/api/admin/credits/cashout-requests/${id}/${action}`, { adminNote: note }),
+    onSuccess: () => {
+      toast({ title: "Cashout request updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/credits/cashout-requests"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/credits/stats"] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const grantMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/credits/grant", {
+      userId: parseInt(grantUserId, 10),
+      amount: parseInt(grantAmount, 10),
+      reason: grantReason || undefined,
+    }),
+    onSuccess: () => {
+      toast({ title: "Credits granted" });
+      setGrantUserId(""); setGrantAmount(""); setGrantReason("");
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      {statsLoading ? (
+        <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" /></div>
+      ) : stats ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Outstanding Liability", value: `${stats.outstandingLiability.toLocaleString()} cr`, sub: `~$${stats.estimatedLiabilityUsd}`, color: "text-amber-500" },
+            { label: "Pending Credits", value: stats.totalCreditsPending.toLocaleString(), sub: "awaiting approval", color: "text-yellow-500" },
+            { label: "Total Approved", value: stats.totalCreditsApproved.toLocaleString(), sub: "lifetime issued", color: "text-green-500" },
+            { label: "Total Paid Out", value: `$${stats.totalPaidOutUsd}`, sub: `${stats.approvedCashouts} cashouts`, color: "text-purple-500" },
+          ].map(s => (
+            <Card key={s.label}>
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground mb-1">{s.label}</div>
+                <div className={`text-xl font-black ${s.color}`}>{s.value}</div>
+                <div className="text-xs text-muted-foreground">{s.sub}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Cashout toggle */}
+      {stats && (
+        <Card>
+          <CardContent className="p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-sm">Cashout Requests</p>
+              <p className="text-xs text-muted-foreground">Enable to allow users to submit cashout requests.</p>
+            </div>
+            <Switch
+              checked={stats ? (stats as any).cashoutEnabled ?? false : false}
+              onCheckedChange={(v) => toggleMutation.mutate(v)}
+              data-testid="switch-cashout-enabled"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Manual grant */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <p className="font-semibold text-sm flex items-center gap-1.5"><Coins className="w-4 h-4 text-amber-400" /> Manual Credit Grant</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Input placeholder="User ID" value={grantUserId} onChange={e => setGrantUserId(e.target.value)} data-testid="input-grant-user-id" />
+            <Input placeholder="Amount (cr)" value={grantAmount} onChange={e => setGrantAmount(e.target.value)} data-testid="input-grant-amount" />
+            <Input placeholder="Reason (optional)" value={grantReason} onChange={e => setGrantReason(e.target.value)} data-testid="input-grant-reason" />
+          </div>
+          <Button size="sm" onClick={() => grantMutation.mutate()} disabled={grantMutation.isPending || !grantUserId || !grantAmount} data-testid="btn-grant-credits">
+            {grantMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Grant Credits
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Cashout queue */}
+      <div>
+        <div className="flex items-center gap-3 mb-3">
+          <p className="font-semibold text-sm">Cashout Requests</p>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32 h-7 text-xs" data-testid="select-cashout-status-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="denied">Denied</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {cashoutsLoading ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin" /></div>
+        ) : cashouts.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">No {statusFilter} requests.</p>
+        ) : (
+          <div className="space-y-3">
+            {cashouts.map(c => (
+              <Card key={c.id} data-testid={`card-cashout-${c.id}`}>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold">{c.username} <span className="text-muted-foreground text-xs">#{c.user_id}</span></div>
+                      <div className="text-xs text-muted-foreground">{c.email}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-black text-amber-500">{c.credits_requested.toLocaleString()} cr</div>
+                      <div className="text-sm font-semibold">${c.dollar_amount}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                    <span>Method: <strong>{c.payout_method ?? "—"}</strong></span>
+                    {c.payout_details && <span>Handle: <strong>{c.payout_details}</strong></span>}
+                    <span>Stripe: {c.stripe_account_status ?? "none"}</span>
+                    <span>{new Date(c.created_at).toLocaleDateString()}</span>
+                  </div>
+                  {c.admin_note && <p className="text-xs text-muted-foreground italic">Note: {c.admin_note}</p>}
+                  {c.status === "pending" && (
+                    <div className="flex gap-2 pt-1">
+                      <Input
+                        placeholder="Admin note (optional)"
+                        className="h-7 text-xs"
+                        value={noteById[c.id] ?? ""}
+                        onChange={e => setNoteById(n => ({ ...n, [c.id]: e.target.value }))}
+                        data-testid={`input-cashout-note-${c.id}`}
+                      />
+                      <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                        onClick={() => reviewMutation.mutate({ id: c.id, action: "approve", note: noteById[c.id] })}
+                        disabled={reviewMutation.isPending}
+                        data-testid={`btn-cashout-approve-${c.id}`}>
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
+                      </Button>
+                      <Button size="sm" variant="destructive" className="h-7 text-xs"
+                        onClick={() => reviewMutation.mutate({ id: c.id, action: "deny", note: noteById[c.id] })}
+                        disabled={reviewMutation.isPending}
+                        data-testid={`btn-cashout-deny-${c.id}`}>
+                        <XCircle className="w-3 h-3 mr-1" /> Deny
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminGrowthEnginePage() {
   const [, navigate] = useLocation();
 
@@ -662,6 +857,7 @@ export default function AdminGrowthEnginePage() {
       <div className="max-w-4xl mx-auto px-4 mt-6">
         <Tabs defaultValue="analytics">
           <TabsList className="mb-6 flex flex-wrap gap-1">
+            <TabsTrigger value="credits">Credits</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="templates">Tasks</TabsTrigger>
             <TabsTrigger value="score-ranks">Score Ranks</TabsTrigger>
@@ -669,6 +865,7 @@ export default function AdminGrowthEnginePage() {
             <TabsTrigger value="reward-config">Reward Config</TabsTrigger>
             <TabsTrigger value="completions">Completions</TabsTrigger>
           </TabsList>
+          <TabsContent value="credits"><CreditsTab /></TabsContent>
           <TabsContent value="analytics"><AnalyticsTab /></TabsContent>
           <TabsContent value="templates"><TemplatesTab /></TabsContent>
           <TabsContent value="score-ranks"><ScoreRanksTab /></TabsContent>

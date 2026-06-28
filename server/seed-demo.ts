@@ -40,6 +40,7 @@ export async function seedDemoAccounts() {
 
     await seedDemoConsumer();
     await seedDemoBusinessUser();
+    await seedDemoActiveJob();
     await seedNationwideJobs();
     await seedNationwideCashDrops();
     await seedDemoReviewsAndWallet();
@@ -378,6 +379,43 @@ async function seedDemoBusinessUser() {
         (${bizAcctId}, 'unlock_credits_purchased', 'processed', 'demo_unlock_credits_001', NOW() - INTERVAL '15 days')
     `);
   }
+}
+
+async function seedDemoActiveJob() {
+  const consumer = await storage.getUserByEmail(DEMO_CONSUMER_EMAIL);
+  const business = await storage.getUserByEmail(DEMO_BUSINESS_EMAIL);
+  if (!consumer || !business) return;
+
+  const existing = await db.execute(sql`
+    SELECT id FROM jobs
+    WHERE assigned_helper_id = ${consumer.id}
+      AND status = 'funded'
+      AND is_demo = true
+    LIMIT 1
+  `);
+  if (existing.rows.length) return;
+
+  await db.insert(jobs).values({
+    title: "Apartment Turnover Cleaning — 2BR West Hollywood",
+    description: "Full turnover cleaning for a 2-bedroom apartment. Tenant moved out yesterday. Supplies provided on-site. Takes about 3 hours.",
+    category: "General Labor",
+    budget: 90,
+    location: "West Hollywood, CA",
+    locationApprox: "West Hollywood, CA",
+    zip: "90046",
+    lat: 34.0900,
+    lng: -118.3617,
+    status: "funded",
+    postedById: business.id,
+    assignedHelperId: consumer.id,
+    isPublished: true,
+    isPaid: true,
+    payType: "fixed",
+    finalPrice: 90,
+    helperPayout: 72,
+    platformFee: 18,
+    isDemo: true,
+  });
 }
 
 async function seedNationwideJobs() {

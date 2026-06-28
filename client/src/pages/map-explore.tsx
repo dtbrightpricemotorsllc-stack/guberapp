@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Star } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { isNativeApp, isAndroid } from "@/lib/platform";
-import { gpsStartWatchPosition } from "@/lib/gps";
+import { gpsStartWatchPosition, gpsClearWatch } from "@/lib/gps";
+import { MissionCard, type MissionTemplate } from "@/components/mission-card";
+import { MissionProofSheet } from "@/components/mission-proof-sheet";
 
 interface ZipJob {
   id: number;
@@ -136,6 +138,18 @@ function makeWorkerDroneSvg(): string {
   );
 }
 
+function makeMissionSvg(emoji: string): string {
+  const size = 44;
+  const safe = (emoji || "⚡").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 8}" viewBox="0 0 ${size} ${size + 8}">
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="#7c3aed" stroke="#ffffff" stroke-width="2.5"/>
+      <text x="${size/2}" y="${size/2}" text-anchor="middle" dominant-baseline="central" font-size="20">${safe}</text>
+      <polygon points="${size/2 - 6},${size - 2} ${size/2 + 6},${size - 2} ${size/2},${size + 8}" fill="#7c3aed"/>
+    </svg>`
+  );
+}
+
 function makeBubbleSvg(total: number, color: string, hasUrgent: boolean): string {
   const count = total > 999 ? "999+" : String(total);
   const size = Math.max(36, Math.min(64, 36 + Math.floor(Math.log2(total + 1)) * 7));
@@ -165,10 +179,12 @@ export default function MapExplore() {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const missionMarkersRef = useRef<google.maps.Marker[]>([]);
   const initStartedRef = useRef(false);
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const hasCenteredRef = useRef(false);
   const hasUpdatedLocationRef = useRef(false);
+  const gpsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadErr, setMapLoadErr] = useState<string | null>(null);
@@ -187,6 +203,7 @@ export default function MapExplore() {
   const [panelCatFilter, setPanelCatFilter] = useState("");
   const [bottomOpen, setBottomOpen] = useState(true);
   const [zipFallback, setZipFallback] = useState<ZipFallbackResult | null>(null);
+  const [proofSheet, setProofSheet] = useState<{ instanceId: number; title: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const userEditedZipRef = useRef(false);
 
@@ -208,6 +225,11 @@ export default function MapExplore() {
   const { data: activeDrops = [] } = useQuery<any[]>({
     queryKey: ["/api/cash-drops/active"],
     refetchInterval: 10000,
+  });
+
+  const { data: missions = [] } = useQuery<MissionTemplate[]>({
+    queryKey: ["/api/missions"],
+    refetchInterval: 120000,
   });
 
   const [selectedDrop, setSelectedDrop] = useState<any | null>(null);
@@ -280,9 +302,26 @@ export default function MapExplore() {
   const startWatchPosition = () => {
     setLocating(true);
     setLocationDenied(false);
+
+    // Safety net: start the timeout FIRST — before any async disclaimer/permission
+    // check — so the map always unblocks even if GPS hangs indefinitely.
+    if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
+    gpsTimeoutRef.current = setTimeout(() => {
+      setLocating(false);
+      gpsTimeoutRef.current = null;
+    }, 10000);
+
+    const clearGpsTimeout = () => {
+      if (gpsTimeoutRef.current) {
+        clearTimeout(gpsTimeoutRef.current);
+        gpsTimeoutRef.current = null;
+      }
+    };
+
     gpsStartWatchPosition(
       (pos) => {
         if (pos.coords.accuracy > 300) return;
+        clearGpsTimeout();
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserPos(coords);
         setLocating(false);
@@ -299,23 +338,25 @@ export default function MapExplore() {
         }
       },
       (err) => {
+        clearGpsTimeout();
         const labels: Record<number, string> = { 1: "PERMISSION_DENIED", 2: "POSITION_UNAVAILABLE", 3: "TIMEOUT" };
         console.warn(`[GUBER] map-explore geolocation: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}`);
         setLocating(false);
-        setLocationDenied(true);
+        // code 1 = PERMISSION_DENIED, code 2 = POSITION_UNAVAILABLE (device GPS off)
+        if (err.code === 1 || err.code === 2) setLocationDenied(true);
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
     ).then((id) => {
       if (watchCancelledRef.current) {
-        if (navigator.geolocation) navigator.geolocation.clearWatch(id);
+        void gpsClearWatch(id);
         return;
       }
       watchIdRef2.current = id;
-    }).catch(() => { setLocating(false); setLocationDenied(true); });
+    }).catch(() => { clearGpsTimeout(); setLocating(false); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {
-    if (watchIdRef2.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef2.current);
+    if (watchIdRef2.current !== null) void gpsClearWatch(watchIdRef2.current);
     watchIdRef2.current = null;
     hasCenteredRef.current = false;
     startWatchPosition();
@@ -326,9 +367,23 @@ export default function MapExplore() {
     startWatchPosition();
     return () => {
       watchCancelledRef.current = true;
-      if (watchIdRef2.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef2.current);
+      if (watchIdRef2.current !== null) void gpsClearWatch(watchIdRef2.current);
     };
   }, []);
+
+  // When user returns from Settings (after granting location), auto-retry GPS
+  useEffect(() => {
+    if (!isNativeApp) return;
+    let cleanup: (() => void) | null = null;
+    import("@capacitor/app").then(({ App }) => {
+      App.addListener("appStateChange", ({ isActive }) => {
+        if (isActive && locationDenied) {
+          handleRetryLocation();
+        }
+      }).then((handle) => { cleanup = () => handle.remove(); });
+    }).catch(() => {});
+    return () => { cleanup?.(); };
+  }, [locationDenied]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current || !userPos) return;
@@ -435,6 +490,33 @@ export default function MapExplore() {
       });
     }
   }, [mapReady, filteredGroups, categoryFilter, workerPins, mapViewMode]);
+
+  // Mission pins — scattered around user position in jobs mode
+  useEffect(() => {
+    const g = window.google?.maps;
+    missionMarkersRef.current.forEach((m) => m.setMap(null));
+    missionMarkersRef.current = [];
+    if (!mapReady || !mapRef.current || !g) return;
+    const missionBase = userPos || jumpCenter;
+    if (mapViewMode !== "jobs" || !missionBase || missions.length === 0) return;
+
+    missions.slice(0, 5).forEach((mission, i) => {
+      const angle = (i * 137.5 * Math.PI) / 180;
+      const radius = 0.018 + (i % 3) * 0.01;
+      const lat = missionBase.lat + Math.sin(angle) * radius;
+      const lng = missionBase.lng + Math.cos(angle) * radius;
+      const svgUrl = makeMissionSvg(mission.emoji);
+      const marker = new g.Marker({
+        position: { lat, lng },
+        map: mapRef.current!,
+        title: mission.title,
+        icon: { url: svgUrl, scaledSize: new g.Size(44, 52), anchor: new g.Point(22, 52) },
+        zIndex: 50,
+      });
+      marker.addListener("click", () => setBottomOpen(true));
+      missionMarkersRef.current.push(marker);
+    });
+  }, [mapReady, missions, userPos, jumpCenter, mapViewMode]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -704,25 +786,43 @@ export default function MapExplore() {
         </div>
       )}
 
-      {/* LOCATION DENIED BANNER — hidden for now (was triggering even when GPS recovered) */}
-      {false && locationDenied && mapReady && (
+      {/* LOCATION DENIED BANNER */}
+      {locationDenied && mapReady && (
         <div
-          className="absolute z-25 bottom-20 left-3 right-3 flex items-center gap-2 px-3 py-2 rounded-xl pointer-events-auto"
-          style={{ background: "rgba(14,15,22,0.92)", border: "1px solid rgba(245,158,11,0.35)", backdropFilter: "blur(10px)", zIndex: 25 }}
+          className="absolute left-3 right-3 flex items-center gap-2 px-3 py-2 rounded-xl pointer-events-auto"
+          style={{ bottom: 160, background: "rgba(14,15,22,0.92)", border: "1px solid rgba(245,158,11,0.35)", backdropFilter: "blur(10px)", zIndex: 25 }}
           data-testid="banner-location-denied-explore"
         >
           <LocateOff className="w-3.5 h-3.5 shrink-0" style={{ color: "#f59e0b" }} />
           <span className="flex-1 text-[10px] font-bold tracking-wide" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "Inter, sans-serif" }}>
-            Location unavailable — enter a ZIP above to browse nearby jobs
+            {isNativeApp ? "Location off — tap to enable" : "Location disabled — search by ZIP code above"}
           </span>
-          <button
-            onClick={handleRetryLocation}
-            className="flex items-center gap-1 text-[10px] font-bold"
-            style={{ color: "#4ade80" }}
-            data-testid="button-retry-location-explore"
-          >
-            <RefreshCw className="w-3 h-3" /> Retry
-          </button>
+          {isNativeApp ? (
+            <button
+              onClick={async () => {
+                try {
+                  const { App } = await import("@capacitor/app");
+                  // Android: opens app permissions page; iOS: opens app settings
+                  const url = isAndroid ? "package:com.guber.app" : "app-settings:";
+                  await App.openUrl({ url });
+                } catch {}
+              }}
+              className="flex items-center gap-1 text-[10px] font-bold whitespace-nowrap"
+              style={{ color: "#f59e0b" }}
+              data-testid="button-open-location-settings"
+            >
+              Open Settings
+            </button>
+          ) : (
+            <button
+              onClick={handleRetryLocation}
+              className="flex items-center gap-1 text-[10px] font-bold"
+              style={{ color: "#4ade80" }}
+              data-testid="button-retry-location-explore"
+            >
+              <RefreshCw className="w-3 h-3" /> Retry
+            </button>
+          )}
         </div>
       )}
 
@@ -856,6 +956,9 @@ export default function MapExplore() {
             background: DARK_CTRL_SOLID,
             boxShadow: "0 -4px 24px rgba(0,0,0,0.5)",
             borderTop: `1px solid ${DARK_BORDER}`,
+            maxHeight: "52vh",
+            display: "flex",
+            flexDirection: "column",
           }}
           data-testid="panel-bottom-sheet"
         >
@@ -895,7 +998,7 @@ export default function MapExplore() {
 
           {/* Expandable content */}
           {bottomOpen && (
-            <div className="px-5 pb-5">
+            <div className="px-5 pb-5 overflow-y-auto flex-1">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-base font-bold" style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}>
@@ -988,6 +1091,35 @@ export default function MapExplore() {
                       </span>
                     ))}
                   </div>
+
+                  {/* ── GUBER Missions ── always shown in jobs mode */}
+                  {missions.length > 0 && (
+                    <div className="mt-4" style={{ borderTop: `1px solid ${DARK_BORDER}` }}>
+                      <div className="flex items-center gap-2 pt-3 pb-2">
+                        <Zap className="w-3 h-3" style={{ color: "#a78bfa" }} />
+                        <span className="text-[11px] font-black tracking-widest uppercase" style={{ color: "#a78bfa", fontFamily: "Inter, sans-serif" }}>
+                          GUBER Missions
+                        </span>
+                        <span className="ml-auto text-[10px]" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
+                          photo proof · credits earned
+                        </span>
+                      </div>
+                      <div className="space-y-2 pb-1">
+                        {missions.slice(0, 3).map(m => (
+                          <MissionCard
+                            key={m.id}
+                            mission={m}
+                            userZip={zipInput || undefined}
+                            userLat={userPos?.lat}
+                            userLng={userPos?.lng}
+                            onAccepted={(instanceId) => setProofSheet({ instanceId, title: m.title })}
+                            onOpenProof={(instanceId, title) => setProofSheet({ instanceId, title })}
+                            compact
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {mapViewMode === "workers" && (
@@ -1235,45 +1367,34 @@ export default function MapExplore() {
             <div style={{ height: 1, background: DARK_BORDER }} />
           </div>
 
-          <div className="overflow-y-auto flex-1">
-            {zipFallback.tasks.map((task, i) => (
-              <button
-                key={task.id}
-                onClick={() => navigate(`/community-tasks?zip=${encodeURIComponent(zipFallback.zip)}`)}
-                className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors active:bg-white/5"
-                style={{ borderBottom: i < zipFallback.tasks.length - 1 ? `1px solid ${DARK_BORDER}` : "none" }}
-                data-testid={`button-growth-task-${task.id}`}
-              >
-                <span className="text-xl flex-shrink-0">{task.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate" style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}>
-                    {task.title}
-                  </p>
-                  <p className="text-xs mt-0.5 truncate" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
-                    {task.description}
-                  </p>
-                </div>
-                <div className="flex-shrink-0 text-right">
-                  <p className="text-xs font-bold" style={{ color: "#16a34a", fontFamily: "Inter, sans-serif" }}>
-                    +{task.rewardCredits} cr
-                  </p>
-                  <p className="text-[10px]" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>
-                    +{task.rewardScore} score
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-shrink-0 px-5 py-4" style={{ borderTop: `1px solid ${DARK_BORDER}` }}>
-            <button
-              onClick={() => navigate(`/community-tasks?zip=${encodeURIComponent(zipFallback.zip)}`)}
-              className="w-full py-2.5 rounded-xl text-sm font-bold active:opacity-80 transition-opacity"
-              style={{ background: "#16a34a", color: "#fff", fontFamily: "Inter, sans-serif" }}
-              data-testid="button-view-community-tasks"
-            >
-              View All Tasks for {zipFallback.zip} →
-            </button>
+          <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+            {missions.length > 0
+              ? missions.map(m => (
+                  <MissionCard
+                    key={m.id}
+                    mission={m}
+                    userZip={zipFallback.zip}
+                    onAccepted={(instanceId) => { setZipFallback(null); setProofSheet({ instanceId, title: m.title }); }}
+                    onOpenProof={(instanceId, title) => { setZipFallback(null); setProofSheet({ instanceId, title }); }}
+                  />
+                ))
+              : zipFallback.tasks.map((task, i) => (
+                  <button
+                    key={task.id}
+                    onClick={() => navigate(`/browse-jobs`)}
+                    className="w-full flex items-center gap-3 px-2 py-3 text-left transition-colors active:bg-white/5"
+                    style={{ borderBottom: i < zipFallback.tasks.length - 1 ? `1px solid ${DARK_BORDER}` : "none" }}
+                    data-testid={`button-growth-task-${task.id}`}
+                  >
+                    <span className="text-xl flex-shrink-0">{task.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: DARK_TEXT, fontFamily: "Inter, sans-serif" }}>{task.title}</p>
+                      <p className="text-xs mt-0.5 truncate" style={{ color: DARK_MUTED, fontFamily: "Inter, sans-serif" }}>{task.description}</p>
+                    </div>
+                    <p className="text-xs font-bold flex-shrink-0" style={{ color: "#16a34a", fontFamily: "Inter, sans-serif" }}>+{task.rewardCredits} cr</p>
+                  </button>
+                ))
+            }
           </div>
         </div>
       )}
@@ -1400,6 +1521,14 @@ export default function MapExplore() {
             )}
           </div>
         </div>
+      )}
+      {proofSheet && (
+        <MissionProofSheet
+          instanceId={proofSheet.instanceId}
+          missionTitle={proofSheet.title}
+          onClose={() => setProofSheet(null)}
+          onSubmitted={() => setProofSheet(null)}
+        />
       )}
     </div>
     </GuberLayout>

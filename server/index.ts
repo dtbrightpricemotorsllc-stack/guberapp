@@ -737,44 +737,247 @@ app.use((req, res, next) => {
     ON CONFLICT DO NOTHING;
   `).catch(e => console.error("[migration] growth_score_ranks error:", e));
 
-  // Seed default growth task templates (6 canonical tasks)
   await pool.query(`
-    INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order) VALUES
-      ('🍔', 'Best Place To Eat',       'Nominate the best local restaurant or food spot in your ZIP.',       25, 50,  25, 'community', 1),
-      ('🔧', 'Trusted Local Business',   'Share a local business you trust and would recommend to neighbors.', 25, 50,  25, 'community', 2),
-      ('⛽', 'Cheapest Fuel Report',     'Report today''s cheapest gas price you''ve spotted in your area.',   20, 40,  25, 'community', 3),
-      ('💼', 'Hiring Alert',             'Know someone who''s hiring locally? Share the opportunity.',         30, 60,  25, 'community', 4),
-      ('📢', 'Share GUBER',             'Tell a neighbor about GUBER and what it does for your community.',   15, 30,  25, 'community', 5),
-      ('👥', 'Invite A User',           'Invite a friend or neighbor to join GUBER with your referral link.', 50, 100, 25, 'referral',  6)
-    ON CONFLICT DO NOTHING;
-  `).catch(e => console.error("[seed] growth task templates error:", e));
+    CREATE TABLE IF NOT EXISTS local_business_pins (
+      id                SERIAL PRIMARY KEY,
+      name              TEXT NOT NULL,
+      category          TEXT NOT NULL DEFAULT 'Business',
+      description       TEXT,
+      address           TEXT,
+      city              TEXT,
+      state             TEXT,
+      zip               TEXT,
+      lat               REAL NOT NULL,
+      lng               REAL NOT NULL,
+      phone             TEXT,
+      website           TEXT,
+      logo_url          TEXT,
+      status            TEXT NOT NULL DEFAULT 'active',
+      featured          BOOLEAN NOT NULL DEFAULT FALSE,
+      added_by_admin_id INTEGER,
+      created_at        TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] local_business_pins error:", e));
 
-  // Seed global fallback setting (enabled by default once feature flag is on)
+  // ── Credit Ledger + Cashout tables (Phase 1 credits rollout) ─────────────
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_credits           INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_credits_earned   INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_credits_redeemed INTEGER DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS credit_ledger (
+      id                 SERIAL PRIMARY KEY,
+      user_id            INTEGER NOT NULL,
+      amount             INTEGER NOT NULL,
+      dollar_equivalent  NUMERIC(10,4) NOT NULL DEFAULT 0,
+      source_type        TEXT NOT NULL,
+      task_completion_id INTEGER,
+      status             TEXT NOT NULL DEFAULT 'approved',
+      reason             TEXT,
+      created_at         TIMESTAMP DEFAULT NOW(),
+      approved_at        TIMESTAMP,
+      redeemed_at        TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_credit_ledger_user   ON credit_ledger(user_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_ledger_status ON credit_ledger(status);
+    CREATE INDEX IF NOT EXISTS idx_credit_ledger_created ON credit_ledger(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS cashout_requests (
+      id                SERIAL PRIMARY KEY,
+      user_id           INTEGER NOT NULL,
+      credits_requested INTEGER NOT NULL,
+      dollar_amount     NUMERIC(10,2) NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      payout_method     TEXT,
+      payout_details    TEXT,
+      admin_note        TEXT,
+      created_at        TIMESTAMP DEFAULT NOW(),
+      reviewed_at       TIMESTAMP,
+      reviewed_by       INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_cashout_requests_user   ON cashout_requests(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cashout_requests_status ON cashout_requests(status);
+  `).catch(e => console.error("[migration] credit ledger / cashout tables error:", e));
+
+  // ── Mission Instances + Proofs tables ─────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mission_instances (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL,
+      template_id     INTEGER NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'accepted',
+      zip             TEXT,
+      lat             REAL,
+      lng             REAL,
+      accepted_at     TIMESTAMP DEFAULT NOW(),
+      submitted_at    TIMESTAMP,
+      reviewed_at     TIMESTAMP,
+      reviewed_by     INTEGER,
+      credits_awarded INTEGER DEFAULT 0,
+      admin_note      TEXT,
+      created_at      TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_mission_instances_user     ON mission_instances(user_id);
+    CREATE INDEX IF NOT EXISTS idx_mission_instances_template ON mission_instances(template_id);
+    CREATE INDEX IF NOT EXISTS idx_mission_instances_status   ON mission_instances(status);
+
+    CREATE TABLE IF NOT EXISTS mission_proofs (
+      id                 SERIAL PRIMARY KEY,
+      instance_id        INTEGER NOT NULL REFERENCES mission_instances(id),
+      photo_url          TEXT,
+      gps_lat            REAL,
+      gps_lng            REAL,
+      captured_at        TIMESTAMP,
+      business_name      TEXT,
+      address            TEXT,
+      notes              TEXT,
+      device_fingerprint TEXT,
+      created_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_mission_proofs_instance ON mission_proofs(instance_id);
+  `).catch(e => console.error("[migration] mission_instances/proofs error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_interactions (
+      id          SERIAL PRIMARY KEY,
+      visitor_id  TEXT NOT NULL,
+      user_id     INTEGER REFERENCES users(id),
+      session_id  TEXT,
+      intent      TEXT,
+      messages    JSONB DEFAULT '[]',
+      zip         TEXT,
+      converted   BOOLEAN DEFAULT FALSE,
+      created_at  TIMESTAMP DEFAULT NOW(),
+      updated_at  TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_interactions_visitor ON jac_interactions(visitor_id);
+    CREATE INDEX IF NOT EXISTS idx_jac_interactions_created ON jac_interactions(created_at);
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS user_type TEXT;
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS tracking JSONB DEFAULT '{}';
+  `).catch(e => console.error("[migration] jac_interactions error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_user_profile (
+      user_id            INTEGER PRIMARY KEY REFERENCES users(id),
+      primary_goal       TEXT,
+      user_type          TEXT,
+      zip_code           TEXT,
+      interests          JSONB DEFAULT '[]',
+      service_needs      JSONB DEFAULT '[]',
+      work_interests     JSONB DEFAULT '[]',
+      transport_interest BOOLEAN DEFAULT FALSE,
+      creator_interest   BOOLEAN DEFAULT FALSE,
+      creator_platforms  JSONB DEFAULT '[]',
+      business_owner     BOOLEAN DEFAULT FALSE,
+      service_provider   BOOLEAN DEFAULT FALSE,
+      retired            BOOLEAN DEFAULT FALSE,
+      prefers_voice      BOOLEAN DEFAULT FALSE,
+      assistant_mode     TEXT DEFAULT 'full',
+      startup_behavior   TEXT DEFAULT 'show_summary',
+      voice_enabled      BOOLEAN DEFAULT TRUE,
+      language           TEXT DEFAULT 'en',
+      tutorial_status    TEXT DEFAULT 'not_started',
+      last_jac_summary   JSONB DEFAULT '{}',
+      updated_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS jac_tutorial_state (
+      user_id                  INTEGER PRIMARY KEY REFERENCES users(id),
+      tutorial_started         BOOLEAN DEFAULT FALSE,
+      tutorial_completed       BOOLEAN DEFAULT FALSE,
+      selected_goal            TEXT,
+      completed_steps          JSONB DEFAULT '[]',
+      skipped_steps            JSONB DEFAULT '[]',
+      last_tutorial_screen     TEXT,
+      needs_followup           BOOLEAN DEFAULT FALSE,
+      reset_count              INTEGER DEFAULT 0,
+      last_seen_feature_version TEXT DEFAULT '1.0',
+      updated_at               TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS jac_missed_actions (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id),
+      action_type  TEXT NOT NULL,
+      priority     TEXT DEFAULT 'medium',
+      title        TEXT NOT NULL,
+      description  TEXT,
+      route        TEXT,
+      cta_label    TEXT,
+      status       TEXT DEFAULT 'active',
+      created_at   TIMESTAMP DEFAULT NOW(),
+      dismissed_at TIMESTAMP,
+      remind_at    TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_missed_user ON jac_missed_actions(user_id, status);
+  `).catch(e => console.error("[migration] jac tables error:", e));
+
+  // Seed Phase 1 map mission templates — deactivate old placeholders first
+  await pool.query(`
+    UPDATE growth_task_templates SET is_active = false, paused = true
+    WHERE title IN (
+      'Best Place To Eat','Trusted Local Business','Cheapest Fuel Report',
+      'Hiring Alert','Share GUBER','Invite A User'
+    );
+    INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order) VALUES
+      ('🗺️', 'Submit Local Recommendation',   'Share a trusted local business, restaurant, or service you would recommend to neighbors in your area.',  25,  25, 100, 'map_mission', 1),
+      ('⛽', 'Fuel Price Report',              'Report today''s cheapest gas price you have spotted nearby. Include the station name and price.',           50,  50, 100, 'map_mission', 2),
+      ('🏪', 'Verify Business Hours',          'Confirm a local business''s hours are correct. Take a photo of their door sign or hours display.',         75,  75, 100, 'map_mission', 3),
+      ('📍', 'Add Useful Local Info',          'Share helpful information about a local spot — parking notes, access tips, or anything the community needs to know.', 100, 100, 100, 'map_mission', 4),
+      ('📅', 'Submit Local Event',             'Know of a local event, market, job fair, or community opportunity? Share it so neighbors can take advantage.', 100, 100, 100, 'map_mission', 5),
+      ('❌', 'Report Wrong or Closed Business','Found a business listed incorrectly or permanently closed? Help keep the map accurate.',                    100, 100, 100, 'map_mission', 6),
+      ('📷', 'Add Storefront Photo',           'Take a clear photo of a local business storefront. Helps the community recognize and find it.',             100, 100, 100, 'map_mission', 7),
+      ('⭐', 'High-Value Verified Local Intel','Submit exceptionally useful, verified local information. Admin-reviewed. Up to 500 credits for top-tier intel.', 500, 500, 100, 'map_mission', 8)
+    ON CONFLICT DO NOTHING;
+    -- Fix OG bonus for any templates already in DB with old 25% value
+    UPDATE growth_task_templates SET og_bonus_pct = 100
+    WHERE og_bonus_pct = 25 AND category IN ('map_mission','profile_mission');
+  `).catch(e => console.error("[seed] Phase 1 map mission templates error:", e));
+
+  await pool.query(`
+    INSERT INTO growth_task_templates (emoji, title, description, reward_credits, reward_score, og_bonus_pct, category, sort_order)
+    VALUES ('📡', 'Set Your Availability + Skills', 'Mark yourself available and describe what tasks or services you can do so hirers know you are on standby. Skilled trade workers must have valid credentials on file.', 200, 200, 100, 'profile_mission', 1)
+    ON CONFLICT DO NOTHING;
+  `).catch(e => console.error("[seed] profile_mission template error:", e));
+
+  // Seed global fallback setting — show missions even when real jobs exist so the map is always useful
   await pool.query(`
     INSERT INTO zip_fallback_settings (scope, scope_value, enabled, show_when_real_jobs_exist, max_tasks_shown)
-    VALUES ('global', '', true, false, 6)
-    ON CONFLICT (scope, scope_value) DO NOTHING;
+    VALUES ('global', '', true, true, 6)
+    ON CONFLICT (scope, scope_value) DO UPDATE
+      SET show_when_real_jobs_exist = true,
+          enabled = true;
   `).catch(e => console.error("[seed] zip fallback global setting error:", e));
 
-  // Seed reward config keys (admin can edit values; defaults are conservative)
+  // Seed/update reward config — ON CONFLICT DO UPDATE so ratio changes apply to existing DBs
   await pool.query(`
     INSERT INTO growth_reward_config (key, value_int, label, description) VALUES
-      ('referral_signup_credits',             2,    'Referral: Signup Credits',              'Credits awarded to referrer when referred user creates account'),
-      ('referral_signup_score',               25,   'Referral: Signup Score',                'Score awarded to referrer when referred user creates account'),
-      ('referral_verified_credits',           10,   'Referral: ID Verified Credits',         'Credits awarded to referrer when referred user verifies ID'),
-      ('referral_verified_score',             100,  'Referral: ID Verified Score',           'Score awarded to referrer when referred user verifies ID'),
-      ('referral_stripe_connected_credits',   25,   'Referral: Stripe Connected Credits',    'Credits awarded when referred user connects Stripe payout'),
-      ('referral_stripe_connected_score',     250,  'Referral: Stripe Connected Score',      'Score awarded when referred user connects Stripe payout'),
-      ('referral_first_paid_job_credits',     100,  'Referral: First Paid Job Credits',      'Credits awarded to referrer when referred user completes first paid job'),
-      ('referral_first_paid_job_score',       1000, 'Referral: First Paid Job Score',        'Score awarded to referrer when referred user completes first paid job'),
-      ('referral_og_purchase_referrer_credits', 50, 'Referral: OG Purchase (Referrer) Credits', 'Credits to referrer when referred user buys Day-1 OG'),
-      ('referral_og_purchase_referrer_score',  500, 'Referral: OG Purchase (Referrer) Score',   'Score to referrer when referred user buys Day-1 OG'),
-      ('referral_og_purchase_referred_credits', 25, 'Referral: OG Purchase (Referred) Credits', 'Credits to referred user for purchasing Day-1 OG via referral'),
-      ('referral_og_purchase_referred_score',  250, 'Referral: OG Purchase (Referred) Score',   'Score to referred user for purchasing Day-1 OG via referral'),
-      ('cashout_minimum_credits',             1000, 'Cashout Minimum Credits',               'Minimum growth credits required to request a cashout (100 cr = $1)'),
-      ('credits_per_dollar',                  100,  'Credits Per Dollar',                    'Number of growth credits equal to $1 USD'),
-      ('og_bonus_pct',                        25,   'Day-1 OG Bonus %',                      'Extra % credits/score earned by Day-1 OG members on growth tasks')
-    ON CONFLICT (key) DO NOTHING;
+      ('referral_signup_credits',               250,   'Referral: Signup Credits (pending)',    'Credits awarded (pending) to referrer when referred user creates account'),
+      ('referral_signup_score',                  25,   'Referral: Signup Score',                'Score awarded to referrer when referred user creates account'),
+      ('referral_verified_credits',             500,   'Referral: ID Verified Credits',         'Credits approved to referrer when referred user verifies ID'),
+      ('referral_verified_score',               100,   'Referral: ID Verified Score',           'Score awarded to referrer when referred user verifies ID'),
+      ('referral_stripe_connected_credits',     500,   'Referral: Stripe Connected Credits',    'Credits awarded when referred user connects Stripe payout'),
+      ('referral_stripe_connected_score',       250,   'Referral: Stripe Connected Score',      'Score awarded when referred user connects Stripe payout'),
+      ('referral_first_paid_job_credits',      1500,   'Referral: First Paid Job Credits',      'Credits awarded to referrer when referred user completes first paid job'),
+      ('referral_first_paid_job_score',        1000,   'Referral: First Paid Job Score',        'Score awarded to referrer when referred user completes first paid job'),
+      ('referral_og_purchase_referrer_credits', 2500,  'Referral: OG Purchase (Referrer) Credits', 'Credits to referrer when referred user buys Day-1 OG'),
+      ('referral_og_purchase_referrer_score',   500,   'Referral: OG Purchase (Referrer) Score',   'Score to referrer when referred user buys Day-1 OG'),
+      ('referral_og_purchase_referred_credits', 1000,  'Referral: OG Purchase (Referred) Credits', 'Credits to referred user for purchasing Day-1 OG via referral'),
+      ('referral_og_purchase_referred_score',   250,   'Referral: OG Purchase (Referred) Score',   'Score to referred user for purchasing Day-1 OG via referral'),
+      ('cashout_minimum_credits',              50000,  'Cashout Minimum Credits',               'Minimum approved credits required to request a cashout (1000 cr = $1, min = $50)'),
+      ('credits_per_dollar',                    1000,  'Credits Per Dollar',                    'Number of growth credits equal to $1 USD'),
+      ('og_bonus_pct',                           100,  'Day-1 OG Bonus %',                      'Extra % credits/score earned by Day-1 OG members on growth tasks (100% = double)'),
+      ('cashout_enabled',                          0,  'Cashout Enabled',                       'Global toggle: 1 = cashout requests allowed, 0 = disabled')
+    ON CONFLICT (key) DO UPDATE
+      SET value_int = EXCLUDED.value_int,
+          label     = EXCLUDED.label,
+          description = EXCLUDED.description,
+          updated_at  = NOW()
+    WHERE growth_reward_config.key IN (
+      'credits_per_dollar','cashout_minimum_credits','og_bonus_pct',
+      'referral_signup_credits','referral_verified_credits',
+      'referral_stripe_connected_credits','referral_first_paid_job_credits',
+      'referral_og_purchase_referrer_credits','referral_og_purchase_referred_credits',
+      'cashout_enabled'
+    );
   `).catch(e => console.error("[seed] growth reward config error:", e));
 
   await registerRoutes(httpServer, app);
@@ -803,6 +1006,21 @@ app.use((req, res, next) => {
   seedBarterChecklists().catch(e => console.error("[seed] Barter checklists seed error:", e));
   reseedOnlineItemsSituations().catch(e => console.error("[seed] Online Items reseed error:", e));
   seedPlatformSettings().catch(e => console.error("[seed] Platform settings seed error:", e));
+
+  pool.query(`
+    INSERT INTO studio_model_pricing (tool_key, label, description, provider_endpoint, credits_cost, active) VALUES
+      ('listing_video', 'Listing Video',
+       'Property or product listing walkthrough video (35 cr).',
+       'composite:listing_video', 35, true),
+      ('promo_clip', 'Promo Clip',
+       'Short promotional video clip for any business type (35 cr).',
+       'composite:promo_clip', 35, true),
+      ('ai_director', 'AI Director',
+       'Automated commercial director — script → clips → assembled ad (200–2240 cr based on duration).',
+       'composite:ai_director', 200, true)
+    ON CONFLICT (tool_key) DO NOTHING
+  `).catch(e => console.error("[seed] Studio model pricing seed error:", e));
+
   seedDemoAccounts().then(() => invalidateDemoIdCache()).catch(e => console.error("[seed] Demo accounts seed error:", e));
   seedMarketplaceSamples().catch(e => console.error("[seed] Marketplace samples seed error:", e));
   pool.query("UPDATE jobs SET status = 'posted_public' WHERE status = 'open'").then((r: any) => {

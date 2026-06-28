@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { readListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -167,9 +168,9 @@ const VEHICLE_TYPES_HAULER = [
 const ADDON_OPTIONS: { key: string; label: string; price: number; hint: string }[] = [
   { key: "urgent_boost",         label: "⚡ Urgent Boost",           price: 10, hint: "Pin your listing at the top for faster responses" },
   { key: "premium_carrier_only", label: "🛡️ Verified Carriers Only", price: 10, hint: "Restrict offers to GUBER-credentialed carriers" },
-  { key: "photo_proof",          label: "📸 Photo Proof at Pickup",   price: 25, hint: "GUBER worker documents freight before transport" },
-  { key: "loading_help",         label: "🤝 Loading Assistance",      price: 10, hint: "GUBER worker helps load freight onto carrier" },
-  { key: "unloading_help",       label: "🤝 Unloading Assistance",    price: 10, hint: "GUBER worker helps unload at destination" },
+  { key: "photo_proof",          label: "📸 Photo Proof at Pickup",   price: 25, hint: "GUBER helper documents freight before transport" },
+  { key: "loading_help",         label: "🤝 Loading Assistance",      price: 10, hint: "GUBER helper assists with loading freight onto carrier" },
+  { key: "unloading_help",       label: "🤝 Unloading Assistance",    price: 10, hint: "GUBER helper assists with unloading at destination" },
   { key: "gps_tracking",         label: "📡 GPS Tracking",            price: 15, hint: "Real-time location updates during transport" },
 ];
 
@@ -298,6 +299,7 @@ export default function LoadBoardPost() {
   const [step, setStep] = useState<Step>(1);
 
   // Step 1 — trailer type
+  // statebleed-allow: JAC prefill sets trailerType + all scoped fields together atomically
   const [freightTrailerType, setFreightTrailerType] = useState("");
 
   // Step 2 — route
@@ -387,6 +389,22 @@ export default function LoadBoardPost() {
   // the iOS ExternalPurchaseSheet can mount with the right options and fire.
   const [pendingProtection, setPendingProtection] = useState<number | null>(null);
   const iosPurchaseRef = useRef<(() => void) | null>(null);
+
+  // ── JAC prefill: auto-populate from listing-collect conversation ──
+  useEffect(() => {
+    const prefill = readListingPrefill();
+    if (!prefill || prefill.type !== "load") return;
+    const c = prefill.collected;
+    clearListingPrefill();
+    if (c.trailer_type) setFreightTrailerType(c.trailer_type);
+    if (c.pickup_zip) setPickupZip(String(c.pickup_zip));
+    if (c.delivery_zip) setDeliveryZip(String(c.delivery_zip));
+    if (c.commodity_type) setCommodityType(c.commodity_type);
+    if (c.weight_lbs) setWeightLbs(String(c.weight_lbs));
+    if (c.notes) setNotes(c.notes);
+    if (c.trailer_type) setStep(2);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (pendingProtection != null && isIOS) iosPurchaseRef.current?.();
@@ -1627,7 +1645,7 @@ export default function LoadBoardPost() {
               type="button"
               className="flex-1 rounded-2xl h-12 font-display font-black text-sm tracking-wide"
               style={canAdvance()
-                ? (activeType ? { background: `linear-gradient(135deg,${activeType.accent}dd,${activeType.accent}99)` } : CYAN_ACTIVE)
+                ? { background: "linear-gradient(135deg,#00e576,#00c864)", color: "#0a1a0f" }
                 : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)" }
               }
               onClick={advance}

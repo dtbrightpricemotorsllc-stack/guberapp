@@ -383,7 +383,7 @@ export default function BizDashboard() {
                   <p className="text-[13px] leading-relaxed mb-1" style={{ color: TEXT_SECONDARY }}>
                     Request GPS-verified, time-stamped visual confirmation of vehicles, property, and equipment before lending, buying, or funding.
                   </p>
-                  <p className="text-xs" style={{ color: TEXT_MUTED }}>Physical presence + photo proof package delivered by verified GUBER workers.</p>
+                  <p className="text-xs" style={{ color: TEXT_MUTED }}>Physical presence + photo proof package delivered by verified GUBER helpers.</p>
                 </div>
                 <ChevronRight className="w-5 h-5 flex-shrink-0 mt-1 opacity-20 group-hover:opacity-50 transition-opacity" style={{ color: "#00e676" }} />
               </div>

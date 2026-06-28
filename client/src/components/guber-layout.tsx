@@ -10,7 +10,7 @@ import { BackgroundLocationModal } from "@/components/background-location-modal"
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { GuberLogo } from "./guber-logo";
-import { GUBERAssistant, GUBERAssistantHeaderButton } from "./guber-assistant";
+import { GUBERAssistant, GUBERAssistantHeaderButton, DDFloatingButton } from "./guber-assistant";
 import { AdminDiagnosticAssistant } from "./admin-diagnostic-assistant";
 import { ActiveJobBanner } from "./active-job-banner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -451,6 +451,7 @@ export function GuberLayout({ children, hideHeader, showBack, backHref, onBack, 
         {children}
       </main>
 
+      <DDFloatingButton />
       <GUBERAssistant />
       {isAdmin && location === "/admin" && <AdminDiagnosticAssistant />}
 

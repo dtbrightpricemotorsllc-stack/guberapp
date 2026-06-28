@@ -101,10 +101,16 @@ export async function browserGoogleSignIn(opts?: {
       try {
         browserListener = await Browser.addListener("browserFinished", async () => {
           trace("browser_closed_event", {});
-          const consumed = await consumeTokenIfReady("browser_close", 0);
-          if (!consumed && !resolved) {
-            finish({ ok: false, reason: "cancelled" });
+          // The server-side token write and the browser-close event can arrive in
+          // either order. Retry up to 10 times (2 s) before giving up so a small
+          // server round-trip delay doesn't force the user to tap again.
+          for (let i = 0; i < 10; i++) {
+            if (resolved) return;
+            const consumed = await consumeTokenIfReady("browser_close", i);
+            if (consumed) return;
+            await new Promise<void>((r) => setTimeout(r, 200));
           }
+          if (!resolved) finish({ ok: false, reason: "cancelled" });
         });
 
         opts?.onPhaseChange?.("browser_open");

@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { taskTrackingService } from "@/services/location/TaskTrackingService";
+import { isIOS } from "@/lib/platform";
 import {
   Truck, MapPin, Loader2, ShieldCheck,
-  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil,
+  Zap, Lock, Check, X, ChevronRight, ShoppingCart, Info, Star, Pencil, Navigation,
 } from "lucide-react";
 
 // ── constants ──────────────────────────────────────────────────────────────────
@@ -39,15 +41,15 @@ const ADDON_PRICES: Record<string, { label: string; price: number; hint: string 
   urgent_boost:         { label: "Urgent Boost",             price: 10,  hint: "Priority placement" },
   premium_carrier_only: { label: "Verified Carriers Only",   price: 10,  hint: "Credential-gated" },
   photo_proof:          { label: "Photo Proof at Pickup",    price: 25,  hint: "GUBER documents asset" },
-  loading_help:         { label: "Loading Assistance",       price: 10,  hint: "GUBER worker helps load" },
-  unloading_help:       { label: "Unloading Assistance",     price: 10,  hint: "GUBER worker helps unload" },
+  loading_help:         { label: "Loading Assistance",       price: 10,  hint: "GUBER helper assists with loading" },
+  unloading_help:       { label: "Unloading Assistance",     price: 10,  hint: "GUBER helper assists with unloading" },
   vin_verification:     { label: "VIN Verification",         price: 15,  hint: "Confirms VIN matches vehicle" },
   gps_tracking:         { label: "GPS Tracking",             price: 15,  hint: "Real-time transport updates" },
 };
 
 // Field services (purchasable after posting via cart)
 const FIELD_SERVICES: { key: string; label: string; price: number; desc: string }[] = [
-  { key: "pre_transport_verification", label: "Pre-Transport Verification", price: 25, desc: "GUBER worker inspects vehicle before transport" },
+  { key: "pre_transport_verification", label: "Pre-Transport Verification", price: 25, desc: "GUBER helper inspects vehicle before transport" },
   { key: "loading_witness",            label: "Loading Witness",            price: 25, desc: "GUBER witnesses and documents loading" },
   { key: "unloading_witness",          label: "Unloading Witness",          price: 25, desc: "GUBER witnesses and documents unloading" },
   { key: "premium_bundle",             label: "Premium Bundle (all 3)",     price: 65, desc: "All 3 GUBER field services at once" },
@@ -61,6 +63,35 @@ const CONNECTION_TIERS = [
 
 const PLATFORM_FEE_RATE = 0.08; // 8%
 
+// ── Demo mode data ─────────────────────────────────────────────────────────────
+
+const DEMO_DETAIL_MAP: Record<number, { listing: any; offers: any[]; myOffer: any; isPoster: boolean; addons: any[]; protectedAsset: null }> = {
+  9001: {
+    listing: { id: 9001, transportType: "vehicle", year: 2023, make: "Porsche", model: "911 GT3", pickupCity: "Atlanta", pickupState: "GA", deliveryCity: "Miami", deliveryState: "FL", pickupAddress: null, deliveryAddress: null, postedPrice: 1800, ownershipProofStatus: "title_in_hand", status: "offer_received", urgent: true, addonFlags: ["urgent_boost", "photo_proof"], estimatedMiles: 662, trailerPreference: "enclosed", vehicleCondition: ["operable"], pickupFlexibility: "business_hours", notes: "Show car, low miles. Needs enclosed transport. Flexible pickup window.", poster: { guberId: "MIKE_R", rating: 4.9, reviewCount: 47, fullName: null }, vinVerified: false, freightTrailerType: null, activationFeePaid: false, connectedCarrierId: null },
+    offers: [
+      { id: 9901, carrierId: 1, offerAmount: 1620, status: "pending", actionCount: 1, counterAmount: null },
+      { id: 9902, carrierId: 2, offerAmount: 1750, status: "pending", actionCount: 1, counterAmount: null },
+    ],
+    myOffer: null, isPoster: true, addons: [], protectedAsset: null,
+  },
+  9002: {
+    listing: { id: 9002, transportType: "boat", assetDescription: "2020 Sea Ray 350SLX", pickupCity: "Dallas", pickupState: "TX", deliveryCity: "Houston", deliveryState: "TX", pickupAddress: null, deliveryAddress: null, postedPrice: 480, ownershipProofStatus: "bill_of_sale", status: "posted", urgent: false, addonFlags: [], estimatedMiles: 239, poster: { guberId: "COASTAL_J", rating: 4.7, reviewCount: 12, fullName: null }, freightTrailerType: null, activationFeePaid: false, connectedCarrierId: null },
+    offers: [], myOffer: null, isPoster: false, addons: [], protectedAsset: null,
+  },
+  9003: {
+    listing: { id: 9003, transportType: "rv", year: 2021, make: "Airstream", model: "Classic 33FB", pickupCity: "Nashville", pickupState: "TN", deliveryCity: "Orlando", deliveryState: "FL", pickupAddress: null, deliveryAddress: null, postedPrice: 650, ownershipProofStatus: "title_in_hand", status: "posted", urgent: false, addonFlags: ["gps_tracking"], estimatedMiles: 558, poster: { guberId: "TRAVEL_K", rating: 5.0, reviewCount: 8, fullName: null }, freightTrailerType: null, activationFeePaid: false, connectedCarrierId: null },
+    offers: [], myOffer: null, isPoster: false, addons: [], protectedAsset: null,
+  },
+  9004: {
+    listing: { id: 9004, transportType: "equipment", assetDescription: "John Deere 310L Backhoe", pickupCity: "Denver", pickupState: "CO", deliveryCity: "Phoenix", deliveryState: "AZ", pickupAddress: null, deliveryAddress: null, postedPrice: 1250, ownershipProofStatus: "dealer_owned", status: "posted", urgent: false, addonFlags: ["premium_carrier_only", "vin_verification"], estimatedMiles: 602, poster: { guberId: "EQUIP_PRO", rating: 4.8, reviewCount: 23, fullName: null }, freightTrailerType: null, activationFeePaid: false, connectedCarrierId: null },
+    offers: [], myOffer: null, isPoster: false, addons: [], protectedAsset: null,
+  },
+  9005: {
+    listing: { id: 9005, transportType: "freight", freightTrailerType: "dry_van", assetDescription: "Electronics — Dry Van", pickupCity: "Chicago", pickupState: "IL", deliveryCity: "Detroit", deliveryState: "MI", pickupAddress: null, deliveryAddress: null, postedPrice: 950, status: "posted", urgent: false, addonFlags: [], estimatedMiles: 281, weightLbs: 14000, palletCount: 18, dockPickup: true, dockDelivery: false, poster: { guberId: "FREIGHT_CO", rating: 4.6, reviewCount: 91, fullName: null }, activationFeePaid: false, connectedCarrierId: null },
+    offers: [], myOffer: null, isPoster: false, addons: [], protectedAsset: null,
+  },
+};
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 export default function LoadBoardDetail() {
@@ -68,6 +99,8 @@ export default function LoadBoardDetail() {
   const [, navigate] = useLocation();
   const { toast }   = useToast();
   const listingId   = params?.id ? parseInt(params.id) : 0;
+  const isDemo = listingId >= 9000 || new URLSearchParams(window.location.search).has("demo");
+  const demoToast = (msg: string) => toast({ title: "🎬 Demo Mode", description: msg });
 
   // Offer flow
   const [offerAmount,   setOfferAmount]   = useState("");
@@ -86,7 +119,7 @@ export default function LoadBoardDetail() {
   const [fieldCart, setFieldCart] = useState<string[]>([]);
   const [showFieldCart, setShowFieldCart] = useState(false);
 
-  const { data, isLoading } = useQuery<{
+  const { data: rawData, isLoading: rawLoading } = useQuery<{
     listing: any; offers: any[]; myOffer: any; isPoster: boolean; addons: any[]; protectedAsset: any | null;
   }>({
     queryKey: ["/api/load-board", listingId],
@@ -94,8 +127,10 @@ export default function LoadBoardDetail() {
       const res = await fetch(`/api/load-board/${listingId}`, { credentials: "include" });
       return res.json();
     },
-    enabled: !!listingId,
+    enabled: !!listingId && !isDemo,
   });
+  const data = isDemo ? (DEMO_DETAIL_MAP[listingId] ?? DEMO_DETAIL_MAP[9001]) : rawData;
+  const isLoading = isDemo ? false : rawLoading;
 
 
   // ── Detect Stripe redirect back (accept offer or addon) ──
@@ -134,14 +169,46 @@ export default function LoadBoardDetail() {
     }
   }, [listingId]);
 
-  // Request background location for the carrier once the load is connected.
-  // Non-blocking — transport proceeds even if the carrier declines.
+  // Tracking state — mirrors the service singleton so the UI re-renders on change.
+  const [isTracking, setIsTracking] = useState(() => taskTrackingService.isTracking());
+
+  // Start / stop background GPS for the carrier during active Load Board transport.
+  //
+  // - iOS: uses @capacitor-community/background-geolocation so fixes continue
+  //   when the app is backgrounded or the screen is locked.
+  // - Android: fires the in-app background-location disclosure then relies on
+  //   the foreground service notification for continued delivery.
+  // - Web: standard foreground watch (no background needed).
+  //
+  // Tracking is gated on: status === "connected" AND user is the carrier.
+  // It stops automatically when the server reports { active: false } (job ended /
+  // cancelled) or when the component sees the status leave "connected".
   useEffect(() => {
     if (!data?.listing) return;
-    if (data.listing.status !== "connected") return;
-    if (data.isPoster) return; // poster doesn't need tracking
-    void ensureBackgroundLocation("load_board");
-  }, [data?.listing?.status, data?.isPoster]);
+    const isCarrier = !data.isPoster;
+    const shouldTrack = data.listing.status === "connected" && isCarrier;
+
+    if (shouldTrack) {
+      if (isIOS) {
+        void taskTrackingService.startTask(listingId);
+      } else {
+        void ensureBackgroundLocation("load_board").then(() =>
+          taskTrackingService.startTask(listingId)
+        );
+      }
+    } else {
+      // Status left "connected" (completed / cancelled) — stop immediately.
+      if (taskTrackingService.getActiveJobId() === listingId) {
+        void taskTrackingService.stopTask(listingId);
+      }
+    }
+
+    // Keep UI in sync with service state.
+    const tick = () => setIsTracking(taskTrackingService.isTracking());
+    const interval = setInterval(tick, 2000);
+    tick();
+    return () => clearInterval(interval);
+  }, [data?.listing?.status, data?.isPoster, listingId]);
 
   // ── Mutations ──
   const offerMutation = useMutation({
@@ -336,8 +403,8 @@ export default function LoadBoardDetail() {
           <Button
             className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
             style={CYAN_ACTIVE}
-            onClick={() => acceptOfferCheckoutMutation.mutate({ offerId: pendingOffer.id, addonTypes: posterAddonCart })}
-            disabled={acceptOfferCheckoutMutation.isPending}
+            onClick={() => isDemo ? demoToast("Payment processed — offer accepted, carrier receives funds via Stripe.") : acceptOfferCheckoutMutation.mutate({ offerId: pendingOffer.id, addonTypes: posterAddonCart })}
+            disabled={!isDemo && acceptOfferCheckoutMutation.isPending}
             data-testid="button-confirm-pay-accept"
           >
             {acceptOfferCheckoutMutation.isPending
@@ -403,8 +470,8 @@ export default function LoadBoardDetail() {
           <Button
             className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
             style={CYAN_ACTIVE}
-            onClick={() => connectMutation.mutate(selectedTier)}
-            disabled={connectMutation.isPending}
+            onClick={() => isDemo ? demoToast("Connected! Shipper's full address and contact info would be revealed now.") : connectMutation.mutate(selectedTier)}
+            disabled={!isDemo && connectMutation.isPending}
             data-testid="button-pay-connect"
           >
             {connectMutation.isPending
@@ -489,8 +556,8 @@ export default function LoadBoardDetail() {
           <Button
             className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
             style={CYAN_ACTIVE}
-            onClick={() => fieldCartCheckoutMutation.mutate(fieldCart)}
-            disabled={fieldCartCheckoutMutation.isPending}
+            onClick={() => isDemo ? demoToast("GUBER field workers dispatched — they'll meet the carrier at pickup.") : fieldCartCheckoutMutation.mutate(fieldCart)}
+            disabled={!isDemo && fieldCartCheckoutMutation.isPending}
             data-testid="button-pay-field-cart"
           >
             {fieldCartCheckoutMutation.isPending
@@ -509,8 +576,16 @@ export default function LoadBoardDetail() {
   // ── Main detail view ───────────────────────────────────────────────────────
 
   return (
-    <GuberLayout title="Load Detail" showBack backHref="/load-board">
+    <GuberLayout title="Load Detail" showBack backHref={isDemo ? "/load-board?demo=1" : "/load-board"}>
       <div className="px-4 pb-28 pt-2 space-y-4">
+
+        {/* ── Demo mode banner ── */}
+        {isDemo && (
+          <div className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-display font-black"
+            style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)", color: "#fbbf24" }}>
+            🎬 DEMO MODE — Buttons show how the flow works
+          </div>
+        )}
 
         {/* ── Header card ── */}
         <div
@@ -536,6 +611,9 @@ export default function LoadBoardDetail() {
                 {sc && <span className={`text-[10px] font-display font-bold ${sc.color}`}>{sc.label}</span>}
               </div>
               <p className="text-base font-display font-black text-foreground leading-tight">{assetTitle}</p>
+              {listing.assetDescription && listing.assetDescription !== assetTitle && (
+                <p className="text-xs text-muted-foreground/60 mt-0.5 leading-snug">{listing.assetDescription}</p>
+              )}
               {listing.vinVerified && listing.vin && (
                 <p className="text-[9px] text-cyan-400/60 mt-0.5 font-mono flex items-center gap-1">
                   <Check className="w-2.5 h-2.5" /> VIN verified: {listing.vin}
@@ -597,6 +675,17 @@ export default function LoadBoardDetail() {
           </div>
         </div>
 
+        {/* ── Shipper notes ── */}
+        {listing.notes && (
+          <div className="rounded-2xl p-4 flex items-start gap-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}>
+            <Info className="w-4 h-4 text-muted-foreground/40 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-1">Shipper Notes</p>
+              <p className="text-xs text-foreground/70 leading-relaxed">{listing.notes}</p>
+            </div>
+          </div>
+        )}
+
         {/* ── Asset requirements ── */}
         {(listing.vehicleCondition?.length || listing.trailerPreference || listing.weightRange ||
           listing.loadingMethod?.length || listing.pickupAccess?.length) && (
@@ -631,6 +720,27 @@ export default function LoadBoardDetail() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Non-freight transport details (vehicle / boat / rv / equipment) ── */}
+        {!listing.freightTrailerType && (listing.vehicleType || listing.boatType || listing.rvClass ||
+          listing.equipmentType || listing.carrierType || listing.vehicleCount ||
+          listing.pickupDate || listing.deliveryDate || listing.weightLbs ||
+          listing.weatherSensitive || listing.sideLoadRequired) && (
+          <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Transport Details</p>
+            {listing.vehicleType && <DetailRow label="Vehicle Type" value={listing.vehicleType.replace(/_/g, " ")} />}
+            {listing.boatType && <DetailRow label="Boat Type" value={listing.boatType.replace(/_/g, " ")} />}
+            {listing.rvClass && <DetailRow label="RV Class" value={listing.rvClass.replace(/_/g, " ")} />}
+            {listing.equipmentType && <DetailRow label="Equipment Type" value={listing.equipmentType.replace(/_/g, " ")} />}
+            {listing.carrierType && <DetailRow label="Carrier Type" value={listing.carrierType === "open" ? "Open Carrier" : "Enclosed Carrier"} />}
+            {listing.vehicleCount && <DetailRow label="Vehicle Count" value={String(listing.vehicleCount)} />}
+            {listing.weightLbs && <DetailRow label="Weight" value={`${listing.weightLbs.toLocaleString()} lbs`} />}
+            {listing.pickupDate && <DetailRow label="Pickup Date" value={listing.pickupDate} />}
+            {listing.deliveryDate && <DetailRow label="Delivery Date" value={listing.deliveryDate} />}
+            {listing.weatherSensitive && <DetailRow label="Weather Sensitive" value="⚠️ Yes — enclosed or covered transport required" />}
+            {listing.sideLoadRequired && <DetailRow label="Side Load" value="⚠️ Required" />}
           </div>
         )}
 
@@ -700,6 +810,42 @@ export default function LoadBoardDetail() {
           </div>
         )}
 
+        {/* ── Carrier GPS tracking status ── */}
+        {isConnected && !data.isPoster && (
+          <div
+            className="rounded-2xl p-3.5 flex items-center justify-between gap-3"
+            style={isTracking
+              ? { background: "rgba(6,182,212,0.10)", border: "1px solid rgba(6,182,212,0.35)" }
+              : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            data-testid="tracking-status-banner"
+          >
+            <div className="flex items-center gap-2">
+              <Navigation className={`w-4 h-4 shrink-0 ${isTracking ? "text-cyan-400" : "text-muted-foreground/40"}`} />
+              <div>
+                <p className={`text-xs font-display font-bold ${isTracking ? "text-cyan-400" : "text-muted-foreground/50"}`}>
+                  {isTracking ? "Location tracking ON" : "Location tracking OFF"}
+                </p>
+                <p className="text-[9px] text-muted-foreground/30 mt-0.5">
+                  {isTracking
+                    ? "Your location is being shared with the shipper for this transport job."
+                    : "Tracking starts automatically when transport is active."}
+                </p>
+              </div>
+            </div>
+            {isTracking && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-[10px] text-muted-foreground/50 hover:text-red-400 px-2 h-7 shrink-0"
+                data-testid="button-stop-tracking"
+                onClick={() => { void taskTrackingService.stopTask(listingId); setIsTracking(false); }}
+              >
+                Stop
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* ════════ FREIGHT FIELDS ════════ */}
         {listing.freightTrailerType && (
           <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -730,6 +876,8 @@ export default function LoadBoardDetail() {
             {listing.carrierType && <DetailRow label="Carrier Type" value={listing.carrierType === "open" ? "Open Carrier" : "Enclosed Carrier"} />}
             {listing.pickupDate && <DetailRow label="Pickup Date" value={listing.pickupDate} />}
             {listing.deliveryDate && <DetailRow label="Delivery Date" value={listing.deliveryDate} />}
+            {listing.weatherSensitive && <DetailRow label="Weather Sensitive" value="⚠️ Yes" />}
+            {listing.sideLoadRequired && <DetailRow label="Side Load" value="⚠️ Required" />}
             {listing.customFreightType && <DetailRow label="Freight Type" value={listing.customFreightType} />}
           </div>
         )}
@@ -771,8 +919,8 @@ export default function LoadBoardDetail() {
                 <Button
                   className="w-full rounded-2xl h-11 font-display font-black text-sm tracking-wide"
                   style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)" }}
-                  onClick={() => activateMutation.mutate()}
-                  disabled={activateMutation.isPending}
+                  onClick={() => isDemo ? demoToast("Payment confirmed — carrier is notified and load goes live.") : activateMutation.mutate()}
+                  disabled={!isDemo && activateMutation.isPending}
                   data-testid="button-activate-load"
                 >
                   {activateMutation.isPending
@@ -796,7 +944,7 @@ export default function LoadBoardDetail() {
                 variant="outline"
                 size="sm"
                 className="w-full rounded-xl h-9 font-display font-black text-xs mb-1"
-                onClick={() => navigate(`/load-board/${listingId}/edit`)}
+                onClick={() => isDemo ? demoToast("Opens the listing editor to update route, price or details.") : navigate(`/load-board/${listingId}/edit`)}
                 data-testid="button-edit-listing"
               >
                 <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Listing
@@ -822,7 +970,7 @@ export default function LoadBoardDetail() {
               >
                 <div>
                   <p className="text-sm font-display font-bold text-foreground">Field Services</p>
-                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER workers — add to cart, pay together</p>
+                  <p className="text-[10px] text-muted-foreground/40 mt-0.5">GUBER helpers — add to cart, pay together</p>
                 </div>
                 {fieldCart.length > 0 && (
                   <span className="text-[10px] font-display font-black px-2 py-0.5 rounded-full text-cyan-400"
@@ -916,6 +1064,7 @@ export default function LoadBoardDetail() {
                             className="rounded-xl h-8 px-3 font-display font-black text-xs"
                             style={CYAN_ACTIVE}
                             onClick={() => {
+                              if (isDemo) { demoToast("Tapping Accept opens a checkout summary — platform fee + optional add-ons — before any charge."); return; }
                               setPendingOffer(o);
                               setShowPosterCheckout(true);
                             }}
@@ -937,8 +1086,8 @@ export default function LoadBoardDetail() {
                                 size="sm"
                                 variant="outline"
                                 className="rounded-xl h-8 px-3 font-display font-black text-xs"
-                                onClick={() => respondMutation.mutate({ offerId: o.id, action: "counter", counterAmount: parseFloat(counterAmount) })}
-                                disabled={!counterAmount || respondMutation.isPending}
+                                onClick={() => isDemo ? demoToast("Counter sent — carrier has up to 3 rounds to negotiate.") : respondMutation.mutate({ offerId: o.id, action: "counter", counterAmount: parseFloat(counterAmount) })}
+                                disabled={!isDemo && (!counterAmount || respondMutation.isPending)}
                                 data-testid={`button-counter-offer-${o.id}`}
                               >
                                 Counter
@@ -949,8 +1098,8 @@ export default function LoadBoardDetail() {
                             size="sm"
                             variant="outline"
                             className="rounded-xl h-8 px-3 font-display font-black text-xs text-destructive border-destructive/30"
-                            onClick={() => respondMutation.mutate({ offerId: o.id, action: "decline" })}
-                            disabled={respondMutation.isPending}
+                            onClick={() => isDemo ? demoToast("Offer declined — carrier is notified and can submit a new offer.") : respondMutation.mutate({ offerId: o.id, action: "decline" })}
+                            disabled={!isDemo && respondMutation.isPending}
                             data-testid={`button-decline-offer-${o.id}`}
                           >
                             <X className="w-3 h-3 mr-1" /> Decline
@@ -967,8 +1116,8 @@ export default function LoadBoardDetail() {
             {isOpen && (
               <button
                 className="w-full text-xs text-destructive/50 font-display font-bold py-2"
-                onClick={() => { if (confirm("Cancel this listing?")) cancelMutation.mutate(); }}
-                disabled={cancelMutation.isPending}
+                onClick={() => isDemo ? demoToast("Listing would be cancelled and removed from the board.") : (confirm("Cancel this listing?") && cancelMutation.mutate())}
+                disabled={!isDemo && cancelMutation.isPending}
                 data-testid="button-cancel-listing"
               >
                 Cancel Listing
@@ -978,7 +1127,7 @@ export default function LoadBoardDetail() {
         )}
 
         {/* ════════ CARRIER VIEW ════════ */}
-        {!isPoster && (
+        {!isPoster && listing.status !== "connected" && listing.status !== "completed" && (
           <>
             {/* My existing offer */}
             {myOffer && (
@@ -1031,6 +1180,29 @@ export default function LoadBoardDetail() {
             {/* Submit new offer */}
             {!myOffer && isOpen && (
               <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(0,229,118,0.55)" }}>
+
+                {/* Instant book at posted price */}
+                {listing.postedPrice && (
+                  <>
+                    <Button
+                      className="w-full rounded-xl h-12 font-display font-black text-sm mb-3"
+                      style={{ background: "linear-gradient(135deg,#00e576,#00b8d9)", color: "#000", boxShadow: "0 0 18px rgba(0,229,118,0.35)" }}
+                      onClick={() => isDemo ? demoToast("Books the load at the posted price — no negotiation needed.") : offerMutation.mutate({ offerAmount: listing.postedPrice, instantBook: true })}
+                      disabled={!isDemo && offerMutation.isPending}
+                      data-testid="button-book-now"
+                    >
+                      {offerMutation.isPending
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <>⚡ Book at ${listing.postedPrice.toLocaleString()} — No negotiation</>}
+                    </Button>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex-1 h-px bg-border/30" />
+                      <span className="text-[9px] text-muted-foreground/30 font-display font-black uppercase tracking-wider">or send a different offer</span>
+                      <div className="flex-1 h-px bg-border/30" />
+                    </div>
+                  </>
+                )}
+
                 <p className="text-[10px] font-display font-black text-muted-foreground/40 uppercase tracking-wider mb-3">Submit Your Offer</p>
                 <div className="relative mb-3">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
@@ -1050,7 +1222,7 @@ export default function LoadBoardDetail() {
                       toast({ variant: "destructive", title: "Enter a valid amount" });
                       return;
                     }
-                    offerMutation.mutate({ offerAmount: parseFloat(offerAmount) });
+                    isDemo ? demoToast("Offer sent to the shipper — they'll get a notification to accept, counter, or decline.") : offerMutation.mutate({ offerAmount: parseFloat(offerAmount) });
                   }}
                   disabled={offerMutation.isPending || !offerAmount}
                   data-testid="button-submit-offer"
@@ -1107,7 +1279,7 @@ export default function LoadBoardDetail() {
                 <Button
                   className="w-full rounded-2xl h-12 font-display font-black text-sm tracking-wide"
                   style={CYAN_ACTIVE}
-                  onClick={() => setShowCheckout(true)}
+                  onClick={() => isDemo ? demoToast("Opens the connection checkout — pay once to unlock the shipper's address and contact info.") : setShowCheckout(true)}
                   data-testid="button-review-checkout"
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />

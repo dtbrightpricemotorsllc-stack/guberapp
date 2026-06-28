@@ -263,6 +263,12 @@ export function setupPublicSeoRoutes(app: Express) {
     }
   });
 
+  app.get("/robots.txt", (_req: Request, res: Response) => {
+    res.type("text/plain").send(
+      `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nSitemap: https://guberapp.app/sitemap.xml\n`
+    );
+  });
+
   app.get("/sitemap.xml", async (_req: Request, res: Response) => {
     try {
       // Sitemap is consumed by search engines — must never index demo-seeded jobs.

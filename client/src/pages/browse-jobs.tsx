@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Search, Briefcase, SlidersHorizontal, Plus, Map, List, ShieldCheck, MapPin as MapPinIcon, Clock, X, Lock } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, Map, List, ShieldCheck, MapPin as MapPinIcon, Clock, X, Lock } from "lucide-react";
+import { MissionCard, type MissionTemplate } from "@/components/mission-card";
 import { useState, useMemo } from "react";
 import { useSearch, useLocation } from "wouter";
 import { Link } from "wouter";
@@ -15,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatJobTime } from "@/lib/job-time";
-import { shouldShowAlertPrompt } from "@/components/alert-prompt-modal";
+import { shouldShowAlertPrompt, setAlertStatus } from "@/components/alert-prompt-modal";
 import { subscribeToPush } from "@/lib/push";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import type { Job, ServiceType } from "@shared/schema";
@@ -81,6 +82,7 @@ export default function BrowseJobs() {
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [selectedPin, setSelectedPin] = useState<JobPin | null>(null);
   const [alertsJustEnabled, setAlertsJustEnabled] = useState(false);
+  const [pendingAlerts, setPendingAlerts] = useState(false);
 
   const alertsOff = !alertsJustEnabled && shouldShowAlertPrompt();
   const availableOff = !(user as any)?.isAvailable;
@@ -111,11 +113,23 @@ export default function BrowseJobs() {
   });
 
   const handleEnableAlerts = async () => {
-    if (!user?.id) return;
-    // Use the boolean return from subscribeToPush — getPushStatus() always
-    // returns "default" on native and would never trigger the success state.
-    const granted = await subscribeToPush(user.id);
-    if (granted) setAlertsJustEnabled(true);
+    if (!user?.id || pendingAlerts) return;
+    setPendingAlerts(true);
+    try {
+      const granted = await subscribeToPush(user.id, { promptIfNeeded: true });
+      if (granted) {
+        setAlertStatus("granted");
+        setAlertsJustEnabled(true);
+      } else {
+        toast({
+          title: "Notifications blocked",
+          description: "Open your phone's Settings → Apps → GUBER → Notifications and turn them on.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setPendingAlerts(false);
+    }
   };
 
   const { data: jobs, isLoading } = useQuery<Job[]>({
@@ -125,6 +139,11 @@ export default function BrowseJobs() {
   const { data: mapPins } = useQuery<JobPin[]>({
     queryKey: ["/api/map-jobs"],
     enabled: viewMode === "map",
+  });
+
+  const { data: missions = [] } = useQuery<MissionTemplate[]>({
+    queryKey: ["/api/missions"],
+    refetchInterval: 120000,
   });
 
   const filtered = useMemo(() => {
@@ -164,9 +183,9 @@ export default function BrowseJobs() {
         {!CATEGORY_IMAGES[category] && (
           <div className="mb-5 animate-fade-in">
             <h1 className="text-xl font-display font-bold tracking-tight mb-1" data-testid="text-browse-title">
-              Browse Jobs
+              Opportunity Feed
             </h1>
-            <p className="text-sm text-muted-foreground">Find opportunities that match your skills</p>
+            <p className="text-sm text-muted-foreground">Jobs, missions &amp; more — always something to earn</p>
           </div>
         )}
 
@@ -366,39 +385,9 @@ export default function BrowseJobs() {
               <Skeleton key={i} className="h-36 rounded-xl" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16 animate-fade-in" data-testid="section-empty-state">
-            <p className="text-2xl mb-3">💰</p>
-            <p className="font-display font-bold text-foreground text-base mb-2" data-testid="text-empty-title">Waiting on the next move</p>
-            <p className="text-sm text-muted-foreground mb-1">Jobs appear in real-time based on your area.</p>
-            {(alertsOff || availableOff) && (
-              <div className="mt-5 flex flex-col gap-2 items-center">
-                {alertsOff && (
-                  <Button
-                    className="w-full max-w-xs gap-2 premium-btn rounded-xl font-display tracking-wider text-xs h-11"
-                    onClick={handleEnableAlerts}
-                    data-testid="button-turn-on-alerts"
-                  >
-                    TURN ON ALERTS
-                  </Button>
-                )}
-                {availableOff && (
-                  <Button
-                    variant="outline"
-                    className="w-full max-w-xs rounded-xl font-display tracking-wider text-xs h-11 border-white/[0.15] hover:border-white/25"
-                    onClick={() => availabilityMutation.mutate()}
-                    disabled={availabilityMutation.isPending}
-                    data-testid="button-set-available"
-                  >
-                    SET AVAILABLE FOR WORK
-                  </Button>
-                )}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground/35 mt-4">Stay ready so you don't miss the next opportunity.</p>
-          </div>
         ) : (
           <div className="space-y-3">
+            {/* Real jobs first */}
             {filtered.map((job, i) => (
               <div key={job.id} className={`animate-fade-in stagger-${Math.min(i + 1, 6)}`}>
                 <JobCard job={job} />
@@ -413,6 +402,42 @@ export default function BrowseJobs() {
                 )}
               </div>
             ))}
+
+            {/* Missions fill remaining space — max 5, always after all real jobs */}
+            {missions.slice(0, 5).map(m => (
+              <MissionCard key={m.id} mission={m} />
+            ))}
+
+            {/* True empty state — no real jobs AND no missions */}
+            {filtered.length === 0 && missions.length === 0 && (
+              <div className="text-center py-10 animate-fade-in" data-testid="section-empty-state">
+                <p className="text-2xl mb-3">💰</p>
+                <p className="font-display font-bold text-foreground text-base mb-1" data-testid="text-empty-title">More opportunities dropping soon</p>
+                <p className="text-sm text-muted-foreground">Be the first to grab them when they post.</p>
+                {alertsOff && (
+                  <Button
+                    size="sm"
+                    className="mt-4 gap-1.5 premium-btn rounded-lg font-display tracking-wider text-[10px] h-8 px-3"
+                    onClick={handleEnableAlerts}
+                    disabled={pendingAlerts}
+                    data-testid="button-turn-on-alerts"
+                  >
+                    {pendingAlerts ? "Enabling…" : "Turn on job alerts"}
+                  </Button>
+                )}
+                {availableOff && (
+                  <Button
+                    variant="outline"
+                    className="mt-3 rounded-xl font-display tracking-wider text-xs h-11 border-white/[0.15] hover:border-white/25"
+                    onClick={() => availabilityMutation.mutate()}
+                    disabled={availabilityMutation.isPending}
+                    data-testid="button-set-available"
+                  >
+                    SET AVAILABLE FOR WORK
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

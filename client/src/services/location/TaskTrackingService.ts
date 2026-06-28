@@ -1,4 +1,5 @@
 import { gpsStartWatchPosition, gpsClearWatch } from "@/lib/gps";
+import { bgStartWatch, bgStopWatch } from "@/lib/bg-geolocation";
 import { startForegroundTracking, stopForegroundTracking } from "@/lib/foreground-tracking";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -67,6 +68,7 @@ export function haversineMeters(a: Coords, b: Coords): number {
 export class TaskTrackingService {
   private activeJobId: number | null = null;
   private watchId: number | null = null;
+  private bgWatchId: number | null = null;
   private starting = false;
   private subscribers = new Set<Subscriber>();
   private geofenceSubscribers = new Set<GeofenceSubscriber>();
@@ -141,26 +143,63 @@ export class TaskTrackingService {
     this.loadPersisted(jobId);
     this.persistMeta();
     try {
-      const id = await gpsStartWatchPosition(
-        (pos) => this.onPosition(pos),
-        (err) => {
-          // Transient watch errors (lost signal, brief denial) are expected on
-          // the move — keep the tracker alive and wait for the next fix.
-          console.warn("[tracking] gps watch error", (err as any)?.code);
+      // iOS: use the background-capable plugin so tracking survives the app
+      // being backgrounded or the screen locking. Falls back to the standard
+      // foreground watch on Android and web.
+      const bgId = await bgStartWatch(
+        (c) => {
+          if (!this.activeJobId) return;
+          const acc = c.accuracy;
+          if (typeof acc === "number" && acc > ACCURACY_CEILING_M) return;
+          if (this.startedAt && Date.now() - this.startedAt > MAX_SESSION_MS) {
+            void this.stopTask(this.activeJobId);
+            return;
+          }
+          const coords: Coords = { lat: c.lat, lng: c.lng };
+          if (!this.shouldAccept(coords, c.ts)) return;
+          const point: TrackPoint = { lat: c.lat, lng: c.lng, ts: c.ts };
+          this.lastAccepted = point;
+          this.latest = coords;
+          this.queue.push(point);
+          this.persistQueue();
+          this.persistLast(coords);
+          this.emit(coords);
+          if (this.queue.length >= BATCH_SIZE) void this.flush(true);
         },
-        { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
+        (code) => {
+          console.warn("[tracking] bg-geo error", code);
+          if (code === "NOT_AUTHORIZED") void this.stopTask(this.activeJobId ?? undefined);
+        },
+        MIN_DISTANCE_M,
       );
-      // If we were stopped/switched while awaiting the watch handle, discard it.
+
       if (this.activeJobId !== jobId) {
-        await gpsClearWatch(id);
+        if (bgId !== null) await bgStopWatch(bgId);
         return;
       }
-      this.watchId = id;
-      this.startFlushTimer();
-      // Android: surface the persistent foreground-service notification for the
-      // duration of tracking (no-op on iOS/web). Best-effort — never blocks the
-      // watch from starting.
-      void startForegroundTracking();
+
+      if (bgId !== null) {
+        // iOS background path — plugin handles delivery; no foreground watch needed.
+        this.bgWatchId = bgId;
+        this.startFlushTimer();
+      } else {
+        // Android / web — standard foreground watch + optional foreground service.
+        const id = await gpsStartWatchPosition(
+          (pos) => this.onPosition(pos),
+          (err) => {
+            console.warn("[tracking] gps watch error", (err as any)?.code);
+          },
+          { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
+        );
+        if (this.activeJobId !== jobId) {
+          await gpsClearWatch(id);
+          return;
+        }
+        this.watchId = id;
+        this.startFlushTimer();
+        void this.startForegroundService(jobId);
+      }
+      window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: true, jobId } }));
     } finally {
       this.starting = false;
     }
@@ -174,10 +213,15 @@ export class TaskTrackingService {
   async stopTask(jobId?: number, opts?: { flush?: boolean }): Promise<void> {
     if (jobId != null && this.activeJobId != null && jobId !== this.activeJobId) return;
     const id = this.watchId;
+    const bgId = this.bgWatchId;
     this.watchId = null;
+    this.bgWatchId = null;
     this.stopFlushTimer();
     if (id !== null) {
       try { await gpsClearWatch(id); } catch { /* ignore */ }
+    }
+    if (bgId !== null) {
+      try { await bgStopWatch(bgId); } catch { /* ignore */ }
     }
     if (opts?.flush !== false) {
       await this.flush(true);
@@ -191,6 +235,7 @@ export class TaskTrackingService {
     // Android: dismiss the persistent foreground-service notification (no-op on
     // iOS/web). Best-effort.
     void stopForegroundTracking();
+    window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: false } }));
   }
 
   private onPosition(pos: GeolocationPosition): void {
@@ -219,6 +264,26 @@ export class TaskTrackingService {
     const movedFar = haversineMeters(this.lastAccepted, c) >= MIN_DISTANCE_M;
     const longEnough = ts - this.lastAccepted.ts >= MIN_INTERVAL_MS;
     return movedFar || longEnough;
+  }
+
+  /**
+   * Fetch a short-lived bg-location token from the server, then start the
+   * native Android foreground service with native GPS. The token lets the Java
+   * service POST location batches directly to the server (bypassing the WebView
+   * session cookie) so tracking continues when the screen locks.
+   */
+  private async startForegroundService(jobId: number): Promise<void> {
+    let authToken: string | undefined;
+    try {
+      const resp = await apiRequest("POST", "/api/auth/bg-location-token", { jobId });
+      if (resp.ok) {
+        const data = await resp.json();
+        authToken = data.token;
+      }
+    } catch {
+      // Non-fatal — foreground service still starts; native GPS just won't post
+    }
+    void startForegroundTracking({ jobId, authToken });
   }
 
   private startFlushTimer(): void {

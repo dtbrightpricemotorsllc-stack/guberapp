@@ -137,10 +137,10 @@ export default function LeaderboardPage() {
       <div className="bg-black text-white px-4 pt-12 pb-6">
         <div className="max-w-lg mx-auto">
           <button
-            onClick={() => navigate("/community-tasks")}
+            onClick={() => navigate("/browse-jobs")}
             className="flex items-center gap-1 text-gray-400 hover:text-white text-sm mb-4 transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" /> Community Tasks
+            <ArrowLeft className="w-4 h-4" /> Opportunity Feed
           </button>
           <div className="flex items-center gap-2 mb-1">
             <Trophy className="w-5 h-5 text-yellow-400" />

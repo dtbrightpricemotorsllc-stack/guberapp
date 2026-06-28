@@ -50,6 +50,23 @@ export interface CashDropPin {
   hostLogoUrl?: string;
 }
 
+export interface BusinessPin {
+  id: number;
+  name: string;
+  category: string;
+  description?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  lat: number;
+  lng: number;
+  phone?: string | null;
+  website?: string | null;
+  logoUrl?: string | null;
+  featured?: boolean;
+}
+
 export interface MapBounds {
   north: number;
   south: number;
@@ -61,15 +78,41 @@ interface GoogleMapProps {
   pins: JobPin[];
   workerPins?: WorkerPin[];
   cashDrops?: CashDropPin[];
+  businessPins?: BusinessPin[];
   onPinClick?: (pin: JobPin) => void;
   onWorkerPinClick?: (worker: WorkerPin) => void;
   onCashDropClick?: (drop: CashDropPin) => void;
+  onBusinessPinClick?: (pin: BusinessPin) => void;
   className?: string;
   center?: { lat: number; lng: number };
   cluster?: boolean;
   onUserPos?: (pos: { lat: number; lng: number }) => void;
   onBoundsChanged?: (bounds: MapBounds) => void;
+  mapStyles?: object[];
 }
+
+export const GUBER_DARK_STYLES: object[] = [
+  { elementType: "geometry",             stylers: [{ color: "#080810" }] },
+  { elementType: "labels.text.stroke",   stylers: [{ color: "#080810" }] },
+  { elementType: "labels.text.fill",     stylers: [{ color: "#4b5563" }] },
+  { featureType: "administrative.locality",    elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+  { featureType: "administrative.neighborhood",elementType: "labels.text.fill", stylers: [{ color: "#374151" }] },
+  { featureType: "poi",                  elementType: "labels",           stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park",             elementType: "geometry.fill",    stylers: [{ color: "#0a130a" }] },
+  { featureType: "road",                 elementType: "geometry.fill",    stylers: [{ color: "#12121e" }] },
+  { featureType: "road",                 elementType: "geometry.stroke",  stylers: [{ color: "#0a0a14" }] },
+  { featureType: "road",                 elementType: "labels.text.fill", stylers: [{ color: "#374151" }] },
+  { featureType: "road.highway",         elementType: "geometry.fill",    stylers: [{ color: "#1a1a30" }] },
+  { featureType: "road.highway",         elementType: "geometry.stroke",  stylers: [{ color: "#0d0d1a" }] },
+  { featureType: "road.highway",         elementType: "labels.text.fill", stylers: [{ color: "#4b5563" }] },
+  { featureType: "road.arterial",        elementType: "geometry.fill",    stylers: [{ color: "#0f0f1c" }] },
+  { featureType: "transit",              elementType: "geometry",         stylers: [{ color: "#0a0a14" }] },
+  { featureType: "transit.station",      elementType: "labels",           stylers: [{ visibility: "off" }] },
+  { featureType: "water",                elementType: "geometry.fill",    stylers: [{ color: "#060c18" }] },
+  { featureType: "water",                elementType: "labels.text.fill", stylers: [{ color: "#1d3a6b" }] },
+  { featureType: "landscape.natural",    elementType: "geometry.fill",    stylers: [{ color: "#0b100b" }] },
+  { featureType: "landscape.man_made",   elementType: "geometry.fill",    stylers: [{ color: "#0c0c14" }] },
+];
 
 const DAYLIGHT_STYLES: object[] = [
   { elementType: "geometry", stylers: [{ color: "#f5f5f0" }] },
@@ -98,10 +141,11 @@ const DAYLIGHT_STYLES: object[] = [
 const US_CENTER = { lat: 39.8283, lng: -98.5795 };
 const US_DENIED_ZOOM = 4;
 
-export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPinClick, onCashDropClick, className, center, cluster, onUserPos, onBoundsChanged }: GoogleMapProps) {
+export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClick, onWorkerPinClick, onCashDropClick, onBusinessPinClick, className, center, cluster, onUserPos, onBoundsChanged, mapStyles }: GoogleMapProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const businessMarkersRef = useRef<google.maps.Marker[]>([]);
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const dropOverlaysRef = useRef<google.maps.OverlayView[]>([]);
@@ -142,9 +186,9 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
 
       const map = new mapsLib.Map(mapDivRef.current, {
         center: mapCenter,
-        zoom: denied ? US_DENIED_ZOOM : 11,
+        zoom: (denied && !center) ? US_DENIED_ZOOM : 11,
         maxZoom: 12,
-        styles: DAYLIGHT_STYLES as google.maps.MapTypeStyle[],
+        styles: (mapStyles ?? DAYLIGHT_STYLES) as google.maps.MapTypeStyle[],
         zoomControl: true,
         mapTypeControl: false,
         streetViewControl: false,
@@ -171,6 +215,13 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       mapListenersRef.current.push(clickListener, idleListener);
 
       mapRef.current = map;
+      // If a center prop was already supplied before the map instance existed
+      // (common on native when the dashboard sets mapCenter from GPS/zip before
+      // the Maps SDK finishes loading), apply it now so the zoom is correct.
+      if (center) {
+        map.panTo(center);
+        map.setZoom(11);
+      }
       setMapReady(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -341,7 +392,17 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
     mountedRef.current = true;
     watchCancelledRef.current = false;
     startWatchPosition();
+
+    // Hard fallback: if GPS + IP locate both take > 8 s, show map at US center
+    const locatingTimeout = setTimeout(() => {
+      if (!mountedRef.current) return;
+      if (userPosRef.current) return; // already have a fix
+      setLocating(false);
+      setLocationDenied(true);
+    }, 8000);
+
     return () => {
+      clearTimeout(locatingTimeout);
       // Block any in-flight async callbacks from touching React state after
       // unmount, and tear down every map resource we created so nothing keeps
       // running (watchers, listeners, markers, overlays) once the screen is gone.
@@ -354,6 +415,8 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       if (clustererRef.current) { try { clustererRef.current.clearMarkers(); } catch {} clustererRef.current = null; }
       markersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
       markersRef.current = [];
+      businessMarkersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
+      businessMarkersRef.current = [];
       if (userMarkerRef.current) { try { userMarkerRef.current.setMap(null); } catch {} userMarkerRef.current = null; }
       dropOverlaysRef.current.forEach((o) => { try { o.setMap(null); } catch {} });
       dropOverlaysRef.current = [];
@@ -652,6 +715,47 @@ export function GoogleMap({ pins, workerPins, cashDrops, onPinClick, onWorkerPin
       dropOverlaysRef.current = [];
     };
   }, [mapReady, cashDrops, onCashDropClick]);
+
+  // ── Business Pin Rendering ──────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const g = window.google?.maps;
+    if (!g) return;
+
+    businessMarkersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
+    businessMarkersRef.current = [];
+
+    (businessPins || []).forEach((biz) => {
+      if (biz.lat == null || biz.lng == null) return;
+
+      // Building-icon SVG path (store/shop silhouette)
+      const BUILDING_PATH = "M -7,7 L -7,-5 L 0,-9 L 7,-5 L 7,7 Z M -2,7 L -2,2 L 2,2 L 2,7 Z";
+      const color = biz.featured ? "#EC4899" : "#a855f7";
+
+      const marker = new g.Marker({
+        position: { lat: biz.lat, lng: biz.lng },
+        map,
+        title: biz.name,
+        icon: {
+          path: BUILDING_PATH,
+          fillColor: color,
+          fillOpacity: 0.95,
+          strokeColor: "#ffffff",
+          strokeWeight: 1.5,
+          scale: 1.4,
+          anchor: new g.Point(0, 7),
+        },
+        zIndex: 200,
+      });
+
+      marker.addListener("click", () => {
+        onBusinessPinClick?.(biz);
+      });
+
+      businessMarkersRef.current.push(marker);
+    });
+  }, [mapReady, businessPins, onBusinessPinClick]);
 
   const handleRecenter = () => {
     if (!mapRef.current) return;

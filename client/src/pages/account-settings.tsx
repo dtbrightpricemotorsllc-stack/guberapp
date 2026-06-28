@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -47,6 +47,227 @@ async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
+function StandbyMissionCard({ user, form }: { user: any; form: any }) {
+  const { data: balance } = useQuery<any>({
+    queryKey: ["/api/credits/balance"],
+    enabled: !!user,
+  });
+
+  if (balance?.profileMissionEarned) {
+    return (
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/30" data-testid="card-standby-mission-done">
+        <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+        <div>
+          <p className="font-display font-semibold text-sm text-green-400">Standby Mission Complete</p>
+          <p className="text-[11px] text-muted-foreground">+200 credits earned — you're on the standby roster.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const hasSkills = (form.skills || "").trim().length >= 10;
+  const isAvailable = !!form.isAvailable;
+  const idVerified = !!user?.idVerified;
+  const credVerified = !!user?.credentialVerified;
+
+  const SKILLED_KEYWORDS = [
+    "plumb", "electric", "hvac", "carpent", "drywall", "weld",
+    "auto repair", "roof", "marine", "boat repair", "towing", "haul",
+    "electrician", "plumber", "carpenter", "welder", "roofer",
+  ];
+  const mentionsSkilled = SKILLED_KEYWORDS.some(kw =>
+    (form.skills || "").toLowerCase().includes(kw)
+  );
+  const needsCred = mentionsSkilled && !credVerified;
+
+  const conditions = [
+    { label: "ID verified", met: idVerified },
+    { label: "Marked available for work", met: isAvailable },
+    { label: "Skills filled in (10+ chars)", met: hasSkills },
+    ...(mentionsSkilled ? [{ label: "Credentials verified (required for skilled trades)", met: credVerified }] : []),
+  ];
+  const allMet = conditions.every(c => c.met);
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3" data-testid="card-standby-mission">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-amber-400" />
+          <span className="font-display font-semibold text-sm">Standby Mission</span>
+          <span className="text-[11px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-display font-bold">+200 CR</span>
+        </div>
+        {allMet && <span className="text-[10px] text-green-400 font-display">Save to claim →</span>}
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        Set yourself on standby and describe what you can do. Hirers will know you're ready.
+        {needsCred && <span className="text-amber-400"> Skilled trades require verified credentials.</span>}
+      </p>
+      <div className="space-y-1.5">
+        {conditions.map((c) => (
+          <div key={c.label} className="flex items-center gap-2">
+            {c.met
+              ? <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0" />
+              : <Circle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+            <span className={`text-[11px] ${c.met ? "text-foreground" : "text-muted-foreground"}`}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Active JAC Voice Row (shown inside JAC Settings) ─────────────────────────
+function ActiveJacVoiceRow() {
+  const [voiceName, setVoiceName] = useState("Loading…");
+
+  useEffect(() => {
+    import("@/lib/jac-voice").then(({ loadJacVoice, getActiveJacVoiceName }) => {
+      loadJacVoice().then(() => setVoiceName(getActiveJacVoiceName()));
+    });
+  }, []);
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+      <div>
+        <p className="font-display font-semibold text-sm">Active JAC Voice</p>
+        <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{voiceName}</p>
+      </div>
+      <span className="text-[10px] px-2 py-1 rounded-full border border-border/30 text-muted-foreground font-display">
+        TTS
+      </span>
+    </div>
+  );
+}
+
+// ── JAC Settings Section ─────────────────────────────────────────────────────
+function JacSettingsSection() {
+  const { toast } = useToast();
+  const [assistantMode, setAssistantMode] = useState("full");
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [language, setLanguage] = useState("en");
+  const [resetting, setResetting] = useState(false);
+
+  const profileQ = useQuery<any>({
+    queryKey: ["/api/jac/profile"],
+    queryFn: () => fetch("/api/jac/profile").then(r => r.ok ? r.json() : null),
+  });
+
+  useEffect(() => {
+    if (profileQ.data) {
+      setAssistantMode(profileQ.data.assistant_mode ?? "full");
+      setVoiceEnabled(profileQ.data.voice_enabled ?? true);
+      setLanguage(profileQ.data.language ?? "en");
+    }
+  }, [profileQ.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      apiRequest("POST", "/api/jac/profile", body),
+    onSuccess: () => toast({ title: "JAC settings saved" }),
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  async function resetTutorial() {
+    setResetting(true);
+    try {
+      await apiRequest("POST", "/api/jac/tutorial/reset", {});
+      toast({ title: "Tutorial reset — JAC will guide you through onboarding again." });
+    } catch {
+      toast({ title: "Reset failed", variant: "destructive" });
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  return (
+    <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4" data-testid="card-jac-settings">
+      <h3 className="font-display font-semibold text-sm flex items-center gap-2">
+        <Bot className="w-4 h-4 text-primary" /> JAC — Assistant Settings
+      </h3>
+
+      {/* Assistant Mode */}
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Assistant Mode</Label>
+        <Select
+          value={assistantMode}
+          onValueChange={(v) => {
+            setAssistantMode(v);
+            saveMutation.mutate({ assistantMode: v });
+          }}
+        >
+          <SelectTrigger className="h-9 text-xs border-border/20" data-testid="select-jac-assistant-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="full">Full — JAC greets, guides, and follows up</SelectItem>
+            <SelectItem value="smart">Smart — JAC activates only on key events</SelectItem>
+            <SelectItem value="on_demand">On-Demand Only — I'll open JAC myself</SelectItem>
+            <SelectItem value="mute">Mute — disable voice and auto-prompts</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Language */}
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Language</Label>
+        <Select
+          value={language}
+          onValueChange={(v) => {
+            setLanguage(v);
+            saveMutation.mutate({ language: v });
+          }}
+        >
+          <SelectTrigger className="h-9 text-xs border-border/20" data-testid="select-jac-language">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="es">Español</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Voice toggle */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+        <div>
+          <p className="font-display font-semibold text-sm">Voice Responses</p>
+          <p className="text-xs text-muted-foreground">JAC reads replies aloud</p>
+        </div>
+        <Switch
+          checked={voiceEnabled}
+          onCheckedChange={(v) => {
+            setVoiceEnabled(v);
+            saveMutation.mutate({ voiceEnabled: v });
+          }}
+          data-testid="switch-jac-voice"
+        />
+      </div>
+
+      {/* Active voice display */}
+      <ActiveJacVoiceRow />
+
+      {/* Tutorial reset */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
+        <div>
+          <p className="font-display font-semibold text-sm">Restart Onboarding Tutorial</p>
+          <p className="text-xs text-muted-foreground">JAC will guide you through setup again</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-border/30 font-display gap-1 text-xs"
+          onClick={resetTutorial}
+          disabled={resetting}
+          data-testid="button-jac-tutorial-reset"
+        >
+          {resetting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+          Reset
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AccountSettings() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
@@ -73,6 +294,7 @@ export default function AccountSettings() {
   const [notifVibrationEnabled, setNotifVibrationEnabledState] = useState(true);
   const [vibrationSupported, setVibrationSupported] = useState(false);
   const [audioBlockedWarning, setAudioBlockedWarning] = useState(false);
+  const [testingSoundType, setTestingSoundType] = useState<SoundType | null>(null);
   const [pushStatus, setPushStatus] = useState<PushStatus | null>(null);
   const [enablingPush, setEnablingPush] = useState(false);
 
@@ -374,6 +596,8 @@ export default function AccountSettings() {
             <Switch checked={form.isAvailable} onCheckedChange={(v) => setForm((f) => ({ ...f, isAvailable: v }))} data-testid="switch-available" />
           </div>
 
+          <StandbyMissionCard user={user} form={form} />
+
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
             className="w-full h-12 font-display tracking-wider bg-primary text-primary-foreground rounded-xl" data-testid="button-save-settings">
             {saveMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "SAVE"}
@@ -632,6 +856,7 @@ export default function AccountSettings() {
                   variant="outline"
                   size="sm"
                   className="h-9 text-xs font-display border-border/30 justify-start"
+                  disabled={testingSoundType !== null}
                   onClick={async () => {
                     if (!notifSoundEnabled) {
                       toast({
@@ -641,12 +866,20 @@ export default function AccountSettings() {
                       });
                       return;
                     }
-                    unlockAudio();
-                    const ok = await playGuberSound(s.type);
-                    setAudioBlockedWarning(!ok);
+                    setTestingSoundType(s.type);
+                    try {
+                      unlockAudio();
+                      const ok = await playGuberSound(s.type);
+                      setAudioBlockedWarning(!ok);
+                    } finally {
+                      setTestingSoundType(null);
+                    }
                   }}
                   data-testid={`button-test-sound-${s.type}`}
                 >
+                  {testingSoundType === s.type ? (
+                    <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                  ) : null}
                   {s.label}
                 </Button>
               ))}
@@ -888,6 +1121,9 @@ export default function AccountSettings() {
             </div>
           )}
         </div>
+
+        {/* ── JAC Settings ─────────────────────────────────────── */}
+        <JacSettingsSection />
 
         <div className="bg-card rounded-2xl border border-destructive/20 p-5 space-y-3">
           <h3 className="font-display font-semibold text-sm text-destructive">Danger Zone</h3>

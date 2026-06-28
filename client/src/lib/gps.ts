@@ -2,21 +2,23 @@ import { Capacitor } from "@capacitor/core";
 
 const SESSION_KEY = "guber_gps_ok";
 
+// On native (iOS/Android) the OS shows its own permission dialog — our web
+// disclaimer modal is redundant and blocks the GPS flow. Auto-accept it.
+if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+  try { localStorage.setItem(SESSION_KEY, "1"); } catch {}
+}
+
 type Resolver = () => void;
 type Rejector = (err: Error) => void;
 const pendingResolvers: Resolver[] = [];
 const pendingRejectors: Rejector[] = [];
 
-// True while the GPS disclaimer is on-screen and awaiting the user's choice.
-// Lets UI mounted after the "show" event (e.g. the dashboard tour) still know
-// the modal is open and defer itself.
 let disclaimerPending = false;
 
 export function isGpsDisclaimerAccepted(): boolean {
   try { return localStorage.getItem(SESSION_KEY) === "1"; } catch { return false; }
 }
 
-/** True if the GPS disclaimer is currently open and waiting on the user. */
 export function isGpsDisclaimerPending(): boolean {
   return disclaimerPending;
 }
@@ -29,7 +31,6 @@ export function acceptGpsDisclaimer(): void {
   try { window.dispatchEvent(new Event("guber:gps-disclaimer-resolved")); } catch {}
 }
 
-/** Called when the user dismisses the GPS disclaimer without accepting (e.g. Android back button). */
 export function dismissGpsDisclaimer(): void {
   disclaimerPending = false;
   pendingResolvers.length = 0;
@@ -49,36 +50,42 @@ export function ensureGpsDisclaimer(): Promise<void> {
   });
 }
 
-// Native-aware geolocation: when running inside a Capacitor app we use the
-// @capacitor/geolocation plugin (more reliable in foreground, handles
-// permission prompts properly). On web/PWA we fall through to
-// navigator.geolocation. Both code paths return the standard
-// GeolocationPosition shape so call sites don't need to change.
 const isNative = (() => { try { return Capacitor.isNativePlatform(); } catch { return false; } })();
+
+// ── Helper: map a native GPS error message to a GeolocationPositionError code ──
+function mapNativeErrorCode(msg: string): number {
+  if (/denied|permission|not authorized|access/i.test(msg)) return 1; // PERMISSION_DENIED
+  if (/timeout/i.test(msg)) return 3;                                  // TIMEOUT
+  return 2;                                                             // POSITION_UNAVAILABLE
+}
 
 async function nativeGetCurrent(opts?: PositionOptions): Promise<GeolocationPosition> {
   const { Geolocation } = await import("@capacitor/geolocation");
-  // Permissions flow: ask only if needed.
   try {
     const perm = await Geolocation.checkPermissions();
+    console.log(`[GUBER GPS] getCurrentPosition checkPermissions: ${perm.location}`);
     if (perm.location !== "granted") {
+      // Always request regardless of checkPermissions — handles Samsung reinstall
+      // where old denial lingers; OS will show dialog or return denied silently.
       const r = await Geolocation.requestPermissions();
+      console.log(`[GUBER GPS] requestPermissions (getCurrentPosition): ${r.location}`);
       if (r.location !== "granted") {
-        const err: any = new Error("Location permission denied");
-        err.code = 1; // PERMISSION_DENIED parity
+        const err: any = new Error("Location permission denied — enable in device Settings");
+        err.code = 1;
         throw err;
       }
     }
   } catch (e: any) {
-    // checkPermissions may not be implemented on every platform — if so
-    // just fall through to getCurrentPosition which prompts itself.
-    if (e?.message === "Location permission denied") throw e;
+    if (e?.code === 1 || e?.message?.includes("permission denied")) throw e;
+    console.warn(`[GUBER GPS] checkPermissions threw (non-fatal): ${e?.message}`);
   }
+  console.log("[GUBER GPS] calling getCurrentPosition…");
   const pos = await Geolocation.getCurrentPosition({
     enableHighAccuracy: opts?.enableHighAccuracy ?? true,
     timeout: opts?.timeout ?? 10000,
     maximumAge: opts?.maximumAge ?? 0,
   });
+  console.log(`[GUBER GPS] getCurrentPosition: lat=${pos.coords.latitude?.toFixed(4)}, acc=${pos.coords.accuracy?.toFixed(0)}m`);
   return {
     coords: {
       latitude: pos.coords.latitude,
@@ -95,19 +102,13 @@ async function nativeGetCurrent(opts?: PositionOptions): Promise<GeolocationPosi
 
 export async function gpsGetCurrentPosition(opts?: PositionOptions): Promise<GeolocationPosition> {
   await ensureGpsDisclaimer();
-  if (isNative) {
-    return nativeGetCurrent(opts);
-  }
+  if (isNative) return nativeGetCurrent(opts);
   return new Promise<GeolocationPosition>((resolve, reject) => {
     if (!navigator.geolocation) { reject(new Error("Geolocation not available")); return; }
     navigator.geolocation.getCurrentPosition(resolve, reject, opts);
   });
 }
 
-// Native watch handles. We return synthetic numeric IDs that map back to the
-// plugin's string handle so existing call sites can keep using
-// navigator.geolocation.clearWatch() for web and a new gpsClearWatch() for
-// native code paths.
 const nativeWatchMap = new Map<number, string>();
 let nativeWatchSeq = 1_000_000;
 
@@ -117,25 +118,49 @@ export async function gpsStartWatchPosition(
   opts?: PositionOptions
 ): Promise<number> {
   await ensureGpsDisclaimer();
+
   if (isNative) {
     const { Geolocation } = await import("@capacitor/geolocation");
+
+    // ── Permission check: must not silently swallow denied state ──────────
+    let permissionDenied = false;
     try {
       const perm = await Geolocation.checkPermissions();
+      console.log(`[GUBER GPS] watchPosition checkPermissions: location=${perm.location}`);
+
       if (perm.location !== "granted") {
-        // requestPermissions() maps to requestWhenInUseAuthorization() on iOS.
-        // The "Always" permission upgrade (needed for background GPS during
-        // Asset Protection / Transport jobs) is requested natively in AppDelegate
-        // via requestAlwaysAuthorization() when applicationDidBecomeActive fires
-        // after the user grants "When In Use". CLLocationManager.startUpdatingLocation
-        // is also swizzled in AppDelegate to set allowsBackgroundLocationUpdates = true
-        // on every call, including inside @capacitor/geolocation's IONGeolocationLib.
+        // Always call requestPermissions regardless of checkPermissions result.
+        // On Android, a previous install's denial may linger after reinstall —
+        // requestPermissions() lets the OS decide whether to show the dialog
+        // or return "denied" silently (permanently blocked / "Don't ask again").
         const r = await Geolocation.requestPermissions();
+        console.log(`[GUBER GPS] requestPermissions: ${r.location}`);
         if (r.location !== "granted") {
-          error({ code: 1, message: "Location permission denied", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
-          throw new Error("Location permission denied");
+          console.warn("[GUBER GPS] Location permission not granted — Settings required");
+          permissionDenied = true;
         }
       }
-    } catch {}
+    } catch (permErr: any) {
+      // checkPermissions not implemented on this platform variant — fall through
+      // and let watchPosition prompt natively or surface its own error.
+      console.warn(`[GUBER GPS] checkPermissions threw (non-fatal, continuing): ${permErr?.message}`);
+    }
+
+    if (permissionDenied) {
+      error({
+        code: 1,
+        message: "Location access denied. Enable location in device Settings.",
+        PERMISSION_DENIED: 1,
+        POSITION_UNAVAILABLE: 2,
+        TIMEOUT: 3,
+      } as GeolocationPositionError);
+      // Return a dummy ID — no watch was started.
+      const dummyId = nativeWatchSeq++;
+      return dummyId;
+    }
+
+    // ── Start the native position watch ───────────────────────────────────
+    console.log("[GUBER GPS] Starting native watchPosition…");
     const handle = await Geolocation.watchPosition(
       {
         enableHighAccuracy: opts?.enableHighAccuracy ?? true,
@@ -144,10 +169,14 @@ export async function gpsStartWatchPosition(
       },
       (pos, err) => {
         if (err) {
-          error({ code: 2, message: err.message, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
+          const msg = err.message ?? "Unknown GPS error";
+          const code = mapNativeErrorCode(msg);
+          console.warn(`[GUBER GPS] watchPosition error → code=${code} (${msg})`);
+          error({ code, message: msg, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
           return;
         }
         if (!pos) return;
+        console.log(`[GUBER GPS] Position update: lat=${pos.coords.latitude?.toFixed(4)}, lng=${pos.coords.longitude?.toFixed(4)}, acc=${pos.coords.accuracy?.toFixed(0)}m`);
         success({
           coords: {
             latitude: pos.coords.latitude,
@@ -162,10 +191,14 @@ export async function gpsStartWatchPosition(
         } as GeolocationPosition);
       },
     );
+
     const id = nativeWatchSeq++;
     nativeWatchMap.set(id, handle);
+    console.log(`[GUBER GPS] Watch started: id=${id}, handle=${handle}`);
     return id;
   }
+
+  // ── Web / PWA path ────────────────────────────────────────────────────────
   if (!navigator.geolocation) {
     error({ code: 2, message: "Geolocation not available", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
     throw new Error("Geolocation not available");
@@ -182,6 +215,7 @@ export async function gpsClearWatch(id: number): Promise<void> {
     try {
       const { Geolocation } = await import("@capacitor/geolocation");
       await Geolocation.clearWatch({ id: handle });
+      console.log(`[GUBER GPS] Cleared native watch id=${id}, handle=${handle}`);
     } catch {}
     return;
   }
