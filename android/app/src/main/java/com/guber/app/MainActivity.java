@@ -25,7 +25,7 @@ public class MainActivity extends BridgeActivity {
      * (file chooser, JS dialogs, geolocation prompts, etc.) is preserved.
      */
     @Override
-    protected void onStart() {
+    public void onStart() {
         super.onStart();
         getBridge().getWebView().setWebChromeClient(
             new BridgeWebChromeClient(getBridge()) {
