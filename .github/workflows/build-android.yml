@@ -2,9 +2,6 @@ name: Build Android AAB
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -75,3 +72,4 @@ jobs:
           name: guber-v1.3-release.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
+
