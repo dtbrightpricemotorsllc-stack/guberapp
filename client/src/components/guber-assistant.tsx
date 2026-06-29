@@ -284,7 +284,8 @@ export function GUBERAssistant() {
         if (parts.length === 0) content = `Welcome back${name}! Good to see you. What can I help you with?`;
         else if (parts.length === 1) content = `Welcome back${name}! Quick update — ${parts[0]}. What else can I help you with?`;
         else { const last = parts.pop(); content = `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`; }
-        setMessages([{ role: "assistant", content }]);
+        // Don't overwrite if briefing already injected (briefingInjectedRef set synchronously before its fetch)
+        if (!briefingInjectedRef.current) setMessages([{ role: "assistant", content }]);
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps

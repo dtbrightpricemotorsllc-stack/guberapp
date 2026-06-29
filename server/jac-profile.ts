@@ -397,17 +397,13 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
            AND deleted_at IS NULL`,
         [userId]
       ),
-      // Documents (release authorizations) expiring within 30 days
+      // Documents (release authorizations) expiring within 30 days for this carrier
       pool.query(
         `SELECT COUNT(*)::int AS cnt FROM release_authorizations
-         WHERE approved_by IS NOT NULL
+         WHERE requested_by = $1
+           AND approved_by IS NOT NULL
            AND expires_at IS NOT NULL
-           AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '30 days'
-           AND asset_id IN (
-             SELECT id FROM tow_vehicle_verifications WHERE carrier_id = $1
-             UNION ALL
-             SELECT id FROM trailer_verifications WHERE carrier_id = $1
-           )`,
+           AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '30 days'`,
         [userId]
       ),
     ]);
