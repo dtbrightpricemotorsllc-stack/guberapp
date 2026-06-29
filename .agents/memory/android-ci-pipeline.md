@@ -15,3 +15,9 @@ description: Lessons from getting the GitHub Actions Android AAB build working f
 **Why:** `.github/` was intentionally excluded when the old PAT only had `repo` scope; the untracked assets accumulated without being committed; keystores are never committed for security.
 
 **How to apply:** For any future re-run or new release build, the workflow file is now on GitHub main. If assets are added locally and not committed, use the batch blob API pattern to push them before triggering a build.
+
+## PAT access — CRITICAL
+- `GITHUB_PAT` is accessible via **bash/shell** (`$GITHUB_PAT`) but returns 401 when read through `viewEnvVars()` in the code_execution sandbox. Always use `curl` in bash to call the GitHub API, never the JS notebook.
+- Android AAB workflow ID: **251873614** (`build-android.yml`)
+- iOS IPA workflow ID: **296761585** (`build-ios-ipa.yml`)
+- Trigger: `POST /repos/dtbrightpricemotorsllc-stack/guberapp/actions/workflows/{id}/dispatches` with `{"ref":"main"}`
