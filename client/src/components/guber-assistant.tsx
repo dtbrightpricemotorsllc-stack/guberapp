@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation, ClipboardList,
+  Target, TrendingUp, Zap,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
@@ -23,11 +24,43 @@ import { extractAndSaveMemory } from "@/lib/jac-memory";
 import { useJacContext, useJacOpportunities } from "@/lib/use-jac-context";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
+const DD_PATTERNS = [
+  /\$\s*\d+.{0,40}by\s+(today|tonight|tomorrow|friday|saturday|sunday|monday|tuesday|wednesday|thursday|next week|end of (week|day)|this weekend|midnight|eod)/i,
+  /\b(need|want|make|earn|get)\b.{0,25}\$\s*\d+\b.{0,40}\b(by|before|this|tonight|tomorrow|end of|in)\b/i,
+  /\bhow\s+(can|do)\s+i\s+(make|earn).{0,25}\$\s*\d+/i,
+  /\b(earning|financial)\s+goal\b/i,
+  /\bdestination\s+determination\b/i,
+  /\bi\s+need\s+\$\s*\d+/i,
+  /\bi\s+want\s+to\s+earn\s+\$\s*\d+/i,
+  /\bset\s+(a|an|my)\s+(earning|income|money)\s+goal\b/i,
+];
+
+function hasDDIntent(text: string): boolean {
+  return DD_PATTERNS.some(p => p.test(text));
+}
+
+type DDPlanItem = {
+  type: string;
+  id?: number;
+  title: string;
+  estimatedPay: number;
+  route: string;
+  urgency: string;
+  actionLabel: string;
+  estimatedTime?: string;
+  notes?: string;
+};
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   route?: string | null;
-  actions?: Array<{ label: string; message: string }>;
+  actions?: Array<{ label: string; message: string; route?: string }>;
+  planItems?: DDPlanItem[];
+  isDDPlan?: boolean;
+  ddGoalAmount?: number;
+  ddDeadline?: string | null;
+  ddEarnedSoFar?: number;
 }
 
 const DD_GREETING =
@@ -58,6 +91,7 @@ function hasListingIntent(text: string): boolean {
 }
 
 const INITIAL_CHIPS = [
+  "I need $500 by Friday",
   "Find work nearby",
   "Hire help",
   "Earn credits",
@@ -434,7 +468,41 @@ export function GUBERAssistant() {
     },
   });
 
-  const anyPending = sendMutation.isPending || listingMutation.isPending;
+  const ddMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await apiRequest("POST", "/api/jac/dd/plan", { message: text });
+      const data = await res.json();
+      return data as {
+        goalId?: number;
+        goalAmount: number;
+        deadline: string | null;
+        earnedSoFar: number;
+        remaining: number;
+        planItems: DDPlanItem[];
+        reply: string;
+        actions: Array<{ label: string; message: string; route?: string }>;
+      };
+    },
+    onSuccess: (data) => {
+      const msg: Message = {
+        role: "assistant",
+        content: data.reply ?? "D.D. plan ready.",
+        isDDPlan: true,
+        planItems: data.planItems ?? [],
+        ddGoalAmount: data.goalAmount,
+        ddDeadline: data.deadline,
+        ddEarnedSoFar: data.earnedSoFar,
+        actions: (data.actions ?? []).slice(0, 4),
+      };
+      setMessages(prev => [...prev, msg]);
+      if (!muted) jacSpeak(msg.content, { muted });
+    },
+    onError: () => {
+      setMessages(prev => [...prev, { role: "assistant", content: "I couldn't build your D.D. plan right now — please try again." }]);
+    },
+  });
+
+  const anyPending = sendMutation.isPending || listingMutation.isPending || ddMutation.isPending;
 
   function exitListingMode() {
     setListingMode(false);
@@ -483,7 +551,9 @@ export function GUBERAssistant() {
     setInput("");
     cancelSpeech();
     cancelAllJacAudio();
-    if (listingMode || hasListingIntent(trimmed)) {
+    if (hasDDIntent(trimmed)) {
+      ddMutation.mutate(trimmed);
+    } else if (listingMode || hasListingIntent(trimmed)) {
       if (!listingMode) setListingMode(true);
       listingMutation.mutate(newMsgs);
     } else {
@@ -674,6 +744,41 @@ export function GUBERAssistant() {
           );
         })()}
 
+        {/* ── Active D.D. Goal Banner ── */}
+        {user && s.open && jacContext?.activeGoal && (() => {
+          const g = jacContext.activeGoal!;
+          const pct = Math.min(100, Math.round((g.earnedSoFar / g.goalAmount) * 100));
+          const remaining = Math.max(0, g.goalAmount - g.earnedSoFar);
+          return (
+            <div
+              className="flex items-center gap-2 px-4 py-2 flex-shrink-0"
+              style={{ background: "hsl(270 100% 65% / 0.08)", borderBottom: "1px solid hsl(270 100% 65% / 0.18)" }}
+              data-testid="dd-goal-banner"
+            >
+              <Target className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "hsl(270 100% 65%)" }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
+                    D.D. Goal: ${g.goalAmount.toFixed(0)}{g.deadline ? ` by ${g.deadline}` : ""}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">${remaining.toFixed(2)} left</span>
+                </div>
+                <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ background: "hsl(222 47% 16%)" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "hsl(270 100% 65%)" }} />
+                </div>
+              </div>
+              <button
+                onClick={() => doSend(`Update my D.D. plan — I need $${remaining.toFixed(2)} more toward my goal`)}
+                className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg flex-shrink-0 transition-colors"
+                style={{ background: "hsl(270 100% 65% / 0.18)", color: "hsl(270 100% 75%)" }}
+                data-testid="button-dd-update-plan"
+              >
+                Update
+              </button>
+            </div>
+          );
+        })()}
+
         {/* ── Listing Builder Banner ── */}
         {listingMode && (
           <div
@@ -749,13 +854,74 @@ export function GUBERAssistant() {
                   </button>
                 )}
 
+                {/* D.D. Plan Cards */}
+                {msg.role === "assistant" && msg.isDDPlan && msg.planItems && msg.planItems.length > 0 && (
+                  <div className="w-full space-y-1.5 mt-1" data-testid="dd-plan-cards">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Target className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 65%)" }} />
+                      <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
+                        Your D.D. Action Plan
+                      </span>
+                      {msg.ddGoalAmount && (
+                        <span className="ml-auto text-[10px] font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 55%)" }}>
+                          Goal: ${msg.ddGoalAmount.toFixed(0)}
+                        </span>
+                      )}
+                    </div>
+                    {msg.planItems.map((item, k) => (
+                      <button
+                        key={k}
+                        onClick={() => { patchStore({ open: false }); navigate(item.route); }}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-all active:scale-[0.98]"
+                        style={{
+                          background: item.urgency === "high" ? "hsl(270 100% 65% / 0.08)" : "hsl(222 47% 11%)",
+                          border: `1px solid ${item.urgency === "high" ? "hsl(270 100% 65% / 0.3)" : "hsl(222 47% 18%)"}`,
+                        }}
+                        data-testid={`dd-plan-item-${k}`}
+                      >
+                        <span className="text-base flex-shrink-0">{
+                          item.type === "job" ? "💼" :
+                          item.type === "load_board" ? "🚛" :
+                          item.type === "cash_drop" ? "💰" :
+                          item.type === "city_mission" ? "📍" :
+                          item.type === "vi_job" ? "🔍" : "⚡"
+                        }</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white/90 leading-tight truncate">{item.title}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {item.estimatedTime && (
+                              <span className="text-[10px] text-muted-foreground">{item.estimatedTime}</span>
+                            )}
+                            {item.notes && (
+                              <span className="text-[10px] text-muted-foreground truncate">{item.notes}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0 flex items-center gap-1.5">
+                          {item.estimatedPay >= 1 && (
+                            <span className="text-xs font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 55%)" }}>
+                              ${item.estimatedPay % 1 === 0 ? item.estimatedPay.toFixed(0) : item.estimatedPay.toFixed(2)}
+                            </span>
+                          )}
+                          {item.urgency === "high" && (
+                            <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(270 100% 65% / 0.2)", color: "hsl(270 100% 75%)" }}>
+                              TOP
+                            </span>
+                          )}
+                          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Action chips from AI */}
-                {msg.role === "assistant" && msg.actions && msg.actions.length > 0 && (
+                {msg.role === "assistant" && msg.actions && msg.actions.length > 0 && !msg.isDDPlan && (
                   <div className="flex flex-wrap gap-1.5">
                     {msg.actions.map((action, j) => (
                       <button
                         key={j}
-                        onClick={() => handleChip(action.message)}
+                        onClick={() => action.route ? handleRoute(action.route) : handleChip(action.message)}
                         className="rounded-xl px-3 py-1.5 text-xs font-display font-semibold transition-all active:scale-95"
                         style={{
                           background: "rgba(255,255,255,0.05)",

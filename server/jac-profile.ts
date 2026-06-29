@@ -306,6 +306,25 @@ export async function buildMorningBriefing(userId: number): Promise<{
       chips.push({ label: `${nearbyJobs} nearby job${nearbyJobs > 1 ? "s" : ""}`, message: "Find work nearby" });
     }
 
+    // ── D.D. goal progress ─────────────────────────────────────────────────
+    const goalRes = await pool.query(
+      `SELECT id, goal_amount, deadline, earned_so_far FROM jac_dd_goals
+       WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+    if (goalRes.rows.length) {
+      const g = goalRes.rows[0];
+      const remaining = Math.max(0, g.goal_amount - (parseFloat(g.earned_so_far) || 0));
+      const pct = Math.min(100, Math.round(((parseFloat(g.earned_so_far) || 0) / g.goal_amount) * 100));
+      if (remaining > 0) {
+        parts.push(`you're ${pct}% toward your $${g.goal_amount} earning goal`);
+        chips.push({ label: "Update my D.D. plan", message: `I need $${remaining.toFixed(2)} more toward my goal` });
+      } else {
+        parts.push(`you've hit your $${g.goal_amount} earning goal — congrats!`);
+        chips.push({ label: "Set a new earning goal", message: "I want to set a new earning goal" });
+      }
+    }
+
     if (parts.length === 0) {
       const catMemRes = await pool.query(
         `SELECT value FROM jac_memory WHERE user_id = $1 AND category = 'work' AND key = 'top_service_categories' LIMIT 1`,

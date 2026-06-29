@@ -17140,6 +17140,43 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
 
       const firstName = (user.full_name || "").split(" ")[0] || null;
 
+      // ── Active D.D. goal ──────────────────────────────────────────────────
+      let activeGoal: any = null;
+      try {
+        const goalRes = await pool.query(
+          `SELECT id, goal_amount, deadline, plan_json, earned_so_far, status, created_at
+           FROM jac_dd_goals WHERE user_id = $1 AND status = 'active'
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId]
+        );
+        if (goalRes.rows.length) {
+          const g = goalRes.rows[0];
+          // Refresh earned_so_far from wallet_transactions since goal was created
+          const earnRes = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total
+             FROM wallet_transactions WHERE user_id = $1 AND type = 'earning'
+             AND status IN ('available','completed') AND created_at >= $2`,
+            [userId, g.created_at]
+          );
+          const earnedSoFar = parseFloat(earnRes.rows[0]?.total) || 0;
+          if (earnedSoFar !== parseFloat(g.earned_so_far)) {
+            await pool.query(
+              `UPDATE jac_dd_goals SET earned_so_far = $1, updated_at = NOW() WHERE id = $2`,
+              [earnedSoFar, g.id]
+            );
+          }
+          activeGoal = {
+            id: g.id,
+            goalAmount: parseFloat(g.goal_amount),
+            deadline: g.deadline,
+            earnedSoFar,
+            status: g.status,
+            createdAt: g.created_at,
+            planItems: Array.isArray(g.plan_json) ? g.plan_json : [],
+          };
+        }
+      } catch {}
+
       res.json({
         memory,
         live: {
@@ -17161,12 +17198,316 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         },
         alerts,
         firstName,
+        activeGoal,
       });
     } catch (err: any) {
       console.error("[jac/context]", err.message);
       res.status(500).json({ message: err.message });
     }
   });
+
+  // ── JAC D.D. (Destination Determination) ─────────────────────────────────
+
+  // Parse goal amount + deadline from a natural-language message
+  function parseDDIntent(message: string): { goalAmount: number | null; deadline: string | null } {
+    const amtMatch = message.match(/\$\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)/);
+    const goalAmount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g, "")) : null;
+    const dlMatch = message.match(/\b(?:by|before)\s+((?:this\s+)?\w+(?:\s+\d{1,2})?)\b/i);
+    const deadline = dlMatch ? dlMatch[1].trim() : null;
+    return { goalAmount, deadline };
+  }
+
+  app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { message, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
+        message?: string;
+        goalAmount?: number;
+        deadline?: string;
+      };
+
+      const parsed = parseDDIntent(message || "");
+      const goalAmount = bodyGoal ?? parsed.goalAmount;
+      const deadline = bodyDeadline ?? parsed.deadline;
+
+      if (!goalAmount || goalAmount <= 0) {
+        return res.status(400).json({ message: "Please specify a goal amount, e.g. 'I need $500 by Friday'." });
+      }
+
+      // ── Query all income streams in parallel ────────────────────────────
+      const userRes = await pool.query(
+        `SELECT zipcode, id_verified FROM users WHERE id = $1`,
+        [userId]
+      );
+      const zip = userRes.rows[0]?.zipcode ?? null;
+      const idVerified = !!userRes.rows[0]?.id_verified;
+
+      const [jobsRes, lbRes, cashDropRes, missionsRes, earnRes] = await Promise.all([
+        pool.query(
+          `SELECT id, title, budget, category, service_type, zip
+           FROM jobs
+           WHERE status = 'open' AND assigned_worker_id IS NULL
+             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND (zip IS NULL OR $1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
+           ORDER BY budget DESC NULLS LAST LIMIT 5`,
+          [zip]
+        ),
+        pool.query(
+          `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip
+           FROM load_board_listings WHERE status = 'active'
+           ORDER BY posted_price DESC NULLS LAST LIMIT 3`
+        ),
+        pool.query(
+          `SELECT id, title, reward_per_winner, end_time
+           FROM cash_drops
+           WHERE status = 'active' AND (is_test_drop = FALSE OR is_test_drop IS NULL)
+             AND (end_time IS NULL OR end_time > NOW())
+           ORDER BY reward_per_winner DESC LIMIT 3`
+        ),
+        pool.query(
+          `SELECT gtt.id, gtt.emoji, gtt.title, gtt.reward_credits, gtt.description, gtt.category
+           FROM growth_task_templates gtt
+           WHERE gtt.is_active = TRUE AND gtt.paused = FALSE
+             AND NOT EXISTS (
+               SELECT 1 FROM growth_task_completions gtc
+               WHERE gtc.template_id = gtt.id AND gtc.user_id = $1 AND gtc.status = 'approved'
+             )
+           ORDER BY gtt.reward_credits DESC LIMIT 3`,
+          [userId]
+        ),
+        pool.query(
+          `SELECT COALESCE(SUM(amount), 0) AS total
+           FROM wallet_transactions WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')`,
+          [userId]
+        ),
+      ]);
+
+      const earnedTotal = parseFloat(earnRes.rows[0]?.total) || 0;
+
+      // ── Build ranked plan items ─────────────────────────────────────────
+      type PlanItem = {
+        type: string;
+        id?: number;
+        title: string;
+        estimatedPay: number;
+        route: string;
+        urgency: "high" | "normal";
+        actionLabel: string;
+        estimatedTime?: string;
+        notes?: string;
+      };
+
+      const items: PlanItem[] = [];
+
+      for (const j of jobsRes.rows) {
+        const pay = parseFloat(j.budget) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "job",
+          id: j.id,
+          title: j.title || `${j.category || "Job"} in ${j.zip || "your area"}`,
+          estimatedPay: pay,
+          route: `/jobs/${j.id}`,
+          urgency: pay >= goalAmount * 0.5 ? "high" : "normal",
+          actionLabel: "View job",
+          estimatedTime: "2–6 hrs",
+        });
+      }
+
+      for (const lb of lbRes.rows) {
+        const pay = parseFloat(lb.posted_price) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "load_board",
+          id: lb.id,
+          title: `Haul: ${lb.cargo_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
+          estimatedPay: pay,
+          route: `/load-board/${lb.id}`,
+          urgency: pay >= goalAmount * 0.4 ? "high" : "normal",
+          actionLabel: "View run",
+          estimatedTime: "4–8 hrs",
+        });
+      }
+
+      if (idVerified) {
+        for (const cd of cashDropRes.rows) {
+          const pay = parseFloat(cd.reward_per_winner) || 0;
+          if (pay <= 0) continue;
+          const urgency: "high" | "normal" = cd.end_time ? "high" : "normal";
+          items.push({
+            type: "cash_drop",
+            id: cd.id,
+            title: `Cash Drop: ${cd.title}`,
+            estimatedPay: pay,
+            route: `/cash-drops`,
+            urgency,
+            actionLabel: "Claim drop",
+            estimatedTime: "< 1 hr",
+            notes: cd.end_time ? `Ends ${new Date(cd.end_time).toLocaleDateString()}` : undefined,
+          });
+        }
+      }
+
+      for (const m of missionsRes.rows) {
+        const creditsVal = (parseInt(m.reward_credits) || 0) / 1000;
+        items.push({
+          type: "city_mission",
+          id: m.id,
+          title: `${m.emoji || "📍"} Mission: ${m.title}`,
+          estimatedPay: creditsVal,
+          route: `/credits`,
+          urgency: "normal",
+          actionLabel: "Start mission",
+          estimatedTime: "< 30 min",
+          notes: `Earns ${m.reward_credits} credits`,
+        });
+      }
+
+      // Sort by estimated pay DESC, urgency first
+      items.sort((a, b) => {
+        if (a.urgency === "high" && b.urgency !== "high") return -1;
+        if (b.urgency === "high" && a.urgency !== "high") return 1;
+        return b.estimatedPay - a.estimatedPay;
+      });
+
+      const topItems = items.slice(0, 7);
+
+      // ── Save / update D.D. goal ─────────────────────────────────────────
+      // Mark any previous active goals as superseded
+      await pool.query(
+        `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+      const insertRes = await pool.query(
+        `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, status)
+         VALUES ($1, $2, $3, $4::jsonb, $5, 'active')
+         RETURNING id`,
+        [userId, goalAmount, deadline, JSON.stringify(topItems), earnedTotal]
+      );
+      const goalId = insertRes.rows[0]?.id;
+
+      // ── Build JAC coordinator response ──────────────────────────────────
+      const remaining = Math.max(0, goalAmount - earnedTotal);
+      const deadlineText = deadline ? ` by ${deadline}` : "";
+      const projectableTotal = topItems.reduce((s, i) => s + i.estimatedPay, 0);
+
+      let intro: string;
+      if (topItems.length === 0) {
+        intro = `I've locked in your goal: earn $${goalAmount.toFixed(2)}${deadlineText}. I don't see live opportunities right now — but check back as new jobs post every day. You need $${remaining.toFixed(2)} more.`;
+      } else {
+        const plural = topItems.length === 1 ? "opportunity" : "opportunities";
+        const projLine = projectableTotal >= remaining
+          ? `Between these ${topItems.length} ${plural}, you could close the gap.`
+          : `These ${plural} get you closer — keep stacking them.`;
+        intro = `D.D. locked. Goal: $${goalAmount.toFixed(2)}${deadlineText}. You need $${remaining.toFixed(2)} more. ${projLine} Here's your ranked action plan:`;
+      }
+
+      res.json({
+        goalId,
+        goalAmount,
+        deadline,
+        earnedSoFar: earnedTotal,
+        remaining,
+        planItems: topItems,
+        reply: intro,
+        actions: topItems.slice(0, 4).map(item => ({
+          label: item.actionLabel,
+          message: `Take me to: ${item.title}`,
+          route: item.route,
+        })),
+      });
+    } catch (err: any) {
+      console.error("[jac/dd/plan]", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/jac/dd/goals", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const result = await pool.query(
+        `SELECT id, goal_amount, deadline, plan_json, earned_so_far, status, created_at, updated_at
+         FROM jac_dd_goals WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        [userId]
+      );
+      res.json(result.rows.map(r => ({
+        id: r.id,
+        goalAmount: parseFloat(r.goal_amount),
+        deadline: r.deadline,
+        planItems: Array.isArray(r.plan_json) ? r.plan_json : [],
+        earnedSoFar: parseFloat(r.earned_so_far) || 0,
+        status: r.status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })));
+    } catch (err: any) {
+      console.error("[jac/dd/goals]", err.message);
+      res.json([]);
+    }
+  });
+
+  app.patch("/api/jac/dd/goals/:id/abandon", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      await pool.query(
+        `UPDATE jac_dd_goals SET status = 'abandoned', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/dd/stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const adminRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [req.session.userId]);
+      if (adminRes.rows[0]?.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+
+      const [totals, topGoals, recent] = await Promise.all([
+        pool.query(`
+          SELECT
+            COUNT(*)::int AS total_goals,
+            COUNT(*) FILTER (WHERE status = 'active')::int AS active_goals,
+            COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_goals,
+            COUNT(*) FILTER (WHERE status = 'abandoned')::int AS abandoned_goals,
+            ROUND(AVG(goal_amount)::numeric, 2) AS avg_goal_amount,
+            ROUND(AVG(earned_so_far)::numeric, 2) AS avg_earned,
+            COUNT(DISTINCT user_id)::int AS unique_users
+          FROM jac_dd_goals
+        `),
+        pool.query(`
+          SELECT goal_amount, COUNT(*)::int AS cnt
+          FROM jac_dd_goals
+          GROUP BY goal_amount ORDER BY cnt DESC LIMIT 5
+        `),
+        pool.query(`
+          SELECT g.id, g.goal_amount, g.deadline, g.earned_so_far, g.status, g.created_at,
+                 u.full_name, u.id AS user_id
+          FROM jac_dd_goals g JOIN users u ON u.id = g.user_id
+          ORDER BY g.created_at DESC LIMIT 10
+        `),
+      ]);
+
+      res.json({
+        totalGoals:     totals.rows[0]?.total_goals ?? 0,
+        activeGoals:    totals.rows[0]?.active_goals ?? 0,
+        completedGoals: totals.rows[0]?.completed_goals ?? 0,
+        abandonedGoals: totals.rows[0]?.abandoned_goals ?? 0,
+        avgGoalAmount:  parseFloat(totals.rows[0]?.avg_goal_amount) || 0,
+        avgEarned:      parseFloat(totals.rows[0]?.avg_earned) || 0,
+        uniqueUsers:    totals.rows[0]?.unique_users ?? 0,
+        topGoalAmounts: topGoals.rows,
+        recentGoals:    recent.rows,
+      });
+    } catch (err: any) {
+      console.error("[admin/jac/dd/stats]", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
 
   // ── JAC Brain Admin APIs ──────────────────────────────────────────────────────
 

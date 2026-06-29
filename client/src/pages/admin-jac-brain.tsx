@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Brain, Zap, BookOpen, ListOrdered, Archive, Lightbulb, Trash2, CheckCircle, XCircle, Plus, TrendingUp, RefreshCw } from "lucide-react";
+import { Brain, Zap, BookOpen, ListOrdered, Archive, Lightbulb, Trash2, CheckCircle, XCircle, Plus, TrendingUp, RefreshCw, Target } from "lucide-react";
 
 const CATEGORIES = ["general", "jobs", "payments", "marketplace", "vi", "load_board", "credits", "safety", "gps", "studio"];
 
@@ -550,6 +550,108 @@ function SuggestionsTab() {
   );
 }
 
+// ── Goals Tab ─────────────────────────────────────────────────────────────────
+function GoalsTab() {
+  const { data: stats, isLoading, refetch } = useQuery<any>({ queryKey: ["/api/admin/jac/dd/stats"] });
+
+  if (isLoading) return <div className="text-center py-10 text-muted-foreground">Loading D.D. goal stats…</div>;
+
+  const s = stats ?? {};
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-lg">D.D. Goal Stats</h2>
+        <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="btn-refresh-dd-stats">
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Goals", value: s.totalGoals ?? 0, color: "text-blue-600" },
+          { label: "Active Goals", value: s.activeGoals ?? 0, color: "text-purple-600" },
+          { label: "Completed", value: s.completedGoals ?? 0, color: "text-green-600" },
+          { label: "Unique Users", value: s.uniqueUsers ?? 0, color: "text-amber-600" },
+        ].map(({ label, value, color }) => (
+          <Card key={label} data-testid={`dd-stat-${label.toLowerCase().replace(/ /g,'-')}`}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <Target className={`h-8 w-8 ${color}`} />
+              <div>
+                <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">{label}</div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Avg Goal Amount</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-purple-600">${(s.avgGoalAmount ?? 0).toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-1">Per D.D. session</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Avg Earned So Far</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-600">${(s.avgEarned ?? 0).toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-1">Progress toward goal</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Top Goal Amounts</CardTitle></CardHeader>
+          <CardContent className="space-y-1">
+            {(s.topGoalAmounts ?? []).map((row: any) => (
+              <div key={row.goal_amount} className="flex justify-between text-sm">
+                <span>${row.goal_amount}</span>
+                <span className="font-medium">{row.cnt}×</span>
+              </div>
+            ))}
+            {!(s.topGoalAmounts?.length) && <div className="text-xs text-muted-foreground">No data yet</div>}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <h3 className="font-semibold text-sm mb-3">Recent Goals</h3>
+        <div className="space-y-2">
+          {(s.recentGoals ?? []).map((g: any) => {
+            const pct = Math.min(100, Math.round((parseFloat(g.earned_so_far) / parseFloat(g.goal_amount)) * 100));
+            return (
+              <Card key={g.id} data-testid={`dd-goal-row-${g.id}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={g.status === "active" ? "default" : g.status === "completed" ? "secondary" : "outline"} className="text-xs">
+                          {g.status}
+                        </Badge>
+                        <span className="font-medium text-sm">${parseFloat(g.goal_amount).toFixed(2)}{g.deadline ? ` by ${g.deadline}` : ""}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">{g.full_name ?? `User #${g.user_id}`}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden bg-muted">
+                        <div className="h-full rounded-full bg-purple-500 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>${parseFloat(g.earned_so_far).toFixed(2)} earned</span>
+                        <span>{pct}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+          {!(s.recentGoals?.length) && <div className="text-center py-8 text-muted-foreground">No D.D. goals yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AdminJacBrain() {
   return (
@@ -565,12 +667,13 @@ export default function AdminJacBrain() {
       </div>
 
       <Tabs defaultValue="stats">
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-6 w-full">
           <TabsTrigger value="stats" data-testid="tab-stats"><Zap className="h-4 w-4 mr-1" />Stats</TabsTrigger>
           <TabsTrigger value="knowledge" data-testid="tab-knowledge"><BookOpen className="h-4 w-4 mr-1" />Knowledge</TabsTrigger>
           <TabsTrigger value="intents" data-testid="tab-intents"><ListOrdered className="h-4 w-4 mr-1" />Intents</TabsTrigger>
           <TabsTrigger value="cache" data-testid="tab-cache"><Archive className="h-4 w-4 mr-1" />Cache</TabsTrigger>
           <TabsTrigger value="suggestions" data-testid="tab-suggestions"><Lightbulb className="h-4 w-4 mr-1" />Suggest</TabsTrigger>
+          <TabsTrigger value="goals" data-testid="tab-goals"><Target className="h-4 w-4 mr-1" />Goals</TabsTrigger>
         </TabsList>
 
         <TabsContent value="stats" className="mt-6"><StatsTab /></TabsContent>
@@ -578,6 +681,7 @@ export default function AdminJacBrain() {
         <TabsContent value="intents" className="mt-6"><IntentsTab /></TabsContent>
         <TabsContent value="cache" className="mt-6"><CacheTab /></TabsContent>
         <TabsContent value="suggestions" className="mt-6"><SuggestionsTab /></TabsContent>
+        <TabsContent value="goals" className="mt-6"><GoalsTab /></TabsContent>
       </Tabs>
     </div>
   );

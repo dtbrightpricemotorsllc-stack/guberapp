@@ -976,6 +976,21 @@ app.use((req, res, next) => {
     ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS admin_notes TEXT;
   `).catch(e => console.error("[migration] jac_brain tables error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_dd_goals (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      goal_amount  REAL NOT NULL,
+      deadline     TEXT,
+      plan_json    JSONB DEFAULT '[]',
+      earned_so_far REAL DEFAULT 0,
+      status       TEXT NOT NULL DEFAULT 'active',
+      created_at   TIMESTAMP DEFAULT NOW(),
+      updated_at   TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_dd_goals_user ON jac_dd_goals(user_id, status);
+  `).catch(e => console.error("[migration] jac_dd_goals error:", e));
+
   // Seed GUBER knowledge base (only if empty)
   await pool.query(`
     INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)

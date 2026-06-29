@@ -27,11 +27,31 @@ export interface JacAlert {
   priority: "high" | "medium" | "low";
 }
 
+export interface JacDDGoal {
+  id: number;
+  goalAmount: number;
+  deadline: string | null;
+  earnedSoFar: number;
+  status: string;
+  createdAt: string;
+  planItems: Array<{
+    type: string;
+    title: string;
+    estimatedPay: number;
+    route: string;
+    urgency: string;
+    actionLabel: string;
+    estimatedTime?: string;
+    notes?: string;
+  }>;
+}
+
 export interface JacContext {
   memory: JacMemoryEntry[];
   live: JacLiveState;
   alerts: JacAlert[];
   firstName: string | null;
+  activeGoal?: JacDDGoal | null;
 }
 
 export interface JacOpportunity {
