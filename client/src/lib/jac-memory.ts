@@ -1,7 +1,7 @@
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export type MemoryCategory = "personal" | "work" | "marketplace" | "vi" | "load_board" | "preferences";
+export type MemoryCategory = "personal" | "work" | "marketplace" | "vi" | "load_board" | "preferences" | "profile" | "vehicle" | "certifications" | "schedule" | "system";
 export type MemorySource = "user_said" | "extracted" | "system";
 
 export interface JacMemoryEntry {
@@ -64,9 +64,19 @@ const VEHICLE_SELL_RE = /\b(sell|selling|selling my|list my)\b.{0,40}\b(car|truc
 const VI_RE = /\b(inspect|inspection|verify|v&i|dealer)\b/i;
 const DOT_RE = /\bDOT\b/;
 const TRAILER_RE = /\b(flatbed|step deck|dry van|reefer|lowboy|hotshot|trailer)\b/i;
+// ── Profile-level extractions ──────────────────────────────────────────────
+const CDL_RE = /\bCDL\b|\bcommercial (driver|license|licence)\b/i;
+const HAVE_TRUCK_RE = /\b(i have|i own|my)\b.{0,25}\b(pickup|truck|pickup truck|f-150|silverado|ram|tacoma|tundra|f150|f250|f350)\b/i;
+const HAVE_VAN_RE = /\b(i have|i own|my)\b.{0,25}\b(van|sprinter|transit van|cargo van)\b/i;
+const HAVE_TRAILER_RE = /\b(i have|i own|my)\b.{0,25}\b(trailer|flatbed|enclosed trailer)\b/i;
+const MORNING_SHIFT_RE = /\b(mornings?|early|before noon|7am|8am|9am|6am)\b/i;
+const EVENING_SHIFT_RE = /\b(evenings?|nights?|after (5|6|7)|7pm|8pm|9pm|10pm)\b/i;
+const WEEKEND_RE = /\b(weekends?|saturday|sunday)\b/i;
+const WEEKDAY_RE = /\b(weekdays?|monday|tuesday|wednesday|thursday|friday)\b/i;
+const EARN_TARGET_RE = /\b(?:make|earn|need)\b.{0,15}\$(\d{2,4})\b.{0,20}\b(?:day|week|month)\b/i;
+const CERT_BACKGROUND_RE = /\b(background check|background checked|i passed|i have a clearance)\b/i;
 
 export function extractAndSaveMemory(userText: string, _assistantText: string): void {
-  // Run async — caller does not await
   (async () => {
     const entries: Array<{ category: MemoryCategory; key: string; value: unknown }> = [];
 
@@ -85,6 +95,27 @@ export function extractAndSaveMemory(userText: string, _assistantText: string): 
     if (DOT_RE.test(userText)) entries.push({ category: "load_board", key: "has_dot", value: true });
     const trailer = TRAILER_RE.exec(userText)?.[1];
     if (trailer) entries.push({ category: "load_board", key: "trailer_type", value: trailer.toLowerCase() });
+
+    // ── Vehicle ownership signals ──────────────────────────────────────────
+    if (HAVE_TRUCK_RE.test(userText)) entries.push({ category: "vehicle", key: "has_truck", value: true });
+    if (HAVE_VAN_RE.test(userText)) entries.push({ category: "vehicle", key: "has_van", value: true });
+    if (HAVE_TRAILER_RE.test(userText)) entries.push({ category: "vehicle", key: "has_trailer", value: true });
+
+    // ── Schedule preferences ───────────────────────────────────────────────
+    if (MORNING_SHIFT_RE.test(userText)) entries.push({ category: "schedule", key: "preferred_shift", value: "morning" });
+    if (EVENING_SHIFT_RE.test(userText)) entries.push({ category: "schedule", key: "preferred_shift", value: "evening" });
+    if (WEEKEND_RE.test(userText)) entries.push({ category: "schedule", key: "available_days", value: "weekends" });
+    if (WEEKDAY_RE.test(userText)) entries.push({ category: "schedule", key: "available_days", value: "weekdays" });
+
+    // ── Certifications ─────────────────────────────────────────────────────
+    if (CDL_RE.test(userText)) entries.push({ category: "certifications", key: "has_cdl", value: true });
+    if (CERT_BACKGROUND_RE.test(userText)) entries.push({ category: "certifications", key: "background_checked", value: true });
+
+    // ── Earnings target ────────────────────────────────────────────────────
+    const earnMatch = EARN_TARGET_RE.exec(userText);
+    if (earnMatch) {
+      entries.push({ category: "preferences", key: "earnings_target", value: { amount: parseInt(earnMatch[1]), period: earnMatch[0].toLowerCase().includes("day") ? "day" : earnMatch[0].toLowerCase().includes("month") ? "month" : "week" } });
+    }
 
     for (const e of entries) {
       await saveJacMemory(e.category, e.key, e.value, "extracted");

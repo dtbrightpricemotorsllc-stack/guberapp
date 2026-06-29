@@ -34,6 +34,22 @@ export interface JacContext {
   firstName: string | null;
 }
 
+export interface JacOpportunity {
+  type: "job" | "load_board" | "pending_action";
+  id?: number;
+  title: string;
+  subtitle?: string;
+  payLabel?: string;
+  route: string;
+  urgency: "high" | "normal";
+  tag?: string;
+}
+
+export interface JacBriefing {
+  text: string | null;
+  chips: Array<{ label: string; message: string }>;
+}
+
 export function useJacContext(enabled = false) {
   return useQuery<JacContext>({
     queryKey: ["/api/jac/context"],
@@ -43,7 +59,24 @@ export function useJacContext(enabled = false) {
   });
 }
 
-// Convenience: get memory value by category + key
+export function useJacOpportunities(enabled = false) {
+  return useQuery<JacOpportunity[]>({
+    queryKey: ["/api/jac/opportunities"],
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useJacBriefing(enabled = false) {
+  return useQuery<JacBriefing>({
+    queryKey: ["/api/jac/briefing"],
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
 export function getMemoryValue(memory: JacMemoryEntry[], category: string, key: string): unknown {
   return memory.find(m => m.category === category && m.key === key)?.value ?? null;
 }

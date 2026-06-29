@@ -24,6 +24,7 @@ import {
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats } from "./jac-brain";
+import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
   getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
@@ -15969,6 +15970,13 @@ Use memory + live data to personalize every response. Reference their history na
 If they say "same as last time" or similar, use memory to fill in what you know.
 
 `;
+          // Enrich with deep profile data (synced from GUBER DB into jac_memory)
+          try {
+            const profileCtx = await buildJacProfileContext(onboardUserId);
+            if (profileCtx) userContextSection += profileCtx + "\n\n";
+          } catch {}
+          // Fire-and-forget profile sync so next call gets fresher data
+          syncJacProfile(onboardUserId).catch(() => {});
         } catch (ctxErr: any) {
           console.error("[JAC onboard ctx]", ctxErr.message);
         }
@@ -17047,9 +17055,33 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
   });
 
   // ── JAC Full Live Context (everything JAC needs to know about a user) ──────
+  app.get("/api/jac/briefing", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const briefing = await buildMorningBriefing(userId);
+      if (!briefing) return res.json({ text: null, chips: [] });
+      res.json({ text: briefing.text, chips: briefing.chips });
+    } catch (err: any) {
+      console.error("[jac/briefing]", err.message);
+      res.json({ text: null, chips: [] });
+    }
+  });
+
+  app.get("/api/jac/opportunities", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const opportunities = await scanOpportunities(userId);
+      res.json(opportunities);
+    } catch (err: any) {
+      console.error("[jac/opportunities]", err.message);
+      res.json([]);
+    }
+  });
+
   app.get("/api/jac/context", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
+      syncJacProfile(userId).catch(() => {});
       const [memRes, liveRes, userRes] = await Promise.all([
         pool.query(
           `SELECT id, category, key, value, source, updated_at FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC`,
