@@ -17022,7 +17022,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     try {
       const userId = req.session.userId!;
       const { category, key, value, source } = req.body;
-      const ALLOWED_CATEGORIES = ["personal", "work", "marketplace", "vi", "load_board", "preferences"];
+      const ALLOWED_CATEGORIES = ["personal", "work", "marketplace", "vi", "load_board", "preferences", "profile", "vehicle", "certifications", "schedule", "system"];
       if (!ALLOWED_CATEGORIES.includes(category) || typeof key !== "string" || !key.trim()) {
         return res.status(400).json({ message: "Invalid category or key" });
       }

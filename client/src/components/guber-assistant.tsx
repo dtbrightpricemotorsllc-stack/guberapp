@@ -290,6 +290,11 @@ export function GUBERAssistant() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.open]);
 
+  // Reset briefing ref on close so the server-side daily gate is re-checked on next open
+  useEffect(() => {
+    if (!s.open) briefingInjectedRef.current = false;
+  }, [s.open]);
+
   // ── Morning briefing injection ─────────────────────────────────────────────
   // Server gates by calendar day per user (jac_memory system/last_briefing_date).
   // Returns null if already shown today — we replace the default greeting with the briefing.

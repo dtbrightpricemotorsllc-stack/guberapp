@@ -234,18 +234,29 @@ export async function buildMorningBriefing(userId: number): Promise<{
       pool.query(
         `SELECT key, value FROM jac_memory
          WHERE user_id = $1 AND category IN ('work','profile')
-           AND key IN ('earnings_7d','top_service_categories','wallet_balance','first_name')`,
+           AND key IN ('earnings_7d','top_service_categories','wallet_balance','first_name','home_zip')`,
         [userId]
       ),
       pool.query(`
         SELECT
           (SELECT full_name FROM users WHERE id = $1) AS full_name,
+          (SELECT zipcode FROM users WHERE id = $1) AS zipcode,
           (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
           (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id = $1 AND status = 'open' AND assigned_helper_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
           (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS pending_offers,
-          (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance
+          (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
+          (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) +
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') +
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS pending_action_count,
+          (SELECT COUNT(*)::int FROM jobs
+           WHERE status = 'open' AND assigned_helper_id IS NULL AND is_published = TRUE
+             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND zip IS NOT NULL
+             AND (SELECT zipcode FROM users WHERE id = $1) IS NOT NULL
+             AND LEFT(zip, 3) = LEFT((SELECT zipcode FROM users WHERE id = $1), 3)
+          ) AS nearby_jobs
       `, [userId]),
     ]);
 
@@ -295,15 +306,25 @@ export async function buildMorningBriefing(userId: number): Promise<{
       parts.push(`${unread} unread notification${unread > 1 ? "s" : ""}`);
     }
 
+    const nearbyJobs = parseInt(live.nearby_jobs) || 0;
+    const pendingActionCount = parseInt(live.pending_action_count) || 0;
+
+    if (nearbyJobs > 0) {
+      chips.push({ label: `${nearbyJobs} nearby job${nearbyJobs > 1 ? "s" : ""}`, message: "Find work nearby" });
+    }
+
     if (parts.length === 0) {
       const topCats: string[] = Array.isArray(memMap["top_service_categories"]) ? memMap["top_service_categories"] : [];
       const catHint = topCats.length ? ` in ${topCats[0]}` : "";
-      chips.push({ label: "Find work nearby", message: "Find work nearby" });
+      if (!chips.some(c => c.message === "Find work nearby")) {
+        chips.push({ label: "Find work nearby", message: "Find work nearby" });
+      }
       chips.push({ label: "Post a job", message: "I need to hire help" });
 
+      const nearbyHint = nearbyJobs > 0 ? ` There ${nearbyJobs === 1 ? "is" : "are"} ${nearbyJobs} open job${nearbyJobs > 1 ? "s" : ""} near you.` : "";
       await upsertMemory(userId, "system", "last_briefing_date", today);
       return {
-        text: `Good morning, ${firstName}! Everything looks good — no urgent items. Ready to find work${catHint} or post a new job?`,
+        text: `Good morning, ${firstName}! Everything looks good — no urgent items.${nearbyHint} Ready to find work${catHint} or post a new job?`,
         chips,
       };
     }
@@ -314,9 +335,12 @@ export async function buildMorningBriefing(userId: number): Promise<{
       ? parts[0]
       : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
 
+    const nearbyLine = nearbyJobs > 0 ? ` Also, ${nearbyJobs} job${nearbyJobs > 1 ? "s" : ""} near you ${nearbyJobs === 1 ? "is" : "are"} open.` : "";
+    const pendingLine = pendingActionCount > 0 ? ` You have ${pendingActionCount} item${pendingActionCount > 1 ? "s" : ""} needing attention.` : "";
+
     await upsertMemory(userId, "system", "last_briefing_date", today);
     return {
-      text: `Morning, ${firstName}! Quick update — ${summary}. What would you like to tackle first?`,
+      text: `Morning, ${firstName}! Quick update — ${summary}.${pendingLine}${nearbyLine} What would you like to tackle first?`,
       chips,
     };
   } catch (err: any) {
@@ -345,7 +369,7 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
   const opportunities: JacOpportunity[] = [];
   try {
     // ── 1. Pending actions (highest priority, shown first) ──────────────────
-    const [actionRes, walletRes, onTheWayRes] = await Promise.all([
+    const [actionRes, walletRes, onTheWayRes, expiringDocsRes] = await Promise.all([
       pool.query(`
         SELECT
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
@@ -366,11 +390,25 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
            AND deleted_at IS NULL`,
         [userId]
       ),
+      // Documents (release authorizations) expiring within 30 days
+      pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM release_authorizations
+         WHERE approved_by IS NOT NULL
+           AND expires_at IS NOT NULL
+           AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+           AND asset_id IN (
+             SELECT id FROM tow_vehicle_verifications WHERE carrier_id = $1
+             UNION ALL
+             SELECT id FROM trailer_verifications WHERE carrier_id = $1
+           )`,
+        [userId]
+      ),
     ]);
 
     const actions = actionRes.rows[0] ?? {};
     const walletBalance = parseFloat(walletRes.rows[0]?.balance || "0");
     const stuckJobs = parseInt(onTheWayRes.rows[0]?.cnt || "0");
+    const expiringDocs = parseInt(expiringDocsRes.rows[0]?.cnt || "0");
 
     if (parseInt(actions.disputes) > 0) {
       pending.push({ type: "pending_action", title: `${actions.disputes} open dispute${actions.disputes > 1 ? "s" : ""}`, subtitle: "Needs your response", route: "/jobs", urgency: "high", tag: "⚠️ Dispute" });
@@ -386,6 +424,9 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     }
     if (walletBalance >= 50) {
       pending.push({ type: "pending_action", title: `$${walletBalance.toFixed(2)} available to cash out`, subtitle: "Tap to request a withdrawal", route: "/profile", urgency: "normal", tag: "💰 Wallet" });
+    }
+    if (expiringDocs > 0) {
+      pending.push({ type: "pending_action", title: `${expiringDocs} transport authorization${expiringDocs > 1 ? "s" : ""} expiring soon`, subtitle: "Renewal needed within 30 days", route: "/profile", urgency: "high", tag: "📄 Expiring" });
     }
 
     // ── 2. Profile data for opportunity matching ────────────────────────────
