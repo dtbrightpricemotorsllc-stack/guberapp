@@ -108,6 +108,7 @@ const AdminQaPush = lazy(() => import("@/pages/admin-qa-push"));
 const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
 const AdminStudio = lazy(() => import("@/pages/admin-studio"));
 const AdminGuberScout = lazy(() => import("@/pages/admin-guber-scout"));
+const AdminJacBrain = lazy(() => import("@/pages/admin-jac-brain"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
@@ -363,6 +364,7 @@ function Router() {
       <Route path="/admin/users/:id" component={() => <AdminRoute component={AdminUserProfile} />} />
       <Route path="/admin/studio" component={() => <AdminRoute component={AdminStudio} />} />
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
+      <Route path="/admin/jac-brain" component={() => <AdminRoute component={AdminJacBrain} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />

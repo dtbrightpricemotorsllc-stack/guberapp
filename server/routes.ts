@@ -23,6 +23,7 @@ import {
   type StudioTierPlanId,
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
+import { tryLocalAnswer, promoteToCache, getJacBrainStats } from "./jac-brain";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
   getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
@@ -15973,6 +15974,26 @@ If they say "same as last time" or similar, use memory to fill in what you know.
         }
       }
 
+      // ── Try local KB/cache answer first (zero AI cost) ──────────────────
+      const _lastUserMsg = sanitized.filter(m => m.role === "user").pop()?.content ?? "";
+      if (_lastUserMsg) {
+        try {
+          const localAns = await tryLocalAnswer(_lastUserMsg);
+          if (localAns && localAns.confidence >= 0.85) {
+            return res.json({
+              reply: localAns.answer,
+              confidence: "high",
+              route: null,
+              actions: localAns.followUpActions ?? [],
+              options: [],
+              tracking: { costSource: localAns.source, kbId: localAns.kbId },
+            });
+          }
+        } catch (brainErr: any) {
+          console.error("[JAC brain]", brainErr.message);
+        }
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -17113,6 +17134,242 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       console.error("[jac/context]", err.message);
       res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── JAC Brain Admin APIs ──────────────────────────────────────────────────────
+
+  app.get("/api/admin/jac/brain/stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const stats = await getJacBrainStats();
+      const interactionCounts = await pool.query(`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE cost_source = 'local')::int AS local_hits,
+          COUNT(*) FILTER (WHERE cost_source = 'cache')::int AS cache_hits,
+          COUNT(*) FILTER (WHERE cost_source = 'kb')::int AS kb_hits
+        FROM jac_interactions
+        WHERE created_at > NOW() - INTERVAL '30 days'
+      `);
+      const ic = interactionCounts.rows[0];
+      res.json({ ...stats, interactions: ic });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Knowledge Base CRUD
+  app.get("/api/admin/jac/brain/knowledge", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`SELECT * FROM jac_knowledge ORDER BY hit_count DESC, created_at DESC LIMIT 200`);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/knowledge", requireAdmin, async (req: Request, res: Response) => {
+    const { category, title, questionPatterns, keywords, answer, followUpActions } = req.body;
+    if (!category || !title || !answer) return res.status(400).json({ message: "category, title, answer required" });
+    try {
+      const r = await pool.query(
+        `INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by, admin_approved)
+         VALUES ($1,$2,$3,$4,$5,$6,'admin',TRUE) RETURNING *`,
+        [category, title,
+         JSON.stringify(questionPatterns ?? []),
+         JSON.stringify(keywords ?? []),
+         answer,
+         JSON.stringify(followUpActions ?? [])]
+      );
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/admin/jac/brain/knowledge/:id", requireAdmin, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { category, title, questionPatterns, keywords, answer, followUpActions, active, adminApproved } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE jac_knowledge SET
+          category = COALESCE($1, category),
+          title = COALESCE($2, title),
+          question_patterns = COALESCE($3::jsonb, question_patterns),
+          keywords = COALESCE($4::jsonb, keywords),
+          answer = COALESCE($5, answer),
+          follow_up_actions = COALESCE($6::jsonb, follow_up_actions),
+          active = COALESCE($7, active),
+          admin_approved = COALESCE($8, admin_approved),
+          updated_at = NOW()
+         WHERE id = $9 RETURNING *`,
+        [category, title,
+         questionPatterns ? JSON.stringify(questionPatterns) : null,
+         keywords ? JSON.stringify(keywords) : null,
+         answer,
+         followUpActions ? JSON.stringify(followUpActions) : null,
+         active, adminApproved, parseInt(id)]
+      );
+      if (!r.rows.length) return res.status(404).json({ message: "Not found" });
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/jac/brain/knowledge/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`DELETE FROM jac_knowledge WHERE id = $1`, [parseInt(req.params.id)]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Intents CRUD
+  app.get("/api/admin/jac/brain/intents", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`SELECT * FROM jac_intents ORDER BY hit_count DESC, created_at DESC`);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/intents", requireAdmin, async (req: Request, res: Response) => {
+    const { intentName, displayName, samplePhrases, targetFlow, targetRoute, fallbackResponse } = req.body;
+    if (!intentName || !displayName) return res.status(400).json({ message: "intentName, displayName required" });
+    try {
+      const r = await pool.query(
+        `INSERT INTO jac_intents (intent_name, display_name, sample_phrases, target_flow, target_route, fallback_response)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [intentName, displayName, JSON.stringify(samplePhrases ?? []), targetFlow, targetRoute, fallbackResponse]
+      );
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/admin/jac/brain/intents/:id", requireAdmin, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { displayName, samplePhrases, targetFlow, targetRoute, fallbackResponse, active } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE jac_intents SET
+          display_name = COALESCE($1, display_name),
+          sample_phrases = COALESCE($2::jsonb, sample_phrases),
+          target_flow = COALESCE($3, target_flow),
+          target_route = COALESCE($4, target_route),
+          fallback_response = COALESCE($5, fallback_response),
+          active = COALESCE($6, active),
+          updated_at = NOW()
+         WHERE id = $7 RETURNING *`,
+        [displayName, samplePhrases ? JSON.stringify(samplePhrases) : null,
+         targetFlow, targetRoute, fallbackResponse, active, parseInt(id)]
+      );
+      if (!r.rows.length) return res.status(404).json({ message: "Not found" });
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/jac/brain/intents/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`DELETE FROM jac_intents WHERE id = $1`, [parseInt(req.params.id)]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Response Cache
+  app.get("/api/admin/jac/brain/cache", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`SELECT * FROM jac_response_cache ORDER BY hit_count DESC, created_at DESC LIMIT 100`);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/cache/promote", requireAdmin, async (req: Request, res: Response) => {
+    const { questionText, answerText, intentName } = req.body;
+    if (!questionText || !answerText) return res.status(400).json({ message: "questionText, answerText required" });
+    try {
+      await promoteToCache(questionText, answerText, intentName ?? null, "admin");
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/cache/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `UPDATE jac_response_cache SET admin_approved = NOT admin_approved WHERE id = $1 RETURNING *`,
+        [parseInt(req.params.id)]
+      );
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/jac/brain/cache/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`DELETE FROM jac_response_cache WHERE id = $1`, [parseInt(req.params.id)]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Suggestions (top repeated questions not in KB)
+  app.get("/api/admin/jac/brain/suggestions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`
+        WITH last_msgs AS (
+          SELECT
+            lower(regexp_replace(
+              (messages->-1->>'content'),
+              '[^a-z0-9 ]', ' ', 'gi'
+            )) AS q,
+            COUNT(*) AS freq
+          FROM jac_interactions
+          WHERE
+            messages IS NOT NULL
+            AND jsonb_array_length(messages) > 0
+            AND messages->-1->>'role' = 'user'
+            AND created_at > NOW() - INTERVAL '30 days'
+          GROUP BY 1
+        )
+        SELECT q AS question, freq::int
+        FROM last_msgs
+        WHERE length(q) > 8
+          AND NOT EXISTS (
+            SELECT 1 FROM jac_knowledge k
+            WHERE q ILIKE '%' || ANY (
+              ARRAY(SELECT jsonb_array_elements_text(k.keywords))
+            ) || '%'
+          )
+        ORDER BY freq DESC
+        LIMIT 30
+      `);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Interaction review
+  app.get("/api/admin/jac/brain/interactions", requireAdmin, async (req: Request, res: Response) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+    try {
+      const r = await pool.query(`
+        SELECT id, user_id, visitor_id, intent, cost_source, admin_reviewed, admin_notes, created_at,
+               messages->-1 AS last_message
+        FROM jac_interactions
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [limit, offset]);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/interactions/:id/feedback", requireAdmin, async (req: Request, res: Response) => {
+    const { adminNotes, adminReviewed, promoteAnswer } = req.body;
+    try {
+      await pool.query(
+        `UPDATE jac_interactions SET admin_reviewed = $1, admin_notes = COALESCE($2, admin_notes), updated_at = NOW() WHERE id = $3`,
+        [adminReviewed ?? true, adminNotes, parseInt(req.params.id)]
+      );
+      if (promoteAnswer) {
+        const row = await pool.query(`SELECT messages FROM jac_interactions WHERE id = $1`, [parseInt(req.params.id)]);
+        if (row.rows.length) {
+          const msgs: Array<{ role: string; content: string }> = row.rows[0].messages ?? [];
+          const q = msgs.filter(m => m.role === "user").pop()?.content ?? "";
+          const a = msgs.filter(m => m.role === "assistant").pop()?.content ?? "";
+          if (q && a) await promoteToCache(q, a, null, "ai_approved");
+        }
+      }
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
