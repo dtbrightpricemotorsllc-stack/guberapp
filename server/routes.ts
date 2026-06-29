@@ -10194,6 +10194,73 @@ export async function registerRoutes(
     }
   });
 
+  // ── JAC Smart Chat: structured quick-action (logs + notifies other party) ─
+  app.post("/api/jobs/:id/quick-action", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      const userId = req.session.userId!;
+      const isWorker = job.assignedHelperId === userId;
+      const isPoster = job.postedById === userId;
+      if (!isWorker && !isPoster) return res.status(403).json({ message: "Not a participant" });
+
+      const { action, flowType } = req.body;
+      const ALLOWED_ACTIONS = [
+        "running_late", "need_clarification", "proof_uploaded",
+        "job_complete", "reviewing_now", "issue_found",
+        "leaving_pickup", "arrived_pickup", "loaded", "in_transit",
+        "fuel_stop", "delay", "mechanical_issue", "delivered",
+        "gate_code", "dock_number", "loading_ready", "delivery_confirmed",
+        "leaving_now", "im_here", "cash_ready", "title_ready",
+        "meeting_complete", "vehicle_sold",
+      ];
+      if (!ALLOWED_ACTIONS.includes(action)) {
+        return res.status(400).json({ message: "Unknown action" });
+      }
+
+      const ACTION_LABELS: Record<string, string> = {
+        running_late: "Running late", need_clarification: "Needs clarification",
+        proof_uploaded: "Proof uploaded", job_complete: "Marked job complete",
+        reviewing_now: "Reviewing proof", issue_found: "Issue found",
+        leaving_pickup: "Leaving for pickup", arrived_pickup: "Arrived at pickup",
+        loaded: "Load secured", in_transit: "In transit",
+        fuel_stop: "Fuel stop", delay: "Delay reported",
+        mechanical_issue: "Mechanical issue reported", delivered: "Delivered",
+        gate_code: "Gate code sent", dock_number: "Dock number sent",
+        loading_ready: "Loading ready", delivery_confirmed: "Delivery confirmed",
+        leaving_now: "Leaving now", im_here: "Arrived at meeting point",
+        cash_ready: "Cash ready", title_ready: "Title ready",
+        meeting_complete: "Meeting complete", vehicle_sold: "Vehicle sold",
+      };
+      const label = ACTION_LABELS[action] || action;
+
+      // Log to job_status_logs
+      await storage.createJobStatusLog({
+        jobId, userId, statusType: `quick_action:${action}`,
+        gpsLat: null, gpsLng: null, note: label,
+      });
+
+      // Notify the other party
+      const recipientId = isWorker ? job.postedById : job.assignedHelperId;
+      const senderName = isWorker ? "Your worker" : "The job poster";
+      if (recipientId) {
+        await storage.createNotification({
+          userId: recipientId,
+          title: label,
+          body: `${senderName} sent a status update on "${job.title}": ${label}`,
+          type: "job_update",
+          jobId,
+        });
+      }
+
+      res.json({ ok: true, action, label, message: `${label} — the other party has been notified.` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/jobs/:id/milestones", requireAuth, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);

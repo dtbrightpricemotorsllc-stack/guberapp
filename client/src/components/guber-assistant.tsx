@@ -11,6 +11,14 @@ import {
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
+import { useAuth } from "@/lib/auth-context";
+import {
+  saveJacSessionDraft,
+  getJacSessionDraft,
+  clearJacSessionDraft,
+  applyJacSessionDraft,
+  getIntentLabel,
+} from "@/lib/jac-session";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 interface Message {
@@ -178,6 +186,9 @@ export function DDFloatingButton() {
 // ── Main Jac Sheet ──────────────────────────────────────────────────────────
 export function GUBERAssistant() {
   const s = useAssistantStore();
+  const { user } = useAuth();
+  const userRef = useRef<typeof user>(null as any);
+  useEffect(() => { userRef.current = user; }, [user]);
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
@@ -223,10 +234,28 @@ export function GUBERAssistant() {
   useEffect(() => {
     if (!s.open) return;
     if (messages.length !== 1) return; // already has a thread
-    // Unlock audio on open — the user tapped the FAB which is a valid gesture.
-    // Without this, static MP3 playback is blocked by autoplay policy and the
-    // greeting falls back to Web Speech before the context is unlocked.
     unlockAudioContext();
+
+    // ── Resume pending pre-login draft for newly logged-in users ──────────
+    if (userRef.current) {
+      const pending = getJacSessionDraft();
+      if (pending) {
+        const route = applyJacSessionDraft(pending);
+        clearJacSessionDraft();
+        const label = getIntentLabel(pending);
+        const resumeContent = `Welcome back! I saved your ${label} from before you signed in. Tap "Continue" and I'll take you straight there — all your info is ready.`;
+        const resumeMsg: Message = {
+          role: "assistant",
+          content: resumeContent,
+          route,
+          actions: [{ label: "Continue where I left off", message: "__resume__" }],
+        };
+        setMessages(prev => [...prev, resumeMsg]);
+        jacSpeak(resumeContent, { muted });
+        return;
+      }
+    }
+
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
       // First-time visitor — speak the greeting immediately
@@ -305,8 +334,8 @@ export function GUBERAssistant() {
       if (!muted) jacSpeak(msg.content, { muted });
 
       if (data.ready && data.route) {
+        // Always write the prefill so forms have data whether or not user is logged in
         if (data.listingType === "job") {
-          // Write to the existing jac_job_prefill format that post-job.tsx already reads
           try {
             localStorage.setItem("jac_job_prefill", JSON.stringify({
               category: newCollected.category || "",
@@ -323,6 +352,31 @@ export function GUBERAssistant() {
             route: data.route,
           });
         }
+
+        // ── Not logged in: save session draft + show auth prompt ──────────
+        if (!userRef.current) {
+          saveJacSessionDraft({
+            intent: (data.listingType as any) || "general",
+            listingType: data.listingType || "",
+            collected: newCollected,
+            route: data.route,
+            messages: [],
+            source: "jac",
+          });
+          const savedMsg: Message = {
+            role: "assistant",
+            content: "I saved everything you told me. After you sign in, I'll continue right where we left off — no starting over. Ready?",
+            actions: [
+              { label: "Sign up — it's free", message: "__goto_signup__" },
+              { label: "Sign in", message: "__goto_login__" },
+            ],
+          };
+          setMessages(prev => [...prev, savedMsg]);
+          jacSpeak(savedMsg.content, { muted });
+          return; // do NOT navigate — user isn't logged in
+        }
+
+        // ── Logged in: navigate immediately ────────────────────────────────
         setTimeout(() => {
           patchStore({ open: false });
           cancelSpeech();
@@ -353,6 +407,23 @@ export function GUBERAssistant() {
   }
 
   function doSend(text: string) {
+    // Navigation sentinels — handled client-side, not sent to AI
+    if (text === "__goto_signup__") {
+      patchStore({ open: false });
+      cancelSpeech();
+      cancelAllJacAudio();
+      navigate("/signup");
+      return;
+    }
+    if (text === "__goto_login__") {
+      patchStore({ open: false });
+      cancelSpeech();
+      cancelAllJacAudio();
+      navigate("/login");
+      return;
+    }
+    if (text === "__resume__") return; // route button on the message handles it
+
     // Mic-denied sentinel from use-speech: show guidance instead of sending
     if (text === "__mic_denied__") {
       const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
