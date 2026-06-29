@@ -64,6 +64,7 @@ export function useJacOpportunities(enabled = false) {
     queryKey: ["/api/jac/opportunities"],
     enabled,
     staleTime: 60_000,
+    refetchInterval: enabled ? 300_000 : false,
     retry: false,
   });
 }

@@ -1,25 +1,30 @@
 ---
 name: JAC Deep Profile system
-description: How JAC auto-syncs user profile data from the DB and surfaces proactive intelligence (briefing + opportunities).
+description: How JAC auto-syncs user profile data from DB and surfaces proactive intelligence (briefing + opportunities).
 ---
 
 # JAC Deep Profile System
 
 ## The rule
-`syncJacProfile(userId)` is a fire-and-forget call that reads from `users`, `job_applications`, `jobs`, `marketplace_listings`, and `wallet_transactions` and upserts structured entries into `jac_memory` under categories: `profile`, `vehicle`, `work`, `certifications`.
+`syncJacProfile(userId)` reads from 9 sources in parallel (users, wallet_transactions, jobs, load_board_listings, tow_vehicle_verifications, trailer_verifications, marketplace_listings, wallet balance, active jobs count) and upserts structured entries into `jac_memory` under categories: `profile`, `vehicle`, `work`, `certifications`.
 
-**Why:** JAC should know the user's data without them re-explaining it. The sync runs on every `/api/jac/context` call so profile data stays fresh, but never blocks the response.
+**Why:** JAC should know the user without them re-explaining. Sync runs fire-and-forget on every `/api/jac/context` call.
 
-## How to apply
-- `buildJacProfileContext(userId)` — reads back from `jac_memory` for prompt enrichment in `/api/jac/onboard`
-- `buildMorningBriefing(userId)` — reads `jac_memory` (work.earnings_7d, etc.) + live job/action counts; returns a briefing string + action chips; **does NOT gate on calendar day server-side** (frontend gates via sessionStorage key `jac_briefing_shown_v1`)
-- `scanOpportunities(userId)` — reads profile zip + categories from `jac_memory`, queries open jobs, load board, pending proof; returns `JacOpportunity[]` (up to 8)
-- `GET /api/jac/briefing` and `GET /api/jac/opportunities` — both `requireAuth`
-- Frontend injects briefing as JAC's first turn only on first open per session (sessionStorage gate)
-- Live Opportunities panel (purple-bordered) filters to `type !== 'pending_action'` job/load_board items
+## Briefing daily gate
+`buildMorningBriefing` is gated server-side: checks `jac_memory(system, last_briefing_date)` vs UTC today. Returns `null` if already shown. Upserts the date before returning a valid briefing.
+
+**Why:** sessionStorage-only gating fails across devices and violates the spec's per-user contract.
+
+## Frontend behavior
+- `useJacOpportunities` has `refetchInterval: 300_000` (5 min) when the assistant is open
+- Briefing injection **replaces** the greeting message (not appends) via `setMessages([briefing])`
+- One unified panel driven by `jacOpportunities`: pending_action items → "Needs Your Attention"; job/load_board items → "Live Opportunities". Old `jacContext.alerts` panel removed.
+
+## Opportunities cap and scope
+`scanOpportunities` returns max 5 items: pending actions (disputes, offers, proof, on_the_way >4h, wallet ≥$50) first, then V&I jobs by `job_type='vi'`, then category-matched jobs with adjacent ZIP (`LEFT(zip,3) = LEFT(userZip,3)`), then load board by trailer type.
 
 ## Key files
 - `server/jac-profile.ts` — all server-side functions
-- `client/src/lib/use-jac-context.ts` — `useJacBriefing()`, `useJacOpportunities()` hooks
-- `client/src/components/guber-assistant.tsx` — briefing injection + opportunities panel
+- `client/src/lib/use-jac-context.ts` — hooks
+- `client/src/components/guber-assistant.tsx` — briefing injection + unified panel
 - `client/src/lib/jac-memory.ts` — `extractAndSaveMemory()` with 12+ regex patterns

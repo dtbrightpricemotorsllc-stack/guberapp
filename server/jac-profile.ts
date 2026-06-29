@@ -5,10 +5,6 @@
  */
 import { pool } from "./db";
 
-/**
- * Upsert a single jac_memory key. Source='system' so it's never shown to the
- * user in the "What JAC remembers" list (only user_said / extracted show there).
- */
 async function upsertMemory(userId: number, category: string, key: string, value: unknown): Promise<void> {
   await pool.query(
     `INSERT INTO jac_memory (user_id, category, key, value, source, updated_at)
@@ -26,19 +22,80 @@ async function upsertMemory(userId: number, category: string, key: string, value
  */
 export async function syncJacProfile(userId: number): Promise<void> {
   try {
-    const userRes = await pool.query(
-      `SELECT full_name, zipcode, rating, jobs_completed, id_verified,
-              stripe_account_status, skills, capabilities_description,
-              vehicle_inspections, property_checks, marketplace_verifications,
-              day1_og, trust_score, jobs_accepted, reliability_score
-       FROM users WHERE id = $1`,
-      [userId]
-    );
+    const [userRes, earnRes, catRes, lbRes, towRes, trailerRes, mktVehicleRes, walletRes, activeJobsRes] = await Promise.all([
+      pool.query(
+        `SELECT full_name, zipcode, rating, jobs_completed, id_verified,
+                stripe_account_status, skills, capabilities_description,
+                vehicle_inspections, property_checks, marketplace_verifications,
+                day1_og, trust_score, jobs_accepted, reliability_score
+         FROM users WHERE id = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN amount ELSE 0 END), 0) AS earn_7d,
+           COALESCE(SUM(CASE WHEN created_at > NOW() - INTERVAL '30 days' THEN amount ELSE 0 END), 0) AS earn_30d,
+           COALESCE(SUM(amount), 0) AS earn_all
+         FROM wallet_transactions
+         WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT category, COUNT(*)::int AS cnt
+         FROM jobs
+         WHERE assigned_helper_id = $1 AND status = 'completed'
+           AND completed_at > NOW() - INTERVAL '90 days'
+         GROUP BY category ORDER BY cnt DESC LIMIT 3`,
+        [userId]
+      ),
+      // Load board — vehicle / trailer data
+      pool.query(
+        `SELECT trailer_preference, transport_type, vehicle_type, make, model, year
+         FROM load_board_listings WHERE poster_id = $1
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      ),
+      // Tow vehicle verifications (certifications)
+      pool.query(
+        `SELECT vehicle_type, plate_state, verified FROM tow_vehicle_verifications
+         WHERE carrier_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      ),
+      // Trailer verifications (certifications)
+      pool.query(
+        `SELECT trailer_type, verified FROM trailer_verifications
+         WHERE carrier_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      ),
+      // Marketplace vehicle listings the user has posted
+      pool.query(
+        `SELECT listing_type, vehicle_type, make, model, year
+         FROM marketplace_listings
+         WHERE user_id = $1 AND listing_type = 'vehicle' AND status != 'sold'
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      ),
+      // Wallet balance
+      pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS balance
+         FROM wallet_transactions WHERE user_id = $1 AND status = 'completed'`,
+        [userId]
+      ),
+      // Active jobs count
+      pool.query(
+        `SELECT
+           COUNT(CASE WHEN assigned_helper_id = $1 AND status NOT IN ('completed','cancelled','disputed') THEN 1 END)::int AS worker_active,
+           COUNT(CASE WHEN posted_by_id = $1 AND status = 'open' AND assigned_helper_id IS NULL THEN 1 END)::int AS hirer_unfilled
+         FROM jobs WHERE deleted_at IS NULL`,
+        [userId]
+      ),
+    ]);
+
     if (!userRes.rows.length) return;
     const u = userRes.rows[0];
-
     const batch: Array<{ category: string; key: string; value: unknown }> = [];
 
+    // ── Profile basics ──────────────────────────────────────────────────────
     if (u.full_name) {
       batch.push({ category: "profile", key: "full_name", value: u.full_name });
       batch.push({ category: "profile", key: "first_name", value: (u.full_name as string).split(" ")[0] });
@@ -54,29 +111,21 @@ export async function syncJacProfile(userId: number): Promise<void> {
     if (u.skills) batch.push({ category: "profile", key: "skills", value: u.skills });
     if (u.capabilities_description) batch.push({ category: "profile", key: "capabilities", value: u.capabilities_description });
 
-    // Top service categories from job history (last 90 days)
-    const catRes = await pool.query(
-      `SELECT category, COUNT(*)::int AS cnt
-       FROM jobs
-       WHERE assigned_helper_id = $1 AND status = 'completed'
-         AND completed_at > NOW() - INTERVAL '90 days'
-       GROUP BY category ORDER BY cnt DESC LIMIT 3`,
-      [userId]
-    );
+    // ── Wallet balance ──────────────────────────────────────────────────────
+    const walletBalance = Math.round(parseFloat(walletRes.rows[0]?.balance || "0") * 100) / 100;
+    batch.push({ category: "profile", key: "wallet_balance", value: walletBalance });
+
+    // ── Active jobs ─────────────────────────────────────────────────────────
+    const aj = activeJobsRes.rows[0] ?? {};
+    batch.push({ category: "profile", key: "worker_active_jobs", value: parseInt(aj.worker_active) || 0 });
+    batch.push({ category: "profile", key: "hirer_unfilled_jobs", value: parseInt(aj.hirer_unfilled) || 0 });
+
+    // ── Top service categories ───────────────────────────────────────────────
     if (catRes.rows.length) {
       batch.push({ category: "work", key: "top_service_categories", value: catRes.rows.map((r: any) => r.category) });
     }
 
-    // Earnings last 7d and 30d
-    const earnRes = await pool.query(
-      `SELECT
-         COALESCE(SUM(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN amount ELSE 0 END), 0) AS earn_7d,
-         COALESCE(SUM(CASE WHEN created_at > NOW() - INTERVAL '30 days' THEN amount ELSE 0 END), 0) AS earn_30d,
-         COALESCE(SUM(amount), 0) AS earn_all
-       FROM wallet_transactions
-       WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')`,
-      [userId]
-    );
+    // ── Earnings ─────────────────────────────────────────────────────────────
     if (earnRes.rows.length) {
       const e = earnRes.rows[0];
       batch.push({ category: "work", key: "earnings_7d", value: Math.round(parseFloat(e.earn_7d) * 100) / 100 });
@@ -84,13 +133,7 @@ export async function syncJacProfile(userId: number): Promise<void> {
       batch.push({ category: "work", key: "earnings_total", value: Math.round(parseFloat(e.earn_all) * 100) / 100 });
     }
 
-    // Vehicle / trailer type from most recent load board listing
-    const lbRes = await pool.query(
-      `SELECT trailer_preference, transport_type, vehicle_type, make, model, year
-       FROM load_board_listings WHERE poster_id = $1
-       ORDER BY created_at DESC LIMIT 1`,
-      [userId]
-    );
+    // ── Vehicle — load board (most specific transport data) ──────────────────
     if (lbRes.rows.length) {
       const lb = lbRes.rows[0];
       if (lb.trailer_preference) batch.push({ category: "vehicle", key: "trailer_type", value: lb.trailer_preference });
@@ -101,7 +144,31 @@ export async function syncJacProfile(userId: number): Promise<void> {
       if (lb.year) batch.push({ category: "vehicle", key: "year", value: lb.year });
     }
 
-    // V&I experience from user counters
+    // ── Vehicle — marketplace profile (fallback if no load board) ───────────
+    if (!lbRes.rows.length && mktVehicleRes.rows.length) {
+      const mv = mktVehicleRes.rows[0];
+      if (mv.vehicle_type) batch.push({ category: "vehicle", key: "vehicle_type", value: mv.vehicle_type });
+      if (mv.make) batch.push({ category: "vehicle", key: "make", value: mv.make });
+      if (mv.model) batch.push({ category: "vehicle", key: "model", value: mv.model });
+      if (mv.year) batch.push({ category: "vehicle", key: "year", value: mv.year });
+    }
+
+    // ── Certifications — tow vehicle ─────────────────────────────────────────
+    if (towRes.rows.length) {
+      const t = towRes.rows[0];
+      if (t.vehicle_type) batch.push({ category: "certifications", key: "tow_vehicle_type", value: t.vehicle_type });
+      batch.push({ category: "certifications", key: "tow_vehicle_verified", value: !!t.verified });
+      if (t.plate_state) batch.push({ category: "certifications", key: "tow_plate_state", value: t.plate_state });
+    }
+
+    // ── Certifications — trailer ─────────────────────────────────────────────
+    if (trailerRes.rows.length) {
+      const tr = trailerRes.rows[0];
+      if (tr.trailer_type) batch.push({ category: "certifications", key: "trailer_type_verified", value: tr.trailer_type });
+      batch.push({ category: "certifications", key: "trailer_verified", value: !!tr.verified });
+    }
+
+    // ── V&I experience from user counters ────────────────────────────────────
     const viTypes: string[] = [];
     if (parseInt(u.vehicle_inspections) > 2) viTypes.push("vehicle inspections");
     if (parseInt(u.property_checks) > 2) viTypes.push("property checks");
@@ -144,17 +211,30 @@ export async function buildJacProfileContext(userId: number): Promise<string> {
 
 /**
  * Build a personalised morning briefing string for the user.
- * Returns null if nothing noteworthy to report.
+ * SERVER-SIDE daily gate: returns null if already shown today (per user, stored in jac_memory).
  */
 export async function buildMorningBriefing(userId: number): Promise<{
   text: string;
   chips: Array<{ label: string; message: string }>;
 } | null> {
   try {
+    // ── Server-side daily gate ──────────────────────────────────────────────
+    const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD" UTC
+    const gateRes = await pool.query(
+      `SELECT value FROM jac_memory WHERE user_id = $1 AND category = 'system' AND key = 'last_briefing_date'`,
+      [userId]
+    );
+    if (gateRes.rows.length) {
+      const stored = gateRes.rows[0].value;
+      const storedDate = typeof stored === "string" ? stored : JSON.stringify(stored).replace(/"/g, "");
+      if (storedDate === today) return null;
+    }
+
     const [profileRes, liveRes] = await Promise.all([
       pool.query(
         `SELECT key, value FROM jac_memory
-         WHERE user_id = $1 AND category = 'work' AND key IN ('earnings_7d','earnings_30d','top_service_categories')`,
+         WHERE user_id = $1 AND category IN ('work','profile')
+           AND key IN ('earnings_7d','top_service_categories','wallet_balance','first_name')`,
         [userId]
       ),
       pool.query(`
@@ -165,7 +245,7 @@ export async function buildMorningBriefing(userId: number): Promise<{
           (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS pending_offers,
-          (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status = 'open' AND zip IS NOT NULL) AS nearby_open
+          (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance
       `, [userId]),
     ]);
 
@@ -178,7 +258,13 @@ export async function buildMorningBriefing(userId: number): Promise<{
     const chips: Array<{ label: string; message: string }> = [];
 
     const earn7d = parseFloat(memMap["earnings_7d"]) || 0;
-    if (earn7d > 0) parts.push(`You earned $${earn7d.toFixed(2)} this week`);
+    if (earn7d > 0) parts.push(`you earned $${earn7d.toFixed(2)} this week`);
+
+    const walletBalance = parseFloat(live.wallet_balance) || 0;
+    if (walletBalance >= 50) {
+      parts.push(`$${walletBalance.toFixed(2)} is waiting in your wallet`);
+      chips.push({ label: "Cash out now", message: "How do I withdraw my wallet balance?" });
+    }
 
     const workerActive = parseInt(live.worker_active) || 0;
     if (workerActive > 0) {
@@ -188,7 +274,7 @@ export async function buildMorningBriefing(userId: number): Promise<{
 
     const openDisputes = parseInt(live.open_disputes) || 0;
     if (openDisputes > 0) {
-      parts.push(`${openDisputes} open dispute${openDisputes > 1 ? "s" : ""} needing attention`);
+      parts.push(`${openDisputes} open dispute${openDisputes > 1 ? "s" : ""} need${openDisputes === 1 ? "s" : ""} attention`);
       chips.push({ label: "View disputes", message: "I have an open dispute" });
     }
 
@@ -209,14 +295,15 @@ export async function buildMorningBriefing(userId: number): Promise<{
       parts.push(`${unread} unread notification${unread > 1 ? "s" : ""}`);
     }
 
-    // Default morning nudge if nothing urgent
     if (parts.length === 0) {
       const topCats: string[] = Array.isArray(memMap["top_service_categories"]) ? memMap["top_service_categories"] : [];
       const catHint = topCats.length ? ` in ${topCats[0]}` : "";
       chips.push({ label: "Find work nearby", message: "Find work nearby" });
       chips.push({ label: "Post a job", message: "I need to hire help" });
+
+      await upsertMemory(userId, "system", "last_briefing_date", today);
       return {
-        text: `Good morning, ${firstName}! Everything's looking good — no urgent items. Ready to find work${catHint} or post a new job?`,
+        text: `Good morning, ${firstName}! Everything looks good — no urgent items. Ready to find work${catHint} or post a new job?`,
         chips,
       };
     }
@@ -227,6 +314,7 @@ export async function buildMorningBriefing(userId: number): Promise<{
       ? parts[0]
       : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
 
+    await upsertMemory(userId, "system", "last_briefing_date", today);
     return {
       text: `Morning, ${firstName}! Quick update — ${summary}. What would you like to tackle first?`,
       chips,
@@ -239,6 +327,7 @@ export async function buildMorningBriefing(userId: number): Promise<{
 
 /**
  * Scan for live opportunities relevant to this user.
+ * Returns up to 5 ranked items: pending actions first, then matching jobs and load board.
  */
 export interface JacOpportunity {
   type: "job" | "load_board" | "pending_action";
@@ -252,32 +341,58 @@ export interface JacOpportunity {
 }
 
 export async function scanOpportunities(userId: number): Promise<JacOpportunity[]> {
-  const results: JacOpportunity[] = [];
+  const pending: JacOpportunity[] = [];
+  const opportunities: JacOpportunity[] = [];
   try {
-    // 1. Pending actions (highest priority)
-    const actionRes = await pool.query(`
-      SELECT
-        (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
-        (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS mkt_offers,
-        (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending
-    `, [userId]);
+    // ── 1. Pending actions (highest priority, shown first) ──────────────────
+    const [actionRes, walletRes, onTheWayRes] = await Promise.all([
+      pool.query(`
+        SELECT
+          (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS mkt_offers,
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending
+      `, [userId]),
+      pool.query(
+        `SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_transactions WHERE user_id = $1 AND status = 'completed'`,
+        [userId]
+      ),
+      // on_the_way jobs stuck for > 4 hours
+      pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM jobs
+         WHERE assigned_helper_id = $1
+           AND status = 'on_the_way'
+           AND on_the_way_at IS NOT NULL
+           AND on_the_way_at < NOW() - INTERVAL '4 hours'
+           AND deleted_at IS NULL`,
+        [userId]
+      ),
+    ]);
+
     const actions = actionRes.rows[0] ?? {};
+    const walletBalance = parseFloat(walletRes.rows[0]?.balance || "0");
+    const stuckJobs = parseInt(onTheWayRes.rows[0]?.cnt || "0");
 
     if (parseInt(actions.disputes) > 0) {
-      results.push({ type: "pending_action", title: `${actions.disputes} open dispute${actions.disputes > 1 ? "s" : ""}`, subtitle: "Needs your response", route: "/jobs", urgency: "high", tag: "⚠️ Dispute" });
+      pending.push({ type: "pending_action", title: `${actions.disputes} open dispute${actions.disputes > 1 ? "s" : ""}`, subtitle: "Needs your response", route: "/jobs", urgency: "high", tag: "⚠️ Dispute" });
     }
     if (parseInt(actions.mkt_offers) > 0) {
-      results.push({ type: "pending_action", title: `${actions.mkt_offers} marketplace offer${actions.mkt_offers > 1 ? "s" : ""}`, subtitle: "Awaiting your review", route: "/marketplace/my-listings", urgency: "high", tag: "💬 Offer" });
+      pending.push({ type: "pending_action", title: `${actions.mkt_offers} marketplace offer${actions.mkt_offers > 1 ? "s" : ""}`, subtitle: "Awaiting your review", route: "/marketplace/my-listings", urgency: "high", tag: "💬 Offer" });
     }
     if (parseInt(actions.proofs_pending) > 0) {
-      results.push({ type: "pending_action", title: `${actions.proofs_pending} proof submission${actions.proofs_pending > 1 ? "s" : ""}`, subtitle: "Worker submitted proof — review now", route: "/jobs", urgency: "high", tag: "📋 Proof" });
+      pending.push({ type: "pending_action", title: `${actions.proofs_pending} proof submission${actions.proofs_pending > 1 ? "s" : ""}`, subtitle: "Worker submitted proof — review now", route: "/jobs", urgency: "high", tag: "📋 Proof" });
+    }
+    if (stuckJobs > 0) {
+      pending.push({ type: "pending_action", title: `${stuckJobs} job${stuckJobs > 1 ? "s" : ""} stuck on the way`, subtitle: "En route for over 4 hours — confirm or contact worker", route: "/jobs", urgency: "high", tag: "🕐 Delayed" });
+    }
+    if (walletBalance >= 50) {
+      pending.push({ type: "pending_action", title: `$${walletBalance.toFixed(2)} available to cash out`, subtitle: "Tap to request a withdrawal", route: "/profile", urgency: "normal", tag: "💰 Wallet" });
     }
 
-    // 2. User's top service categories + zip from profile memory
+    // ── 2. Profile data for opportunity matching ────────────────────────────
     const memRes = await pool.query(
       `SELECT key, value FROM jac_memory
        WHERE user_id = $1 AND category IN ('work','profile','vehicle')
-         AND key IN ('top_service_categories','home_zip','trailer_type','transport_type')`,
+         AND key IN ('top_service_categories','home_zip','trailer_type','transport_type','vi_experience')`,
       [userId]
     );
     const mem: Record<string, any> = {};
@@ -286,13 +401,44 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     const userZip: string | null = mem["home_zip"] || null;
     const topCats: string[] = Array.isArray(mem["top_service_categories"]) ? mem["top_service_categories"] : [];
     const trailerType: string | null = mem["trailer_type"] || null;
+    const hasViExp = Array.isArray(mem["vi_experience"]) && mem["vi_experience"].length > 0;
 
-    // 3. Open jobs matching user zip + top categories
-    if (userZip || topCats.length > 0) {
-      const zipFilter = userZip ? `AND zip = '${userZip.replace(/'/g, "''")}'` : "";
-      const catFilter = topCats.length
-        ? `AND category = ANY(ARRAY[${topCats.map((c: string) => `'${c.replace(/'/g, "''")}'`).join(",")}]::text[])`
-        : "";
+    // ── 3. V&I jobs near user ───────────────────────────────────────────────
+    if (userZip) {
+      const viRes = await pool.query(`
+        SELECT id, title, category, budget, zip, urgent_switch
+        FROM jobs
+        WHERE status = 'open'
+          AND assigned_helper_id IS NULL
+          AND is_published = TRUE
+          AND (is_test_job = FALSE OR is_test_job IS NULL)
+          AND deleted_at IS NULL
+          AND job_type = 'vi'
+          AND (zip = $2 OR LEFT(zip, 3) = LEFT($2, 3))
+        ORDER BY urgent_switch DESC, created_at DESC
+        LIMIT 2
+      `, [userId, userZip]);
+      for (const j of viRes.rows) {
+        opportunities.push({
+          type: "job",
+          id: j.id,
+          title: j.title,
+          subtitle: `V&I · ${j.zip || ""}`,
+          payLabel: j.budget ? `$${parseFloat(j.budget).toFixed(0)}` : "Open bid",
+          route: `/jobs/${j.id}`,
+          urgency: j.urgent_switch ? "high" : "normal",
+          tag: "🔍 V&I",
+        });
+      }
+    }
+
+    // ── 4. Open jobs matching zip (same ZIP or adjacent 3-digit prefix) + categories ──
+    const zipCondition = userZip ? `AND (zip = '${userZip.replace(/'/g, "''")}' OR LEFT(zip, 3) = LEFT('${userZip.replace(/'/g, "''")}', 3))` : "";
+    const catFilter = topCats.length
+      ? `AND category = ANY(ARRAY[${topCats.map((c: string) => `'${c.replace(/'/g, "''")}'`).join(",")}]::text[])`
+      : "";
+
+    if (zipCondition || catFilter) {
       const jobsRes = await pool.query(`
         SELECT id, title, category, budget, zip, urgent_switch
         FROM jobs
@@ -301,13 +447,14 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
           AND is_published = TRUE
           AND (is_test_job = FALSE OR is_test_job IS NULL)
           AND deleted_at IS NULL
-          ${zipFilter}
+          AND (job_type IS NULL OR job_type != 'vi')
+          ${zipCondition}
           ${catFilter}
         ORDER BY urgent_switch DESC, created_at DESC
-        LIMIT 4
+        LIMIT 3
       `);
       for (const j of jobsRes.rows) {
-        results.push({
+        opportunities.push({
           type: "job",
           id: j.id,
           title: j.title,
@@ -332,7 +479,7 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
         LIMIT 3
       `);
       for (const j of jobsRes.rows) {
-        results.push({
+        opportunities.push({
           type: "job",
           id: j.id,
           title: j.title,
@@ -345,8 +492,8 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
       }
     }
 
-    // 4. Load board listings matching trailer type
-    if (trailerType || topCats.some((c: string) => c.toLowerCase().includes("transport") || c.toLowerCase().includes("load"))) {
+    // ── 5. Load board listings matching trailer type ──────────────────────
+    if (trailerType || topCats.some((c: string) => /transport|load|haul|tow/i.test(c))) {
       const trailerFilter = trailerType ? `AND trailer_preference = '${trailerType.replace(/'/g, "''")}'` : "";
       const lbRes = await pool.query(`
         SELECT id, pickup_city, pickup_state, delivery_city, delivery_state, posted_price, transport_type
@@ -354,15 +501,15 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
         WHERE status = 'posted'
           ${trailerFilter}
         ORDER BY created_at DESC
-        LIMIT 3
+        LIMIT 2
       `);
       for (const lb of lbRes.rows) {
         const from = [lb.pickup_city, lb.pickup_state].filter(Boolean).join(", ");
         const to = [lb.delivery_city, lb.delivery_state].filter(Boolean).join(", ");
-        results.push({
+        opportunities.push({
           type: "load_board",
           id: lb.id,
-          title: `Transport: ${from} → ${to}`,
+          title: `Transport: ${from || "?"} → ${to || "?"}`,
           subtitle: lb.transport_type || "Load Board",
           payLabel: lb.posted_price ? `$${parseFloat(lb.posted_price).toFixed(0)}` : "Open offers",
           route: `/load-board`,
@@ -372,9 +519,10 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
       }
     }
 
-    return results.slice(0, 8);
+    // Pending actions first, then opportunities; cap at 5 total
+    return [...pending, ...opportunities].slice(0, 5);
   } catch (err: any) {
     console.error("[jac-opportunities]", err.message);
-    return results;
+    return [...pending, ...opportunities].slice(0, 5);
   }
 }
