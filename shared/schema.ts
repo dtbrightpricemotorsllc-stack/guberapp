@@ -2845,3 +2845,16 @@ export const jacMissedActions = pgTable("jac_missed_actions", {
 });
 export type JacMissedAction       = typeof jacMissedActions.$inferSelect;
 export type InsertJacMissedAction = typeof jacMissedActions.$inferInsert;
+
+// ── JAC Memory (living user profile) ──────────────────────────────────────────
+export const jacMemory = pgTable("jac_memory", {
+  id:        serial("id").primaryKey(),
+  userId:    integer("user_id").notNull().references(() => users.id),
+  category:  text("category").notNull(), // personal | work | marketplace | vi | load_board | preferences
+  key:       text("key").notNull(),
+  value:     jsonb("value").$type<unknown>().notNull(),
+  source:    text("source").default("user_said"), // user_said | extracted | system
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type JacMemoryEntry       = typeof jacMemory.$inferSelect;
+export type InsertJacMemoryEntry = typeof jacMemory.$inferInsert;

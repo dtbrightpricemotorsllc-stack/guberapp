@@ -910,6 +910,20 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_missed_user ON jac_missed_actions(user_id, status);
   `).catch(e => console.error("[migration] jac tables error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_memory (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      category   TEXT NOT NULL,
+      key        TEXT NOT NULL,
+      value      JSONB NOT NULL,
+      source     TEXT DEFAULT 'user_said',
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (user_id, category, key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_memory_user ON jac_memory(user_id);
+  `).catch(e => console.error("[migration] jac_memory error:", e));
+
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`
     UPDATE growth_task_templates SET is_active = false, paused = true

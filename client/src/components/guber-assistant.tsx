@@ -19,6 +19,8 @@ import {
   applyJacSessionDraft,
   getIntentLabel,
 } from "@/lib/jac-session";
+import { extractAndSaveMemory } from "@/lib/jac-memory";
+import { useJacContext } from "@/lib/use-jac-context";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
 interface Message {
@@ -196,8 +198,12 @@ export function GUBERAssistant() {
   const [listingCollected, setListingCollected] = useState<Record<string, any>>({});
   const [listingType, setListingType] = useState("");
   const [listingRoute, setListingRoute] = useState("");
+  const [alertsDismissed, setAlertsDismissed] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastUserInputRef = useRef("");
+
+  const { data: jacContext } = useJacContext(!!user && s.open);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -301,6 +307,9 @@ export function GUBERAssistant() {
       };
       setMessages((prev) => [...prev, msg]);
       if (!muted) jacSpeak(msg.content, { muted });
+      if (userRef.current && lastUserInputRef.current) {
+        extractAndSaveMemory(lastUserInputRef.current, msg.content);
+      }
     },
     onError: () => {
       setMessages((prev) => [
@@ -439,6 +448,7 @@ export function GUBERAssistant() {
     unlockAudioContext();
     const trimmed = text.trim();
     if (!trimmed || anyPending) return;
+    lastUserInputRef.current = trimmed;
     const newMsgs: Message[] = [...messages, { role: "user", content: trimmed }];
     setMessages(newMsgs);
     setInput("");
@@ -528,6 +538,56 @@ export function GUBERAssistant() {
             </div>
           </div>
         </SheetHeader>
+
+        {/* ── Proactive Alerts Panel ── */}
+        {user && !alertsDismissed && jacContext && jacContext.alerts.length > 0 && (
+          <div
+            className="flex-shrink-0 mx-3 mt-3 rounded-xl overflow-hidden"
+            style={{ background: "hsl(222 47% 9%)", border: "1px solid hsl(222 47% 18%)" }}
+          >
+            <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: "1px solid hsl(222 47% 15%)" }}>
+              <span className="text-[10px] font-display font-black tracking-wider text-muted-foreground uppercase">
+                Needs Your Attention
+              </span>
+              <button
+                onClick={() => setAlertsDismissed(true)}
+                className="text-muted-foreground hover:text-white transition-colors"
+                aria-label="Dismiss alerts"
+                data-testid="button-jac-alerts-dismiss"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="divide-y" style={{ borderColor: "hsl(222 47% 14%)" }}>
+              {jacContext.alerts.slice(0, 4).map((alert, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    if (alert.route) { patchStore({ open: false }); navigate(alert.route); }
+                  }}
+                  className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-white/[0.03] transition-colors"
+                  data-testid={`button-jac-alert-${i}`}
+                >
+                  <span
+                    className="mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                    style={{
+                      background: alert.priority === "high"
+                        ? "hsl(0 84% 60%)"
+                        : alert.priority === "medium"
+                          ? "hsl(38 92% 50%)"
+                          : "hsl(210 100% 55%)",
+                    }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white/90 leading-tight truncate">{alert.title}</p>
+                    <p className="text-[10px] text-muted-foreground leading-snug mt-0.5 line-clamp-1">{alert.body}</p>
+                  </div>
+                  {alert.route && <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5 ml-auto" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Listing Builder Banner ── */}
         {listingMode && (

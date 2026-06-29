@@ -15909,6 +15909,70 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       }
       if (!sanitized.length) return res.status(400).json({ message: "No valid messages" });
 
+      // ── Inject user memory + live context for logged-in users ────────────
+      const onboardUserId = (req.session as any)?.userId ?? null;
+      let userContextSection = "";
+      if (onboardUserId) {
+        try {
+          const [memRes, liveRes] = await Promise.all([
+            pool.query(
+              `SELECT category, key, value FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
+              [onboardUserId]
+            ),
+            pool.query(`
+              SELECT
+                (SELECT full_name FROM users WHERE id = $1) AS full_name,
+                (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+                (SELECT COUNT(*)::int FROM jobs WHERE posted_by = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+                (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
+                (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by=$1 AND ps.status='submitted') AS proofs_pending,
+                (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id=$1 OR respondent_id=$1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+                (SELECT COUNT(*)::int FROM marketplace_items WHERE seller_id=$1 AND status='active') AS marketplace_active,
+                (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_id=$1 AND status='pending') AS marketplace_offers,
+                (SELECT COUNT(*)::int FROM load_board_listings WHERE poster_id=$1 AND status='active') AS load_board_active,
+                (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int FROM credit_ledger WHERE user_id=$1) AS studio_credits,
+                (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id=$1 AND status='completed') AS wallet_balance
+            `, [onboardUserId]),
+          ]);
+          const live = liveRes.rows[0] ?? {};
+          const firstName = (live.full_name || "").split(" ")[0] || "there";
+          const memories = memRes.rows as Array<{ category: string; key: string; value: any }>;
+          const memLines = memories.length
+            ? memories.map(m => `• ${m.category}/${m.key}: ${typeof m.value === "string" ? m.value : JSON.stringify(m.value)}`).join("\n")
+            : "(none yet)";
+          const alerts: string[] = [];
+          if (parseInt(live.proofs_pending) > 0) alerts.push(`${live.proofs_pending} proof submission(s) awaiting review`);
+          if (parseInt(live.open_disputes) > 0) alerts.push(`${live.open_disputes} open dispute(s)`);
+          if (parseInt(live.marketplace_offers) > 0) alerts.push(`${live.marketplace_offers} pending offer(s) on marketplace listings`);
+          if (parseInt(live.unread_notifs) > 0) alerts.push(`${live.unread_notifs} unread notification(s)`);
+          userContextSection = `═══════════════════════════════════
+LOGGED-IN USER: ${firstName}
+═══════════════════════════════════
+This user is already signed in to GUBER. Do NOT route them to /signup.
+Route to app pages directly (e.g. /post-job, /marketplace, /profile).
+Greet them by first name (${firstName}) naturally, once.
+
+WHAT JAC REMEMBERS:
+${memLines}
+
+LIVE ACCOUNT RIGHT NOW:
+• Worker active jobs: ${live.worker_active || 0}
+• Hirer active jobs: ${live.hirer_active || 0}
+• Marketplace listings: ${live.marketplace_active || 0}
+• Load board listings: ${live.load_board_active || 0}
+• Studio credits: ${live.studio_credits || 0}
+• Wallet balance: $${parseFloat(live.wallet_balance || "0").toFixed(2)}
+${alerts.length ? `\nNEEDS ATTENTION:\n${alerts.map(a => `• ${a}`).join("\n")}` : ""}
+
+Use memory + live data to personalize every response. Reference their history naturally.
+If they say "same as last time" or similar, use memory to fill in what you know.
+
+`;
+        } catch (ctxErr: any) {
+          console.error("[JAC onboard ctx]", ctxErr.message);
+        }
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -16309,7 +16373,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         temperature: 0.3,
         max_tokens: 500,
         response_format: { type: "json_object" as const },
-        messages: [{ role: "system", content: onboardPrompt }, ...sanitized],
+        messages: [{ role: "system", content: userContextSection + onboardPrompt }, ...sanitized],
       });
 
       const raw = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -16908,6 +16972,146 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     } catch (err: any) {
       console.error("[jac/tutorial/reset]", err.message);
       res.status(500).json({ message: "Failed to reset tutorial" });
+    }
+  });
+
+  // ── JAC Memory CRUD ────────────────────────────────────────────────────────
+  app.get("/api/jac/memory", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const r = await pool.query(
+        `SELECT id, category, key, value, source, updated_at FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC`,
+        [userId]
+      );
+      res.json(r.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/jac/memory", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { category, key, value, source } = req.body;
+      const ALLOWED_CATEGORIES = ["personal", "work", "marketplace", "vi", "load_board", "preferences"];
+      if (!ALLOWED_CATEGORIES.includes(category) || typeof key !== "string" || !key.trim()) {
+        return res.status(400).json({ message: "Invalid category or key" });
+      }
+      if (value === undefined || value === null) {
+        return res.status(400).json({ message: "value required" });
+      }
+      const safeSource = ["user_said", "extracted", "system"].includes(source) ? source : "user_said";
+      await pool.query(
+        `INSERT INTO jac_memory (user_id, category, key, value, source, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
+         ON CONFLICT (user_id, category, key) DO UPDATE SET
+           value = $4::jsonb, source = $5, updated_at = NOW()`,
+        [userId, category, key.trim().slice(0, 100), JSON.stringify(value), safeSource]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/jac/memory/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      await pool.query(`DELETE FROM jac_memory WHERE id = $1 AND user_id = $2`, [id, userId]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── JAC Full Live Context (everything JAC needs to know about a user) ──────
+  app.get("/api/jac/context", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [memRes, liveRes, userRes] = await Promise.all([
+        pool.query(
+          `SELECT id, category, key, value, source, updated_at FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC`,
+          [userId]
+        ),
+        pool.query(`
+          SELECT
+            (SELECT COUNT(*)::int  FROM jobs WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by = $1 AND status = 'open' AND assigned_worker_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
+            (SELECT COUNT(*)::int  FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
+            (SELECT COUNT(*)::int  FROM proof_submissions ps JOIN jobs j ON j.id = ps.job_id WHERE j.posted_by = $1 AND ps.status = 'submitted') AS proofs_pending,
+            (SELECT COUNT(*)::int  FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+            (SELECT COUNT(*)::int  FROM marketplace_items WHERE seller_id = $1 AND status = 'active') AS marketplace_active,
+            (SELECT COUNT(*)::int  FROM marketplace_offers WHERE seller_id = $1 AND status = 'pending') AS marketplace_offers_received,
+            (SELECT COUNT(*)::int  FROM load_board_listings WHERE poster_id = $1 AND status = 'active') AS load_board_active,
+            (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int FROM credit_ledger WHERE user_id = $1) AS studio_credits,
+            (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
+            (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status = 'in_progress' AND deleted_at IS NULL) AS jobs_in_progress_worker,
+            (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status = 'completed' AND deleted_at IS NULL) AS jobs_completed_worker
+        `, [userId]),
+        pool.query(
+          `SELECT full_name, id_verified, stripe_account_id, stripe_onboarding_complete FROM users WHERE id = $1`,
+          [userId]
+        ),
+      ]);
+
+      const live = liveRes.rows[0] ?? {};
+      const user = userRes.rows[0] ?? {};
+      const memory = memRes.rows;
+
+      // Build proactive alerts
+      const alerts: Array<{ type: string; title: string; body: string; route?: string; priority: "high" | "medium" | "low" }> = [];
+
+      if (live.proofs_pending > 0) {
+        alerts.push({ type: "proof_review", title: `${live.proofs_pending} proof${live.proofs_pending > 1 ? "s" : ""} waiting for your review`, body: "A worker submitted proof of completion. Approve or request a retake.", route: "/jobs", priority: "high" });
+      }
+      if (live.open_disputes > 0) {
+        alerts.push({ type: "dispute", title: `${live.open_disputes} open dispute${live.open_disputes > 1 ? "s" : ""}`, body: "You have an active dispute that needs attention.", route: "/jobs", priority: "high" });
+      }
+      if (live.marketplace_offers_received > 0) {
+        alerts.push({ type: "marketplace_offer", title: `${live.marketplace_offers_received} offer${live.marketplace_offers_received > 1 ? "s" : ""} on your listing`, body: "Someone made an offer on one of your listings. Review it now.", route: "/marketplace/my-listings", priority: "high" });
+      }
+      if (live.hirer_unfilled > 0) {
+        alerts.push({ type: "unfilled_job", title: `${live.hirer_unfilled} job${live.hirer_unfilled > 1 ? "s" : ""} still looking for a worker`, body: "Your posted job hasn't been filled yet.", route: "/jobs", priority: "medium" });
+      }
+      if (user.id_verified === false || user.id_verified === null) {
+        alerts.push({ type: "id_verify", title: "ID not verified yet", body: "Verify your identity to unlock hiring and earning on GUBER.", route: "/profile", priority: "medium" });
+      }
+      if (user.stripe_account_id && !user.stripe_onboarding_complete) {
+        alerts.push({ type: "stripe_onboard", title: "Stripe payout setup incomplete", body: "Complete your Stripe onboarding to receive payments.", route: "/profile", priority: "medium" });
+      }
+      if (live.unread_notifs > 0) {
+        alerts.push({ type: "notifications", title: `${live.unread_notifs} unread notification${live.unread_notifs > 1 ? "s" : ""}`, body: "You have unread notifications.", route: "/notifications", priority: "low" });
+      }
+
+      const firstName = (user.full_name || "").split(" ")[0] || null;
+
+      res.json({
+        memory,
+        live: {
+          workerActive:             parseInt(live.worker_active) || 0,
+          hirerActive:              parseInt(live.hirer_active) || 0,
+          hirerUnfilled:            parseInt(live.hirer_unfilled) || 0,
+          unreadNotifs:             parseInt(live.unread_notifs) || 0,
+          proofsPending:            parseInt(live.proofs_pending) || 0,
+          openDisputes:             parseInt(live.open_disputes) || 0,
+          marketplaceActive:        parseInt(live.marketplace_active) || 0,
+          marketplaceOffersReceived:parseInt(live.marketplace_offers_received) || 0,
+          loadBoardActive:          parseInt(live.load_board_active) || 0,
+          studioCredits:            parseInt(live.studio_credits) || 0,
+          walletBalance:            parseFloat(live.wallet_balance) || 0,
+          jobsInProgressWorker:     parseInt(live.jobs_in_progress_worker) || 0,
+          jobsCompletedWorker:      parseInt(live.jobs_completed_worker) || 0,
+          idVerified:               !!user.id_verified,
+          stripeOnboardComplete:    !!user.stripe_onboarding_complete,
+        },
+        alerts,
+        firstName,
+      });
+    } catch (err: any) {
+      console.error("[jac/context]", err.message);
+      res.status(500).json({ message: err.message });
     }
   });
 
