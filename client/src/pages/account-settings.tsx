@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw, Volume2, Mic, Smartphone, BrainCircuit, Globe, Headphones, BellRing, Sparkles } from "lucide-react";
+import { WakeWordDetector } from "@/lib/voice";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -300,7 +301,12 @@ function JacSettingsSection() {
             label='Voice Activation'
             description='"Hey JAC" wake word'
             checked={voiceActivation}
-            onChange={(v) => { setVoiceActivation(v); save({ voiceActivation: v }); }}
+            onChange={(v) => {
+              setVoiceActivation(v);
+              save({ voiceActivation: v });
+              if (v) WakeWordDetector.enable();
+              else WakeWordDetector.disable();
+            }}
             testId="switch-jac-voice-activation"
             badge="Beta"
             disabled={jacDisabled}

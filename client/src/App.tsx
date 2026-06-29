@@ -16,6 +16,7 @@ import AnnouncementPopup from "@/components/announcement-popup";
 import { GpsTrackingBanner } from "@/components/gps-tracking-banner";
 import { Capacitor } from "@capacitor/core";
 import { isStoreBuild } from "@/lib/platform";
+import { WakeWordDetector } from "@/lib/voice";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import {
@@ -598,9 +599,25 @@ function TaskTrackingResumer() {
     if (user) {
       void taskTrackingService.resumeIfActive();
     } else {
-      // User logged out — stop any active tracking immediately.
       void taskTrackingService.stopTask();
     }
+  }, [user?.id]);
+  return null;
+}
+
+// Initialize WakeWordDetector based on the user's JAC voiceActivation preference.
+// Runs once on mount; re-reads when auth state changes.
+function WakeWordInit() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user) { WakeWordDetector.disable(); return; }
+    fetch("/api/jac/profile")
+      .then((r) => r.ok ? r.json() : null)
+      .then((profile) => {
+        if (profile?.voice_activation === true) WakeWordDetector.enable();
+        else WakeWordDetector.disable();
+      })
+      .catch(() => WakeWordDetector.disable());
   }, [user?.id]);
   return null;
 }
@@ -620,6 +637,7 @@ function App() {
         <TooltipProvider>
           <AuthProvider>
             <TaskTrackingResumer />
+            <WakeWordInit />
             <Toaster />
             <UploadProgressPill />
             <GoogleAuthOverlay />

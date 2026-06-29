@@ -64,7 +64,7 @@ interface Message {
 }
 
 const DD_GREETING =
-  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. Whether you need to earn, hire, sell, or just explore — I'm here. You can minimize me anytime, but I'll always be in the bottom right corner. What can I do for you today?";
+  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. What brings you to GUBER?";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
@@ -258,8 +258,21 @@ export function GUBERAssistant() {
     useSpeechOutput();
 
   // Auto-send when mic result arrives — no send button tap needed
-  const { listening, start: startListening, stop: stopListening, supported: micSupported } =
+  const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => doSend(text));
+
+  // Wake word listener — "Hey JAC" opens the panel and starts listening
+  useEffect(() => {
+    function onWake() {
+      if (!store.open) {
+        markSeen();
+        patchStore({ open: true });
+      }
+      setTimeout(() => startListening(), 400);
+    }
+    window.addEventListener("jac:wake", onWake);
+    return () => window.removeEventListener("jac:wake", onWake);
+  }, [startListening]);
 
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages)); } catch {}
@@ -1015,14 +1028,20 @@ export function GUBERAssistant() {
                 style={{
                   background: listening
                     ? "hsl(0 80% 55%)"
-                    : "hsl(222 47% 15%)",
-                  color: listening ? "white" : "hsl(0 0% 45%)",
+                    : transcribing
+                      ? "hsl(270 60% 35%)"
+                      : "hsl(222 47% 15%)",
+                  color: listening || transcribing ? "white" : "hsl(0 0% 45%)",
                 }}
                 data-testid="button-dd-mic"
-                aria-label={listening ? "Stop listening" : "Speak to Jac"}
-                disabled={anyPending}
+                aria-label={transcribing ? "Transcribing…" : listening ? "Stop listening" : "Speak to Jac"}
+                disabled={anyPending || transcribing}
               >
-                {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {transcribing
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : listening
+                    ? <MicOff className="w-3.5 h-3.5" />
+                    : <Mic className="w-3.5 h-3.5" />}
               </button>
             )}
 

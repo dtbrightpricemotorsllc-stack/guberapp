@@ -17996,6 +17996,58 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     }
   });
 
+  // ── JAC STT — Whisper transcription (iOS + fallback) ─────────────────────────
+  app.post("/api/jac/stt", async (req: Request, res: Response) => {
+    try {
+      const { audioBase64, mimeType } = req.body as { audioBase64?: string; mimeType?: string };
+      if (!audioBase64 || typeof audioBase64 !== "string") {
+        return res.status(400).json({ message: "audioBase64 required" });
+      }
+
+      const apiKey   = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const baseURL  = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      if (!apiKey) return res.status(503).json({ message: "STT not configured" });
+
+      // IP rate limit: 5 calls/min
+      const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const STT_WINDOW_MS = 60_000;
+      const STT_IP_MAX    = 5;
+      if (!(global as any).__sttIpBucket) (global as any).__sttIpBucket = new Map();
+      const sttBucket: Map<string, { count: number; resetAt: number }> = (global as any).__sttIpBucket;
+      const b = sttBucket.get(ip) ?? { count: 0, resetAt: now + STT_WINDOW_MS };
+      if (now > b.resetAt) { b.count = 0; b.resetAt = now + STT_WINDOW_MS; }
+      if (b.count >= STT_IP_MAX) {
+        console.warn(`[JAC STT] rate-limited IP ${ip}`);
+        return res.status(429).json({ message: "Too many STT requests — slow down." });
+      }
+      b.count++;
+      sttBucket.set(ip, b);
+
+      const audioBuffer = Buffer.from(audioBase64, "base64");
+      const ext = (mimeType ?? "audio/webm").includes("mp4") ? "m4a" : "webm";
+      const filename = `jac_audio.${ext}`;
+
+      const OpenAI = (await import("openai")).default;
+      const { toFile } = await import("openai");
+      const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+
+      const file = await toFile(audioBuffer, filename, { type: mimeType ?? "audio/webm" });
+      const transcription = await openai.audio.transcriptions.create({
+        file,
+        model: "whisper-1",
+        language: "en",
+      });
+
+      const text = (transcription.text ?? "").trim();
+      console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}"`);
+      return res.json({ text });
+    } catch (e: any) {
+      console.error("[JAC STT] error:", e.message);
+      return res.status(500).json({ message: "STT error" });
+    }
+  });
+
   // ── JAC TTS Cache Pregen (admin only) ────────────────────────────────────────
   app.post("/api/jac/tts/pregen", async (req: Request, res: Response) => {
     try {
