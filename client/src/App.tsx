@@ -100,6 +100,7 @@ const OSMissionControl = lazy(() => import("@/pages/os/os-mission-control"));
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
 const AdminQa = lazy(() => import("@/pages/admin-qa"));
+const AdminMissionControl = lazy(() => import("@/pages/admin-mission-control"));
 const AdminQaInspect = lazy(() => import("@/pages/admin-qa-inspect"));
 const AdminQaCashdropDebug = lazy(() => import("@/pages/admin-qa-cashdrop-debug"));
 const AdminQaFlags = lazy(() => import("@/pages/admin-qa-flags"));
@@ -354,6 +355,7 @@ function Router() {
       <Route path="/os/events" component={() => <OSAdminRoute component={OSEvents} />} />
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
+      <Route path="/admin/mission-control" component={() => <AdminRoute component={AdminMissionControl} />} />
       <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
       <Route path="/admin/qa/push" component={() => <AdminRoute component={AdminQaPush} />} />
       <Route path="/admin/qa/cashdrops/:id/debug" component={() => <AdminRoute component={AdminQaCashdropDebug} />} />
