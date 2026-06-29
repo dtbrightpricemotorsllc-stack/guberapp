@@ -499,7 +499,7 @@ export function GUBERAssistant() {
     onSuccess: (data) => {
       const msg: Message = {
         role: "assistant",
-        content: data.reply ?? "D.D. plan ready.",
+        content: data.reply ?? "Here are some options that could help.",
         isDDPlan: true,
         planItems: data.planItems ?? [],
         ddGoalAmount: data.goalAmount,
@@ -511,7 +511,7 @@ export function GUBERAssistant() {
       if (!muted) jacSpeak(msg.content, { muted });
     },
     onError: () => {
-      setMessages(prev => [...prev, { role: "assistant", content: "I couldn't build your D.D. plan right now — please try again." }]);
+      setMessages(prev => [...prev, { role: "assistant", content: "I couldn't pull up options right now — please try again." }]);
     },
   });
 
@@ -772,7 +772,7 @@ export function GUBERAssistant() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
-                    D.D. Goal: ${g.goalAmount.toFixed(0)}{g.deadline ? ` by ${g.deadline}` : ""}
+                    Goal: ${g.goalAmount.toFixed(0)}{g.deadline ? ` by ${g.deadline}` : ""}
                   </span>
                   <span className="text-[10px] text-muted-foreground">${remaining.toFixed(2)} left</span>
                 </div>
@@ -781,7 +781,7 @@ export function GUBERAssistant() {
                 </div>
               </div>
               <button
-                onClick={() => doSend(`Update my D.D. plan — I need $${remaining.toFixed(2)} more toward my goal`)}
+                onClick={() => doSend(`I need $${remaining.toFixed(2)} more toward my goal — what options do I have?`)}
                 className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg flex-shrink-0 transition-colors"
                 style={{ background: "hsl(270 100% 65% / 0.18)", color: "hsl(270 100% 75%)" }}
                 data-testid="button-dd-update-plan"
@@ -873,7 +873,7 @@ export function GUBERAssistant() {
                     <div className="flex items-center gap-1.5 mb-2">
                       <Target className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 65%)" }} />
                       <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
-                        Your D.D. Action Plan
+                        Possible Options
                       </span>
                       {msg.ddGoalAmount && (
                         <span className="ml-auto text-[10px] font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 55%)" }}>

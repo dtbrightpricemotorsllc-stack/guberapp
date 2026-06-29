@@ -139,14 +139,20 @@ function webSpeechFallback(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const ss = window.speechSynthesis;
   ss.cancel();
-  // Chrome/WebView bug: cancel() followed immediately by speak() can silently
-  // drop the utterance. A 60 ms gap lets cancel() finish before we enqueue.
+  // Android WebView needs a longer gap after cancel() — 60 ms is sometimes too
+  // tight and the utterance is silently dropped. 220 ms is reliable in practice.
   setTimeout(() => {
     const utt = new SpeechSynthesisUtterance(text);
-    applyJacVoice(utt);
-    utt.rate   = 1.08;
-    utt.pitch  = 1.15;
+    utt.lang   = "en-US";
+    utt.rate   = 1.05;
+    utt.pitch  = 1.1;
     utt.volume = 1.0;
+    // Only apply a specific voice if voices are already loaded; otherwise let
+    // the browser pick the system default (safer on Android WebView).
+    const voices = ss.getVoices();
+    if (voices.length > 0) applyJacVoice(utt);
     ss.speak(utt);
-  }, 60);
+    // Android WebView sometimes pauses synthesis — nudge it.
+    setTimeout(() => { if (ss.paused) ss.resume(); }, 300);
+  }, 220);
 }

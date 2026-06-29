@@ -17543,11 +17543,11 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
 
       let intro: string;
       if (topItems.length === 0) {
-        intro = `D.D. locked: $${goalAmount.toFixed(2)}${deadlineText}. No live jobs in your area right now — but new ones post daily. Come back and I'll refresh the plan.`;
+        intro = `Goal set: $${goalAmount.toFixed(2)}${deadlineText}. No live jobs showing in your area right now — but new ones post daily. Come back and I'll pull fresh options.`;
       } else if (realisticShortfall > 0) {
-        intro = `D.D. locked: $${goalAmount.toFixed(2)}${deadlineText}. Based on ${topItems.length} live opportunity${topItems.length !== 1 ? "s" : ""} near you, you can realistically earn ~$${realisticEarnable.toFixed(0)} ${daysText} — $${realisticShortfall.toFixed(0)} short of your goal. Stack these to close the gap, and new jobs post daily:`;
+        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} possible option${topItems.length !== 1 ? "s" : ""} near you worth exploring — actual earnings depend on availability and what gets accepted. New jobs post daily:`;
       } else {
-        intro = `D.D. locked: $${goalAmount.toFixed(2)}${deadlineText}. Good news — these ${topItems.length} opportunity${topItems.length !== 1 ? "s" : ""} can cover your goal. Ranked by fastest payout:`;
+        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} option${topItems.length !== 1 ? "s" : ""} in your area that could be worth looking into — ranked by potential payout:`;
       }
 
       res.json({
