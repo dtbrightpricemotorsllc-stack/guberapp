@@ -17234,38 +17234,93 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         return res.status(400).json({ message: "Please specify a goal amount, e.g. 'I need $500 by Friday'." });
       }
 
-      // ── Query all income streams in parallel ────────────────────────────
+      // ── Time window scoring ─────────────────────────────────────────────
+      // Parse deadline into days remaining; default 7 if not specified.
+      function deadlineToDays(dl: string | null): number {
+        if (!dl) return 7;
+        const lower = dl.toLowerCase();
+        if (/tonight|today|eod|end of day|midnight/.test(lower)) return 0.5;
+        if (/tomorrow/.test(lower)) return 1;
+        if (/this weekend|saturday|sunday/.test(lower)) {
+          const now = new Date();
+          const dow = now.getDay(); // 0=Sun,6=Sat
+          const daysToSat = dow <= 6 ? 6 - dow : 0;
+          return Math.max(0.5, daysToSat);
+        }
+        const dayMap: Record<string, number> = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0 };
+        for (const [d, target] of Object.entries(dayMap)) {
+          if (lower.includes(d)) {
+            const now = new Date();
+            const cur = now.getDay();
+            let diff = target - cur;
+            if (diff <= 0) diff += 7;
+            return diff;
+          }
+        }
+        if (/next week/.test(lower)) return 7;
+        if (/\d/.test(lower)) {
+          const m = lower.match(/(\d+)\s*(day|hour)/);
+          if (m) return m[2].startsWith("hour") ? parseInt(m[1]) / 24 : parseInt(m[1]);
+        }
+        return 7;
+      }
+      const daysLeft = deadlineToDays(deadline);
+      const dailyRateNeeded = daysLeft > 0 ? goalAmount / daysLeft : goalAmount;
+
+      // ── Query all income streams + profile in parallel ──────────────────
       const userRes = await pool.query(
-        `SELECT zipcode, id_verified FROM users WHERE id = $1`,
+        `SELECT u.zipcode, u.id_verified,
+                (SELECT value FROM jac_memory WHERE user_id = u.id AND category = 'work' AND key = 'top_service_categories' LIMIT 1) AS top_cats,
+                (SELECT value FROM jac_memory WHERE user_id = u.id AND category = 'transport' AND key = 'has_vehicle' LIMIT 1) AS has_vehicle
+         FROM users u WHERE u.id = $1`,
         [userId]
       );
       const zip = userRes.rows[0]?.zipcode ?? null;
       const idVerified = !!userRes.rows[0]?.id_verified;
+      const topCats: string[] = (() => { try { const v = userRes.rows[0]?.top_cats; return Array.isArray(v) ? v : (typeof v === "string" ? JSON.parse(v) : []); } catch { return []; } })();
+      const hasVehicle = !!userRes.rows[0]?.has_vehicle;
 
-      const [jobsRes, lbRes, cashDropRes, missionsRes, earnRes] = await Promise.all([
+      const [jobsRes, viJobsRes, lbRes, cashDropRes, missionsRes, mktRes] = await Promise.all([
+        // General nearby jobs — profile-matched categories first
         pool.query(
-          `SELECT id, title, budget, category, service_type, zip
+          `SELECT id, title, budget, category, service_type, zip, job_type
            FROM jobs
            WHERE status = 'open' AND assigned_worker_id IS NULL
+             AND job_type IS DISTINCT FROM 'vi'
              AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
-             AND (zip IS NULL OR $1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
-           ORDER BY budget DESC NULLS LAST LIMIT 5`,
-          [zip]
+             AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
+           ORDER BY
+             CASE WHEN $2::text[] IS NOT NULL AND category = ANY($2::text[]) THEN 0 ELSE 1 END,
+             budget DESC NULLS LAST
+           LIMIT 6`,
+          [zip, topCats.length ? topCats : null]
         ),
+        // V&I jobs (Verify & Inspect) — fast single-visit pay
         pool.query(
+          `SELECT id, title, budget, zip
+           FROM jobs
+           WHERE status = 'open' AND assigned_worker_id IS NULL
+             AND job_type = 'vi'
+             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+           ORDER BY budget DESC NULLS LAST LIMIT 3`
+        ),
+        // Load board — only if user has a vehicle
+        hasVehicle ? pool.query(
           `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip
            FROM load_board_listings WHERE status = 'active'
            ORDER BY posted_price DESC NULLS LAST LIMIT 3`
-        ),
-        pool.query(
+        ) : Promise.resolve({ rows: [] as any[] }),
+        // Cash drops (ID-verified users only)
+        idVerified ? pool.query(
           `SELECT id, title, reward_per_winner, end_time
            FROM cash_drops
            WHERE status = 'active' AND (is_test_drop = FALSE OR is_test_drop IS NULL)
              AND (end_time IS NULL OR end_time > NOW())
            ORDER BY reward_per_winner DESC LIMIT 3`
-        ),
+        ) : Promise.resolve({ rows: [] as any[] }),
+        // City missions (incomplete only)
         pool.query(
-          `SELECT gtt.id, gtt.emoji, gtt.title, gtt.reward_credits, gtt.description, gtt.category
+          `SELECT gtt.id, gtt.emoji, gtt.title, gtt.reward_credits, gtt.description
            FROM growth_task_templates gtt
            WHERE gtt.is_active = TRUE AND gtt.paused = FALSE
              AND NOT EXISTS (
@@ -17275,16 +17330,18 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
            ORDER BY gtt.reward_credits DESC LIMIT 3`,
           [userId]
         ),
+        // User's own marketplace listings with views but no offers (lower price tip)
         pool.query(
-          `SELECT COALESCE(SUM(amount), 0) AS total
-           FROM wallet_transactions WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')`,
+          `SELECT mi.id, mi.title, mi.price
+           FROM marketplace_items mi
+           WHERE mi.seller_id = $1 AND mi.status = 'active'
+             AND (SELECT COUNT(*) FROM marketplace_offers mo WHERE mo.item_id = mi.id AND mo.status NOT IN ('rejected','withdrawn')) = 0
+           ORDER BY mi.created_at DESC LIMIT 2`,
           [userId]
         ),
       ]);
 
-      const earnedTotal = parseFloat(earnRes.rows[0]?.total) || 0;
-
-      // ── Build ranked plan items ─────────────────────────────────────────
+      // ── Build plan items with speed-to-earnings scoring ─────────────────
       type PlanItem = {
         type: string;
         id?: number;
@@ -17295,22 +17352,47 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         actionLabel: string;
         estimatedTime?: string;
         notes?: string;
+        matchReason?: string;
       };
 
       const items: PlanItem[] = [];
 
+      // Speed-to-earnings scoring: urgency = "high" if this item covers >= half the daily rate needed
+      function scoreUrgency(pay: number, estimatedHours: number): "high" | "normal" {
+        const payPerDay = (pay / estimatedHours) * 8; // normalize to 8h day
+        return payPerDay >= dailyRateNeeded * 0.5 ? "high" : "normal";
+      }
+
       for (const j of jobsRes.rows) {
         const pay = parseFloat(j.budget) || 0;
         if (pay <= 0) continue;
+        const isCatMatch = topCats.length && topCats.some(c => j.category?.toLowerCase().includes(c.toLowerCase()));
         items.push({
           type: "job",
           id: j.id,
-          title: j.title || `${j.category || "Job"} in ${j.zip || "your area"}`,
+          title: j.title || `${j.category || "Job"} nearby`,
           estimatedPay: pay,
           route: `/jobs/${j.id}`,
-          urgency: pay >= goalAmount * 0.5 ? "high" : "normal",
+          urgency: scoreUrgency(pay, 4),
           actionLabel: "View job",
           estimatedTime: "2–6 hrs",
+          matchReason: isCatMatch ? `Matches your ${topCats[0]} experience` : undefined,
+        });
+      }
+
+      for (const j of viJobsRes.rows) {
+        const pay = parseFloat(j.budget) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "vi_job",
+          id: j.id,
+          title: j.title || "Verify & Inspect job",
+          estimatedPay: pay,
+          route: `/jobs/${j.id}`,
+          urgency: scoreUrgency(pay, 1.5),
+          actionLabel: "View V&I job",
+          estimatedTime: "1–2 hrs",
+          matchReason: "Quick single-visit payout",
         });
       }
 
@@ -17323,38 +17405,34 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           title: `Haul: ${lb.cargo_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
           estimatedPay: pay,
           route: `/load-board/${lb.id}`,
-          urgency: pay >= goalAmount * 0.4 ? "high" : "normal",
+          urgency: scoreUrgency(pay, 6),
           actionLabel: "View run",
           estimatedTime: "4–8 hrs",
         });
       }
 
-      if (idVerified) {
-        for (const cd of cashDropRes.rows) {
-          const pay = parseFloat(cd.reward_per_winner) || 0;
-          if (pay <= 0) continue;
-          const urgency: "high" | "normal" = cd.end_time ? "high" : "normal";
-          items.push({
-            type: "cash_drop",
-            id: cd.id,
-            title: `Cash Drop: ${cd.title}`,
-            estimatedPay: pay,
-            route: `/cash-drops`,
-            urgency,
-            actionLabel: "Claim drop",
-            estimatedTime: "< 1 hr",
-            notes: cd.end_time ? `Ends ${new Date(cd.end_time).toLocaleDateString()}` : undefined,
-          });
-        }
+      for (const cd of cashDropRes.rows) {
+        const pay = parseFloat(cd.reward_per_winner) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "cash_drop",
+          id: cd.id,
+          title: `Cash Drop: ${cd.title}`,
+          estimatedPay: pay,
+          route: `/cash-drops`,
+          urgency: cd.end_time ? "high" : "normal",
+          actionLabel: "Claim drop",
+          estimatedTime: "< 1 hr",
+          notes: cd.end_time ? `Ends ${new Date(cd.end_time).toLocaleDateString()}` : undefined,
+        });
       }
 
       for (const m of missionsRes.rows) {
-        const creditsVal = (parseInt(m.reward_credits) || 0) / 1000;
         items.push({
           type: "city_mission",
           id: m.id,
           title: `${m.emoji || "📍"} Mission: ${m.title}`,
-          estimatedPay: creditsVal,
+          estimatedPay: 0,
           route: `/credits`,
           urgency: "normal",
           actionLabel: "Start mission",
@@ -17363,17 +17441,42 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         });
       }
 
-      // Sort by estimated pay DESC, urgency first
+      for (const mi of mktRes.rows) {
+        const price = parseFloat(mi.price) || 0;
+        if (price <= 0) continue;
+        items.push({
+          type: "marketplace",
+          id: mi.id,
+          title: `Lower price on: ${mi.title}`,
+          estimatedPay: price * 0.9,
+          route: `/marketplace/my-listings`,
+          urgency: "normal",
+          actionLabel: "Update listing",
+          estimatedTime: "< 5 min",
+          matchReason: "Active listing with no offers — a small price drop often closes sales fast",
+        });
+      }
+
+      // ── Rank: urgency first, then by speed-to-earnings (pay / hrs) ──────
       items.sort((a, b) => {
         if (a.urgency === "high" && b.urgency !== "high") return -1;
         if (b.urgency === "high" && a.urgency !== "high") return 1;
-        return b.estimatedPay - a.estimatedPay;
+        const aRate = a.type === "vi_job" ? a.estimatedPay / 1.5 :
+                       a.type === "cash_drop" ? a.estimatedPay / 0.5 :
+                       a.type === "load_board" ? a.estimatedPay / 6 : a.estimatedPay / 4;
+        const bRate = b.type === "vi_job" ? b.estimatedPay / 1.5 :
+                       b.type === "cash_drop" ? b.estimatedPay / 0.5 :
+                       b.type === "load_board" ? b.estimatedPay / 6 : b.estimatedPay / 4;
+        return bRate - aRate;
       });
 
       const topItems = items.slice(0, 7);
 
-      // ── Save / update D.D. goal ─────────────────────────────────────────
-      // Mark any previous active goals as superseded
+      // ── Realistic gap analysis ──────────────────────────────────────────
+      const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);
+      const realisticShortfall = Math.max(0, goalAmount - realisticEarnable);
+
+      // ── Save goal — earnedSoFar = 0 (tracking starts from NOW) ──────────
       await pool.query(
         `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
          WHERE user_id = $1 AND status = 'active'`,
@@ -17381,37 +17484,37 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       );
       const insertRes = await pool.query(
         `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, status)
-         VALUES ($1, $2, $3, $4::jsonb, $5, 'active')
+         VALUES ($1, $2, $3, $4::jsonb, 0, 'active')
          RETURNING id`,
-        [userId, goalAmount, deadline, JSON.stringify(topItems), earnedTotal]
+        [userId, goalAmount, deadline, JSON.stringify(topItems)]
       );
       const goalId = insertRes.rows[0]?.id;
 
-      // ── Build JAC coordinator response ──────────────────────────────────
-      const remaining = Math.max(0, goalAmount - earnedTotal);
+      // ── JAC coordinator voice — gap-aware response ───────────────────────
       const deadlineText = deadline ? ` by ${deadline}` : "";
-      const projectableTotal = topItems.reduce((s, i) => s + i.estimatedPay, 0);
+      const daysText = daysLeft < 1 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${Math.round(daysLeft)} days`;
 
       let intro: string;
       if (topItems.length === 0) {
-        intro = `I've locked in your goal: earn $${goalAmount.toFixed(2)}${deadlineText}. I don't see live opportunities right now — but check back as new jobs post every day. You need $${remaining.toFixed(2)} more.`;
+        intro = `D.D. locked: $${goalAmount.toFixed(2)}${deadlineText}. No live jobs in your area right now — but new ones post daily. Come back and I'll refresh the plan.`;
+      } else if (realisticShortfall > 0) {
+        intro = `D.D. locked: $${goalAmount.toFixed(2)}${deadlineText}. Based on ${topItems.length} live opportunity${topItems.length !== 1 ? "s" : ""} near you, you can realistically earn ~$${realisticEarnable.toFixed(0)} ${daysText} — $${realisticShortfall.toFixed(0)} short of your goal. Stack these to close the gap, and new jobs post daily:`;
       } else {
-        const plural = topItems.length === 1 ? "opportunity" : "opportunities";
-        const projLine = projectableTotal >= remaining
-          ? `Between these ${topItems.length} ${plural}, you could close the gap.`
-          : `These ${plural} get you closer — keep stacking them.`;
-        intro = `D.D. locked. Goal: $${goalAmount.toFixed(2)}${deadlineText}. You need $${remaining.toFixed(2)} more. ${projLine} Here's your ranked action plan:`;
+        intro = `D.D. locked: $${goalAmount.toFixed(2)}${deadlineText}. Good news — these ${topItems.length} opportunity${topItems.length !== 1 ? "s" : ""} can cover your goal. Ranked by fastest payout:`;
       }
 
       res.json({
         goalId,
         goalAmount,
         deadline,
-        earnedSoFar: earnedTotal,
-        remaining,
+        daysLeft,
+        earnedSoFar: 0,
+        remaining: goalAmount,
+        realisticEarnable,
+        realisticShortfall,
         planItems: topItems,
         reply: intro,
-        actions: topItems.slice(0, 4).map(item => ({
+        actions: topItems.filter(i => i.estimatedPay > 0).slice(0, 4).map(item => ({
           label: item.actionLabel,
           message: `Take me to: ${item.title}`,
           route: item.route,
@@ -17423,7 +17526,8 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     }
   });
 
-  app.get("/api/jac/dd/goals", requireAuth, async (req: Request, res: Response) => {
+  // Shared handler for history/goals — same data, two routes for compatibility
+  async function handleDDHistory(req: Request, res: Response) {
     try {
       const userId = req.session.userId!;
       const result = await pool.query(
@@ -17442,10 +17546,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         updatedAt: r.updated_at,
       })));
     } catch (err: any) {
-      console.error("[jac/dd/goals]", err.message);
+      console.error("[jac/dd/history]", err.message);
       res.json([]);
     }
-  });
+  }
+
+  app.get("/api/jac/dd/goals", requireAuth, handleDDHistory);
+  app.get("/api/jac/dd/history", requireAuth, handleDDHistory);
 
   app.patch("/api/jac/dd/goals/:id/abandon", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -17466,7 +17573,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       const adminRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [req.session.userId]);
       if (adminRes.rows[0]?.role !== "admin") return res.status(403).json({ message: "Forbidden" });
 
-      const [totals, topGoals, recent] = await Promise.all([
+      const [totals, topGoals, recent, incomePaths] = await Promise.all([
         pool.query(`
           SELECT
             COUNT(*)::int AS total_goals,
@@ -17475,7 +17582,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
             COUNT(*) FILTER (WHERE status = 'abandoned')::int AS abandoned_goals,
             ROUND(AVG(goal_amount)::numeric, 2) AS avg_goal_amount,
             ROUND(AVG(earned_so_far)::numeric, 2) AS avg_earned,
-            COUNT(DISTINCT user_id)::int AS unique_users
+            COUNT(DISTINCT user_id)::int AS unique_users,
+            ROUND(
+              100.0 * COUNT(*) FILTER (WHERE status = 'completed') / NULLIF(COUNT(*), 0), 1
+            ) AS completion_rate,
+            ROUND(AVG(
+              CASE WHEN status = 'completed' THEN goal_amount - earned_so_far ELSE NULL END
+            )::numeric, 2) AS avg_gap_completed
           FROM jac_dd_goals
         `),
         pool.query(`
@@ -17489,18 +17602,29 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           FROM jac_dd_goals g JOIN users u ON u.id = g.user_id
           ORDER BY g.created_at DESC LIMIT 10
         `),
+        pool.query(`
+          SELECT elem->>'type' AS income_type, COUNT(*)::int AS cnt
+          FROM jac_dd_goals,
+               jsonb_array_elements(plan_json) AS elem
+          WHERE plan_json IS NOT NULL AND jsonb_typeof(plan_json) = 'array'
+          GROUP BY income_type ORDER BY cnt DESC LIMIT 6
+        `),
       ]);
 
+      const t = totals.rows[0];
       res.json({
-        totalGoals:     totals.rows[0]?.total_goals ?? 0,
-        activeGoals:    totals.rows[0]?.active_goals ?? 0,
-        completedGoals: totals.rows[0]?.completed_goals ?? 0,
-        abandonedGoals: totals.rows[0]?.abandoned_goals ?? 0,
-        avgGoalAmount:  parseFloat(totals.rows[0]?.avg_goal_amount) || 0,
-        avgEarned:      parseFloat(totals.rows[0]?.avg_earned) || 0,
-        uniqueUsers:    totals.rows[0]?.unique_users ?? 0,
-        topGoalAmounts: topGoals.rows,
-        recentGoals:    recent.rows,
+        totalGoals:       t?.total_goals ?? 0,
+        activeGoals:      t?.active_goals ?? 0,
+        completedGoals:   t?.completed_goals ?? 0,
+        abandonedGoals:   t?.abandoned_goals ?? 0,
+        avgGoalAmount:    parseFloat(t?.avg_goal_amount) || 0,
+        avgEarned:        parseFloat(t?.avg_earned) || 0,
+        uniqueUsers:      t?.unique_users ?? 0,
+        completionRate:   parseFloat(t?.completion_rate) || 0,
+        avgGapCompleted:  parseFloat(t?.avg_gap_completed) || 0,
+        topGoalAmounts:   topGoals.rows,
+        recentGoals:      recent.rows,
+        topIncomePaths:   incomePaths.rows,
       });
     } catch (err: any) {
       console.error("[admin/jac/dd/stats]", err.message);

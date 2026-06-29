@@ -1177,6 +1177,25 @@ app.use((req, res, next) => {
     WHERE NOT EXISTS (SELECT 1 FROM jac_intents LIMIT 1);
   `).catch(e => console.error("[migration] jac_intents seed error:", e));
 
+  // Upsert destination_determination intent (D.D. mode — goal-based financial plan)
+  await pool.query(`
+    INSERT INTO jac_intents (intent_name, display_name, sample_phrases, required_fields, target_flow, target_route, fallback_response)
+    VALUES (
+      'destination_determination',
+      'Destination Determination',
+      '["I need $","help me earn","make money by","earn by","I want to make","earning goal","how do I make $","I need to make","D.D. mode","destination determination"]'::jsonb,
+      '["goal_amount"]'::jsonb,
+      'destination_determination',
+      NULL,
+      'Tell me your earning goal and deadline — e.g. "I need $300 by Friday" — and I''ll build a ranked action plan across all GUBER income streams.'
+    )
+    ON CONFLICT (intent_name) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      sample_phrases = EXCLUDED.sample_phrases,
+      target_flow = EXCLUDED.target_flow,
+      fallback_response = EXCLUDED.fallback_response;
+  `).catch(e => console.error("[migration] jac_intents seed error:", e));
+
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`
     UPDATE growth_task_templates SET is_active = false, paused = true

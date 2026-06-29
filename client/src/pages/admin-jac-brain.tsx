@@ -586,7 +586,7 @@ function GoalsTab() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Avg Goal Amount</CardTitle></CardHeader>
           <CardContent>
@@ -595,10 +595,17 @@ function GoalsTab() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Avg Earned So Far</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Completion Rate</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">${(s.avgEarned ?? 0).toFixed(2)}</div>
-            <div className="text-xs text-muted-foreground mt-1">Progress toward goal</div>
+            <div className="text-3xl font-bold text-green-600">{(s.completionRate ?? 0).toFixed(1)}%</div>
+            <div className="text-xs text-muted-foreground mt-1">Goals reached target</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Avg Gap (Completed)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-amber-600">${(s.avgGapCompleted ?? 0).toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-1">Goal minus earned at close</div>
           </CardContent>
         </Card>
         <Card>
@@ -614,6 +621,21 @@ function GoalsTab() {
           </CardContent>
         </Card>
       </div>
+
+      {(s.topIncomePaths ?? []).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Top Recommended Income Paths</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {(s.topIncomePaths ?? []).map((row: any) => (
+                <Badge key={row.income_type} variant="secondary" className="text-xs" data-testid={`income-path-${row.income_type}`}>
+                  {row.income_type?.replace(/_/g, " ")} <span className="ml-1 font-bold">{row.cnt}×</span>
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div>
         <h3 className="font-semibold text-sm mb-3">Recent Goals</h3>
