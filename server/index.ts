@@ -991,6 +991,11 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_dd_goals_user ON jac_dd_goals(user_id, status);
   `).catch(e => console.error("[migration] jac_dd_goals error:", e));
 
+  // Add realistic_earnable column to jac_dd_goals if not exists (idempotent)
+  await pool.query(`
+    ALTER TABLE jac_dd_goals ADD COLUMN IF NOT EXISTS realistic_earnable REAL DEFAULT 0;
+  `).catch(e => console.error("[migration] jac_dd_goals realistic_earnable error:", e));
+
   // Seed GUBER knowledge base (only if empty)
   await pool.query(`
     INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)

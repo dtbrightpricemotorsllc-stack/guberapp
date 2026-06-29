@@ -17220,14 +17220,16 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
   app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
-      const { message, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
+      // Accept both `goal` (spec contract) and `goalAmount` (backward-compat)
+      const { message, goal: bodyGoalSpec, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
         message?: string;
+        goal?: number;
         goalAmount?: number;
         deadline?: string;
       };
 
       const parsed = parseDDIntent(message || "");
-      const goalAmount = bodyGoal ?? parsed.goalAmount;
+      const goalAmount = bodyGoalSpec ?? bodyGoal ?? parsed.goalAmount;
       const deadline = bodyDeadline ?? parsed.deadline;
 
       if (!goalAmount || goalAmount <= 0) {
@@ -17281,9 +17283,10 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       const hasVehicle = !!userRes.rows[0]?.has_vehicle;
 
       const [jobsRes, viJobsRes, lbRes, cashDropRes, missionsRes, mktRes] = await Promise.all([
-        // General nearby jobs — profile-matched categories first
+        // General nearby jobs — profile-matched categories first; includes total count
         pool.query(
-          `SELECT id, title, budget, category, service_type, zip, job_type
+          `SELECT id, title, budget, category, service_type, zip, job_type,
+                  COUNT(*) OVER() AS availability_count
            FROM jobs
            WHERE status = 'open' AND assigned_worker_id IS NULL
              AND job_type IS DISTINCT FROM 'vi'
@@ -17295,32 +17298,37 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
            LIMIT 6`,
           [zip, topCats.length ? topCats : null]
         ),
-        // V&I jobs (Verify & Inspect) — fast single-visit pay
+        // V&I jobs (Verify & Inspect) — zip-proximity filtered, fast single-visit pay
         pool.query(
-          `SELECT id, title, budget, zip
+          `SELECT id, title, budget, zip, COUNT(*) OVER() AS availability_count
            FROM jobs
            WHERE status = 'open' AND assigned_worker_id IS NULL
              AND job_type = 'vi'
              AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
-           ORDER BY budget DESC NULLS LAST LIMIT 3`
+             AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
+           ORDER BY budget DESC NULLS LAST LIMIT 3`,
+          [zip]
         ),
-        // Load board — only if user has a vehicle
+        // Load board — only if user has a vehicle; includes total count
         hasVehicle ? pool.query(
-          `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip
+          `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip,
+                  COUNT(*) OVER() AS availability_count
            FROM load_board_listings WHERE status = 'active'
            ORDER BY posted_price DESC NULLS LAST LIMIT 3`
         ) : Promise.resolve({ rows: [] as any[] }),
-        // Cash drops (ID-verified users only)
+        // Cash drops — ID-verified + active + not expired; proximity requires user GPS so all active drops shown
         idVerified ? pool.query(
-          `SELECT id, title, reward_per_winner, end_time
+          `SELECT id, title, reward_per_winner, end_time,
+                  COUNT(*) OVER() AS availability_count
            FROM cash_drops
            WHERE status = 'active' AND (is_test_drop = FALSE OR is_test_drop IS NULL)
              AND (end_time IS NULL OR end_time > NOW())
            ORDER BY reward_per_winner DESC LIMIT 3`
         ) : Promise.resolve({ rows: [] as any[] }),
-        // City missions (incomplete only)
+        // City missions (incomplete only) — includes total remaining count
         pool.query(
-          `SELECT gtt.id, gtt.emoji, gtt.title, gtt.reward_credits, gtt.description
+          `SELECT gtt.id, gtt.emoji, gtt.title, gtt.reward_credits, gtt.description,
+                  COUNT(*) OVER() AS availability_count
            FROM growth_task_templates gtt
            WHERE gtt.is_active = TRUE AND gtt.paused = FALSE
              AND NOT EXISTS (
@@ -17330,13 +17338,17 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
            ORDER BY gtt.reward_credits DESC LIMIT 3`,
           [userId]
         ),
-        // User's own marketplace listings with views but no offers (lower price tip)
+        // User's stale marketplace listings: active + getting views + no pending/accepted offers
         pool.query(
-          `SELECT mi.id, mi.title, mi.price
+          `SELECT mi.id, mi.title, mi.price, mi.view_count,
+                  COUNT(*) OVER() AS availability_count
            FROM marketplace_items mi
            WHERE mi.seller_id = $1 AND mi.status = 'active'
-             AND (SELECT COUNT(*) FROM marketplace_offers mo WHERE mo.item_id = mi.id AND mo.status NOT IN ('rejected','withdrawn')) = 0
-           ORDER BY mi.created_at DESC LIMIT 2`,
+             AND COALESCE(mi.view_count, 0) > 0
+             AND (SELECT COUNT(*) FROM marketplace_offers mo
+                  WHERE mo.item_id = mi.id
+                    AND mo.status NOT IN ('rejected','withdrawn')) = 0
+           ORDER BY mi.view_count DESC LIMIT 2`,
           [userId]
         ),
       ]);
@@ -17347,12 +17359,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         id?: number;
         title: string;
         estimatedPay: number;
+        availabilityCount: number;
         route: string;
         urgency: "high" | "normal";
         actionLabel: string;
         estimatedTime?: string;
         notes?: string;
-        matchReason?: string;
+        matchReason: string;
       };
 
       const items: PlanItem[] = [];
@@ -17363,6 +17376,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         return payPerDay >= dailyRateNeeded * 0.5 ? "high" : "normal";
       }
 
+      const jobAvail = parseInt(jobsRes.rows[0]?.availability_count ?? "0");
       for (const j of jobsRes.rows) {
         const pay = parseFloat(j.budget) || 0;
         if (pay <= 0) continue;
@@ -17372,14 +17386,16 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           id: j.id,
           title: j.title || `${j.category || "Job"} nearby`,
           estimatedPay: pay,
+          availabilityCount: jobAvail,
           route: `/jobs/${j.id}`,
           urgency: scoreUrgency(pay, 4),
           actionLabel: "View job",
           estimatedTime: "2–6 hrs",
-          matchReason: isCatMatch ? `Matches your ${topCats[0]} experience` : undefined,
+          matchReason: isCatMatch ? `Matches your ${topCats[0]} experience — ${jobAvail} open job${jobAvail !== 1 ? "s" : ""} nearby` : `${jobAvail} open job${jobAvail !== 1 ? "s" : ""} in your area`,
         });
       }
 
+      const viAvail = parseInt(viJobsRes.rows[0]?.availability_count ?? "0");
       for (const j of viJobsRes.rows) {
         const pay = parseFloat(j.budget) || 0;
         if (pay <= 0) continue;
@@ -17388,14 +17404,16 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           id: j.id,
           title: j.title || "Verify & Inspect job",
           estimatedPay: pay,
+          availabilityCount: viAvail,
           route: `/jobs/${j.id}`,
           urgency: scoreUrgency(pay, 1.5),
           actionLabel: "View V&I job",
           estimatedTime: "1–2 hrs",
-          matchReason: "Quick single-visit payout",
+          matchReason: `Quick single-visit payout — ${viAvail} V&I job${viAvail !== 1 ? "s" : ""} near you`,
         });
       }
 
+      const lbAvail = parseInt(lbRes.rows[0]?.availability_count ?? "0");
       for (const lb of lbRes.rows) {
         const pay = parseFloat(lb.posted_price) || 0;
         if (pay <= 0) continue;
@@ -17404,13 +17422,16 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           id: lb.id,
           title: `Haul: ${lb.cargo_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
           estimatedPay: pay,
+          availabilityCount: lbAvail,
           route: `/load-board/${lb.id}`,
           urgency: scoreUrgency(pay, 6),
           actionLabel: "View run",
           estimatedTime: "4–8 hrs",
+          matchReason: `${lbAvail} active load${lbAvail !== 1 ? "s" : ""} on the board — vehicle required`,
         });
       }
 
+      const cdAvail = parseInt(cashDropRes.rows[0]?.availability_count ?? "0");
       for (const cd of cashDropRes.rows) {
         const pay = parseFloat(cd.reward_per_winner) || 0;
         if (pay <= 0) continue;
@@ -17419,28 +17440,34 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           id: cd.id,
           title: `Cash Drop: ${cd.title}`,
           estimatedPay: pay,
+          availabilityCount: cdAvail,
           route: `/cash-drops`,
           urgency: cd.end_time ? "high" : "normal",
           actionLabel: "Claim drop",
           estimatedTime: "< 1 hr",
           notes: cd.end_time ? `Ends ${new Date(cd.end_time).toLocaleDateString()}` : undefined,
+          matchReason: `${cdAvail} active drop${cdAvail !== 1 ? "s" : ""} — claim before they close`,
         });
       }
 
+      const missionAvail = parseInt(missionsRes.rows[0]?.availability_count ?? "0");
       for (const m of missionsRes.rows) {
         items.push({
           type: "city_mission",
           id: m.id,
           title: `${m.emoji || "📍"} Mission: ${m.title}`,
           estimatedPay: 0,
+          availabilityCount: missionAvail,
           route: `/credits`,
           urgency: "normal",
           actionLabel: "Start mission",
           estimatedTime: "< 30 min",
           notes: `Earns ${m.reward_credits} credits`,
+          matchReason: `${missionAvail} mission${missionAvail !== 1 ? "s" : ""} available — earns GUBER credits`,
         });
       }
 
+      const mktAvail = parseInt(mktRes.rows[0]?.availability_count ?? "0");
       for (const mi of mktRes.rows) {
         const price = parseFloat(mi.price) || 0;
         if (price <= 0) continue;
@@ -17449,11 +17476,12 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           id: mi.id,
           title: `Lower price on: ${mi.title}`,
           estimatedPay: price * 0.9,
+          availabilityCount: mktAvail,
           route: `/marketplace/my-listings`,
           urgency: "normal",
           actionLabel: "Update listing",
           estimatedTime: "< 5 min",
-          matchReason: "Active listing with no offers — a small price drop often closes sales fast",
+          matchReason: `${mi.view_count ?? 0} view${(mi.view_count ?? 0) !== 1 ? "s" : ""}, no offers yet — a small price drop often closes sales fast`,
         });
       }
 
@@ -17483,10 +17511,10 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         [userId]
       );
       const insertRes = await pool.query(
-        `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, status)
-         VALUES ($1, $2, $3, $4::jsonb, 0, 'active')
+        `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, realistic_earnable, status)
+         VALUES ($1, $2, $3, $4::jsonb, 0, $5, 'active')
          RETURNING id`,
-        [userId, goalAmount, deadline, JSON.stringify(topItems)]
+        [userId, goalAmount, deadline, JSON.stringify(topItems), realisticEarnable]
       );
       const goalId = insertRes.rows[0]?.id;
 
@@ -17587,7 +17615,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
               100.0 * COUNT(*) FILTER (WHERE status = 'completed') / NULLIF(COUNT(*), 0), 1
             ) AS completion_rate,
             ROUND(AVG(
-              CASE WHEN status = 'completed' THEN goal_amount - earned_so_far ELSE NULL END
+              goal_amount - COALESCE(realistic_earnable, 0)
             )::numeric, 2) AS avg_gap_completed
           FROM jac_dd_goals
         `),
