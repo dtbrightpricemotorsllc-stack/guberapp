@@ -307,7 +307,11 @@ export async function buildMorningBriefing(userId: number): Promise<{
     }
 
     if (parts.length === 0) {
-      const topCats: string[] = Array.isArray(memMap["top_service_categories"]) ? memMap["top_service_categories"] : [];
+      const catMemRes = await pool.query(
+        `SELECT value FROM jac_memory WHERE user_id = $1 AND category = 'work' AND key = 'top_service_categories' LIMIT 1`,
+        [userId]
+      );
+      const topCats: string[] = Array.isArray(catMemRes.rows[0]?.value) ? catMemRes.rows[0].value : [];
       const catHint = topCats.length ? ` in ${topCats[0]}` : "";
       if (!chips.some(c => c.message === "Find work nearby")) {
         chips.push({ label: "Find work nearby", message: "Find work nearby" });
@@ -490,12 +494,15 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     }
 
     // ── 4. Open jobs matching zip (same ZIP or adjacent 3-digit prefix) + categories ──
-    const zipCondition = userZip ? `AND (zip = '${userZip.replace(/'/g, "''")}' OR LEFT(zip, 3) = LEFT('${userZip.replace(/'/g, "''")}', 3))` : "";
-    const catFilter = topCats.length
-      ? `AND category = ANY(ARRAY[${topCats.map((c: string) => `'${c.replace(/'/g, "''")}'`).join(",")}]::text[])`
-      : "";
+    const hasZip = !!userZip;
+    const hasCats = topCats.length > 0;
 
-    if (zipCondition || catFilter) {
+    if (hasZip || hasCats) {
+      const params: unknown[] = [];
+      let zipClause = "";
+      let catClause = "";
+      if (hasZip) { params.push(userZip); zipClause = `AND (zip = $${params.length} OR LEFT(zip, 3) = LEFT($${params.length}, 3))`; }
+      if (hasCats) { params.push(topCats); catClause = `AND category = ANY($${params.length}::text[])`; }
       const jobsRes = await pool.query(`
         SELECT id, title, category, budget, zip, urgent_switch
         FROM jobs
@@ -505,11 +512,11 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
           AND (is_test_job = FALSE OR is_test_job IS NULL)
           AND deleted_at IS NULL
           AND (job_type IS NULL OR job_type != 'vi')
-          ${zipCondition}
-          ${catFilter}
+          ${zipClause}
+          ${catClause}
         ORDER BY urgent_switch DESC, created_at DESC
         LIMIT 3
-      `);
+      `, params);
       for (const j of jobsRes.rows) {
         opportunities.push({
           type: "job",
@@ -553,17 +560,20 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
 
     // ── 5. Load board listings matching trailer type or vehicle type ────────
     if (trailerType || vehicleType || topCats.some((c: string) => /transport|load|haul|tow/i.test(c))) {
-      const trailerFilter = trailerType ? `AND trailer_preference = '${trailerType.replace(/'/g, "''")}'` : "";
-      const vehicleFilter = vehicleType && !trailerType ? `AND vehicle_type = '${vehicleType.replace(/'/g, "''")}'` : "";
+      const lbParams: unknown[] = [];
+      let trailerClause = "";
+      let vehicleClause = "";
+      if (trailerType) { lbParams.push(trailerType); trailerClause = `AND trailer_preference = $${lbParams.length}`; }
+      else if (vehicleType) { lbParams.push(vehicleType); vehicleClause = `AND vehicle_type = $${lbParams.length}`; }
       const lbRes = await pool.query(`
         SELECT id, pickup_city, pickup_state, delivery_city, delivery_state, posted_price, transport_type, vehicle_type
         FROM load_board_listings
         WHERE status = 'posted'
-          ${trailerFilter}
-          ${vehicleFilter}
+          ${trailerClause}
+          ${vehicleClause}
         ORDER BY created_at DESC
         LIMIT 2
-      `);
+      `, lbParams);
       for (const lb of lbRes.rows) {
         const from = [lb.pickup_city, lb.pickup_state].filter(Boolean).join(", ");
         const to = [lb.delivery_city, lb.delivery_state].filter(Boolean).join(", ");
