@@ -996,6 +996,18 @@ app.use((req, res, next) => {
     ALTER TABLE jac_dd_goals ADD COLUMN IF NOT EXISTS realistic_earnable REAL DEFAULT 0;
   `).catch(e => console.error("[migration] jac_dd_goals realistic_earnable error:", e));
 
+  // Add new JAC preference columns to jac_user_profile (idempotent)
+  await pool.query(`
+    ALTER TABLE jac_user_profile
+      ADD COLUMN IF NOT EXISTS text_responses               BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS voice_activation             BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS floating_button              BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS proactive_suggestions        BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS personalized_recommendations BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS voice_selection              TEXT    DEFAULT 'default',
+      ADD COLUMN IF NOT EXISTS low_data_mode                BOOLEAN DEFAULT FALSE;
+  `).catch(e => console.error("[migration] jac_user_profile prefs error:", e));
+
   // Seed GUBER knowledge base (only if empty)
   await pool.query(`
     INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)

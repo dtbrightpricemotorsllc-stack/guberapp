@@ -16867,14 +16867,19 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         transportInterest, creatorInterest, creatorPlatforms, businessOwner,
         serviceProvider, retired, prefersVoice, assistantMode, startupBehavior,
         voiceEnabled, language, tutorialStatus,
+        textResponses, voiceActivation, floatingButton,
+        proactiveSuggestions, personalizedRecommendations, voiceSelection, lowDataMode,
       } = req.body;
       await pool.query(
         `INSERT INTO jac_user_profile (
           user_id, primary_goal, user_type, zip_code, interests, service_needs,
           work_interests, transport_interest, creator_interest, creator_platforms,
           business_owner, service_provider, retired, prefers_voice, assistant_mode,
-          startup_behavior, voice_enabled, language, tutorial_status, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
+          startup_behavior, voice_enabled, language, tutorial_status,
+          text_responses, voice_activation, floating_button,
+          proactive_suggestions, personalized_recommendations, voice_selection, low_data_mode,
+          updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW())
         ON CONFLICT (user_id) DO UPDATE SET
           primary_goal     = COALESCE($2, jac_user_profile.primary_goal),
           user_type        = COALESCE($3, jac_user_profile.user_type),
@@ -16894,6 +16899,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           voice_enabled    = COALESCE($17, jac_user_profile.voice_enabled),
           language         = COALESCE($18, jac_user_profile.language),
           tutorial_status  = COALESCE($19, jac_user_profile.tutorial_status),
+          text_responses               = COALESCE($20, jac_user_profile.text_responses),
+          voice_activation             = COALESCE($21, jac_user_profile.voice_activation),
+          floating_button              = COALESCE($22, jac_user_profile.floating_button),
+          proactive_suggestions        = COALESCE($23, jac_user_profile.proactive_suggestions),
+          personalized_recommendations = COALESCE($24, jac_user_profile.personalized_recommendations),
+          voice_selection              = COALESCE($25, jac_user_profile.voice_selection),
+          low_data_mode                = COALESCE($26, jac_user_profile.low_data_mode),
           updated_at       = NOW()`,
         [
           userId,
@@ -16915,6 +16927,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           typeof voiceEnabled === "boolean" ? voiceEnabled : null,
           typeof language === "string" && ["en","es"].includes(language) ? language : null,
           typeof tutorialStatus === "string" ? tutorialStatus : null,
+          typeof textResponses === "boolean" ? textResponses : null,
+          typeof voiceActivation === "boolean" ? voiceActivation : null,
+          typeof floatingButton === "boolean" ? floatingButton : null,
+          typeof proactiveSuggestions === "boolean" ? proactiveSuggestions : null,
+          typeof personalizedRecommendations === "boolean" ? personalizedRecommendations : null,
+          typeof voiceSelection === "string" ? voiceSelection : null,
+          typeof lowDataMode === "boolean" ? lowDataMode : null,
         ]
       );
       res.json({ ok: true });
