@@ -638,6 +638,14 @@ export function GUBERAssistant() {
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {opp.distanceLabel && (
+                            <span
+                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-lg"
+                              style={{ background: "hsl(222 47% 18%)", color: "hsl(210 40% 70%)" }}
+                            >
+                              {opp.distanceLabel}
+                            </span>
+                          )}
                           {opp.payLabel && (
                             <span
                               className="text-[10px] font-display font-bold px-1.5 py-0.5 rounded-lg"

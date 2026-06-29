@@ -230,14 +230,7 @@ export async function buildMorningBriefing(userId: number): Promise<{
       if (storedDate === today) return null;
     }
 
-    const [profileRes, liveRes] = await Promise.all([
-      pool.query(
-        `SELECT key, value FROM jac_memory
-         WHERE user_id = $1 AND category IN ('work','profile')
-           AND key IN ('earnings_7d','top_service_categories','wallet_balance','first_name','home_zip')`,
-        [userId]
-      ),
-      pool.query(`
+    const liveRes = await pool.query(`
         SELECT
           (SELECT full_name FROM users WHERE id = $1) AS full_name,
           (SELECT zipcode FROM users WHERE id = $1) AS zipcode,
@@ -247,6 +240,9 @@ export async function buildMorningBriefing(userId: number): Promise<{
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS pending_offers,
           (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
+          (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions
+           WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')
+             AND created_at > NOW() - INTERVAL '7 days') AS earn_7d,
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) +
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') +
           (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS pending_action_count,
@@ -257,18 +253,15 @@ export async function buildMorningBriefing(userId: number): Promise<{
              AND (SELECT zipcode FROM users WHERE id = $1) IS NOT NULL
              AND LEFT(zip, 3) = LEFT((SELECT zipcode FROM users WHERE id = $1), 3)
           ) AS nearby_jobs
-      `, [userId]),
-    ]);
+      `, [userId]);
 
     const live = liveRes.rows[0] ?? {};
     const firstName = ((live.full_name || "").split(" ")[0] || "there");
-    const memMap: Record<string, any> = {};
-    for (const row of profileRes.rows) memMap[row.key] = row.value;
 
     const parts: string[] = [];
     const chips: Array<{ label: string; message: string }> = [];
 
-    const earn7d = parseFloat(memMap["earnings_7d"]) || 0;
+    const earn7d = parseFloat(live.earn_7d) || 0;
     if (earn7d > 0) parts.push(`you earned $${earn7d.toFixed(2)} this week`);
 
     const walletBalance = parseFloat(live.wallet_balance) || 0;
@@ -359,6 +352,7 @@ export interface JacOpportunity {
   title: string;
   subtitle?: string;
   payLabel?: string;
+  distanceLabel?: string;
   route: string;
   urgency: "high" | "normal";
   tag?: string;
@@ -374,7 +368,16 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
         SELECT
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
           (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS mkt_offers,
-          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending,
+          (SELECT COUNT(*)::int FROM jobs j
+           WHERE j.assigned_helper_id = $1
+             AND j.status IN ('accepted','in_progress','arrived')
+             AND j.proof_required = TRUE
+             AND j.deleted_at IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM proof_submissions ps WHERE ps.job_id = j.id AND ps.status = 'submitted'
+             )
+          ) AS unsubmitted_proof
       `, [userId]),
       pool.query(
         `SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_transactions WHERE user_id = $1 AND status = 'completed'`,
@@ -419,6 +422,9 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     if (parseInt(actions.proofs_pending) > 0) {
       pending.push({ type: "pending_action", title: `${actions.proofs_pending} proof submission${actions.proofs_pending > 1 ? "s" : ""}`, subtitle: "Worker submitted proof — review now", route: "/jobs", urgency: "high", tag: "📋 Proof" });
     }
+    if (parseInt(actions.unsubmitted_proof) > 0) {
+      pending.push({ type: "pending_action", title: `${actions.unsubmitted_proof} job${parseInt(actions.unsubmitted_proof) > 1 ? "s" : ""} need${parseInt(actions.unsubmitted_proof) === 1 ? "s" : ""} your proof`, subtitle: "Submit proof to complete and get paid", route: "/jobs", urgency: "high", tag: "📸 Submit Proof" });
+    }
     if (stuckJobs > 0) {
       pending.push({ type: "pending_action", title: `${stuckJobs} job${stuckJobs > 1 ? "s" : ""} stuck on the way`, subtitle: "En route for over 4 hours — confirm or contact worker", route: "/jobs", urgency: "high", tag: "🕐 Delayed" });
     }
@@ -433,7 +439,7 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     const memRes = await pool.query(
       `SELECT key, value FROM jac_memory
        WHERE user_id = $1 AND category IN ('work','profile','vehicle')
-         AND key IN ('top_service_categories','home_zip','trailer_type','transport_type','vi_experience')`,
+         AND key IN ('top_service_categories','home_zip','trailer_type','transport_type','vi_experience','vehicle_type')`,
       [userId]
     );
     const mem: Record<string, any> = {};
@@ -442,7 +448,16 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     const userZip: string | null = mem["home_zip"] || null;
     const topCats: string[] = Array.isArray(mem["top_service_categories"]) ? mem["top_service_categories"] : [];
     const trailerType: string | null = mem["trailer_type"] || null;
+    const vehicleType: string | null = mem["vehicle_type"] || null;
     const hasViExp = Array.isArray(mem["vi_experience"]) && mem["vi_experience"].length > 0;
+
+    // Helper: compute distance label based on ZIP proximity
+    function distLabel(jobZip: string | null): string | undefined {
+      if (!userZip || !jobZip) return undefined;
+      if (jobZip === userZip) return "Same zip";
+      if (jobZip.length >= 3 && userZip.length >= 3 && jobZip.slice(0, 3) === userZip.slice(0, 3)) return "Nearby";
+      return undefined;
+    }
 
     // ── 3. V&I jobs near user ───────────────────────────────────────────────
     if (userZip) {
@@ -466,6 +481,7 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
           title: j.title,
           subtitle: `V&I · ${j.zip || ""}`,
           payLabel: j.budget ? `$${parseFloat(j.budget).toFixed(0)}` : "Open bid",
+          distanceLabel: distLabel(j.zip),
           route: `/jobs/${j.id}`,
           urgency: j.urgent_switch ? "high" : "normal",
           tag: "🔍 V&I",
@@ -501,6 +517,7 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
           title: j.title,
           subtitle: j.category + (j.zip ? ` · ${j.zip}` : ""),
           payLabel: j.budget ? `$${parseFloat(j.budget).toFixed(0)}` : "Open bid",
+          distanceLabel: distLabel(j.zip),
           route: `/jobs/${j.id}`,
           urgency: j.urgent_switch ? "high" : "normal",
           tag: j.urgent_switch ? "🔥 Urgent" : j.category,
@@ -526,6 +543,7 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
           title: j.title,
           subtitle: j.category + (j.zip ? ` · ${j.zip}` : ""),
           payLabel: j.budget ? `$${parseFloat(j.budget).toFixed(0)}` : "Open bid",
+          distanceLabel: distLabel(j.zip),
           route: `/jobs/${j.id}`,
           urgency: j.urgent_switch ? "high" : "normal",
           tag: j.urgent_switch ? "🔥 Urgent" : j.category,
@@ -533,14 +551,16 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
       }
     }
 
-    // ── 5. Load board listings matching trailer type ──────────────────────
-    if (trailerType || topCats.some((c: string) => /transport|load|haul|tow/i.test(c))) {
+    // ── 5. Load board listings matching trailer type or vehicle type ────────
+    if (trailerType || vehicleType || topCats.some((c: string) => /transport|load|haul|tow/i.test(c))) {
       const trailerFilter = trailerType ? `AND trailer_preference = '${trailerType.replace(/'/g, "''")}'` : "";
+      const vehicleFilter = vehicleType && !trailerType ? `AND vehicle_type = '${vehicleType.replace(/'/g, "''")}'` : "";
       const lbRes = await pool.query(`
-        SELECT id, pickup_city, pickup_state, delivery_city, delivery_state, posted_price, transport_type
+        SELECT id, pickup_city, pickup_state, delivery_city, delivery_state, posted_price, transport_type, vehicle_type
         FROM load_board_listings
         WHERE status = 'posted'
           ${trailerFilter}
+          ${vehicleFilter}
         ORDER BY created_at DESC
         LIMIT 2
       `);

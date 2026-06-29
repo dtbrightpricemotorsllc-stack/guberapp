@@ -40,6 +40,7 @@ export interface JacOpportunity {
   title: string;
   subtitle?: string;
   payLabel?: string;
+  distanceLabel?: string;
   route: string;
   urgency: "high" | "normal";
   tag?: string;
