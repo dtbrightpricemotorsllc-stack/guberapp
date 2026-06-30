@@ -91,18 +91,21 @@ export function unlockAudioContext() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       const ss = window.speechSynthesis;
       ss.resume();
-      if (!_audioUnlocked) {
-        // iOS WebKit (Safari + CriOS) requires that speechSynthesis.speak() is
-        // called at least once synchronously inside a user-gesture handler before
-        // any async speak() calls will play. volume=0 is silently discarded by
-        // iOS and does NOT count as a gesture activation — use 0.01 instead so
-        // the engine registers it as a real utterance. At rate=16 + a single
-        // space it finishes in <10 ms without any audible sound.
+      // iOS WebKit (Safari + CriOS) requires speechSynthesis.speak() to be
+      // called synchronously inside each user-gesture handler before any async
+      // speak() will play. volume=0 is discarded by iOS — use 0.01 so the
+      // engine registers it. At rate=16 + one space it finishes in <10 ms.
+      //
+      // On Android/desktop we only need this once (_audioUnlocked gate).
+      // On iOS we must re-prime on EVERY gesture because the module-level
+      // _audioUnlocked flag persists across SPA navigations, so without this
+      // the greeting silently fails after the very first page visit.
+      const onIOS = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (!_audioUnlocked || onIOS) {
         const primer = new SpeechSynthesisUtterance(" ");
         primer.volume = 0.01;
         primer.rate   = 16;
         ss.speak(primer);
-        // No explicit cancel — the primer finishes naturally before JAC speaks.
       }
     }
   } catch {}
