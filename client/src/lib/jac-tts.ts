@@ -73,12 +73,20 @@ export function cancelElevenLabsAudio() {
  * Unlocks audio playback on mobile browsers that require a gesture.
  */
 export function unlockAudioContext() {
-  if (_audioUnlocked) return;
-  // Tiny silent MP3 (base64) — triggers browser audio permission without audible sound
-  const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
-  const a = new Audio(SILENT_MP3);
-  a.volume = 0;
-  a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
+  // Unlock HTML5 audio (autoplay gate)
+  if (!_audioUnlocked) {
+    const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+    const a = new Audio(SILENT_MP3);
+    a.volume = 0;
+    a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
+  }
+  // Unlock speechSynthesis — Chrome Android suspends it when the mic is in use.
+  // Calling resume() on every user gesture ensures it's ready to speak.
+  try {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.resume();
+    }
+  } catch {}
 }
 
 /**
@@ -139,8 +147,14 @@ function webSpeechFallback(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const ss = window.speechSynthesis;
   ss.cancel();
-  // Android WebView needs a longer gap after cancel() — 60 ms is sometimes too
-  // tight and the utterance is silently dropped. 220 ms is reliable in practice.
+  // Chrome Android suspends speechSynthesis when the mic is active (or after
+  // it stops). We must call resume() BEFORE enqueueing an utterance, otherwise
+  // the utterance silently queues but never plays. Do it immediately (before
+  // the cancel→speak gap) AND again just before speak().
+  try { ss.resume(); } catch {}
+
+  // A short gap after cancel() prevents Chrome/WebView from silently dropping
+  // the first utterance. 220 ms is reliable across Android WebView + Chrome.
   setTimeout(() => {
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang   = "en-US";
@@ -148,11 +162,14 @@ function webSpeechFallback(text: string) {
     utt.pitch  = 1.1;
     utt.volume = 1.0;
     // Only apply a specific voice if voices are already loaded; otherwise let
-    // the browser pick the system default (safer on Android WebView).
+    // the browser pick the system default (safer on Android).
     const voices = ss.getVoices();
     if (voices.length > 0) applyJacVoice(utt);
+    // Resume again right before speaking — Chrome Android can re-suspend
+    // between the cancel() call and this timeout.
+    try { ss.resume(); } catch {}
     ss.speak(utt);
-    // Android WebView sometimes pauses synthesis — nudge it.
-    setTimeout(() => { if (ss.paused) ss.resume(); }, 300);
+    // Final nudge: if still paused 300 ms after enqueue, force resume.
+    setTimeout(() => { try { if (ss.paused) ss.resume(); } catch {} }, 300);
   }, 220);
 }
