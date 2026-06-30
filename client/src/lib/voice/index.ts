@@ -38,10 +38,24 @@ let _cached: STTProvider | null = null;
 export function getSTTProvider(): STTProvider {
   if (_cached) return _cached;
 
+  const nativePlatform =
+    typeof window !== "undefined"
+      ? (window as any).Capacitor?.getPlatform?.() ?? "web"
+      : "web";
+
   // iOS Capacitor app → Whisper (WKWebView SpeechRecognition unreliable)
-  if (isIOS) {
+  if (isIOS || nativePlatform === "ios") {
     _cached = new WhisperProvider();
     console.info("[JAC Voice] STT provider: Whisper (iOS Capacitor)");
+    return _cached;
+  }
+
+  // Android Capacitor app → Whisper.
+  // webkitSpeechRecognition inside the Capacitor WebView has inconsistent
+  // permission grant flow on Android; Whisper via getUserMedia is more reliable.
+  if (nativePlatform === "android") {
+    _cached = new WhisperProvider();
+    console.info("[JAC Voice] STT provider: Whisper (Android Capacitor)");
     return _cached;
   }
 

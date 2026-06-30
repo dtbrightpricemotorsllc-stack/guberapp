@@ -547,10 +547,10 @@ export function GUBERAssistant() {
     if (text === "__mic_denied__") {
       const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
       const guide = platform === "android"
-        ? "Microphone access is blocked. Go to Settings → Apps → GUBER → Permissions → Microphone and allow it, then try again."
+        ? "Microphone is blocked. To fix it: open your phone's Settings app → Apps → tap the three-dot menu (⋮) or search for GUBER → App info → Permissions → Microphone → set to Allow. Then come back and try again."
         : platform === "ios"
-          ? "Microphone access is blocked. Go to Settings → Privacy → Microphone → GUBER and allow it, then try again."
-          : "Microphone access was denied. Please allow microphone access in your browser settings.";
+          ? "Microphone access is blocked. Go to Settings → Privacy & Security → Microphone → GUBER and turn it on, then try again."
+          : "Microphone access was denied. Please allow microphone access in your browser settings, then try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: guide }]);
       jacSpeak(guide, { muted });
       return;

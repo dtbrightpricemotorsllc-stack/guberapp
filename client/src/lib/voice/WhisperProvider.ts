@@ -42,6 +42,20 @@ export class WhisperProvider implements STTProvider {
     this._onResult = onResult;
     this._chunks = [];
 
+    // Pre-check permission state so we can distinguish "needs dialog" from
+    // "hard denied" — avoids a confusing silent failure on Android.
+    if (typeof navigator !== "undefined" && navigator.permissions) {
+      try {
+        const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (perm.state === "denied") {
+          onResult("__mic_denied__");
+          return;
+        }
+      } catch {
+        // permissions.query not supported on this platform — fall through
+      }
+    }
+
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
