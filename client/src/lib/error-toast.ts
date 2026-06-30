@@ -13,6 +13,10 @@ const KNOWN_ERRORS: Record<string, { title: string; description: string }> = {
     title: "Agreement Required",
     description: "Please review and accept the liability disclaimer to continue.",
   },
+  SAFETY_CONFIRM_REQUIRED: {
+    title: "Confirmation Required",
+    description: "Please confirm you're ready to start before proceeding.",
+  },
   DEMO_GUARD: {
     title: "Demo Mode",
     description: "This action is not available in demo mode.",

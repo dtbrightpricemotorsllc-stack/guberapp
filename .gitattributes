@@ -1,1 +1,2 @@
 attached_assets/generated_videos/guber_promo_master_16x9.mp4 filter=lfs diff=lfs merge=lfs -text
+attached_assets/generated_videos/final/guber_gps_explainer.mp4 filter=lfs diff=lfs merge=lfs -text

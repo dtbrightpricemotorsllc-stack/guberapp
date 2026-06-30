@@ -162,7 +162,7 @@ npm run check
 npm install <package-name>
 
 # IMPORTANT: After any npm install, commit the updated package-lock.json.
-# Codemagic CI uses `npm ci` which reads package-lock.json strictly.
+# GitHub Actions uses `npm ci` which reads package-lock.json strictly.
 # A stale lock file will break iOS builds.
 ```
 

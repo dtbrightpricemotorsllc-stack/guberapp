@@ -231,9 +231,15 @@ export function GoogleMap({ pins, workerPins, cashDrops, businessPins, onPinClic
     }
   };
 
+  // Guard: only reverse-geocode ONCE per map mount. GPS watch fires continuously;
+  // calling the geocoding API on every update was generating $48+ in API charges.
+  const hasReverseGeocodedRef = useRef(false);
+
   const reverseGeocodeZip = async (lat: number, lng: number) => {
+    if (hasReverseGeocodedRef.current) return;
+    hasReverseGeocodedRef.current = true;
     try {
-      const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+      const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}&caller=google-map`);
       const data = await res.json();
       if (data?.zip && mountedRef.current) setZipInput(data.zip);
     } catch {}

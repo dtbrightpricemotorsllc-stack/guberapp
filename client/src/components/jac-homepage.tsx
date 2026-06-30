@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
-import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus } from "lucide-react";
+import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
@@ -89,7 +89,7 @@ const OPENING_OPTIONS = [
 
 const GREETING: JacMsg = {
   role: "assistant",
-  content: "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. Whether you need to earn, hire, sell, or just explore — I'm here. You can minimize me anytime, but I'll always be in the bottom right corner. What brings you in today?",
+  content: "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. What brings you to GUBER?",
   buttons: OPENING_OPTIONS,
 };
 
@@ -167,7 +167,7 @@ export function JacHomepage() {
   // "splash" = gesture gate (required by browsers before any audio)
   // "chat"   = full chat panel + auto-speak fires immediately on enter
   // "intro"  = minimized chip selector (reached via minimize button)
-  const [mode, setMode] = useState<"splash" | "intro" | "chat">("splash");
+  const [mode, setMode] = useState<"splash" | "intro" | "chat">("chat");
   const [messages, setMessages] = useState<JacMsg[]>([GREETING]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -182,7 +182,7 @@ export function JacHomepage() {
   mutedRef.current = muted;
 
   // Auto-send when mic result arrives — no send button tap required
-  const { listening, start: startListening, stop: stopListening, supported: micSupported } =
+  const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
 
   // Dismiss float hint after 4s
@@ -195,11 +195,44 @@ export function JacHomepage() {
     return () => clearTimeout(t);
   }, [showFloatHint]);
 
-  // Tap → gesture unlocked → enter chat → speak immediately
+  // Auto-speak greeting on homepage load.
+  // Browsers require a user gesture before audio plays (web PWA).
+  // On Capacitor (iOS/Android) audio is already unlocked — speak immediately.
+  // On web: speak on the very first user interaction anywhere on the page.
+  const greetingSpokenRef = useRef(false);
+  useEffect(() => {
+    if (mode !== "chat") return;
+    if (greetingSpokenRef.current) return;
+
+    const currentGreeting = messages[0]?.content ?? GREETING.content;
+
+    function speak() {
+      if (greetingSpokenRef.current) return;
+      greetingSpokenRef.current = true;
+      unlockAudioContext();
+      setTimeout(() => jacSpeak(currentGreeting, { muted: mutedRef.current }), 120);
+    }
+
+    // Try immediately (works on Capacitor where audio is pre-unlocked)
+    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor;
+    if (isCapacitor) { speak(); return; }
+
+    // Web: wait for first gesture then speak once
+    const opts = { once: true, passive: true } as const;
+    const cleanup = () => {
+      document.removeEventListener("click",      speak, opts);
+      document.removeEventListener("touchstart", speak, opts);
+      document.removeEventListener("keydown",    speak, opts);
+    };
+    document.addEventListener("click",      speak, opts);
+    document.addEventListener("touchstart", speak, opts);
+    document.addEventListener("keydown",    speak, opts);
+    return cleanup;
+  }, [mode, messages]);
+
   function enterChat() {
     unlockAudioContext();
     setMode("chat");
-    setTimeout(() => jacSpeak(GREETING.content, { muted: mutedRef.current }), 120);
   }
 
   // Personalise greeting for returning visitors
@@ -622,12 +655,19 @@ export function JacHomepage() {
               <button
                 onClick={listening ? stopListening : startListening}
                 className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${listening ? "animate-pulse" : ""}`}
-                style={{ background: listening ? "hsl(0 80% 55%)" : "hsl(222 47% 15%)", color: listening ? "white" : "hsl(0 0% 45%)" }}
+                style={{
+                  background: listening ? "hsl(0 80% 55%)" : transcribing ? "hsl(270 60% 35%)" : "hsl(222 47% 15%)",
+                  color: listening || transcribing ? "white" : "hsl(0 0% 45%)",
+                }}
                 data-testid="button-jac-mic"
-                disabled={typing}
-                aria-label={listening ? "Stop" : "Speak"}
+                disabled={typing || transcribing}
+                aria-label={transcribing ? "Transcribing…" : listening ? "Stop" : "Speak"}
               >
-                {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {transcribing
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : listening
+                    ? <MicOff className="w-3.5 h-3.5" />
+                    : <Mic className="w-3.5 h-3.5" />}
               </button>
             )}
             <button

@@ -16,6 +16,7 @@ import AnnouncementPopup from "@/components/announcement-popup";
 import { GpsTrackingBanner } from "@/components/gps-tracking-banner";
 import { Capacitor } from "@capacitor/core";
 import { isStoreBuild } from "@/lib/platform";
+import { WakeWordDetector } from "@/lib/voice";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import {
@@ -100,6 +101,7 @@ const OSMissionControl = lazy(() => import("@/pages/os/os-mission-control"));
 // Feature pages — lazy loaded
 const Admin = lazy(() => import("@/pages/admin"));
 const AdminQa = lazy(() => import("@/pages/admin-qa"));
+const AdminMissionControl = lazy(() => import("@/pages/admin-mission-control"));
 const AdminQaInspect = lazy(() => import("@/pages/admin-qa-inspect"));
 const AdminQaCashdropDebug = lazy(() => import("@/pages/admin-qa-cashdrop-debug"));
 const AdminQaFlags = lazy(() => import("@/pages/admin-qa-flags"));
@@ -107,6 +109,7 @@ const AdminQaPush = lazy(() => import("@/pages/admin-qa-push"));
 const AdminUserProfile = lazy(() => import("@/pages/admin-user-profile"));
 const AdminStudio = lazy(() => import("@/pages/admin-studio"));
 const AdminGuberScout = lazy(() => import("@/pages/admin-guber-scout"));
+const AdminJacBrain = lazy(() => import("@/pages/admin-jac-brain"));
 const AiOrNot = lazy(() => import("@/pages/ai-or-not"));
 const VerifyInspect = lazy(() => import("@/pages/verify-inspect"));
 const BusinessOnboarding = lazy(() => import("@/pages/business-onboarding"));
@@ -354,6 +357,7 @@ function Router() {
       <Route path="/os/events" component={() => <OSAdminRoute component={OSEvents} />} />
       <Route path="/admin" component={() => <AdminRoute component={Admin} />} />
       <Route path="/admin/qa" component={() => <AdminRoute component={AdminQa} />} />
+      <Route path="/admin/mission-control" component={() => <AdminRoute component={AdminMissionControl} />} />
       <Route path="/admin/qa/flags" component={() => <AdminRoute component={AdminQaFlags} />} />
       <Route path="/admin/qa/push" component={() => <AdminRoute component={AdminQaPush} />} />
       <Route path="/admin/qa/cashdrops/:id/debug" component={() => <AdminRoute component={AdminQaCashdropDebug} />} />
@@ -361,6 +365,7 @@ function Router() {
       <Route path="/admin/users/:id" component={() => <AdminRoute component={AdminUserProfile} />} />
       <Route path="/admin/studio" component={() => <AdminRoute component={AdminStudio} />} />
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
+      <Route path="/admin/jac-brain" component={() => <AdminRoute component={AdminJacBrain} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
@@ -594,9 +599,25 @@ function TaskTrackingResumer() {
     if (user) {
       void taskTrackingService.resumeIfActive();
     } else {
-      // User logged out — stop any active tracking immediately.
       void taskTrackingService.stopTask();
     }
+  }, [user?.id]);
+  return null;
+}
+
+// Initialize WakeWordDetector based on the user's JAC voiceActivation preference.
+// Runs once on mount; re-reads when auth state changes.
+function WakeWordInit() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user) { WakeWordDetector.disable(); return; }
+    fetch("/api/jac/profile")
+      .then((r) => r.ok ? r.json() : null)
+      .then((profile) => {
+        if (profile?.voice_activation === true) WakeWordDetector.enable();
+        else WakeWordDetector.disable();
+      })
+      .catch(() => WakeWordDetector.disable());
   }, [user?.id]);
   return null;
 }
@@ -616,6 +637,7 @@ function App() {
         <TooltipProvider>
           <AuthProvider>
             <TaskTrackingResumer />
+            <WakeWordInit />
             <Toaster />
             <UploadProgressPill />
             <GoogleAuthOverlay />

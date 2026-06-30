@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw } from "lucide-react";
+import { Loader2, LogOut, Trash2, Lock, Camera, AlertCircle, Shield, ShieldCheck, Building2, MessageSquare, CheckCircle, Fingerprint, Map, Bell, VolumeX, MapPin, Sliders, Zap, Circle, Bot, RotateCcw, Volume2, Mic, Smartphone, BrainCircuit, Globe, Headphones, BellRing, Sparkles } from "lucide-react";
+import { WakeWordDetector } from "@/lib/voice";
 import { Link, useLocation } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -139,13 +140,22 @@ function ActiveJacVoiceRow() {
   );
 }
 
-// ── JAC Settings Section ─────────────────────────────────────────────────────
+// ── JAC Preferences Section ───────────────────────────────────────────────────
 function JacSettingsSection() {
   const { toast } = useToast();
-  const [assistantMode, setAssistantMode] = useState("full");
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [language, setLanguage] = useState("en");
   const [resetting, setResetting] = useState(false);
+
+  const [enabled, setEnabled]                         = useState(true);
+  const [assistantMode, setAssistantMode]             = useState("full");
+  const [voiceEnabled, setVoiceEnabled]               = useState(true);
+  const [textResponses, setTextResponses]             = useState(true);
+  const [voiceActivation, setVoiceActivation]         = useState(false);
+  const [floatingButton, setFloatingButton]           = useState(true);
+  const [proactiveSuggestions, setProactiveSuggestions]               = useState(true);
+  const [personalizedRecommendations, setPersonalizedRecommendations] = useState(true);
+  const [language, setLanguage]                       = useState("en");
+  const [voiceSelection, setVoiceSelection]           = useState("default");
+  const [lowDataMode, setLowDataMode]                 = useState(false);
 
   const profileQ = useQuery<any>({
     queryKey: ["/api/jac/profile"],
@@ -153,25 +163,38 @@ function JacSettingsSection() {
   });
 
   useEffect(() => {
-    if (profileQ.data) {
-      setAssistantMode(profileQ.data.assistant_mode ?? "full");
-      setVoiceEnabled(profileQ.data.voice_enabled ?? true);
-      setLanguage(profileQ.data.language ?? "en");
-    }
+    const d = profileQ.data;
+    if (!d) return;
+    const mode = d.assistant_mode ?? "full";
+    setAssistantMode(mode);
+    setEnabled(mode !== "mute");
+    setVoiceEnabled(d.voice_enabled ?? true);
+    setTextResponses(d.text_responses ?? true);
+    setVoiceActivation(d.voice_activation ?? false);
+    setFloatingButton(d.floating_button ?? true);
+    setProactiveSuggestions(d.proactive_suggestions ?? true);
+    setPersonalizedRecommendations(d.personalized_recommendations ?? true);
+    setLanguage(d.language ?? "en");
+    setVoiceSelection(d.voice_selection ?? "default");
+    setLowDataMode(d.low_data_mode ?? false);
   }, [profileQ.data]);
 
   const saveMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       apiRequest("POST", "/api/jac/profile", body),
-    onSuccess: () => toast({ title: "JAC settings saved" }),
+    onSuccess: () => toast({ title: "Saved" }),
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
+
+  function save(patch: Record<string, unknown>) {
+    saveMutation.mutate(patch);
+  }
 
   async function resetTutorial() {
     setResetting(true);
     try {
       await apiRequest("POST", "/api/jac/tutorial/reset", {});
-      toast({ title: "Tutorial reset — JAC will guide you through onboarding again." });
+      toast({ title: "Tutorial reset — JAC will guide you through setup again." });
     } catch {
       toast({ title: "Reset failed", variant: "destructive" });
     } finally {
@@ -179,89 +202,250 @@ function JacSettingsSection() {
     }
   }
 
+  type PrefRowProps = {
+    icon: React.ReactNode;
+    label: string;
+    description: string;
+    checked: boolean;
+    onChange: (v: boolean) => void;
+    testId: string;
+    badge?: string;
+    disabled?: boolean;
+  };
+  function PrefRow({ icon, label, description, checked, onChange, testId, badge, disabled }: PrefRowProps) {
+    return (
+      <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl bg-background border border-border/20 transition-opacity ${disabled ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="text-primary/80 shrink-0">{icon}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="font-display font-semibold text-sm leading-tight">{label}</p>
+              {badge && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-display font-semibold uppercase tracking-wide">
+                  {badge}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate max-w-[220px]">{description}</p>
+          </div>
+        </div>
+        <Switch
+          checked={checked}
+          onCheckedChange={onChange}
+          data-testid={testId}
+        />
+      </div>
+    );
+  }
+
+  const jacDisabled = !enabled;
+
   return (
     <div className="bg-card rounded-2xl border border-border/20 p-5 space-y-4" data-testid="card-jac-settings">
       <h3 className="font-display font-semibold text-sm flex items-center gap-2">
-        <Bot className="w-4 h-4 text-primary" /> JAC — Assistant Settings
+        <Bot className="w-4 h-4 text-primary" /> JAC Preferences
       </h3>
 
-      {/* Assistant Mode */}
-      <div className="space-y-1">
-        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Assistant Mode</Label>
+      {/* ── Enable JAC — master toggle ─────────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-3 rounded-xl bg-primary/5 border border-primary/20">
+        <div className="flex items-center gap-2.5">
+          <Bot className="w-5 h-5 text-primary shrink-0" />
+          <div>
+            <p className="font-display font-semibold text-sm">Enable JAC</p>
+            <p className="text-xs text-muted-foreground">Your Job Assisting Coordinator</p>
+          </div>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => {
+            setEnabled(v);
+            const newMode = v ? (assistantMode === "mute" ? "full" : assistantMode) : "mute";
+            setAssistantMode(newMode);
+            save({ assistantMode: newMode });
+          }}
+          data-testid="switch-jac-enabled"
+        />
+      </div>
+
+      {/* ── Voice & Text ───────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-display px-1">Responses</p>
+        <div className="space-y-1.5">
+          <PrefRow
+            icon={<Volume2 className="w-4 h-4" />}
+            label="Voice Responses"
+            description="JAC reads replies aloud"
+            checked={voiceEnabled}
+            onChange={(v) => { setVoiceEnabled(v); save({ voiceEnabled: v }); }}
+            testId="switch-jac-voice"
+            disabled={jacDisabled}
+          />
+          <PrefRow
+            icon={<MessageSquare className="w-4 h-4" />}
+            label="Text Responses"
+            description="Show written replies in chat"
+            checked={textResponses}
+            onChange={(v) => { setTextResponses(v); save({ textResponses: v }); }}
+            testId="switch-jac-text"
+            disabled={jacDisabled}
+          />
+        </div>
+      </div>
+
+      {/* ── Activation & Presence ──────────────────────────────────────── */}
+      <div className="space-y-2">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-display px-1">Activation</p>
+        <div className="space-y-1.5">
+          <PrefRow
+            icon={<Mic className="w-4 h-4" />}
+            label='Voice Activation'
+            description='"Hey JAC" wake word'
+            checked={voiceActivation}
+            onChange={(v) => {
+              setVoiceActivation(v);
+              save({ voiceActivation: v });
+              if (v) WakeWordDetector.enable();
+              else WakeWordDetector.disable();
+            }}
+            testId="switch-jac-voice-activation"
+            badge="Beta"
+            disabled={jacDisabled}
+          />
+          <PrefRow
+            icon={<Smartphone className="w-4 h-4" />}
+            label="Floating JAC Button"
+            description="Quick-access button on every screen"
+            checked={floatingButton}
+            onChange={(v) => { setFloatingButton(v); save({ floatingButton: v }); }}
+            testId="switch-jac-floating"
+            disabled={jacDisabled}
+          />
+        </div>
+      </div>
+
+      {/* ── Intelligence ───────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-display px-1">Intelligence</p>
+        <div className="space-y-1.5">
+          <PrefRow
+            icon={<BellRing className="w-4 h-4" />}
+            label="Proactive Suggestions"
+            description="JAC nudges you toward opportunities"
+            checked={proactiveSuggestions}
+            onChange={(v) => { setProactiveSuggestions(v); save({ proactiveSuggestions: v }); }}
+            testId="switch-jac-proactive"
+            disabled={jacDisabled}
+          />
+          <PrefRow
+            icon={<BrainCircuit className="w-4 h-4" />}
+            label="Personalized Recommendations"
+            description="Uses your history and preferences"
+            checked={personalizedRecommendations}
+            onChange={(v) => { setPersonalizedRecommendations(v); save({ personalizedRecommendations: v }); }}
+            testId="switch-jac-personalized"
+            disabled={jacDisabled}
+          />
+          <PrefRow
+            icon={<Zap className="w-4 h-4" />}
+            label="Low Data Mode"
+            description="Reduce AI calls, faster on slow connections"
+            checked={lowDataMode}
+            onChange={(v) => { setLowDataMode(v); save({ lowDataMode: v }); }}
+            testId="switch-jac-low-data"
+            disabled={jacDisabled}
+          />
+        </div>
+      </div>
+
+      {/* ── Language & Voice ───────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-display px-1">Language & Voice</p>
+        <div className="space-y-1.5">
+          <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-background border border-border/20 ${jacDisabled ? "opacity-40 pointer-events-none" : ""}`}>
+            <Globe className="w-4 h-4 text-primary/80 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-semibold text-sm">Language</p>
+              <p className="text-xs text-muted-foreground">JAC's response language</p>
+            </div>
+            <Select
+              value={language}
+              onValueChange={(v) => { setLanguage(v); save({ language: v }); }}
+            >
+              <SelectTrigger className="h-8 w-28 text-xs border-border/20 shrink-0" data-testid="select-jac-language">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">🇺🇸 English</SelectItem>
+                <SelectItem value="es">🇲🇽 Español</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-background border border-border/20 ${jacDisabled ? "opacity-40 pointer-events-none" : ""}`}>
+            <Headphones className="w-4 h-4 text-primary/80 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-display font-semibold text-sm">Voice Selection</p>
+              <p className="text-xs text-muted-foreground">JAC's speaking style</p>
+            </div>
+            <Select
+              value={voiceSelection}
+              onValueChange={(v) => { setVoiceSelection(v); save({ voiceSelection: v }); }}
+            >
+              <SelectTrigger className="h-8 w-28 text-xs border-border/20 shrink-0" data-testid="select-jac-voice-selection">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="professional">Professional</SelectItem>
+                <SelectItem value="casual">Casual</SelectItem>
+                <SelectItem value="energetic">Energetic</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <ActiveJacVoiceRow />
+        </div>
+      </div>
+
+      {/* ── Assistant Mode (advanced) ──────────────────────────────────── */}
+      <div className={`space-y-1 ${jacDisabled ? "opacity-40 pointer-events-none" : ""}`}>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-display px-1">Assistant Mode</p>
         <Select
-          value={assistantMode}
+          value={assistantMode === "mute" ? "full" : assistantMode}
           onValueChange={(v) => {
             setAssistantMode(v);
-            saveMutation.mutate({ assistantMode: v });
+            save({ assistantMode: v });
           }}
         >
           <SelectTrigger className="h-9 text-xs border-border/20" data-testid="select-jac-assistant-mode">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="full">Full — JAC greets, guides, and follows up</SelectItem>
-            <SelectItem value="smart">Smart — JAC activates only on key events</SelectItem>
-            <SelectItem value="on_demand">On-Demand Only — I'll open JAC myself</SelectItem>
-            <SelectItem value="mute">Mute — disable voice and auto-prompts</SelectItem>
+            <SelectItem value="full">Full — greets, guides, and follows up</SelectItem>
+            <SelectItem value="smart">Smart — activates only on key events</SelectItem>
+            <SelectItem value="on_demand">On-Demand — I'll open JAC myself</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Language */}
-      <div className="space-y-1">
-        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider font-display">Language</Label>
-        <Select
-          value={language}
-          onValueChange={(v) => {
-            setLanguage(v);
-            saveMutation.mutate({ language: v });
-          }}
-        >
-          <SelectTrigger className="h-9 text-xs border-border/20" data-testid="select-jac-language">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="en">English</SelectItem>
-            <SelectItem value="es">Español</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Voice toggle */}
-      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
-        <div>
-          <p className="font-display font-semibold text-sm">Voice Responses</p>
-          <p className="text-xs text-muted-foreground">JAC reads replies aloud</p>
-        </div>
-        <Switch
-          checked={voiceEnabled}
-          onCheckedChange={(v) => {
-            setVoiceEnabled(v);
-            saveMutation.mutate({ voiceEnabled: v });
-          }}
-          data-testid="switch-jac-voice"
-        />
-      </div>
-
-      {/* Active voice display */}
-      <ActiveJacVoiceRow />
-
-      {/* Tutorial reset */}
-      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/20">
-        <div>
-          <p className="font-display font-semibold text-sm">Restart Onboarding Tutorial</p>
-          <p className="text-xs text-muted-foreground">JAC will guide you through setup again</p>
+      {/* ── Reset tutorial ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-background border border-border/20">
+        <div className="flex items-center gap-2.5">
+          <RotateCcw className="w-4 h-4 text-muted-foreground shrink-0" />
+          <div>
+            <p className="font-display font-semibold text-sm">Restart Onboarding</p>
+            <p className="text-xs text-muted-foreground">JAC guides you through setup again</p>
+          </div>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="border-border/30 font-display gap-1 text-xs"
+          className="border-border/30 font-display text-xs h-7 px-2.5"
           onClick={resetTutorial}
           disabled={resetting}
           data-testid="button-jac-tutorial-reset"
         >
-          {resetting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-          Reset
+          {resetting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reset"}
         </Button>
       </div>
     </div>

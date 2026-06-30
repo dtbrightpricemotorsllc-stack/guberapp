@@ -142,6 +142,7 @@ export class TaskTrackingService {
     if (!this.startedAt) this.startedAt = Date.now();
     this.loadPersisted(jobId);
     this.persistMeta();
+    console.info(`[GUBER TRACKING] startTask jobId=${jobId}`);
     try {
       // iOS: use the background-capable plugin so tracking survives the app
       // being backgrounded or the screen locking. Falls back to the standard
@@ -182,12 +183,13 @@ export class TaskTrackingService {
         // iOS background path — plugin handles delivery; no foreground watch needed.
         this.bgWatchId = bgId;
         this.startFlushTimer();
+        console.info(`[GUBER TRACKING] iOS bg-geo watch started id=${bgId} jobId=${jobId}`);
       } else {
         // Android / web — standard foreground watch + optional foreground service.
         const id = await gpsStartWatchPosition(
           (pos) => this.onPosition(pos),
           (err) => {
-            console.warn("[tracking] gps watch error", (err as any)?.code);
+            console.warn(`[GUBER TRACKING] gps watch error code=${(err as any)?.code} msg=${(err as any)?.message}`);
           },
           { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
         );
@@ -197,8 +199,10 @@ export class TaskTrackingService {
         }
         this.watchId = id;
         this.startFlushTimer();
+        console.info(`[GUBER TRACKING] foreground watch started id=${id} jobId=${jobId}`);
         void this.startForegroundService(jobId);
       }
+      console.info(`[GUBER TRACKING] tracking ACTIVE jobId=${jobId}`);
       window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: true, jobId } }));
     } finally {
       this.starting = false;
@@ -226,6 +230,7 @@ export class TaskTrackingService {
     if (opts?.flush !== false) {
       await this.flush(true);
     }
+    const stoppedJobId = this.activeJobId;
     this.activeJobId = null;
     this.lastAccepted = null;
     this.latest = null;
@@ -235,6 +240,7 @@ export class TaskTrackingService {
     // Android: dismiss the persistent foreground-service notification (no-op on
     // iOS/web). Best-effort.
     void stopForegroundTracking();
+    console.info(`[GUBER TRACKING] tracking STOPPED jobId=${stoppedJobId}`);
     window.dispatchEvent(new CustomEvent("guber:gps-tracking-changed", { detail: { active: false } }));
   }
 

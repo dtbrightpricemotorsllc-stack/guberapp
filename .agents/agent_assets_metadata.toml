@@ -521,3 +521,111 @@ id = "VVbb_w5Xgj-dlKKTF06GW"
 uri = "file://investor-deck.pdf"
 type = "pdf"
 title = "GUBER Investor Deck — PDF"
+
+[[outputs]]
+id = "_B2wdXnxyd5dxd3YeoacI"
+uri = "file://attached_assets/generated_audio/guber_gps_narration.mp3"
+type = "audio"
+title = "guber_gps_narration"
+
+[[outputs]]
+id = "Sch9UJr_ufU0iTxc_iegE"
+uri = "file://attached_assets/generated_audio/guber_bg_music.mp3"
+type = "audio"
+title = "guber_bg_music"
+
+[[outputs]]
+id = "ZzpeyAKqfP8PeZ5VXfIl6"
+uri = "file://attached_assets/generated_videos/final/guber_gps_explainer.mp4"
+type = "video"
+title = "GUBER GPS Explainer — Google Play Store"
+
+[[outputs]]
+id = "OPGVej377bN1dgpqfp59Y"
+uri = "file://client/public/mascot-spec/GUBER_VRM_Spec.md"
+type = "text"
+title = "GUBER Mascot — VRM Production Specification"
+
+[[outputs]]
+id = "6WQupC3we4Gns6Lrv4faf"
+uri = "file://client/public/mascot-spec/GUBER_mascot_bundle.tar.gz"
+type = "unspecified"
+title = "GUBER Mascot — Fixed Bundle v2 (VRM + GLB + standalone preview)"
+
+[[outputs]]
+id = "sKICdmUMoROHWTbSFbk4E"
+uri = "file://public/jac-audio/test-aria.mp3"
+type = "audio"
+title = "Aria — warm, expressive American"
+
+[[outputs]]
+id = "NlOfpwk7Baq7PyrkBgSVU"
+uri = "file://public/jac-audio/test-sarah.mp3"
+type = "audio"
+title = "Sarah — soft, natural American"
+
+[[outputs]]
+id = "YpMVWePwvgRjBrIFHH3yQ"
+uri = "file://public/jac-audio/test-charlotte.mp3"
+type = "audio"
+title = "Charlotte — warm, soulful British"
+
+[[outputs]]
+id = "mKZahsUMRlwjUJW1iWnZ_"
+uri = "file://public/jac-audio/test-lily.mp3"
+type = "audio"
+title = "Lily — bubbly, upbeat American"
+
+[[outputs]]
+id = "NuOJtSKsdT9RCq3PFKKvS"
+uri = "file://public/jac-audio/test-aria-mature.mp3"
+type = "audio"
+title = "Aria — toned down, more mature"
+
+[[outputs]]
+id = "WD7x4UupiuCK0Kcjn-SNl"
+uri = "file://public/jac-audio/test-rachel.mp3"
+type = "audio"
+title = "Rachel — warm, calm adult American"
+
+[[outputs]]
+id = "IhpRDzoPC5KnPlm6jcWgg"
+uri = "file://public/jac-audio/test-confirm.mp3"
+type = "audio"
+title = "Does this sound right?"
+
+[[outputs]]
+id = "fqh_q1H0GvICN5ln7hODr"
+uri = "file://public/jac-audio/test-fix.mp3"
+type = "audio"
+title = "Aria — speaker boost OFF, does this sound better?"
+
+[[outputs]]
+id = "JWKucNfx4GHe9UaJXjxmo"
+uri = "file://screenshots/ipad_home.jpg"
+type = "image"
+title = "iPad Screenshot 1 — Home / JAC"
+
+[[outputs]]
+id = "pgpHNcGzgBwwx_JQsz_vy"
+uri = "file://screenshots/ipad_login.jpg"
+type = "image"
+title = "iPad Screenshot 2 — Sign In"
+
+[[outputs]]
+id = "cK49DSbcghuuiqi64qvYJ"
+uri = "file://screenshots/ipad_1_home.jpg"
+type = "image"
+title = "iPad 1 — Home (2064×2752)"
+
+[[outputs]]
+id = "-EAZqYX3P1RDOPFJSSroU"
+uri = "file://screenshots/ipad_2_login.jpg"
+type = "image"
+title = "iPad 2 — Sign In (2064×2752)"
+
+[[outputs]]
+id = "I5mCsfGMt3sw30cJau-ux"
+uri = "file://screenshots/ipad_3_signup.jpg"
+type = "image"
+title = "iPad 3 — Create Account (2064×2752)"

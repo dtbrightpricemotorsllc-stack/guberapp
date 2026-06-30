@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GUBER • Day-1 OG Founder Pass</title>
+  <meta name="description" content="GUBER is free to join and use. Day-1 OG is an optional one-time founder package — $1.99 — for early supporters who want permanent recognition, extra perks, and ZIP founder status." />
+  <link rel="icon" href="/favicon.png" />
+  <style>
+    :root {
+      --bg-main: #020205;
+      --bg-card: #05050b;
+      --bg-card-soft: #0c0513;
+      --gold: #f5c542;
+      --hot-pink: #ff3bda;
+      --neon-green: #7cff8c;
+      --text-main: #f8f8ff;
+      --text-soft: #b0b3c6;
+      --border-soft: #1a1a2b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top center, rgba(255,59,218,0.22), transparent 55%),
+        radial-gradient(circle at 10% 90%, rgba(124,255,140,0.14), transparent 55%),
+        var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { min-height: 100vh; max-width: 960px; margin: 0 auto; padding: 28px 18px 60px; }
+
+    .free-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 14px; border-radius: 999px;
+      background: rgba(124,255,140,0.1); border: 1px solid rgba(124,255,140,0.35);
+      color: var(--neon-green); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    }
+    .free-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--neon-green); box-shadow: 0 0 8px rgba(124,255,140,0.9); }
+
+    .hero-card {
+      position: relative; border-radius: 32px; padding: 24px 20px 28px;
+      background:
+        radial-gradient(circle at top left, rgba(245,197,66,0.18), transparent 60%),
+        radial-gradient(circle at top right, rgba(255,59,218,0.14), transparent 70%),
+        linear-gradient(145deg, #050308, #050308 40%, #090015 100%);
+      border: 1px solid rgba(245,197,66,0.28);
+      box-shadow: 0 0 60px rgba(245,197,66,0.28), 0 0 100px rgba(255,59,218,0.14);
+    }
+    .hero-top-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .hero-logo-pill {
+      display: inline-flex; align-items: center; justify-content: center; padding: 5px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 0%, rgba(245,197,66,0.55), transparent 60%), #000;
+      box-shadow: 0 0 28px rgba(245,197,66,0.7);
+    }
+    .hero-logo-pill-inner { border-radius: 999px; padding: 11px 16px; background: #000; border: 1px solid rgba(245,197,66,0.8); }
+    .hero-logo-pill img { display: block; height: 38px; width: auto; }
+    .hero-title-block { flex: 1; min-width: 0; }
+    .hero-kicker { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--neon-green); margin-bottom: 4px; }
+    .hero-title { font-size: 26px; line-height: 1.1; font-weight: 900; }
+    .hero-title span.gold { color: var(--gold); text-shadow: 0 0 14px rgba(245,197,66,0.65); }
+    .hero-sub { margin-top: 8px; font-size: 13px; color: var(--text-soft); }
+    .hero-sub strong { color: var(--hot-pink); font-weight: 600; }
+    .hero-token-wrap { margin: 20px auto 6px; display: flex; justify-content: center; }
+    .hero-token-img {
+      width: 240px; max-width: 78%; height: auto; border-radius: 22px;
+      box-shadow: 0 0 40px rgba(245,197,66,0.65), 0 0 70px rgba(255,59,218,0.35);
+    }
+    .hero-pill {
+      margin: 16px 0 6px; display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 999px;
+      border: 1px solid rgba(124,255,140,0.55);
+      background: radial-gradient(circle at 0 50%, rgba(124,255,140,0.35), transparent 70%);
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--neon-green);
+    }
+    .hero-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--neon-green); box-shadow: 0 0 10px rgba(124,255,140,0.9); }
+    .hero-price-line { margin-top: 8px; font-size: 14px; color: var(--text-soft); }
+    .hero-price-line strong { color: var(--gold); font-size: 18px; }
+    .hero-price-line .subtle { font-size: 12px; color: #878aa4; }
+    .hero-limited-note { margin-top: 10px; font-size: 12px; color: #ffb38a; }
+    .hero-limited-note strong { color: #ffddaa; }
+
+    .section {
+      margin-top: 24px; padding: 20px 18px 18px; border-radius: 26px;
+      background:
+        radial-gradient(circle at top left, rgba(255,59,218,0.07), transparent 65%),
+        radial-gradient(circle at bottom right, rgba(124,255,140,0.04), transparent 60%),
+        var(--bg-card);
+      border: 1px solid var(--border-soft);
+    }
+    .section-employer {
+      background:
+        radial-gradient(circle at top right, rgba(255,59,218,0.16), transparent 70%),
+        radial-gradient(circle at bottom left, rgba(245,197,66,0.16), transparent 65%),
+        var(--bg-card-soft);
+      border: 1px solid rgba(245,197,66,0.6);
+      box-shadow: 0 0 40px rgba(245,197,66,0.2), 0 0 60px rgba(255,59,218,0.14);
+    }
+    .section-header { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--neon-green); margin-bottom: 4px; }
+    .section-employer .section-header { color: var(--gold); }
+    .section-title { font-size: 19px; font-weight: 800; margin-bottom: 10px; }
+    .section-title .hot { color: var(--hot-pink); }
+    .section-body { font-size: 14px; color: var(--text-soft); }
+    .section-body strong { color: var(--text-main); font-weight: 600; }
+
+    .perks-group-label {
+      font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--gold); margin: 18px 0 8px; font-weight: 700;
+    }
+    .list { list-style: none; font-size: 14px; color: var(--text-soft); }
+    .list li { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+    .list-icon { font-size: 15px; margin-top: 1px; }
+    .list li strong { color: var(--text-main); }
+
+    .compare-grid { margin-top: 10px; display: flex; flex-direction: column; border: 1px solid rgba(124,255,140,0.18); border-radius: 12px; overflow: hidden; }
+    .compare-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; padding: 9px 12px; font-size: 13px; align-items: center; border-bottom: 1px solid rgba(124,255,140,0.07); }
+    .compare-row:last-child { border-bottom: none; }
+    .compare-row.compare-head { background: rgba(124,255,140,0.05); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-soft); font-weight: 700; }
+    .compare-row.compare-foot { background: rgba(245,197,66,0.07); font-weight: 700; }
+    .compare-og { color: var(--neon-green); font-weight: 700; }
+    .math-value-normal { color: #ffb38a; }
+
+    /* ZIP STATUS */
+    .zip-section {
+      margin-top: 24px; border-radius: 26px; padding: 22px 18px 20px;
+      background:
+        radial-gradient(circle at top left, rgba(124,255,140,0.1), transparent 60%),
+        radial-gradient(circle at bottom right, rgba(245,197,66,0.08), transparent 60%),
+        var(--bg-card);
+      border: 1px solid rgba(124,255,140,0.28);
+    }
+    .zip-input-row { display: flex; gap: 8px; margin: 12px 0; }
+    .zip-input {
+      flex: 1; padding: 10px 14px; border-radius: 12px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(124,255,140,0.28);
+      color: var(--text-main); font-size: 16px; letter-spacing: 0.12em; outline: none;
+    }
+    .zip-input::placeholder { color: #555; }
+    .zip-input:focus { border-color: rgba(124,255,140,0.65); box-shadow: 0 0 0 2px rgba(124,255,140,0.1); }
+    .zip-btn {
+      padding: 10px 18px; border-radius: 12px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, #7cff8c, #3ecf50);
+      color: #000; font-weight: 800; font-size: 13px;
+    }
+    .zip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .zip-result { display: none; }
+    .zip-result.visible { display: block; }
+    .zip-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+    .zip-stat { padding: 12px; border-radius: 14px; background: rgba(124,255,140,0.06); border: 1px solid rgba(124,255,140,0.14); text-align: center; }
+    .zip-stat-value { font-size: 22px; font-weight: 900; color: var(--neon-green); }
+    .zip-stat-label { font-size: 10px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+    .progress-bar-wrap { margin: 12px 0 4px; }
+    .progress-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-soft); margin-bottom: 5px; }
+    .progress-bar-track { height: 8px; border-radius: 999px; background: rgba(124,255,140,0.1); overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3ecf50, #7cff8c); transition: width 0.6s ease; }
+    .zip-status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 14px; border-radius: 999px;
+      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; margin-top: 10px;
+    }
+    .status-building { background: rgba(245,197,66,0.12); border: 1px solid rgba(245,197,66,0.4); color: var(--gold); }
+    .status-activated { background: rgba(124,255,140,0.12); border: 1px solid rgba(124,255,140,0.4); color: var(--neon-green); }
+    .status-closed { background: rgba(255,59,218,0.12); border: 1px solid rgba(255,59,218,0.4); color: var(--hot-pink); }
+    .zip-note { font-size: 12px; color: var(--text-soft); margin-top: 12px; line-height: 1.6; }
+
+    .cta-wrap { margin-top: 32px; text-align: center; }
+    .cta-button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 16px 28px; border-radius: 999px; text-decoration: none;
+      font-size: 16px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+      color: #000; background: linear-gradient(135deg, #ffdf73, #ffaa00);
+      box-shadow: 0 0 28px rgba(255,204,51,0.4); border: 1px solid rgba(0,0,0,0.4);
+    }
+    .cta-note { margin-top: 9px; font-size: 11px; color: var(--text-soft); }
+
+    .legal-box {
+      margin-top: 24px; padding: 16px 18px; border-radius: 16px;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+      font-size: 12px; color: #6a6d84; line-height: 1.7;
+    }
+    .legal-box strong { color: #9a9db8; }
+
+    .fine-list { list-style: none; font-size: 13px; color: var(--text-soft); }
+    .fine-list li { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 9px; }
+
+    footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid rgba(64,64,96,0.6); font-size: 11px; color: #7a7d94; text-align: center; }
+    footer a { color: var(--neon-green); text-decoration: none; }
+    .social-links { margin-top: 8px; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+    .social-links a { color: var(--text-soft); text-decoration: none; }
+
+    @media (min-width: 600px) {
+      .hero-title { font-size: 30px; }
+      .zip-stat-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div style="text-align:center;margin-bottom:10px;">
+    <span class="free-badge">
+      <span class="free-badge-dot"></span>
+      GUBER is free to join and use
+    </span>
+  </div>
+
+  <!-- HERO -->
+  <header class="hero-card">
+    <div class="hero-top-row">
+      <div class="hero-logo-pill">
+        <div class="hero-logo-pill-inner">
+          <img src="Guberapplogo.png" alt="GUBER Logo" />
+        </div>
+      </div>
+      <div class="hero-title-block">
+        <div class="hero-kicker">Optional Founder Package · One-Time $1.99</div>
+        <h1 class="hero-title">
+          Claim Your Spot in<br /><span class="gold">GUBER History</span>
+        </h1>
+        <p class="hero-sub">
+          GUBER is <strong>completely free</strong> to join and use.
+          Day-1 OG is an optional one-time founder package for early supporters
+          who want permanent recognition, extra perks, and ZIP founder status.
+        </p>
+      </div>
+    </div>
+
+    <div class="hero-token-wrap">
+      <img src="mascot-day1og-hero.png" alt="GUBER Day-1 OG Founder" class="hero-token-img" />
+    </div>
+
+    <div class="hero-pill">
+      <span class="hero-pill-dot"></span>
+      Permanent Founder Status · 100 Spots Per ZIP Code
+    </div>
+
+    <p class="hero-price-line">
+      One-time payment of <strong>$1.99</strong>.
+      <span class="subtle">&nbsp;No subscriptions. No renewal. Perks last forever.</span>
+    </p>
+    <p class="hero-limited-note">
+      <strong>Very limited — 100 founder spots per ZIP code.</strong>
+      Once your ZIP's founder class closes, no new Day-1 OG passes will be issued for it.
+    </p>
+  </header>
+
+  <!-- PERKS -->
+  <section class="section section-employer" style="margin-top:24px;">
+    <div class="section-header">Day-1 OG Founder Package · What You Get</div>
+    <h2 class="section-title">Everything Included as a <span class="hot">Day-1 OG Founder</span></h2>
+
+    <p class="perks-group-label">Permanent Founder Benefits</p>
+    <ul class="list">
+      <li><span class="list-icon">👑</span><span><strong>Day-1 OG Founder Badge</strong> — permanently displayed on your profile. Every hirer and helper sees it forever.</span></li>
+      <li><span class="list-icon">🔢</span><span><strong>Founder Number</strong> — your permanent position in the founding class of your ZIP code.</span></li>
+      <li><span class="list-icon">📅</span><span><strong>Member Since Date</strong> — your founding date permanently shown on your profile.</span></li>
+      <li><span class="list-icon">📍</span><span><strong>ZIP Founder Status</strong> — recognized as one of the first 100 founders in your local ZIP code.</span></li>
+      <li><span class="list-icon">🏛️</span><span><strong>Founder Wall Recognition</strong> — listed among the founding members of your local GUBER community.</span></li>
+      <li><span class="list-icon">⭐</span><span><strong>Early Supporter Status</strong> — permanent recognition that you believed in GUBER from day one.</span></li>
+      <li><span class="list-icon">💸</span><span><strong>Permanent 5% Service Fee Discount</strong> — your platform fee is locked in lower than the standard rate, forever. Even if GUBER raises fees later, your rate never changes.</span></li>
+    </ul>
+
+    <p class="perks-group-label">Monthly Founder Benefits</p>
+    <ul class="list">
+      <li><span class="list-icon">🚀</span><span><strong>5 Free Urgent Upgrades Per Month</strong> — mark any job post as URGENT at no extra charge. <em style="color:#878aa4;font-size:12px;">Note: posting a job still requires standard payment — only the urgent upgrade fee is free for OG founders.</em></span></li>
+      <li><span class="list-icon">🛒</span><span><strong>1 Free Buyer's Order Per Month</strong> — one complimentary buyer's order credit, every month.</span></li>
+      <li><span class="list-icon">✕2</span><span><strong>2× GUBER Credits Earned</strong> — double the credits on qualifying activity every month.</span></li>
+      <li><span class="list-icon">🤖</span><span><strong>AI or Not Credits</strong> — monthly AI credits included with your founder status.</span></li>
+    </ul>
+
+    <p class="perks-group-label">Future Founder Benefits</p>
+    <ul class="list">
+      <li><span class="list-icon">🔓</span><span><strong>Priority access to select new features</strong> — founders get it before the general public.</span></li>
+      <li><span class="list-icon">🎁</span><span><strong>Founder-only promotions</strong> as GUBER grows and activates more communities.</span></li>
+      <li><span class="list-icon">➕</span><span><strong>Additional founder perks</strong> as they become available — OG founders are always first in line.</span></li>
+    </ul>
+  </section>
+
+  <!-- FEE COMPARISON -->
+  <section class="section" style="margin-top:24px;">
+    <div class="section-header">Helpers · Fee discount locked for life</div>
+    <h2 class="section-title">How the <span class="hot">5% Discount</span> Works</h2>
+    <p class="section-body">
+      GUBER takes a small service fee from each completed job — it comes out before your payout,
+      no card required. Day-1 OG founders pay a permanently lower rate.
+    </p>
+    <div class="compare-grid" style="margin-top:14px;">
+      <div class="compare-row compare-head"><div></div><div>Standard</div><div class="compare-og">Day-1 OG</div></div>
+      <div class="compare-row"><div>Helper take-home</div><div class="math-value-normal">80%</div><div class="compare-og">85%</div></div>
+      <div class="compare-row"><div>Urgent Job Boost</div><div class="math-value-normal">paid per post</div><div class="compare-og">5 free/mo</div></div>
+      <div class="compare-row"><div>Founder Badge</div><div class="math-value-normal">—</div><div class="compare-og">permanent</div></div>
+      <div class="compare-row"><div>Credits earned</div><div class="math-value-normal">standard</div><div class="compare-og">2× per month</div></div>
+      <div class="compare-row"><div>ZIP founder spot</div><div class="math-value-normal">—</div><div class="compare-og">100 max / ZIP</div></div>
+      <div class="compare-row compare-foot"><div>Cost</div><div class="math-value-normal">free</div><div class="compare-og" style="color:var(--gold);">$1.99 once</div></div>
+    </div>
+    <p style="margin-top:12px;font-size:13px;color:var(--text-soft);">
+      On a $100 job, a Day-1 OG founder keeps <strong style="color:var(--neon-green);">$85</strong> vs $80 for a standard helper.
+      Over dozens of jobs, that difference adds up to real money.
+    </p>
+  </section>
+
+  <!-- FIRST CTA -->
+  <div class="cta-wrap">
+    <a
+      class="cta-button"
+      href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00?success_url=https%3A%2F%2Fguberapp.com%2Fog-confirmation.html"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span>🔒</span>
+      <span>Claim My Day-1 OG Pass — $1.99</span>
+    </a>
+    <div class="cta-note">One-time payment · Secure checkout via Stripe · GUBER is free to join without purchasing</div>
+  </div>
+
+  <!-- ZIP FOUNDER STATUS -->
+  <section class="zip-section" id="zip-section">
+    <div class="section-header">ZIP Founder System · Live Status</div>
+    <h2 class="section-title" style="font-size:19px;font-weight:800;margin-bottom:6px;">Wake Up Your ZIP Code</h2>
+    <p style="font-size:13px;color:var(--text-soft);margin-bottom:4px;">
+      Each ZIP code has <strong style="color:var(--gold);">100 Day-1 OG Founder spots</strong>.
+      Once 100 are claimed, that ZIP's founder class closes forever. Founder numbers are permanent.
+    </p>
+    <p style="font-size:13px;color:var(--text-soft);margin-bottom:4px;">
+      A ZIP activates when it reaches <strong style="color:var(--neon-green);">100 OG founders</strong>
+      <em>or</em> <strong style="color:var(--neon-green);">250 total GUBER users</strong> — whichever comes first.
+      Every founder and every local user helps move your community closer to activation.
+    </p>
+
+    <div class="zip-input-row">
+      <input class="zip-input" id="zipInput" type="text" inputmode="numeric" maxlength="5" placeholder="Enter your ZIP code" />
+      <button class="zip-btn" id="zipBtn" onclick="checkZip()">Check</button>
+    </div>
+    <div id="zipError" style="display:none;color:#ff8a8a;font-size:13px;margin-bottom:8px;"></div>
+
+    <div class="zip-result" id="zipResult">
+      <div class="zip-stat-grid">
+        <div class="zip-stat">
+          <div class="zip-stat-value" id="statOG">—</div>
+          <div class="zip-stat-label">OG Founders</div>
+        </div>
+        <div class="zip-stat">
+          <div class="zip-stat-value" id="statRemaining" style="color:var(--gold);">—</div>
+          <div class="zip-stat-label">Spots Remaining</div>
+        </div>
+        <div class="zip-stat">
+          <div class="zip-stat-value" id="statUsers" style="color:var(--text-soft);">—</div>
+          <div class="zip-stat-label">Total Local Users</div>
+        </div>
+        <div class="zip-stat">
+          <div class="zip-stat-value" id="statProgress" style="color:var(--hot-pink);">—</div>
+          <div class="zip-stat-label">Activation %</div>
+        </div>
+      </div>
+
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-label">
+          <span>OG Founders: <span id="barOGLabel">0</span> / 100</span>
+          <span>Local Users: <span id="barUsersLabel">0</span> / 250</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="statusBadgeWrap"></div>
+
+      <p class="zip-note">
+        As GUBER communities grow, GUBER may choose to activate local promotions, founder appreciation events,
+        giveaways, cash drops, or community campaigns.
+      </p>
+
+      <div style="margin-top:16px;text-align:center;">
+        <a
+          class="cta-button"
+          href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00?success_url=https%3A%2F%2Fguberapp.com%2Fog-confirmation.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="font-size:14px;padding:13px 22px;"
+        >
+          <span>👑</span>
+          <span>Become a Day-1 OG Founder — $1.99</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINE PRINT -->
+  <section class="section" style="margin-top:24px;">
+    <div class="section-header">Plain language · No games</div>
+    <h2 class="section-title">Simple and Transparent</h2>
+    <ul class="fine-list">
+      <li><span style="color:var(--neon-green);font-size:15px;">✓</span><span>GUBER is <strong style="color:var(--text-main);">free to join and use</strong>. Day-1 OG is entirely optional.</span></li>
+      <li><span style="color:var(--neon-green);font-size:15px;">✓</span><span>The Day-1 OG pass is a <strong style="color:var(--text-main);">one-time $1.99 digital perks package</strong>. No subscriptions, no renewals.</span></li>
+      <li><span style="color:var(--neon-green);font-size:15px;">✓</span><span>Urgent Job Boost is free for OG founders. <strong style="color:var(--text-main);">Posting a job still requires standard payment.</strong> Only the urgency upgrade fee is waived.</span></li>
+      <li><span style="color:var(--neon-green);font-size:15px;">✓</span><span>Founder status is tied to your verified GUBER account. <strong style="color:var(--text-main);">Permanent and non-transferable.</strong></span></li>
+      <li><span style="color:var(--neon-green);font-size:15px;">✓</span><span>The 5% fee discount applies to eligible GUBER jobs completed through your verified account, subject to GUBER's Terms of Service.</span></li>
+      <li><span style="color:var(--neon-green);font-size:15px;">✓</span><span>ZIP activation may vary by region. Your Day-1 OG status will be honored wherever GUBER is officially live.</span></li>
+    </ul>
+  </section>
+
+  <!-- LEGAL -->
+  <div class="legal-box">
+    <strong>Legal Disclosure</strong><br />
+    GUBER is free to join and use. Day-1 OG Advantage is optional.<br /><br />
+    Day-1 OG is a digital founder perks package. It is <strong>not ownership, equity, an investment, profit sharing, or a guarantee of financial returns</strong> of any kind.
+    Purchasing Day-1 OG does not create any ownership stake in GUBER Global LLC or entitle the purchaser to any share of company revenue, profits, or assets.
+    All perks are platform features subject to GUBER's Terms of Service.
+  </div>
+
+  <!-- SECOND CTA -->
+  <div class="cta-wrap" style="margin-top:32px;">
+    <a
+      class="cta-button"
+      href="https://buy.stripe.com/fZu00l3Xr3Y84NQ5CpeAg00?success_url=https%3A%2F%2Fguberapp.com%2Fog-confirmation.html"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span>🔒</span>
+      <span>Claim My Day-1 OG Pass — $1.99</span>
+    </a>
+    <div class="cta-note">
+      One-time payment · Secure checkout via Stripe · Free to join GUBER without purchasing
+    </div>
+  </div>
+
+  <footer>
+    © 2025 Guber Global LLC — All Rights Reserved<br />
+    Contact: <a href="mailto:support@guberapp.com">support@guberapp.com</a>
+    <div class="social-links">
+      <a href="https://guberapp.app" target="_blank" rel="noopener noreferrer">guberapp.app</a>
+      <a href="https://www.facebook.com/share/1H8GbxUHwn/" target="_blank" rel="noopener noreferrer">Facebook</a>
+      <a href="https://www.instagram.com/guber_global?igsh=MWs5aHg4bW90amtmNw==" target="_blank" rel="noopener noreferrer">Instagram</a>
+      <a href="https://www.tiktok.com/@the.guber.app" target="_blank" rel="noopener noreferrer">TikTok</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+  async function checkZip() {
+    const input = document.getElementById('zipInput');
+    const zip = (input.value || '').trim().replace(/\D/g, '').slice(0, 5);
+    const errEl = document.getElementById('zipError');
+    const resultEl = document.getElementById('zipResult');
+    const btn = document.getElementById('zipBtn');
+
+    errEl.style.display = 'none';
+    if (zip.length !== 5) {
+      errEl.textContent = 'Please enter a valid 5-digit ZIP code.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+    resultEl.classList.remove('visible');
+
+    try {
+      const res = await fetch('/api/zip-founder-status?zip=' + zip);
+      if (!res.ok) throw new Error('Could not load ZIP data');
+      const d = await res.json();
+
+      document.getElementById('statOG').textContent = d.ogCount;
+      document.getElementById('statRemaining').textContent = d.spotsRemaining;
+      document.getElementById('statUsers').textContent = d.totalCount;
+      document.getElementById('statProgress').textContent = d.overallProgress + '%';
+      document.getElementById('barOGLabel').textContent = d.ogCount;
+      document.getElementById('barUsersLabel').textContent = d.totalCount;
+      document.getElementById('progressFill').style.width = d.overallProgress + '%';
+
+      const cls = d.status === 'Activated' ? 'status-activated'
+                : d.status === 'Founder Class Closed' ? 'status-closed'
+                : 'status-building';
+      const dot = d.status === 'Building' ? '🟡' : d.status === 'Activated' ? '🟢' : '🔴';
+      document.getElementById('statusBadgeWrap').innerHTML =
+        '<span class="zip-status-badge ' + cls + '">' + dot + ' ZIP ' + d.zip + ' — ' + d.status + '</span>';
+
+      resultEl.classList.add('visible');
+    } catch (e) {
+      errEl.textContent = 'Unable to load ZIP data right now. Try again in a moment.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Check';
+    }
+  }
+
+  document.getElementById('zipInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') checkZip();
+  });
+</script>
+</body>
+</html>

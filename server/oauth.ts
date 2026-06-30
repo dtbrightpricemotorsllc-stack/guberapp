@@ -1,6 +1,28 @@
 import type { Request, Response } from "express";
-import { randomBytes } from "crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "crypto";
 import { ALLOWED_RETURN_TO_PREFIXES } from "../shared/oauth-config";
+
+// ── HMAC-signed OAuth nonce helpers ─────────────────────────────────────────
+// The nonce is signed with SESSION_SECRET so the callback can verify it came
+// from us WITHOUT relying on the session cookie or the state cookie — both of
+// which Safari's ITP can drop during the Google redirect chain.
+
+function _hmacSecret(): string {
+  return process.env.SESSION_SECRET || "dev-only-insecure-session-secret";
+}
+
+function signOAuthNonce(nonce: string): string {
+  return createHmac("sha256", _hmacSecret()).update(nonce).digest("hex");
+}
+
+function verifyOAuthNonce(nonce: string, sig: string): boolean {
+  if (!nonce || !sig || sig.length < 32) return false;
+  const expected = Buffer.from(signOAuthNonce(nonce), "hex");
+  let candidate: Buffer;
+  try { candidate = Buffer.from(sig, "hex"); } catch { return false; }
+  if (expected.length !== candidate.length) return false;
+  return timingSafeEqual(expected, candidate);
+}
 
 export { ALLOWED_RETURN_TO_PREFIXES };
 
@@ -189,6 +211,7 @@ export function setNonceStore(store: NonceStore): void {
  */
 interface OAuthStatePayload {
   n: string;             // CSRF nonce — 128-bit hex
+  sig?: string;          // HMAC-SHA256(n, SESSION_SECRET) — self-validating; no session/cookie needed
   native: boolean;       // true when triggered from the native mobile app
   returnTo: string | null; // validated return path, or null
   pollKey?: string;      // correlation key for polling-based token retrieval (no deep link required)
@@ -241,10 +264,15 @@ export function handleGoogleAuthStart(req: Request, res: Response): void {
   const rawPollKey = req.query.pollKey as string | undefined;
   const pollKey = rawPollKey && /^[a-f0-9]{8,64}$/.test(rawPollKey) ? rawPollKey : undefined;
 
+  // Sign the nonce so the callback can self-validate the state even when
+  // Safari's ITP drops the session cookie and the state cookie during the
+  // Google OAuth redirect chain.
+  const sig = signOAuthNonce(nonce);
+
   // Encode the full OAuth context in the state parameter so native/returnTo
   // survive the round-trip even when the session is lost (Chrome Custom Tab
   // on Android has an isolated cookie jar from the Capacitor WebView).
-  const statePayload: OAuthStatePayload = { n: nonce, native: isNative, returnTo, pollKey };
+  const statePayload: OAuthStatePayload = { n: nonce, sig, native: isNative, returnTo, pollKey };
   const state = encodeOAuthState(statePayload);
 
   // Session stores only the nonce — one-time-use CSRF verification.
@@ -355,12 +383,19 @@ export async function validateOAuthState(req: Request, res?: Response): Promise<
   let stateSource: string;
   let stateValid = false;
 
-  if (sessionNonce) {
-    // Primary: nonce from session vs nonce in decoded payload
+  if (payload.sig && verifyOAuthNonce(payload.n, payload.sig)) {
+    // Primary (Safari-safe): HMAC signature in the state parameter itself.
+    // No session cookie or state cookie needed — survives Safari ITP and
+    // Chrome Custom Tab cookie-jar isolation. Replay protection still happens
+    // below via the shared nonce store.
+    stateSource = "hmac";
+    stateValid = true;
+  } else if (sessionNonce) {
+    // Secondary: nonce stored in the Express session
     stateSource = "session";
     stateValid = !!(payload.n && payload.n === sessionNonce);
   } else if (cookieState) {
-    // Fallback: full encoded state in cookie vs full received state string
+    // Tertiary: full encoded state in the guber_oauth_state cookie
     stateSource = "cookie-fallback";
     stateValid = !!(state && state === cookieState);
   } else {

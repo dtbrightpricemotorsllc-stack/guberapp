@@ -910,6 +910,309 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_missed_user ON jac_missed_actions(user_id, status);
   `).catch(e => console.error("[migration] jac tables error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_memory (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      category   TEXT NOT NULL,
+      key        TEXT NOT NULL,
+      value      JSONB NOT NULL,
+      source     TEXT DEFAULT 'user_said',
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (user_id, category, key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_memory_user ON jac_memory(user_id);
+  `).catch(e => console.error("[migration] jac_memory error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_knowledge (
+      id               SERIAL PRIMARY KEY,
+      category         TEXT NOT NULL,
+      title            TEXT NOT NULL,
+      question_patterns JSONB DEFAULT '[]',
+      keywords         JSONB DEFAULT '[]',
+      answer           TEXT NOT NULL,
+      follow_up_actions JSONB DEFAULT '[]',
+      active           BOOLEAN DEFAULT TRUE,
+      admin_approved   BOOLEAN DEFAULT TRUE,
+      hit_count        INTEGER DEFAULT 0,
+      created_by       TEXT DEFAULT 'system',
+      created_at       TIMESTAMP DEFAULT NOW(),
+      updated_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS jac_intents (
+      id                 SERIAL PRIMARY KEY,
+      intent_name        TEXT UNIQUE NOT NULL,
+      display_name       TEXT NOT NULL,
+      sample_phrases     JSONB DEFAULT '[]',
+      required_fields    JSONB DEFAULT '[]',
+      target_flow        TEXT,
+      target_route       TEXT,
+      backend_action     TEXT,
+      follow_up_questions JSONB DEFAULT '[]',
+      fallback_response  TEXT,
+      active             BOOLEAN DEFAULT TRUE,
+      hit_count          INTEGER DEFAULT 0,
+      created_at         TIMESTAMP DEFAULT NOW(),
+      updated_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS jac_response_cache (
+      id            SERIAL PRIMARY KEY,
+      cache_key     TEXT UNIQUE NOT NULL,
+      question_text TEXT NOT NULL,
+      answer_text   TEXT NOT NULL,
+      intent_name   TEXT,
+      source        TEXT DEFAULT 'ai_approved',
+      admin_approved BOOLEAN DEFAULT FALSE,
+      hit_count     INTEGER DEFAULT 0,
+      last_hit_at   TIMESTAMP,
+      created_at    TIMESTAMP DEFAULT NOW()
+    );
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS intent_detected TEXT;
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS cost_source TEXT DEFAULT 'ai';
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS jac_response TEXT;
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS user_feedback TEXT;
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS admin_reviewed BOOLEAN DEFAULT FALSE;
+    ALTER TABLE jac_interactions ADD COLUMN IF NOT EXISTS admin_notes TEXT;
+  `).catch(e => console.error("[migration] jac_brain tables error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_dd_goals (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      goal_amount  REAL NOT NULL,
+      deadline     TEXT,
+      plan_json    JSONB DEFAULT '[]',
+      earned_so_far REAL DEFAULT 0,
+      status       TEXT NOT NULL DEFAULT 'active',
+      created_at   TIMESTAMP DEFAULT NOW(),
+      updated_at   TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_dd_goals_user ON jac_dd_goals(user_id, status);
+  `).catch(e => console.error("[migration] jac_dd_goals error:", e));
+
+  // Add realistic_earnable column to jac_dd_goals if not exists (idempotent)
+  await pool.query(`
+    ALTER TABLE jac_dd_goals ADD COLUMN IF NOT EXISTS realistic_earnable REAL DEFAULT 0;
+  `).catch(e => console.error("[migration] jac_dd_goals realistic_earnable error:", e));
+
+  // Add new JAC preference columns to jac_user_profile (idempotent)
+  await pool.query(`
+    ALTER TABLE jac_user_profile
+      ADD COLUMN IF NOT EXISTS text_responses               BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS voice_activation             BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS floating_button              BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS proactive_suggestions        BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS personalized_recommendations BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS voice_selection              TEXT    DEFAULT 'default',
+      ADD COLUMN IF NOT EXISTS low_data_mode                BOOLEAN DEFAULT FALSE;
+  `).catch(e => console.error("[migration] jac_user_profile prefs error:", e));
+
+  // Seed GUBER knowledge base (only if empty)
+  await pool.query(`
+    INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    SELECT * FROM (VALUES
+      ('general','What is GUBER',
+        '["what is guber","how does guber work","what does guber do","tell me about guber","explain guber","about guber"]'::jsonb,
+        '["guber","platform","how it works","global unlimited"]'::jsonb,
+        'GUBER stands for Global Unlimited Business & Employment Resources. It''s a U.S.-only local platform where workers earn money on real nearby jobs, hirers post jobs and hire ID-verified workers, and users can buy/sell vehicles and items in the Marketplace. Our slogan: "Create Value In Yourself."',
+        '[{"label":"Find work","message":"I want to find work nearby"},{"label":"Post a job","message":"I need to hire someone"},{"label":"Explore all features","message":"What else can GUBER do?"}]'::jsonb,
+        'system'),
+      ('general','Is GUBER free to use',
+        '["is guber free","does guber cost money","how much does guber cost","is it free to sign up","free to join"]'::jsonb,
+        '["free","cost","price","sign up","join"]'::jsonb,
+        'Signing up and posting jobs is free. Workers earn from completed jobs. GUBER takes a small platform fee on completed transactions. Premium features like Studio credits, Scout Plan, and Day-1 OG have their own pricing.',
+        '[{"label":"See Day-1 OG","message":"What is Day-1 OG?"},{"label":"Find work","message":"How do I start earning?"}]'::jsonb,
+        'system'),
+      ('jobs','How to post a job',
+        '["how do i post a job","how do i hire someone","create a job","post a job listing","hire help","need to hire","want to hire","how to post"]'::jsonb,
+        '["post job","hire","job listing","post a task","create job"]'::jsonb,
+        'Tap "Post a Job" from the home screen or job board. Choose your service category, describe what you need, set a budget, and enter your ZIP code. Once posted, verified workers in your area can apply. You only pay when you lock in a worker.',
+        '[{"label":"Post a job now","message":"I want to post a job"},{"label":"How does payment work?","message":"How does GUBER payment work?"}]'::jsonb,
+        'system'),
+      ('jobs','How to find work nearby',
+        '["how do i find work","find jobs nearby","how do i get hired","looking for work","want to work","need a job","looking for jobs","find gigs","earn money","how to earn"]'::jsonb,
+        '["find work","get hired","jobs nearby","earn","worker","gig"]'::jsonb,
+        'Create a free account as a worker, complete ID verification, and browse available jobs in your area on the Job Board. Apply to jobs that match your skills. Once a hirer selects you, you''ll receive a notification and can coordinate directly.',
+        '[{"label":"Sign up as worker","message":"I want to sign up as a worker"},{"label":"What jobs are available?","message":"What kind of jobs are on GUBER?"}]'::jsonb,
+        'system'),
+      ('payments','How does payment work',
+        '["how do i get paid","when do i get paid","how does payment work","how does guber pay","stripe","wallet","how does the wallet work","getting paid"]'::jsonb,
+        '["get paid","payment","wallet","stripe","earnings","payout"]'::jsonb,
+        'GUBER uses Stripe for secure payments. Hirers fund a job when they lock in a worker. Once the job is marked complete and the hirer approves proof, the payment releases to your GUBER wallet. You can then withdraw to your bank via Stripe. Setup usually takes 2–5 business days.',
+        '[{"label":"Set up Stripe","message":"How do I set up Stripe to get paid?"},{"label":"Withdraw money","message":"How do I withdraw my wallet balance?"}]'::jsonb,
+        'system'),
+      ('payments','Stripe onboarding setup',
+        '["stripe onboarding","set up stripe","connect stripe","stripe account","how to withdraw","how to cash out","withdraw money","cash out wallet"]'::jsonb,
+        '["stripe","onboarding","withdraw","cash out","bank account","payout setup"]'::jsonb,
+        'Go to your Profile and tap "Set up payouts." This opens Stripe Express, where you''ll enter your SSN (last 4 digits), bank account info, and verify your identity. Once approved, your wallet balance can be withdrawn anytime. Most transfers arrive in 2–5 business days.',
+        '[{"label":"Go to profile","message":"Take me to my profile"}]'::jsonb,
+        'system'),
+      ('general','What is Day-1 OG',
+        '["what is day 1 og","day-1 og","og membership","founding membership","day one og","what is og","og benefits","day 1 original"]'::jsonb,
+        '["day-1","og","founding","original","membership","day one"]'::jsonb,
+        'Day-1 OG is GUBER''s founding membership. OG members get +20 Studio credits every month (rollover, no expiry), a permanent OG badge on their profile, priority in job matching, and exclusive perks as GUBER grows. You can join from your Profile page or the OG Advantage section.',
+        '[{"label":"Join Day-1 OG","message":"How do I become a Day-1 OG?"},{"label":"What are Studio credits?","message":"What are GUBER Studio credits?"}]'::jsonb,
+        'system'),
+      ('credits','What are GUBER credits',
+        '["what are credits","guber credits","how do credits work","what can i do with credits","credit system","earn credits","credits missions"]'::jsonb,
+        '["credits","missions","earn credits","credit balance","reward"]'::jsonb,
+        'GUBER credits are your in-app currency used primarily for GUBER Studio (AI content generation). You earn credits by completing City Missions — local tasks like reporting fuel prices, submitting local events, or verifying business info. New users get 2 free trial credits. Day-1 OG members receive +20 credits/month.',
+        '[{"label":"View missions","message":"Show me city missions"},{"label":"GUBER Studio","message":"What is GUBER Studio?"}]'::jsonb,
+        'system'),
+      ('general','What are Cash Drops',
+        '["what are cash drops","cash drop","how do cash drops work","how to get cash drops","guber cash drops","cash drop event"]'::jsonb,
+        '["cash drop","community event","free money","cash event"]'::jsonb,
+        'Cash Drops are community events where GUBER drops real money to verified users in specific locations at specific times. They''re NOT jobs — you just need to show up verified and claim your share. Check the home screen for active Cash Drop events near you.',
+        '[{"label":"See Cash Drops","message":"Show me active Cash Drops near me"}]'::jsonb,
+        'system'),
+      ('vi','What is Verify and Inspect',
+        '["what is verify and inspect","what is v&i","verify and inspect","vehicle inspection","how does v&i work","verify a vehicle","inspect a vehicle","vi service"]'::jsonb,
+        '["verify","inspect","v&i","vehicle inspection","inspection service"]'::jsonb,
+        'Verify & Inspect (V&I) is GUBER''s remote vehicle inspection service. A verified GUBER worker visits the vehicle on your behalf, takes structured photos and a live video walkthrough, and submits a full inspection report. Great for buying used vehicles remotely or confirming a vehicle''s condition before transport.',
+        '[{"label":"Request V&I","message":"I want to request a vehicle inspection"},{"label":"Become a V&I inspector","message":"How do I become a Verify and Inspect worker?"}]'::jsonb,
+        'system'),
+      ('vi','How to upload proof photos',
+        '["how do i upload proof","photo proof","submit proof","proof of completion","upload photos","take photos for job","proof submission"]'::jsonb,
+        '["proof","upload","photo","completion","submit proof","evidence"]'::jsonb,
+        'When your job is in progress, open the job detail screen and tap "Submit Proof." Take or upload photos showing the completed work. Your proof is sent to the hirer for review. They can approve it (releasing your payment) or request a retake if something is unclear.',
+        '[{"label":"How do I get paid after proof?","message":"What happens after I submit proof?"}]'::jsonb,
+        'system'),
+      ('load_board','What is the Load Board',
+        '["what is the load board","load board","how does the load board work","transport loads","freight","hauling","shipping loads","carrier loads"]'::jsonb,
+        '["load board","transport","freight","haul","carrier","shipper","cargo"]'::jsonb,
+        'The GUBER Load Board connects shippers who need cargo moved with carriers (truck drivers, haulers) who can move it. Shippers post loads with origin, destination, weight, and price. Carriers browse and bid on loads. Great for DOT-licensed carriers looking for local or regional loads.',
+        '[{"label":"Post a load","message":"I need to post a load on the load board"},{"label":"Find loads to haul","message":"I want to find loads to haul as a carrier"}]'::jsonb,
+        'system'),
+      ('marketplace','How to sell a vehicle',
+        '["how do i sell my car","sell my vehicle","sell my truck","list my car","vehicle listing","sell on marketplace","car for sale","list a vehicle"]'::jsonb,
+        '["sell car","sell vehicle","vehicle listing","marketplace car","car sale","list truck"]'::jsonb,
+        'Go to the Marketplace and tap "Sell a Vehicle." Enter the year, make, model, mileage, condition, your asking price, and photos. Your listing goes live immediately to verified GUBER buyers. You can receive offers, accept/counter, and coordinate a meeting through the app.',
+        '[{"label":"Start a listing","message":"I want to list my vehicle for sale"},{"label":"How do offers work?","message":"How do marketplace offers work?"}]'::jsonb,
+        'system'),
+      ('marketplace','How marketplace offers work',
+        '["how do offers work","how do i make an offer","marketplace offer","buyer offer","make an offer on a car","accept an offer"]'::jsonb,
+        '["offer","bid","marketplace offer","accept offer","counter offer","make offer"]'::jsonb,
+        'On any marketplace listing, tap "Make an Offer" and enter your price. The seller gets notified and can accept, counter, or decline. If accepted, both parties coordinate a meeting time through the GUBER messaging system. Payment is handled through GUBER''s secure escrow.',
+        '[{"label":"Browse marketplace","message":"Show me the marketplace"}]'::jsonb,
+        'system'),
+      ('safety','Is GUBER safe',
+        '["is guber safe","how is guber safe","safety","how does guber verify users","is it safe to hire on guber","worker safety","id verification safety"]'::jsonb,
+        '["safe","safety","verify","trust","id verification","background","secure"]'::jsonb,
+        'GUBER requires mandatory ID verification for all hirers and workers before they can transact. All jobs go through a structured flow with proof-of-completion, GPS check-ins, and dispute protection. Payments are held in escrow until both parties confirm completion.',
+        '[{"label":"How does ID verification work?","message":"How does ID verification work on GUBER?"},{"label":"What if there is a dispute?","message":"What happens if there is a dispute?"}]'::jsonb,
+        'system'),
+      ('safety','ID verification process',
+        '["how does id verification work","verify my id","id check","identity verification","verify my identity","how do i verify","id required"]'::jsonb,
+        '["id verification","verify","identity","id check","document","verify id"]'::jsonb,
+        'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. You must be 18+ (or have a parent account if 13–17).',
+        '[{"label":"Go verify my ID","message":"Take me to verify my ID"}]'::jsonb,
+        'system'),
+      ('safety','How disputes work',
+        '["what if there is a dispute","dispute","how do disputes work","dispute a job","file a dispute","job dispute","problem with job","bad worker","hirer problem"]'::jsonb,
+        '["dispute","problem","issue","conflict","bad worker","bad hirer","complaint"]'::jsonb,
+        'If there''s a problem with a job, either party can open a dispute from the job detail screen. GUBER''s team reviews submitted proof, GPS data, and messages. Funds stay in escrow during the review. Most disputes are resolved within 48 hours based on the evidence.',
+        '[{"label":"How does proof work?","message":"How does photo proof work on GUBER?"}]'::jsonb,
+        'system'),
+      ('gps','Why does GUBER need my location',
+        '["why does guber need my location","location access","gps permission","why gps","location privacy","do you track me","is my location shared","location data"]'::jsonb,
+        '["gps","location","privacy","tracking","location access","share location"]'::jsonb,
+        'GUBER uses your location for three things: 1) showing nearby jobs and workers, 2) verifying GPS check-ins for job status (on my way, arrived), and 3) preventing fraud by confirming workers are physically at job sites. All GPS coordinates are fuzzed on public maps — your exact address is never shown to others.',
+        '[{"label":"GPS privacy","message":"How is my GPS data kept private?"}]'::jsonb,
+        'system'),
+      ('general','GUBER Studio what is it',
+        '["what is guber studio","studio","ai content","ai videos","guber ai","studio credits","generate video","create content with guber"]'::jsonb,
+        '["studio","ai content","generate","video","music","avatar","ai tool"]'::jsonb,
+        'GUBER Studio is our AI content creation suite. Use it to generate AI videos (text-to-video, motion control), AI music, and motion effects using your Studio credits. Tools include Kling Motion, WAN Motion, and MiniMax Music. Access it from the Studio tab.',
+        '[{"label":"Go to Studio","message":"Take me to GUBER Studio"},{"label":"Get more credits","message":"How do I get more Studio credits?"}]'::jsonb,
+        'system'),
+      ('jobs','Job status updates explained',
+        '["on my way","arrived","mark complete","job status","what does job status mean","in progress","job complete","mark arrived","status update"]'::jsonb,
+        '["on my way","arrived","in progress","mark complete","job status","status update"]'::jsonb,
+        'Job statuses: Open → a hirer posted, no worker yet. In Progress → worker accepted and is working. On My Way → worker has checked in that they''re heading to the job. Arrived → worker confirmed they''re on site. Complete → work done, proof submitted, awaiting hirer approval. You update status from the job detail screen.',
+        '[{"label":"How does proof work?","message":"How do I submit proof of completion?"}]'::jsonb,
+        'system')
+    ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE created_by = 'system' LIMIT 1);
+  `).catch(e => console.error("[migration] jac_knowledge seed error:", e));
+
+  // Seed initial intents
+  await pool.query(`
+    INSERT INTO jac_intents (intent_name, display_name, sample_phrases, required_fields, target_flow, target_route, fallback_response)
+    SELECT * FROM (VALUES
+      ('post_job','Post a Job',
+        '["post a job","hire someone","need help","I need someone to","create a job"]'::jsonb,
+        '["service_type","zip"]'::jsonb,
+        'post_job','/post-job?from=jac',
+        'I can help you post a job. What service do you need, and what area are you in?'),
+      ('find_work','Find Work',
+        '["find work","looking for work","I want to work","earn money","get hired","find a job","available jobs"]'::jsonb,
+        '[]'::jsonb,
+        'find_work','/jobs',
+        'Great — let''s get you set up to earn on GUBER. Have you created your account yet?'),
+      ('sell_vehicle','Sell a Vehicle',
+        '["sell my car","list my truck","sell my vehicle","car for sale","sell a vehicle"]'::jsonb,
+        '["make","model","year"]'::jsonb,
+        'marketplace','/marketplace',
+        'I can help you list your vehicle. What''s the year, make, and model?'),
+      ('request_vi','Request Verify and Inspect',
+        '["verify a vehicle","inspect a car","v&i","verify and inspect","vehicle inspection","inspect before I buy"]'::jsonb,
+        '["vehicle_location","vin_or_description"]'::jsonb,
+        'verify_inspect','/verify-inspect',
+        'Verify & Inspect is perfect for buying a vehicle remotely. Where is the vehicle located?'),
+      ('post_load','Post a Load',
+        '["post a load","need freight moved","ship a load","load board post","need a carrier","transport cargo"]'::jsonb,
+        '["pickup","delivery","weight"]'::jsonb,
+        'load_board','/load-board',
+        'I can help you post a load. What''s the pickup location, destination, and approximate weight?'),
+      ('find_loads','Find Loads to Haul',
+        '["find loads","haul loads","carrier loads","truck loads","available loads","I drive a truck","I have a trailer"]'::jsonb,
+        '[]'::jsonb,
+        'load_board','/load-board',
+        'Let''s find loads that match your equipment. What type of trailer do you run?'),
+      ('check_payment','Check Payment Status',
+        '["where is my money","when do I get paid","payment status","check my payment","wallet balance","how much have I earned"]'::jsonb,
+        '[]'::jsonb,
+        'payments','/profile',
+        'Your wallet balance and payment history are in your Profile. Want me to take you there?'),
+      ('explain_og','Explain Day-1 OG',
+        '["what is og","day 1 og","day-1 og","founding membership","og benefits","og member"]'::jsonb,
+        '[]'::jsonb,
+        'og','/profile',
+        'Day-1 OG is GUBER''s founding membership — monthly Studio credits, an OG badge, and growing perks. Want to join?'),
+      ('gps_help','GPS Help',
+        '["gps not working","location not working","can''t share location","location permission","gps issues","location access denied"]'::jsonb,
+        '[]'::jsonb,
+        'help',NULL,
+        'GPS is used to verify job check-ins and show nearby opportunities. On iOS: Settings → Privacy → Location → GUBER → While Using. On Android: Settings → Apps → GUBER → Permissions → Location.'),
+      ('check_job_status','Check Job Status',
+        '["what is my job status","where is my job","job update","job progress","active jobs","job status","what''s happening with my job"]'::jsonb,
+        '[]'::jsonb,
+        'jobs','/jobs',
+        'Your active jobs and their current status are on the Jobs screen. Want me to take you there?')
+    ) AS v(intent_name, display_name, sample_phrases, required_fields, target_flow, target_route, fallback_response)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_intents LIMIT 1);
+  `).catch(e => console.error("[migration] jac_intents seed error:", e));
+
+  // Upsert destination_determination intent (D.D. mode — goal-based financial plan)
+  await pool.query(`
+    INSERT INTO jac_intents (intent_name, display_name, sample_phrases, required_fields, target_flow, target_route, fallback_response)
+    VALUES (
+      'destination_determination',
+      'Destination Determination',
+      '["I need $","help me earn","make money by","earn by","I want to make","earning goal","how do I make $","I need to make","D.D. mode","destination determination"]'::jsonb,
+      '["goal_amount"]'::jsonb,
+      'destination_determination',
+      NULL,
+      'Tell me your earning goal and deadline — e.g. "I need $300 by Friday" — and I''ll build a ranked action plan across all GUBER income streams.'
+    )
+    ON CONFLICT (intent_name) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      sample_phrases = EXCLUDED.sample_phrases,
+      target_flow = EXCLUDED.target_flow,
+      fallback_response = EXCLUDED.fallback_response;
+  `).catch(e => console.error("[migration] jac_intents seed error:", e));
+
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`
     UPDATE growth_task_templates SET is_active = false, paused = true

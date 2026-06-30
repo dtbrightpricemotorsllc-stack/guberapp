@@ -73,12 +73,42 @@ export function cancelElevenLabsAudio() {
  * Unlocks audio playback on mobile browsers that require a gesture.
  */
 export function unlockAudioContext() {
-  if (_audioUnlocked) return;
-  // Tiny silent MP3 (base64) — triggers browser audio permission without audible sound
-  const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
-  const a = new Audio(SILENT_MP3);
-  a.volume = 0;
-  a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
+  // Unlock HTML5 audio (autoplay gate)
+  if (!_audioUnlocked) {
+    const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+    const a = new Audio(SILENT_MP3);
+    a.volume = 0;
+    a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
+  }
+  // Unlock speechSynthesis on every user gesture.
+  // - Chrome Android: resume() lifts suspension caused by mic activity.
+  // - iOS Safari PWA: the FIRST speak() call must happen inside a user-gesture
+  //   handler or all subsequent async speak() calls are silently blocked.
+  //   We speak a zero-volume utterance immediately and cancel it — this primes
+  //   the engine so JAC's real responses (which arrive async after an API call)
+  //   will actually play.
+  try {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const ss = window.speechSynthesis;
+      ss.resume();
+      // iOS WebKit (Safari + CriOS) requires speechSynthesis.speak() to be
+      // called synchronously inside each user-gesture handler before any async
+      // speak() will play. volume=0 is discarded by iOS — use 0.01 so the
+      // engine registers it. At rate=16 + one space it finishes in <10 ms.
+      //
+      // On Android/desktop we only need this once (_audioUnlocked gate).
+      // On iOS we must re-prime on EVERY gesture because the module-level
+      // _audioUnlocked flag persists across SPA navigations, so without this
+      // the greeting silently fails after the very first page visit.
+      const onIOS = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (!_audioUnlocked || onIOS) {
+        const primer = new SpeechSynthesisUtterance(" ");
+        primer.volume = 0.01;
+        primer.rate   = 16;
+        ss.speak(primer);
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -135,18 +165,45 @@ function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
   });
 }
 
+/** True for any iOS browser — Safari, CriOS, Firefox iOS, etc. */
+function isIOSBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 function webSpeechFallback(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const ss = window.speechSynthesis;
   ss.cancel();
-  // Chrome/WebView bug: cancel() followed immediately by speak() can silently
-  // drop the utterance. A 60 ms gap lets cancel() finish before we enqueue.
+  // Chrome Android suspends speechSynthesis when the mic is active (or after
+  // it stops). We must call resume() BEFORE enqueueing an utterance, otherwise
+  // the utterance silently queues but never plays.
+  try { ss.resume(); } catch {}
+
+  // Delay rationale:
+  //   Android WebView / Chrome Android: cancel() needs a short settle gap or
+  //   the first utterance is silently dropped. 220 ms was the original safe
+  //   value; with resume() called before AND after the gap, 120 ms is reliable
+  //   and removes the noticeable lag users hear on Android.
+  //   iOS (Safari + CriOS): cancel→speak race is not an issue on iOS WebKit,
+  //   and a long delay risks re-suspension. 50 ms is enough.
+  const delay = isIOSBrowser() ? 50 : 120;
+
   setTimeout(() => {
     const utt = new SpeechSynthesisUtterance(text);
-    applyJacVoice(utt);
-    utt.rate   = 1.08;
-    utt.pitch  = 1.15;
+    utt.lang   = "en-US";
+    utt.rate   = 1.05;
+    utt.pitch  = 1.1;
     utt.volume = 1.0;
+    // Only apply a specific voice if voices are already loaded; otherwise let
+    // the browser pick the system default (safer on mobile).
+    const voices = ss.getVoices();
+    if (voices.length > 0) applyJacVoice(utt);
+    // Resume again right before speaking — both Chrome Android and iOS can
+    // re-suspend between the cancel() call and this timeout.
+    try { ss.resume(); } catch {}
     ss.speak(utt);
-  }, 60);
+    // Final nudge: if still paused 300 ms after enqueue, force resume.
+    setTimeout(() => { try { if (ss.paused) ss.resume(); } catch {} }, 300);
+  }, delay);
 }

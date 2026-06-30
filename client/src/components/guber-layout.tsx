@@ -13,6 +13,7 @@ import { GuberLogo } from "./guber-logo";
 import { GUBERAssistant, GUBERAssistantHeaderButton, DDFloatingButton } from "./guber-assistant";
 import { AdminDiagnosticAssistant } from "./admin-diagnostic-assistant";
 import { ActiveJobBanner } from "./active-job-banner";
+import { JacResumeBanner } from "./jac-resume-banner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -448,6 +449,7 @@ export function GuberLayout({ children, hideHeader, showBack, backHref, onBack, 
       <main className="flex-1" style={{ paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
         <PushNotificationBanner />
         <ActiveJobBanner />
+        <JacResumeBanner />
         {children}
       </main>
 

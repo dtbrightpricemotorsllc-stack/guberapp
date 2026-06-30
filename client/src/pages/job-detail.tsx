@@ -229,6 +229,10 @@ export default function JobDetail() {
   const [bountyCondition, setBountyCondition] = useState<"Intact" | "Damaged" | "Missing" | "">("");
   const [bountyNotes, setBountyNotes] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
+  // True while gpsGetCurrentPosition() is in-flight for On My Way / Arrived.
+  // Distinct from milestoneMutation.isPending so the button shows "Getting GPS…"
+  // before the network request starts.
+  const [gpsAcquiring, setGpsAcquiring] = useState(false);
   // Bounty review state
   const [rejectingAttemptId, setRejectingAttemptId] = useState<number | null>(null);
   const [bountyRejectReason, setBountyRejectReason] = useState("");
@@ -750,7 +754,18 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
         navigate("/browse-jobs");
       }
     },
-    onError: (err: any) => showError(err),
+    onError: (err: any, vars: any) => {
+      // SAFETY_CONFIRM_REQUIRED: re-open the confirmation modal instead of
+      // showing an error toast. The server sends this when helperSafetyConfirmedAt
+      // is missing (e.g. a V&I job tapped without going through the modal first).
+      if (err?.message === "SAFETY_CONFIRM_REQUIRED" &&
+          (vars?.statusType === "on_the_way" || vars?.statusType === "start_work")) {
+        helperStartActionRef.current = "on_the_way";
+        setHelperStartConfirmOpen(true);
+        return;
+      }
+      showError(err);
+    },
   });
 
   const reviewMutation = useMutation({
@@ -829,15 +844,22 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
 
   function captureGps() {
     setGpsLoading(true);
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 10000 })
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
       .then((pos) => {
         setBountyGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
         setGpsLoading(false);
         toast({ title: "Location Captured", description: `Accuracy: ±${Math.round(pos.coords.accuracy)}m` });
       })
-      .catch(() => {
+      .catch((err: any) => {
         setGpsLoading(false);
-        toast({ title: "GPS Error", description: "Could not capture location. Please enable location access.", variant: "destructive" });
+        const isPermission = err?.code === 1 || /permission|denied/i.test(err?.message ?? "");
+        toast({
+          title: "GPS Error",
+          description: isPermission
+            ? "GUBER needs location permission. Go to Settings → Apps → GUBER → Permissions → Location → Allow."
+            : "Could not get GPS fix. Step outside or wait a moment, then try again.",
+          variant: "destructive",
+        });
       });
   }
 
@@ -913,8 +935,16 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
       // tracking works even when the worker switches apps. Non-blocking —
       // the GPS milestone proceeds regardless of the user's choice.
       void ensureBackgroundLocation("job");
-      gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+      setGpsAcquiring(true);
+      console.info("[GUBER GPS] on_the_way: acquiring position…");
+      // maximumAge: 30000 — accept a cached fix up to 30 s old so indoor users
+      // don't time out waiting for a fresh satellite lock. timeout raised to
+      // 15 s for the same reason. The catch distinguishes permission-denied
+      // (code 1) from timeout so the message isn't misleading.
+      gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
         .then((pos) => {
+          console.info(`[GUBER GPS] on_the_way: fix acquired lat=${pos.coords.latitude.toFixed(4)} acc=±${Math.round(pos.coords.accuracy)}m`);
+          setGpsAcquiring(false);
           milestoneMutation.mutate({
             statusType: "on_the_way",
             gpsLat: pos.coords.latitude,
@@ -922,12 +952,15 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             safetyConfirmed: true,
           });
         })
-        .catch(() => {
-          // Don't silently fall through. The hirer needs an honest GPS
-          // breadcrumb when the helper marks "on the way".
+        .catch((err: any) => {
+          setGpsAcquiring(false);
+          const isPermission = err?.code === 1 || /permission|denied/i.test(err?.message ?? "");
+          console.warn(`[GUBER GPS] on_the_way: GPS failed code=${err?.code} msg=${err?.message}`);
           toast({
             title: "Location required",
-            description: "Enable GPS so we can share your start location with the hirer, then tap On My Way again.",
+            description: isPermission
+              ? "GUBER needs location permission. Go to Settings → Apps → GUBER → Permissions → Location → Allow."
+              : "Couldn't get your GPS fix in time. Step outside or wait a moment, then tap On My Way again.",
             variant: "destructive",
           });
         });
@@ -984,21 +1017,27 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
   };
 
   const handleArrived = () => {
-    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+    setGpsAcquiring(true);
+    console.info("[GUBER GPS] arrived: acquiring position…");
+    gpsGetCurrentPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
       .then((pos) => {
+        console.info(`[GUBER GPS] arrived: fix acquired lat=${pos.coords.latitude.toFixed(4)} acc=±${Math.round(pos.coords.accuracy)}m`);
+        setGpsAcquiring(false);
         milestoneMutation.mutate({
           statusType: "arrived",
           gpsLat: pos.coords.latitude,
           gpsLng: pos.coords.longitude,
         });
       })
-      .catch(() => {
-        // Server now requires GPS to verify the worker is at the job site
-        // (geofence). Don't fire the request without coords — surface a
-        // useful message so the user can fix the permission/signal issue.
+      .catch((err: any) => {
+        setGpsAcquiring(false);
+        const isPermission = err?.code === 1 || /permission|denied/i.test(err?.message ?? "");
+        console.warn(`[GUBER GPS] arrived: GPS failed code=${err?.code} msg=${err?.message}`);
         toast({
           title: "Location required",
-          description: "Enable GPS so we can verify you're at the job site, then tap Arrived again.",
+          description: isPermission
+            ? "GUBER needs location permission. Go to Settings → Apps → GUBER → Permissions → Location → Allow."
+            : "Couldn't get your GPS fix in time. Step outside or wait a moment, then tap Arrived again.",
           variant: "destructive",
         });
       });
@@ -1545,34 +1584,28 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
             {showOnMyWay && (
               <Button
                 onClick={handleOnMyWay}
-                disabled={milestoneMutation.isPending}
+                disabled={milestoneMutation.isPending || gpsAcquiring}
                 className="w-full h-12 font-display tracking-wider rounded-xl text-white font-bold"
                 style={{ background: "linear-gradient(135deg, #2563eb, #1d4ed8)" }}
                 data-testid="button-on-my-way"
               >
-                {milestoneMutation.isPending ? (
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                ) : (
-                  <Navigation className="w-5 h-5 mr-2" />
-                )}
-                I'M ON MY WAY
+                <Loader2 className={`w-5 h-5 mr-2 animate-spin ${gpsAcquiring || milestoneMutation.isPending ? "" : "hidden"}`} />
+                {!gpsAcquiring && !milestoneMutation.isPending && <Navigation className="w-5 h-5 mr-2" />}
+                {gpsAcquiring ? "Getting GPS…" : milestoneMutation.isPending ? "Sending…" : "I'M ON MY WAY"}
               </Button>
             )}
 
             {showArrived && (
               <Button
                 onClick={handleArrived}
-                disabled={milestoneMutation.isPending}
+                disabled={milestoneMutation.isPending || gpsAcquiring}
                 className="w-full h-12 font-display tracking-wider rounded-xl text-white font-bold"
                 style={{ background: "linear-gradient(135deg, #059669, #047857)" }}
                 data-testid="button-arrived"
               >
-                {milestoneMutation.isPending ? (
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                ) : (
-                  <MapPinned className="w-5 h-5 mr-2" />
-                )}
-                I'VE ARRIVED
+                <Loader2 className={`w-5 h-5 mr-2 animate-spin ${gpsAcquiring || milestoneMutation.isPending ? "" : "hidden"}`} />
+                {!gpsAcquiring && !milestoneMutation.isPending && <MapPinned className="w-5 h-5 mr-2" />}
+                {gpsAcquiring ? "Getting GPS…" : milestoneMutation.isPending ? "Sending…" : "I'VE ARRIVED"}
               </Button>
             )}
 

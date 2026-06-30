@@ -189,7 +189,7 @@ export default function PostJob() {
         setExactLat(latitude);
         setExactLng(longitude);
         try {
-          const resp = await fetch(`/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}`, { credentials: "include" });
+          const resp = await fetch(`/api/places/reverse-geocode?lat=${latitude}&lng=${longitude}&caller=post-job`, { credentials: "include" });
           if (resp.ok) {
             const data = await resp.json();
             setJobLocation(data.address || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);

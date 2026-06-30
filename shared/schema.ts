@@ -2799,14 +2799,21 @@ export const jacUserProfile = pgTable("jac_user_profile", {
   businessOwner:     boolean("business_owner").default(false),
   serviceProvider:   boolean("service_provider").default(false),
   retired:           boolean("retired").default(false),
-  prefersVoice:      boolean("prefers_voice").default(false),
-  assistantMode:     text("assistant_mode").default("full"),
-  startupBehavior:   text("startup_behavior").default("show_summary"),
-  voiceEnabled:      boolean("voice_enabled").default(true),
-  language:          text("language").default("en"),
-  tutorialStatus:    text("tutorial_status").default("not_started"),
-  lastJacSummary:    jsonb("last_jac_summary").$type<Record<string, unknown>>().default({}),
-  updatedAt:         timestamp("updated_at").defaultNow(),
+  prefersVoice:                boolean("prefers_voice").default(false),
+  assistantMode:               text("assistant_mode").default("full"),
+  startupBehavior:             text("startup_behavior").default("show_summary"),
+  voiceEnabled:                boolean("voice_enabled").default(true),
+  textResponses:               boolean("text_responses").default(true),
+  voiceActivation:             boolean("voice_activation").default(false),
+  floatingButton:              boolean("floating_button").default(true),
+  proactiveSuggestions:        boolean("proactive_suggestions").default(true),
+  personalizedRecommendations: boolean("personalized_recommendations").default(true),
+  voiceSelection:              text("voice_selection").default("default"),
+  lowDataMode:                 boolean("low_data_mode").default(false),
+  language:                    text("language").default("en"),
+  tutorialStatus:              text("tutorial_status").default("not_started"),
+  lastJacSummary:              jsonb("last_jac_summary").$type<Record<string, unknown>>().default({}),
+  updatedAt:                   timestamp("updated_at").defaultNow(),
 });
 export type JacUserProfile       = typeof jacUserProfile.$inferSelect;
 export type InsertJacUserProfile = typeof jacUserProfile.$inferInsert;
@@ -2845,3 +2852,71 @@ export const jacMissedActions = pgTable("jac_missed_actions", {
 });
 export type JacMissedAction       = typeof jacMissedActions.$inferSelect;
 export type InsertJacMissedAction = typeof jacMissedActions.$inferInsert;
+
+// ── JAC Knowledge Base ────────────────────────────────────────────────────────
+export const jacKnowledge = pgTable("jac_knowledge", {
+  id:              serial("id").primaryKey(),
+  category:        text("category").notNull(),
+  title:           text("title").notNull(),
+  questionPatterns:jsonb("question_patterns").$type<string[]>().default([]),
+  keywords:        jsonb("keywords").$type<string[]>().default([]),
+  answer:          text("answer").notNull(),
+  followUpActions: jsonb("follow_up_actions").$type<Array<{ label: string; message: string }>>().default([]),
+  active:          boolean("active").default(true),
+  adminApproved:   boolean("admin_approved").default(true),
+  hitCount:        integer("hit_count").default(0),
+  createdBy:       text("created_by").default("system"),
+  createdAt:       timestamp("created_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+});
+export type JacKnowledge       = typeof jacKnowledge.$inferSelect;
+export type InsertJacKnowledge = typeof jacKnowledge.$inferInsert;
+
+// ── JAC Intents ───────────────────────────────────────────────────────────────
+export const jacIntents = pgTable("jac_intents", {
+  id:                serial("id").primaryKey(),
+  intentName:        text("intent_name").unique().notNull(),
+  displayName:       text("display_name").notNull(),
+  samplePhrases:     jsonb("sample_phrases").$type<string[]>().default([]),
+  requiredFields:    jsonb("required_fields").$type<string[]>().default([]),
+  targetFlow:        text("target_flow"),
+  targetRoute:       text("target_route"),
+  backendAction:     text("backend_action"),
+  followUpQuestions: jsonb("follow_up_questions").$type<string[]>().default([]),
+  fallbackResponse:  text("fallback_response"),
+  active:            boolean("active").default(true),
+  hitCount:          integer("hit_count").default(0),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+});
+export type JacIntent       = typeof jacIntents.$inferSelect;
+export type InsertJacIntent = typeof jacIntents.$inferInsert;
+
+// ── JAC Response Cache ────────────────────────────────────────────────────────
+export const jacResponseCache = pgTable("jac_response_cache", {
+  id:           serial("id").primaryKey(),
+  cacheKey:     text("cache_key").unique().notNull(),
+  questionText: text("question_text").notNull(),
+  answerText:   text("answer_text").notNull(),
+  intentName:   text("intent_name"),
+  source:       text("source").default("ai_approved"),
+  adminApproved:boolean("admin_approved").default(false),
+  hitCount:     integer("hit_count").default(0),
+  lastHitAt:    timestamp("last_hit_at"),
+  createdAt:    timestamp("created_at").defaultNow(),
+});
+export type JacResponseCache       = typeof jacResponseCache.$inferSelect;
+export type InsertJacResponseCache = typeof jacResponseCache.$inferInsert;
+
+// ── JAC Memory (living user profile) ──────────────────────────────────────────
+export const jacMemory = pgTable("jac_memory", {
+  id:        serial("id").primaryKey(),
+  userId:    integer("user_id").notNull().references(() => users.id),
+  category:  text("category").notNull(), // personal | work | marketplace | vi | load_board | preferences
+  key:       text("key").notNull(),
+  value:     jsonb("value").$type<unknown>().notNull(),
+  source:    text("source").default("user_said"), // user_said | extracted | system
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type JacMemoryEntry       = typeof jacMemory.$inferSelect;
+export type InsertJacMemoryEntry = typeof jacMemory.$inferInsert;

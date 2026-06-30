@@ -118,8 +118,16 @@ async function checkAppleLogin(): Promise<CheckResult> {
   return ok(key, "Apple Login", "Configured", "APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY all present");
 }
 
+// Cache health-check Google geocoding results for 30 minutes to avoid billing
+// charges from frequent health-check polling.
+let _healthGoogleMapsCache: { result: CheckResult; exp: number } | null = null;
+const HEALTH_GOOGLE_CACHE_MS = 30 * 60 * 1000;
+
 async function checkGoogleMaps(): Promise<CheckResult> {
   const key = "google_maps";
+  if (_healthGoogleMapsCache && Date.now() < _healthGoogleMapsCache.exp) {
+    return _healthGoogleMapsCache.result;
+  }
   const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     return unk(key, "Google Maps", "No server-side Maps key set (GOOGLE_GEOCODING_API_KEY or GOOGLE_MAPS_API_KEY)");
@@ -128,16 +136,19 @@ async function checkGoogleMaps(): Promise<CheckResult> {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=New+York&key=${apiKey}`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(7000) });
     const data: any = await resp.json();
+    let result: CheckResult;
     if (data.status === "OK" || data.status === "ZERO_RESULTS") {
-      return ok(key, "Google Maps", "Healthy", `Geocoding API responded: ${data.status}`);
-    }
-    if (data.status === "REQUEST_DENIED") {
+      result = ok(key, "Google Maps", "Healthy", `Geocoding API responded: ${data.status}`);
+    } else if (data.status === "REQUEST_DENIED") {
       const reason = `API key rejected: ${data.error_message ?? data.status}`;
-      return crit(key, "Google Maps", "Denied", reason,
+      result = crit(key, "Google Maps", "Denied", reason,
         "Check key restrictions and ensure Geocoding API is enabled in Google Cloud Console.", reason);
+    } else {
+      const reason = `Unexpected status: ${data.status}`;
+      result = warn(key, "Google Maps", data.status, reason, "Review Google Maps API quotas.", reason);
     }
-    const reason = `Unexpected status: ${data.status}`;
-    return warn(key, "Google Maps", data.status, reason, "Review Google Maps API quotas.", reason);
+    _healthGoogleMapsCache = { result, exp: Date.now() + HEALTH_GOOGLE_CACHE_MS };
+    return result;
   } catch (e: any) {
     const reason = e?.message ?? "Network error";
     return warn(key, "Google Maps", "Unreachable", reason, "Check connectivity to maps.googleapis.com.", reason);
@@ -396,8 +407,13 @@ async function checkSHA1Fingerprints(): Promise<CheckResult> {
   };
 }
 
+let _healthBillingCache: { result: CheckResult; exp: number } | null = null;
+
 async function checkMapsSdkBilling(): Promise<CheckResult> {
   const key = "maps_sdk_billing";
+  if (_healthBillingCache && Date.now() < _healthBillingCache.exp) {
+    return _healthBillingCache.result;
+  }
   // Live geocoding test already validates Maps + billing indirectly.
   const serverKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!serverKey) {
@@ -412,17 +428,20 @@ async function checkMapsSdkBilling(): Promise<CheckResult> {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=Chicago&key=${serverKey}`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(7000) });
     const data: any = await resp.json();
+    let result: CheckResult;
     if (data.status === "OK" || data.status === "ZERO_RESULTS") {
       mark(key, true);
-      return ok(key, "Maps SDK + Billing", "Active", "Geocoding API returned OK — Maps SDK enabled and billing active");
-    }
-    if (data.status === "REQUEST_DENIED") {
+      result = ok(key, "Maps SDK + Billing", "Active", "Geocoding API returned OK — Maps SDK enabled and billing active");
+    } else if (data.status === "REQUEST_DENIED") {
       const reason = `Maps SDK or billing issue: ${data.error_message ?? data.status}`;
-      return crit(key, "Maps SDK + Billing", "Denied", reason,
+      result = crit(key, "Maps SDK + Billing", "Denied", reason,
         "Enable Maps JavaScript API and Geocoding API in Google Cloud Console, and ensure a billing account is linked.", reason);
+    } else {
+      result = warn(key, "Maps SDK + Billing", data.status,
+        `Unexpected status: ${data.status}`, "Check Maps API quota and billing.", data.status);
     }
-    return warn(key, "Maps SDK + Billing", data.status,
-      `Unexpected status: ${data.status}`, "Check Maps API quota and billing.", data.status);
+    _healthBillingCache = { result, exp: Date.now() + HEALTH_GOOGLE_CACHE_MS };
+    return result;
   } catch (e: any) {
     return warn(key, "Maps SDK + Billing", "Unreachable", e?.message ?? "Network error",
       "Check connectivity to maps.googleapis.com.", e?.message);

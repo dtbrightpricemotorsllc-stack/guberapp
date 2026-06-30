@@ -1,61 +1,71 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { loadJacVoice, applyJacVoice } from "@/lib/jac-voice";
+import { getSTTProvider } from "@/lib/voice";
 
-const SR: typeof SpeechRecognition | null =
-  typeof window !== "undefined"
-    ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null)
-    : null;
-
+/**
+ * useSpeechInput — platform-aware STT hook.
+ *
+ * On iOS → WhisperProvider (MediaRecorder → /api/jac/stt)
+ * On Web/Android → WebSpeechProvider (native SpeechRecognition)
+ *
+ * Consumers see the same API regardless of provider:
+ *   { listening, transcribing, start, stop, supported }
+ *
+ * `transcribing` is only true during Whisper upload/processing.
+ * The mic button should show a spinner while transcribing.
+ */
 export function useSpeechInput(onResult: (text: string) => void) {
   const [listening, setListening] = useState(false);
-  const supported = !!SR;
-  const recRef = useRef<SpeechRecognition | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const providerRef = useRef(getSTTProvider());
   const cbRef = useRef(onResult);
   cbRef.current = onResult;
 
+  // Poll provider state so React re-renders on provider transitions
+  useEffect(() => {
+    const p = providerRef.current;
+    const id = setInterval(() => {
+      const l = p.isListening();
+      const t = p.isTranscribing();
+      setListening(l);
+      setTranscribing(t);
+    }, 150);
+    return () => clearInterval(id);
+  }, []);
+
   const start = useCallback(() => {
-    if (!SR) return;
-    try {
-      const rec = new SR();
-      rec.continuous = false;
-      rec.interimResults = false;
-      rec.lang = "en-US";
-      rec.onresult = (e) => {
-        const text = Array.from(e.results)
-          .map((r) => r[0].transcript)
-          .join(" ")
-          .trim();
-        if (text) cbRef.current(text);
-      };
-      rec.onend = () => setListening(false);
-      rec.onerror = (e) => {
-        setListening(false);
-        // Surface actionable guidance for the two most common native failures
-        if ((e as any).error === "not-allowed") {
-          // Android: go to Settings → Apps → GUBER → Permissions → Microphone
-          // iOS:     Settings → Privacy → Microphone → GUBER
-          cbRef.current("__mic_denied__");
-        }
-        // "network" = webkitSpeechRecognition hit Google's cloud endpoint —
-        // this only fires in WebView if the audio capture was actually granted
-        // but the network call failed (offline, etc.). No user action needed.
-      };
-      rec.start();
-      recRef.current = rec;
-      setListening(true);
-    } catch {
-      setListening(false);
-    }
+    const p = providerRef.current;
+    if (!p.isSupported() || p.isListening() || p.isTranscribing()) return;
+    p.startListening((text) => {
+      // Swallow Whisper failure/empty sentinels — don't submit them as chat
+      // messages. __mic_denied__ is intentionally passed through so consumers
+      // can show a "mic permission" prompt. __whisper_error__ and friends are
+      // internal transport failures that the user shouldn't see as text.
+      if (
+        text === "__whisper_error__" ||
+        text === "__whisper_empty__" ||
+        text === "__mic_error__"
+      ) return;
+      cbRef.current(text);
+    });
+    setListening(true);
   }, []);
 
   const stop = useCallback(() => {
-    recRef.current?.stop();
-    setListening(false);
+    providerRef.current.stopListening();
+    // transcribing state will be picked up by the poll above
   }, []);
 
-  useEffect(() => () => { try { recRef.current?.stop(); } catch {} }, []);
+  useEffect(() => () => { try { providerRef.current.stopListening(); } catch {} }, []);
 
-  return { listening, start, stop, supported };
+  return {
+    listening,
+    transcribing,
+    start,
+    stop,
+    supported: providerRef.current.isSupported(),
+    providerName: providerRef.current.name,
+  };
 }
 
 export function useSpeechOutput() {
@@ -64,8 +74,6 @@ export function useSpeechOutput() {
   });
   const supported = typeof window !== "undefined" && "speechSynthesis" in window;
 
-  // Kick off voice loading as soon as the hook mounts so the voice is ready
-  // before the first utterance.
   useEffect(() => {
     if (supported) loadJacVoice();
   }, [supported]);
@@ -76,19 +84,16 @@ export function useSpeechOutput() {
       window.speechSynthesis.cancel();
       const normalized = text
         .replace(/[*_#`[\]]/g, "")
-        // Zip codes: exactly 5 digits → space-separated digits (e.g. 27405 → "2 7 4 0 5")
         .replace(/(?<!\d)(\d{5})(?!\d)/g, (_, z) => z.split("").join(" "))
-        // Pronunciation overrides — longer phrases first
         .replace(/\bDay[-\s]?1\s+OG\b/gi, "Day One Oh Gee")
         .replace(/\bOG\b/g, "Oh Gee")
         .replace(/\bJAC\b/g, "Jack")
         .replace(/\bGUBER\b/g, "Goober")
         .slice(0, 500);
       const utt = new SpeechSynthesisUtterance(normalized);
-      // Voice settings — warm, expressive, slightly sparkly
-      applyJacVoice(utt);   // sets .voice + .lang
-      utt.rate  = 1.05;     // normal-to-slightly-lively
-      utt.pitch = 1.1;      // a touch brighter / friendlier
+      applyJacVoice(utt);
+      utt.rate  = 1.05;
+      utt.pitch = 1.1;
       utt.volume = 1.0;
       window.speechSynthesis.speak(utt);
     } catch {}

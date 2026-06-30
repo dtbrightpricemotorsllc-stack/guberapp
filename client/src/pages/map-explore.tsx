@@ -290,10 +290,16 @@ export default function MapExplore() {
   const watchIdRef2 = useRef<number | null>(null);
   const watchCancelledRef = useRef(false);
 
+  // Guard: only reverse-geocode ONCE per page mount. GPS watch fires on every
+  // position update; hitting the API each time was generating runaway billing.
+  const hasReverseGeocodedRef = useRef(false);
+
   const reverseGeocodeZip = async (lat: number, lng: number) => {
     if (userEditedZipRef.current) return;
+    if (hasReverseGeocodedRef.current) return;
+    hasReverseGeocodedRef.current = true;
     try {
-      const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}`);
+      const res = await fetch(`/api/places/reverse-geocode?lat=${lat}&lng=${lng}&caller=map-explore`);
       const data = await res.json();
       if (data?.zip && !userEditedZipRef.current) setZipInput(data.zip);
     } catch {}
@@ -684,7 +690,7 @@ export default function MapExplore() {
     if (!/^\d{5}$/.test(zip)) { setZipError("Enter a valid 5-digit zip"); return; }
     setZipError(""); setZipLoading(true); setZipFallback(null);
     try {
-      const res = await fetch(`/api/geocode?address=${encodeURIComponent(zip + ", USA")}`);
+      const res = await fetch(`/api/geocode?address=${encodeURIComponent(zip + ", USA")}&caller=map-explore-zip`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (typeof data?.lat !== "number" || typeof data?.lng !== "number") throw new Error();
