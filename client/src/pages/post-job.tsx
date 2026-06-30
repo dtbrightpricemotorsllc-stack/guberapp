@@ -130,7 +130,15 @@ export default function PostJob() {
     }
     return "";
   });
-  const [budget, setBudget] = useState("");
+  const [budget, setBudget] = useState(() => {
+    if (params.get("from") === "jac") {
+      try {
+        const raw = localStorage.getItem("jac_job_prefill");
+        if (raw) return JSON.parse(raw).budget || "";
+      } catch {}
+    }
+    return "";
+  });
   const [location_, setJobLocation] = useState("");
   const [zip, setZip] = useState(() => {
     if (user?.zipcode) return user.zipcode;
@@ -147,7 +155,18 @@ export default function PostJob() {
   const [urgentSwitch, setUrgentSwitch] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const gpsLoadingRef = useRef(false);
-  const [jobDetails, setJobDetails] = useState<Record<string, any>>({});
+  const [jobDetails, setJobDetails] = useState<Record<string, any>>(() => {
+    if (params.get("from") === "jac") {
+      try {
+        const raw = localStorage.getItem("jac_job_prefill");
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (p.jobDetails && typeof p.jobDetails === "object") return p.jobDetails;
+        }
+      } catch {}
+    }
+    return {};
+  });
   const [estimatedMinutes, setEstimatedMinutes] = useState("");
   const [barterNeed, setBarterNeed] = useState("");
   const [barterOffering, setBarterOffering] = useState("");

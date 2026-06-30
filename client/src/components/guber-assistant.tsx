@@ -424,10 +424,11 @@ export function GUBERAssistant() {
           try {
             localStorage.setItem("jac_job_prefill", JSON.stringify({
               category: newCollected.category || "",
-              serviceType: newCollected.serviceType || newCollected.service_type || "",
+              serviceType: newCollected.jobType || newCollected.serviceType || newCollected.service_type || "",
               descriptionSeed: newCollected.descriptionSeed || newCollected.description || "",
-              budgetHint: newCollected.budget ? Number(newCollected.budget) : null,
+              budget: newCollected.budget ? String(Number(newCollected.budget)) : "",
               zip: newCollected.zip || "",
+              jobDetails: (newCollected.jobDetails && typeof newCollected.jobDetails === "object") ? newCollected.jobDetails : {},
             }));
           } catch {}
         } else {
