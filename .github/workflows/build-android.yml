@@ -20,15 +20,12 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --registry https://registry.npmjs.org
 
       - name: Build web app
         run: npm run build
         env:
           NODE_ENV: production
-          # Vite inlines any env var prefixed with VITE_ into the production
-          # JS bundle at build time. Without this the Google Sign-In plugin
-          # initializes with an empty webClientId and silently fails on Android.
           VITE_GOOGLE_WEB_CLIENT_ID: ${{ secrets.VITE_GOOGLE_WEB_CLIENT_ID }}
 
       - name: Set up JDK 21
@@ -72,4 +69,3 @@ jobs:
           name: guber-v1.3-release.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
-
