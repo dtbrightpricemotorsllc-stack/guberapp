@@ -36,7 +36,18 @@ export function useSpeechInput(onResult: (text: string) => void) {
   const start = useCallback(() => {
     const p = providerRef.current;
     if (!p.isSupported() || p.isListening() || p.isTranscribing()) return;
-    p.startListening((text) => cbRef.current(text));
+    p.startListening((text) => {
+      // Swallow Whisper failure/empty sentinels — don't submit them as chat
+      // messages. __mic_denied__ is intentionally passed through so consumers
+      // can show a "mic permission" prompt. __whisper_error__ and friends are
+      // internal transport failures that the user shouldn't see as text.
+      if (
+        text === "__whisper_error__" ||
+        text === "__whisper_empty__" ||
+        text === "__mic_error__"
+      ) return;
+      cbRef.current(text);
+    });
     setListening(true);
   }, []);
 

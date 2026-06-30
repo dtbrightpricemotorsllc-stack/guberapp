@@ -80,11 +80,26 @@ export function unlockAudioContext() {
     a.volume = 0;
     a.play().then(() => { _audioUnlocked = true; }).catch(() => {});
   }
-  // Unlock speechSynthesis — Chrome Android suspends it when the mic is in use.
-  // Calling resume() on every user gesture ensures it's ready to speak.
+  // Unlock speechSynthesis on every user gesture.
+  // - Chrome Android: resume() lifts suspension caused by mic activity.
+  // - iOS Safari PWA: the FIRST speak() call must happen inside a user-gesture
+  //   handler or all subsequent async speak() calls are silently blocked.
+  //   We speak a zero-volume utterance immediately and cancel it — this primes
+  //   the engine so JAC's real responses (which arrive async after an API call)
+  //   will actually play.
   try {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.resume();
+      const ss = window.speechSynthesis;
+      ss.resume();
+      if (!_audioUnlocked) {
+        // Only need the priming speak on first gesture; after that the engine
+        // stays unlocked for the session.
+        const primer = new SpeechSynthesisUtterance(" ");
+        primer.volume = 0;
+        primer.rate   = 16; // speak instantly so cancel() follows right away
+        ss.speak(primer);
+        setTimeout(() => { try { ss.cancel(); } catch {} }, 50);
+      }
     }
   } catch {}
 }
