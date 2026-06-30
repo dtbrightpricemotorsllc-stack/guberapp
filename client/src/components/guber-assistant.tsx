@@ -1021,7 +1021,7 @@ export function GUBERAssistant() {
             {/* Mic button */}
             {micSupported && (
               <button
-                onClick={listening ? stopListening : startListening}
+                onClick={() => { unlockAudioContext(); listening ? stopListening() : startListening(); }}
                 className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${
                   listening ? "animate-pulse" : ""
                 }`}
