@@ -10,6 +10,19 @@ import { WebSpeechProvider } from "./WebSpeechProvider";
 import { WhisperProvider } from "./WhisperProvider";
 import type { STTProvider } from "./VoiceProvider";
 
+/**
+ * Returns true when running in Safari (desktop or mobile) but NOT inside the
+ * Capacitor iOS app. webkitSpeechRecognition on Safari is unreliable — it
+ * doesn't persist the mic permission grant and frequently returns no results.
+ */
+function isSafariBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent;
+  // Safari UA contains "Safari" but Chrome/Chromium/Edge/Android also contain
+  // "Safari" — exclude them with the negative pattern.
+  return /Safari/i.test(ua) && !/Chrome|CriOS|Chromium|Android|Edg\//i.test(ua);
+}
+
 export type { STTProvider, STTCallback } from "./VoiceProvider";
 export { WakeWordDetector } from "./WakeWordDetector";
 
@@ -25,16 +38,26 @@ let _cached: STTProvider | null = null;
 export function getSTTProvider(): STTProvider {
   if (_cached) return _cached;
 
+  // iOS Capacitor app → Whisper (WKWebView SpeechRecognition unreliable)
   if (isIOS) {
     _cached = new WhisperProvider();
-    console.info("[JAC Voice] STT provider: Whisper (iOS)");
+    console.info("[JAC Voice] STT provider: Whisper (iOS Capacitor)");
+    return _cached;
+  }
+
+  // Safari browser (desktop or mobile) → Whisper.
+  // webkitSpeechRecognition on Safari doesn't persist the mic permission grant
+  // and frequently returns no results — Whisper is more reliable here.
+  if (isSafariBrowser()) {
+    _cached = new WhisperProvider();
+    console.info("[JAC Voice] STT provider: Whisper (Safari)");
     return _cached;
   }
 
   const ws = new WebSpeechProvider();
   if (ws.isSupported()) {
     _cached = ws;
-    console.info("[JAC Voice] STT provider: WebSpeech");
+    console.info("[JAC Voice] STT provider: WebSpeech (Chrome/Android)");
     return _cached;
   }
 
