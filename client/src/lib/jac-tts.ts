@@ -178,12 +178,13 @@ function webSpeechFallback(text: string) {
   try { ss.resume(); } catch {}
 
   // Delay rationale:
-  //   Android WebView / Chrome Android: needs 220 ms after cancel() or the
-  //   first utterance is silently dropped.
+  //   Android WebView / Chrome Android: cancel() needs a short settle gap or
+  //   the first utterance is silently dropped. 220 ms was the original safe
+  //   value; with resume() called before AND after the gap, 120 ms is reliable
+  //   and removes the noticeable lag users hear on Android.
   //   iOS (Safari + CriOS): cancel→speak race is not an issue on iOS WebKit,
-  //   and a long delay gives the engine time to re-suspend. 50 ms is enough
-  //   to let cancel() settle without risking a new suspension.
-  const delay = isIOSBrowser() ? 50 : 220;
+  //   and a long delay risks re-suspension. 50 ms is enough.
+  const delay = isIOSBrowser() ? 50 : 120;
 
   setTimeout(() => {
     const utt = new SpeechSynthesisUtterance(text);
