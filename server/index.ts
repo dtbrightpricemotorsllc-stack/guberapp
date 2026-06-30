@@ -996,6 +996,25 @@ app.use((req, res, next) => {
     ALTER TABLE jac_dd_goals ADD COLUMN IF NOT EXISTS realistic_earnable REAL DEFAULT 0;
   `).catch(e => console.error("[migration] jac_dd_goals realistic_earnable error:", e));
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_feedback_reports (
+      id               SERIAL PRIMARY KEY,
+      user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      user_email       TEXT,
+      platform         TEXT,
+      device_info      TEXT,
+      current_route    TEXT,
+      issue_category   TEXT,
+      user_description TEXT,
+      jac_messages     JSONB DEFAULT '[]',
+      status           TEXT NOT NULL DEFAULT 'new',
+      admin_notes      TEXT,
+      created_at       TIMESTAMP DEFAULT NOW(),
+      updated_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_feedback_status ON jac_feedback_reports(status, created_at DESC);
+  `).catch(e => console.error("[migration] jac_feedback_reports error:", e));
+
   // Add new JAC preference columns to jac_user_profile (idempotent)
   await pool.query(`
     ALTER TABLE jac_user_profile

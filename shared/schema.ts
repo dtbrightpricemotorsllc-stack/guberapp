@@ -2920,3 +2920,21 @@ export const jacMemory = pgTable("jac_memory", {
 });
 export type JacMemoryEntry       = typeof jacMemory.$inferSelect;
 export type InsertJacMemoryEntry = typeof jacMemory.$inferInsert;
+
+export const jacFeedbackReports = pgTable("jac_feedback_reports", {
+  id:              serial("id").primaryKey(),
+  userId:          integer("user_id").references(() => users.id),
+  userEmail:       text("user_email"),
+  platform:        text("platform"),
+  deviceInfo:      text("device_info"),
+  currentRoute:    text("current_route"),
+  issueCategory:   text("issue_category"), // mic_failure|voice_failure|listing_interruption|payment_issue|gps_issue|form_problem|app_bug|general
+  userDescription: text("user_description"),
+  jacMessages:     jsonb("jac_messages").$type<Array<{role:string;content:string}>>().default([]),
+  status:          text("status").notNull().default("new"), // new|reviewed|fixed|dismissed
+  adminNotes:      text("admin_notes"),
+  createdAt:       timestamp("created_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+});
+export type JacFeedbackReport       = typeof jacFeedbackReports.$inferSelect;
+export type InsertJacFeedbackReport = typeof jacFeedbackReports.$inferInsert;

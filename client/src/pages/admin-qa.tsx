@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2, FileText } from "lucide-react";
 import {
   TTS_PROVIDER, JAC_TARGET_VOICE,
   loadJacVoice, getVoiceDebugInfo, resetJacVoiceCache,
@@ -2001,6 +2001,160 @@ function CashDropDebuggerTab() {
   );
 }
 
+type FeedbackReport = {
+  id: number; user_id: number | null; user_email: string | null; username: string | null; full_name: string | null;
+  platform: string | null; device_info: string | null; current_route: string | null;
+  issue_category: string | null; user_description: string | null; jac_messages: Array<{role:string;content:string}>;
+  status: string; admin_notes: string | null; created_at: string;
+};
+
+function JacReportsTab() {
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [noteInputs, setNoteInputs] = useState<Record<number,string>>({});
+  const { toast } = useToast();
+
+  const { data, isLoading, refetch } = useQuery<{ reports: FeedbackReport[] }>({
+    queryKey: ["/api/admin/jac/reports", statusFilter],
+    queryFn: async () => {
+      const qs = statusFilter !== "all" ? `?status=${statusFilter}` : "";
+      const r = await apiRequest("GET", `/api/admin/jac/reports${qs}`);
+      return r.json();
+    },
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: number; status?: string; adminNotes?: string }) => {
+      const r = await apiRequest("PATCH", `/api/admin/jac/reports/${id}`, { status, adminNotes });
+      return r.json();
+    },
+    onSuccess: () => { refetch(); toast({ title: "Updated" }); },
+    onError: () => toast({ title: "Error", description: "Could not update report", variant: "destructive" }),
+  });
+
+  const STATUS_COLORS: Record<string, string> = {
+    new: "bg-blue-100 text-blue-800",
+    reviewed: "bg-yellow-100 text-yellow-800",
+    fixed: "bg-green-100 text-green-800",
+    dismissed: "bg-gray-100 text-gray-600",
+  };
+  const CATEGORY_LABELS: Record<string, string> = {
+    mic_failure: "🎤 Mic Failure", voice_failure: "🔊 Voice Failure",
+    listing_interruption: "📋 Listing", payment_issue: "💳 Payment",
+    gps_issue: "📍 GPS", form_problem: "📝 Form", app_bug: "🐛 Bug", general: "💬 General",
+  };
+
+  const reports = data?.reports ?? [];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-4 w-4" /> JAC Feedback Reports
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-40" data-testid="select-report-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="new">New</SelectItem>
+                <SelectItem value="reviewed">Reviewed</SelectItem>
+                <SelectItem value="fixed">Fixed</SelectItem>
+                <SelectItem value="dismissed">Dismissed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>Refresh</Button>
+            <span className="text-sm text-muted-foreground">{reports.length} report(s)</span>
+          </div>
+
+          {isLoading && <div className="text-sm text-muted-foreground py-4">Loading…</div>}
+          {!isLoading && reports.length === 0 && (
+            <div className="text-sm text-muted-foreground py-4">No reports found.</div>
+          )}
+
+          <div className="space-y-2">
+            {reports.map((r) => (
+              <Card key={r.id} className="border" data-testid={`card-report-${r.id}`}>
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] ?? "bg-gray-100"}`}>
+                        {r.status}
+                      </span>
+                      <span className="font-medium">{CATEGORY_LABELS[r.issue_category ?? "general"] ?? r.issue_category}</span>
+                      <span className="text-muted-foreground">{r.platform ?? "unknown platform"}</span>
+                      {r.full_name && <span className="text-muted-foreground">· {r.full_name}</span>}
+                      {r.user_email && <span className="text-muted-foreground text-xs">{r.user_email}</span>}
+                      <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleString()}</span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}>
+                      {expandedId === r.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                  </div>
+
+                  {r.user_description && (
+                    <p className="text-sm italic text-muted-foreground">"{r.user_description}"</p>
+                  )}
+
+                  {expandedId === r.id && (
+                    <div className="space-y-3 border-t pt-2 mt-2">
+                      {r.current_route && (
+                        <p className="text-xs text-muted-foreground">Route: <code>{r.current_route}</code></p>
+                      )}
+                      {(r.jac_messages ?? []).length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground">Conversation:</p>
+                          <div className="max-h-48 overflow-y-auto space-y-1 rounded border p-2 bg-muted/30">
+                            {(r.jac_messages ?? []).map((m, i) => (
+                              <div key={i} className={`text-xs p-1 rounded ${m.role === "user" ? "bg-blue-50 dark:bg-blue-900/30" : "bg-gray-50 dark:bg-gray-800/30"}`}>
+                                <span className="font-semibold">{m.role === "user" ? "User" : "JAC"}:</span> {m.content}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2 items-end">
+                        <div className="flex-1 min-w-48">
+                          <Input
+                            placeholder="Admin notes…"
+                            value={noteInputs[r.id] ?? r.admin_notes ?? ""}
+                            onChange={(e) => setNoteInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
+                            data-testid={`input-notes-${r.id}`}
+                          />
+                        </div>
+                        <Select
+                          value={r.status}
+                          onValueChange={(v) => patchMutation.mutate({ id: r.id, status: v, adminNotes: noteInputs[r.id] })}
+                        >
+                          <SelectTrigger className="w-36" data-testid={`select-status-${r.id}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="new">New</SelectItem>
+                            <SelectItem value="reviewed">Reviewed</SelectItem>
+                            <SelectItem value="fixed">Fixed</SelectItem>
+                            <SelectItem value="dismissed">Dismissed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" variant="outline" onClick={() => patchMutation.mutate({ id: r.id, adminNotes: noteInputs[r.id] })}>
+                          Save Note
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminQa() {
   return (
     <div className="container mx-auto max-w-6xl p-4">
@@ -2028,6 +2182,7 @@ export default function AdminQa() {
           <TabsTrigger value="featured-clips" data-testid="tab-featured-clips"><Film className="mr-1 h-3 w-3" />Trends Rail</TabsTrigger>
           <TabsTrigger value="growth-engine" data-testid="tab-growth-engine">🌱 Growth Engine</TabsTrigger>
           <TabsTrigger value="jac-voice" data-testid="tab-jac-voice"><Volume2 className="mr-1 h-3 w-3" />JAC Voice</TabsTrigger>
+          <TabsTrigger value="jac-reports" data-testid="tab-jac-reports"><FileText className="mr-1 h-3 w-3" />JAC Reports</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -2067,6 +2222,7 @@ export default function AdminQa() {
           </Card>
         </TabsContent>
         <TabsContent value="jac-voice"><JacVoiceDebugTab /></TabsContent>
+        <TabsContent value="jac-reports"><JacReportsTab /></TabsContent>
       </Tabs>
     </div>
   );

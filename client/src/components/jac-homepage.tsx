@@ -176,6 +176,7 @@ export function JacHomepage() {
   });
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
 
   const { cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
   const mutedRef = useRef(muted);
@@ -260,6 +261,34 @@ export function JacHomepage() {
     unlockAudioContext();
     const trimmed = text.trim();
     if (!trimmed || typing) return;
+
+    // ── Feedback report sentinel ─────────────────────────────────────────────
+    if (trimmed === "__submit_feedback_report__") {
+      const draft = feedbackDraftRef.current;
+      const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
+      const currentMsgs = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const confirmMsg = "Got it — your report is on its way to the GUBER team. They'll review it shortly. Anything else I can help you with?";
+      setMessages(prev => [...prev,
+        { role: "user", content: "Yes, send report" },
+        { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS },
+      ]);
+      if (!muted) jacSpeak(confirmMsg, { muted });
+      fetch("/api/jac/feedback-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          deviceInfo: typeof window !== "undefined" ? (navigator.userAgent ?? null) : null,
+          currentRoute: typeof window !== "undefined" ? window.location.pathname : null,
+          issueCategory: draft?.category ?? "general",
+          userDescription: draft?.description ?? null,
+          jacMessages: currentMsgs,
+        }),
+      }).catch(() => {});
+      feedbackDraftRef.current = null;
+      return;
+    }
+
     const userMsg: JacMsg = { role: "user", content: trimmed };
     const next = [...messages, userMsg];
     setMessages(next);
@@ -278,6 +307,9 @@ export function JacHomepage() {
       if (data.tracking && typeof data.tracking === "object") {
         _lastTracking = { ..._lastTracking, ...data.tracking };
         saveJacPrefill(_lastTracking);
+      }
+      if (data.feedbackDraft?.ready) {
+        feedbackDraftRef.current = data.feedbackDraft;
       }
 
       const aMsg: JacMsg = {

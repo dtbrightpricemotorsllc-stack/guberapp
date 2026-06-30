@@ -241,6 +241,7 @@ export function GUBERAssistant() {
   const { data: jacOpportunities } = useJacOpportunities(!!user && s.open);
 
   const briefingInjectedRef = useRef(false);
+  const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -369,9 +370,12 @@ export function GUBERAssistant() {
         messages: msgs.map((m) => ({ role: m.role, content: m.content })),
       });
       const data = await res.json();
-      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }> };
+      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }>; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
     },
     onSuccess: (data) => {
+      if (data.feedbackDraft?.ready) {
+        feedbackDraftRef.current = data.feedbackDraft;
+      }
       const msg: Message = {
         role: "assistant",
         content: data.reply ?? "I'm having trouble right now — please try again.",
@@ -547,13 +551,47 @@ export function GUBERAssistant() {
     // STT sentinels — show actionable feedback rather than silently doing nothing
     if (text === "__mic_denied__") {
       const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
-      const guide = platform === "android"
-        ? "Microphone is blocked. To fix it: open your phone's Settings app → Apps → tap the three-dot menu (⋮) or search for GUBER → App info → Permissions → Microphone → set to Allow. Then come back and try again."
-        : platform === "ios"
-          ? "Microphone access is blocked. Go to Settings → Privacy & Security → Microphone → GUBER and turn it on, then try again."
-          : "Microphone access was denied. Please allow microphone access in your browser settings, then try again.";
-      setMessages((prev) => [...prev, { role: "assistant", content: guide }]);
+      let guide: string;
+      let micActions: Array<{ label: string; message: string }> | undefined;
+      if (platform === "ios") {
+        guide = "Microphone is blocked. Go to Settings → scroll down → find GUBER → tap it → Microphone → turn it ON. Then come back.";
+      } else if (platform === "android") {
+        guide = "Microphone is blocked. What phone are you using? I'll give you the exact steps.";
+        micActions = [
+          { label: "Samsung", message: "Samsung" },
+          { label: "Pixel", message: "Pixel" },
+          { label: "Other Android", message: "Other Android" },
+        ];
+      } else {
+        guide = "Microphone access was denied. Click the 🔒 lock icon next to the address bar → Microphone → Allow, then try again.";
+      }
+      setMessages((prev) => [...prev, { role: "assistant", content: guide, actions: micActions }]);
       jacSpeak(guide, { muted });
+      return;
+    }
+    if (text === "__submit_feedback_report__") {
+      const draft = feedbackDraftRef.current;
+      const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
+      const currentMsgs = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const confirmMsg = "Got it — sending your report to the GUBER team now. They'll look into it and follow up. Is there anything else I can help you with?";
+      setMessages((prev) => [...prev,
+        { role: "user", content: "Yes, send report" },
+        { role: "assistant", content: confirmMsg },
+      ]);
+      jacSpeak(confirmMsg, { muted });
+      fetch("/api/jac/feedback-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          deviceInfo: typeof window !== "undefined" ? (navigator.userAgent ?? null) : null,
+          currentRoute: typeof window !== "undefined" ? window.location.pathname : null,
+          issueCategory: draft?.category ?? "general",
+          userDescription: draft?.description ?? null,
+          jacMessages: currentMsgs,
+        }),
+      }).catch(() => {});
+      feedbackDraftRef.current = null;
       return;
     }
     if (text === "__whisper_empty__") {

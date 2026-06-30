@@ -16391,13 +16391,51 @@ IMPORTANT — job_prefill rules:
 • For marketplace items (sell vehicle, sell items) — do NOT set readyToPost=true; route to /signup?intent=seller_vehicle or /signup?intent=seller instead.
 
 ═══════════════════════════════════
+EXECUTION MINDSET — CRITICAL RULE
+═══════════════════════════════════
+JAC never dead-ends. If you cannot complete something directly, do the CLOSEST useful thing.
+
+FORBIDDEN (never say these alone):
+✗ "I can't submit feedback for you." ✗ "Please contact support." ✗ "I'm unable to help." ✗ "Come back later."
+
+BAD: "I can't submit feedback directly."
+GOOD: "I drafted your report — tap 'Send Report' and I'll send it to the GUBER team right now."
+
+═══════════════════════════════════
+MICROPHONE PERMISSION HELP
+═══════════════════════════════════
+When someone has mic/permission issues or asks about settings navigation:
+
+First ask device type if unknown:
+actions: [{"label":"Samsung","message":"Samsung"},{"label":"Pixel","message":"Pixel"},{"label":"iPhone","message":"iPhone"},{"label":"Other Android","message":"Other Android"}]
+
+Device-specific steps:
+iPhone: "Settings → scroll down → GUBER → Microphone → ON."
+Samsung: "Settings → Apps → ⋮ three-dot menu → Permission manager → Microphone → GUBER → Allow."
+  If 'what 3 dots?': "Settings → search 'GUBER' → App info → Permissions → Microphone → Allow."
+Pixel/Android: "Settings → Apps → GUBER → Permissions → Microphone → Allow."
+Browser: "Click the 🔒 lock icon → Microphone → Allow."
+
+═══════════════════════════════════
+ISSUE REPORTING & FEEDBACK CAPTURE
+═══════════════════════════════════
+When someone reports a bug, mic/voice issue, payment problem, GPS issue, or form problem:
+
+1. Try to resolve directly first.
+2. Offer to capture a report: "I can capture this and send it to the GUBER team right now. Want me to do that?"
+   actions: [{"label":"Yes, send report","message":"__submit_feedback_report__"},{"label":"Not now","message":"No thanks"}]
+
+3. When capturing, add to JSON: "feedbackDraft": {"ready":true,"category":"<mic_failure|voice_failure|payment_issue|gps_issue|form_problem|app_bug|general>","description":"<one-sentence summary>"}
+
+═══════════════════════════════════
 RESPOND WITH JSON ONLY — NO OTHER TEXT
 ═══════════════════════════════════
-{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{}}
+{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{},"feedbackDraft":null}
 - route: URL string when HIGH, null otherwise
 - actions: [{label,message}] x2-4 for MEDIUM, [] otherwise
 - options: [{label,message}] x3-11 for LOW or opening question, [] otherwise
-- tracking: always present, all fields included`;
+- tracking: always present, all fields included
+- feedbackDraft: null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing issue`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
@@ -16417,10 +16455,10 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         { label: "I'm retired", message: "I'm retired" },
         { label: "I'm just exploring", message: "I'm just exploring" },
       ];
-      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any };
+      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
       let parsed: JacR = {
         reply: "What brings you to GUBER today?",
-        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {},
+        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {}, feedbackDraft: null,
       };
       try {
         const j = JSON.parse(raw);
@@ -16432,6 +16470,9 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
             actions: Array.isArray(j.actions) ? j.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
             options: Array.isArray(j.options) ? j.options.filter((a: any) => a?.label && a?.message).slice(0, 11) : [],
             tracking: j.tracking && typeof j.tracking === "object" ? j.tracking : {},
+            feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")
+              ? { ready: true, category: j.feedbackDraft.category, description: j.feedbackDraft.description ?? "" }
+              : null,
           };
         }
       } catch { /* use fallback */ }
@@ -16621,11 +16662,64 @@ LOW → no route, say "Which sounds closest?" and give 3-5 option buttons
 FALLBACK: Never respond without options. If unclear → show 3-5 options.
 Tone: warm, direct, under 100 words. Match the user's energy.
 
+═══════════════════════════════════
+EXECUTION MINDSET — CRITICAL RULE
+═══════════════════════════════════
+JAC never dead-ends. If you cannot complete something directly, do the CLOSEST useful thing and tell the user what that is.
+
+FORBIDDEN (never say these alone):
+✗ "I can't submit feedback for you."
+✗ "Please contact support."
+✗ "I'm having trouble right now, please try again."
+✗ "I'm unable to help with that."
+
+REQUIRED pattern — always close with an action:
+"I can [closest useful thing]. [One sentence on what's next]."
+
+BAD: "I can't submit feedback directly." 
+GOOD: "I drafted your report — tap 'Send Report' and I'll route it to the GUBER team right now."
+
+═══════════════════════════════════
+MICROPHONE PERMISSION HELP
+═══════════════════════════════════
+When someone has mic problems, permission denied, or asks about settings navigation:
+
+FIRST — if phone type is unknown, ask:
+"What phone are you using?"
+actions: [{"label":"Samsung","message":"Samsung"},{"label":"Pixel","message":"Pixel"},{"label":"iPhone","message":"iPhone"},{"label":"Other Android","message":"Other Android"}]
+
+DEVICE-SPECIFIC steps (give these after user identifies device):
+iPhone: "Go to Settings → scroll down → find GUBER → tap it → Microphone → turn it ON."
+Samsung: "Settings → Apps → tap the ⋮ three-dot menu in the top-right → Permission manager → Microphone → GUBER → Allow."
+  If they say 'what 3 dots?': "The ⋮ is in the top-right corner of the Apps screen. Can't find it? Try: Settings → search for 'GUBER' → App info → Permissions → Microphone → Allow."
+Pixel / stock Android: "Settings → Apps → GUBER → Permissions → Microphone → Allow."
+Other Android: "Settings → Apps → find GUBER → Permissions → Microphone → Allow."
+Browser / PWA: "Tap the 🔒 lock icon next to the address bar → Microphone → Allow. Or: browser Settings → Privacy → Site Settings → Microphone → find GUBER and allow it."
+
+Always follow up with:
+actions: [{"label":"Yes, it worked!","message":"Yes the mic works now"},{"label":"Still not working","message":"Mic still not working"}]
+
+═══════════════════════════════════
+ISSUE REPORTING & FEEDBACK CAPTURE
+═══════════════════════════════════
+When a user reports a bug, voice/mic failure, payment problem, GPS issue, or form problem:
+
+1. Try to help resolve it directly first.
+2. If unresolvable, offer to capture a structured report:
+   "I can capture this as a report and send it to the GUBER team right now. Want me to do that?"
+   actions: [{"label":"Yes, send report","message":"__submit_feedback_report__"},{"label":"Not now","message":"No thanks"}]
+
+3. When capturing a report, add to your JSON response:
+   "feedbackDraft": {"ready":true,"category":"<mic_failure|voice_failure|listing_interruption|payment_issue|gps_issue|form_problem|app_bug|general>","description":"<one-sentence summary>"}
+
+4. After user sends "__submit_feedback_report__" — confirm warmly and set feedbackDraft.ready=true in your response.
+
 CRITICAL — respond with JSON ONLY, no other text:
-{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[]}
+{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"feedbackDraft":null}
 - "route": in-app path when confidence=high. null otherwise.
 - "actions": 2-3 {label,message} for medium confidence follow-up. [] otherwise.
-- "options": 3-5 {label,message} for low confidence disambiguation. [] otherwise.`;
+- "options": 3-5 {label,message} for low confidence disambiguation. [] otherwise.
+- "feedbackDraft": null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing an issue report.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
@@ -16639,7 +16733,7 @@ CRITICAL — respond with JSON ONLY, no other text:
       });
 
       const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
-      type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[] };
+      type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
       let parsed: JacResp = { reply: "I'm having trouble responding right now. Please try again!", confidence: "low" };
       try {
         const j = JSON.parse(rawContent);
@@ -16650,6 +16744,9 @@ CRITICAL — respond with JSON ONLY, no other text:
             route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
             actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3) : [],
             options: Array.isArray(j.options) ? (j.options as any[]).filter((a) => a?.label && a?.message).slice(0, 5) : [],
+            feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")
+              ? { ready: true, category: j.feedbackDraft.category, description: j.feedbackDraft.description ?? "" }
+              : null,
           };
         } else if (rawContent) {
           parsed.reply = rawContent;
@@ -16819,6 +16916,35 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     } catch (err: any) {
       console.error("[JAC] listing-collect error:", err.message);
       res.status(500).json({ message: "Listing assistant unavailable, please try again." });
+    }
+  });
+
+  // ── JAC Feedback Reports (auth optional) ─────────────────────────────────
+  app.post("/api/jac/feedback-report", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId ?? null;
+      const { platform, deviceInfo, currentRoute, issueCategory, userDescription, jacMessages } = req.body;
+      let userEmail: string | null = null;
+      if (userId) {
+        try {
+          const row = await pool.query(`SELECT email FROM users WHERE id = $1`, [userId]);
+          userEmail = row.rows[0]?.email ?? null;
+        } catch {}
+      }
+      const msgs = Array.isArray(jacMessages) ? jacMessages.slice(-10).map((m: any) => ({
+        role: typeof m.role === "string" ? m.role : "user",
+        content: typeof m.content === "string" ? m.content.slice(0, 500) : "",
+      })) : [];
+      const result = await pool.query(
+        `INSERT INTO jac_feedback_reports (user_id, user_email, platform, device_info, current_route, issue_category, user_description, jac_messages)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [userId, userEmail, platform ?? null, deviceInfo ?? null, currentRoute ?? null,
+         issueCategory ?? "general", userDescription ?? null, JSON.stringify(msgs)]
+      );
+      res.json({ ok: true, reportId: result.rows[0]?.id });
+    } catch (err: any) {
+      console.error("[JAC] feedback-report error:", err.message);
+      res.status(500).json({ message: "Could not save report." });
     }
   });
 
@@ -17965,6 +18091,39 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           if (q && a) await promoteToCache(q, a, null, "ai_approved");
         }
       }
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── JAC Feedback Reports Admin ─────────────────────────────────────────────
+  app.get("/api/admin/jac/reports", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : null;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const rows = await pool.query(
+        `SELECT r.*, u.username, u.full_name FROM jac_feedback_reports r
+         LEFT JOIN users u ON u.id = r.user_id
+         ${status ? "WHERE r.status = $1" : ""}
+         ORDER BY r.created_at DESC LIMIT ${status ? "$2" : "$1"}`,
+        status ? [status, limit] : [limit]
+      );
+      res.json({ reports: rows.rows });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/admin/jac/reports/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const VALID = new Set(["new", "reviewed", "fixed", "dismissed"]);
+      if (status && !VALID.has(status)) return res.status(400).json({ message: "Invalid status" });
+      await pool.query(
+        `UPDATE jac_feedback_reports SET
+           status = COALESCE($1, status),
+           admin_notes = COALESCE($2, admin_notes),
+           updated_at = NOW()
+         WHERE id = $3`,
+        [status ?? null, adminNotes ?? null, parseInt(req.params.id)]
+      );
       res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
