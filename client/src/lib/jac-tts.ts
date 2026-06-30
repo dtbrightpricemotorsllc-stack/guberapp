@@ -92,13 +92,17 @@ export function unlockAudioContext() {
       const ss = window.speechSynthesis;
       ss.resume();
       if (!_audioUnlocked) {
-        // Only need the priming speak on first gesture; after that the engine
-        // stays unlocked for the session.
+        // iOS WebKit (Safari + CriOS) requires that speechSynthesis.speak() is
+        // called at least once synchronously inside a user-gesture handler before
+        // any async speak() calls will play. volume=0 is silently discarded by
+        // iOS and does NOT count as a gesture activation — use 0.01 instead so
+        // the engine registers it as a real utterance. At rate=16 + a single
+        // space it finishes in <10 ms without any audible sound.
         const primer = new SpeechSynthesisUtterance(" ");
-        primer.volume = 0;
-        primer.rate   = 16; // speak instantly so cancel() follows right away
+        primer.volume = 0.01;
+        primer.rate   = 16;
         ss.speak(primer);
-        setTimeout(() => { try { ss.cancel(); } catch {} }, 50);
+        // No explicit cancel — the primer finishes naturally before JAC speaks.
       }
     }
   } catch {}
@@ -158,18 +162,29 @@ function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
   });
 }
 
+/** True for any iOS browser — Safari, CriOS, Firefox iOS, etc. */
+function isIOSBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 function webSpeechFallback(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const ss = window.speechSynthesis;
   ss.cancel();
   // Chrome Android suspends speechSynthesis when the mic is active (or after
   // it stops). We must call resume() BEFORE enqueueing an utterance, otherwise
-  // the utterance silently queues but never plays. Do it immediately (before
-  // the cancel→speak gap) AND again just before speak().
+  // the utterance silently queues but never plays.
   try { ss.resume(); } catch {}
 
-  // A short gap after cancel() prevents Chrome/WebView from silently dropping
-  // the first utterance. 220 ms is reliable across Android WebView + Chrome.
+  // Delay rationale:
+  //   Android WebView / Chrome Android: needs 220 ms after cancel() or the
+  //   first utterance is silently dropped.
+  //   iOS (Safari + CriOS): cancel→speak race is not an issue on iOS WebKit,
+  //   and a long delay gives the engine time to re-suspend. 50 ms is enough
+  //   to let cancel() settle without risking a new suspension.
+  const delay = isIOSBrowser() ? 50 : 220;
+
   setTimeout(() => {
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang   = "en-US";
@@ -177,14 +192,14 @@ function webSpeechFallback(text: string) {
     utt.pitch  = 1.1;
     utt.volume = 1.0;
     // Only apply a specific voice if voices are already loaded; otherwise let
-    // the browser pick the system default (safer on Android).
+    // the browser pick the system default (safer on mobile).
     const voices = ss.getVoices();
     if (voices.length > 0) applyJacVoice(utt);
-    // Resume again right before speaking — Chrome Android can re-suspend
-    // between the cancel() call and this timeout.
+    // Resume again right before speaking — both Chrome Android and iOS can
+    // re-suspend between the cancel() call and this timeout.
     try { ss.resume(); } catch {}
     ss.speak(utt);
     // Final nudge: if still paused 300 ms after enqueue, force resume.
     setTimeout(() => { try { if (ss.paused) ss.resume(); } catch {} }, 300);
-  }, 220);
+  }, delay);
 }
