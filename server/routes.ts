@@ -16301,9 +16301,15 @@ PRESSURE WASHING:
 SELLING A VEHICLE (Marketplace — not a job post):
   Step 1: "What year, make, and model?"
   Step 2: "What's the condition — runs great, needs some work, or for parts?"
-  Step 3: "What's your asking price or range?"
-  → route: /signup?intent=seller_vehicle&from=jac
-  Note: This becomes a marketplace listing, not a job post.
+  Step 3: Collect price intent. ANY of these count as a valid price answer — route immediately after:
+    • "I want what I paid for it" / "I won't take less than what it cost" / "I want full value" / "I want top dollar"
+    • A specific number ("$18,000" / "around 15k")
+    • A range ("between 12 and 15")
+    • Vague ("asking price TBD" / "not sure yet" / "make me an offer")
+  → CONTEXT LOCK: once a vehicle is mentioned, stay in vehicle-listing mode until listing is complete or user explicitly changes topic. NEVER pivot to explaining platform fees or GUBER pricing during vehicle intake.
+  → route: /signup?intent=seller_vehicle&from=jac [HIGH — use as soon as year+make+model + condition known, even if price is vague]
+  → CTA: "I can get your listing started right now — you set the price after you sign up. Create your free account and we'll post it."
+  Note: This becomes a marketplace listing, not a job post. Platform fees are NEVER the right response to a vehicle price question.
 
 SELLING ITEMS (Marketplace — not a job post):
   Step 1: "What are you selling?"
@@ -16620,8 +16626,15 @@ FIND WORK / EARN MONEY → route: /browse-jobs
 POST A JOB / HIRE → route: /post-job
 "need help" / "need somebody" / "need labor" / "need a worker" / "need a handyman" / "need cleaning" / "need my grass cut" / "need painting" / "need pressure washing" / "need a plumber" / "need moving help" / "I want to hire"
 
-MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle
+MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle [HIGH]
 "sell my car" / "list my vehicle" / "post my truck" / "got a car to sell" / "selling my SUV" / "sell my motorcycle"
+Also applies mid-conversation: if user has been discussing their vehicle (year/make/model/condition/price) in prior turns, this context is already established — route NOW.
+VEHICLE LISTING INTAKE (if year+make+model not yet known):
+  Ask ONE question at a time:
+  • Year, make, model → condition → price intent (any answer counts: "I want full value" / "I won't take less than what I paid" / "top dollar" / "make me an offer" / a number / a range)
+  → CONTEXT LOCK: once vehicle selling is the topic, NEVER pivot to platform fees or GUBER pricing. Platform fees are irrelevant to a seller listing a car.
+  → After condition + any price signal: route to /marketplace/new?type=vehicle immediately with HIGH confidence.
+  → CTA: "Tap here to start your listing — you'll set the exact price inside the form."
 
 MARKETPLACE — SELL ITEM → route: /marketplace/new
 "sell my phone" / "furniture for sale" / "sell stuff" / "list an item" / "post something to sell"
