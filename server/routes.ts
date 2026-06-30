@@ -18015,7 +18015,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
       const now = Date.now();
       const STT_WINDOW_MS = 60_000;
-      const STT_IP_MAX    = 5;
+      const STT_IP_MAX    = 20;
       if (!(global as any).__sttIpBucket) (global as any).__sttIpBucket = new Map();
       const sttBucket: Map<string, { count: number; resetAt: number }> = (global as any).__sttIpBucket;
       const b = sttBucket.get(ip) ?? { count: 0, resetAt: now + STT_WINDOW_MS };
@@ -18028,7 +18028,14 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       sttBucket.set(ip, b);
 
       const audioBuffer = Buffer.from(audioBase64, "base64");
-      const ext = (mimeType ?? "audio/webm").includes("mp4") ? "m4a" : "webm";
+      const mt = (mimeType ?? "audio/webm").toLowerCase();
+      const ext = mt.includes("mp4") || mt.includes("m4a") || mt.includes("aac")
+        ? "m4a"
+        : mt.includes("ogg")
+          ? "ogg"
+          : mt.includes("mp3") || mt.includes("mpeg")
+            ? "mp3"
+            : "webm";
       const filename = `jac_audio.${ext}`;
 
       const OpenAI = (await import("openai")).default;

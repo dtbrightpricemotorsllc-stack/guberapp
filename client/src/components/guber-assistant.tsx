@@ -543,7 +543,7 @@ export function GUBERAssistant() {
     }
     if (text === "__resume__") return; // route button on the message handles it
 
-    // Mic-denied sentinel from use-speech: show guidance instead of sending
+    // STT sentinels — show actionable feedback rather than silently doing nothing
     if (text === "__mic_denied__") {
       const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
       const guide = platform === "android"
@@ -553,6 +553,18 @@ export function GUBERAssistant() {
           : "Microphone access was denied. Please allow microphone access in your browser settings, then try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: guide }]);
       jacSpeak(guide, { muted });
+      return;
+    }
+    if (text === "__whisper_empty__") {
+      const msg = "I didn't catch that — tap the mic and try again.";
+      setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
+      jacSpeak(msg, { muted });
+      return;
+    }
+    if (text === "__whisper_error__" || text === "__mic_error__") {
+      const msg = "Something went wrong with voice — please try again.";
+      setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
+      jacSpeak(msg, { muted });
       return;
     }
     unlockAudioContext();
