@@ -7,21 +7,64 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Loader2, Mic, MicOff, Volume2, VolumeX, ChevronRight, X, Navigation, ClipboardList,
+  Target, TrendingUp, Zap,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
+import { useAuth } from "@/lib/auth-context";
+import {
+  saveJacSessionDraft,
+  getJacSessionDraft,
+  clearJacSessionDraft,
+  applyJacSessionDraft,
+  getIntentLabel,
+} from "@/lib/jac-session";
+import { extractAndSaveMemory } from "@/lib/jac-memory";
+import { useJacContext, useJacOpportunities } from "@/lib/use-jac-context";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
+
+const DD_PATTERNS = [
+  /\$\s*\d+.{0,40}by\s+(today|tonight|tomorrow|friday|saturday|sunday|monday|tuesday|wednesday|thursday|next week|end of (week|day)|this weekend|midnight|eod)/i,
+  /\b(need|want|make|earn|get)\b.{0,25}\$\s*\d+\b.{0,40}\b(by|before|this|tonight|tomorrow|end of|in)\b/i,
+  /\bhow\s+(can|do)\s+i\s+(make|earn).{0,25}\$\s*\d+/i,
+  /\b(earning|financial)\s+goal\b/i,
+  /\bdestination\s+determination\b/i,
+  /\bi\s+need\s+\$\s*\d+/i,
+  /\bi\s+want\s+to\s+earn\s+\$\s*\d+/i,
+  /\bset\s+(a|an|my)\s+(earning|income|money)\s+goal\b/i,
+];
+
+function hasDDIntent(text: string): boolean {
+  return DD_PATTERNS.some(p => p.test(text));
+}
+
+type DDPlanItem = {
+  type: string;
+  id?: number;
+  title: string;
+  estimatedPay: number;
+  route: string;
+  urgency: string;
+  actionLabel: string;
+  estimatedTime?: string;
+  notes?: string;
+};
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   route?: string | null;
-  actions?: Array<{ label: string; message: string }>;
+  actions?: Array<{ label: string; message: string; route?: string }>;
+  planItems?: DDPlanItem[];
+  isDDPlan?: boolean;
+  ddGoalAmount?: number;
+  ddDeadline?: string | null;
+  ddEarnedSoFar?: number;
 }
 
 const DD_GREETING =
-  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. Whether you need to earn, hire, sell, or just explore — I'm here. You can minimize me anytime, but I'll always be in the bottom right corner. What can I do for you today?";
+  "Welcome to GUBER — the land of opportunities. I'm JAC, your Job Assisting Coordinator. What brings you to GUBER?";
 const SESSION_KEY = "jac_v1_messages";
 const SEEN_KEY = "jac_v1_seen";
 const FAB_HINT_KEY = "jac_fab_hint_shown";
@@ -48,6 +91,7 @@ function hasListingIntent(text: string): boolean {
 }
 
 const INITIAL_CHIPS = [
+  "I need $500 by Friday",
   "Find work nearby",
   "Hire help",
   "Earn credits",
@@ -178,6 +222,9 @@ export function DDFloatingButton() {
 // ── Main Jac Sheet ──────────────────────────────────────────────────────────
 export function GUBERAssistant() {
   const s = useAssistantStore();
+  const { user } = useAuth();
+  const userRef = useRef<typeof user>(null as any);
+  useEffect(() => { userRef.current = user; }, [user]);
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState("");
@@ -185,8 +232,15 @@ export function GUBERAssistant() {
   const [listingCollected, setListingCollected] = useState<Record<string, any>>({});
   const [listingType, setListingType] = useState("");
   const [listingRoute, setListingRoute] = useState("");
+  const [alertsDismissed, setAlertsDismissed] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastUserInputRef = useRef("");
+
+  const { data: jacContext } = useJacContext(!!user && s.open);
+  const { data: jacOpportunities } = useJacOpportunities(!!user && s.open);
+
+  const briefingInjectedRef = useRef(false);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -204,8 +258,21 @@ export function GUBERAssistant() {
     useSpeechOutput();
 
   // Auto-send when mic result arrives — no send button tap needed
-  const { listening, start: startListening, stop: stopListening, supported: micSupported } =
+  const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => doSend(text));
+
+  // Wake word listener — "Hey JAC" opens the panel and starts listening
+  useEffect(() => {
+    function onWake() {
+      if (!store.open) {
+        markSeen();
+        patchStore({ open: true });
+      }
+      setTimeout(() => startListening(), 400);
+    }
+    window.addEventListener("jac:wake", onWake);
+    return () => window.removeEventListener("jac:wake", onWake);
+  }, [startListening]);
 
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(messages)); } catch {}
@@ -223,10 +290,28 @@ export function GUBERAssistant() {
   useEffect(() => {
     if (!s.open) return;
     if (messages.length !== 1) return; // already has a thread
-    // Unlock audio on open — the user tapped the FAB which is a valid gesture.
-    // Without this, static MP3 playback is blocked by autoplay policy and the
-    // greeting falls back to Web Speech before the context is unlocked.
     unlockAudioContext();
+
+    // ── Resume pending pre-login draft for newly logged-in users ──────────
+    if (userRef.current) {
+      const pending = getJacSessionDraft();
+      if (pending) {
+        const route = applyJacSessionDraft(pending);
+        clearJacSessionDraft();
+        const label = getIntentLabel(pending);
+        const resumeContent = `Welcome back! I saved your ${label} from before you signed in. Tap "Continue" and I'll take you straight there — all your info is ready.`;
+        const resumeMsg: Message = {
+          role: "assistant",
+          content: resumeContent,
+          route,
+          actions: [{ label: "Continue where I left off", message: "__resume__" }],
+        };
+        setMessages(prev => [...prev, resumeMsg]);
+        jacSpeak(resumeContent, { muted });
+        return;
+      }
+    }
+
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
       // First-time visitor — speak the greeting immediately
@@ -246,11 +331,37 @@ export function GUBERAssistant() {
         if (parts.length === 0) content = `Welcome back${name}! Good to see you. What can I help you with?`;
         else if (parts.length === 1) content = `Welcome back${name}! Quick update — ${parts[0]}. What else can I help you with?`;
         else { const last = parts.pop(); content = `Welcome back${name}! Quick update — ${parts.join(", ")} and ${last}. What can I help you with?`; }
-        setMessages([{ role: "assistant", content }]);
+        // Don't overwrite if briefing already injected (briefingInjectedRef set synchronously before its fetch)
+        if (!briefingInjectedRef.current) setMessages([{ role: "assistant", content }]);
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.open]);
+
+  // Reset briefing ref on close so the server-side daily gate is re-checked on next open
+  useEffect(() => {
+    if (!s.open) briefingInjectedRef.current = false;
+  }, [s.open]);
+
+  // ── Morning briefing injection ─────────────────────────────────────────────
+  // Server gates by calendar day per user (jac_memory system/last_briefing_date).
+  // Returns null if already shown today — we replace the default greeting with the briefing.
+  useEffect(() => {
+    if (!s.open || !user || briefingInjectedRef.current) return;
+    briefingInjectedRef.current = true;
+    fetch("/api/jac/briefing")
+      .then(r => r.json())
+      .then((data: { text: string | null; chips: Array<{ label: string; message: string }> }) => {
+        if (!data.text) return;
+        // Replace the greeting entirely — briefing IS the first message
+        setMessages(prev => {
+          if (prev.length !== 1 || prev[0].role !== "assistant") return prev;
+          return [{ role: "assistant", content: data.text!, actions: data.chips || [] }];
+        });
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.open, user]);
 
   const sendMutation = useMutation({
     mutationFn: async (msgs: Message[]) => {
@@ -272,6 +383,9 @@ export function GUBERAssistant() {
       };
       setMessages((prev) => [...prev, msg]);
       if (!muted) jacSpeak(msg.content, { muted });
+      if (userRef.current && lastUserInputRef.current) {
+        extractAndSaveMemory(lastUserInputRef.current, msg.content);
+      }
     },
     onError: () => {
       setMessages((prev) => [
@@ -305,8 +419,8 @@ export function GUBERAssistant() {
       if (!muted) jacSpeak(msg.content, { muted });
 
       if (data.ready && data.route) {
+        // Always write the prefill so forms have data whether or not user is logged in
         if (data.listingType === "job") {
-          // Write to the existing jac_job_prefill format that post-job.tsx already reads
           try {
             localStorage.setItem("jac_job_prefill", JSON.stringify({
               category: newCollected.category || "",
@@ -323,6 +437,31 @@ export function GUBERAssistant() {
             route: data.route,
           });
         }
+
+        // ── Not logged in: save session draft + show auth prompt ──────────
+        if (!userRef.current) {
+          saveJacSessionDraft({
+            intent: (data.listingType as any) || "general",
+            listingType: data.listingType || "",
+            collected: newCollected,
+            route: data.route,
+            messages: [],
+            source: "jac",
+          });
+          const savedMsg: Message = {
+            role: "assistant",
+            content: "I saved everything you told me. After you sign in, I'll continue right where we left off — no starting over. Ready?",
+            actions: [
+              { label: "Sign up — it's free", message: "__goto_signup__" },
+              { label: "Sign in", message: "__goto_login__" },
+            ],
+          };
+          setMessages(prev => [...prev, savedMsg]);
+          jacSpeak(savedMsg.content, { muted });
+          return; // do NOT navigate — user isn't logged in
+        }
+
+        // ── Logged in: navigate immediately ────────────────────────────────
         setTimeout(() => {
           patchStore({ open: false });
           cancelSpeech();
@@ -342,7 +481,41 @@ export function GUBERAssistant() {
     },
   });
 
-  const anyPending = sendMutation.isPending || listingMutation.isPending;
+  const ddMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await apiRequest("POST", "/api/jac/dd/plan", { message: text });
+      const data = await res.json();
+      return data as {
+        goalId?: number;
+        goalAmount: number;
+        deadline: string | null;
+        earnedSoFar: number;
+        remaining: number;
+        planItems: DDPlanItem[];
+        reply: string;
+        actions: Array<{ label: string; message: string; route?: string }>;
+      };
+    },
+    onSuccess: (data) => {
+      const msg: Message = {
+        role: "assistant",
+        content: data.reply ?? "Here are some options that could help.",
+        isDDPlan: true,
+        planItems: data.planItems ?? [],
+        ddGoalAmount: data.goalAmount,
+        ddDeadline: data.deadline,
+        ddEarnedSoFar: data.earnedSoFar,
+        actions: (data.actions ?? []).slice(0, 4),
+      };
+      setMessages(prev => [...prev, msg]);
+      if (!muted) jacSpeak(msg.content, { muted });
+    },
+    onError: () => {
+      setMessages(prev => [...prev, { role: "assistant", content: "I couldn't pull up options right now — please try again." }]);
+    },
+  });
+
+  const anyPending = sendMutation.isPending || listingMutation.isPending || ddMutation.isPending;
 
   function exitListingMode() {
     setListingMode(false);
@@ -353,14 +526,31 @@ export function GUBERAssistant() {
   }
 
   function doSend(text: string) {
+    // Navigation sentinels — handled client-side, not sent to AI
+    if (text === "__goto_signup__") {
+      patchStore({ open: false });
+      cancelSpeech();
+      cancelAllJacAudio();
+      navigate("/signup");
+      return;
+    }
+    if (text === "__goto_login__") {
+      patchStore({ open: false });
+      cancelSpeech();
+      cancelAllJacAudio();
+      navigate("/login");
+      return;
+    }
+    if (text === "__resume__") return; // route button on the message handles it
+
     // Mic-denied sentinel from use-speech: show guidance instead of sending
     if (text === "__mic_denied__") {
       const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
       const guide = platform === "android"
-        ? "Microphone access is blocked. Go to Settings → Apps → GUBER → Permissions → Microphone and allow it, then try again."
+        ? "Microphone is blocked. To fix it: open your phone's Settings app → Apps → tap the three-dot menu (⋮) or search for GUBER → App info → Permissions → Microphone → set to Allow. Then come back and try again."
         : platform === "ios"
-          ? "Microphone access is blocked. Go to Settings → Privacy → Microphone → GUBER and allow it, then try again."
-          : "Microphone access was denied. Please allow microphone access in your browser settings.";
+          ? "Microphone access is blocked. Go to Settings → Privacy & Security → Microphone → GUBER and turn it on, then try again."
+          : "Microphone access was denied. Please allow microphone access in your browser settings, then try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: guide }]);
       jacSpeak(guide, { muted });
       return;
@@ -368,12 +558,15 @@ export function GUBERAssistant() {
     unlockAudioContext();
     const trimmed = text.trim();
     if (!trimmed || anyPending) return;
+    lastUserInputRef.current = trimmed;
     const newMsgs: Message[] = [...messages, { role: "user", content: trimmed }];
     setMessages(newMsgs);
     setInput("");
     cancelSpeech();
     cancelAllJacAudio();
-    if (listingMode || hasListingIntent(trimmed)) {
+    if (hasDDIntent(trimmed)) {
+      ddMutation.mutate(trimmed);
+    } else if (listingMode || hasListingIntent(trimmed)) {
       if (!listingMode) setListingMode(true);
       listingMutation.mutate(newMsgs);
     } else {
@@ -458,6 +651,147 @@ export function GUBERAssistant() {
           </div>
         </SheetHeader>
 
+        {/* ── Live Intelligence Panel (pending actions + opportunities) ── */}
+        {user && s.open && !alertsDismissed && jacOpportunities && jacOpportunities.length > 0 && (() => {
+          const actions = jacOpportunities.filter(o => o.type === "pending_action");
+          const opps = jacOpportunities.filter(o => o.type !== "pending_action");
+          return (
+            <div className="flex-shrink-0 mx-3 mt-3 space-y-2">
+              {actions.length > 0 && (
+                <div
+                  className="rounded-xl overflow-hidden"
+                  style={{ background: "hsl(222 47% 9%)", border: "1px solid hsl(222 47% 18%)" }}
+                >
+                  <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: "1px solid hsl(222 47% 15%)" }}>
+                    <span className="text-[10px] font-display font-black tracking-wider text-muted-foreground uppercase">
+                      Needs Your Attention
+                    </span>
+                    <button
+                      onClick={() => setAlertsDismissed(true)}
+                      className="text-muted-foreground hover:text-white transition-colors"
+                      aria-label="Dismiss alerts"
+                      data-testid="button-jac-alerts-dismiss"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="divide-y" style={{ borderColor: "hsl(222 47% 14%)" }}>
+                    {actions.map((opp, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { patchStore({ open: false }); navigate(opp.route); }}
+                        className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-white/[0.03] transition-colors"
+                        data-testid={`button-jac-alert-${i}`}
+                      >
+                        <span
+                          className="mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{ background: opp.urgency === "high" ? "hsl(0 84% 60%)" : "hsl(38 92% 50%)" }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white/90 leading-tight truncate">{opp.title}</p>
+                          {opp.subtitle && <p className="text-[10px] text-muted-foreground leading-snug mt-0.5 line-clamp-1">{opp.subtitle}</p>}
+                        </div>
+                        <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5 ml-auto" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {opps.length > 0 && (
+                <div
+                  className="rounded-xl overflow-hidden"
+                  style={{ background: "hsl(222 47% 9%)", border: "1px solid hsl(270 100% 65% / 0.18)" }}
+                >
+                  <div className="px-3 py-2" style={{ borderBottom: "1px solid hsl(222 47% 15%)" }}>
+                    <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
+                      🔍 Live Opportunities
+                    </span>
+                  </div>
+                  <div className="divide-y" style={{ borderColor: "hsl(222 47% 14%)" }}>
+                    {opps.map((opp, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { patchStore({ open: false }); navigate(opp.route); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-white/[0.03] transition-colors"
+                        data-testid={`button-jac-opp-${i}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white/90 leading-tight truncate">{opp.title}</p>
+                          {opp.subtitle && (
+                            <p className="text-[10px] text-muted-foreground leading-snug mt-0.5 truncate">{opp.subtitle}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {opp.distanceLabel && (
+                            <span
+                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-lg"
+                              style={{ background: "hsl(222 47% 18%)", color: "hsl(210 40% 70%)" }}
+                            >
+                              {opp.distanceLabel}
+                            </span>
+                          )}
+                          {opp.payLabel && (
+                            <span
+                              className="text-[10px] font-display font-bold px-1.5 py-0.5 rounded-lg"
+                              style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 55%)" }}
+                            >
+                              {opp.payLabel}
+                            </span>
+                          )}
+                          {opp.urgency === "high" && (
+                            <span
+                              className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-lg"
+                              style={{ background: "hsl(0 84% 60% / 0.15)", color: "hsl(0 84% 65%)" }}
+                            >
+                              URGENT
+                            </span>
+                          )}
+                          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── Active D.D. Goal Banner ── */}
+        {user && s.open && jacContext?.activeGoal && (() => {
+          const g = jacContext.activeGoal!;
+          const pct = Math.min(100, Math.round((g.earnedSoFar / g.goalAmount) * 100));
+          const remaining = Math.max(0, g.goalAmount - g.earnedSoFar);
+          return (
+            <div
+              className="flex items-center gap-2 px-4 py-2 flex-shrink-0"
+              style={{ background: "hsl(270 100% 65% / 0.08)", borderBottom: "1px solid hsl(270 100% 65% / 0.18)" }}
+              data-testid="dd-goal-banner"
+            >
+              <Target className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "hsl(270 100% 65%)" }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
+                    Goal: ${g.goalAmount.toFixed(0)}{g.deadline ? ` by ${g.deadline}` : ""}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">${remaining.toFixed(2)} left</span>
+                </div>
+                <div className="h-1 rounded-full mt-1 overflow-hidden" style={{ background: "hsl(222 47% 16%)" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "hsl(270 100% 65%)" }} />
+                </div>
+              </div>
+              <button
+                onClick={() => doSend(`I need $${remaining.toFixed(2)} more toward my goal — what options do I have?`)}
+                className="text-[10px] font-display font-semibold px-2 py-1 rounded-lg flex-shrink-0 transition-colors"
+                style={{ background: "hsl(270 100% 65% / 0.18)", color: "hsl(270 100% 75%)" }}
+                data-testid="button-dd-update-plan"
+              >
+                Update
+              </button>
+            </div>
+          );
+        })()}
+
         {/* ── Listing Builder Banner ── */}
         {listingMode && (
           <div
@@ -533,13 +867,74 @@ export function GUBERAssistant() {
                   </button>
                 )}
 
+                {/* D.D. Plan Cards */}
+                {msg.role === "assistant" && msg.isDDPlan && msg.planItems && msg.planItems.length > 0 && (
+                  <div className="w-full space-y-1.5 mt-1" data-testid="dd-plan-cards">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Target className="w-3.5 h-3.5" style={{ color: "hsl(270 100% 65%)" }} />
+                      <span className="text-[10px] font-display font-black tracking-wider uppercase" style={{ color: "hsl(270 100% 65%)" }}>
+                        Possible Options
+                      </span>
+                      {msg.ddGoalAmount && (
+                        <span className="ml-auto text-[10px] font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 55%)" }}>
+                          Goal: ${msg.ddGoalAmount.toFixed(0)}
+                        </span>
+                      )}
+                    </div>
+                    {msg.planItems.map((item, k) => (
+                      <button
+                        key={k}
+                        onClick={() => { patchStore({ open: false }); navigate(item.route); }}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-all active:scale-[0.98]"
+                        style={{
+                          background: item.urgency === "high" ? "hsl(270 100% 65% / 0.08)" : "hsl(222 47% 11%)",
+                          border: `1px solid ${item.urgency === "high" ? "hsl(270 100% 65% / 0.3)" : "hsl(222 47% 18%)"}`,
+                        }}
+                        data-testid={`dd-plan-item-${k}`}
+                      >
+                        <span className="text-base flex-shrink-0">{
+                          item.type === "job" ? "💼" :
+                          item.type === "load_board" ? "🚛" :
+                          item.type === "cash_drop" ? "💰" :
+                          item.type === "city_mission" ? "📍" :
+                          item.type === "vi_job" ? "🔍" : "⚡"
+                        }</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white/90 leading-tight truncate">{item.title}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {item.estimatedTime && (
+                              <span className="text-[10px] text-muted-foreground">{item.estimatedTime}</span>
+                            )}
+                            {item.notes && (
+                              <span className="text-[10px] text-muted-foreground truncate">{item.notes}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0 flex items-center gap-1.5">
+                          {item.estimatedPay >= 1 && (
+                            <span className="text-xs font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(152 100% 44% / 0.15)", color: "hsl(152 100% 55%)" }}>
+                              ${item.estimatedPay % 1 === 0 ? item.estimatedPay.toFixed(0) : item.estimatedPay.toFixed(2)}
+                            </span>
+                          )}
+                          {item.urgency === "high" && (
+                            <span className="text-[9px] font-display font-bold px-1.5 py-0.5 rounded-lg" style={{ background: "hsl(270 100% 65% / 0.2)", color: "hsl(270 100% 75%)" }}>
+                              TOP
+                            </span>
+                          )}
+                          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Action chips from AI */}
-                {msg.role === "assistant" && msg.actions && msg.actions.length > 0 && (
+                {msg.role === "assistant" && msg.actions && msg.actions.length > 0 && !msg.isDDPlan && (
                   <div className="flex flex-wrap gap-1.5">
                     {msg.actions.map((action, j) => (
                       <button
                         key={j}
-                        onClick={() => handleChip(action.message)}
+                        onClick={() => action.route ? handleRoute(action.route) : handleChip(action.message)}
                         className="rounded-xl px-3 py-1.5 text-xs font-display font-semibold transition-all active:scale-95"
                         style={{
                           background: "rgba(255,255,255,0.05)",
@@ -626,21 +1021,27 @@ export function GUBERAssistant() {
             {/* Mic button */}
             {micSupported && (
               <button
-                onClick={listening ? stopListening : startListening}
+                onClick={() => { unlockAudioContext(); listening ? stopListening() : startListening(); }}
                 className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${
                   listening ? "animate-pulse" : ""
                 }`}
                 style={{
                   background: listening
                     ? "hsl(0 80% 55%)"
-                    : "hsl(222 47% 15%)",
-                  color: listening ? "white" : "hsl(0 0% 45%)",
+                    : transcribing
+                      ? "hsl(270 60% 35%)"
+                      : "hsl(222 47% 15%)",
+                  color: listening || transcribing ? "white" : "hsl(0 0% 45%)",
                 }}
                 data-testid="button-dd-mic"
-                aria-label={listening ? "Stop listening" : "Speak to Jac"}
-                disabled={anyPending}
+                aria-label={transcribing ? "Transcribing…" : listening ? "Stop listening" : "Speak to Jac"}
+                disabled={anyPending || transcribing}
               >
-                {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {transcribing
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : listening
+                    ? <MicOff className="w-3.5 h-3.5" />
+                    : <Mic className="w-3.5 h-3.5" />}
               </button>
             )}
 

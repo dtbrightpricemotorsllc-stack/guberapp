@@ -23,6 +23,8 @@ import {
   type StudioTierPlanId,
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
+import { tryLocalAnswer, promoteToCache, getJacBrainStats } from "./jac-brain";
+import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
   getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
@@ -448,8 +450,60 @@ async function checkStripeForOGStatus(email: string): Promise<{ isOG: boolean; h
   }
 }
 
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+// ── Geocoding caches & rate-limits ────────────────────────────────────────────
+// Forward geocode cache (address → lat/lng). Keyed by lowercase-trimmed address.
+// TTL: 24 h, max 2000 entries. Avoids hitting Google on repeated identical inputs.
+const _fwdGeocodeCache = new Map<string, { lat: number; lng: number; exp: number }>();
+const FWD_GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
+const FWD_GEOCODE_MAX = 2000;
+
+// Reverse geocode cache (lat/lng → address+zip). Keyed by 3-dp grid (~100 m).
+const _revGeocodeCache = new Map<string, { address: string | null; zip: string | null; exp: number }>();
+const REV_GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
+const REV_GEOCODE_MAX = 2000;
+
+// Global hourly cap: never let either geocode call Google more than N times/hour.
+let _geocodeHourCount = 0;
+let _geocodeHourReset = Date.now() + 3_600_000;
+const GEOCODE_HOURLY_HARD_CAP = 500;
+
+function _geocodeCapCheck(caller: string): boolean {
+  const now = Date.now();
+  if (now > _geocodeHourReset) { _geocodeHourCount = 0; _geocodeHourReset = now + 3_600_000; }
+  _geocodeHourCount++;
+  if (_geocodeHourCount > GEOCODE_HOURLY_HARD_CAP) {
+    console.warn(`[geocode-cap] HARD CAP hit (${_geocodeHourCount}/hr) — blocking Google call. caller=${caller}`);
+    return false;
+  }
+  return true;
+}
+
+// Per-user reverse-geocode rate limit: max 6 calls per minute per user.
+const _revRateMap = new Map<string, { count: number; resetAt: number }>();
+function _revRateAllow(userId: string): boolean {
+  const now = Date.now();
+  const entry = _revRateMap.get(userId);
+  if (!entry || now > entry.resetAt) {
+    _revRateMap.set(userId, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > 6) {
+    console.warn(`[reverse-geocode] rate-limit user=${userId} count=${entry.count}`);
+    return false;
+  }
+  return true;
+}
+
+async function geocodeAddress(address: string, caller = "unknown"): Promise<{ lat: number; lng: number } | null> {
   if (!address) return null;
+
+  // Check in-memory cache first
+  const cacheKey = address.toLowerCase().trim();
+  const cached = _fwdGeocodeCache.get(cacheKey);
+  if (cached && Date.now() < cached.exp) {
+    return { lat: cached.lat, lng: cached.lng };
+  }
 
   // Always try Google Maps first — it returns exact street-level coordinates.
   // Prefer GOOGLE_GEOCODING_API_KEY (unrestricted server key) over GOOGLE_MAPS_API_KEY
@@ -457,12 +511,20 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
   const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (apiKey) {
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&region=us&key=${apiKey}`;
-      const resp = await fetch(url);
-      const data = await resp.json() as any;
-      if (data.status === "OK" && data.results?.[0]) {
-        const loc = data.results[0].geometry.location;
-        return { lat: loc.lat, lng: loc.lng };
+      if (!_geocodeCapCheck(`fwd:${caller}`)) {
+        // cap hit — skip Google, fall through to Nominatim
+      } else {
+        console.info(`[geocode] fwd Google call caller=${caller} address="${address.slice(0, 60)}"`);
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&components=country:US&region=us&key=${apiKey}`;
+        const resp = await fetch(url);
+        const data = await resp.json() as any;
+        if (data.status === "OK" && data.results?.[0]) {
+          const loc = data.results[0].geometry.location;
+          const result = { lat: loc.lat, lng: loc.lng };
+          if (_fwdGeocodeCache.size >= FWD_GEOCODE_MAX) _fwdGeocodeCache.delete(_fwdGeocodeCache.keys().next().value!);
+          _fwdGeocodeCache.set(cacheKey, { ...result, exp: Date.now() + FWD_GEOCODE_TTL_MS });
+          return result;
+        }
       }
     } catch {}
   }
@@ -474,7 +536,10 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
     if (nomResp.ok) {
       const nomData = await nomResp.json() as any[];
       if (nomData?.[0]?.lat && nomData?.[0]?.lon) {
-        return { lat: parseFloat(nomData[0].lat), lng: parseFloat(nomData[0].lon) };
+        const result = { lat: parseFloat(nomData[0].lat), lng: parseFloat(nomData[0].lon) };
+        if (_fwdGeocodeCache.size >= FWD_GEOCODE_MAX) _fwdGeocodeCache.delete(_fwdGeocodeCache.keys().next().value!);
+        _fwdGeocodeCache.set(cacheKey, { ...result, exp: Date.now() + FWD_GEOCODE_TTL_MS });
+        return result;
       }
     }
   } catch {}
@@ -490,7 +555,10 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
         const data = await resp.json() as any;
         const place = data.places?.[0];
         if (place?.latitude && place?.longitude) {
-          return { lat: parseFloat(place.latitude), lng: parseFloat(place.longitude) };
+          const result = { lat: parseFloat(place.latitude), lng: parseFloat(place.longitude) };
+          if (_fwdGeocodeCache.size >= FWD_GEOCODE_MAX) _fwdGeocodeCache.delete(_fwdGeocodeCache.keys().next().value!);
+          _fwdGeocodeCache.set(cacheKey, { ...result, exp: Date.now() + FWD_GEOCODE_TTL_MS });
+          return result;
         }
       }
     } catch {}
@@ -1291,9 +1359,10 @@ export async function registerRoutes(
 
   app.get("/api/geocode", async (req: Request, res: Response) => {
     const address = typeof req.query.address === "string" ? req.query.address : "";
+    const caller = typeof req.query.caller === "string" ? req.query.caller : "unknown";
     if (!address) return res.status(400).json({ error: "address required" });
     try {
-      const coords = await geocodeAddress(address);
+      const coords = await geocodeAddress(address, caller);
       if (!coords) return res.status(404).json({ error: "Address not found" });
       res.json(coords);
     } catch (err: any) {
@@ -1339,36 +1408,58 @@ export async function registerRoutes(
   app.get("/api/places/reverse-geocode", async (req: Request, res: Response) => {
     const lat = parseFloat(req.query.lat as string);
     const lng = parseFloat(req.query.lng as string);
+    const caller = typeof req.query.caller === "string" ? req.query.caller : "unknown";
     if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "lat and lng required" });
+
+    // Per-user rate limit (anonymous requests share "anon" bucket)
+    const userId = (req.session as any)?.userId ? String((req.session as any).userId) : "anon";
+    if (!_revRateAllow(userId)) {
+      return res.status(429).json({ address: null, zip: null, error: "rate-limited" });
+    }
+
+    // Cache key: 3 decimal places ≈ 100 m grid — good enough for a ZIP lookup
+    const cacheKey = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+    const cached = _revGeocodeCache.get(cacheKey);
+    if (cached && Date.now() < cached.exp) {
+      res.set("X-Geocode-Cache", "hit");
+      return res.json({ address: cached.address, zip: cached.zip });
+    }
+
+    const storeResult = (address: string | null, zip: string | null) => {
+      if (_revGeocodeCache.size >= REV_GEOCODE_MAX) _revGeocodeCache.delete(_revGeocodeCache.keys().next().value!);
+      _revGeocodeCache.set(cacheKey, { address, zip, exp: Date.now() + REV_GEOCODE_TTL_MS });
+    };
 
     // Try Google Maps first (server-side). Prefer GOOGLE_GEOCODING_API_KEY (unrestricted
     // server key) over GOOGLE_MAPS_API_KEY which may have HTTP-referer restrictions.
-    // Either failure falls cleanly through to Nominatim.
     const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
     if (apiKey) {
       try {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-        const resp = await fetch(url);
-        const text = await resp.text();
-        let data: any = null;
-        try { data = JSON.parse(text); } catch { /* non-JSON body (HTML/XML error page) — ignore */ }
-        if (data?.status === "OK" && data.results?.[0]) {
-          const result = data.results[0];
-          const address = result.formatted_address as string;
-          const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
-          const zip = zipComp?.short_name || null;
-          return res.json({ address, zip });
-        }
-        if (data?.status && data.status !== "OK") {
-          console.warn(`[reverse-geocode] Google returned ${data.status}${data.error_message ? `: ${data.error_message}` : ""}`);
+        if (_geocodeCapCheck(`rev:${caller}`)) {
+          console.info(`[reverse-geocode] Google call caller=${caller} user=${userId} latlng=${lat.toFixed(4)},${lng.toFixed(4)}`);
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+          const resp = await fetch(url);
+          const text = await resp.text();
+          let data: any = null;
+          try { data = JSON.parse(text); } catch { /* non-JSON body — ignore */ }
+          if (data?.status === "OK" && data.results?.[0]) {
+            const result = data.results[0];
+            const address = result.formatted_address as string;
+            const zipComp = result.address_components?.find((c: any) => c.types.includes("postal_code"));
+            const zip = zipComp?.short_name || null;
+            storeResult(address, zip);
+            return res.json({ address, zip });
+          }
+          if (data?.status && data.status !== "OK") {
+            console.warn(`[reverse-geocode] Google returned ${data.status}${data.error_message ? `: ${data.error_message}` : ""}`);
+          }
         }
       } catch (err: any) {
         console.warn(`[reverse-geocode] Google call failed: ${err?.message || err}`);
       }
     }
 
-    // Nominatim fallback. Also fully wrapped so we never 500 the client and start
-    // a retry storm — a missing address is a soft failure.
+    // Nominatim fallback — free, no billing.
     try {
       const nomUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
       const nomResp = await fetch(nomUrl, { headers: { "User-Agent": "GUBER/1.0 contact@guberapp.app" } });
@@ -1377,6 +1468,7 @@ export async function registerRoutes(
       try { nomData = JSON.parse(nomText); } catch { /* Nominatim error page or rate-limit HTML — ignore */ }
       if (nomData?.display_name) {
         const zip = nomData.address?.postcode || null;
+        storeResult(nomData.display_name, zip);
         return res.json({ address: nomData.display_name, zip });
       }
     } catch (err: any) {
@@ -1385,6 +1477,7 @@ export async function registerRoutes(
 
     // Soft failure: return null fields with 200 so the client can render the
     // raw GPS coordinates without spamming the endpoint with retries.
+    storeResult(null, null);
     return res.json({ address: null, zip: null });
   });
 
@@ -10103,6 +10196,73 @@ export async function registerRoutes(
     }
   });
 
+  // ── JAC Smart Chat: structured quick-action (logs + notifies other party) ─
+  app.post("/api/jobs/:id/quick-action", requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      const userId = req.session.userId!;
+      const isWorker = job.assignedHelperId === userId;
+      const isPoster = job.postedById === userId;
+      if (!isWorker && !isPoster) return res.status(403).json({ message: "Not a participant" });
+
+      const { action, flowType } = req.body;
+      const ALLOWED_ACTIONS = [
+        "running_late", "need_clarification", "proof_uploaded",
+        "job_complete", "reviewing_now", "issue_found",
+        "leaving_pickup", "arrived_pickup", "loaded", "in_transit",
+        "fuel_stop", "delay", "mechanical_issue", "delivered",
+        "gate_code", "dock_number", "loading_ready", "delivery_confirmed",
+        "leaving_now", "im_here", "cash_ready", "title_ready",
+        "meeting_complete", "vehicle_sold",
+      ];
+      if (!ALLOWED_ACTIONS.includes(action)) {
+        return res.status(400).json({ message: "Unknown action" });
+      }
+
+      const ACTION_LABELS: Record<string, string> = {
+        running_late: "Running late", need_clarification: "Needs clarification",
+        proof_uploaded: "Proof uploaded", job_complete: "Marked job complete",
+        reviewing_now: "Reviewing proof", issue_found: "Issue found",
+        leaving_pickup: "Leaving for pickup", arrived_pickup: "Arrived at pickup",
+        loaded: "Load secured", in_transit: "In transit",
+        fuel_stop: "Fuel stop", delay: "Delay reported",
+        mechanical_issue: "Mechanical issue reported", delivered: "Delivered",
+        gate_code: "Gate code sent", dock_number: "Dock number sent",
+        loading_ready: "Loading ready", delivery_confirmed: "Delivery confirmed",
+        leaving_now: "Leaving now", im_here: "Arrived at meeting point",
+        cash_ready: "Cash ready", title_ready: "Title ready",
+        meeting_complete: "Meeting complete", vehicle_sold: "Vehicle sold",
+      };
+      const label = ACTION_LABELS[action] || action;
+
+      // Log to job_status_logs
+      await storage.createJobStatusLog({
+        jobId, userId, statusType: `quick_action:${action}`,
+        gpsLat: null, gpsLng: null, note: label,
+      });
+
+      // Notify the other party
+      const recipientId = isWorker ? job.postedById : job.assignedHelperId;
+      const senderName = isWorker ? "Your worker" : "The job poster";
+      if (recipientId) {
+        await storage.createNotification({
+          userId: recipientId,
+          title: label,
+          body: `${senderName} sent a status update on "${job.title}": ${label}`,
+          type: "job_update",
+          jobId,
+        });
+      }
+
+      res.json({ ok: true, action, label, message: `${label} — the other party has been notified.` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/jobs/:id/milestones", requireAuth, async (req: Request, res: Response) => {
     try {
       const jobId = parseInt(req.params.id);
@@ -15751,6 +15911,97 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       }
       if (!sanitized.length) return res.status(400).json({ message: "No valid messages" });
 
+      // ── Inject user memory + live context for logged-in users ────────────
+      const onboardUserId = (req.session as any)?.userId ?? null;
+      let userContextSection = "";
+      if (onboardUserId) {
+        try {
+          const [memRes, liveRes] = await Promise.all([
+            pool.query(
+              `SELECT category, key, value FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
+              [onboardUserId]
+            ),
+            pool.query(`
+              SELECT
+                (SELECT full_name FROM users WHERE id = $1) AS full_name,
+                (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+                (SELECT COUNT(*)::int FROM jobs WHERE posted_by = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+                (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
+                (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by=$1 AND ps.status='submitted') AS proofs_pending,
+                (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id=$1 OR respondent_id=$1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+                (SELECT COUNT(*)::int FROM marketplace_items WHERE seller_id=$1 AND status='active') AS marketplace_active,
+                (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_id=$1 AND status='pending') AS marketplace_offers,
+                (SELECT COUNT(*)::int FROM load_board_listings WHERE poster_id=$1 AND status='active') AS load_board_active,
+                (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int FROM credit_ledger WHERE user_id=$1) AS studio_credits,
+                (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id=$1 AND status='completed') AS wallet_balance
+            `, [onboardUserId]),
+          ]);
+          const live = liveRes.rows[0] ?? {};
+          const firstName = (live.full_name || "").split(" ")[0] || "there";
+          const memories = memRes.rows as Array<{ category: string; key: string; value: any }>;
+          const memLines = memories.length
+            ? memories.map(m => `• ${m.category}/${m.key}: ${typeof m.value === "string" ? m.value : JSON.stringify(m.value)}`).join("\n")
+            : "(none yet)";
+          const alerts: string[] = [];
+          if (parseInt(live.proofs_pending) > 0) alerts.push(`${live.proofs_pending} proof submission(s) awaiting review`);
+          if (parseInt(live.open_disputes) > 0) alerts.push(`${live.open_disputes} open dispute(s)`);
+          if (parseInt(live.marketplace_offers) > 0) alerts.push(`${live.marketplace_offers} pending offer(s) on marketplace listings`);
+          if (parseInt(live.unread_notifs) > 0) alerts.push(`${live.unread_notifs} unread notification(s)`);
+          userContextSection = `═══════════════════════════════════
+LOGGED-IN USER: ${firstName}
+═══════════════════════════════════
+This user is already signed in to GUBER. Do NOT route them to /signup.
+Route to app pages directly (e.g. /post-job, /marketplace, /profile).
+Greet them by first name (${firstName}) naturally, once.
+
+WHAT JAC REMEMBERS:
+${memLines}
+
+LIVE ACCOUNT RIGHT NOW:
+• Worker active jobs: ${live.worker_active || 0}
+• Hirer active jobs: ${live.hirer_active || 0}
+• Marketplace listings: ${live.marketplace_active || 0}
+• Load board listings: ${live.load_board_active || 0}
+• Studio credits: ${live.studio_credits || 0}
+• Wallet balance: $${parseFloat(live.wallet_balance || "0").toFixed(2)}
+${alerts.length ? `\nNEEDS ATTENTION:\n${alerts.map(a => `• ${a}`).join("\n")}` : ""}
+
+Use memory + live data to personalize every response. Reference their history naturally.
+If they say "same as last time" or similar, use memory to fill in what you know.
+
+`;
+          // Enrich with deep profile data (synced from GUBER DB into jac_memory)
+          try {
+            const profileCtx = await buildJacProfileContext(onboardUserId);
+            if (profileCtx) userContextSection += profileCtx + "\n\n";
+          } catch {}
+          // Fire-and-forget profile sync so next call gets fresher data
+          syncJacProfile(onboardUserId).catch(() => {});
+        } catch (ctxErr: any) {
+          console.error("[JAC onboard ctx]", ctxErr.message);
+        }
+      }
+
+      // ── Try local KB/cache answer first (zero AI cost) ──────────────────
+      const _lastUserMsg = sanitized.filter(m => m.role === "user").pop()?.content ?? "";
+      if (_lastUserMsg) {
+        try {
+          const localAns = await tryLocalAnswer(_lastUserMsg);
+          if (localAns && localAns.confidence >= 0.85) {
+            return res.json({
+              reply: localAns.answer,
+              confidence: "high",
+              route: null,
+              actions: localAns.followUpActions ?? [],
+              options: [],
+              tracking: { costSource: localAns.source, kbId: localAns.kbId },
+            });
+          }
+        } catch (brainErr: any) {
+          console.error("[JAC brain]", brainErr.message);
+        }
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -15790,6 +16041,8 @@ Rules:
 - Plain language. Clear enough for a 75-year-old.
 - Under 75 words per reply.
 - Sound human, not like a FAQ bot.
+
+VOICE & AUDIO: JAC has text-to-speech voice output — she CAN speak out loud through the device speaker. If someone says they can't hear her, acknowledge that voice IS enabled and suggest they check their device volume or tap the mic icon to interact. Never say you are text-only or have no voice.
 
 ═══════════════════════════════════
 COORDINATOR MINDSET
@@ -16151,7 +16404,7 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         temperature: 0.3,
         max_tokens: 500,
         response_format: { type: "json_object" as const },
-        messages: [{ role: "system", content: onboardPrompt }, ...sanitized],
+        messages: [{ role: "system", content: userContextSection + onboardPrompt }, ...sanitized],
       });
 
       const raw = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -16313,6 +16566,7 @@ BEHAVIOR RULES:
 - Never reveal internal architecture, database info, or admin-only details.
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
 - Warm, encouraging tone — GUBER is a community.
+- VOICE: JAC has text-to-speech voice output and CAN speak out loud. Never say you are text-only or have no voice/audio features. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
 
 JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
 You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
@@ -16616,14 +16870,19 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         transportInterest, creatorInterest, creatorPlatforms, businessOwner,
         serviceProvider, retired, prefersVoice, assistantMode, startupBehavior,
         voiceEnabled, language, tutorialStatus,
+        textResponses, voiceActivation, floatingButton,
+        proactiveSuggestions, personalizedRecommendations, voiceSelection, lowDataMode,
       } = req.body;
       await pool.query(
         `INSERT INTO jac_user_profile (
           user_id, primary_goal, user_type, zip_code, interests, service_needs,
           work_interests, transport_interest, creator_interest, creator_platforms,
           business_owner, service_provider, retired, prefers_voice, assistant_mode,
-          startup_behavior, voice_enabled, language, tutorial_status, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
+          startup_behavior, voice_enabled, language, tutorial_status,
+          text_responses, voice_activation, floating_button,
+          proactive_suggestions, personalized_recommendations, voice_selection, low_data_mode,
+          updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW())
         ON CONFLICT (user_id) DO UPDATE SET
           primary_goal     = COALESCE($2, jac_user_profile.primary_goal),
           user_type        = COALESCE($3, jac_user_profile.user_type),
@@ -16643,6 +16902,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           voice_enabled    = COALESCE($17, jac_user_profile.voice_enabled),
           language         = COALESCE($18, jac_user_profile.language),
           tutorial_status  = COALESCE($19, jac_user_profile.tutorial_status),
+          text_responses               = COALESCE($20, jac_user_profile.text_responses),
+          voice_activation             = COALESCE($21, jac_user_profile.voice_activation),
+          floating_button              = COALESCE($22, jac_user_profile.floating_button),
+          proactive_suggestions        = COALESCE($23, jac_user_profile.proactive_suggestions),
+          personalized_recommendations = COALESCE($24, jac_user_profile.personalized_recommendations),
+          voice_selection              = COALESCE($25, jac_user_profile.voice_selection),
+          low_data_mode                = COALESCE($26, jac_user_profile.low_data_mode),
           updated_at       = NOW()`,
         [
           userId,
@@ -16664,6 +16930,13 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           typeof voiceEnabled === "boolean" ? voiceEnabled : null,
           typeof language === "string" && ["en","es"].includes(language) ? language : null,
           typeof tutorialStatus === "string" ? tutorialStatus : null,
+          typeof textResponses === "boolean" ? textResponses : null,
+          typeof voiceActivation === "boolean" ? voiceActivation : null,
+          typeof floatingButton === "boolean" ? floatingButton : null,
+          typeof proactiveSuggestions === "boolean" ? proactiveSuggestions : null,
+          typeof personalizedRecommendations === "boolean" ? personalizedRecommendations : null,
+          typeof voiceSelection === "string" ? voiceSelection : null,
+          typeof lowDataMode === "boolean" ? lowDataMode : null,
         ]
       );
       res.json({ ok: true });
@@ -16753,6 +17026,899 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     }
   });
 
+  // ── JAC Memory CRUD ────────────────────────────────────────────────────────
+  app.get("/api/jac/memory", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const r = await pool.query(
+        `SELECT id, category, key, value, source, updated_at FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC`,
+        [userId]
+      );
+      res.json(r.rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/jac/memory", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { category, key, value, source } = req.body;
+      const ALLOWED_CATEGORIES = ["personal", "work", "marketplace", "vi", "load_board", "preferences", "profile", "vehicle", "certifications", "schedule", "system"];
+      if (!ALLOWED_CATEGORIES.includes(category) || typeof key !== "string" || !key.trim()) {
+        return res.status(400).json({ message: "Invalid category or key" });
+      }
+      if (value === undefined || value === null) {
+        return res.status(400).json({ message: "value required" });
+      }
+      const safeSource = ["user_said", "extracted", "system"].includes(source) ? source : "user_said";
+      await pool.query(
+        `INSERT INTO jac_memory (user_id, category, key, value, source, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5, NOW())
+         ON CONFLICT (user_id, category, key) DO UPDATE SET
+           value = $4::jsonb, source = $5, updated_at = NOW()`,
+        [userId, category, key.trim().slice(0, 100), JSON.stringify(value), safeSource]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/jac/memory/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      await pool.query(`DELETE FROM jac_memory WHERE id = $1 AND user_id = $2`, [id, userId]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── JAC Full Live Context (everything JAC needs to know about a user) ──────
+  app.get("/api/jac/briefing", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const briefing = await buildMorningBriefing(userId);
+      if (!briefing) return res.json({ text: null, chips: [] });
+      res.json({ text: briefing.text, chips: briefing.chips });
+    } catch (err: any) {
+      console.error("[jac/briefing]", err.message);
+      res.json({ text: null, chips: [] });
+    }
+  });
+
+  app.get("/api/jac/opportunities", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const opportunities = await scanOpportunities(userId);
+      res.json(opportunities);
+    } catch (err: any) {
+      console.error("[jac/opportunities]", err.message);
+      res.json([]);
+    }
+  });
+
+  app.get("/api/jac/context", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      syncJacProfile(userId).catch(() => {});
+      const [memRes, liveRes, userRes] = await Promise.all([
+        pool.query(
+          `SELECT id, category, key, value, source, updated_at FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC`,
+          [userId]
+        ),
+        pool.query(`
+          SELECT
+            (SELECT COUNT(*)::int  FROM jobs WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by = $1 AND status = 'open' AND assigned_worker_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
+            (SELECT COUNT(*)::int  FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
+            (SELECT COUNT(*)::int  FROM proof_submissions ps JOIN jobs j ON j.id = ps.job_id WHERE j.posted_by = $1 AND ps.status = 'submitted') AS proofs_pending,
+            (SELECT COUNT(*)::int  FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+            (SELECT COUNT(*)::int  FROM marketplace_items WHERE seller_id = $1 AND status = 'active') AS marketplace_active,
+            (SELECT COUNT(*)::int  FROM marketplace_offers WHERE seller_id = $1 AND status = 'pending') AS marketplace_offers_received,
+            (SELECT COUNT(*)::int  FROM load_board_listings WHERE poster_id = $1 AND status = 'active') AS load_board_active,
+            (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int FROM credit_ledger WHERE user_id = $1) AS studio_credits,
+            (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
+            (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status = 'in_progress' AND deleted_at IS NULL) AS jobs_in_progress_worker,
+            (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status = 'completed' AND deleted_at IS NULL) AS jobs_completed_worker
+        `, [userId]),
+        pool.query(
+          `SELECT full_name, id_verified, stripe_account_id, stripe_onboarding_complete FROM users WHERE id = $1`,
+          [userId]
+        ),
+      ]);
+
+      const live = liveRes.rows[0] ?? {};
+      const user = userRes.rows[0] ?? {};
+      const memory = memRes.rows;
+
+      // Build proactive alerts
+      const alerts: Array<{ type: string; title: string; body: string; route?: string; priority: "high" | "medium" | "low" }> = [];
+
+      if (live.proofs_pending > 0) {
+        alerts.push({ type: "proof_review", title: `${live.proofs_pending} proof${live.proofs_pending > 1 ? "s" : ""} waiting for your review`, body: "A worker submitted proof of completion. Approve or request a retake.", route: "/jobs", priority: "high" });
+      }
+      if (live.open_disputes > 0) {
+        alerts.push({ type: "dispute", title: `${live.open_disputes} open dispute${live.open_disputes > 1 ? "s" : ""}`, body: "You have an active dispute that needs attention.", route: "/jobs", priority: "high" });
+      }
+      if (live.marketplace_offers_received > 0) {
+        alerts.push({ type: "marketplace_offer", title: `${live.marketplace_offers_received} offer${live.marketplace_offers_received > 1 ? "s" : ""} on your listing`, body: "Someone made an offer on one of your listings. Review it now.", route: "/marketplace/my-listings", priority: "high" });
+      }
+      if (live.hirer_unfilled > 0) {
+        alerts.push({ type: "unfilled_job", title: `${live.hirer_unfilled} job${live.hirer_unfilled > 1 ? "s" : ""} still looking for a worker`, body: "Your posted job hasn't been filled yet.", route: "/jobs", priority: "medium" });
+      }
+      if (user.id_verified === false || user.id_verified === null) {
+        alerts.push({ type: "id_verify", title: "ID not verified yet", body: "Verify your identity to unlock hiring and earning on GUBER.", route: "/profile", priority: "medium" });
+      }
+      if (user.stripe_account_id && !user.stripe_onboarding_complete) {
+        alerts.push({ type: "stripe_onboard", title: "Stripe payout setup incomplete", body: "Complete your Stripe onboarding to receive payments.", route: "/profile", priority: "medium" });
+      }
+      if (live.unread_notifs > 0) {
+        alerts.push({ type: "notifications", title: `${live.unread_notifs} unread notification${live.unread_notifs > 1 ? "s" : ""}`, body: "You have unread notifications.", route: "/notifications", priority: "low" });
+      }
+
+      const firstName = (user.full_name || "").split(" ")[0] || null;
+
+      // ── Active D.D. goal ──────────────────────────────────────────────────
+      let activeGoal: any = null;
+      try {
+        const goalRes = await pool.query(
+          `SELECT id, goal_amount, deadline, plan_json, earned_so_far, status, created_at
+           FROM jac_dd_goals WHERE user_id = $1 AND status = 'active'
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId]
+        );
+        if (goalRes.rows.length) {
+          const g = goalRes.rows[0];
+          // Refresh earned_so_far from wallet_transactions since goal was created
+          const earnRes = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total
+             FROM wallet_transactions WHERE user_id = $1 AND type = 'earning'
+             AND status IN ('available','completed') AND created_at >= $2`,
+            [userId, g.created_at]
+          );
+          const earnedSoFar = parseFloat(earnRes.rows[0]?.total) || 0;
+          if (earnedSoFar !== parseFloat(g.earned_so_far)) {
+            await pool.query(
+              `UPDATE jac_dd_goals SET earned_so_far = $1, updated_at = NOW() WHERE id = $2`,
+              [earnedSoFar, g.id]
+            );
+          }
+          activeGoal = {
+            id: g.id,
+            goalAmount: parseFloat(g.goal_amount),
+            deadline: g.deadline,
+            earnedSoFar,
+            status: g.status,
+            createdAt: g.created_at,
+            planItems: Array.isArray(g.plan_json) ? g.plan_json : [],
+          };
+        }
+      } catch {}
+
+      res.json({
+        memory,
+        live: {
+          workerActive:             parseInt(live.worker_active) || 0,
+          hirerActive:              parseInt(live.hirer_active) || 0,
+          hirerUnfilled:            parseInt(live.hirer_unfilled) || 0,
+          unreadNotifs:             parseInt(live.unread_notifs) || 0,
+          proofsPending:            parseInt(live.proofs_pending) || 0,
+          openDisputes:             parseInt(live.open_disputes) || 0,
+          marketplaceActive:        parseInt(live.marketplace_active) || 0,
+          marketplaceOffersReceived:parseInt(live.marketplace_offers_received) || 0,
+          loadBoardActive:          parseInt(live.load_board_active) || 0,
+          studioCredits:            parseInt(live.studio_credits) || 0,
+          walletBalance:            parseFloat(live.wallet_balance) || 0,
+          jobsInProgressWorker:     parseInt(live.jobs_in_progress_worker) || 0,
+          jobsCompletedWorker:      parseInt(live.jobs_completed_worker) || 0,
+          idVerified:               !!user.id_verified,
+          stripeOnboardComplete:    !!user.stripe_onboarding_complete,
+        },
+        alerts,
+        firstName,
+        activeGoal,
+      });
+    } catch (err: any) {
+      console.error("[jac/context]", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── JAC D.D. (Destination Determination) ─────────────────────────────────
+
+  // Parse goal amount + deadline from a natural-language message
+  function parseDDIntent(message: string): { goalAmount: number | null; deadline: string | null } {
+    const amtMatch = message.match(/\$\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)/);
+    const goalAmount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g, "")) : null;
+    const dlMatch = message.match(/\b(?:by|before)\s+((?:this\s+)?\w+(?:\s+\d{1,2})?)\b/i);
+    const deadline = dlMatch ? dlMatch[1].trim() : null;
+    return { goalAmount, deadline };
+  }
+
+  app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      // Accept both `goal` (spec contract) and `goalAmount` (backward-compat)
+      const { message, goal: bodyGoalSpec, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
+        message?: string;
+        goal?: number;
+        goalAmount?: number;
+        deadline?: string;
+      };
+
+      const parsed = parseDDIntent(message || "");
+      const goalAmount = bodyGoalSpec ?? bodyGoal ?? parsed.goalAmount;
+      const deadline = bodyDeadline ?? parsed.deadline;
+
+      if (!goalAmount || goalAmount <= 0) {
+        return res.status(400).json({ message: "Please specify a goal amount, e.g. 'I need $500 by Friday'." });
+      }
+
+      // ── Time window scoring ─────────────────────────────────────────────
+      // Parse deadline into days remaining; default 7 if not specified.
+      function deadlineToDays(dl: string | null): number {
+        if (!dl) return 7;
+        const lower = dl.toLowerCase();
+        if (/tonight|today|eod|end of day|midnight/.test(lower)) return 0.5;
+        if (/tomorrow/.test(lower)) return 1;
+        if (/this weekend|saturday|sunday/.test(lower)) {
+          const now = new Date();
+          const dow = now.getDay(); // 0=Sun,6=Sat
+          const daysToSat = dow <= 6 ? 6 - dow : 0;
+          return Math.max(0.5, daysToSat);
+        }
+        const dayMap: Record<string, number> = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0 };
+        for (const [d, target] of Object.entries(dayMap)) {
+          if (lower.includes(d)) {
+            const now = new Date();
+            const cur = now.getDay();
+            let diff = target - cur;
+            if (diff <= 0) diff += 7;
+            return diff;
+          }
+        }
+        if (/next week/.test(lower)) return 7;
+        if (/\d/.test(lower)) {
+          const m = lower.match(/(\d+)\s*(day|hour)/);
+          if (m) return m[2].startsWith("hour") ? parseInt(m[1]) / 24 : parseInt(m[1]);
+        }
+        return 7;
+      }
+      const daysLeft = deadlineToDays(deadline);
+      const dailyRateNeeded = daysLeft > 0 ? goalAmount / daysLeft : goalAmount;
+
+      // ── Query all income streams + profile in parallel ──────────────────
+      const userRes = await pool.query(
+        `SELECT u.zipcode, u.id_verified,
+                (SELECT value FROM jac_memory WHERE user_id = u.id AND category = 'work' AND key = 'top_service_categories' LIMIT 1) AS top_cats,
+                (SELECT value FROM jac_memory WHERE user_id = u.id AND category = 'transport' AND key = 'has_vehicle' LIMIT 1) AS has_vehicle
+         FROM users u WHERE u.id = $1`,
+        [userId]
+      );
+      const zip = userRes.rows[0]?.zipcode ?? null;
+      const idVerified = !!userRes.rows[0]?.id_verified;
+      const topCats: string[] = (() => { try { const v = userRes.rows[0]?.top_cats; return Array.isArray(v) ? v : (typeof v === "string" ? JSON.parse(v) : []); } catch { return []; } })();
+      const hasVehicle = !!userRes.rows[0]?.has_vehicle;
+
+      const [jobsRes, viJobsRes, lbRes, cashDropRes, missionsRes, mktRes] = await Promise.all([
+        // General nearby jobs — profile-matched categories first; includes total count
+        pool.query(
+          `SELECT id, title, budget, category, service_type, zip, job_type,
+                  COUNT(*) OVER() AS availability_count
+           FROM jobs
+           WHERE status = 'open' AND assigned_worker_id IS NULL
+             AND job_type IS DISTINCT FROM 'vi'
+             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
+           ORDER BY
+             CASE WHEN $2::text[] IS NOT NULL AND category = ANY($2::text[]) THEN 0 ELSE 1 END,
+             budget DESC NULLS LAST
+           LIMIT 6`,
+          [zip, topCats.length ? topCats : null]
+        ),
+        // V&I jobs (Verify & Inspect) — zip-proximity filtered, fast single-visit pay
+        pool.query(
+          `SELECT id, title, budget, zip, COUNT(*) OVER() AS availability_count
+           FROM jobs
+           WHERE status = 'open' AND assigned_worker_id IS NULL
+             AND job_type = 'vi'
+             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
+           ORDER BY budget DESC NULLS LAST LIMIT 3`,
+          [zip]
+        ),
+        // Load board — only if user has a vehicle; includes total count
+        hasVehicle ? pool.query(
+          `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip,
+                  COUNT(*) OVER() AS availability_count
+           FROM load_board_listings WHERE status = 'active'
+           ORDER BY posted_price DESC NULLS LAST LIMIT 3`
+        ) : Promise.resolve({ rows: [] as any[] }),
+        // Cash drops — ID-verified + active + not expired; proximity requires user GPS so all active drops shown
+        idVerified ? pool.query(
+          `SELECT id, title, reward_per_winner, end_time,
+                  COUNT(*) OVER() AS availability_count
+           FROM cash_drops
+           WHERE status = 'active' AND (is_test_drop = FALSE OR is_test_drop IS NULL)
+             AND (end_time IS NULL OR end_time > NOW())
+           ORDER BY reward_per_winner DESC LIMIT 3`
+        ) : Promise.resolve({ rows: [] as any[] }),
+        // City missions (incomplete only) — includes total remaining count
+        pool.query(
+          `SELECT gtt.id, gtt.emoji, gtt.title, gtt.reward_credits, gtt.description,
+                  COUNT(*) OVER() AS availability_count
+           FROM growth_task_templates gtt
+           WHERE gtt.is_active = TRUE AND gtt.paused = FALSE
+             AND NOT EXISTS (
+               SELECT 1 FROM growth_task_completions gtc
+               WHERE gtc.template_id = gtt.id AND gtc.user_id = $1 AND gtc.status = 'approved'
+             )
+           ORDER BY gtt.reward_credits DESC LIMIT 3`,
+          [userId]
+        ),
+        // User's stale marketplace listings: active + getting views + no pending/accepted offers
+        pool.query(
+          `SELECT mi.id, mi.title, mi.price, mi.view_count,
+                  COUNT(*) OVER() AS availability_count
+           FROM marketplace_items mi
+           WHERE mi.seller_id = $1 AND mi.status = 'active'
+             AND COALESCE(mi.view_count, 0) > 0
+             AND (SELECT COUNT(*) FROM marketplace_offers mo
+                  WHERE mo.item_id = mi.id
+                    AND mo.status NOT IN ('rejected','withdrawn')) = 0
+           ORDER BY mi.view_count DESC LIMIT 2`,
+          [userId]
+        ),
+      ]);
+
+      // ── Build plan items with speed-to-earnings scoring ─────────────────
+      type PlanItem = {
+        type: string;
+        id?: number;
+        title: string;
+        estimatedPay: number;
+        availabilityCount: number;
+        route: string;
+        urgency: "high" | "normal";
+        actionLabel: string;
+        estimatedTime?: string;
+        notes?: string;
+        matchReason: string;
+      };
+
+      const items: PlanItem[] = [];
+
+      // Speed-to-earnings scoring: urgency = "high" if this item covers >= half the daily rate needed
+      function scoreUrgency(pay: number, estimatedHours: number): "high" | "normal" {
+        const payPerDay = (pay / estimatedHours) * 8; // normalize to 8h day
+        return payPerDay >= dailyRateNeeded * 0.5 ? "high" : "normal";
+      }
+
+      const jobAvail = parseInt(jobsRes.rows[0]?.availability_count ?? "0");
+      for (const j of jobsRes.rows) {
+        const pay = parseFloat(j.budget) || 0;
+        if (pay <= 0) continue;
+        const isCatMatch = topCats.length && topCats.some(c => j.category?.toLowerCase().includes(c.toLowerCase()));
+        items.push({
+          type: "job",
+          id: j.id,
+          title: j.title || `${j.category || "Job"} nearby`,
+          estimatedPay: pay,
+          availabilityCount: jobAvail,
+          route: `/jobs/${j.id}`,
+          urgency: scoreUrgency(pay, 4),
+          actionLabel: "View job",
+          estimatedTime: "2–6 hrs",
+          matchReason: isCatMatch ? `Matches your ${topCats[0]} experience — ${jobAvail} open job${jobAvail !== 1 ? "s" : ""} nearby` : `${jobAvail} open job${jobAvail !== 1 ? "s" : ""} in your area`,
+        });
+      }
+
+      const viAvail = parseInt(viJobsRes.rows[0]?.availability_count ?? "0");
+      for (const j of viJobsRes.rows) {
+        const pay = parseFloat(j.budget) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "vi_job",
+          id: j.id,
+          title: j.title || "Verify & Inspect job",
+          estimatedPay: pay,
+          availabilityCount: viAvail,
+          route: `/jobs/${j.id}`,
+          urgency: scoreUrgency(pay, 1.5),
+          actionLabel: "View V&I job",
+          estimatedTime: "1–2 hrs",
+          matchReason: `Quick single-visit payout — ${viAvail} V&I job${viAvail !== 1 ? "s" : ""} near you`,
+        });
+      }
+
+      const lbAvail = parseInt(lbRes.rows[0]?.availability_count ?? "0");
+      for (const lb of lbRes.rows) {
+        const pay = parseFloat(lb.posted_price) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "load_board",
+          id: lb.id,
+          title: `Haul: ${lb.cargo_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
+          estimatedPay: pay,
+          availabilityCount: lbAvail,
+          route: `/load-board/${lb.id}`,
+          urgency: scoreUrgency(pay, 6),
+          actionLabel: "View run",
+          estimatedTime: "4–8 hrs",
+          matchReason: `${lbAvail} active load${lbAvail !== 1 ? "s" : ""} on the board — vehicle required`,
+        });
+      }
+
+      const cdAvail = parseInt(cashDropRes.rows[0]?.availability_count ?? "0");
+      for (const cd of cashDropRes.rows) {
+        const pay = parseFloat(cd.reward_per_winner) || 0;
+        if (pay <= 0) continue;
+        items.push({
+          type: "cash_drop",
+          id: cd.id,
+          title: `Cash Drop: ${cd.title}`,
+          estimatedPay: pay,
+          availabilityCount: cdAvail,
+          route: `/cash-drops`,
+          urgency: cd.end_time ? "high" : "normal",
+          actionLabel: "Claim drop",
+          estimatedTime: "< 1 hr",
+          notes: cd.end_time ? `Ends ${new Date(cd.end_time).toLocaleDateString()}` : undefined,
+          matchReason: `${cdAvail} active drop${cdAvail !== 1 ? "s" : ""} — claim before they close`,
+        });
+      }
+
+      const missionAvail = parseInt(missionsRes.rows[0]?.availability_count ?? "0");
+      for (const m of missionsRes.rows) {
+        items.push({
+          type: "city_mission",
+          id: m.id,
+          title: `${m.emoji || "📍"} Mission: ${m.title}`,
+          estimatedPay: 0,
+          availabilityCount: missionAvail,
+          route: `/credits`,
+          urgency: "normal",
+          actionLabel: "Start mission",
+          estimatedTime: "< 30 min",
+          notes: `Earns ${m.reward_credits} credits`,
+          matchReason: `${missionAvail} mission${missionAvail !== 1 ? "s" : ""} available — earns GUBER credits`,
+        });
+      }
+
+      const mktAvail = parseInt(mktRes.rows[0]?.availability_count ?? "0");
+      for (const mi of mktRes.rows) {
+        const price = parseFloat(mi.price) || 0;
+        if (price <= 0) continue;
+        items.push({
+          type: "marketplace",
+          id: mi.id,
+          title: `Lower price on: ${mi.title}`,
+          estimatedPay: price * 0.9,
+          availabilityCount: mktAvail,
+          route: `/marketplace/my-listings`,
+          urgency: "normal",
+          actionLabel: "Update listing",
+          estimatedTime: "< 5 min",
+          matchReason: `${mi.view_count ?? 0} view${(mi.view_count ?? 0) !== 1 ? "s" : ""}, no offers yet — a small price drop often closes sales fast`,
+        });
+      }
+
+      // ── Rank: urgency first, then by speed-to-earnings (pay / hrs) ──────
+      items.sort((a, b) => {
+        if (a.urgency === "high" && b.urgency !== "high") return -1;
+        if (b.urgency === "high" && a.urgency !== "high") return 1;
+        const aRate = a.type === "vi_job" ? a.estimatedPay / 1.5 :
+                       a.type === "cash_drop" ? a.estimatedPay / 0.5 :
+                       a.type === "load_board" ? a.estimatedPay / 6 : a.estimatedPay / 4;
+        const bRate = b.type === "vi_job" ? b.estimatedPay / 1.5 :
+                       b.type === "cash_drop" ? b.estimatedPay / 0.5 :
+                       b.type === "load_board" ? b.estimatedPay / 6 : b.estimatedPay / 4;
+        return bRate - aRate;
+      });
+
+      const topItems = items.slice(0, 7);
+
+      // ── Realistic gap analysis ──────────────────────────────────────────
+      const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);
+      const realisticShortfall = Math.max(0, goalAmount - realisticEarnable);
+
+      // ── Save goal — earnedSoFar = 0 (tracking starts from NOW) ──────────
+      await pool.query(
+        `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+      const insertRes = await pool.query(
+        `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, realistic_earnable, status)
+         VALUES ($1, $2, $3, $4::jsonb, 0, $5, 'active')
+         RETURNING id`,
+        [userId, goalAmount, deadline, JSON.stringify(topItems), realisticEarnable]
+      );
+      const goalId = insertRes.rows[0]?.id;
+
+      // ── JAC coordinator voice — gap-aware response ───────────────────────
+      const deadlineText = deadline ? ` by ${deadline}` : "";
+      const daysText = daysLeft < 1 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${Math.round(daysLeft)} days`;
+
+      let intro: string;
+      if (topItems.length === 0) {
+        intro = `Goal set: $${goalAmount.toFixed(2)}${deadlineText}. No live jobs showing in your area right now — but new ones post daily. Come back and I'll pull fresh options.`;
+      } else if (realisticShortfall > 0) {
+        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} possible option${topItems.length !== 1 ? "s" : ""} near you worth exploring — actual earnings depend on availability and what gets accepted. New jobs post daily:`;
+      } else {
+        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} option${topItems.length !== 1 ? "s" : ""} in your area that could be worth looking into — ranked by potential payout:`;
+      }
+
+      res.json({
+        goalId,
+        goalAmount,
+        deadline,
+        daysLeft,
+        earnedSoFar: 0,
+        remaining: goalAmount,
+        realisticEarnable,
+        realisticShortfall,
+        planItems: topItems,
+        reply: intro,
+        actions: topItems.filter(i => i.estimatedPay > 0).slice(0, 4).map(item => ({
+          label: item.actionLabel,
+          message: `Take me to: ${item.title}`,
+          route: item.route,
+        })),
+      });
+    } catch (err: any) {
+      console.error("[jac/dd/plan]", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Shared handler for history/goals — same data, two routes for compatibility
+  async function handleDDHistory(req: Request, res: Response) {
+    try {
+      const userId = req.session.userId!;
+      const result = await pool.query(
+        `SELECT id, goal_amount, deadline, plan_json, earned_so_far, status, created_at, updated_at
+         FROM jac_dd_goals WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        [userId]
+      );
+      res.json(result.rows.map(r => ({
+        id: r.id,
+        goalAmount: parseFloat(r.goal_amount),
+        deadline: r.deadline,
+        planItems: Array.isArray(r.plan_json) ? r.plan_json : [],
+        earnedSoFar: parseFloat(r.earned_so_far) || 0,
+        status: r.status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })));
+    } catch (err: any) {
+      console.error("[jac/dd/history]", err.message);
+      res.json([]);
+    }
+  }
+
+  app.get("/api/jac/dd/goals", requireAuth, handleDDHistory);
+  app.get("/api/jac/dd/history", requireAuth, handleDDHistory);
+
+  app.patch("/api/jac/dd/goals/:id/abandon", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      await pool.query(
+        `UPDATE jac_dd_goals SET status = 'abandoned', updated_at = NOW() WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/jac/dd/stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const adminRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [req.session.userId]);
+      if (adminRes.rows[0]?.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+
+      const [totals, topGoals, recent, incomePaths] = await Promise.all([
+        pool.query(`
+          SELECT
+            COUNT(*)::int AS total_goals,
+            COUNT(*) FILTER (WHERE status = 'active')::int AS active_goals,
+            COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_goals,
+            COUNT(*) FILTER (WHERE status = 'abandoned')::int AS abandoned_goals,
+            ROUND(AVG(goal_amount)::numeric, 2) AS avg_goal_amount,
+            ROUND(AVG(earned_so_far)::numeric, 2) AS avg_earned,
+            COUNT(DISTINCT user_id)::int AS unique_users,
+            ROUND(
+              100.0 * COUNT(*) FILTER (WHERE status = 'completed') / NULLIF(COUNT(*), 0), 1
+            ) AS completion_rate,
+            ROUND(AVG(
+              goal_amount - COALESCE(realistic_earnable, 0)
+            )::numeric, 2) AS avg_gap_completed
+          FROM jac_dd_goals
+        `),
+        pool.query(`
+          SELECT goal_amount, COUNT(*)::int AS cnt
+          FROM jac_dd_goals
+          GROUP BY goal_amount ORDER BY cnt DESC LIMIT 5
+        `),
+        pool.query(`
+          SELECT g.id, g.goal_amount, g.deadline, g.earned_so_far, g.status, g.created_at,
+                 u.full_name, u.id AS user_id
+          FROM jac_dd_goals g JOIN users u ON u.id = g.user_id
+          ORDER BY g.created_at DESC LIMIT 10
+        `),
+        pool.query(`
+          SELECT elem->>'type' AS income_type, COUNT(*)::int AS cnt
+          FROM jac_dd_goals,
+               jsonb_array_elements(plan_json) AS elem
+          WHERE plan_json IS NOT NULL AND jsonb_typeof(plan_json) = 'array'
+          GROUP BY income_type ORDER BY cnt DESC LIMIT 6
+        `),
+      ]);
+
+      const t = totals.rows[0];
+      res.json({
+        totalGoals:       t?.total_goals ?? 0,
+        activeGoals:      t?.active_goals ?? 0,
+        completedGoals:   t?.completed_goals ?? 0,
+        abandonedGoals:   t?.abandoned_goals ?? 0,
+        avgGoalAmount:    parseFloat(t?.avg_goal_amount) || 0,
+        avgEarned:        parseFloat(t?.avg_earned) || 0,
+        uniqueUsers:      t?.unique_users ?? 0,
+        completionRate:   parseFloat(t?.completion_rate) || 0,
+        avgGapCompleted:  parseFloat(t?.avg_gap_completed) || 0,
+        topGoalAmounts:   topGoals.rows,
+        recentGoals:      recent.rows,
+        topIncomePaths:   incomePaths.rows,
+      });
+    } catch (err: any) {
+      console.error("[admin/jac/dd/stats]", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+
+  // ── JAC Brain Admin APIs ──────────────────────────────────────────────────────
+
+  app.get("/api/admin/jac/brain/stats", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const stats = await getJacBrainStats();
+      const interactionCounts = await pool.query(`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE cost_source = 'local')::int AS local_hits,
+          COUNT(*) FILTER (WHERE cost_source = 'cache')::int AS cache_hits,
+          COUNT(*) FILTER (WHERE cost_source = 'kb')::int AS kb_hits
+        FROM jac_interactions
+        WHERE created_at > NOW() - INTERVAL '30 days'
+      `);
+      const ic = interactionCounts.rows[0];
+      res.json({ ...stats, interactions: ic });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Knowledge Base CRUD
+  app.get("/api/admin/jac/brain/knowledge", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`SELECT * FROM jac_knowledge ORDER BY hit_count DESC, created_at DESC LIMIT 200`);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/knowledge", requireAdmin, async (req: Request, res: Response) => {
+    const { category, title, questionPatterns, keywords, answer, followUpActions } = req.body;
+    if (!category || !title || !answer) return res.status(400).json({ message: "category, title, answer required" });
+    try {
+      const r = await pool.query(
+        `INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by, admin_approved)
+         VALUES ($1,$2,$3,$4,$5,$6,'admin',TRUE) RETURNING *`,
+        [category, title,
+         JSON.stringify(questionPatterns ?? []),
+         JSON.stringify(keywords ?? []),
+         answer,
+         JSON.stringify(followUpActions ?? [])]
+      );
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/admin/jac/brain/knowledge/:id", requireAdmin, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { category, title, questionPatterns, keywords, answer, followUpActions, active, adminApproved } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE jac_knowledge SET
+          category = COALESCE($1, category),
+          title = COALESCE($2, title),
+          question_patterns = COALESCE($3::jsonb, question_patterns),
+          keywords = COALESCE($4::jsonb, keywords),
+          answer = COALESCE($5, answer),
+          follow_up_actions = COALESCE($6::jsonb, follow_up_actions),
+          active = COALESCE($7, active),
+          admin_approved = COALESCE($8, admin_approved),
+          updated_at = NOW()
+         WHERE id = $9 RETURNING *`,
+        [category, title,
+         questionPatterns ? JSON.stringify(questionPatterns) : null,
+         keywords ? JSON.stringify(keywords) : null,
+         answer,
+         followUpActions ? JSON.stringify(followUpActions) : null,
+         active, adminApproved, parseInt(id)]
+      );
+      if (!r.rows.length) return res.status(404).json({ message: "Not found" });
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/jac/brain/knowledge/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`DELETE FROM jac_knowledge WHERE id = $1`, [parseInt(req.params.id)]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Intents CRUD
+  app.get("/api/admin/jac/brain/intents", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`SELECT * FROM jac_intents ORDER BY hit_count DESC, created_at DESC`);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/intents", requireAdmin, async (req: Request, res: Response) => {
+    const { intentName, displayName, samplePhrases, targetFlow, targetRoute, fallbackResponse } = req.body;
+    if (!intentName || !displayName) return res.status(400).json({ message: "intentName, displayName required" });
+    try {
+      const r = await pool.query(
+        `INSERT INTO jac_intents (intent_name, display_name, sample_phrases, target_flow, target_route, fallback_response)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [intentName, displayName, JSON.stringify(samplePhrases ?? []), targetFlow, targetRoute, fallbackResponse]
+      );
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/admin/jac/brain/intents/:id", requireAdmin, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { displayName, samplePhrases, targetFlow, targetRoute, fallbackResponse, active } = req.body;
+    try {
+      const r = await pool.query(
+        `UPDATE jac_intents SET
+          display_name = COALESCE($1, display_name),
+          sample_phrases = COALESCE($2::jsonb, sample_phrases),
+          target_flow = COALESCE($3, target_flow),
+          target_route = COALESCE($4, target_route),
+          fallback_response = COALESCE($5, fallback_response),
+          active = COALESCE($6, active),
+          updated_at = NOW()
+         WHERE id = $7 RETURNING *`,
+        [displayName, samplePhrases ? JSON.stringify(samplePhrases) : null,
+         targetFlow, targetRoute, fallbackResponse, active, parseInt(id)]
+      );
+      if (!r.rows.length) return res.status(404).json({ message: "Not found" });
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/jac/brain/intents/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`DELETE FROM jac_intents WHERE id = $1`, [parseInt(req.params.id)]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Response Cache
+  app.get("/api/admin/jac/brain/cache", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`SELECT * FROM jac_response_cache ORDER BY hit_count DESC, created_at DESC LIMIT 100`);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/cache/promote", requireAdmin, async (req: Request, res: Response) => {
+    const { questionText, answerText, intentName } = req.body;
+    if (!questionText || !answerText) return res.status(400).json({ message: "questionText, answerText required" });
+    try {
+      await promoteToCache(questionText, answerText, intentName ?? null, "admin");
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/cache/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        `UPDATE jac_response_cache SET admin_approved = NOT admin_approved WHERE id = $1 RETURNING *`,
+        [parseInt(req.params.id)]
+      );
+      res.json(r.rows[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/jac/brain/cache/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`DELETE FROM jac_response_cache WHERE id = $1`, [parseInt(req.params.id)]);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Suggestions (top repeated questions not in KB)
+  app.get("/api/admin/jac/brain/suggestions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(`
+        WITH last_msgs AS (
+          SELECT
+            lower(regexp_replace(
+              (messages->-1->>'content'),
+              '[^a-z0-9 ]', ' ', 'gi'
+            )) AS q,
+            COUNT(*) AS freq
+          FROM jac_interactions
+          WHERE
+            messages IS NOT NULL
+            AND jsonb_array_length(messages) > 0
+            AND messages->-1->>'role' = 'user'
+            AND created_at > NOW() - INTERVAL '30 days'
+          GROUP BY 1
+        )
+        SELECT q AS question, freq::int
+        FROM last_msgs
+        WHERE length(q) > 8
+          AND NOT EXISTS (
+            SELECT 1 FROM jac_knowledge k
+            WHERE q ILIKE '%' || ANY (
+              ARRAY(SELECT jsonb_array_elements_text(k.keywords))
+            ) || '%'
+          )
+        ORDER BY freq DESC
+        LIMIT 30
+      `);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // Interaction review
+  app.get("/api/admin/jac/brain/interactions", requireAdmin, async (req: Request, res: Response) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+    try {
+      const r = await pool.query(`
+        SELECT id, user_id, visitor_id, intent, cost_source, admin_reviewed, admin_notes, created_at,
+               messages->-1 AS last_message
+        FROM jac_interactions
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [limit, offset]);
+      res.json(r.rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/jac/brain/interactions/:id/feedback", requireAdmin, async (req: Request, res: Response) => {
+    const { adminNotes, adminReviewed, promoteAnswer } = req.body;
+    try {
+      await pool.query(
+        `UPDATE jac_interactions SET admin_reviewed = $1, admin_notes = COALESCE($2, admin_notes), updated_at = NOW() WHERE id = $3`,
+        [adminReviewed ?? true, adminNotes, parseInt(req.params.id)]
+      );
+      if (promoteAnswer) {
+        const row = await pool.query(`SELECT messages FROM jac_interactions WHERE id = $1`, [parseInt(req.params.id)]);
+        if (row.rows.length) {
+          const msgs: Array<{ role: string; content: string }> = row.rows[0].messages ?? [];
+          const q = msgs.filter(m => m.role === "user").pop()?.content ?? "";
+          const a = msgs.filter(m => m.role === "assistant").pop()?.content ?? "";
+          if (q && a) await promoteToCache(q, a, null, "ai_approved");
+        }
+      }
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
   // Keeps the API key server-side. Returns audio/mpeg stream.
   // ── TTS cost guards ───────────────────────────────────────────────────────
@@ -16830,6 +17996,58 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     } catch (e: any) {
       console.error("[JAC TTS] error:", e.message);
       res.status(500).json({ message: "TTS error" });
+    }
+  });
+
+  // ── JAC STT — Whisper transcription (iOS + fallback) ─────────────────────────
+  app.post("/api/jac/stt", async (req: Request, res: Response) => {
+    try {
+      const { audioBase64, mimeType } = req.body as { audioBase64?: string; mimeType?: string };
+      if (!audioBase64 || typeof audioBase64 !== "string") {
+        return res.status(400).json({ message: "audioBase64 required" });
+      }
+
+      const apiKey   = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const baseURL  = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      if (!apiKey) return res.status(503).json({ message: "STT not configured" });
+
+      // IP rate limit: 5 calls/min
+      const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const STT_WINDOW_MS = 60_000;
+      const STT_IP_MAX    = 5;
+      if (!(global as any).__sttIpBucket) (global as any).__sttIpBucket = new Map();
+      const sttBucket: Map<string, { count: number; resetAt: number }> = (global as any).__sttIpBucket;
+      const b = sttBucket.get(ip) ?? { count: 0, resetAt: now + STT_WINDOW_MS };
+      if (now > b.resetAt) { b.count = 0; b.resetAt = now + STT_WINDOW_MS; }
+      if (b.count >= STT_IP_MAX) {
+        console.warn(`[JAC STT] rate-limited IP ${ip}`);
+        return res.status(429).json({ message: "Too many STT requests — slow down." });
+      }
+      b.count++;
+      sttBucket.set(ip, b);
+
+      const audioBuffer = Buffer.from(audioBase64, "base64");
+      const ext = (mimeType ?? "audio/webm").includes("mp4") ? "m4a" : "webm";
+      const filename = `jac_audio.${ext}`;
+
+      const OpenAI = (await import("openai")).default;
+      const { toFile } = await import("openai");
+      const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+
+      const file = await toFile(audioBuffer, filename, { type: mimeType ?? "audio/webm" });
+      const transcription = await openai.audio.transcriptions.create({
+        file,
+        model: "whisper-1",
+        language: "en",
+      });
+
+      const text = (transcription.text ?? "").trim();
+      console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}"`);
+      return res.json({ text });
+    } catch (e: any) {
+      console.error("[JAC STT] error:", e.message);
+      return res.status(500).json({ message: "STT error" });
     }
   });
 
