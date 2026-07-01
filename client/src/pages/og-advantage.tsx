@@ -369,8 +369,17 @@ export default function OgAdvantage() {
           </div>
         </div>
 
+        {/* Already purchased contact note */}
+        <p className="text-center text-[10px] text-muted-foreground/60 mt-8 leading-relaxed">
+          Already purchased Day-1 OG but not seeing your badge?{" "}
+          <a href="mailto:support@guberapp.com?subject=Day-1%20OG%20Badge%20Missing" className="text-amber-400/80 hover:text-amber-400 underline underline-offset-2 transition-colors">
+            Contact us
+          </a>{" "}
+          and we&apos;ll get it sorted.
+        </p>
+
         {/* Legal footer */}
-        <p className="text-center text-[10px] text-muted-foreground/50 font-display tracking-wider mt-8">
+        <p className="text-center text-[10px] text-muted-foreground/50 font-display tracking-wider mt-4">
           GUBER GLOBAL LLC · DAY-1 OG IS A PLATFORM DESIGNATION, NOT A FINANCIAL INSTRUMENT
         </p>
       </div>

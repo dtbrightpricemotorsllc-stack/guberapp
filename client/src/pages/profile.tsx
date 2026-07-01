@@ -790,6 +790,12 @@ export default function Profile() {
             >
               Not now
             </button>
+            <p className="mt-3 text-center text-[10px] text-muted-foreground/60 leading-relaxed">
+              Already purchased OG but not seeing your badge?{" "}
+              <a href="mailto:support@guberapp.com?subject=Day-1%20OG%20Badge%20Missing" className="text-amber-400/80 hover:text-amber-400 underline underline-offset-2 transition-colors">
+                Contact us
+              </a>
+            </p>
           </Card>
           );
         })()}
