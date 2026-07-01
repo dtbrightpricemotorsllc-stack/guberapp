@@ -122,10 +122,21 @@ export class WhisperProvider implements STTProvider {
 
     rec.onstop = () => { this._finalize(); };
 
-    // timeslice 250ms — collects chunks during recording.
-    // Some iOS versions only fire ondataavailable on stop; that's fine because
-    // _finalize reads this._chunks which gets the single on-stop chunk too.
-    try { rec.start(250); } catch { rec.start(); }
+    // On iOS/Safari, timeslice recording is unreliable — the browser may fire
+    // ondataavailable with empty chunks and terminate the recorder early.
+    // Use no timeslice on iOS/Safari; the final ondataavailable fires on stop.
+    const isIosSafari =
+      typeof navigator !== "undefined" &&
+      /iP(hone|ad|od)/i.test(navigator.userAgent);
+    try {
+      if (isIosSafari) {
+        rec.start();
+      } else {
+        rec.start(250);
+      }
+    } catch {
+      try { rec.start(); } catch { /* give up */ }
+    }
 
     this._recorder = rec;
     this._listening = true;

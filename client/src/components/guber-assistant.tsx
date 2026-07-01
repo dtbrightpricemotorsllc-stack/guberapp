@@ -1072,7 +1072,16 @@ export function GUBERAssistant() {
             {/* Mic button */}
             {micSupported && (
               <button
-                onClick={() => { unlockAudioContext(); listening ? stopListening() : startListening(); }}
+                onClick={() => {
+                  unlockAudioContext();
+                  if (listening) {
+                    stopListening();
+                  } else {
+                    cancelSpeech();
+                    cancelAllJacAudio();
+                    setTimeout(() => startListening(), 150);
+                  }
+                }}
                 className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
                   listening ? "scale-110" : "hover:scale-105 active:scale-95"
                 }`}

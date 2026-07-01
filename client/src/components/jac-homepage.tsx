@@ -262,6 +262,27 @@ export function JacHomepage() {
     const trimmed = text.trim();
     if (!trimmed || typing) return;
 
+    // ── Voice sentinels — never leak to JAC as text ─────────────────────────
+    if (trimmed === "__mic_denied__") {
+      setMessages(prev => [...prev,
+        { role: "assistant", content: "Looks like mic access was blocked. What device are you using?", buttons: [
+          { label: "Samsung", message: "Samsung" },
+          { label: "Pixel", message: "Pixel" },
+          { label: "iPhone", message: "iPhone" },
+          { label: "Other Android", message: "Other Android" },
+        ]},
+      ]);
+      if (!muted) jacSpeak("Looks like mic access was blocked. What device are you using?", { muted });
+      return;
+    }
+    if (
+      trimmed === "__whisper_empty__" ||
+      trimmed === "__whisper_error__" ||
+      trimmed === "__mic_error__"
+    ) {
+      return;
+    }
+
     // ── Feedback report sentinel ─────────────────────────────────────────────
     if (trimmed === "__submit_feedback_report__") {
       const draft = feedbackDraftRef.current;
@@ -685,7 +706,15 @@ export function JacHomepage() {
             />
             {micSupported && (
               <button
-                onClick={listening ? stopListening : startListening}
+                onClick={() => {
+                  if (listening) {
+                    stopListening();
+                  } else {
+                    cancelSpeech();
+                    cancelAllJacAudio();
+                    setTimeout(() => startListening(), 150);
+                  }
+                }}
                 className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${listening ? "animate-pulse" : ""}`}
                 style={{
                   background: listening ? "hsl(0 80% 55%)" : transcribing ? "hsl(270 60% 35%)" : "hsl(222 47% 15%)",
