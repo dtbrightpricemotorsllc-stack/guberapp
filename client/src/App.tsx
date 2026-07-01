@@ -19,6 +19,7 @@ import { isStoreBuild } from "@/lib/platform";
 import { WakeWordDetector } from "@/lib/voice";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import {
   lockBiometricSession,
   getBiometricEnabled,
@@ -455,6 +456,14 @@ export function NativeDeepLinkHandler() {
   const { logout } = useAuth();
   const { toast } = useToast();
   const [biometricLocked, setBiometricLocked] = useState(false);
+
+  // Ensure status bar always shows white/light icons on GUBER's dark background.
+  // Runs once on mount — guards both iOS and Android native builds.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    StatusBar.setStyle({ style: Style.Light }).catch(() => {});
+    StatusBar.setBackgroundColor({ color: "#00000000" }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;

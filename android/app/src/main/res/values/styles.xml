@@ -13,10 +13,10 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- White status bar background -->
-        <item name="android:statusBarColor">#FFFFFF</item>
-        <!-- true = dark icons (time, battery, signal) on light background -->
-        <item name="android:windowLightStatusBar">true</item>
+        <!-- Transparent status bar — app dark background shows through -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- false = light/white icons (time, battery, signal) visible on dark background -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 
