@@ -26,6 +26,7 @@ const OG_PREAPPROVED_EMAILS = [
   "robertboulosqa@gmail.com",
   "mgersak20@gmail.com",
   "ceibutler@gmail.com",
+  "chikinluvinmama@gmail.com",
 ];
 
 export async function syncOGPreapprovedEmails() {
