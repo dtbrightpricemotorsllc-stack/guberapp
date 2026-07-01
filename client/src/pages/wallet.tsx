@@ -185,15 +185,15 @@ export default function WalletPage() {
   const payments = transactions?.filter(t => t.type === "payment") || [];
   const earnings = transactions?.filter(t => t.type === "earning" || t.type === "credit") || [];
 
-  const totalEarnings = earnings.reduce((s, t) => s + t.amount, 0);
-  const availableBalance = earnings.filter(t => t.status === "available").reduce((s, t) => s + t.amount, 0);
-  const pendingEarnings = earnings.filter(t => t.status === "pending").reduce((s, t) => s + t.amount, 0);
-  const totalSpent = payments.reduce((s, t) => s + t.amount, 0);
-  const creditBalance = transactions?.filter(t => t.type === "credit" && t.status === "available").reduce((s, t) => s + t.amount, 0) || 0;
+  const totalEarnings = earnings.reduce((s, t) => s + (t.amount ?? 0), 0);
+  const availableBalance = earnings.filter(t => t.status === "available").reduce((s, t) => s + (t.amount ?? 0), 0);
+  const pendingEarnings = earnings.filter(t => t.status === "pending").reduce((s, t) => s + (t.amount ?? 0), 0);
+  const totalSpent = payments.reduce((s, t) => s + (t.amount ?? 0), 0);
+  const creditBalance = (transactions ?? []).filter(t => t.type === "credit" && t.status === "available").reduce((s, t) => s + (t.amount ?? 0), 0);
 
   const unsentTotal = earnings
     .filter(t => t.status === "available" && !(t as any).stripeTransferId)
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + (t.amount ?? 0), 0);
 
   const hasUnsent = unsentTotal > 0;
   const isConnectActive = connectStatus?.status === "active";
@@ -511,7 +511,7 @@ function TransactionList({ items }: { items: WalletTransaction[] }) {
             </div>
             <div className="text-right">
               <p className={`font-display font-bold ${isHeld ? "text-yellow-400" : colorClass}`}>
-                {t.type === "payment" ? "-" : "+"}${t.amount.toFixed(2)}
+                {t.type === "payment" ? "-" : "+"}${(t.amount ?? 0).toFixed(2)}
               </p>
               <Badge
                 variant="outline"

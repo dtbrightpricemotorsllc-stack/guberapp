@@ -71,7 +71,17 @@ export class WhisperProvider implements STTProvider {
 
     // Pre-check permission state so we can distinguish "needs dialog" from
     // "hard denied" — avoids a confusing silent failure on Android.
-    if (typeof navigator !== "undefined" && navigator.permissions) {
+    //
+    // IMPORTANT: Skip this on iOS/Safari. On iOS Safari and PWA, any `await`
+    // before getUserMedia burns the user-gesture activation token. Once the
+    // activation is consumed, getUserMedia silently fails with NotAllowedError
+    // even when the user granted mic permission. We skip the pre-check on iOS
+    // and let getUserMedia handle the NotAllowedError itself.
+    const isIosSafari =
+      typeof navigator !== "undefined" &&
+      /iP(hone|ad|od)/i.test(navigator.userAgent);
+
+    if (!isIosSafari && typeof navigator !== "undefined" && navigator.permissions) {
       try {
         const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
         if (perm.state === "denied") {
@@ -125,9 +135,6 @@ export class WhisperProvider implements STTProvider {
     // On iOS/Safari, timeslice recording is unreliable — the browser may fire
     // ondataavailable with empty chunks and terminate the recorder early.
     // Use no timeslice on iOS/Safari; the final ondataavailable fires on stop.
-    const isIosSafari =
-      typeof navigator !== "undefined" &&
-      /iP(hone|ad|od)/i.test(navigator.userAgent);
     try {
       if (isIosSafari) {
         rec.start();
