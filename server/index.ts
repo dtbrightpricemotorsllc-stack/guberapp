@@ -1015,6 +1015,149 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_feedback_status ON jac_feedback_reports(status, created_at DESC);
   `).catch(e => console.error("[migration] jac_feedback_reports error:", e));
 
+  // ── GUBER Campaign Lab ─────────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS campaign_lab_role TEXT;
+  `).catch(e => console.error("[migration] campaign_lab_role error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_tool_costs (
+      id           SERIAL PRIMARY KEY,
+      tool_key     TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      cost_cents   INTEGER NOT NULL DEFAULT 0,
+      description  TEXT,
+      active       BOOLEAN DEFAULT TRUE,
+      updated_at   TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] campaign_lab_tool_costs error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_budget_config (
+      id                    INTEGER PRIMARY KEY DEFAULT 1,
+      monthly_budget_cents  INTEGER DEFAULT 50000,
+      monthly_spent_cents   INTEGER DEFAULT 0,
+      budget_month_year     TEXT,
+      ai_kill_switch        BOOLEAN DEFAULT FALSE,
+      updated_at            TIMESTAMP DEFAULT NOW(),
+      updated_by_user_id    INTEGER REFERENCES users(id)
+    );
+    INSERT INTO campaign_lab_budget_config (id) VALUES (1) ON CONFLICT DO NOTHING;
+  `).catch(e => console.error("[migration] campaign_lab_budget_config error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_brand_context (
+      id         SERIAL PRIMARY KEY,
+      category   TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      content    TEXT NOT NULL,
+      is_active  BOOLEAN DEFAULT TRUE,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] campaign_lab_brand_context error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_assets (
+      id                   SERIAL PRIMARY KEY,
+      category             TEXT NOT NULL,
+      name                 TEXT NOT NULL,
+      description          TEXT,
+      url                  TEXT NOT NULL,
+      cloudinary_public_id TEXT,
+      file_type            TEXT NOT NULL,
+      mime_type            TEXT,
+      tags                 JSONB DEFAULT '[]',
+      is_approved          BOOLEAN DEFAULT TRUE,
+      uploaded_by_user_id  INTEGER REFERENCES users(id),
+      created_at           TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_assets_category ON campaign_lab_assets(category);
+  `).catch(e => console.error("[migration] campaign_lab_assets error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_campaigns (
+      id                 SERIAL PRIMARY KEY,
+      title              TEXT NOT NULL,
+      description        TEXT,
+      goal               TEXT,
+      audience           TEXT,
+      approved_messaging TEXT,
+      required_cta       TEXT,
+      hashtags           JSONB DEFAULT '[]',
+      budget_cents       INTEGER DEFAULT 0,
+      spent_cents        INTEGER DEFAULT 0,
+      status             TEXT NOT NULL DEFAULT 'draft',
+      due_date           TIMESTAMP,
+      cover_image_url    TEXT,
+      created_by_user_id INTEGER REFERENCES users(id),
+      created_at         TIMESTAMP DEFAULT NOW(),
+      updated_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_campaigns_status ON campaign_lab_campaigns(status);
+  `).catch(e => console.error("[migration] campaign_lab_campaigns error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_creator_assignments (
+      id                   SERIAL PRIMARY KEY,
+      user_id              INTEGER NOT NULL REFERENCES users(id),
+      campaign_id          INTEGER NOT NULL REFERENCES campaign_lab_campaigns(id) ON DELETE CASCADE,
+      spending_limit_cents INTEGER DEFAULT 2500,
+      spent_cents          INTEGER DEFAULT 0,
+      active               BOOLEAN DEFAULT TRUE,
+      assigned_at          TIMESTAMP DEFAULT NOW(),
+      assigned_by_user_id  INTEGER REFERENCES users(id),
+      UNIQUE(user_id, campaign_id)
+    );
+  `).catch(e => console.error("[migration] campaign_lab_creator_assignments error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_work_items (
+      id                   SERIAL PRIMARY KEY,
+      user_id              INTEGER NOT NULL REFERENCES users(id),
+      campaign_id          INTEGER NOT NULL REFERENCES campaign_lab_campaigns(id) ON DELETE CASCADE,
+      title                TEXT NOT NULL,
+      type                 TEXT NOT NULL,
+      status               TEXT NOT NULL DEFAULT 'draft',
+      content              TEXT,
+      asset_url            TEXT,
+      cloudinary_public_id TEXT,
+      ai_prompt_used       TEXT,
+      notes                TEXT,
+      reviewer_feedback    TEXT,
+      reviewed_by_user_id  INTEGER REFERENCES users(id),
+      reviewed_at          TIMESTAMP,
+      parent_work_item_id  INTEGER,
+      created_at           TIMESTAMP DEFAULT NOW(),
+      updated_at           TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_work_items_campaign ON campaign_lab_work_items(campaign_id, status);
+    CREATE INDEX IF NOT EXISTS idx_cl_work_items_user ON campaign_lab_work_items(user_id, created_at DESC);
+  `).catch(e => console.error("[migration] campaign_lab_work_items error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_generation_log (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      campaign_id     INTEGER REFERENCES campaign_lab_campaigns(id),
+      work_item_id    INTEGER REFERENCES campaign_lab_work_items(id),
+      tool_key        TEXT NOT NULL,
+      cost_cents      INTEGER NOT NULL DEFAULT 0,
+      status          TEXT NOT NULL DEFAULT 'success',
+      prompt_used     TEXT,
+      output_url      TEXT,
+      provider_job_id TEXT,
+      created_at      TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_gen_log_user ON campaign_lab_generation_log(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_cl_gen_log_campaign ON campaign_lab_generation_log(campaign_id, created_at DESC);
+  `).catch(e => console.error("[migration] campaign_lab_generation_log error:", e));
+
+  // Tool costs and brand/campaign seeds are loaded lazily by setupCampaignLabRoutes (non-blocking).
+
+
+
   // Add new JAC preference columns to jac_user_profile (idempotent)
   await pool.query(`
     ALTER TABLE jac_user_profile

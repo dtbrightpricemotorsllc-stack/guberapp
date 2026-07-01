@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import { setupCampaignLabRoutes } from "./campaign-lab";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
@@ -28685,6 +28686,9 @@ OUTPUT STYLE:
       res.status(500).json({ message: err.message });
     }
   });
+
+  // Campaign Lab
+  setupCampaignLabRoutes(app);
 
   return httpServer;
 }
