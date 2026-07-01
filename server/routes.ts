@@ -59,7 +59,7 @@ import {
 } from "@shared/asset-protection";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
-import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
+import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, ogPreapprovedEmails, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
 import {
   DISPUTE_ISSUE_TYPES,
   ADMIN_DISPUTE_DECISIONS,
@@ -26732,6 +26732,154 @@ OUTPUT STYLE:
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ message: err.message });
+    }
+  });
+
+  // ── Day-1 OG Stripe Audit ────────────────────────────────────────────────────
+
+  // GET /api/admin/og-stripe-audit
+  // Scans ALL paid Stripe checkout sessions, cross-references with DB, returns full audit list.
+  app.get("/api/admin/og-stripe-audit", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const stripe = (await import("stripe")).default;
+      const client = new stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" });
+
+      // Collect all paid sessions
+      const sessions: any[] = [];
+      let hasMore = true;
+      let startingAfter: string | undefined;
+      while (hasMore) {
+        const page = await client.checkout.sessions.list({ limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) });
+        sessions.push(...page.data.filter((s: any) => s.payment_status === "paid" && s.amount_total !== null && s.amount_total <= 210));
+        hasMore = page.has_more;
+        if (page.data.length > 0) startingAfter = page.data[page.data.length - 1].id;
+      }
+
+      // Deduplicate by email (keep earliest payment date)
+      const byEmail: Record<string, { email: string; paidAt: string; sessionId: string; amount: number }> = {};
+      for (const s of sessions) {
+        const email = (s.customer_details?.email || s.metadata?.userEmail || "").toLowerCase().trim();
+        if (!email) continue;
+        const prev = byEmail[email];
+        if (!prev || s.created < new Date(prev.paidAt).getTime() / 1000) {
+          byEmail[email] = { email, paidAt: new Date(s.created * 1000).toISOString(), sessionId: s.id, amount: s.amount_total };
+        }
+      }
+
+      const emails = Object.keys(byEmail);
+      if (emails.length === 0) return res.json({ rows: [], scannedAt: new Date().toISOString() });
+
+      // Cross-reference DB using inArray (emails already lowercased)
+      const userRows = await db
+        .select({ emailRaw: usersTable.email, id: usersTable.id, username: usersTable.username, day1OG: usersTable.day1OG })
+        .from(usersTable)
+        .where(inArray(sql<string>`LOWER(${usersTable.email})`, emails));
+      const preRows = await db
+        .select({ email: ogPreapprovedEmails.email })
+        .from(ogPreapprovedEmails)
+        .where(inArray(sql<string>`LOWER(${ogPreapprovedEmails.email})`, emails));
+
+      const userMap: Record<string, { id: number; username: string; day1OG: boolean }> = {};
+      for (const r of userRows) {
+        userMap[r.emailRaw.toLowerCase()] = { id: r.id, username: r.username, day1OG: !!r.day1OG };
+      }
+      const preSet = new Set(preRows.map((r) => r.email.toLowerCase()));
+
+      const rows = emails.map((email) => ({
+        email,
+        paidAt: byEmail[email].paidAt,
+        sessionId: byEmail[email].sessionId,
+        amountCents: byEmail[email].amount,
+        hasAccount: !!userMap[email],
+        userId: userMap[email]?.id ?? null,
+        username: userMap[email]?.username ?? null,
+        day1OgActive: userMap[email]?.day1OG ?? false,
+        inPreapproved: preSet.has(email),
+      })).sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime());
+
+      res.json({ rows, scannedAt: new Date().toISOString() });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/admin/og-grant — add to preapproved + retroactively activate for existing users
+  app.post("/api/admin/og-grant", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body as { email: string };
+      if (!email) return res.status(400).json({ message: "email required" });
+      const lower = email.toLowerCase().trim();
+
+      await db.execute(sql`INSERT INTO og_preapproved_emails (email) VALUES (${lower}) ON CONFLICT DO NOTHING`);
+      await db.execute(sql`UPDATE users SET day1_og = TRUE WHERE LOWER(email) = ${lower}`);
+      await db.execute(sql`
+        UPDATE users SET ai_or_not_credits = 5
+        WHERE LOWER(email) = ${lower}
+          AND day1_og = TRUE
+          AND trust_box_purchased = FALSE
+          AND (ai_or_not_credits IS NULL OR ai_or_not_credits < 5)
+      `);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/admin/og-notify-email — send OG welcome email via Resend
+  app.post("/api/admin/og-notify-email", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { email, hasAccount } = req.body as { email: string; hasAccount: boolean };
+      if (!email) return res.status(400).json({ message: "email required" });
+      if (!process.env.RESEND_API_KEY) return res.status(503).json({ message: "RESEND_API_KEY not configured" });
+
+      const { Resend } = await import("resend");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+      const baseUrl = process.env.BASE_URL || `https://${fromDomain}`;
+
+      const subject = hasAccount
+        ? "Your GUBER Day-1 OG Badge is Active 🏆"
+        : "You're a GUBER Day-1 OG — Create Your Account to Claim It";
+
+      const body = hasAccount
+        ? `<p style="font-size:15px;color:#ccc;line-height:1.6;margin:0 0 20px;">
+            Your <strong style="color:#fbbf24;">Day-1 OG</strong> founding-member badge has been activated on your account.
+            You're locked in at the <strong style="color:#fff;">15% service fee rate for life</strong> — that's the lowest rate GUBER will ever offer.
+            Log in to see your gold badge and all your member perks.
+          </p>
+          <a href="${baseUrl}/profile" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:10px;">View Your Profile</a>`
+        : `<p style="font-size:15px;color:#ccc;line-height:1.6;margin:0 0 20px;">
+            You purchased <strong style="color:#fbbf24;">Day-1 OG</strong> membership — thank you for being an early supporter of GUBER.
+            Your badge and lifetime rate lock are waiting. Create your account with this email address to claim them instantly.
+          </p>
+          <a href="${baseUrl}/signup" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:10px;">Create Your Account</a>`;
+
+      const html = `
+        <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;background:#0a0a0a;color:#fff;padding:40px 32px;border-radius:16px;border:1px solid rgba(245,158,11,0.25);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <span style="font-size:26px;font-weight:900;color:#22c55e;letter-spacing:-0.5px;">GUBER</span>
+          </div>
+          <p style="font-size:11px;color:#666;letter-spacing:0.2em;text-transform:uppercase;margin:0 0 32px;">DAY-1 OG FOUNDING MEMBER</p>
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;">
+            <div style="font-size:36px;margin-bottom:6px;">🏆</div>
+            <div style="font-size:18px;font-weight:900;color:#fbbf24;letter-spacing:0.1em;">DAY-1 OG</div>
+            <div style="font-size:11px;color:#a78b3e;letter-spacing:0.15em;text-transform:uppercase;">Founding Member · Lifetime Rate Lock</div>
+          </div>
+          ${body}
+          <p style="font-size:11px;color:#444;margin-top:28px;line-height:1.6;">
+            Questions? Reply to this email or contact <a href="mailto:support@guberapp.com" style="color:#22c55e;">support@guberapp.com</a>.
+          </p>
+        </div>`;
+
+      const { data, error } = await resend.emails.send({ from: `GUBER <noreply@${fromDomain}>`, to: email, subject, html });
+      if (error) {
+        console.error("[OG-NOTIFY] Resend error:", error.message);
+        return res.status(500).json({ message: error.message });
+      }
+      console.log("[OG-NOTIFY] Email sent to", email, "id:", data?.id);
+      res.json({ ok: true, emailId: data?.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
     }
   });
 

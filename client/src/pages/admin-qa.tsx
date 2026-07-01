@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2, FileText } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2, FileText, Crown, RefreshCw, Mail, Star } from "lucide-react";
 import {
   TTS_PROVIDER, JAC_TARGET_VOICE,
   loadJacVoice, getVoiceDebugInfo, resetJacVoiceCache,
@@ -1751,6 +1751,223 @@ function FeaturedClipsTab() {
   );
 }
 
+// ── Day-1 OG Stripe Audit Tab ─────────────────────────────────────────────────
+type OGAuditRow = {
+  email: string;
+  paidAt: string;
+  sessionId: string;
+  amountCents: number;
+  hasAccount: boolean;
+  userId: number | null;
+  username: string | null;
+  day1OgActive: boolean;
+  inPreapproved: boolean;
+};
+type OGAuditData = { rows: OGAuditRow[]; scannedAt: string };
+
+function OGAuditTab() {
+  const { toast } = useToast();
+  const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
+
+  const { data, isLoading, refetch, isFetching } = useQuery<OGAuditData>({
+    queryKey: ["/api/admin/og-stripe-audit"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const rows = data?.rows ?? [];
+  const totalPaid = rows.length;
+  const activeCount = rows.filter((r) => r.day1OgActive).length;
+  const noAccountCount = rows.filter((r) => !r.hasAccount).length;
+  const needsGrantCount = rows.filter((r) => r.hasAccount && !r.day1OgActive).length;
+  const notPreapprovedCount = rows.filter((r) => !r.inPreapproved).length;
+
+  const doGrant = async (email: string) => {
+    setActionLoading((p) => ({ ...p, [email + "_grant"]: "loading" }));
+    try {
+      await apiRequest("POST", "/api/admin/og-grant", { email });
+      toast({ title: "OG granted", description: email });
+      refetch();
+    } catch (e: any) {
+      toast({ title: "Grant failed", description: e.message, variant: "destructive" });
+    } finally {
+      setActionLoading((p) => { const n = { ...p }; delete n[email + "_grant"]; return n; });
+    }
+  };
+
+  const doEmail = async (email: string, hasAccount: boolean) => {
+    setActionLoading((p) => ({ ...p, [email + "_email"]: "loading" }));
+    try {
+      await apiRequest("POST", "/api/admin/og-notify-email", { email, hasAccount });
+      toast({ title: "Email sent", description: email });
+    } catch (e: any) {
+      toast({ title: "Email failed", description: e.message, variant: "destructive" });
+    } finally {
+      setActionLoading((p) => { const n = { ...p }; delete n[email + "_email"]; return n; });
+    }
+  };
+
+  const doEmailAll = async () => {
+    const targets = rows.filter((r) => !r.day1OgActive || !r.hasAccount);
+    for (const r of targets) {
+      await doEmail(r.email, r.hasAccount);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    toast({ title: "All notifications sent", description: `${targets.length} emails queued` });
+  };
+
+  const rowStatus = (r: OGAuditRow) => {
+    if (r.day1OgActive) return "ok";
+    if (!r.hasAccount) return "pending";
+    return "action";
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Crown className="h-4 w-4 text-amber-500" /> Day-1 OG Stripe Audit
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {data?.scannedAt && (
+                <span className="text-[10px] text-muted-foreground">
+                  Last scan: {new Date(data.scannedAt).toLocaleTimeString()}
+                </span>
+              )}
+              <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} data-testid="button-og-refresh">
+                <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? "animate-spin" : ""}`} />
+                {isFetching ? "Scanning…" : "Scan Stripe"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Scanning Stripe…</p>
+          ) : (
+            <>
+              {/* Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                {[
+                  { label: "Paid OG Buyers", value: totalPaid, color: "text-foreground" },
+                  { label: "Badge Active", value: activeCount, color: "text-green-500" },
+                  { label: "No Account Yet", value: noAccountCount, color: "text-yellow-500" },
+                  { label: "Needs Grant", value: needsGrantCount, color: "text-orange-500" },
+                  { label: "Not Preapproved", value: notPreapprovedCount, color: "text-red-500" },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-lg border p-3 text-center" data-testid={`stat-og-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
+                    <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bulk actions */}
+              {(needsGrantCount > 0 || noAccountCount > 0) && (
+                <div className="flex gap-2 mb-4">
+                  {needsGrantCount > 0 && (
+                    <Button size="sm" variant="outline" className="text-orange-500 border-orange-500/30"
+                      onClick={() => rows.filter((r) => r.hasAccount && !r.day1OgActive).forEach((r) => doGrant(r.email))}
+                      data-testid="button-og-grant-all">
+                      <Star className="h-3 w-3 mr-1" /> Grant All Missing ({needsGrantCount})
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" className="text-blue-500 border-blue-500/30"
+                    onClick={doEmailAll} data-testid="button-og-email-all">
+                    <Mail className="h-3 w-3 mr-1" /> Email All Unactivated
+                  </Button>
+                </div>
+              )}
+
+              {/* Table */}
+              <div className="rounded-lg border overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="text-left px-3 py-2 font-medium">Email</th>
+                      <th className="text-left px-3 py-2 font-medium">Paid</th>
+                      <th className="text-left px-3 py-2 font-medium">Account</th>
+                      <th className="text-left px-3 py-2 font-medium">OG Active</th>
+                      <th className="text-left px-3 py-2 font-medium">Preapproved</th>
+                      <th className="text-right px-3 py-2 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => {
+                      const status = rowStatus(r);
+                      return (
+                        <tr key={r.email}
+                          className={`border-b last:border-0 ${status === "ok" ? "bg-green-500/5" : status === "action" ? "bg-orange-500/5" : "bg-yellow-500/5"}`}
+                          data-testid={`row-og-${r.email}`}>
+                          <td className="px-3 py-2 font-mono">{r.email}</td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                            {new Date(r.paidAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.hasAccount ? (
+                              <a href={`/admin/user/${r.userId}`} target="_blank" rel="noopener noreferrer"
+                                className="text-primary underline underline-offset-2">
+                                @{r.username}
+                              </a>
+                            ) : (
+                              <span className="text-yellow-500">No account</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.day1OgActive
+                              ? <span className="text-green-500 font-semibold">✓ Active</span>
+                              : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.inPreapproved
+                              ? <span className="text-green-500">✓</span>
+                              : <span className="text-red-500">✗ Missing</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex gap-1 justify-end">
+                              {!r.inPreapproved && (
+                                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-red-500 border-red-500/30"
+                                  onClick={() => doGrant(r.email)}
+                                  disabled={!!actionLoading[r.email + "_grant"]}
+                                  data-testid={`button-og-grant-${r.email}`}>
+                                  {actionLoading[r.email + "_grant"] ? "…" : "Add Preapproved"}
+                                </Button>
+                              )}
+                              {r.hasAccount && !r.day1OgActive && (
+                                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-orange-500 border-orange-500/30"
+                                  onClick={() => doGrant(r.email)}
+                                  disabled={!!actionLoading[r.email + "_grant"]}
+                                  data-testid={`button-og-activate-${r.email}`}>
+                                  {actionLoading[r.email + "_grant"] ? "…" : "Grant OG"}
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                                onClick={() => doEmail(r.email, r.hasAccount)}
+                                disabled={!!actionLoading[r.email + "_email"]}
+                                data-testid={`button-og-email-${r.email}`}>
+                                {actionLoading[r.email + "_email"] ? "…" : <Mail className="h-3 w-3" />}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {rows.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">No paid OG sessions found in Stripe.</p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── JAC Voice Debug Tab ───────────────────────────────────────────────────────
 function JacVoiceDebugTab() {
   const [info, setInfo] = useState<VoiceDebugInfo | null>(null);
@@ -2183,6 +2400,7 @@ export default function AdminQa() {
           <TabsTrigger value="growth-engine" data-testid="tab-growth-engine">🌱 Growth Engine</TabsTrigger>
           <TabsTrigger value="jac-voice" data-testid="tab-jac-voice"><Volume2 className="mr-1 h-3 w-3" />JAC Voice</TabsTrigger>
           <TabsTrigger value="jac-reports" data-testid="tab-jac-reports"><FileText className="mr-1 h-3 w-3" />JAC Reports</TabsTrigger>
+          <TabsTrigger value="og-audit" data-testid="tab-og-audit"><Crown className="mr-1 h-3 w-3 text-amber-500" />OG Audit</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -2223,6 +2441,7 @@ export default function AdminQa() {
         </TabsContent>
         <TabsContent value="jac-voice"><JacVoiceDebugTab /></TabsContent>
         <TabsContent value="jac-reports"><JacReportsTab /></TabsContent>
+        <TabsContent value="og-audit"><OGAuditTab /></TabsContent>
       </Tabs>
     </div>
   );
