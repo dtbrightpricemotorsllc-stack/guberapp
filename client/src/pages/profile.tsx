@@ -738,7 +738,7 @@ export default function Profile() {
           )}
         </Card>
 
-        {isOwnProfile && !displayUser.day1OG && !isDemoUser && !ogCardHidden && (() => {
+        {isOwnProfile && !displayUser.day1OG && !isDemoUser && !isStoreBuild && !ogCardHidden && (() => {
           const profileIncomplete = !displayUser.userBio || !displayUser.profilePhoto || !displayUser.publicUsername || !displayUser.zipcode;
           const accountAgeMs = displayUser.createdAt ? Date.now() - new Date(displayUser.createdAt).getTime() : 0;
           const isOnboardingWindow = accountAgeMs > 0 && accountAgeMs < 14 * 24 * 60 * 60 * 1000;
