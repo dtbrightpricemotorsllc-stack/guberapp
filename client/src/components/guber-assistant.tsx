@@ -175,9 +175,20 @@ export function GUBERAssistantHeaderButton() {
 // ── Floating Jac bubble (FAB, rendered in guber-layout) ─────────────────────
 export function DDFloatingButton() {
   const s = useAssistantStore();
+  const [location] = useLocation();
+  const isMapPage = location === "/map";
+
   const [showHint, setShowHint] = useState(() => {
     try { return localStorage.getItem(FAB_HINT_KEY) !== "1"; } catch { return false; }
   });
+
+  // Map-specific state
+  const [mapPanelExpanded, setMapPanelExpanded] = useState(false);
+  const [mapOverlay, setMapOverlay] = useState(false);
+  const [mapInteracting, setMapInteracting] = useState(false);
+  // When minimized, user can tap to temporarily expand; resets on next panel state change
+  const [userExpandedOnMap, setUserExpandedOnMap] = useState(false);
+  const interactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!showHint) return;
@@ -188,13 +199,79 @@ export function DDFloatingButton() {
     return () => clearTimeout(t);
   }, [showHint]);
 
+  // Subscribe to map panel state events
+  useEffect(() => {
+    function onMapPanel(e: Event) {
+      const { expanded, overlay } = (e as CustomEvent<{ expanded: boolean; overlay: boolean }>).detail;
+      setMapPanelExpanded(expanded);
+      setMapOverlay(overlay);
+      // Reset user-override whenever panel state changes — re-evaluate minimize
+      setUserExpandedOnMap(false);
+    }
+    window.addEventListener("jac:map-panel", onMapPanel);
+    return () => window.removeEventListener("jac:map-panel", onMapPanel);
+  }, []);
+
+  // Reset map state when leaving the map page
+  useEffect(() => {
+    if (!isMapPage) {
+      setMapPanelExpanded(false);
+      setMapOverlay(false);
+      setMapInteracting(false);
+      setUserExpandedOnMap(false);
+    }
+  }, [isMapPage]);
+
+  // Detect map gestures (touch/drag) → fade JAC for 1.5 s
+  useEffect(() => {
+    if (!isMapPage) return;
+    function onInteract(e: Event) {
+      // Don't trigger fade if the user is tapping the JAC button itself
+      if ((e.target as HTMLElement)?.closest("[data-testid='button-dd-floating']")) return;
+      setMapInteracting(true);
+      if (interactTimerRef.current) clearTimeout(interactTimerRef.current);
+      interactTimerRef.current = setTimeout(() => setMapInteracting(false), 1500);
+    }
+    document.addEventListener("touchstart", onInteract, { passive: true });
+    document.addEventListener("pointerdown", onInteract, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onInteract);
+      document.removeEventListener("pointerdown", onInteract);
+      if (interactTimerRef.current) clearTimeout(interactTimerRef.current);
+    };
+  }, [isMapPage]);
+
   if (s.open) return null;
+
+  // Derive display mode
+  const needsMinimize = isMapPage && (mapPanelExpanded || mapOverlay) && !userExpandedOnMap;
+  const isFaded = isMapPage && mapInteracting;
+
+  // Minimized = small 36 px circle; normal = 56 px FAB
+  const size = needsMinimize ? 36 : 56;
+
+  function handleClick() {
+    if (needsMinimize) {
+      // First tap expands the bubble; second tap (when full) opens JAC
+      setUserExpandedOnMap(true);
+      return;
+    }
+    markSeen();
+    patchStore({ open: true });
+  }
+
   return (
     <div
       className="fixed z-[150]"
-      style={{ bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", right: "16px" }}
+      style={{
+        bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
+        right: "16px",
+        opacity: isFaded ? 0.4 : 1,
+        transition: "opacity 0.3s ease, bottom 0.3s ease",
+        pointerEvents: isFaded ? "none" : "auto",
+      }}
     >
-      {showHint && (
+      {showHint && !needsMinimize && (
         <div
           className="absolute bottom-16 right-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-[11px] font-display font-semibold text-white animate-fade-in mb-1"
           style={{ background: "hsl(270 100% 65% / 0.95)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
@@ -204,14 +281,21 @@ export function DDFloatingButton() {
       )}
       <button
         type="button"
-        onClick={() => { markSeen(); patchStore({ open: true }); }}
-        className="w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
-        style={{
-          boxShadow: "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
-          border: "2px solid hsl(270 100% 65% / 0.6)",
-        }}
+        onClick={handleClick}
         data-testid="button-dd-floating"
-        aria-label="Open Jac"
+        aria-label={needsMinimize ? "Show Jac" : "Open Jac"}
+        className="rounded-full overflow-hidden active:scale-95"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          transition: "width 0.25s ease, height 0.25s ease, box-shadow 0.25s ease, border 0.25s ease",
+          boxShadow: needsMinimize
+            ? "0 2px 10px hsl(270 100% 65% / 0.35), 0 1px 4px rgba(0,0,0,0.5)"
+            : "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
+          border: needsMinimize
+            ? "1.5px solid hsl(270 100% 65% / 0.4)"
+            : "2px solid hsl(270 100% 65% / 0.6)",
+        }}
       >
         <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
       </button>

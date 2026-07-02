@@ -235,6 +235,22 @@ export default function MapExplore() {
   const [selectedDrop, setSelectedDrop] = useState<any | null>(null);
   const dropOverlaysRef = useRef<any[]>([]);
 
+  // Notify JAC bubble about map panel state so she can get out of the way
+  useEffect(() => {
+    const hasOverlay = !!(selectedZip || selectedWorker || selectedDrop ||
+      (zipFallback?.hasFallback && !selectedZip && !selectedDrop));
+    window.dispatchEvent(new CustomEvent("jac:map-panel", {
+      detail: { expanded: bottomOpen, overlay: hasOverlay },
+    }));
+  }, [bottomOpen, selectedZip, selectedWorker, selectedDrop, zipFallback]);
+
+  // Reset JAC on unmount (leaving map page)
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("jac:map-panel", {
+      detail: { expanded: false, overlay: false },
+    }));
+  }, []);
+
   const apiKey = config?.googleMapsApiKey ?? "";
   const filterOrigin = jumpCenter || userPos;
 
