@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
-import { isIOS } from "@/lib/platform";
+import { isIOS, isStoreBuild } from "@/lib/platform";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
 import { nativeAppleSignIn } from "@/lib/native-apple-sign-in";
 import { getToken } from "@/lib/token-storage";
@@ -27,28 +27,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
-  const [demoVisible, setDemoVisible] = useState(false);
   const [demoLoading, setDemoLoading] = useState<"consumer" | "business" | null>(null);
   const isNative = Capacitor.isNativePlatform();
 
-  // 5-tap logo counter
-  const tapCountRef = useRef(0);
-  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Synchronous in-flight lock for the Google sign-in handler — see comment in handler below.
   const googleInFlightRef = useRef(false);
-
-  const handleLogoTap = () => {
-    tapCountRef.current += 1;
-    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-    if (tapCountRef.current >= 5) {
-      tapCountRef.current = 0;
-      setDemoVisible(true);
-      return;
-    }
-    tapTimerRef.current = setTimeout(() => {
-      tapCountRef.current = 0;
-    }, 1500);
-  };
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -225,8 +208,7 @@ export default function Login() {
 
           <div className="text-center space-y-3 mb-10 animate-fade-in">
             <div
-              onClick={handleLogoTap}
-              className="inline-block cursor-pointer select-none active:opacity-75 transition-opacity"
+              className="inline-block select-none"
               data-testid="logo-tap-trigger"
             >
               <GuberLogo size="lg" />
@@ -349,11 +331,8 @@ export default function Login() {
               </Button>
             </form>
 
-            {/* iOS-only helper notes. Google sign-in is hidden on iOS, so
-                existing Google web users need a path to email/password login —
-                the forgot-password flow already works for them, but they need
-                to know that. Reviewer hint also lives here. */}
-            {isIOS && !demoVisible && (
+            {/* iOS-only helper note for existing Google web users */}
+            {isIOS && (
               <div className="mt-3 space-y-2">
                 <p className="text-center text-[11px] text-muted-foreground/80 leading-relaxed" data-testid="text-google-user-hint">
                   Already use GUBER on the web with Google?{" "}
@@ -362,14 +341,11 @@ export default function Login() {
                   </Link>{" "}
                   to use the app — don't sign up again or you'll create a duplicate account.
                 </p>
-                <p className="text-center text-[10px] text-muted-foreground/70 font-display tracking-wider" data-testid="text-reviewer-hint">
-                  APP STORE REVIEWERS — TAP THE GUBER LOGO 5× FOR DEMO ACCESS
-                </p>
               </div>
             )}
 
-            {/* Demo login — revealed after 5 taps on the GUBER logo */}
-            {demoVisible && (
+            {/* Demo login — always visible on store builds so reviewers can access instantly */}
+            {isStoreBuild && (
               <div className="mt-5 pt-5 border-t border-white/[0.06]" data-testid="demo-login-section">
                 <p className="text-[10px] text-muted-foreground font-display tracking-widest text-center mb-3">REVIEWER DEMO ACCESS</p>
                 <div className="flex gap-2">
