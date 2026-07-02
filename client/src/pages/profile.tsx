@@ -31,7 +31,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { TrustBadge, TrustProgressBar, Day1OGBadge, Day1OGLogo, FoundingMemberBadge } from "@/components/trust-badge";
-import { MapPin, Star, Edit, CheckCircle, Crown, Loader2, ShieldCheck, Camera, FileText, Upload, Clock, TrendingUp, Award, AlertCircle, FileUp, DollarSign, ExternalLink, Banknote, ChevronRight, Share2, Copy, Gift, Shield, Lock, Zap, MessageSquare, Bell, Plus, X as XIcon, BadgeCheck } from "lucide-react";
+import { MapPin, Star, Edit, CheckCircle, Crown, Loader2, ShieldCheck, Camera, FileText, Upload, Clock, TrendingUp, Award, AlertCircle, FileUp, DollarSign, ExternalLink, Banknote, ChevronRight, Share2, Copy, Gift, Shield, Lock, Zap, MessageSquare, Bell, Plus, X as XIcon, BadgeCheck, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -147,6 +147,19 @@ export default function Profile() {
     },
     onError: (err: any) => {
       toast({ title: "Couldn't send feedback", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/users/${currentUser!.id}`, {}),
+    onSuccess: () => {
+      window.location.href = "/";
+    },
+    onError: (err: any) => {
+      toast({ title: "Deletion failed", description: err.message || "Please try again.", variant: "destructive" });
     },
   });
 
@@ -1594,7 +1607,101 @@ export default function Profile() {
             </div>
           )}
         </Card>
+
+        {isOwnProfile && !isDemoUser && (
+          <div className="mt-2 mb-6 px-1">
+            <button
+              onClick={() => { setDeleteStep(1); setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
+              className="w-full text-[11px] text-red-400/60 hover:text-red-400 transition-colors py-2 flex items-center justify-center gap-1.5"
+              data-testid="button-open-delete-account"
+            >
+              <Trash2 className="w-3 h-3" />
+              Delete Account
+            </button>
+          </div>
+        )}
       </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { if (!deleteAccountMutation.isPending) setDeleteDialogOpen(o); }}>
+        <DialogContent className="max-w-sm rounded-2xl" data-testid="dialog-delete-account">
+          <DialogHeader>
+            <div className="flex justify-center mb-3">
+              <div className="w-11 h-11 rounded-full bg-red-500/10 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+            </div>
+            <DialogTitle className="text-center text-base font-display font-bold">Delete Account</DialogTitle>
+            <DialogDescription className="text-center text-xs text-muted-foreground">
+              {deleteStep === 1
+                ? "This will permanently remove your profile, login access, and public data."
+                : "Type DELETE below to confirm you want to permanently delete your account."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteStep === 1 && (
+            <div className="space-y-3 mt-1">
+              <div className="rounded-xl bg-red-500/5 border border-red-500/15 p-4 space-y-2">
+                <p className="text-[11px] font-display font-bold text-red-400 uppercase tracking-wide">What gets removed</p>
+                <ul className="space-y-1.5 text-[11px] text-muted-foreground leading-relaxed">
+                  <li className="flex items-start gap-1.5"><AlertCircle className="w-3 h-3 mt-0.5 text-red-400/60 shrink-0" />Your name, photo, bio, and profile</li>
+                  <li className="flex items-start gap-1.5"><AlertCircle className="w-3 h-3 mt-0.5 text-red-400/60 shrink-0" />Login access — you will be signed out immediately</li>
+                  <li className="flex items-start gap-1.5"><AlertCircle className="w-3 h-3 mt-0.5 text-red-400/60 shrink-0" />Visibility in search and talent listings</li>
+                </ul>
+                <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-red-500/10 mt-2">
+                  Job history, payment records, and audit logs are retained for 90 days for legal and fraud-prevention purposes, then purged.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                className="w-full h-10 font-display font-bold rounded-xl"
+                onClick={() => setDeleteStep(2)}
+                data-testid="button-delete-step-next"
+              >
+                Continue
+              </Button>
+              <button
+                onClick={() => setDeleteDialogOpen(false)}
+                className="w-full text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1"
+                data-testid="button-delete-cancel"
+              >
+                Cancel — keep my account
+              </button>
+            </div>
+          )}
+
+          {deleteStep === 2 && (
+            <div className="space-y-3 mt-1">
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
+                placeholder='Type DELETE to confirm'
+                className="text-center font-display font-bold tracking-widest text-red-400 border-red-500/30 focus:border-red-500/60 bg-red-500/5"
+                data-testid="input-delete-confirm"
+                disabled={deleteAccountMutation.isPending}
+              />
+              <Button
+                variant="destructive"
+                className="w-full h-10 font-display font-bold rounded-xl"
+                disabled={deleteConfirmText !== "DELETE" || deleteAccountMutation.isPending}
+                onClick={() => deleteAccountMutation.mutate()}
+                data-testid="button-delete-confirm"
+              >
+                {deleteAccountMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Deleting…</>
+                  : "Delete My Account"}
+              </Button>
+              <button
+                onClick={() => { setDeleteStep(1); setDeleteConfirmText(""); }}
+                className="w-full text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1"
+                data-testid="button-delete-back"
+                disabled={deleteAccountMutation.isPending}
+              >
+                ← Go back
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showStripeGuide} onOpenChange={setShowStripeGuide}>
         <DialogContent className="max-w-sm rounded-2xl" data-testid="dialog-stripe-guide">
