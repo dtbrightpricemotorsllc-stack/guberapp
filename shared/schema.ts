@@ -2819,6 +2819,7 @@ export const jacUserProfile = pgTable("jac_user_profile", {
   language:                    text("language").default("en"),
   tutorialStatus:              text("tutorial_status").default("not_started"),
   lastJacSummary:              jsonb("last_jac_summary").$type<Record<string, unknown>>().default({}),
+  memoryConsent:               text("memory_consent").default("unset"), // unset | granted | denied
   updatedAt:                   timestamp("updated_at").defaultNow(),
 });
 export type JacUserProfile       = typeof jacUserProfile.$inferSelect;
@@ -2944,6 +2945,21 @@ export const jacFeedbackReports = pgTable("jac_feedback_reports", {
 });
 export type JacFeedbackReport       = typeof jacFeedbackReports.$inferSelect;
 export type InsertJacFeedbackReport = typeof jacFeedbackReports.$inferInsert;
+
+// ── JAC Pending Actions (confirm-before-submit workflow execution) ────────────
+export const jacPendingActions = pgTable("jac_pending_actions", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").notNull().references(() => users.id),
+  actionType: text("action_type").notNull(), // post_job | marketplace_listing | transport_request | vi_request
+  payload:    jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  summary:    text("summary").notNull(),
+  status:     text("status").notNull().default("pending"), // pending | confirmed | executed | failed | cancelled | expired
+  resultBody: jsonb("result_body").$type<Record<string, unknown>>(),
+  createdAt:  timestamp("created_at").defaultNow(),
+  expiresAt:  timestamp("expires_at"),
+});
+export type JacPendingAction       = typeof jacPendingActions.$inferSelect;
+export type InsertJacPendingAction = typeof jacPendingActions.$inferInsert;
 
 // ── GUBER Campaign Lab ────────────────────────────────────────────────────────
 

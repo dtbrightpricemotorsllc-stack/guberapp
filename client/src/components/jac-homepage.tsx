@@ -6,11 +6,20 @@ import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
+interface JacPendingAction {
+  id: number;
+  type: string;
+  summary: string;
+  status: "pending" | "confirming" | "confirmed" | "cancelled" | "failed";
+  resultMessage?: string;
+}
+
 interface JacMsg {
   role: "user" | "assistant";
   content: string;
   buttons?: Array<{ label: string; message: string }>;
   signupRoute?: string;
+  pendingAction?: JacPendingAction;
 }
 
 interface JacJobPrefill {
@@ -341,6 +350,9 @@ export function JacHomepage() {
           ...(Array.isArray(data.actions) ? data.actions : []),
           ...(Array.isArray(data.options) ? data.options : []),
         ].filter((b: any) => b?.label && b?.message).slice(0, 11),
+        pendingAction: (data.pendingAction && typeof data.pendingAction === "object" && data.pendingAction.id && data.pendingAction.summary)
+          ? { id: data.pendingAction.id, type: data.pendingAction.type, summary: data.pendingAction.summary, status: "pending" }
+          : undefined,
       };
 
       const final = [...next, aMsg];
@@ -361,6 +373,37 @@ export function JacHomepage() {
     } finally {
       setTyping(false);
     }
+  }
+
+  function updatePendingAction(id: number, patch: Partial<JacPendingAction>) {
+    setMessages(prev => prev.map(m =>
+      m.pendingAction?.id === id ? { ...m, pendingAction: { ...m.pendingAction, ...patch } } : m
+    ));
+  }
+
+  async function confirmPendingAction(pa: JacPendingAction) {
+    if (pa.status !== "pending") return;
+    updatePendingAction(pa.id, { status: "confirming" });
+    try {
+      const res = await fetch(`/api/jac/actions/${pa.id}/confirm`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        updatePendingAction(pa.id, { status: "confirmed" });
+        const confirmMsg = "Done — that's submitted. Anything else you need?";
+        setMessages(prev => [...prev, { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS }]);
+        if (!muted) jacSpeak(confirmMsg, { muted });
+      } else {
+        updatePendingAction(pa.id, { status: "failed", resultMessage: data?.message || "That didn't go through." });
+      }
+    } catch {
+      updatePendingAction(pa.id, { status: "failed", resultMessage: "Something went wrong confirming this." });
+    }
+  }
+
+  async function cancelPendingAction(pa: JacPendingAction) {
+    if (pa.status !== "pending") return;
+    updatePendingAction(pa.id, { status: "cancelled" });
+    fetch(`/api/jac/actions/${pa.id}/cancel`, { method: "POST" }).catch(() => {});
   }
 
   function openChat(initial?: string) {
@@ -652,6 +695,52 @@ export function JacHomepage() {
                   >
                     {ctaLabel(msg.signupRoute)} <ArrowRight className="w-4 h-4" />
                   </Link>
+                )}
+
+                {/* Confirm-before-submit workflow card */}
+                {msg.role === "assistant" && msg.pendingAction && (
+                  <div
+                    className="rounded-2xl px-4 py-3 space-y-2.5"
+                    style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(270 100% 65% / 0.35)" }}
+                    data-testid={`jac-pending-action-${msg.pendingAction.id}`}
+                  >
+                    <p className="text-[10px] font-display font-black tracking-widest" style={{ color: "hsl(270 100% 78%)" }}>
+                      REVIEW BEFORE SUBMITTING
+                    </p>
+                    <p className="text-sm text-white/90 leading-relaxed">{msg.pendingAction.summary}</p>
+                    {msg.pendingAction.status === "pending" && (
+                      <div className="flex gap-2 pt-0.5">
+                        <button
+                          onClick={() => confirmPendingAction(msg.pendingAction!)}
+                          className="flex-1 rounded-xl px-4 py-2 text-sm font-display font-black transition-all active:scale-[0.97]"
+                          style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }}
+                          data-testid={`jac-confirm-action-${msg.pendingAction.id}`}
+                        >
+                          Confirm & Submit
+                        </button>
+                        <button
+                          onClick={() => cancelPendingAction(msg.pendingAction!)}
+                          className="rounded-xl px-4 py-2 text-sm font-display font-semibold transition-all active:scale-[0.97]"
+                          style={{ background: "hsl(222 47% 15%)", border: "1px solid hsl(222 47% 22%)", color: "rgba(255,255,255,0.7)" }}
+                          data-testid={`jac-cancel-action-${msg.pendingAction.id}`}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {msg.pendingAction.status === "confirming" && (
+                      <p className="text-xs text-white/50 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Submitting…</p>
+                    )}
+                    {msg.pendingAction.status === "confirmed" && (
+                      <p className="text-xs font-semibold" style={{ color: "hsl(152 100% 55%)" }}>✓ Submitted</p>
+                    )}
+                    {msg.pendingAction.status === "cancelled" && (
+                      <p className="text-xs text-white/40">Cancelled — nothing was submitted.</p>
+                    )}
+                    {msg.pendingAction.status === "failed" && (
+                      <p className="text-xs" style={{ color: "hsl(0 80% 65%)" }}>{msg.pendingAction.resultMessage || "That didn't go through."}</p>
+                    )}
+                  </div>
                 )}
 
                 {/* Follow-up buttons / option chips */}

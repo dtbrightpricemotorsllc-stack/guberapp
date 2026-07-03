@@ -878,6 +878,7 @@ app.use((req, res, next) => {
       language           TEXT DEFAULT 'en',
       tutorial_status    TEXT DEFAULT 'not_started',
       last_jac_summary   JSONB DEFAULT '{}',
+      memory_consent     TEXT DEFAULT 'unset',
       updated_at         TIMESTAMP DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS jac_tutorial_state (
@@ -995,6 +996,27 @@ app.use((req, res, next) => {
   await pool.query(`
     ALTER TABLE jac_dd_goals ADD COLUMN IF NOT EXISTS realistic_earnable REAL DEFAULT 0;
   `).catch(e => console.error("[migration] jac_dd_goals realistic_earnable error:", e));
+
+  // Add memory_consent column for users whose jac_user_profile row predates this feature
+  await pool.query(`
+    ALTER TABLE jac_user_profile ADD COLUMN IF NOT EXISTS memory_consent TEXT DEFAULT 'unset';
+  `).catch(e => console.error("[migration] jac_user_profile memory_consent error:", e));
+
+  // JAC confirm-before-submit workflow execution (post_job, marketplace_listing, transport_request, vi_request)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_pending_actions (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id),
+      action_type  TEXT NOT NULL,
+      payload      JSONB NOT NULL,
+      summary      TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'pending',
+      result_body  JSONB,
+      created_at   TIMESTAMP DEFAULT NOW(),
+      expires_at   TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_pending_actions_user ON jac_pending_actions(user_id, status);
+  `).catch(e => console.error("[migration] jac_pending_actions error:", e));
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS jac_feedback_reports (
@@ -1374,6 +1396,83 @@ app.use((req, res, next) => {
       target_flow = EXCLUDED.target_flow,
       fallback_response = EXCLUDED.fallback_response;
   `).catch(e => console.error("[migration] jac_intents seed error:", e));
+
+  // GUBER Brain v2 — knowledge base gap-fill seed (vehicles, real estate, missions,
+  // credits detail, Day-1 OG detail, city activation, payments/fees, accounts,
+  // messaging, FAQs). Guarded on its own marker title so it only runs once and
+  // is independent of the original jac_knowledge seed block above.
+  await pool.query(`
+    INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    SELECT * FROM (VALUES
+      ('marketplace','Vehicle listing fields and Buyer''s Order',
+        '["vehicle listing fields","vin mileage listing","buyer''s order","buyers order pdf","vehicle info sheet","what info do i need to sell my car"]'::jsonb,
+        '["vin","mileage","buyer''s order","vehicle fields","title status"]'::jsonb,
+        'Vehicle listings capture VIN, mileage, year, make/model, title status, and purchase type (finance or cash). Price must be at least $100 and mileage at least 2 to prevent junk listings. If a listing is missing details, a buyer can request them, then purchase a Buyer''s Order PDF (vehicle info sheet) for $1 — free (2/month) for Day-1 OG members. If the vehicle completed a Verify & Inspect job, the PDF carries a GUBER Verified badge.',
+        '[{"label":"List my vehicle","message":"I want to sell my vehicle"},{"label":"What is Verify and Inspect?","message":"What is Verify and Inspect?"}]'::jsonb,
+        'system'),
+      ('marketplace','Selling real estate on GUBER',
+        '["sell my house","list my property","real estate listing","sell land","list a property","sell my home on guber"]'::jsonb,
+        '["real estate","property","house","land","sell home"]'::jsonb,
+        'Real Estate is a category inside GUBER Marketplace, using the same listing system as other items (title, description, price, photos, location, offers, deals, boosting). You can also request a Verify & Inspect walkthrough on a property using its APN (Assessor''s Parcel Number) for extra buyer confidence.',
+        '[{"label":"Start a real estate listing","message":"I want to list my property"},{"label":"Request a property inspection","message":"I want to request a Verify and Inspect on a property"}]'::jsonb,
+        'system'),
+      ('general','What is City Activation',
+        '["what is city activation","city activation","is my city activated","when does my city activate","activation threshold"]'::jsonb,
+        '["city activation","activation","market launch","live feed"]'::jsonb,
+        'A city or local market "activates" once it reaches 250 verified/active users. Activation unlocks the live local feed and lets Cash Drops appear on the map for that area. GUBER rolls out market-by-market so there''s always enough real activity before turning on the full live experience.',
+        '[{"label":"What are Cash Drops?","message":"What are Cash Drops?"}]'::jsonb,
+        'system'),
+      ('payments','GUBER fees breakdown',
+        '["what fees does guber charge","platform fee","processing fee","how much does guber take","cashout fee","instant cashout fee","early cashout fee"]'::jsonb,
+        '["fees","platform fee","processing fee","cashout fee","commission"]'::jsonb,
+        'Platform fee on job payouts is 20% (15% for Day-1 OG). Posters also pay a 3.2% processing fee at checkout. Wallet cashouts: early cashout is 2% (Verified Worker tier+), instant cashout is 5% (Trusted Worker tier+). Standard payouts land in 2–7 business days via Stripe.',
+        '[{"label":"What is Day-1 OG?","message":"What is Day-1 OG?"},{"label":"How do trust tiers work?","message":"How does the trust score system work?"}]'::jsonb,
+        'system'),
+      ('safety','How the trust score system works',
+        '["trust score","how does trust score work","verified worker tier","trusted worker tier","how do i level up my trust score"]'::jsonb,
+        '["trust score","tier","verified worker","trusted worker","reputation"]'::jsonb,
+        'Everyone starts at a trust score of 50. It rises for good behavior (job confirmed +5, completed with proof +5, Day-1 OG +10) and falls for bad behavior (dispute opened -10, proof rejected -20, job abandoned -15). Below 60 = New Worker, 60-79 = Verified Worker (unlocks early cashout), 80+ = Trusted Worker (unlocks instant cashout).',
+        '[{"label":"Cashout fees","message":"What are the cashout fees?"}]'::jsonb,
+        'system'),
+      ('safety','Dispute resolution timeline',
+        '["how long does a dispute take","dispute timeline","dispute sla","what happens after i file a dispute","dispute response window"]'::jsonb,
+        '["dispute timeline","dispute sla","dispute window","24 hours","5 day"]'::jsonb,
+        'After a dispute is opened, the other party has 24 hours to respond with their own evidence, then an admin reviews. GUBER commits to resolving every dispute within 5 days — if that window passes with no resolution, the hirer is automatically issued a full refund. If no dispute is filed at all, jobs auto-confirm and pay out after 24-72 hours depending on job type/value.',
+        '[{"label":"How do disputes work?","message":"What happens if there is a dispute?"}]'::jsonb,
+        'system'),
+      ('general','Account deletion and data retention',
+        '["how do i delete my account","delete my account","account deletion","close my account","remove my account"]'::jsonb,
+        '["delete account","close account","soft delete","account removal"]'::jsonb,
+        'GUBER uses soft-delete: your name, photo, bio, and skills are wiped immediately and your email/username are anonymized. Job history and payment records are retained (without your identity attached) for a minimum of 90 days for legal/fraud purposes. Public lookups for a deleted account return "not found."',
+        '[{"label":"Is GUBER safe?","message":"Is GUBER safe?"}]'::jsonb,
+        'system'),
+      ('general','Editing your profile',
+        '["how do i edit my profile","update my profile","change my bio","edit my skills","change profile photo","update availability"]'::jsonb,
+        '["edit profile","update profile","bio","skills","availability","profile photo"]'::jsonb,
+        'From your Profile page you can edit your name, bio, zip code, skills list, availability toggle, and profile photo. Only you can edit your own profile, and photo changes go through the same content-safety checks as everything else on GUBER.',
+        '[{"label":"Go to my profile","message":"Take me to my profile"}]'::jsonb,
+        'system'),
+      ('general','Messaging and chat rules',
+        '["how does messaging work","can i chat with a seller","why can''t i message someone","chat rules","when does chat unlock"]'::jsonb,
+        '["chat","messaging","message seller","message buyer","deal chat"]'::jsonb,
+        'Marketplace chat with a seller unlocks only after a deal is created (an offer is accepted) — this prevents message spam to sellers. Jobs intentionally skip open-ended chat for scheduling and instead use GUBER''s structured availability-window flow. All messages, everywhere on GUBER, are automatically screened for phone numbers, emails, social handles, and off-platform payment mentions (Venmo/CashApp/Zelle) to keep transactions safe and on-platform.',
+        '[{"label":"Why does GUBER block contact info?","message":"Why can I not share my phone number on GUBER?"}]'::jsonb,
+        'system'),
+      ('credits','How missions work',
+        '["how do missions work","map missions","what missions can i do","earn credits from missions","list of missions"]'::jsonb,
+        '["missions","map mission","earn credits","growth task"]'::jsonb,
+        'Missions are small local tasks shown on the map that earn credits — separate from paid jobs. Examples: Submit Local Recommendation (25 cr), Fuel Price Report (50 cr), Verify Business Hours (75 cr), Add Local Info or Submit Local Event (100 cr each), Report Wrong/Closed Business (100 cr), Add Storefront Photo (100 cr), and High-Value Verified Local Intel (up to 500 cr, admin-reviewed). There''s also a profile mission, Set Your Availability + Skills, worth 200 cr. Day-1 OG members earn a bonus on top of every mission reward. Missions are community/promotional activities, not employment or guaranteed income.',
+        '[{"label":"Show me city missions","message":"Show me city missions"},{"label":"What is Day-1 OG?","message":"What is Day-1 OG?"}]'::jsonb,
+        'system'),
+      ('general','iOS digital purchases and ExternalPurchaseSheet',
+        '["why does it open a browser to pay","external purchase sheet","ios purchase","apple pay disclosure","why can''t i pay directly in the app"]'::jsonb,
+        '["ios purchase","external purchase","apple disclosure","in-app browser"]'::jsonb,
+        'On iOS, purely digital purchases (Studio credits/subscriptions, Day-1 OG, Trust Box, Business Scout plan, unlock packs, Buyer''s Order PDFs) show Apple''s required purchase disclosure, then open Stripe checkout in a secure in-app browser — this is required by Apple''s policy for digital goods. Real-world services (jobs, Verify & Inspect, barter, worker payouts, refunds) go straight through Stripe on every platform since those are exempt from Apple''s in-app purchase rules.',
+        '[{"label":"What is Day-1 OG?","message":"What is Day-1 OG?"}]'::jsonb,
+        'system')
+    ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'Vehicle listing fields and Buyer''s Order');
+  `).catch(e => console.error("[migration] jac_knowledge gap-fill seed error:", e));
 
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`

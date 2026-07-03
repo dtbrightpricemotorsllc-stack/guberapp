@@ -24,8 +24,9 @@ import {
   type StudioTierPlanId,
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
-import { tryLocalAnswer, promoteToCache, getJacBrainStats } from "./jac-brain";
+import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
+import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
   getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
@@ -15915,13 +15916,24 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       // ── Inject user memory + live context for logged-in users ────────────
       const onboardUserId = (req.session as any)?.userId ?? null;
       let userContextSection = "";
+      let memoryConsent: string = "unset";
       if (onboardUserId) {
         try {
+          const consentRes = await pool.query(
+            `SELECT memory_consent FROM jac_user_profile WHERE user_id = $1`,
+            [onboardUserId]
+          );
+          memoryConsent = consentRes.rows[0]?.memory_consent ?? "unset";
+        } catch { /* profile row may not exist yet — treat as unset */ }
+
+        try {
           const [memRes, liveRes] = await Promise.all([
-            pool.query(
-              `SELECT category, key, value FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
-              [onboardUserId]
-            ),
+            memoryConsent === "denied"
+              ? Promise.resolve({ rows: [] })
+              : pool.query(
+                  `SELECT category, key, value FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
+                  [onboardUserId]
+                ),
             pool.query(`
               SELECT
                 (SELECT full_name FROM users WHERE id = $1) AS full_name,
@@ -15971,21 +15983,38 @@ Use memory + live data to personalize every response. Reference their history na
 If they say "same as last time" or similar, use memory to fill in what you know.
 
 `;
-          // Enrich with deep profile data (synced from GUBER DB into jac_memory)
-          try {
-            const profileCtx = await buildJacProfileContext(onboardUserId);
-            if (profileCtx) userContextSection += profileCtx + "\n\n";
-          } catch {}
-          // Fire-and-forget profile sync so next call gets fresher data
-          syncJacProfile(onboardUserId).catch(() => {});
+          if (memoryConsent === "denied") {
+            userContextSection += `MEMORY: This user has turned OFF long-term memory. Do not claim to remember past conversations. You may still use the LIVE ACCOUNT data above (it is not memory, it is their current account state).\n\n`;
+          } else if (memoryConsent === "unset") {
+            userContextSection += `MEMORY CONSENT: Not yet asked. Early in this conversation (after the main topic), naturally ask once: "Want me to remember details across our conversations so I don't have to ask twice? You can turn this off anytime in your profile." If they agree, set tracking.memoryConsentAction to "grant". If they decline, set tracking.memoryConsentAction to "deny". Otherwise omit it.\n\n`;
+          }
+          // Enrich with deep profile data (synced from GUBER DB into jac_memory) — only with consent
+          if (memoryConsent !== "denied") {
+            try {
+              const profileCtx = await buildJacProfileContext(onboardUserId);
+              if (profileCtx) userContextSection += profileCtx + "\n\n";
+            } catch {}
+            // Fire-and-forget profile sync so next call gets fresher data
+            syncJacProfile(onboardUserId).catch(() => {});
+          }
         } catch (ctxErr: any) {
           console.error("[JAC onboard ctx]", ctxErr.message);
         }
       }
 
       // ── Try local KB/cache answer first (zero AI cost) ──────────────────
+      // Skip this shortcut for logged-in users whose message looks like it's
+      // carrying structured workflow details (e.g. "list my bike, category
+      // Sporting Goods, price $450") — otherwise a keyword like "price" can
+      // match an unrelated FAQ entry (e.g. platform fees) and short-circuit
+      // the response before the LLM ever gets a chance to stage a
+      // proposedAction. FAQ-style questions stay short and rarely bundle a
+      // dollar amount/category/zip together, so this heuristic leaves normal
+      // KB shortcuts intact while letting action-heavy messages reach the LLM.
       const _lastUserMsg = sanitized.filter(m => m.role === "user").pop()?.content ?? "";
-      if (_lastUserMsg) {
+      const _looksLikeActionDetail = !!onboardUserId && _lastUserMsg.length > 40 &&
+        /\$\d|\bbudget\b|\bcategory\b|\bprice\s+is\b|\bzip\s*code\b|\bzip\b\s*\d{5}|\bcondition\s+is\b|\btransport(ing)?\b|\bpickup\b|\bdeliver(y|ing)?\b|\binspect(ion)?\b/i.test(_lastUserMsg);
+      if (_lastUserMsg && !_looksLikeActionDetail) {
         try {
           const localAns = await tryLocalAnswer(_lastUserMsg);
           if (localAns && localAns.confidence >= 0.85) {
@@ -16001,6 +16030,24 @@ If they say "same as last time" or similar, use memory to fill in what you know.
         } catch (brainErr: any) {
           console.error("[JAC brain]", brainErr.message);
         }
+      }
+
+      // ── Multi-source reasoning: pull several relevant KB/intent entries so
+      // JAC can synthesize an answer combining multiple GUBER sources instead
+      // of being limited to a single best match. ─────────────────────────
+      let multiSourceSection = "";
+      if (_lastUserMsg) {
+        try {
+          const sources = await getMultiSourceContext(_lastUserMsg, 4);
+          if (sources.length > 0) {
+            multiSourceSection = `═══════════════════════════════════
+RELEVANT GUBER KNOWLEDGE (multiple sources — combine as needed, don't just repeat one verbatim)
+═══════════════════════════════════
+${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).join("\n")}
+
+`;
+          }
+        } catch { /* non-fatal — falls back to model's own knowledge */ }
       }
 
       const OpenAI = (await import("openai")).default;
@@ -16222,6 +16269,9 @@ RETIRED: route: /signup?intent=worker&type=flexible&from=jac [HIGH after clarifi
 JUST EXPLORING: Explain GUBER simply. Ask what interests them. Route after conversation.
 RETURNING USER: route: /login [HIGH]
 
+NOTE — all "route: /signup..." lines above are for users who are NOT logged in.
+${onboardUserId ? `This user IS already logged in — never send them to /signup or /login for SELL ITEMS, SELL VEHICLE, VERIFY & INSPECT, or TRANSPORT / LOAD BOARD. Instead gather the needed details in conversation and use the EXECUTE WORKFLOWS section below to stage a proposedAction so they can confirm and submit right here in chat.` : `This user is NOT logged in, so the /signup routes above apply as written.`}
+
 ═══════════════════════════════════
 JOB INTAKE PROTOCOL — HIRE MODE
 ═══════════════════════════════════
@@ -16308,15 +16358,16 @@ SELLING A VEHICLE (Marketplace — not a job post):
     • A range ("between 12 and 15")
     • Vague ("asking price TBD" / "not sure yet" / "make me an offer")
   → CONTEXT LOCK: once a vehicle is mentioned, stay in vehicle-listing mode until listing is complete or user explicitly changes topic. NEVER pivot to explaining platform fees or GUBER pricing during vehicle intake.
-  → route: /signup?intent=seller_vehicle&from=jac [HIGH — use as soon as year+make+model + condition known, even if price is vague]
-  → CTA: "I can get your listing started right now — you set the price after you sign up. Create your free account and we'll post it."
+  → NOT LOGGED IN: route: /signup?intent=seller_vehicle&from=jac [HIGH — use as soon as year+make+model + condition known, even if price is vague]. CTA: "I can get your listing started right now — you set the price after you sign up. Create your free account and we'll post it."
+  → ALREADY LOGGED IN: never route to /signup. Once year+make+model+condition (and price, if given) are known, set proposedAction {"type":"marketplace_listing","fields":{...}} per the EXECUTE WORKFLOWS section instead, and tell them you've prepared it for their confirmation.
   Note: This becomes a marketplace listing, not a job post. Platform fees are NEVER the right response to a vehicle price question.
 
 SELLING ITEMS (Marketplace — not a job post):
   Step 1: "What are you selling?"
   Step 2: "What condition is it in?"
   Step 3: "Any price in mind?"
-  → route: /signup?intent=seller&from=jac
+  → NOT LOGGED IN: route: /signup?intent=seller&from=jac
+  → ALREADY LOGGED IN: never route to /signup. Once title+category (and price/condition, if given) are known, set proposedAction {"type":"marketplace_listing","fields":{...}} per the EXECUTE WORKFLOWS section instead, and tell them you've prepared it for their confirmation.
 
 GENERAL RULE:
 • Build job_prefill.descriptionSeed from answers naturally: "Need a dog walker for my [breed], [size] dog, [frequency], in [zip area]."
@@ -16395,7 +16446,7 @@ IMPORTANT — job_prefill rules:
 • Set readyToPost=true only when service type AND zip/area are both known.
 • When readyToPost=true, set confidence="high" and route="/post-job?from=jac".
 • descriptionSeed should be a complete natural sentence: "Need a dog walker for my 3-year-old Golden Retriever, 3x per week, in the 90210 area."
-• For marketplace items (sell vehicle, sell items) — do NOT set readyToPost=true; route to /signup?intent=seller_vehicle or /signup?intent=seller instead.
+• For marketplace items (sell vehicle, sell items) — do NOT set readyToPost=true. If the user is NOT logged in, route to /signup?intent=seller_vehicle or /signup?intent=seller instead. If the user IS logged in, stage a proposedAction (marketplace_listing) per EXECUTE WORKFLOWS instead of routing anywhere.
 
 ═══════════════════════════════════
 EXECUTION MINDSET — CRITICAL RULE
@@ -16435,21 +16486,38 @@ When someone reports a bug, mic/voice issue, payment problem, GPS issue, or form
 3. When capturing, add to JSON: "feedbackDraft": {"ready":true,"category":"<mic_failure|voice_failure|payment_issue|gps_issue|form_problem|app_bug|general>","description":"<one-sentence summary>"}
 
 ═══════════════════════════════════
+EXECUTE WORKFLOWS — CONFIRM BEFORE SUBMIT (logged-in users only)
+═══════════════════════════════════
+${onboardUserId ? `This user IS logged in, so you can go further than routing them to a page — you can stage a real workflow for them, but you must NEVER submit or charge anything silently. GUBER always shows a plain-language confirmation before anything is actually created.
+
+Once you've gathered enough detail through natural conversation for one of these, include a "proposedAction" in the JSON:
+- post_job: needs category + serviceType + zip (or category="Verify & Inspect" + useCaseName + catalogServiceTypeName)
+- marketplace_listing: needs title + category (price/condition/photos help but aren't required to stage it)
+- transport_request: needs transportType + pickupCity + pickupState + deliveryCity + deliveryState
+- vi_request: needs useCaseName + catalogServiceTypeName (Verify & Inspect on a vehicle/property/asset)
+
+When ready, set:
+"proposedAction": {"type":"post_job|marketplace_listing|transport_request|vi_request","fields":{...all known fields...}}
+
+Tell the user in your reply that you've prepared it and they'll see a summary to confirm before anything is posted or charged — e.g. "I've got everything I need — I'll show you a quick summary to confirm before this goes live." Do NOT say it's already posted. Only include proposedAction once, when fields are genuinely complete — do not repeat it identically every turn once the user has already seen the confirmation card (wait for them to respond).` : `This user is NOT logged in — never propose an action. Route them to /signup instead.`}
+
+═══════════════════════════════════
 RESPOND WITH JSON ONLY — NO OTHER TEXT
 ═══════════════════════════════════
-{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{},"feedbackDraft":null}
+{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{},"feedbackDraft":null,"proposedAction":null}
 - route: URL string when HIGH, null otherwise
 - actions: [{label,message}] x2-4 for MEDIUM, [] otherwise
 - options: [{label,message}] x3-11 for LOW or opening question, [] otherwise
 - tracking: always present, all fields included
-- feedbackDraft: null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing issue`;
+- feedbackDraft: null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing issue
+- proposedAction: null normally; {"type":"...","fields":{...}} only when a real workflow is ready to be staged for user confirmation (see EXECUTE WORKFLOWS section)`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.3,
-        max_tokens: 500,
+        max_tokens: 600,
         response_format: { type: "json_object" as const },
-        messages: [{ role: "system", content: userContextSection + onboardPrompt }, ...sanitized],
+        messages: [{ role: "system", content: userContextSection + multiSourceSection + onboardPrompt }, ...sanitized],
       });
 
       const raw = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -16462,11 +16530,12 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         { label: "I'm retired", message: "I'm retired" },
         { label: "I'm just exploring", message: "I'm just exploring" },
       ];
-      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
+      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null; pendingAction?: { id: number; type: string; summary: string } | null };
       let parsed: JacR = {
         reply: "What brings you to GUBER today?",
         confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {}, feedbackDraft: null,
       };
+      let proposedAction: { type?: string; fields?: Record<string, any> } | null = null;
       try {
         const j = JSON.parse(raw);
         if (typeof j.reply === "string" && j.reply.trim()) {
@@ -16481,8 +16550,38 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
               ? { ready: true, category: j.feedbackDraft.category, description: j.feedbackDraft.description ?? "" }
               : null,
           };
+          if (j.proposedAction && typeof j.proposedAction === "object" && isValidActionType(j.proposedAction.type)) {
+            proposedAction = { type: j.proposedAction.type, fields: j.proposedAction.fields ?? {} };
+          }
         }
       } catch { /* use fallback */ }
+
+      // Persist memory consent decision the moment the model reports it (logged-in only)
+      if (onboardUserId && parsed.tracking?.memoryConsentAction) {
+        const decision = parsed.tracking.memoryConsentAction === "grant" ? "granted"
+          : parsed.tracking.memoryConsentAction === "deny" ? "denied" : null;
+        if (decision) {
+          pool.query(
+            `INSERT INTO jac_user_profile (user_id, memory_consent) VALUES ($1, $2)
+             ON CONFLICT (user_id) DO UPDATE SET memory_consent = $2, updated_at = NOW()`,
+            [onboardUserId, decision]
+          ).catch((e) => console.error("[JAC] memory consent persist error:", e.message));
+        }
+      }
+
+      // Stage (not execute) a proposed workflow — requires explicit user confirmation
+      if (onboardUserId && proposedAction?.type && isValidActionType(proposedAction.type)) {
+        try {
+          const { ok, summary } = validateAndSummarize(proposedAction.type, proposedAction.fields ?? {});
+          if (ok) {
+            const id = await createPendingAction(onboardUserId, proposedAction.type, proposedAction.fields ?? {}, summary);
+            (parsed as any).pendingAction = { id, type: proposedAction.type, summary };
+          }
+        } catch (paErr: any) {
+          console.error("[JAC] pending action stage error:", paErr.message);
+        }
+      }
+
       res.json(parsed);
     } catch (err: any) {
       console.error("[JAC] onboard error:", err.message);
@@ -17062,7 +17161,9 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         voiceEnabled, language, tutorialStatus,
         textResponses, voiceActivation, floatingButton,
         proactiveSuggestions, personalizedRecommendations, voiceSelection, lowDataMode,
+        memoryConsent,
       } = req.body;
+      const safeMemoryConsent = ["granted", "denied"].includes(memoryConsent) ? memoryConsent : null;
       await pool.query(
         `INSERT INTO jac_user_profile (
           user_id, primary_goal, user_type, zip_code, interests, service_needs,
@@ -17071,8 +17172,8 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           startup_behavior, voice_enabled, language, tutorial_status,
           text_responses, voice_activation, floating_button,
           proactive_suggestions, personalized_recommendations, voice_selection, low_data_mode,
-          updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW())
+          memory_consent, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW())
         ON CONFLICT (user_id) DO UPDATE SET
           primary_goal     = COALESCE($2, jac_user_profile.primary_goal),
           user_type        = COALESCE($3, jac_user_profile.user_type),
@@ -17099,6 +17200,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           personalized_recommendations = COALESCE($24, jac_user_profile.personalized_recommendations),
           voice_selection              = COALESCE($25, jac_user_profile.voice_selection),
           low_data_mode                = COALESCE($26, jac_user_profile.low_data_mode),
+          memory_consent               = COALESCE($27, jac_user_profile.memory_consent),
           updated_at       = NOW()`,
         [
           userId,
@@ -17127,6 +17229,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           typeof personalizedRecommendations === "boolean" ? personalizedRecommendations : null,
           typeof voiceSelection === "string" ? voiceSelection : null,
           typeof lowDataMode === "boolean" ? lowDataMode : null,
+          safeMemoryConsent,
         ]
       );
       res.json({ ok: true });
@@ -17260,6 +17363,83 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const userId = req.session.userId!;
       const id = parseInt(req.params.id);
       await pool.query(`DELETE FROM jac_memory WHERE id = $1 AND user_id = $2`, [id, userId]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── JAC Pending Actions — confirm-before-submit workflow execution ────────
+  app.get("/api/jac/actions/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const r = await pool.query(
+        `SELECT id, action_type, payload, summary, status, result_body, created_at, expires_at
+         FROM jac_pending_actions WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      if (!r.rows[0]) return res.status(404).json({ message: "Not found" });
+      res.json(r.rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/jac/actions/:id/confirm", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const r = await pool.query(
+        `SELECT id, action_type, payload, status, expires_at FROM jac_pending_actions
+         WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+        [id, userId]
+      );
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ message: "Not found" });
+      if (row.status !== "pending") {
+        return res.status(409).json({ message: `Action already ${row.status}` });
+      }
+      if (new Date(row.expires_at).getTime() < Date.now()) {
+        await pool.query(`UPDATE jac_pending_actions SET status = 'expired' WHERE id = $1`, [id]);
+        return res.status(410).json({ message: "This request expired — please ask JAC to set it up again." });
+      }
+      if (!isValidActionType(row.action_type)) {
+        return res.status(400).json({ message: "Unknown action type" });
+      }
+      // Re-validate against the freshest fields (never trust client-supplied overrides)
+      const { ok, summary } = validateAndSummarize(row.action_type, row.payload);
+      if (!ok) {
+        await pool.query(`UPDATE jac_pending_actions SET status = 'failed', result_body = $2 WHERE id = $1`, [id, JSON.stringify({ message: "Missing required fields" })]);
+        return res.status(400).json({ message: "This request is missing required details — please ask JAC to fill them in." });
+      }
+      const port = parseInt(process.env.PORT || "5000", 10);
+      const { status, body } = await executeAction(row.action_type, row.payload, req.headers.cookie, port);
+      const success = status >= 200 && status < 300;
+      await pool.query(
+        `UPDATE jac_pending_actions SET status = $2, result_body = $3::jsonb WHERE id = $1`,
+        [id, success ? "completed" : "failed", JSON.stringify(body ?? {})]
+      );
+      if (!success) {
+        return res.status(status).json({ message: body?.message || "That didn't go through — please try again from the page directly.", body });
+      }
+      res.json({ ok: true, summary, result: body });
+    } catch (err: any) {
+      console.error("[jac/actions confirm]", err.message);
+      res.status(500).json({ message: "Something went wrong confirming this action." });
+    }
+  });
+
+  app.post("/api/jac/actions/:id/cancel", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const r = await pool.query(
+        `UPDATE jac_pending_actions SET status = 'cancelled'
+         WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id`,
+        [id, userId]
+      );
+      if (!r.rows[0]) return res.status(404).json({ message: "Not found or already resolved" });
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

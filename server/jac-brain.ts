@@ -133,6 +133,83 @@ export async function tryLocalAnswer(userText: string): Promise<LocalAnswer | nu
   return null;
 }
 
+export interface MultiSourceMatch {
+  category: string;
+  title: string;
+  answer: string;
+  followUpActions: Array<{ label: string; message: string }>;
+  matchType: "kb" | "intent";
+}
+
+/**
+ * Multi-source reasoning support: return the top N KB entries (plus any
+ * matching intent fallback) relevant to the user's text, instead of a single
+ * best match. Used to enrich the AI fallback prompt so JAC can combine and
+ * reconcile knowledge from multiple GUBER sources in one answer, rather than
+ * being locked to whichever single row happened to match first.
+ */
+export async function getMultiSourceContext(userText: string, limit = 4): Promise<MultiSourceMatch[]> {
+  const normalized = normalizeText(userText);
+  if (normalized.length < 3) return [];
+  const matches: MultiSourceMatch[] = [];
+
+  try {
+    const r = await pool.query(
+      `SELECT category, title, answer, follow_up_actions,
+         (
+           (SELECT COUNT(*) FROM jsonb_array_elements_text(question_patterns) qp WHERE $1 ILIKE '%' || qp || '%')
+           + (SELECT COUNT(*) FROM jsonb_array_elements_text(keywords) kw WHERE $1 ILIKE '%' || kw || '%')
+         ) AS score
+       FROM jac_knowledge
+       WHERE active = TRUE AND admin_approved = TRUE
+       HAVING (
+         (SELECT COUNT(*) FROM jsonb_array_elements_text(question_patterns) qp WHERE $1 ILIKE '%' || qp || '%')
+         + (SELECT COUNT(*) FROM jsonb_array_elements_text(keywords) kw WHERE $1 ILIKE '%' || kw || '%')
+       ) > 0
+       ORDER BY score DESC, hit_count DESC
+       LIMIT $2`,
+      [normalized, limit]
+    );
+    for (const row of r.rows) {
+      matches.push({
+        category: row.category,
+        title: row.title,
+        answer: row.answer,
+        followUpActions: Array.isArray(row.follow_up_actions) ? row.follow_up_actions : [],
+        matchType: "kb",
+      });
+    }
+  } catch {}
+
+  try {
+    const r = await pool.query(
+      `SELECT intent_name, display_name, fallback_response
+       FROM jac_intents
+       WHERE active = TRUE AND fallback_response IS NOT NULL
+         AND EXISTS (
+           SELECT 1 FROM jsonb_array_elements_text(sample_phrases) p
+           WHERE $1 ILIKE '%' || p || '%'
+         )
+       ORDER BY hit_count DESC
+       LIMIT 1`,
+      [normalized]
+    );
+    for (const row of r.rows) {
+      if (!matches.some((m) => m.title === row.display_name)) {
+        matches.push({
+          category: row.intent_name,
+          title: row.display_name,
+          answer: row.fallback_response,
+          followUpActions: [],
+          matchType: "intent",
+        });
+      }
+    }
+  } catch {}
+
+  return matches.slice(0, limit);
+}
+
 /**
  * Promote a Q&A pair into the response cache for future reuse.
  */
