@@ -39,6 +39,7 @@
 | Live task tracking | `client/src/services/location/TaskTrackingService.ts` (foreground GPS watch; `POST /api/jobs/:id/location-batch`; table `job_location_pings`) |
 | Admin QA | `client/src/pages/admin-qa.tsx`, `server/admin-qa.ts` |
 | Dispute types | `shared/dispute.ts` |
+| JAC knowledge base (official source of truth) | `docs/jac-knowledge-base.md` |
 | Server tests | `server/tests/` |
 | E2E tests | `e2e/` |
 
