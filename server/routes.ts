@@ -3,6 +3,7 @@ import { setupCampaignLabRoutes } from "./campaign-lab";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
+import { synthesizeSpeech, httpStatusForError, estimateCostUsd, DEFAULT_JAC_VOICE_ID } from "./elevenlabs";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -18388,33 +18389,22 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return res.status(429).json({ message: "Voice budget reached for this session." });
       }
 
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
       console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
-      const upstream = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
-        {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: cleaned,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
-          }),
-        }
-      );
+      const result = await synthesizeSpeech(cleaned, { voiceId });
 
-      if (!upstream.ok) {
-        const err = await upstream.text();
-        console.error("[JAC TTS] ElevenLabs error", upstream.status, err);
-        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: false, errorMessage: `upstream_${upstream.status}`, ip });
-        return res.status(502).json({ message: "TTS upstream error" });
+      if (!result.ok) {
+        console.error(`[JAC TTS] ElevenLabs error [${result.code}]:`, result.message);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: false, errorMessage: result.code, ip });
+        return res.status(httpStatusForError(result.code)).json({ message: result.message });
       }
 
       logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: true, ip });
 
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
+      const upstream = result.response;
       if (upstream.body) {
         const { Readable } = await import("stream");
         Readable.fromWeb(upstream.body as any).pipe(res);
@@ -18498,6 +18488,48 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
+  // ── JAC Voice Usage — admin cost/reliability tracking ───────────────────────
+  app.get("/api/admin/jac-voice-usage", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 200, 1000);
+      const rows = await pool.query(
+        `SELECT l.id, l.created_at, l.type, l.provider, l.voice_id, l.units, l.success, l.error_message,
+                l.user_id, u.email AS user_email
+         FROM jac_voice_usage_log l
+         LEFT JOIN users u ON u.id = l.user_id
+         ORDER BY l.id DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      const usage = rows.rows.map((r) => ({
+        id: r.id,
+        date: r.created_at,
+        userId: r.user_id,
+        userEmail: r.user_email ?? "anonymous",
+        feature: r.type === "tts" ? "Text-to-Speech" : "Speech-to-Text",
+        type: r.type,
+        provider: r.provider,
+        voiceId: r.voice_id,
+        units: r.units,
+        estimatedCostUsd: estimateCostUsd(r.type, r.units || 0),
+        success: r.success,
+        errorMessage: r.error_message,
+      }));
+
+      const summary = await pool.query(
+        `SELECT type, success, COUNT(*)::int AS count, COALESCE(SUM(units),0)::bigint AS total_units
+         FROM jac_voice_usage_log
+         GROUP BY type, success`
+      );
+
+      res.json({ usage, summary: summary.rows });
+    } catch (e: any) {
+      console.error("[admin/jac-voice-usage] error:", e.message);
+      res.status(500).json({ message: "Failed to load usage log" });
+    }
+  });
+
   // ── JAC TTS Cache Pregen (admin only) ────────────────────────────────────────
   app.post("/api/jac/tts/pregen", async (req: Request, res: Response) => {
     try {
@@ -18507,7 +18539,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
       const { readFileSync, writeFileSync, existsSync } = await import("fs");
@@ -18541,24 +18573,16 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       for (const [key, text] of Object.entries(CACHE_CLIPS)) {
         const filePath = path.join(dir, `${key}.mp3`);
         if (existsSync(filePath)) { results[key] = "skipped (exists)"; continue; }
-        try {
-          const r = await fetch(
-            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
-            {
-              method: "POST",
-              headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                text,
-                model_id: "eleven_multilingual_v2",
-                voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
-              }),
-            }
-          );
-          if (!r.ok) { results[key] = `error ${r.status}`; continue; }
-          const buf = await r.arrayBuffer();
-          writeFileSync(filePath, Buffer.from(buf));
-          results[key] = "generated";
-        } catch (e: any) { results[key] = `exception: ${e.message}`; }
+        const result = await synthesizeSpeech(text, { voiceId });
+        if (!result.ok) {
+          results[key] = `error: ${result.code}`;
+          logJacVoiceUsage({ userId, type: "tts", provider: "elevenlabs", voiceId, units: text.length, success: false, errorMessage: result.code });
+          continue;
+        }
+        const buf = await result.response.arrayBuffer();
+        writeFileSync(filePath, Buffer.from(buf));
+        results[key] = "generated";
+        logJacVoiceUsage({ userId, type: "tts", provider: "elevenlabs", voiceId, units: text.length, success: true });
       }
       res.json({ ok: true, results });
     } catch (e: any) {

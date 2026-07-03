@@ -26,12 +26,17 @@ On iOS WKWebView, if `getBestMimeType()` returns a type the recorder rejects (e.
 **Fix:** Chunked loop: `for (let i = 0; i < bytes.byteLength; i += 8192) { binary += String.fromCharCode(...bytes.subarray(i, i + 8192)); }`
 
 ## Server-side MIME→extension mapping
-`audio/mp4;codecs=mp4a.40.2` must map to `.m4a`. Updated the `ext` determination to also handle `ogg` and `mp3` explicitly. OpenAI Whisper accepts: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm.
+`audio/mp4;codecs=mp4a.40.2` must map to `.m4a`. Updated the `ext` determination to also handle `ogg`, `mp3`, and `wav` explicitly (a missing `wav` case silently mislabeled the file as `.webm` and caused "corrupted audio" errors from the transcription API). OpenAI Whisper accepts: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm.
 
 ### 5. `await permissions.query()` burns iOS user-gesture token before `getUserMedia`
 `WhisperProvider.startListening()` was async and `await navigator.permissions.query(...)` ran BEFORE `getUserMedia`. On iOS Safari/PWA, any `await` before `getUserMedia` consumes the transient user-activation — `getUserMedia` then silently fails with NotAllowedError even when mic permission was previously granted.
 
 **Fix:** Detect `isIosSafari` via `/iP(hone|ad|od)/i.test(navigator.userAgent)` at the top of `startListening`. Skip the `permissions.query` block entirely on iOS — go straight to `getUserMedia`. The `NotAllowedError` catch already handles the denied case. The same `isIosSafari` flag is reused for the existing timeslice-skip logic lower in the function (removed the duplicate declaration).
+
+### 6. Replit's AI Integrations OpenAI-compatible proxy rejects `whisper-1`
+Calling `openai.audio.transcriptions.create({ model: "whisper-1" })` against `AI_INTEGRATIONS_OPENAI_BASE_URL` returns `400 Model 'whisper-1' is not supported.` The proxy does support newer transcription models.
+
+**Fix:** Use `model: "gpt-4o-mini-transcribe"` (confirmed working) instead of `whisper-1` for any STT call routed through Replit's AI Integrations proxy.
 
 ## Platform routing (voice/index.ts)
 - iOS Capacitor → WhisperProvider (WKWebView SpeechRecognition is unreliable, MediaRecorder is supported iOS 14.5+)

@@ -2201,7 +2201,95 @@ function JacVoiceDebugTab() {
           )}
         </CardContent>
       </Card>
+
+      <JacVoiceUsageTab />
     </div>
+  );
+}
+
+type JacVoiceUsageRow = {
+  id: number; date: string; userId: number | null; userEmail: string; feature: string; type: string;
+  provider: string; voiceId: string | null; units: number; estimatedCostUsd: number; success: boolean; errorMessage: string | null;
+};
+type JacVoiceUsageSummaryRow = { type: string; success: boolean; count: number; total_units: string | number };
+
+function JacVoiceUsageTab() {
+  const { data, isLoading, refetch, isFetching } = useQuery<{ usage: JacVoiceUsageRow[]; summary: JacVoiceUsageSummaryRow[] }>({
+    queryKey: ["/api/admin/jac-voice-usage"],
+  });
+
+  const totalCost = (data?.usage ?? []).reduce((sum, r) => sum + (r.estimatedCostUsd || 0), 0);
+  const totalCalls = data?.usage.length ?? 0;
+  const failedCalls = (data?.usage ?? []).filter((r) => !r.success).length;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center justify-between">
+          <span>ElevenLabs / JAC Voice Usage — Cost & Reliability Tracking</span>
+          <button
+            className="text-[10px] underline text-primary disabled:opacity-40"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            data-testid="button-jac-usage-refresh"
+          >
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Loading usage log…</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded border p-2">
+                <div className="text-muted-foreground">Calls (last {totalCalls})</div>
+                <div className="text-lg font-bold" data-testid="text-jac-usage-total-calls">{totalCalls}</div>
+              </div>
+              <div className="rounded border p-2">
+                <div className="text-muted-foreground">Failures</div>
+                <div className={`text-lg font-bold ${failedCalls > 0 ? "text-red-500" : ""}`} data-testid="text-jac-usage-failed-calls">{failedCalls}</div>
+              </div>
+              <div className="rounded border p-2">
+                <div className="text-muted-foreground">Est. cost (shown page)</div>
+                <div className="text-lg font-bold" data-testid="text-jac-usage-total-cost">${totalCost.toFixed(4)}</div>
+              </div>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto text-[11px] font-mono">
+              <div className="grid grid-cols-[110px_1fr_90px_70px_60px_70px_1fr] gap-1 px-1.5 py-1 text-[9px] text-muted-foreground uppercase tracking-wide border-b sticky top-0 bg-background">
+                <span>Date</span><span>User</span><span>Feature</span><span>Units</span><span>Cost</span><span>Status</span><span>Error</span>
+              </div>
+              {(data?.usage ?? []).map((r) => (
+                <div
+                  key={r.id}
+                  className="grid grid-cols-[110px_1fr_90px_70px_60px_70px_1fr] gap-1 items-center px-1.5 py-1 rounded hover:bg-muted/40"
+                  data-testid={`row-jac-usage-${r.id}`}
+                >
+                  <span className="text-muted-foreground truncate">{new Date(r.date).toLocaleString()}</span>
+                  <span className="truncate">{r.userEmail}</span>
+                  <span className="truncate">{r.feature}</span>
+                  <span>{r.units}</span>
+                  <span>${r.estimatedCostUsd.toFixed(4)}</span>
+                  <span>
+                    {r.success ? (
+                      <Badge className="text-[8px] px-1 py-0 bg-green-500">OK</Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-[8px] px-1 py-0">FAIL</Badge>
+                    )}
+                  </span>
+                  <span className="truncate text-red-500">{r.errorMessage ?? ""}</span>
+                </div>
+              ))}
+              {(data?.usage ?? []).length === 0 && (
+                <p className="text-xs text-muted-foreground py-4 text-center">No voice usage recorded yet.</p>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
