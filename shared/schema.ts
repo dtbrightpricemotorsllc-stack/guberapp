@@ -2961,6 +2961,22 @@ export const jacPendingActions = pgTable("jac_pending_actions", {
 export type JacPendingAction       = typeof jacPendingActions.$inferSelect;
 export type InsertJacPendingAction = typeof jacPendingActions.$inferInsert;
 
+// ── JAC Voice Usage Log (TTS/STT credit + reliability tracking) ──────────────
+export const jacVoiceUsageLog = pgTable("jac_voice_usage_log", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").references(() => users.id),
+  type:       text("type").notNull(), // tts | stt
+  provider:   text("provider").notNull(), // elevenlabs | whisper | web_speech | static_cache
+  voiceId:    text("voice_id"),
+  units:      integer("units").notNull(), // tts: chars sent | stt: audio bytes
+  success:    boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  ip:         text("ip"),
+  createdAt:  timestamp("created_at").defaultNow(),
+});
+export type JacVoiceUsageLog       = typeof jacVoiceUsageLog.$inferSelect;
+export type InsertJacVoiceUsageLog = typeof jacVoiceUsageLog.$inferInsert;
+
 // ── GUBER Campaign Lab ────────────────────────────────────────────────────────
 
 // Per-tool dollar cost registry (admin-editable, stored in cents)

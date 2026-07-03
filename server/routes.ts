@@ -18322,6 +18322,22 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ── JAC voice usage logging (TTS/STT credit + reliability tracking) ─────────
+  async function logJacVoiceUsage(entry: {
+    userId?: number | null; type: "tts" | "stt"; provider: string; voiceId?: string | null;
+    units: number; success: boolean; errorMessage?: string | null; ip?: string | null;
+  }) {
+    try {
+      await pool.query(
+        `INSERT INTO jac_voice_usage_log (user_id, type, provider, voice_id, units, success, error_message, ip)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [entry.userId ?? null, entry.type, entry.provider, entry.voiceId ?? null, entry.units, entry.success, entry.errorMessage ?? null, entry.ip ?? null]
+      );
+    } catch (e: any) {
+      console.error("[JAC voice usage log] error:", e.message);
+    }
+  }
+
   // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
   // Keeps the API key server-side. Returns audio/mpeg stream.
   // ── TTS cost guards ───────────────────────────────────────────────────────
@@ -18343,15 +18359,21 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const cleaned = text.slice(0, TTS_MAX_CHARS);
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
+      const userIdForLog = (req.session as any)?.userId ?? null;
+      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      if (!apiKey) {
+        console.warn("[JAC TTS] ELEVENLABS_API_KEY not set — falling back to client-side voice");
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "not_configured", ip });
+        return res.status(503).json({ message: "TTS not configured" });
+      }
 
       // Guard 1: IP rate limit
-      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
       const now = Date.now();
       const bucket = _ttsIpBucket.get(ip) ?? { count: 0, resetAt: now + TTS_IP_WINDOW_MS };
       if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + TTS_IP_WINDOW_MS; }
       if (bucket.count >= TTS_IP_MAX) {
         console.warn(`[JAC TTS] rate-limited IP ${ip}`);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "ip_rate_limited", ip });
         return res.status(429).json({ message: "Too many TTS requests — slow down." });
       }
       bucket.count++;
@@ -18362,6 +18384,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       sess.ttsCharsUsed = (sess.ttsCharsUsed ?? 0) + cleaned.length;
       if (sess.ttsCharsUsed > TTS_SESSION_CHAR_BUDGET) {
         console.warn(`[JAC TTS] session budget exceeded (${sess.ttsCharsUsed} chars)`);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "session_budget_exceeded", ip });
         return res.status(429).json({ message: "Voice budget reached for this session." });
       }
 
@@ -18384,8 +18407,11 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (!upstream.ok) {
         const err = await upstream.text();
         console.error("[JAC TTS] ElevenLabs error", upstream.status, err);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: false, errorMessage: `upstream_${upstream.status}`, ip });
         return res.status(502).json({ message: "TTS upstream error" });
       }
+
+      logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: true, ip });
 
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
@@ -18398,6 +18424,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       }
     } catch (e: any) {
       console.error("[JAC TTS] error:", e.message);
+      logJacVoiceUsage({ userId: (req.session as any)?.userId ?? null, type: "tts", provider: "elevenlabs", units: (req.body?.text?.length) || 0, success: false, errorMessage: e.message?.slice(0, 200) });
       res.status(500).json({ message: "TTS error" });
     }
   });
@@ -18412,10 +18439,15 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
 
       const apiKey   = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
       const baseURL  = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      if (!apiKey) return res.status(503).json({ message: "STT not configured" });
+      const userIdForLog = (req.session as any)?.userId ?? null;
+      const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const audioBytesForLog = Buffer.byteLength(audioBase64, "base64");
+      if (!apiKey) {
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "not_configured", ip });
+        return res.status(503).json({ message: "STT not configured" });
+      }
 
       // IP rate limit: 5 calls/min
-      const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
       const now = Date.now();
       const STT_WINDOW_MS = 60_000;
       const STT_IP_MAX    = 20;
@@ -18425,6 +18457,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (now > b.resetAt) { b.count = 0; b.resetAt = now + STT_WINDOW_MS; }
       if (b.count >= STT_IP_MAX) {
         console.warn(`[JAC STT] rate-limited IP ${ip}`);
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "ip_rate_limited", ip });
         return res.status(429).json({ message: "Too many STT requests — slow down." });
       }
       b.count++;
@@ -18438,7 +18471,9 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           ? "ogg"
           : mt.includes("mp3") || mt.includes("mpeg")
             ? "mp3"
-            : "webm";
+            : mt.includes("wav")
+              ? "wav"
+              : "webm";
       const filename = `jac_audio.${ext}`;
 
       const OpenAI = (await import("openai")).default;
@@ -18448,15 +18483,17 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const file = await toFile(audioBuffer, filename, { type: mimeType ?? "audio/webm" });
       const transcription = await openai.audio.transcriptions.create({
         file,
-        model: "whisper-1",
+        model: "gpt-4o-mini-transcribe",
         language: "en",
       });
 
       const text = (transcription.text ?? "").trim();
       console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}"`);
+      logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBuffer.length, success: true, ip });
       return res.json({ text });
     } catch (e: any) {
       console.error("[JAC STT] error:", e.message);
+      logJacVoiceUsage({ userId: (req.session as any)?.userId ?? null, type: "stt", provider: "openai_transcribe", units: Buffer.byteLength((req.body?.audioBase64 as string) || "", "base64"), success: false, errorMessage: e.message?.slice(0, 200) });
       return res.status(500).json({ message: "STT error" });
     }
   });

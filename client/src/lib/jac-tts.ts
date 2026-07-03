@@ -143,11 +143,40 @@ export async function jacSpeak(
     if (played) return;
   }
 
-  // ── Tier 2: Web Speech (Android + web; iOS WKWebView doesn't support it) ───
-  // ElevenLabs parked — latency + voice inconsistency across responses.
+  // ── Tier 2: live ElevenLabs via backend proxy (web + Android only) ────────
+  // iOS WKWebView has latency/playback issues with streamed audio, so iOS
+  // goes straight to the native Web Speech fallback.
+  if (!isIOS) {
+    const played = await tryLiveElevenLabs(text);
+    if (played) return;
+  }
+
+  // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
   if (isIOS) return;
   opts.onFallback?.();
   webSpeechFallback(text);
+}
+
+/**
+ * Calls the backend ElevenLabs TTS proxy (server holds the API key — never
+ * exposed to the client) and plays the returned audio. Returns false on any
+ * failure so the caller can fall back to Web Speech.
+ */
+async function tryLiveElevenLabs(text: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/jac/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    if (!blob.size) return false;
+    const url = URL.createObjectURL(blob);
+    return await tryPlayAudio(url, true);
+  } catch {
+    return false;
+  }
 }
 
 function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {

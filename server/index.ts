@@ -1018,6 +1018,24 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_jac_pending_actions_user ON jac_pending_actions(user_id, status);
   `).catch(e => console.error("[migration] jac_pending_actions error:", e));
 
+  // JAC voice usage log (TTS/STT credit + reliability tracking)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_voice_usage_log (
+      id             SERIAL PRIMARY KEY,
+      user_id        INTEGER REFERENCES users(id),
+      type           TEXT NOT NULL,
+      provider       TEXT NOT NULL,
+      voice_id       TEXT,
+      units          INTEGER NOT NULL,
+      success        BOOLEAN NOT NULL DEFAULT TRUE,
+      error_message  TEXT,
+      ip             TEXT,
+      created_at     TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_usage_log_user ON jac_voice_usage_log(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_usage_log_type ON jac_voice_usage_log(type, created_at);
+  `).catch(e => console.error("[migration] jac_voice_usage_log error:", e));
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS jac_feedback_reports (
       id               SERIAL PRIMARY KEY,
