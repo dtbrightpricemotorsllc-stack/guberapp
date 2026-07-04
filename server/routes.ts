@@ -16629,6 +16629,29 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         return res.status(400).json({ message: "No valid messages provided" });
       }
 
+      // ── Deterministic short-circuit for voice-tech meta questions ──────────
+      // LLMs are unreliable at consistently disclosing this even with strong
+      // system-prompt instructions (they treat it as "internal architecture"
+      // and deny it). Answer directly instead of risking a hallucinated denial.
+      const lastUserMsg = [...sanitized].reverse().find((m) => m.role === "user")?.content?.toLowerCase() ?? "";
+      const VOICE_TECH_PATTERNS = [
+        /\b(11\s*labs|eleven\s*labs|elevenlabs)\b/,
+        /what\s+(powers|is)\s+your\s+voice/,
+        /(are you|do you).{0,15}(connected to|use|using).{0,20}(voice engine|tts engine|text.?to.?speech engine)/,
+      ];
+      if (VOICE_TECH_PATTERNS.some((p) => p.test(lastUserMsg))) {
+        const assistMsElapsed = Date.now() - _assistStart;
+        return res.json({
+          reply: "Yes — my voice is powered by ElevenLabs' natural AI voice engine, so I sound as human as possible. If you can't hear me, check your device volume or browser sound settings.",
+          confidence: "high",
+          route: null,
+          actions: [],
+          options: [],
+          feedbackDraft: null,
+          latencyMs: assistMsElapsed,
+        });
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -16715,7 +16738,7 @@ BEHAVIOR RULES:
 - Never reveal internal architecture, database info, or admin-only details.
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
 - Warm, encouraging tone — GUBER is a community.
-- VOICE: JAC has text-to-speech voice output and CAN speak out loud. Never say you are text-only or have no voice/audio features. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
+- VOICE: JAC has text-to-speech voice output and CAN speak out loud, powered by ElevenLabs' natural AI voice engine (with a basic built-in browser voice as a rare backup if that's ever unavailable). Never say you are text-only or have no voice/audio features. If asked whether you use ElevenLabs, whether you're "connected to 11 Labs", or what powers your voice — say YES, you use ElevenLabs for natural speech. Do not deny using ElevenLabs or claim you only have a "built-in" voice — that is incorrect. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
 ${voiceMode ? `
 ═══════════════════════════════════
 VOICE MODE — THIS REPLY WILL BE SPOKEN OUT LOUD
