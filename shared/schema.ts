@@ -2972,6 +2972,7 @@ export const jacVoiceUsageLog = pgTable("jac_voice_usage_log", {
   success:    boolean("success").notNull().default(true),
   errorMessage: text("error_message"),
   ip:         text("ip"),
+  latencyMs:  integer("latency_ms"), // time from request received to response sent
   createdAt:  timestamp("created_at").defaultNow(),
 });
 export type JacVoiceUsageLog       = typeof jacVoiceUsageLog.$inferSelect;

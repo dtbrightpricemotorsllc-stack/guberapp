@@ -1030,10 +1030,12 @@ app.use((req, res, next) => {
       success        BOOLEAN NOT NULL DEFAULT TRUE,
       error_message  TEXT,
       ip             TEXT,
+      latency_ms     INTEGER,
       created_at     TIMESTAMP DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_jac_voice_usage_log_user ON jac_voice_usage_log(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_jac_voice_usage_log_type ON jac_voice_usage_log(type, created_at);
+    ALTER TABLE jac_voice_usage_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER;
   `).catch(e => console.error("[migration] jac_voice_usage_log error:", e));
 
   await pool.query(`

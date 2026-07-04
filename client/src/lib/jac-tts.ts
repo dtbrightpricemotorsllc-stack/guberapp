@@ -121,12 +121,29 @@ export function cancelAllJacAudio() {
 }
 
 /**
+ * Reports a silent Web Speech fallback to the server so it shows up in
+ * admin-visible JAC voice usage logs (never fail silently — item D).
+ */
+function reportFallback(reason: string) {
+  try {
+    fetch("/api/jac/tts/fallback-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
+}
+
+/**
  * Speak text using ElevenLabs (cached → live → Web Speech fallback).
  * Returns a promise that resolves when audio ends (or immediately on error).
+ * `onStart` fires the moment audible playback actually begins — use it to
+ * measure end-to-end latency from STT completion to first sound.
  */
 export async function jacSpeak(
   rawText: string,
-  opts: { muted?: boolean; onFallback?: () => void } = {}
+  opts: { muted?: boolean; onFallback?: () => void; onStart?: () => void } = {}
 ): Promise<void> {
   if (opts.muted) return;
 
@@ -139,7 +156,7 @@ export async function jacSpeak(
   // ── Tier 1: static cache (free, instant, all platforms) ──────────────────
   const slug = detectCacheSlug(rawText);
   if (slug) {
-    const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`);
+    const played = await tryPlayAudio(`/jac-audio/${slug}.mp3`, false, opts.onStart);
     if (played) return;
   }
 
@@ -147,22 +164,139 @@ export async function jacSpeak(
   // iOS WKWebView has latency/playback issues with streamed audio, so iOS
   // goes straight to the native Web Speech fallback.
   if (!isIOS) {
-    const played = await tryLiveElevenLabs(text);
+    const played = await tryLiveElevenLabs(text, opts.onStart);
     if (played) return;
   }
 
   // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
   if (isIOS) return;
   opts.onFallback?.();
-  webSpeechFallback(text);
+  reportFallback(isIOS ? "ios_native" : "live_elevenlabs_failed");
+  webSpeechFallback(text, opts.onStart);
 }
 
 /**
  * Calls the backend ElevenLabs TTS proxy (server holds the API key — never
- * exposed to the client) and plays the returned audio. Returns false on any
- * failure so the caller can fall back to Web Speech.
+ * exposed to the client) and plays the returned audio. Streams audio via
+ * MediaSource so playback can start before the full response has arrived
+ * (item A — start playback ASAP). Falls back to full-blob buffering when
+ * MediaSource / streaming isn't available or fails partway through.
+ * Returns false on any failure so the caller can fall back to Web Speech.
  */
-async function tryLiveElevenLabs(text: string): Promise<boolean> {
+async function tryLiveElevenLabs(text: string, onStart?: () => void): Promise<boolean> {
+  const canStream =
+    typeof window !== "undefined" &&
+    "MediaSource" in window &&
+    MediaSource.isTypeSupported("audio/mpeg");
+
+  if (canStream) {
+    const streamed = await tryLiveElevenLabsStreaming(text, onStart);
+    if (streamed) return true;
+    // Streaming attempt failed partway — don't double-fetch, just fall
+    // through to Web Speech via the buffered path's own failure below only
+    // if we never got a response at all (handled inside the streaming fn).
+  }
+  return tryLiveElevenLabsBuffered(text, onStart);
+}
+
+/** Progressive playback via MediaSource Extensions — audio starts as soon as the first chunk lands. */
+async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await fetch("/api/jac/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  } catch {
+    return false;
+  }
+  if (!res.ok || !res.body) return false;
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(ok);
+    };
+
+    const mediaSource = new MediaSource();
+    const objectUrl = URL.createObjectURL(mediaSource);
+    const audio = new Audio(objectUrl);
+    audio.preload = "auto";
+    _currentAudio = audio;
+
+    let started = false;
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl);
+      if (_currentAudio === audio) _currentAudio = null;
+    };
+
+    audio.onplay = () => { if (!started) { started = true; onStart?.(); } };
+    audio.onended = () => finish(true);
+    audio.onerror = () => finish(false);
+
+    mediaSource.addEventListener("sourceopen", async () => {
+      let sourceBuffer: SourceBuffer;
+      try {
+        sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+      } catch {
+        finish(false);
+        return;
+      }
+
+      const reader = res.body!.getReader();
+      let playStarted = false;
+      let gotAnyData = false;
+
+      const appendChunk = (chunk: Uint8Array) =>
+        new Promise<void>((resolveAppend, rejectAppend) => {
+          const onUpdateEnd = () => {
+            sourceBuffer.removeEventListener("updateend", onUpdateEnd);
+            resolveAppend();
+          };
+          sourceBuffer.addEventListener("updateend", onUpdateEnd);
+          try {
+            sourceBuffer.appendBuffer(chunk);
+          } catch (e) {
+            sourceBuffer.removeEventListener("updateend", onUpdateEnd);
+            rejectAppend(e);
+          }
+        });
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value || !value.length) continue;
+          gotAnyData = true;
+          if (sourceBuffer.updating) {
+            await new Promise<void>((r) => sourceBuffer.addEventListener("updateend", () => r(), { once: true }));
+          }
+          await appendChunk(value);
+          if (!playStarted) {
+            playStarted = true;
+            audio.play().catch(() => {});
+          }
+        }
+        if (!gotAnyData) {
+          finish(false);
+          return;
+        }
+        if (mediaSource.readyState === "open") {
+          try { mediaSource.endOfStream(); } catch {}
+        }
+      } catch {
+        finish(false);
+      }
+    });
+  });
+}
+
+/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails. */
+async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Promise<boolean> {
   try {
     const res = await fetch("/api/jac/tts", {
       method: "POST",
@@ -173,23 +307,25 @@ async function tryLiveElevenLabs(text: string): Promise<boolean> {
     const blob = await res.blob();
     if (!blob.size) return false;
     const url = URL.createObjectURL(blob);
-    return await tryPlayAudio(url, true);
+    return await tryPlayAudio(url, true, onStart);
   } catch {
     return false;
   }
 }
 
-function tryPlayAudio(url: string, isBlob = false): Promise<boolean> {
+function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     audio.preload = "auto";
     _currentAudio = audio;
+    let started = false;
     const cleanup = () => {
       if (isBlob) URL.revokeObjectURL(url);
       _currentAudio = null;
     };
-    audio.onended  = () => { cleanup(); resolve(true); };
-    audio.onerror  = () => { cleanup(); resolve(false); };
+    audio.onplay  = () => { if (!started) { started = true; onStart?.(); } };
+    audio.onended = () => { cleanup(); resolve(true); };
+    audio.onerror = () => { cleanup(); resolve(false); };
     audio.play().catch(() => { cleanup(); resolve(false); });
   });
 }
@@ -200,7 +336,7 @@ function isIOSBrowser(): boolean {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-function webSpeechFallback(text: string) {
+function webSpeechFallback(text: string, onStart?: () => void) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const ss = window.speechSynthesis;
   ss.cancel();
@@ -228,6 +364,8 @@ function webSpeechFallback(text: string) {
     // the browser pick the system default (safer on mobile).
     const voices = ss.getVoices();
     if (voices.length > 0) applyJacVoice(utt);
+    let started = false;
+    utt.onstart = () => { if (!started) { started = true; onStart?.(); } };
     // Resume again right before speaking — both Chrome Android and iOS can
     // re-suspend between the cancel() call and this timeout.
     try { ss.resume(); } catch {}

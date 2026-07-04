@@ -51,13 +51,32 @@ function classifyError(status: number, bodyText: string): ElevenLabsError {
   return { ok: false, code: "upstream_error", httpStatus: status, message: `ElevenLabs upstream error (${status}).` };
 }
 
+// eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms model latency vs
+// ~300-400ms for eleven_multilingual_v2), purpose-built for real-time
+// conversational agents. Slight quality tradeoff vs multilingual_v2, but for a
+// live voice assistant the latency win is worth far more than it costs.
+export const DEFAULT_JAC_MODEL_ID = "eleven_flash_v2_5";
+
+// Tuned for a warmer, more natural conversational read (vs. the flatter
+// defaults previously used). Lower stability = more expressive/varied
+// delivery; higher similarity_boost + style + speaker_boost = closer to the
+// natural human reference recording instead of a flat TTS read.
+export const DEFAULT_JAC_VOICE_SETTINGS = {
+  stability: 0.42,
+  similarity_boost: 0.85,
+  style: 0.28,
+  use_speaker_boost: true,
+};
+
 /**
- * Synthesizes speech via ElevenLabs. Returns either the raw upstream Response
- * (caller streams/pipes the body) or a classified error — never throws.
+ * Synthesizes speech via ElevenLabs' streaming endpoint. Returns either the
+ * raw upstream Response (caller streams/pipes the body as it arrives — first
+ * bytes are usable before the full utterance finishes generating) or a
+ * classified error — never throws.
  */
 export async function synthesizeSpeech(
   text: string,
-  opts: { voiceId?: string } = {}
+  opts: { voiceId?: string; modelId?: string; stream?: boolean } = {}
 ): Promise<ElevenLabsResult> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
@@ -65,20 +84,21 @@ export async function synthesizeSpeech(
   }
 
   const voiceId = opts.voiceId || process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
+  const modelId = opts.modelId || process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
+  const stream = opts.stream !== false;
+  const path = stream ? "stream" : "";
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}${path ? `/${path}` : ""}?output_format=mp3_44100_64${stream ? "&optimize_streaming_latency=3" : ""}`;
 
   try {
-    const upstream = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
-      {
-        method: "POST",
-        headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
-        }),
-      }
-    );
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        model_id: modelId,
+        voice_settings: DEFAULT_JAC_VOICE_SETTINGS,
+      }),
+    });
 
     if (!upstream.ok) {
       const bodyText = await upstream.text().catch(() => "");

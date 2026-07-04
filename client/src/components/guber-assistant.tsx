@@ -320,6 +320,8 @@ export function GUBERAssistant() {
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastUserInputRef = useRef("");
+  const lastInputWasVoiceRef = useRef(false);
+  const voiceTimingRef = useRef<{ start: number } | null>(null);
 
   const { data: jacContext } = useJacContext(!!user && s.open);
   const { data: jacOpportunities } = useJacOpportunities(!!user && s.open);
@@ -344,7 +346,10 @@ export function GUBERAssistant() {
 
   // Auto-send when mic result arrives — no send button tap needed
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
-    useSpeechInput((text) => doSend(text));
+    useSpeechInput((text) => {
+      lastInputWasVoiceRef.current = true;
+      doSend(text);
+    });
 
   // Wake word listener — "Hey JAC" opens the panel and starts listening
   useEffect(() => {
@@ -449,12 +454,13 @@ export function GUBERAssistant() {
   }, [s.open, user]);
 
   const sendMutation = useMutation({
-    mutationFn: async (msgs: Message[]) => {
+    mutationFn: async ({ msgs, voiceMode }: { msgs: Message[]; voiceMode?: boolean }) => {
       const res = await apiRequest("POST", "/api/ai/guber-assist", {
         messages: msgs.map((m) => ({ role: m.role, content: m.content })),
+        voiceMode: !!voiceMode,
       });
       const data = await res.json();
-      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }>; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
+      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }>; feedbackDraft?: { ready: boolean; category: string; description: string } | null; latencyMs?: number };
     },
     onSuccess: (data) => {
       if (data.feedbackDraft?.ready) {
@@ -470,7 +476,23 @@ export function GUBERAssistant() {
         ].filter((a: any) => a?.label && a?.message).slice(0, 5),
       };
       setMessages((prev) => [...prev, msg]);
-      if (!muted) jacSpeak(msg.content, { muted });
+      const timing = voiceTimingRef.current;
+      if (timing) {
+        const chatMs = Math.round(performance.now() - timing.start);
+        console.log(`[JAC voice] STT→chat-response: ${chatMs}ms (server reported ${data.latencyMs ?? "?"}ms)`);
+      }
+      if (!muted) {
+        jacSpeak(msg.content, {
+          muted,
+          onStart: timing ? () => {
+            const totalMs = Math.round(performance.now() - timing.start);
+            console.log(`[JAC voice] STT→first-audio: ${totalMs}ms`);
+            voiceTimingRef.current = null;
+          } : undefined,
+        });
+      } else {
+        voiceTimingRef.current = null;
+      }
       if (userRef.current && lastUserInputRef.current) {
         extractAndSaveMemory(lastUserInputRef.current, msg.content);
       }
@@ -615,6 +637,8 @@ export function GUBERAssistant() {
   }
 
   function doSend(text: string) {
+    const wasVoice = lastInputWasVoiceRef.current;
+    lastInputWasVoiceRef.current = false;
     // Navigation sentinels — handled client-side, not sent to AI
     if (text === "__goto_signup__") {
       patchStore({ open: false });
@@ -699,13 +723,18 @@ export function GUBERAssistant() {
     setInput("");
     cancelSpeech();
     cancelAllJacAudio();
+    if (wasVoice) {
+      voiceTimingRef.current = { start: performance.now() };
+    } else {
+      voiceTimingRef.current = null;
+    }
     if (hasDDIntent(trimmed)) {
       ddMutation.mutate(trimmed);
     } else if (listingMode || hasListingIntent(trimmed)) {
       if (!listingMode) setListingMode(true);
       listingMutation.mutate(newMsgs);
     } else {
-      sendMutation.mutate(newMsgs);
+      sendMutation.mutate({ msgs: newMsgs, voiceMode: wasVoice });
     }
   }
 

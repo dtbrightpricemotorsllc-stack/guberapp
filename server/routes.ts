@@ -3,7 +3,7 @@ import { setupCampaignLabRoutes } from "./campaign-lab";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
-import { synthesizeSpeech, httpStatusForError, estimateCostUsd, DEFAULT_JAC_VOICE_ID } from "./elevenlabs";
+import { synthesizeSpeech, httpStatusForError, estimateCostUsd, DEFAULT_JAC_VOICE_ID, DEFAULT_JAC_MODEL_ID } from "./elevenlabs";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -16604,13 +16604,14 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
   });
 
   app.post("/api/ai/guber-assist", requireAuth, async (req: Request, res: Response) => {
+    const _assistStart = Date.now();
     try {
       const sessionUser = req.session?.userId ? await storage.getUser(req.session.userId) : null;
       if (!sessionUser) {
         return res.status(403).json({ message: "Session expired. Please log in." });
       }
 
-      const { messages } = req.body;
+      const { messages, voiceMode } = req.body as { messages?: any[]; voiceMode?: boolean };
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ message: "messages must be a non-empty array" });
       }
@@ -16715,6 +16716,18 @@ BEHAVIOR RULES:
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
 - Warm, encouraging tone — GUBER is a community.
 - VOICE: JAC has text-to-speech voice output and CAN speak out loud. Never say you are text-only or have no voice/audio features. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
+${voiceMode ? `
+═══════════════════════════════════
+VOICE MODE — THIS REPLY WILL BE SPOKEN OUT LOUD
+═══════════════════════════════════
+The user just spoke to you and this reply will be read aloud by text-to-speech. Talk like a real person on a phone call, not a form or a knowledge base:
+- Keep it SHORT — 1-3 sentences, under 40 words whenever possible. Never write a paragraph.
+- Sound warm and casual, like a helpful friend, not a customer-service script. Contractions are good ("you'll", "that's", "let's").
+- Lead with the answer, not a preamble. Skip phrases like "Great question!" or "I'd be happy to help with that."
+- Use short sentences with natural breathing points (commas, periods) instead of long compound sentences — it reads more naturally out loud.
+- Only ask ONE thing at a time. Don't stack multiple questions or options in a single spoken reply.
+- Still include "route"/"actions"/"options" JSON fields as normal — those render as tappable buttons even though the reply text itself stays brief.
+` : ""}
 
 JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
 You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
@@ -16838,13 +16851,15 @@ CRITICAL — respond with JSON ONLY, no other text:
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_tokens: 600,
+        max_tokens: voiceMode ? 220 : 600,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
           ...sanitized,
         ],
       });
+      const assistMs = Date.now() - _assistStart;
+      console.log(`[JAC assist] ${assistMs}ms | voiceMode=${!!voiceMode} | user ${sessionUser.id}`);
 
       const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
       type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
@@ -16868,9 +16883,9 @@ CRITICAL — respond with JSON ONLY, no other text:
       } catch {
         if (rawContent) parsed.reply = rawContent;
       }
-      res.json(parsed);
+      res.json({ ...parsed, latencyMs: assistMs });
     } catch (err: any) {
-      console.error("[GUBER] guber-assist error:", err.message);
+      console.error(`[GUBER] guber-assist error after ${Date.now() - _assistStart}ms:`, err.message);
       res.status(500).json({ message: "Assistant unavailable, please try again." });
     }
   });
@@ -18326,13 +18341,13 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   // ── JAC voice usage logging (TTS/STT credit + reliability tracking) ─────────
   async function logJacVoiceUsage(entry: {
     userId?: number | null; type: "tts" | "stt"; provider: string; voiceId?: string | null;
-    units: number; success: boolean; errorMessage?: string | null; ip?: string | null;
+    units: number; success: boolean; errorMessage?: string | null; ip?: string | null; latencyMs?: number | null;
   }) {
     try {
       await pool.query(
-        `INSERT INTO jac_voice_usage_log (user_id, type, provider, voice_id, units, success, error_message, ip)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [entry.userId ?? null, entry.type, entry.provider, entry.voiceId ?? null, entry.units, entry.success, entry.errorMessage ?? null, entry.ip ?? null]
+        `INSERT INTO jac_voice_usage_log (user_id, type, provider, voice_id, units, success, error_message, ip, latency_ms)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [entry.userId ?? null, entry.type, entry.provider, entry.voiceId ?? null, entry.units, entry.success, entry.errorMessage ?? null, entry.ip ?? null, entry.latencyMs ?? null]
       );
     } catch (e: any) {
       console.error("[JAC voice usage log] error:", e.message);
@@ -18354,6 +18369,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   app.post("/api/jac/tts", async (req: Request, res: Response) => {
     try {
       const { text } = req.body as { text?: string };
+      const _ttsStart = Date.now();
       if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
 
       // Guard 3: hard character cap per request
@@ -18364,7 +18380,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
       if (!apiKey) {
         console.warn("[JAC TTS] ELEVENLABS_API_KEY not set — falling back to client-side voice");
-        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "not_configured", ip });
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "not_configured", ip, latencyMs: Date.now() - _ttsStart });
         return res.status(503).json({ message: "TTS not configured" });
       }
 
@@ -18374,7 +18390,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + TTS_IP_WINDOW_MS; }
       if (bucket.count >= TTS_IP_MAX) {
         console.warn(`[JAC TTS] rate-limited IP ${ip}`);
-        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "ip_rate_limited", ip });
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "ip_rate_limited", ip, latencyMs: Date.now() - _ttsStart });
         return res.status(429).json({ message: "Too many TTS requests — slow down." });
       }
       bucket.count++;
@@ -18385,22 +18401,25 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       sess.ttsCharsUsed = (sess.ttsCharsUsed ?? 0) + cleaned.length;
       if (sess.ttsCharsUsed > TTS_SESSION_CHAR_BUDGET) {
         console.warn(`[JAC TTS] session budget exceeded (${sess.ttsCharsUsed} chars)`);
-        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "session_budget_exceeded", ip });
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "session_budget_exceeded", ip, latencyMs: Date.now() - _ttsStart });
         return res.status(429).json({ message: "Voice budget reached for this session." });
       }
 
       const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
-      console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
+      const modelId = process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
+      console.log(`[JAC TTS] ${cleaned.length} chars | model ${modelId} | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
-      const result = await synthesizeSpeech(cleaned, { voiceId });
+      const result = await synthesizeSpeech(cleaned, { voiceId, modelId, stream: true });
+      const upstreamMs = Date.now() - _ttsStart;
 
       if (!result.ok) {
-        console.error(`[JAC TTS] ElevenLabs error [${result.code}]:`, result.message);
-        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: false, errorMessage: result.code, ip });
+        console.error(`[JAC TTS] ElevenLabs error [${result.code}] after ${upstreamMs}ms:`, result.message);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: false, errorMessage: result.code, ip, latencyMs: upstreamMs });
         return res.status(httpStatusForError(result.code)).json({ message: result.message });
       }
 
-      logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: true, ip });
+      console.log(`[JAC TTS] ElevenLabs responded in ${upstreamMs}ms (time-to-first-byte, streaming) | voice ${voiceId}`);
+      logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: true, ip, latencyMs: upstreamMs });
 
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
@@ -18419,9 +18438,33 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     }
   });
 
+  // ── JAC TTS client-side fallback event log ───────────────────────────────────
+  // Called (fire-and-forget) by the browser when it silently falls back to the
+  // robotic Web Speech API because live ElevenLabs playback failed on the
+  // client side (network error, blob empty, autoplay blocked, etc). Without
+  // this, those failures are invisible to admins — the user hears a fallback
+  // voice but the usage log would otherwise show nothing happened.
+  app.post("/api/jac/tts/fallback-log", async (req: Request, res: Response) => {
+    try {
+      const { reason, textLength } = req.body as { reason?: string; textLength?: number };
+      const userIdForLog = (req.session as any)?.userId ?? null;
+      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      console.warn(`[JAC TTS] client fell back to Web Speech — reason: ${reason || "unknown"}`);
+      logJacVoiceUsage({
+        userId: userIdForLog, type: "tts", provider: "web_speech_fallback",
+        units: typeof textLength === "number" ? textLength : 0, success: false,
+        errorMessage: `client_fallback:${(reason || "unknown").slice(0, 100)}`, ip,
+      });
+      res.status(204).end();
+    } catch {
+      res.status(204).end();
+    }
+  });
+
   // ── JAC STT — Whisper transcription (iOS + fallback) ─────────────────────────
   app.post("/api/jac/stt", async (req: Request, res: Response) => {
     try {
+      const _sttStart = Date.now();
       const { audioBase64, mimeType } = req.body as { audioBase64?: string; mimeType?: string };
       if (!audioBase64 || typeof audioBase64 !== "string") {
         return res.status(400).json({ message: "audioBase64 required" });
@@ -18433,7 +18476,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
       const audioBytesForLog = Buffer.byteLength(audioBase64, "base64");
       if (!apiKey) {
-        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "not_configured", ip });
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "not_configured", ip, latencyMs: Date.now() - _sttStart });
         return res.status(503).json({ message: "STT not configured" });
       }
 
@@ -18447,7 +18490,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       if (now > b.resetAt) { b.count = 0; b.resetAt = now + STT_WINDOW_MS; }
       if (b.count >= STT_IP_MAX) {
         console.warn(`[JAC STT] rate-limited IP ${ip}`);
-        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "ip_rate_limited", ip });
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "ip_rate_limited", ip, latencyMs: Date.now() - _sttStart });
         return res.status(429).json({ message: "Too many STT requests — slow down." });
       }
       b.count++;
@@ -18478,9 +18521,10 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       });
 
       const text = (transcription.text ?? "").trim();
-      console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}"`);
-      logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBuffer.length, success: true, ip });
-      return res.json({ text });
+      const sttMs = Date.now() - _sttStart;
+      console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}" | ${sttMs}ms`);
+      logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBuffer.length, success: true, ip, latencyMs: sttMs });
+      return res.json({ text, latencyMs: sttMs });
     } catch (e: any) {
       console.error("[JAC STT] error:", e.message);
       logJacVoiceUsage({ userId: (req.session as any)?.userId ?? null, type: "stt", provider: "openai_transcribe", units: Buffer.byteLength((req.body?.audioBase64 as string) || "", "base64"), success: false, errorMessage: e.message?.slice(0, 200) });
