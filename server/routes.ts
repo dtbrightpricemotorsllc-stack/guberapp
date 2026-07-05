@@ -15950,6 +15950,40 @@ Input body: ${JSON.stringify((body || "").trim())}`;
         } catch { /* fall through to normal onboarding flow */ }
       }
 
+      // ── JAC D.D. (Destination Determination): goal intent → plan mode ──────
+      // Applies the coordinator behavior to BOTH JAC surfaces. Guests can't get
+      // a personalized plan (no profile/zip), so we invite sign-in; logged-in
+      // users get a live, ranked earning plan directly (no LLM cost).
+      if (hasDDIntentServer(_onboardLastUserMsg)) {
+        if (_onboardSessUserId) {
+          try {
+            const dd = await buildDDPlan(_onboardSessUserId, _onboardLastUserMsg, null, null);
+            return res.json({
+              reply: dd.reply,
+              confidence: "high",
+              route: null,
+              actions: (dd.actions ?? []).slice(0, 4),
+              options: [],
+              dd,
+            });
+          } catch (e: any) {
+            console.error("[jac/onboard dd]", e?.message);
+            /* fall through to normal onboarding flow */
+          }
+        } else {
+          return res.json({
+            reply: "I can map out the fastest ways to hit a money goal near you — like \"$500 by Friday.\" Create a free account or log in and tell me your target, and I'll build you a live plan.",
+            confidence: "high",
+            route: null,
+            actions: [
+              { label: "Create account", message: "__goto_signup__" },
+              { label: "Log in", message: "__goto_login__" },
+            ],
+            options: [],
+          });
+        }
+      }
+
       // ── Inject user memory + live context for logged-in users ────────────
       const onboardUserId = (req.session as any)?.userId ?? null;
       let userContextSection = "";
@@ -16741,6 +16775,28 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
             });
           }
         } catch { /* fall through to normal assist flow */ }
+      }
+
+      // ── JAC D.D. (Destination Determination): goal intent → plan mode ──────
+      // Same coordinator behavior as the onboard surface; returns a live ranked
+      // earning plan directly (no LLM cost) when the user states a money goal.
+      if (hasDDIntentServer(lastUserMsg)) {
+        try {
+          const dd = await buildDDPlan(req.session.userId!, lastUserMsg, null, null);
+          return res.json({
+            reply: dd.reply,
+            confidence: "high",
+            route: null,
+            actions: (dd.actions ?? []).slice(0, 4),
+            options: [],
+            feedbackDraft: null,
+            latencyMs: Date.now() - _assistStart,
+            dd,
+          });
+        } catch (e: any) {
+          console.error("[guber-assist dd]", e?.message);
+          /* fall through to normal assist flow */
+        }
       }
 
       const OpenAI = (await import("openai")).default;
@@ -17755,24 +17811,43 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
     return { goalAmount, deadline };
   }
 
-  app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      // Accept both `goal` (spec contract) and `goalAmount` (backward-compat)
-      const { message, goal: bodyGoalSpec, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
-        message?: string;
-        goal?: number;
-        goalAmount?: number;
-        deadline?: string;
-      };
+  // Server-side goal-intent detector — mirrors the client DD_PATTERNS list,
+  // including amount-free money-intent phrases like "how do I make money today".
+  const DD_INTENT_PATTERNS: RegExp[] = [
+    /\$\s*\d+.{0,40}by\s+(today|tonight|tomorrow|friday|saturday|sunday|monday|tuesday|wednesday|thursday|next week|end of (week|day)|this weekend|midnight|eod)/i,
+    /\b(need|want|make|earn|get)\b.{0,25}\$\s*\d+\b.{0,40}\b(by|before|this|tonight|tomorrow|end of|in)\b/i,
+    /\bhow\s+(can|do)\s+i\s+(make|earn).{0,25}\$\s*\d+/i,
+    /\b(earning|financial|income|money)\s+goal\b/i,
+    /\bdestination\s+determination\b/i,
+    /\bi\s+need\s+\$\s*\d+/i,
+    /\bi\s+want\s+to\s+earn\s+\$\s*\d+/i,
+    /\bset\s+(a|an|my)\s+(earning|income|money)\s+goal\b/i,
+    /\bhow\s+(can|do|could|should)\s+i\s+(make|earn|get)\s+(some\s+)?(money|cash|income)\b/i,
+    /\b(make|earn|get)\s+(some\s+)?(money|cash)\s+(today|tonight|fast|quick|quickly|now|asap|this\s+week|this\s+weekend)\b/i,
+    /\bways?\s+to\s+(make|earn)\s+(money|cash|income)\b/i,
+    /\bi\s+need\s+(to\s+(make|earn)\s+)?(money|cash)\b/i,
+    /\bhelp\s+me\s+(make|earn)\s+(money|cash|income)\b/i,
+  ];
+  function hasDDIntentServer(message: string): boolean {
+    const t = (message || "").toLowerCase();
+    return DD_INTENT_PATTERNS.some((p) => p.test(t));
+  }
 
+  // Shared D.D. planner used by /api/jac/dd/plan AND both JAC chat surfaces
+  // (onboard + guber-assist), so a money goal enters D.D. mode consistently.
+  // When no amount is given (e.g. "how do I make money today") it returns a
+  // ranked list of live earning options and invites the user to set a target
+  // instead of erroring.
+  async function buildDDPlan(
+    userId: number,
+    message: string,
+    bodyGoal?: number | null,
+    bodyDeadline?: string | null,
+  ) {
       const parsed = parseDDIntent(message || "");
-      const goalAmount = bodyGoalSpec ?? bodyGoal ?? parsed.goalAmount;
+      const goalAmount = (bodyGoal ?? parsed.goalAmount) || null;
       const deadline = bodyDeadline ?? parsed.deadline;
-
-      if (!goalAmount || goalAmount <= 0) {
-        return res.status(400).json({ message: "Please specify a goal amount, e.g. 'I need $500 by Friday'." });
-      }
+      const hasGoal = !!goalAmount && goalAmount > 0;
 
       // ── Time window scoring ─────────────────────────────────────────────
       // Parse deadline into days remaining; default 7 if not specified.
@@ -17805,7 +17880,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return 7;
       }
       const daysLeft = deadlineToDays(deadline);
-      const dailyRateNeeded = daysLeft > 0 ? goalAmount / daysLeft : goalAmount;
+      const dailyRateNeeded = hasGoal ? (daysLeft > 0 ? goalAmount! / daysLeft : goalAmount!) : 150;
 
       // ── Query all income streams + profile in parallel ──────────────────
       const userRes = await pool.query(
@@ -17826,9 +17901,10 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           `SELECT id, title, budget, category, service_type, zip, job_type,
                   COUNT(*) OVER() AS availability_count
            FROM jobs
-           WHERE status = 'open' AND assigned_worker_id IS NULL
+           WHERE status = 'open' AND assigned_helper_id IS NULL
              AND job_type IS DISTINCT FROM 'vi'
-             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND (is_test_job = FALSE OR is_test_job IS NULL)
+             AND (removed_by_admin = FALSE OR removed_by_admin IS NULL)
              AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
            ORDER BY
              CASE WHEN $2::text[] IS NOT NULL AND category = ANY($2::text[]) THEN 0 ELSE 1 END,
@@ -17840,16 +17916,17 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         pool.query(
           `SELECT id, title, budget, zip, COUNT(*) OVER() AS availability_count
            FROM jobs
-           WHERE status = 'open' AND assigned_worker_id IS NULL
+           WHERE status = 'open' AND assigned_helper_id IS NULL
              AND job_type = 'vi'
-             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND (is_test_job = FALSE OR is_test_job IS NULL)
+             AND (removed_by_admin = FALSE OR removed_by_admin IS NULL)
              AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
            ORDER BY budget DESC NULLS LAST LIMIT 3`,
           [zip]
         ),
         // Load board — only if user has a vehicle; includes total count
         hasVehicle ? pool.query(
-          `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip,
+          `SELECT id, commodity_type, posted_price, pickup_city, delivery_city, pickup_zip,
                   COUNT(*) OVER() AS availability_count
            FROM load_board_listings WHERE status = 'active'
            ORDER BY posted_price DESC NULLS LAST LIMIT 3`
@@ -17884,7 +17961,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
            WHERE mi.seller_id = $1 AND mi.status = 'active'
              AND COALESCE(mi.view_count, 0) > 0
              AND (SELECT COUNT(*) FROM marketplace_offers mo
-                  WHERE mo.item_id = mi.id
+                  WHERE mo.listing_id = mi.id
                     AND mo.status NOT IN ('rejected','withdrawn')) = 0
            ORDER BY mi.view_count DESC LIMIT 2`,
           [userId]
@@ -17958,7 +18035,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         items.push({
           type: "load_board",
           id: lb.id,
-          title: `Haul: ${lb.cargo_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
+          title: `Haul: ${lb.commodity_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
           estimatedPay: pay,
           availabilityCount: lbAvail,
           route: `/load-board/${lb.id}`,
@@ -18036,46 +18113,56 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return bRate - aRate;
       });
 
-      const topItems = items.slice(0, 7);
+      const topItems = items.slice(0, 6);
 
       // ── Realistic gap analysis ──────────────────────────────────────────
       const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);
-      const realisticShortfall = Math.max(0, goalAmount - realisticEarnable);
+      const realisticShortfall = hasGoal ? Math.max(0, goalAmount! - realisticEarnable) : 0;
 
-      // ── Save goal — earnedSoFar = 0 (tracking starts from NOW) ──────────
-      await pool.query(
-        `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
-         WHERE user_id = $1 AND status = 'active'`,
-        [userId]
-      );
-      const insertRes = await pool.query(
-        `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, realistic_earnable, status)
-         VALUES ($1, $2, $3, $4::jsonb, 0, $5, 'active')
-         RETURNING id`,
-        [userId, goalAmount, deadline, JSON.stringify(topItems), realisticEarnable]
-      );
-      const goalId = insertRes.rows[0]?.id;
+      // ── Save goal — earnedSoFar = 0 (tracking starts from NOW). Only persist
+      // when the user actually named a target; amount-free "how do I make
+      // money" queries just surface options without creating a goal. ─────────
+      let goalId: number | null = null;
+      if (hasGoal) {
+        await pool.query(
+          `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
+           WHERE user_id = $1 AND status = 'active'`,
+          [userId]
+        );
+        const insertRes = await pool.query(
+          `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, realistic_earnable, status)
+           VALUES ($1, $2, $3, $4::jsonb, 0, $5, 'active')
+           RETURNING id`,
+          [userId, goalAmount, deadline, JSON.stringify(topItems), realisticEarnable]
+        );
+        goalId = insertRes.rows[0]?.id ?? null;
+      }
 
-      // ── JAC coordinator voice — gap-aware response ───────────────────────
+      // ── JAC coordinator voice — honest, gap-aware response ───────────────
       const deadlineText = deadline ? ` by ${deadline}` : "";
-      const daysText = daysLeft < 1 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${Math.round(daysLeft)} days`;
+      const daysText = daysLeft < 1 ? "today" : daysLeft === 1 ? "by tomorrow" : `in about ${Math.round(daysLeft)} days`;
+      const earnable = Math.round(realisticEarnable);
 
       let intro: string;
       if (topItems.length === 0) {
-        intro = `Goal set: $${goalAmount.toFixed(2)}${deadlineText}. No live jobs showing in your area right now — but new ones post daily. Come back and I'll pull fresh options.`;
-      } else if (realisticShortfall > 0) {
-        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} possible option${topItems.length !== 1 ? "s" : ""} near you worth exploring — actual earnings depend on availability and what gets accepted. New jobs post daily:`;
+        intro = hasGoal
+          ? `Goal set: $${goalAmount!.toFixed(2)}${deadlineText}. I'm not seeing live options in your area right now — but new ones post daily. Check back and I'll pull a fresh plan.`
+          : `I'm not seeing live earning options in your area right now — but new ones post daily. Check back soon and I'll pull fresh options.`;
+      } else if (hasGoal && realisticShortfall > 0) {
+        intro = `Goal: $${goalAmount!.toFixed(2)}${deadlineText}. I'll be straight with you — from what's live right now, about $${earnable} looks realistically reachable ${daysText}, so the full $${Math.round(goalAmount!)} may need a bit more time or extra sources. Here ${topItems.length === 1 ? "is" : "are"} ${topItems.length} option${topItems.length !== 1 ? "s" : ""} ranked by speed-to-cash — new jobs post daily:`;
+      } else if (hasGoal) {
+        intro = `Goal: $${goalAmount!.toFixed(2)}${deadlineText}. Good news — about $${earnable} looks reachable from what's live now, which covers your target. Here ${topItems.length === 1 ? "is" : "are"} ${topItems.length} option${topItems.length !== 1 ? "s" : ""} ranked by payout:`;
       } else {
-        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} option${topItems.length !== 1 ? "s" : ""} in your area that could be worth looking into — ranked by potential payout:`;
+        intro = `Here ${topItems.length === 1 ? "is" : "are"} ${topItems.length} way${topItems.length !== 1 ? "s" : ""} to make money near you right now, ranked by speed-to-cash. Want me to build a plan to a target? Tell me an amount and deadline — like "$500 by Friday" — and I'll map out how to hit it.`;
       }
 
-      res.json({
+      return {
         goalId,
-        goalAmount,
+        goalAmount: hasGoal ? goalAmount : null,
         deadline,
         daysLeft,
         earnedSoFar: 0,
-        remaining: goalAmount,
+        remaining: hasGoal ? goalAmount : 0,
         realisticEarnable,
         realisticShortfall,
         planItems: topItems,
@@ -18085,7 +18172,21 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           message: `Take me to: ${item.title}`,
           route: item.route,
         })),
-      });
+      };
+  }
+
+  app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      // Accept both `goal` (spec contract) and `goalAmount` (backward-compat)
+      const { message, goal: bodyGoalSpec, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
+        message?: string;
+        goal?: number;
+        goalAmount?: number;
+        deadline?: string;
+      };
+      const plan = await buildDDPlan(userId, message || "", bodyGoalSpec ?? bodyGoal ?? null, bodyDeadline ?? null);
+      res.json(plan);
     } catch (err: any) {
       console.error("[jac/dd/plan]", err.message);
       res.status(500).json({ message: err.message });

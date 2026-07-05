@@ -353,6 +353,10 @@ export function JacHomepage() {
     const trimmed = text.trim();
     if (!trimmed || typing) return;
 
+    // ── Navigation sentinels (guest D.D. sign-in invite) — handled client-side ─
+    if (trimmed === "__goto_signup__") { window.location.href = "/signup"; return; }
+    if (trimmed === "__goto_login__") { window.location.href = "/login"; return; }
+
     // ── Voice sentinels — never leak to JAC as text ─────────────────────────
     if (trimmed === "__mic_denied__") {
       setMessages(prev => [...prev,

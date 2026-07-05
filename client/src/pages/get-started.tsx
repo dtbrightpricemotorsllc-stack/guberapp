@@ -62,6 +62,10 @@ export default function GetStarted() {
     const trimmed = text.trim();
     if (!trimmed || typing) return;
 
+    // ── Navigation sentinels (guest D.D. sign-in invite) — handled client-side ─
+    if (trimmed === "__goto_signup__") { cancelSpeech(); navigate("/signup"); return; }
+    if (trimmed === "__goto_login__") { cancelSpeech(); navigate("/login"); return; }
+
     const userMsg: OnboardingMessage = { role: "user", content: trimmed };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);

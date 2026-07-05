@@ -31,11 +31,17 @@ const DD_PATTERNS = [
   /\$\s*\d+.{0,40}by\s+(today|tonight|tomorrow|friday|saturday|sunday|monday|tuesday|wednesday|thursday|next week|end of (week|day)|this weekend|midnight|eod)/i,
   /\b(need|want|make|earn|get)\b.{0,25}\$\s*\d+\b.{0,40}\b(by|before|this|tonight|tomorrow|end of|in)\b/i,
   /\bhow\s+(can|do)\s+i\s+(make|earn).{0,25}\$\s*\d+/i,
-  /\b(earning|financial)\s+goal\b/i,
+  /\b(earning|financial|income|money)\s+goal\b/i,
   /\bdestination\s+determination\b/i,
   /\bi\s+need\s+\$\s*\d+/i,
   /\bi\s+want\s+to\s+earn\s+\$\s*\d+/i,
   /\bset\s+(a|an|my)\s+(earning|income|money)\s+goal\b/i,
+  // Amount-free money-making intent (e.g. "how do I make money today")
+  /\bhow\s+(can|do|could|should)\s+i\s+(make|earn|get)\s+(some\s+)?(money|cash|income)\b/i,
+  /\b(make|earn|get)\s+(some\s+)?(money|cash)\s+(today|tonight|fast|quick|quickly|now|asap|this\s+week|this\s+weekend)\b/i,
+  /\bways?\s+to\s+(make|earn)\s+(money|cash|income)\b/i,
+  /\bi\s+need\s+(to\s+(make|earn)\s+)?(money|cash)\b/i,
+  /\bhelp\s+me\s+(make|earn)\s+(money|cash|income)\b/i,
 ];
 
 function hasDDIntent(text: string): boolean {
@@ -47,6 +53,8 @@ type DDPlanItem = {
   id?: number;
   title: string;
   estimatedPay: number;
+  availabilityCount?: number;
+  matchReason?: string;
   route: string;
   urgency: string;
   actionLabel: string;
@@ -61,7 +69,7 @@ interface Message {
   actions?: Array<{ label: string; message: string; route?: string }>;
   planItems?: DDPlanItem[];
   isDDPlan?: boolean;
-  ddGoalAmount?: number;
+  ddGoalAmount?: number | null;
   ddDeadline?: string | null;
   ddEarnedSoFar?: number;
 }
@@ -691,11 +699,14 @@ export function GUBERAssistant() {
       const res = await apiRequest("POST", "/api/jac/dd/plan", { message: text });
       const data = await res.json();
       return data as {
-        goalId?: number;
-        goalAmount: number;
+        goalId?: number | null;
+        goalAmount: number | null;
         deadline: string | null;
+        daysLeft?: number;
         earnedSoFar: number;
         remaining: number;
+        realisticEarnable?: number;
+        realisticShortfall?: number;
         planItems: DDPlanItem[];
         reply: string;
         actions: Array<{ label: string; message: string; route?: string }>;
@@ -1159,9 +1170,15 @@ export function GUBERAssistant() {
                         }</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-white/90 leading-tight truncate">{item.title}</p>
+                          {item.matchReason && (
+                            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid={`dd-plan-match-${k}`}>{item.matchReason}</p>
+                          )}
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {item.estimatedTime && (
                               <span className="text-[10px] text-muted-foreground">{item.estimatedTime}</span>
+                            )}
+                            {typeof item.availabilityCount === "number" && item.availabilityCount > 0 && (
+                              <span className="text-[10px] text-muted-foreground" data-testid={`dd-plan-avail-${k}`}>· {item.availabilityCount} nearby</span>
                             )}
                             {item.notes && (
                               <span className="text-[10px] text-muted-foreground truncate">{item.notes}</span>

@@ -23,6 +23,7 @@
 - [JAC Brain system](jac-brain-system.md) — local KB + intent + cache bypass; confidence ≥0.85 skips OpenAI; admin UI at /admin/jac-brain. (Both-surface rule → jac-system-guardian.md.)
 - [JAC Deep Profile system](jac-deep-profile.md) — syncJacProfile() auto-syncs DB→jac_memory on every context fetch; buildJacProfileContext() reads back for prompt enrichment; briefing+opportunities are separate auth-gated endpoints.
 - [Cross-platform voice STT](voice-stt-cross-platform.md) — silent failures from swallowed sentinels + 5/min rate limit + MediaRecorder MIME fallback required for iOS.
+- [jobs table column traps](jobs-table-column-traps.md) — hand-written "nearby" SQL in routes.ts often names columns that don't exist; always verify raw jobs/load-board/offers SQL against the live DB before trusting it.
 - [JAC voice latency optimization](jac-voice-latency-optimization.md) — eleven_flash_v2_5 streaming model + MediaSource progressive playback + voiceMode-gated short/warm prompt + admin-visible fallback logging.
 - [Wallet status enum consistency](wallet-status-enum-consistency.md) — wallet_transactions.status must exactly match wallet.tsx's filter strings ("available"/"pending") or balances silently show $0.
 - [JAC System Guardian + both surfaces](jac-system-guardian.md) — apply every JAC change to BOTH onboard+guber-assist; system_issues deduped, severity server-set & monotonic; escalate only new/upgraded criticals; admin monitoring answers bypass OpenAI.
