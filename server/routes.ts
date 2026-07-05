@@ -18703,8 +18703,14 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
   const _ttsIpBucket = new Map<string, { count: number; resetAt: number }>();
   const TTS_IP_MAX   = 10;
   const TTS_IP_WINDOW_MS = 60_000;
-  // Guard 2: Session character budget — max 1 500 chars of live TTS per session
-  const TTS_SESSION_CHAR_BUDGET = 1_500;
+  // Guard 2: Session character budget — ROLLING window, not a hard per-session
+  // cap. A never-resetting cap silently killed the real ElevenLabs voice after
+  // ~10 spoken replies and dropped users onto the robotic Web Speech fallback
+  // for the rest of their session. The IP limit above (10 req/min × 400 chars =
+  // 4 000 chars/min) is the real abuse throttle; this just bounds sustained cost
+  // while letting a normal conversation keep the good voice.
+  const TTS_SESSION_CHAR_BUDGET = 12_000;
+  const TTS_SESSION_WINDOW_MS = 15 * 60_000;
   // Guard 3: Per-request text cap — never send more than 400 chars to ElevenLabs
   const TTS_MAX_CHARS = 400;
 
@@ -18738,8 +18744,13 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       bucket.count++;
       _ttsIpBucket.set(ip, bucket);
 
-      // Guard 2: session character budget
+      // Guard 2: session character budget (rolling — resets each window so a
+      // long conversation never permanently loses the ElevenLabs voice)
       const sess = req.session as any;
+      if (!sess.ttsCharsResetAt || now > sess.ttsCharsResetAt) {
+        sess.ttsCharsUsed = 0;
+        sess.ttsCharsResetAt = now + TTS_SESSION_WINDOW_MS;
+      }
       sess.ttsCharsUsed = (sess.ttsCharsUsed ?? 0) + cleaned.length;
       if (sess.ttsCharsUsed > TTS_SESSION_CHAR_BUDGET) {
         console.warn(`[JAC TTS] session budget exceeded (${sess.ttsCharsUsed} chars)`);
@@ -18822,7 +18833,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return res.status(503).json({ message: "STT not configured" });
       }
 
-      // IP rate limit: 5 calls/min
+      // IP rate limit: 20 calls/min
       const now = Date.now();
       const STT_WINDOW_MS = 60_000;
       const STT_IP_MAX    = 20;
@@ -18856,10 +18867,17 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
 
       const file = await toFile(audioBuffer, filename, { type: mimeType ?? "audio/webm" });
+      // Domain-vocabulary hint biases the model toward GUBER's proper nouns and
+      // jargon (brand names, feature names) so they aren't mis-transcribed into
+      // similar-sounding everyday words — the main cause of JAC "misunderstanding".
       const transcription = await openai.audio.transcriptions.create({
         file,
         model: "gpt-4o-mini-transcribe",
         language: "en",
+        prompt:
+          "GUBER, JAC, GUVATAR, GUBER Studio, Verify and Inspect, Cash Drop, " +
+          "Day-1 OG, Trust Box, Load Board, barter, marketplace, gig, hirer, " +
+          "worker, payout, Stripe, background check, direct offer, AI or Not.",
       });
 
       const text = (transcription.text ?? "").trim();

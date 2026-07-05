@@ -38,6 +38,11 @@ Calling `openai.audio.transcriptions.create({ model: "whisper-1" })` against `AI
 
 **Fix:** Use `model: "gpt-4o-mini-transcribe"` (confirmed working) instead of `whisper-1` for any STT call routed through Replit's AI Integrations proxy.
 
+### 7. STT mis-hears GUBER proper nouns → pass a domain-vocabulary `prompt`
+Without a hint, the transcription model turns brand/feature names (GUBER, JAC, GUVATAR, Verify and Inspect, Cash Drop, Day-1 OG, Trust Box, Load Board…) into similar-sounding everyday words — the main cause of JAC "misunderstanding what I said."
+
+**Fix:** Pass a `prompt` string listing those proper nouns to `transcriptions.create`. The Replit AI-integrations proxy DOES accept the `prompt` param on `gpt-4o-mini-transcribe` (verified live: POST /api/jac/stt with a silent WAV returns 200 + empty text, no proxy error). Also request `echoCancellation`/`noiseSuppression`/`autoGainControl` in `getUserMedia` for cleaner capture. NOTE: this only helps server-STT paths (WhisperProvider / ConversationEngine); Chrome-desktop/Android-browser users go through native `WebSpeechProvider` and never hit the server, so neither fix reaches them.
+
 ## Platform routing (voice/index.ts)
 - iOS Capacitor → WhisperProvider (WKWebView SpeechRecognition is unreliable, MediaRecorder is supported iOS 14.5+)
 - Android Capacitor → WhisperProvider (permission flow more reliable via getUserMedia)

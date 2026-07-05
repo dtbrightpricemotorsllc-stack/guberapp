@@ -58,7 +58,16 @@ export class WhisperProvider implements STTProvider {
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request clean speech capture — noise suppression + echo cancellation +
+      // auto gain markedly improve transcription accuracy in noisy/echoey
+      // rooms. Browsers that don't honor a constraint just ignore it.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
     } catch (err: any) {
       const msg = err?.name === "NotAllowedError" ? "__mic_denied__" : "__mic_error__";
       onResult(msg);
