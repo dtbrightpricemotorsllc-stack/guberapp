@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getToken, clearToken } from "./token-storage";
+import { reportIssue } from "./report-issue";
 
 export interface ApiError extends Error {
   status?: number;
@@ -47,6 +48,15 @@ async function throwIfResNotOk(res: Response) {
     const err: ApiError = new Error(message);
     err.detail = detail;
     err.status = res.status;
+    // Phase 5: surface server-side failures (5xx) to JAC's System Guardian.
+    // 4xx (validation / auth / not-found) are expected and NOT reported.
+    if (res.status >= 500) {
+      let path = "";
+      try { path = new URL(res.url).pathname; } catch { path = res.url || ""; }
+      if (!path.includes("/api/issues/report")) {
+        void reportIssue({ module: "network", attemptedAction: `${res.status} ${path}`, error: message, blocked: false });
+      }
+    }
     throw err;
   }
 }
@@ -72,6 +82,9 @@ export async function apiRequest(
     });
   } catch (err: any) {
     console.error("[GUBER] Network request failed:", err);
+    if (!url.includes("/api/issues/report")) {
+      void reportIssue({ module: "network", attemptedAction: `${method} ${url}`, error: err, blocked: false });
+    }
     const friendly: ApiError = new Error("Connection issue. Please check your internet and try again.");
     friendly.name = "NetworkError";
     throw friendly;
@@ -94,6 +107,10 @@ export const getQueryFn: <T>(options: {
       });
     } catch (err: any) {
       console.error("[GUBER] Query network error:", err);
+      const _qUrl = queryKey.join("/");
+      if (!_qUrl.includes("/api/issues/report")) {
+        void reportIssue({ module: "network", attemptedAction: `GET ${_qUrl}`, error: err, blocked: false });
+      }
       throw new Error("Connection issue. Please check your internet and try again.");
     }
 

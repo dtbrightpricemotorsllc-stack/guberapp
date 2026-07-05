@@ -4,6 +4,7 @@ import {
   notifyUploadDone,
   notifyUploadError,
 } from "./upload-events";
+import { reportIssue } from "./report-issue";
 
 const PER_ATTEMPT_TIMEOUT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
@@ -179,8 +180,13 @@ export async function uploadToCloudinarySigned(
       await new Promise((r) => setTimeout(r, wait));
     }
   }
-  notifyUploadError((lastErr as any)?.message);
-  throw lastErr || new Error("Upload failed");
+  const finalErr = lastErr || new Error("Upload failed");
+  notifyUploadError((finalErr as any)?.message);
+  // Cancellations are user-initiated, not system failures — don't report them.
+  if ((finalErr as any)?.message !== "Upload cancelled") {
+    reportIssue({ module: "upload", attemptedAction: `upload:${kind}`, error: finalErr, blocked: true, relatedIds: { kind } });
+  }
+  throw finalErr;
 }
 
 export function base64ToBlob(dataUrl: string): Blob {

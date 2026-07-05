@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { UserLink } from "@/components/user-link";
-import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2, FileText, Crown, RefreshCw, Mail, Star } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Sparkles, Beaker, Flag, Bug, Users as UsersIcon, Eye, Search, Bell, Trash2, Activity, ImageOff, Image as ImageIcon, Film, Plus, Pencil, X as XIcon, ChevronUp, ChevronDown, ShieldCheck, Volume2, FileText, Crown, RefreshCw, Mail, Star, Siren } from "lucide-react";
 import {
   TTS_PROVIDER, JAC_TARGET_VOICE,
   loadJacVoice, getVoiceDebugInfo, resetJacVoiceCache,
@@ -2313,6 +2313,185 @@ type FeedbackReport = {
   status: string; admin_notes: string | null; created_at: string;
 };
 
+type SystemIssue = {
+  id: number;
+  fingerprint: string;
+  user_id: number | null;
+  platform: string;
+  device: string | null;
+  app_version: string | null;
+  route: string | null;
+  module: string;
+  attempted_action: string | null;
+  error_message: string | null;
+  related_ids: Record<string, any> | null;
+  severity: "low" | "medium" | "high" | "critical";
+  blocked: boolean;
+  steps: string[] | null;
+  screenshot_url: string | null;
+  gps_permission: string | null;
+  occurrence_count: number;
+  first_seen: string;
+  last_seen: string;
+  status: "open" | "ack" | "resolved";
+};
+
+type IssuesSummary = {
+  open: number; critical: number; high: number; blockedUsers: number;
+  bySeverity: Record<string, number>;
+  byPlatform: Record<string, number>;
+  byModule: Array<{ module: string; count: number; occurrences: number }>;
+  last24h: number;
+};
+
+function SystemIssuesTab() {
+  const [statusFilter, setStatusFilter] = useState<string>("open");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const summaryQ = useQuery<IssuesSummary>({
+    queryKey: ["/api/admin/qa/issues/summary"],
+    queryFn: async () => (await apiRequest("GET", "/api/admin/qa/issues/summary")).json(),
+  });
+
+  const listQ = useQuery<{ issues: SystemIssue[] }>({
+    queryKey: ["/api/admin/qa/issues", statusFilter, severityFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (severityFilter !== "all") params.set("severity", severityFilter);
+      const qs = params.toString();
+      return (await apiRequest("GET", `/api/admin/qa/issues${qs ? `?${qs}` : ""}`)).json();
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) =>
+      (await apiRequest("PATCH", `/api/admin/qa/issues/${id}/status`, { status })).json(),
+    onSuccess: () => {
+      listQ.refetch(); summaryQ.refetch();
+      toast({ title: "Issue updated" });
+    },
+    onError: () => toast({ title: "Error", description: "Could not update issue", variant: "destructive" }),
+  });
+
+  const SEV_COLORS: Record<string, string> = {
+    critical: "bg-red-100 text-red-800 border-red-300",
+    high: "bg-orange-100 text-orange-800 border-orange-300",
+    medium: "bg-yellow-100 text-yellow-800 border-yellow-300",
+    low: "bg-gray-100 text-gray-600 border-gray-300",
+  };
+  const STATUS_COLORS: Record<string, string> = {
+    open: "bg-blue-100 text-blue-800",
+    ack: "bg-purple-100 text-purple-800",
+    resolved: "bg-green-100 text-green-800",
+  };
+
+  const summary = summaryQ.data;
+  const issues = listQ.data?.issues ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <Card><CardContent className="p-3"><div className="text-2xl font-bold" data-testid="stat-issues-open">{summary?.open ?? "—"}</div><div className="text-xs text-muted-foreground">Open</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-2xl font-bold text-red-600" data-testid="stat-issues-critical">{summary?.critical ?? "—"}</div><div className="text-xs text-muted-foreground">Critical</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-2xl font-bold text-orange-600" data-testid="stat-issues-high">{summary?.high ?? "—"}</div><div className="text-xs text-muted-foreground">High</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-2xl font-bold" data-testid="stat-issues-blocked">{summary?.blockedUsers ?? "—"}</div><div className="text-xs text-muted-foreground">Blocking users</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-2xl font-bold" data-testid="stat-issues-24h">{summary?.last24h ?? "—"}</div><div className="text-xs text-muted-foreground">Last 24h</div></CardContent></Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Siren className="h-4 w-4" /> System Issues — JAC Guardian</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-36" data-testid="select-issue-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="ack">Acknowledged</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+              <SelectTrigger className="w-36" data-testid="select-issue-severity"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All severities</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={() => { listQ.refetch(); summaryQ.refetch(); }} data-testid="button-refresh-issues">
+              <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+            </Button>
+            <span className="text-sm text-muted-foreground">{issues.length} issue(s)</span>
+          </div>
+
+          {listQ.isLoading && <div className="text-sm text-muted-foreground py-4">Loading…</div>}
+          {!listQ.isLoading && issues.length === 0 && <div className="text-sm text-muted-foreground py-4">No issues 🎉</div>}
+
+          <div className="space-y-2">
+            {issues.map((it) => (
+              <Card key={it.id} className={`border ${it.severity === "critical" ? "border-red-300" : ""}`} data-testid={`card-issue-${it.id}`}>
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Badge className={SEV_COLORS[it.severity] || ""} data-testid={`badge-issue-severity-${it.id}`}>{it.severity}</Badge>
+                      <Badge variant="outline">{it.module}</Badge>
+                      <Badge variant="outline">{it.platform}</Badge>
+                      {it.blocked && <Badge className="bg-red-100 text-red-800">blocked</Badge>}
+                      <Badge className={STATUS_COLORS[it.status] || ""}>{it.status}</Badge>
+                      {it.occurrence_count > 1 && <span className="text-xs text-muted-foreground">×{it.occurrence_count}</span>}
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setExpandedId(expandedId === it.id ? null : it.id)} data-testid={`button-expand-issue-${it.id}`}>
+                      {expandedId === it.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <div className="text-sm font-medium" data-testid={`text-issue-message-${it.id}`}>{it.error_message || it.attempted_action || "(no message)"}</div>
+                  <div className="text-xs text-muted-foreground">last seen {new Date(it.last_seen).toLocaleString()}</div>
+
+                  {expandedId === it.id && (
+                    <div className="mt-2 space-y-2 border-t pt-2 text-xs">
+                      {it.attempted_action && <div><span className="font-semibold">Action:</span> {it.attempted_action}</div>}
+                      {it.route && <div><span className="font-semibold">Route:</span> {it.route}</div>}
+                      {it.device && <div><span className="font-semibold">Device:</span> {it.device}</div>}
+                      {it.app_version && <div><span className="font-semibold">App version:</span> {it.app_version}</div>}
+                      {it.gps_permission && <div><span className="font-semibold">GPS permission:</span> {it.gps_permission}</div>}
+                      {it.user_id != null && <div><span className="font-semibold">User:</span> #{it.user_id}</div>}
+                      {it.related_ids && Object.keys(it.related_ids).length > 0 && (
+                        <div><span className="font-semibold">Related:</span> {Object.entries(it.related_ids).map(([k, v]) => `${k}=${v}`).join(", ")}</div>
+                      )}
+                      {Array.isArray(it.steps) && it.steps.length > 0 && (
+                        <div><span className="font-semibold">Steps:</span>
+                          <ol className="list-decimal ml-5">{it.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+                        </div>
+                      )}
+                      <div><span className="font-semibold">Fingerprint:</span> {it.fingerprint.slice(0, 12)}</div>
+                      <div><span className="font-semibold">First seen:</span> {new Date(it.first_seen).toLocaleString()}</div>
+                      {it.screenshot_url && <div><a className="text-blue-600 underline" href={it.screenshot_url} target="_blank" rel="noreferrer">screenshot</a></div>}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {it.status !== "ack" && <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: it.id, status: "ack" })} disabled={statusMutation.isPending} data-testid={`button-ack-issue-${it.id}`}>Acknowledge</Button>}
+                    {it.status !== "resolved" && <Button size="sm" onClick={() => statusMutation.mutate({ id: it.id, status: "resolved" })} disabled={statusMutation.isPending} data-testid={`button-resolve-issue-${it.id}`}>Resolve</Button>}
+                    {it.status === "resolved" && <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: it.id, status: "open" })} disabled={statusMutation.isPending} data-testid={`button-reopen-issue-${it.id}`}>Reopen</Button>}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function JacReportsTab() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -2470,7 +2649,7 @@ export default function AdminQa() {
         <Button asChild variant="outline"><Link href="/admin">← Back to admin</Link></Button>
       </div>
 
-      <Tabs defaultValue="checklist">
+      <Tabs defaultValue={(() => { try { return new URLSearchParams(window.location.search).get("tab") || "checklist"; } catch { return "checklist"; } })()}>
         <TabsList className="overflow-x-auto w-full flex-nowrap justify-start h-auto">
           <TabsTrigger value="checklist" data-testid="tab-checklist"><CheckCircle className="mr-1 h-3 w-3" />Checklist</TabsTrigger>
           <TabsTrigger value="sandbox" data-testid="tab-sandbox"><Beaker className="mr-1 h-3 w-3" />Sandbox</TabsTrigger>
@@ -2489,6 +2668,7 @@ export default function AdminQa() {
           <TabsTrigger value="jac-voice" data-testid="tab-jac-voice"><Volume2 className="mr-1 h-3 w-3" />JAC Voice</TabsTrigger>
           <TabsTrigger value="jac-reports" data-testid="tab-jac-reports"><FileText className="mr-1 h-3 w-3" />JAC Reports</TabsTrigger>
           <TabsTrigger value="og-audit" data-testid="tab-og-audit"><Crown className="mr-1 h-3 w-3 text-amber-500" />OG Audit</TabsTrigger>
+          <TabsTrigger value="system-issues" data-testid="tab-system-issues"><Siren className="mr-1 h-3 w-3 text-red-500" />System Issues</TabsTrigger>
         </TabsList>
         <TabsContent value="checklist"><ChecklistTab /></TabsContent>
         <TabsContent value="sandbox"><SandboxTab /></TabsContent>
@@ -2530,6 +2710,7 @@ export default function AdminQa() {
         <TabsContent value="jac-voice"><JacVoiceDebugTab /></TabsContent>
         <TabsContent value="jac-reports"><JacReportsTab /></TabsContent>
         <TabsContent value="og-audit"><OGAuditTab /></TabsContent>
+        <TabsContent value="system-issues"><SystemIssuesTab /></TabsContent>
       </Tabs>
     </div>
   );

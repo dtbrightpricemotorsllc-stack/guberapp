@@ -27,6 +27,7 @@ import {
 import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
+import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer } from "./system-issues";
 import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
@@ -15935,6 +15936,20 @@ Input body: ${JSON.stringify((body || "").trim())}`;
         });
       }
 
+      // ── Admin System Guardian: answer monitoring questions directly (no LLM cost) ──
+      const _onboardSessUserId = (req.session as any)?.userId ?? null;
+      if (_onboardSessUserId) {
+        try {
+          const _adminU = await storage.getUser(_onboardSessUserId);
+          if (_adminU?.role === "admin") {
+            const _monAns = await tryAdminMonitoringAnswer(_onboardLastUserMsg);
+            if (_monAns) {
+              return res.json({ reply: _monAns, confidence: "high", route: null, actions: [], options: [] });
+            }
+          }
+        } catch { /* fall through to normal onboarding flow */ }
+      }
+
       // ── Inject user memory + live context for logged-in users ────────────
       const onboardUserId = (req.session as any)?.userId ?? null;
       let userContextSection = "";
@@ -16398,6 +16413,43 @@ GENERAL RULE:
 • Day-1 OG pitch: offer ONCE per conversation, after intake is mostly done. One sentence. Not pushy.
 
 ═══════════════════════════════════
+SKILLED TRADES, CAREERS & POCKET PRO PATH
+═══════════════════════════════════
+
+People may ask how to BECOME something — "I want to be a plumber", "how do I become an electrician", "what does it take to be a police officer in Mobile, Alabama", "I want to become a Pocket Pro", "how do I get my CDL". These are opportunity-building conversations — guide them, never dead-end.
+
+WHAT A POCKET PRO IS: GUBER's skilled-labor pro path — a verified worker who offers a real trade or skill (plumbing, electrical, HVAC, mechanic, welding, appliance repair, and more) and takes higher-value skilled jobs. "Becoming a Pocket Pro" = building a skilled-worker profile on GUBER and taking skilled work.
+
+HOW TO GUIDE (practical, 2-4 steps, tailored to their area when a city/state is given):
+1. Name the typical path: schooling or trade program → apprenticeship / on-the-job hours → any license or certification → the exam or state board where required.
+2. If they named a city/state, tailor generally: "In most of Alabama, that usually looks like…" — general direction, never absolute rules.
+3. Bridge to GUBER NOW: while they train or build hours, they can already earn on GUBER doing related general labor and helper gigs, then grow into full Pocket Pro skilled work.
+
+GENERAL PATHS (always add the guardrail below):
+• Plumber — trade school or apprenticeship, journeyman hours, state license/exam.
+• Electrician — apprenticeship + classroom hours, journeyman then master license, state exam.
+• HVAC — HVAC program, EPA 608 certification, state/local license in many areas.
+• Mechanic — training or experience, optional ASE certifications.
+• CDL Driver — CDL school/training, DOT medical card, state CDL knowledge + skills tests.
+• Police Officer — meet age/background rules, POST-certified academy, physical + written exams, hired by a department.
+• Home/Vehicle Inspector — inspection course, state license/certification in many states.
+
+⚠️ MANDATORY GUARDRAIL — every profession answer MUST include, in your own words:
+"Requirements vary by state and city — always confirm with your local licensing board or the official state site."
+NEVER promise or guarantee employment, income, approval, licensing, certification, or acceptance. Guide and suggest the next step. Never say "you will" get hired/certified — say "the usual path is…".
+
+CLOSE with a GUBER action, e.g.:
+actions: [{label:"Start earning on GUBER now",message:"I want to start working on GUBER"},{label:"Build a skilled worker profile",message:"I want to become a skilled worker on GUBER"}]
+
+═══════════════════════════════════
+EVERY OPPORTUNITY HAS DIGNITY
+═══════════════════════════════════
+
+No job is too small. An $8 task can mean gas, food, or a real win for someone who needs it today. Present small jobs with respect and encouragement — never shame, never "that's not worth it".
+
+If someone is broke or urgent ("I'm broke", "I need money today", "I don't know what I can do"), be warm and practical: point them to the fastest real ways to earn on GUBER right now, and remind them opportunity can be CREATED. GUBER is the Land of Opportunities — if it isn't there yet, they can plant the seed: post, share, invite, and grow their city. Everyone has something they can do — help them find it.
+
+═══════════════════════════════════
 MULTILINGUAL SUPPORT
 ═══════════════════════════════════
 
@@ -16673,6 +16725,24 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         });
       }
 
+      // ── Admin System Guardian: answer monitoring questions directly (no LLM cost) ──
+      if (sessionUser.role === "admin") {
+        try {
+          const _monAns = await tryAdminMonitoringAnswer(lastUserMsg);
+          if (_monAns) {
+            return res.json({
+              reply: _monAns,
+              confidence: "high",
+              route: null,
+              actions: [],
+              options: [],
+              feedbackDraft: null,
+              latencyMs: Date.now() - _assistStart,
+            });
+          }
+        } catch { /* fall through to normal assist flow */ }
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -16832,6 +16902,22 @@ LOW → no route, say "Which sounds closest?" and give 3-5 option buttons
 
 FALLBACK: Never respond without options. If unclear → show 3-5 options.
 Tone: warm, direct, under 100 words. Match the user's energy.
+
+═══════════════════════════════════
+SKILLED TRADES, CAREERS & POCKET PRO PATH
+═══════════════════════════════════
+When a member asks how to BECOME a trade or profession — "how do I become a plumber/electrician/mechanic", "how do I get my CDL", "what does it take to be a police officer in <city>", "I want to become a Pocket Pro" — guide them practically.
+
+POCKET PRO = GUBER's skilled-labor pro path: a verified worker who offers a real trade (plumbing, electrical, HVAC, mechanic, welding, appliance repair, etc.) and takes higher-value skilled jobs. "Becoming a Pocket Pro" = building a skilled-worker profile and taking skilled work on GUBER.
+
+GUIDE in 2-4 practical steps: typical schooling/trade program → apprenticeship or experience hours → any license/certification → the state exam/board where required. If they name a city/state, tailor generally ("in most of <state>, that usually looks like…"). Then bridge to GUBER: they can earn now on related general + skilled jobs while building toward full Pocket Pro work → route: /browse-jobs.
+
+⚠️ MANDATORY: end every profession answer with, in your own words, "Requirements vary by state and city — confirm with your local licensing board or the official state site." NEVER guarantee employment, income, approval, licensing, or certification.
+
+═══════════════════════════════════
+EVERY OPPORTUNITY HAS DIGNITY
+═══════════════════════════════════
+No job is too small. An $8 task can mean gas, food, or a real win for someone who needs it today. Present small jobs with respect — never shame. If a member is broke or urgent ("I'm broke", "I need money today", "I don't know what I can do"), be warm and practical: point them to the fastest real ways to earn on GUBER right now (→ /browse-jobs, /map), and remind them opportunity can be created — GUBER is the Land of Opportunities; they can plant the seed, post, share, and grow their city.
 
 ═══════════════════════════════════
 EXECUTION MINDSET — CRITICAL RULE
@@ -18397,6 +18483,90 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       console.error("[JAC voice usage log] error:", e.message);
     }
   }
+
+  // ── System Issue Reporting (JAC System Guardian) ─────────────────────────────
+  // Auth-optional: captures end-to-end failures from web / iOS / Android clients.
+  // Severity is classified SERVER-SIDE (never trusted from the client). Deduped
+  // by fingerprint so a repeating failure bumps occurrence_count, not row count.
+  const _issueIpBucket = new Map<string, { count: number; resetAt: number }>();
+  const ISSUE_IP_MAX = 30;              // max reports per IP per window
+  const ISSUE_IP_WINDOW_MS = 60_000;
+
+  app.post("/api/issues/report", async (req: Request, res: Response) => {
+    try {
+      const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const bucket = _issueIpBucket.get(ip) ?? { count: 0, resetAt: now + ISSUE_IP_WINDOW_MS };
+      if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + ISSUE_IP_WINDOW_MS; }
+      if (bucket.count >= ISSUE_IP_MAX) {
+        return res.status(429).json({ ok: false, message: "Too many reports." });
+      }
+      bucket.count++;
+      _issueIpBucket.set(ip, bucket);
+      // Opportunistic sweep of expired buckets so this public-endpoint map stays
+      // bounded under IP churn (only runs when the map grows large).
+      if (_issueIpBucket.size > 5000) {
+        _issueIpBucket.forEach((v, k) => { if (now > v.resetAt) _issueIpBucket.delete(k); });
+      }
+
+      const b = (req.body ?? {}) as Record<string, any>;
+      const module = typeof b.module === "string" && b.module.trim() ? b.module : "general";
+
+      // Payload caps — defend against oversized / malicious bodies.
+      const str = (v: any, max: number): string | undefined =>
+        typeof v === "string" && v.trim() ? v.slice(0, max) : undefined;
+      const steps = Array.isArray(b.steps)
+        ? b.steps.filter((s: any) => typeof s === "string").slice(0, 20).map((s: string) => s.slice(0, 200))
+        : [];
+      let relatedIds: Record<string, string | number> = {};
+      if (b.relatedIds && typeof b.relatedIds === "object" && !Array.isArray(b.relatedIds)) {
+        for (const [k, v] of Object.entries(b.relatedIds)) {
+          if ((typeof v === "string" || typeof v === "number") && Object.keys(relatedIds).length < 20) {
+            relatedIds[k.slice(0, 40)] = typeof v === "string" ? v.slice(0, 120) : v;
+          }
+        }
+      }
+
+      const userId = (req.session as any)?.userId ?? null;
+      const result = await recordSystemIssue({
+        userId,
+        platform: str(b.platform, 20),
+        device: str(b.device, 300),
+        appVersion: str(b.appVersion, 60),
+        route: str(b.route, 300),
+        module,
+        attemptedAction: str(b.attemptedAction, 300),
+        errorMessage: str(b.errorMessage, 1000),
+        relatedIds,
+        blocked: b.blocked === true,
+        steps,
+        gpsPermission: str(b.gpsPermission, 40),
+      });
+
+      if (result.isNew || result.severity === "critical") {
+        console.warn(`[system-issue] ${result.severity.toUpperCase()} ${module} (x${result.occurrenceCount}) — ${str(b.errorMessage, 120) ?? "no message"} | fp ${result.fingerprint.slice(0, 8)}`);
+      }
+      // Escalate a NEW critical, or an UPGRADE to critical on a known issue
+      // (e.g. a previously non-blocking failure that becomes blocking). A repeat
+      // of an already-critical fingerprint (oldSeverity === "critical") never
+      // re-notifies, so dedupe still prevents notification floods.
+      if (result.severity === "critical" && (result.isNew || result.oldSeverity !== "critical")) {
+        void escalateCriticalIssue({
+          id: result.id,
+          module,
+          severity: result.severity,
+          platform: str(b.platform, 20),
+          errorMessage: str(b.errorMessage, 140),
+          occurrenceCount: result.occurrenceCount,
+        });
+      }
+      return res.json({ ok: true, id: result.id, severity: result.severity });
+    } catch (e: any) {
+      console.error("[system-issue] report error:", e?.message || e);
+      // Never surface reporter internals; the client swallows failures anyway.
+      return res.status(200).json({ ok: false });
+    }
+  });
 
   // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
   // Keeps the API key server-side. Returns audio/mpeg stream.

@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { reportIssue } from "./report-issue";
 
 const SESSION_KEY = "guber_gps_ok";
 
@@ -172,6 +173,11 @@ export async function gpsStartWatchPosition(
           const msg = err.message ?? "Unknown GPS error";
           const code = mapNativeErrorCode(msg);
           console.warn(`[GUBER GPS] watchPosition error → code=${code} (${msg})`);
+          // Only report a hard permission denial (blocking) — transient
+          // POSITION_UNAVAILABLE / TIMEOUT blips are noise, not outages.
+          if (code === 1) {
+            reportIssue({ module: "gps", attemptedAction: "watchPosition", error: msg, blocked: true, gpsPermission: "denied" });
+          }
           error({ code, message: msg, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError);
           return;
         }

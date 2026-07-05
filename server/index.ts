@@ -222,6 +222,37 @@ app.use((req, res, next) => {
     ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS expiry_warning_sent_at TIMESTAMP;
   `).catch(e => console.error("[migration] worker_qualifications expiry_warning_sent_at error:", e));
 
+  // System Issues — JAC System Guardian telemetry. Prod has no db:push, so
+  // self-heal the table + indexes here (idempotent). Deduped by fingerprint.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_issues (
+      id SERIAL PRIMARY KEY,
+      fingerprint TEXT NOT NULL UNIQUE,
+      user_id INTEGER,
+      platform TEXT DEFAULT 'web',
+      device TEXT,
+      app_version TEXT,
+      route TEXT,
+      module TEXT NOT NULL,
+      attempted_action TEXT,
+      error_message TEXT,
+      related_ids JSONB DEFAULT '{}'::jsonb,
+      severity TEXT DEFAULT 'medium',
+      blocked BOOLEAN DEFAULT false,
+      steps JSONB DEFAULT '[]'::jsonb,
+      screenshot_url TEXT,
+      gps_permission TEXT,
+      occurrence_count INTEGER DEFAULT 1,
+      first_seen TIMESTAMP DEFAULT NOW(),
+      last_seen TIMESTAMP DEFAULT NOW(),
+      status TEXT DEFAULT 'open'
+    );
+    CREATE INDEX IF NOT EXISTS idx_system_issues_status ON system_issues (status);
+    CREATE INDEX IF NOT EXISTS idx_system_issues_severity ON system_issues (severity);
+    CREATE INDEX IF NOT EXISTS idx_system_issues_last_seen ON system_issues (last_seen DESC);
+    CREATE INDEX IF NOT EXISTS idx_system_issues_module ON system_issues (module);
+  `).catch(e => console.error("[migration] system_issues table setup error:", e));
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_accounts (
       id SERIAL PRIMARY KEY,

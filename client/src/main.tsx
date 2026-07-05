@@ -2,6 +2,9 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { migrateToken } from "@/lib/token-storage";
+import { installGlobalErrorReporting } from "@/lib/report-issue";
+
+installGlobalErrorReporting();
 
 migrateToken().finally(() => {
   createRoot(document.getElementById("root")!).render(<App />);

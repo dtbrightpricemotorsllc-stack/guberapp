@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { reportIssue } from "@/lib/report-issue";
 import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/queryClient";
@@ -69,6 +70,12 @@ export default function Login() {
       }
     } catch (err: any) {
       toast({ title: "Login Failed", description: err.message || "Invalid credentials", variant: "destructive" });
+      // Only report system failures (network / 5xx) — wrong credentials (401/403)
+      // are expected user error, not an outage worth alerting on.
+      const status = err?.status;
+      if (status === undefined || status >= 500) {
+        reportIssue({ module: "login", attemptedAction: "password-login", error: err, blocked: true });
+      }
     } finally {
       setLoading(false);
     }

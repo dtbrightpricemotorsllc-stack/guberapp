@@ -2879,6 +2879,40 @@ export const jacKnowledge = pgTable("jac_knowledge", {
 export type JacKnowledge       = typeof jacKnowledge.$inferSelect;
 export type InsertJacKnowledge = typeof jacKnowledge.$inferInsert;
 
+// ── System Issues (JAC System Guardian telemetry) ─────────────────────────────
+// Rich end-to-end failure reports captured across web / iOS / Android. Deduped
+// by fingerprint = md5(module + normalized error + route + platform); repeat
+// occurrences bump occurrence_count + last_seen instead of inserting new rows.
+// Severity is ALWAYS classified server-side — never trusted from the client.
+export const systemIssues = pgTable("system_issues", {
+  id:              serial("id").primaryKey(),
+  fingerprint:     text("fingerprint").notNull().unique(),
+  userId:          integer("user_id"),
+  platform:        text("platform").default("web"),        // web | ios | android
+  device:          text("device"),
+  appVersion:      text("app_version"),
+  route:           text("route"),
+  module:          text("module").notNull(),               // payment | login | upload | gps | map | wallet | studio | network | client | general
+  attemptedAction: text("attempted_action"),
+  errorMessage:    text("error_message"),
+  relatedIds:      jsonb("related_ids").$type<Record<string, string | number>>().default({}),
+  severity:        text("severity").default("medium"),     // low | medium | high | critical
+  blocked:         boolean("blocked").default(false),
+  steps:           jsonb("steps").$type<string[]>().default([]),
+  screenshotUrl:   text("screenshot_url"),
+  gpsPermission:   text("gps_permission"),
+  occurrenceCount: integer("occurrence_count").default(1),
+  firstSeen:       timestamp("first_seen").defaultNow(),
+  lastSeen:        timestamp("last_seen").defaultNow(),
+  status:          text("status").default("open"),         // open | ack | resolved
+});
+export const insertSystemIssueSchema = createInsertSchema(systemIssues).omit({
+  id: true, fingerprint: true, severity: true, occurrenceCount: true,
+  firstSeen: true, lastSeen: true, status: true,
+});
+export type SystemIssue       = typeof systemIssues.$inferSelect;
+export type InsertSystemIssue = z.infer<typeof insertSystemIssueSchema>;
+
 // ── JAC Intents ───────────────────────────────────────────────────────────────
 export const jacIntents = pgTable("jac_intents", {
   id:                serial("id").primaryKey(),
