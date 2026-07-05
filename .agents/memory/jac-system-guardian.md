@@ -20,6 +20,27 @@ producing inconsistent JAC answers depending on login state.
 block (both share a voice-tech short-circuit + a `tryLocalAnswer` fallback +
 an `openai.chat.completions.create` call) and mirror the edit.
 
+## Adding a JAC knowledge topic = FOUR touch points
+Teaching JAC a new subject (e.g. a product/feature) requires editing all four,
+or answers drift by surface:
+1. `docs/jac-knowledge-base.md` — the official source of truth. Add a numbered
+   section; renumber any sections after it (the FAQ section is last).
+2. `onboardPrompt` (routes.ts) — the `/api/jac/onboard` system prompt block +
+   the one-line platform overview.
+3. guber-assist `systemPrompt` (routes.ts) — the `/api/ai/guber-assist` feature
+   block. Different wording is fine; the facts must match.
+4. `jac_knowledge` seed in `server/index.ts` — helps onboard's `tryLocalAnswer`
+   ILIKE match (skips OpenAI).
+
+**Seed-guard trap:** the PRIMARY `jac_knowledge` seed block is wrapped in a
+"skip whole block if ANY system entry already exists" guard, so appending rows
+there does NOTHING on any DB that's already been seeded (incl. prod). New KB
+rows MUST go in their own INCREMENTAL block guarded by
+`WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = '<first new title>')`.
+**Why:** prod has no `db:push`/reseed step; a row added to the guarded primary
+block silently never inserts. Verify with a DB query after boot, not by reading
+the seed code.
+
 ## System Guardian telemetry (`server/system-issues.ts`)
 - Failures are upserted into `system_issues` deduped by a **fingerprint** =
   `module + normalizedMessage + route + platform` (volatile ids/hex/long

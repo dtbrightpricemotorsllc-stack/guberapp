@@ -1531,6 +1531,32 @@ app.use((req, res, next) => {
     WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'Vehicle listing fields and Buyer''s Order');
   `).catch(e => console.error("[migration] jac_knowledge gap-fill seed error:", e));
 
+  // Seed GUVATAR (AI avatar platform) knowledge — incremental, guarded by first title
+  await pool.query(`
+    INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    SELECT * FROM (VALUES
+      ('general','What is GUVATAR',
+        '["what is guvatar","guvatar","tell me about guvatar","avatar platform","ai avatar","create an avatar","make an avatar","digital avatar","build an avatar"]'::jsonb,
+        '["guvatar","avatar","ai avatar","digital avatar","spokesperson","mascot","vtuber","character"]'::jsonb,
+        'GUVATAR is GUBER''s AI avatar platform, part of GUBER Studio. It turns a photo or an idea into a living digital avatar you can animate and customize — no 3D, rigging, or animation experience needed. Create a personal avatar, a business spokesperson, a company mascot, an AI influencer, a VTuber, a gaming or educational character, or something completely original. What would you like to create today?',
+        '[{"label":"What can I create?","message":"What can I create with GUVATAR?"},{"label":"How does it work?","message":"How does GUVATAR work?"}]'::jsonb,
+        'system'),
+      ('general','What can I create with GUVATAR',
+        '["what can i create with guvatar","what can guvatar make","types of avatars","what avatars can i make","guvatar ideas","what can i make with guvatar"]'::jsonb,
+        '["guvatar","avatar types","spokesperson","mascot","influencer","vtuber","gaming character","brand ambassador"]'::jsonb,
+        'With GUVATAR you can create personal AI avatars, business spokespersons, company mascots, AI influencers, VTubers, streamers, gaming characters, educational characters, customer-service reps, brand ambassadors, family characters, and original fictional characters — whatever you can imagine. Whether you''re creating content, growing a business, streaming, teaching, or gaming, GUVATAR makes it simple. What would you like to build first?',
+        '[{"label":"How does it work?","message":"How does GUVATAR work?"},{"label":"What is GUVATAR?","message":"What is GUVATAR?"}]'::jsonb,
+        'system'),
+      ('general','How does GUVATAR work',
+        '["how does guvatar work","how do i make a guvatar","how to create an avatar","guvatar steps","how do i build an avatar","how do i use guvatar"]'::jsonb,
+        '["guvatar","how it works","create avatar","upload photo","animate avatar","customize avatar"]'::jsonb,
+        'It''s simple: 1) Choose what you''d like to create. 2) Upload a photo or describe your idea. 3) Customize your avatar. 4) Animate it using supported AI technologies. 5) Use it across supported platforms. No 3D skills or animation experience required — just your imagination. GUVATAR is built with long-term compatibility in mind, and support keeps expanding over time. Ready to start?',
+        '[{"label":"What can I create?","message":"What can I create with GUVATAR?"},{"label":"Open GUBER Studio","message":"Take me to GUBER Studio"}]'::jsonb,
+        'system')
+    ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'What is GUVATAR');
+  `).catch(e => console.error("[migration] jac_knowledge GUVATAR seed error:", e));
+
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`
     UPDATE growth_task_templates SET is_active = false, paused = true

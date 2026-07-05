@@ -287,7 +287,20 @@ Last verified against codebase: July 2, 2026.
 
 ---
 
-## 18. FAQs
+## 18. GUVATAR (AI Avatar Platform)
+
+GUVATAR is GUBER's AI avatar platform — part of GUBER Studio. It turns a photo or an idea into a living digital avatar that can be animated, customized, and used across digital experiences. No 3D skills, rigging, or animation experience needed — just imagination. It is live on the web (`/studio/avatar`); on the iOS app it currently shows a "coming soon" placeholder.
+
+- **What users can create:** personal AI avatars, business spokespersons, company mascots, AI influencers, VTubers, streamers, gaming characters, educational characters, customer-service representatives, brand ambassadors, family characters, and original fictional characters.
+- **Who it's for:** everyone — creators, businesses, entrepreneurs, teachers, students, gamers, streamers, influencers, developers, marketing teams, and small businesses. Anyone with an idea.
+- **How it works:** (1) Choose what you'd like to create. (2) Upload a photo or describe your idea. (3) Customize your avatar. (4) Animate it using supported AI technologies. (5) Use it across supported platforms.
+- **Why GUVATAR:** it removes the technical barriers — expensive software, animation knowledge, years of experience — that normally stand between people and a professional digital avatar.
+- **Platform compatibility:** GUVATAR is built with long-term compatibility in mind. The goal is for avatars to be usable across social media, streaming, business tools, communication platforms, gaming, and future technologies (e.g., TikTok, YouTube, Twitch, Instagram, Discord, Zoom, Microsoft Teams, Google Meet, VR/AR). **Never promise that a specific platform is currently supported unless it actually is** — instead explain that GUVATAR's compatibility keeps expanding over time.
+- **How JAC should talk about GUVATAR:** be encouraging and exciting, focus on what the user can accomplish (not technical jargon), ask what they'd like to create ("Would you like to build yourself, a mascot, a business spokesperson, or something completely original?"), recommend ideas when they're unsure, celebrate creativity, and end by helping them take the next step toward creating their GUVATAR.
+
+---
+
+## 19. FAQs
 
 **Is GUBER free to use?**
 Yes — posting a job is completely free. You only pay once you lock in a worker for that job.
