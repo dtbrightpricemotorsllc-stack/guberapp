@@ -27,7 +27,8 @@ import {
 import { sendPushToUser } from "./push";
 import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
-import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer } from "./system-issues";
+import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
+import { maybeDiagnoseIssue } from "./ai-diagnosis";
 import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
@@ -18651,7 +18652,9 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       // (e.g. a previously non-blocking failure that becomes blocking). A repeat
       // of an already-critical fingerprint (oldSeverity === "critical") never
       // re-notifies, so dedupe still prevents notification floods.
-      if (result.severity === "critical" && (result.isNew || result.oldSeverity !== "critical")) {
+      // A reopened critical (a previously-resolved outage that recurred) also
+      // re-notifies — otherwise a recurring failure would stay silent.
+      if (result.severity === "critical" && (result.isNew || result.oldSeverity !== "critical" || result.reopened)) {
         void escalateCriticalIssue({
           id: result.id,
           module,
@@ -18660,6 +18663,19 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           errorMessage: str(b.errorMessage, 140),
           occurrenceCount: result.occurrenceCount,
         });
+      }
+      // Layer 4 — strictly-gated AI escalation. Only qualifying issues (critical /
+      // repeat / multi-user / blocked money-access module) ever wake the model.
+      // Fire-and-forget: the reporter is never blocked, and the module itself
+      // guarantees at-most-once-per-fingerprint plus a global hourly cap.
+      if (shouldDiagnose({
+        severity: result.severity,
+        occurrenceCount: result.occurrenceCount,
+        distinctUsers: result.distinctUsers,
+        module: result.module,
+        blocked: result.blocked,
+      })) {
+        void maybeDiagnoseIssue(result.id);
       }
       return res.json({ ok: true, id: result.id, severity: result.severity });
     } catch (e: any) {

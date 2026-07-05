@@ -26,6 +26,11 @@ const KNOWN_MODULES = new Set([
 const CRITICAL_MODULES = new Set(["payment", "wallet", "login"]);
 // Core task flows — elevated even when not explicitly blocking.
 const HIGH_MODULES = new Set(["gps", "upload", "job", "verify_inspect", "load_board", "map", "studio"]);
+// Money- or access-critical modules. A BLOCKED failure here is a valid AI-diagnosis
+// trigger even before it repeats or spreads (Layer 4 gating).
+const DIAGNOSE_MODULES = new Set(["payment", "wallet", "login", "signup", "gps", "map", "job"]);
+
+const SEV_RANK: Record<IssueSeverity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
 
 export function normalizeModule(module: string): string {
   const m = (module || "general").toLowerCase().trim();
@@ -83,6 +88,19 @@ export interface ReportIssueInput {
   steps?: string[];
   screenshotUrl?: string | null;
   gpsPermission?: string;
+  /** Origin of the report. Defaults to "user_event". Scheduled health probes
+   *  pass "health_probe" so the dashboard + self-heal can distinguish them. */
+  source?: "user_event" | "health_probe";
+  /** Static remediation hint stored alongside the issue (self-healing prep). */
+  suggestedFix?: string | null;
+  /**
+   * SECURITY-SENSITIVE — server callers ONLY. Raises the classified severity to
+   * at least this level. Used by scheduled health probes (a DB outage must be
+   * critical even though the module classifier alone wouldn't say so). This must
+   * NEVER be wired to the public /api/issues/report endpoint — severity there is
+   * always classified server-side so clients can't spam "critical".
+   */
+  severityFloor?: IssueSeverity;
 }
 
 export interface ReportIssueResult {
@@ -94,6 +112,32 @@ export interface ReportIssueResult {
   /** Severity BEFORE this report merged in (null on first insert). Lets callers
    *  detect an upgrade-to-critical on a deduped fingerprint. */
   oldSeverity: IssueSeverity | null;
+  /** Distinct affected users after this report merged in (capped at 50). */
+  distinctUsers: number;
+  /** True when a previously-resolved fingerprint was re-opened by this report.
+   *  Callers re-escalate on this transition so a recurring outage re-alerts. */
+  reopened: boolean;
+  module: string;
+  blocked: boolean;
+}
+
+/**
+ * Layer-4 AI-diagnosis gate. Returns true ONLY for issues worth spending an
+ * OpenAI call on: criticals, repeats, multi-user incidents, or a blocked
+ * failure in a money/access-critical module. Everything else stays cost-free.
+ */
+export function shouldDiagnose(i: {
+  severity: IssueSeverity;
+  occurrenceCount: number;
+  distinctUsers: number;
+  module: string;
+  blocked?: boolean;
+}): boolean {
+  if (i.severity === "critical") return true;
+  if ((i.occurrenceCount ?? 0) >= 5) return true;
+  if ((i.distinctUsers ?? 0) >= 3) return true;
+  if (DIAGNOSE_MODULES.has(normalizeModule(i.module)) && !!i.blocked) return true;
+  return false;
 }
 
 /** Upsert an issue keyed by fingerprint. Repeats bump occurrence_count + last_seen. */
@@ -102,24 +146,34 @@ export async function reportIssue(input: ReportIssueInput): Promise<ReportIssueR
   const platform = (input.platform || "web").toLowerCase().slice(0, 20);
   const route = (input.route || "").slice(0, 300);
   const errorMessage = (input.errorMessage || "").slice(0, 1000);
-  const severity = classifySeverity({ module, blocked: input.blocked, errorMessage });
+  // Server-side classification, then apply the (server-only) severity floor.
+  let severity = classifySeverity({ module, blocked: input.blocked, errorMessage });
+  if (input.severityFloor && SEV_RANK[input.severityFloor] > SEV_RANK[severity]) {
+    severity = input.severityFloor;
+  }
   const fingerprint = makeFingerprint(module, errorMessage, route, platform);
+  const source = input.source === "health_probe" ? "health_probe" : "user_event";
 
-  // CTE captures the pre-upsert severity (`prev`) under the same snapshot so
-  // callers can distinguish a brand-new critical from an upgrade-to-critical on
-  // a deduped fingerprint. Severity is MONOTONIC (worst-ever): it never
-  // downgrades, so a later non-blocking re-fire can't mask an earlier critical
-  // and can't cause escalation flapping.
+  // CTE captures the pre-upsert severity + status (`prev`) under the same
+  // snapshot so callers can distinguish a brand-new critical from an
+  // upgrade-to-critical, and a resolved→open reopen, on a deduped fingerprint.
+  // Severity is MONOTONIC (worst-ever): it never downgrades, so a later
+  // non-blocking re-fire can't mask an earlier critical or cause flapping.
+  // affected_user_ids accumulates distinct user_ids (capped at 50) so the
+  // dashboard + AI gate can tell single-user glitches from platform-wide ones.
   const r = await pool.query(
     `WITH prev AS (
-       SELECT severity AS old_severity FROM system_issues WHERE fingerprint = $1
+       SELECT severity AS old_severity, status AS old_status FROM system_issues WHERE fingerprint = $1
      ),
      up AS (
        INSERT INTO system_issues
         (fingerprint, user_id, platform, device, app_version, route, module,
          attempted_action, error_message, related_ids, severity, blocked, steps,
-         screenshot_url, gps_permission, occurrence_count, first_seen, last_seen, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,NOW(),NOW(),'open')
+         screenshot_url, gps_permission, source, suggested_fix, affected_user_ids,
+         occurrence_count, first_seen, last_seen, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+         CASE WHEN $2::int IS NULL THEN '[]'::jsonb ELSE jsonb_build_array($2::int) END,
+         1,NOW(),NOW(),'open')
        ON CONFLICT (fingerprint) DO UPDATE SET
          occurrence_count = system_issues.occurrence_count + 1,
          last_seen = NOW(),
@@ -132,10 +186,20 @@ export async function reportIssue(input: ReportIssueInput): Promise<ReportIssueR
          END,
          blocked = system_issues.blocked OR EXCLUDED.blocked,
          error_message = COALESCE(EXCLUDED.error_message, system_issues.error_message),
+         suggested_fix = COALESCE(EXCLUDED.suggested_fix, system_issues.suggested_fix),
+         affected_user_ids = CASE
+           WHEN EXCLUDED.user_id IS NULL THEN system_issues.affected_user_ids
+           WHEN system_issues.affected_user_ids @> to_jsonb(EXCLUDED.user_id) THEN system_issues.affected_user_ids
+           WHEN jsonb_array_length(COALESCE(system_issues.affected_user_ids, '[]'::jsonb)) >= 50 THEN system_issues.affected_user_ids
+           ELSE COALESCE(system_issues.affected_user_ids, '[]'::jsonb) || to_jsonb(EXCLUDED.user_id)
+         END,
          status = CASE WHEN system_issues.status = 'resolved' THEN 'open' ELSE system_issues.status END
-       RETURNING id, fingerprint, severity, occurrence_count, (xmax = 0) AS is_new
+       RETURNING id, fingerprint, severity, occurrence_count, blocked, module, status AS new_status,
+                 (xmax = 0) AS is_new,
+                 jsonb_array_length(COALESCE(affected_user_ids, '[]'::jsonb)) AS affected_count
      )
-     SELECT up.id, up.fingerprint, up.severity, up.occurrence_count, up.is_new, prev.old_severity
+     SELECT up.id, up.fingerprint, up.severity, up.occurrence_count, up.blocked, up.module,
+            up.new_status, up.is_new, up.affected_count, prev.old_severity, prev.old_status
      FROM up LEFT JOIN prev ON true`,
     [
       fingerprint, input.userId ?? null, platform, (input.device || "").slice(0, 300) || null,
@@ -144,6 +208,7 @@ export async function reportIssue(input: ReportIssueInput): Promise<ReportIssueR
       errorMessage || null, JSON.stringify(input.relatedIds ?? {}),
       severity, !!input.blocked, JSON.stringify((input.steps ?? []).slice(0, 20)),
       input.screenshotUrl ?? null, (input.gpsPermission || "").slice(0, 40) || null,
+      source, (input.suggestedFix || "").slice(0, 500) || null,
     ]
   );
   const row = r.rows[0];
@@ -154,6 +219,10 @@ export async function reportIssue(input: ReportIssueInput): Promise<ReportIssueR
     occurrenceCount: row.occurrence_count,
     isNew: row.is_new === true,
     oldSeverity: (row.old_severity ?? null) as IssueSeverity | null,
+    distinctUsers: row.affected_count ?? 0,
+    reopened: row.old_status === "resolved" && row.new_status === "open",
+    module: row.module as string,
+    blocked: row.blocked === true,
   };
 }
 
@@ -179,7 +248,10 @@ export async function listIssues(filter: IssueFilter = {}): Promise<any[]> {
   const r = await pool.query(
     `SELECT id, fingerprint, user_id, platform, device, app_version, route, module,
             attempted_action, error_message, related_ids, severity, blocked, steps,
-            screenshot_url, gps_permission, occurrence_count, first_seen, last_seen, status
+            screenshot_url, gps_permission, occurrence_count, first_seen, last_seen, status,
+            source, suggested_fix, affected_user_ids,
+            jsonb_array_length(COALESCE(affected_user_ids, '[]'::jsonb)) AS affected_count,
+            ai_diagnosis, ai_diagnosed_at
      FROM system_issues
      ${where}
      ORDER BY

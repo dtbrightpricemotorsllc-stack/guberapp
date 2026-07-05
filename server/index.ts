@@ -251,6 +251,12 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_system_issues_severity ON system_issues (severity);
     CREATE INDEX IF NOT EXISTS idx_system_issues_last_seen ON system_issues (last_seen DESC);
     CREATE INDEX IF NOT EXISTS idx_system_issues_module ON system_issues (module);
+    -- 24/7 Smart Monitoring columns (prod has no db:push — self-heal here, idempotent)
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS affected_user_ids JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'user_event';
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS suggested_fix TEXT;
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS ai_diagnosis JSONB;
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS ai_diagnosed_at TIMESTAMP;
   `).catch(e => console.error("[migration] system_issues table setup error:", e));
 
   await pool.query(`

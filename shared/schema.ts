@@ -2905,6 +2905,12 @@ export const systemIssues = pgTable("system_issues", {
   firstSeen:       timestamp("first_seen").defaultNow(),
   lastSeen:        timestamp("last_seen").defaultNow(),
   status:          text("status").default("open"),         // open | ack | resolved
+  // ── 24/7 Smart Monitoring additions ──
+  affectedUserIds: jsonb("affected_user_ids").$type<number[]>().default([]), // distinct users hit (capped)
+  source:          text("source").default("user_event"),   // user_event | health_probe
+  suggestedFix:    text("suggested_fix"),                   // static remediation hint (self-healing prep)
+  aiDiagnosis:     jsonb("ai_diagnosis").$type<Record<string, string>>(), // { whatBroke, whereBroke, whoAffected, likelyCause, suggestedFix, urgency }
+  aiDiagnosedAt:   timestamp("ai_diagnosed_at"),            // set atomically BEFORE the OpenAI call — guarantees once-per-fingerprint
 });
 export const insertSystemIssueSchema = createInsertSchema(systemIssues).omit({
   id: true, fingerprint: true, severity: true, occurrenceCount: true,
