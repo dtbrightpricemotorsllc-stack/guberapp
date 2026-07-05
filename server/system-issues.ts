@@ -19,7 +19,7 @@ export type IssueStatus = "open" | "ack" | "resolved";
 const KNOWN_MODULES = new Set([
   "payment", "wallet", "login", "signup", "upload", "gps", "map", "studio",
   "network", "client", "job", "marketplace", "verify_inspect", "load_board",
-  "push", "profile", "general",
+  "push", "profile", "voice", "general",
 ]);
 
 // Money / access flows — a failure here that blocks the user is CRITICAL.
@@ -382,6 +382,7 @@ const MONITORING_MODULE_WORDS: Array<[string, string]> = [
   ["marketplace", "marketplace"],
   ["notifications", "push"], ["notification", "push"], ["push", "push"],
   ["jobs", "job"], ["job", "job"],
+  ["voice", "voice"], ["speech", "voice"], ["talk", "voice"], ["mic", "voice"], ["microphone", "voice"], ["jac voice", "voice"],
   ["profile", "profile"],
 ];
 

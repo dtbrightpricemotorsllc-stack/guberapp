@@ -51,6 +51,8 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
+import { verifyJacVoiceToken } from "./jac-voice-token";
+import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion } from "./jac-convai";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
 import {
@@ -16745,6 +16747,24 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         return res.status(400).json({ message: "No valid messages provided" });
       }
 
+      const parsed = await runGuberAssistBrain(sessionUser, sanitized, !!voiceMode);
+      res.json({ ...parsed, latencyMs: Date.now() - _assistStart });
+    } catch (err: any) {
+      console.error(`[GUBER] guber-assist error after ${Date.now() - _assistStart}ms:`, err.message);
+      res.status(500).json({ message: "Assistant unavailable, please try again." });
+    }
+  });
+
+  // JAC's single brain. Called by /api/ai/guber-assist (session-authed, web/native
+  // text) AND by the ElevenLabs custom-LLM adapter below — one JAC everywhere, no
+  // drift. Returns the structured reply; callers add latencyMs / choose transport.
+  async function runGuberAssistBrain(
+    sessionUser: any,
+    sanitized: Array<{ role: "user" | "assistant"; content: string }>,
+    voiceMode: boolean,
+  ): Promise<{ reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; feedbackDraft?: any; dd?: any }> {
+    const _brainStart = Date.now();
+
       // ── Deterministic short-circuit for voice-tech meta questions ──────────
       // LLMs are unreliable at consistently disclosing this even with strong
       // system-prompt instructions (they treat it as "internal architecture"
@@ -16756,16 +16776,14 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         /(are you|do you).{0,15}(connected to|use|using).{0,20}(voice engine|tts engine|text.?to.?speech engine)/,
       ];
       if (VOICE_TECH_PATTERNS.some((p) => p.test(lastUserMsg))) {
-        const assistMsElapsed = Date.now() - _assistStart;
-        return res.json({
+        return {
           reply: "Yes — my voice is powered by ElevenLabs' natural AI voice engine, so I sound as human as possible. If you can't hear me, check your device volume or browser sound settings.",
           confidence: "high",
           route: null,
           actions: [],
           options: [],
           feedbackDraft: null,
-          latencyMs: assistMsElapsed,
-        });
+        };
       }
 
       // ── Admin System Guardian: answer monitoring questions directly (no LLM cost) ──
@@ -16773,15 +16791,14 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         try {
           const _monAns = await tryAdminMonitoringAnswer(lastUserMsg);
           if (_monAns) {
-            return res.json({
+            return {
               reply: _monAns,
               confidence: "high",
               route: null,
               actions: [],
               options: [],
               feedbackDraft: null,
-              latencyMs: Date.now() - _assistStart,
-            });
+            };
           }
         } catch { /* fall through to normal assist flow */ }
       }
@@ -16791,17 +16808,16 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
       // earning plan directly (no LLM cost) when the user states a money goal.
       if (hasDDIntentServer(lastUserMsg)) {
         try {
-          const dd = await buildDDPlan(req.session.userId!, lastUserMsg, null, null);
-          return res.json({
+          const dd = await buildDDPlan(sessionUser.id, lastUserMsg, null, null);
+          return {
             reply: dd.reply,
             confidence: "high",
             route: null,
             actions: (dd.actions ?? []).slice(0, 4),
             options: [],
             feedbackDraft: null,
-            latencyMs: Date.now() - _assistStart,
             dd,
-          });
+          };
         } catch (e: any) {
           console.error("[guber-assist dd]", e?.message);
           /* fall through to normal assist flow */
@@ -17056,7 +17072,7 @@ CRITICAL — respond with JSON ONLY, no other text:
           ...sanitized,
         ],
       });
-      const assistMs = Date.now() - _assistStart;
+      const assistMs = Date.now() - _brainStart;
       console.log(`[JAC assist] ${assistMs}ms | voiceMode=${!!voiceMode} | user ${sessionUser.id}`);
 
       const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -17081,10 +17097,62 @@ CRITICAL — respond with JSON ONLY, no other text:
       } catch {
         if (rawContent) parsed.reply = rawContent;
       }
-      res.json({ ...parsed, latencyMs: assistMs });
+      return parsed;
+  }
+
+  // ── JAC ⇄ ElevenLabs Conversational AI custom-LLM adapter ─────────────────
+  // ElevenLabs points here as its "LLM". We run JAC's OWN brain and stream the
+  // reply back as OpenAI chat.completion.chunk SSE, so voice on every platform
+  // is the same JAC. Auth = per-conversation HMAC identity token (userId derived
+  // ONLY from the token, never from the model/agent) + optional shared-secret
+  // header. Inert unless a valid token is minted; client is gated on voice_pipeline_v2.
+  app.post("/api/jac/convai/llm", async (req: Request, res: Response) => {
+    try {
+      const cfgSecret = process.env.JAC_CONVAI_SHARED_SECRET;
+      if (cfgSecret) {
+        const provided = req.headers["x-guber-convai-secret"];
+        if (provided !== cfgSecret) {
+          return res.status(401).json({ error: { message: "unauthorized", type: "invalid_request_error" } });
+        }
+      }
+
+      const rawToken = resolveVoiceToken(req);
+      const claims = rawToken ? verifyJacVoiceToken(rawToken) : null;
+      if (!claims) {
+        return res.status(401).json({ error: { message: "invalid or missing voice token", type: "invalid_request_error" } });
+      }
+      if (claims.userId == null) {
+        // Anonymous onboarding voice is a later phase; staging is authed-only.
+        return res.status(401).json({ error: { message: "authentication required", type: "invalid_request_error" } });
+      }
+      const user = await storage.getUser(claims.userId);
+      if (!user) {
+        return res.status(401).json({ error: { message: "user not found", type: "invalid_request_error" } });
+      }
+
+      const body: any = req.body ?? {};
+      const model = typeof body.model === "string" && body.model ? body.model : "gpt-4.1-mini";
+      const stream = body.stream !== false; // ElevenLabs streams by default
+      const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
+      if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
+
+      // voiceMode = true → brain keeps replies short + spoken-friendly.
+      const result = await runGuberAssistBrain(user, sanitized, true);
+      const content = (result?.reply || "Sorry, I didn't catch that — could you say that again?").toString();
+      const id = newCompletionId();
+
+      if (stream) {
+        writeOpenAiStream(res, { id, model, content });
+      } else {
+        res.json(buildNonStreamCompletion({ id, model, content }));
+      }
     } catch (err: any) {
-      console.error(`[GUBER] guber-assist error after ${Date.now() - _assistStart}ms:`, err.message);
-      res.status(500).json({ message: "Assistant unavailable, please try again." });
+      console.error("[jac/convai/llm]", err?.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: { message: "adapter error", type: "server_error" } });
+      } else {
+        try { res.end(); } catch { /* socket already closed */ }
+      }
     }
   });
 
