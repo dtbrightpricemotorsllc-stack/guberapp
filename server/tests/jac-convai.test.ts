@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   sanitizeAssistMessages,
   resolveVoiceToken,
@@ -7,6 +7,8 @@ import {
   buildStreamChunk,
   buildNonStreamCompletion,
   writeOpenAiStream,
+  checkConvaiRateLimit,
+  __resetConvaiRateLimit,
 } from "../jac-convai";
 
 describe("jac-convai adapter helpers", () => {
@@ -82,5 +84,50 @@ describe("jac-convai adapter helpers", () => {
     expect(parsed[0].choices[0].delta.role).toBe("assistant");
     expect(parsed[1].choices[0].delta.content).toBe("Hello there");
     expect(parsed[2].choices[0].finish_reason).toBe("stop");
+  });
+});
+
+describe("checkConvaiRateLimit (adapter cost guard)", () => {
+  beforeEach(() => __resetConvaiRateLimit());
+
+  it("allows a normal conversation cadence up to the per-cid cap", () => {
+    const now = 1_000_000;
+    for (let i = 0; i < 40; i++) {
+      expect(checkConvaiRateLimit(1, "cidA", now + i * 100).ok).toBe(true);
+    }
+  });
+
+  it("429s a single conversation that exceeds its per-cid window", () => {
+    const now = 1_000_000;
+    for (let i = 0; i < 40; i++) checkConvaiRateLimit(1, "cidA", now);
+    const blocked = checkConvaiRateLimit(1, "cidA", now);
+    expect(blocked.ok).toBe(false);
+    expect(blocked.scope).toBe("cid");
+    expect(blocked.retryAfterMs).toBeGreaterThan(0);
+  });
+
+  it("enforces a per-user cap across multiple conversations", () => {
+    const now = 1_000_000;
+    // 3 cids * 40 hits = 120 user hits, each cid staying under its own cap.
+    for (let c = 0; c < 3; c++) {
+      for (let i = 0; i < 40; i++) checkConvaiRateLimit(7, `cid${c}`, now);
+    }
+    const blocked = checkConvaiRateLimit(7, "cid-new", now);
+    expect(blocked.ok).toBe(false);
+    expect(blocked.scope).toBe("user");
+  });
+
+  it("slides the window: hits older than 60s are forgotten", () => {
+    const now = 1_000_000;
+    for (let i = 0; i < 40; i++) checkConvaiRateLimit(2, "cidX", now);
+    expect(checkConvaiRateLimit(2, "cidX", now).ok).toBe(false);
+    expect(checkConvaiRateLimit(2, "cidX", now + 61_000).ok).toBe(true);
+  });
+
+  it("isolates different users", () => {
+    const now = 1_000_000;
+    for (let i = 0; i < 40; i++) checkConvaiRateLimit(1, "cid", now);
+    expect(checkConvaiRateLimit(1, "cid", now).ok).toBe(false);
+    expect(checkConvaiRateLimit(2, "cid", now).ok).toBe(true);
   });
 });

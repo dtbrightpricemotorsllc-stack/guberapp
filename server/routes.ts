@@ -51,8 +51,8 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
-import { verifyJacVoiceToken } from "./jac-voice-token";
-import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion } from "./jac-convai";
+import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
+import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
 import {
@@ -17100,6 +17100,58 @@ CRITICAL — respond with JSON ONLY, no other text:
       return parsed;
   }
 
+  // ── JAC voice session mint (ElevenLabs Conversational AI) ─────────────────
+  // Authenticated + voice_pipeline_v2-gated. Returns a short-lived signed URL
+  // for the PRIVATE ElevenLabs agent PLUS a per-conversation HMAC identity token
+  // the client passes as the SECRET dynamic variable `secret__jac_voice_token`.
+  // ElevenLabs forwards that to our adapter as the x-jac-voice-token header
+  // (never to the model). The ElevenLabs API key stays server-side. Because the
+  // flag defaults OFF, this returns 403 to everyone in prod → pipeline is inert.
+  app.post("/api/jac/convai/session", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "unauthorized" });
+
+      const { isFeatureEnabledFor } = await import("./feature-flags.js");
+      const enabled = await isFeatureEnabledFor("voice_pipeline_v2", { id: user.id, role: user.role });
+      if (!enabled) return res.status(403).json({ message: "voice pipeline not enabled for this account" });
+
+      const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
+
+      const platformRaw = req.body?.platform;
+      const platform: "web" | "ios" | "android" =
+        platformRaw === "ios" ? "ios" : platformRaw === "android" ? "android" : "web";
+      const role: "admin" | "user" = user.role === "admin" ? "admin" : "user";
+      const voiceToken = signJacVoiceToken({ userId: user.id, role, platform });
+
+      // Private agent → mint a short-lived signed URL server-side.
+      const signedRes = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+        { headers: { "xi-api-key": apiKey } },
+      );
+      if (!signedRes.ok) {
+        console.error("[jac/convai/session] signed-url failed", signedRes.status);
+        return res.status(502).json({ message: "voice provider unavailable" });
+      }
+      const signedJson: any = await signedRes.json().catch(() => ({}));
+      if (!signedJson?.signed_url) {
+        return res.status(502).json({ message: "voice provider returned no url" });
+      }
+
+      return res.json({
+        agentId,
+        signedUrl: signedJson.signed_url,
+        voiceToken,
+        dynamicVariableName: "secret__jac_voice_token",
+      });
+    } catch (err: any) {
+      console.error("[jac/convai/session]", err?.message);
+      return res.status(500).json({ message: "session error" });
+    }
+  });
+
   // ── JAC ⇄ ElevenLabs Conversational AI custom-LLM adapter ─────────────────
   // ElevenLabs points here as its "LLM". We run JAC's OWN brain and stream the
   // reply back as OpenAI chat.completion.chunk SSE, so voice on every platform
@@ -17128,6 +17180,14 @@ CRITICAL — respond with JSON ONLY, no other text:
       const user = await storage.getUser(claims.userId);
       if (!user) {
         return res.status(401).json({ error: { message: "user not found", type: "invalid_request_error" } });
+      }
+
+      // Per-conversation + per-user sliding-window cap: a minted token lives in
+      // the browser for up to 2h, so bound replay to keep LLM/voice spend safe.
+      const rl = checkConvaiRateLimit(claims.userId, claims.cid);
+      if (!rl.ok) {
+        res.setHeader("Retry-After", Math.ceil((rl.retryAfterMs ?? 60000) / 1000).toString());
+        return res.status(429).json({ error: { message: "rate limit exceeded", type: "rate_limit_error" } });
       }
 
       const body: any = req.body ?? {};

@@ -26,6 +26,7 @@
     "@capacitor/preferences": "^7.0.4",
     "@capacitor/push-notifications": "^7.0.6",
     "@capacitor/status-bar": "^8.0.2",
+    "@elevenlabs/react": "^1.9.0",
     "@fal-ai/client": "^1.10.1",
     "@gltf-transform/core": "^4.4.0",
     "@gltf-transform/extensions": "^4.4.0",

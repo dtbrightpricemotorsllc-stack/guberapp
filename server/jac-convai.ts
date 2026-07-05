@@ -131,3 +131,78 @@ export function writeOpenAiStream(res: SseSink, input: { id: string; model: stri
   res.write("data: [DONE]\n\n");
   res.end();
 }
+
+/**
+ * In-memory per-conversation + per-user rate limit for the custom-LLM adapter.
+ *
+ * A minted voice token lives in the browser for up to 2h, so a leaked token
+ * could be replayed to burn OpenAI/ElevenLabs cost. We cap requests per
+ * conversation id AND per user id in a sliding 60s window. This is a
+ * single-process guard (fine for our single Autoscale instance today); if we
+ * ever run multiple instances a shared store (e.g. Redis) would be required.
+ */
+export const RATE_WINDOW_MS = 60_000;
+const RATE_CID_LIMIT = 40; // sustained ~1 utterance/sec per conversation is ample for speech
+const RATE_USER_LIMIT = 120; // across all of a user's concurrent conversations
+
+const cidHits = new Map<string, number[]>();
+const userHits = new Map<string, number[]>();
+let rateCallsSinceSweep = 0;
+
+function pruneWindow(arr: number[], now: number): number[] {
+  const cutoff = now - RATE_WINDOW_MS;
+  let i = 0;
+  while (i < arr.length && arr[i] <= cutoff) i++;
+  return i > 0 ? arr.slice(i) : arr;
+}
+
+function sweepRateMaps(now: number): void {
+  for (const [k, arr] of Array.from(cidHits.entries())) {
+    const p = pruneWindow(arr, now);
+    if (p.length === 0) cidHits.delete(k);
+    else cidHits.set(k, p);
+  }
+  for (const [k, arr] of Array.from(userHits.entries())) {
+    const p = pruneWindow(arr, now);
+    if (p.length === 0) userHits.delete(k);
+    else userHits.set(k, p);
+  }
+}
+
+export interface ConvaiRateResult {
+  ok: boolean;
+  scope?: "cid" | "user";
+  retryAfterMs?: number;
+}
+
+export function checkConvaiRateLimit(userId: number, cid: string, now: number = Date.now()): ConvaiRateResult {
+  if (++rateCallsSinceSweep >= 500) {
+    rateCallsSinceSweep = 0;
+    sweepRateMaps(now);
+  }
+  const cidKey = `${userId}:${cid}`;
+  const userKey = String(userId);
+  const cidArr = pruneWindow(cidHits.get(cidKey) ?? [], now);
+  const userArr = pruneWindow(userHits.get(userKey) ?? [], now);
+
+  if (cidArr.length >= RATE_CID_LIMIT) {
+    cidHits.set(cidKey, cidArr);
+    return { ok: false, scope: "cid", retryAfterMs: RATE_WINDOW_MS - (now - cidArr[0]) };
+  }
+  if (userArr.length >= RATE_USER_LIMIT) {
+    userHits.set(userKey, userArr);
+    return { ok: false, scope: "user", retryAfterMs: RATE_WINDOW_MS - (now - userArr[0]) };
+  }
+  cidArr.push(now);
+  userArr.push(now);
+  cidHits.set(cidKey, cidArr);
+  userHits.set(userKey, userArr);
+  return { ok: true };
+}
+
+/** Test-only: clear the sliding windows between cases. */
+export function __resetConvaiRateLimit(): void {
+  cidHits.clear();
+  userHits.clear();
+  rateCallsSinceSweep = 0;
+}

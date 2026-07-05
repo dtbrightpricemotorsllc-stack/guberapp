@@ -20,5 +20,13 @@ JAC's brain lives in a single function `runGuberAssistBrain(sessionUser, sanitiz
 ## Cost gate
 ElevenLabs Conversational AI is billed per-minute. Web rollout (Phase 2) and native (Phase 3) require explicit user cost sign-off + spend caps first. The old STT/TTS pipeline must stay intact as a fallback — never delete those routes when rolling out.
 
+## Web client (@elevenlabs/react) gotchas
+- `useConversation()` MUST be rendered inside `<ConversationProvider>` or it throws. The provider's own `useEffect` auto-calls `endSession()` on unmount, so a component-level cleanup effect is redundant — don't add one.
+- Private (non-public) agents connect via `startSession({ signedUrl, dynamicVariables })` — NOT `agentId`. The identity token is passed as `dynamicVariables: { secret__jac_voice_token: <token> }`; the `secret__` prefix is what makes ElevenLabs forward it as an `x-jac-voice-token` header to the adapter instead of injecting it into the prompt.
+- `startSession` returns void (fire-and-forget) in the react hook — do not `await` it; use the `onConnect`/`onError` callbacks for state.
+- Prime mic permission with `getUserMedia({audio:true})` BEFORE `startSession`, but immediately `stream.getTracks().forEach(t=>t.stop())` — the SDK opens its own stream, so the priming stream otherwise leaks and keeps the mic indicator lit for the page lifetime.
+
+**Why:** These are silent-failure / privacy traps, not compile errors — the mic-leak in particular passes review unless you know the SDK opens a second stream.
+
 ## Native
 Custom Capacitor plugins wrapping the ElevenLabs Swift/Android SDKs are built and tested OFF-Replit (Xcode / Android Studio). Web ships first regardless.
