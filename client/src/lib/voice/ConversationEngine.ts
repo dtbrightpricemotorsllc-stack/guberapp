@@ -111,6 +111,14 @@ export class ConversationEngine {
     try {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
       this.audioCtx = new AudioCtxClass();
+      // iOS WebKit can start the context "suspended" if there was any async
+      // gap (e.g. the getUserMedia await above) between the user gesture and
+      // context creation. If we don't resume it here, getByteTimeDomainData
+      // silently returns dead-flat data forever and the VAD never fires —
+      // Live Conversation Mode looks "on" but never hears anything on iOS.
+      if (this.audioCtx.state === "suspended") {
+        try { await this.audioCtx.resume(); } catch { /* best effort */ }
+      }
       const source = this.audioCtx.createMediaStreamSource(stream);
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = 512;
@@ -179,6 +187,14 @@ export class ConversationEngine {
   }
 
   private tick(): void {
+    // Safety net: iOS can suspend the AudioContext again if the tab/app
+    // briefly backgrounds (app switcher, incoming call, lock screen) even
+    // after our initial resume() in start(). Without this the VAD would go
+    // permanently silent until the user manually toggles the mode off/on.
+    if (this.audioCtx && this.audioCtx.state === "suspended") {
+      this.audioCtx.resume().catch(() => {});
+    }
+
     const rms = this.getRms();
     const now = Date.now();
 
