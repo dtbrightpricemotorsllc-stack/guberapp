@@ -31,13 +31,18 @@ export interface ConversationEngineCallbacks {
 // not network calls, so they cost nothing — they just decide when to start/
 // stop recording and when to treat playback-time noise as an interruption.
 const VAD_CHECK_INTERVAL_MS = 60;
-const SPEECH_RMS_THRESHOLD = 0.02; // while listening for a fresh utterance
+const SPEECH_RMS_THRESHOLD = 0.016; // while listening for a fresh utterance (slightly more sensitive so trailing-off words at end of a sentence still register as speech)
 const INTERRUPT_RMS_THRESHOLD = 0.045; // higher bar while JAC is speaking (avoid self-echo false triggers)
 const SPEECH_ONSET_MS = 150; // sustained volume needed before we call it "speech started"
 const INTERRUPT_SUSTAIN_MS = 220; // sustained volume needed before we call it a real interruption
-const SILENCE_END_MS = 700; // silence needed before we finalize an utterance
+// Silence needed before we finalize an utterance. 700ms was too aggressive —
+// it cut people off during completely normal mid-sentence pauses (taking a
+// breath, thinking of a word, "um..."). 1600ms gives people room to breathe
+// and think without JAC yet cutting them off, while still feeling responsive
+// once they're actually done.
+const SILENCE_END_MS = 1600;
 const PLAYBACK_IGNORE_MS = 250; // ignore VAD right as TTS playback starts (ramp-up/echo)
-const MAX_UTTERANCE_MS = 20_000;
+const MAX_UTTERANCE_MS = 30_000;
 
 export class ConversationEngine {
   private stream: MediaStream | null = null;
