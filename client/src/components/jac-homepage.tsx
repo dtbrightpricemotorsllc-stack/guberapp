@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
+import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2, Zap } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
 
@@ -195,6 +196,87 @@ export function JacHomepage() {
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
 
+  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
+  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
+  // (no ElevenLabs Conversational Agents / per-minute billing).
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const engineRef = useRef<ConversationEngine | null>(null);
+
+  function getEngine(): ConversationEngine {
+    if (!engineRef.current) {
+      engineRef.current = new ConversationEngine({
+        onUtterance: (text) => { processInput(text); },
+        onStateChange: setLiveState,
+        onError: (reason) => {
+          setLiveMode(false);
+          setLiveState("idle");
+          const sentinel = reason === "mic_denied" ? "__mic_denied__" : "__mic_error__";
+          processInput(sentinel);
+        },
+      });
+    }
+    return engineRef.current;
+  }
+
+  function stopLiveMode() {
+    engineRef.current?.stop();
+    setLiveMode(false);
+    setLiveState("idle");
+  }
+
+  async function toggleLiveMode() {
+    if (liveMode) {
+      stopLiveMode();
+      return;
+    }
+    unlockAudioContext();
+    cancelSpeech();
+    cancelAllJacAudio();
+    if (listening) stopListening();
+    setLiveMode(true);
+    await getEngine().start();
+  }
+
+  // Wrapper around jacSpeak that keeps the live-mode VAD in sync with
+  // playback so it knows when to arm interruption detection and when to
+  // go back to plain listening once JAC finishes talking.
+  const speak = useCallback((text: string) => {
+    if (mutedRef.current) return;
+    const engine = engineRef.current;
+    jacSpeak(text, {
+      muted: mutedRef.current,
+      onStart: () => engine?.notifySpeakingStarted(),
+    }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
+  }, []);
+
+  // Tear down the live mic stream on unmount, tab hide, or app background.
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === "hidden") stopLiveMode();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!(typeof window !== "undefined" && (window as any).Capacitor?.isNativePlatform?.())) return;
+    let handle: any;
+    (async () => {
+      try {
+        const { App: CapApp } = await import("@capacitor/app");
+        handle = CapApp.addListener("appStateChange", ({ isActive }: { isActive: boolean }) => {
+          if (!isActive) stopLiveMode();
+        });
+      } catch {}
+    })();
+    return () => { handle?.then?.((h: any) => h.remove()).catch(() => {}); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { engineRef.current?.stop(); }, []);
+
   // Dismiss float hint after 4s
   useEffect(() => {
     if (!showFloatHint) return;
@@ -216,27 +298,27 @@ export function JacHomepage() {
 
     const currentGreeting = messages[0]?.content ?? GREETING.content;
 
-    function speak() {
+    function speakGreeting() {
       if (greetingSpokenRef.current) return;
       greetingSpokenRef.current = true;
       unlockAudioContext();
-      setTimeout(() => jacSpeak(currentGreeting, { muted: mutedRef.current }), 120);
+      setTimeout(() => speak(currentGreeting), 120);
     }
 
     // Try immediately (works on Capacitor where audio is pre-unlocked)
     const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor;
-    if (isCapacitor) { speak(); return; }
+    if (isCapacitor) { speakGreeting(); return; }
 
     // Web: wait for first gesture then speak once
     const opts = { once: true, passive: true } as const;
     const cleanup = () => {
-      document.removeEventListener("click",      speak, opts);
-      document.removeEventListener("touchstart", speak, opts);
-      document.removeEventListener("keydown",    speak, opts);
+      document.removeEventListener("click",      speakGreeting, opts);
+      document.removeEventListener("touchstart", speakGreeting, opts);
+      document.removeEventListener("keydown",    speakGreeting, opts);
     };
-    document.addEventListener("click",      speak, opts);
-    document.addEventListener("touchstart", speak, opts);
-    document.addEventListener("keydown",    speak, opts);
+    document.addEventListener("click",      speakGreeting, opts);
+    document.addEventListener("touchstart", speakGreeting, opts);
+    document.addEventListener("keydown",    speakGreeting, opts);
     return cleanup;
   }, [mode, messages]);
 
@@ -281,7 +363,7 @@ export function JacHomepage() {
           { label: "Other Android", message: "Other Android" },
         ]},
       ]);
-      if (!muted) jacSpeak("Looks like mic access was blocked. What device are you using?", { muted });
+      if (!muted) speak("Looks like mic access was blocked. What device are you using?");
       return;
     }
     if (
@@ -302,7 +384,7 @@ export function JacHomepage() {
         { role: "user", content: "Yes, send report" },
         { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS },
       ]);
-      if (!muted) jacSpeak(confirmMsg, { muted });
+      if (!muted) speak(confirmMsg);
       fetch("/api/jac/feedback-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -357,7 +439,7 @@ export function JacHomepage() {
 
       const final = [...next, aMsg];
       setMessages(final);
-      if (!muted) jacSpeak(aMsg.content, { muted });
+      if (!muted) speak(aMsg.content);
       try { localStorage.setItem("jac_returning", "1"); } catch {}
 
       await logInteraction(final, {
@@ -391,7 +473,7 @@ export function JacHomepage() {
         updatePendingAction(pa.id, { status: "confirmed" });
         const confirmMsg = "Done — that's submitted. Anything else you need?";
         setMessages(prev => [...prev, { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS }]);
-        if (!muted) jacSpeak(confirmMsg, { muted });
+        if (!muted) speak(confirmMsg);
       } else {
         updatePendingAction(pa.id, { status: "failed", resultMessage: data?.message || "That didn't go through." });
       }
@@ -795,7 +877,36 @@ export function JacHomepage() {
             />
             {micSupported && (
               <button
+                onClick={toggleLiveMode}
+                className={`relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
+                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
+                }`}
+                style={{
+                  background: liveMode
+                    ? liveState === "speaking"
+                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                      : liveState === "recording"
+                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
+                    : "hsl(222 47% 15%)",
+                  color: liveMode ? "white" : "hsl(45 90% 60%)",
+                  boxShadow: liveMode ? "0 0 0 2px hsl(45 100% 55% / 0.3), 0 0 12px hsl(45 100% 55% / 0.4)" : "none",
+                }}
+                data-testid="button-live-conversation"
+                disabled={typing}
+                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
+                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
+              >
+                {liveMode && (liveState === "recording" || liveState === "listening") && (
+                  <span className="absolute inset-0 rounded-xl animate-ping opacity-30" style={{ background: "hsl(45 100% 55%)" }} />
+                )}
+                <Zap className="w-3.5 h-3.5" fill={liveMode ? "currentColor" : "none"} />
+              </button>
+            )}
+            {micSupported && (
+              <button
                 onClick={() => {
+                  if (liveMode) stopLiveMode();
                   if (listening) {
                     stopListening();
                   } else {

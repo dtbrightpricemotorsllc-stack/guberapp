@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -351,6 +354,93 @@ export function GUBERAssistant() {
       doSend(text);
     });
 
+  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
+  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
+  // (no ElevenLabs Conversational Agents / per-minute billing).
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const engineRef = useRef<ConversationEngine | null>(null);
+  const mutedRef = useRef(muted);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+  function getEngine(): ConversationEngine {
+    if (!engineRef.current) {
+      engineRef.current = new ConversationEngine({
+        onUtterance: (text) => {
+          lastInputWasVoiceRef.current = true;
+          doSend(text);
+        },
+        onStateChange: setLiveState,
+        onError: (reason) => {
+          setLiveMode(false);
+          setLiveState("idle");
+          const sentinel = reason === "mic_denied" ? "__mic_denied__" : reason === "unsupported" ? "__mic_error__" : "__mic_error__";
+          doSend(sentinel);
+        },
+      });
+    }
+    return engineRef.current;
+  }
+
+  function stopLiveMode() {
+    engineRef.current?.stop();
+    setLiveMode(false);
+    setLiveState("idle");
+  }
+
+  async function toggleLiveMode() {
+    if (liveMode) {
+      stopLiveMode();
+      return;
+    }
+    unlockAudioContext();
+    cancelSpeech();
+    cancelAllJacAudio();
+    if (listening) stopListening();
+    setLiveMode(true);
+    await getEngine().start();
+  }
+
+  // Wrapper around jacSpeak that keeps the live-mode VAD in sync with
+  // playback so it knows when to arm interruption detection and when to
+  // go back to plain listening once JAC finishes talking.
+  const speak = useCallback((text: string) => {
+    if (mutedRef.current) return;
+    const engine = engineRef.current;
+    jacSpeak(text, {
+      muted: mutedRef.current,
+      onStart: () => engine?.notifySpeakingStarted(),
+    }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
+  }, []);
+
+  // Tear down the live mic stream whenever the assistant sheet closes, the
+  // app is backgrounded (native), or the tab goes hidden (web) — never leave
+  // an open mic stream running unattended.
+  useEffect(() => {
+    if (!s.open) stopLiveMode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.open]);
+
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === "hidden") stopLiveMode();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const handle = CapApp.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive) stopLiveMode();
+    });
+    return () => { handle.then((h) => h.remove()).catch(() => {}); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { engineRef.current?.stop(); }, []);
+
   // Wake word listener — "Hey JAC" opens the panel and starts listening
   useEffect(() => {
     function onWake() {
@@ -397,7 +487,7 @@ export function GUBERAssistant() {
           actions: [{ label: "Continue where I left off", message: "__resume__" }],
         };
         setMessages(prev => [...prev, resumeMsg]);
-        jacSpeak(resumeContent, { muted });
+        speak(resumeContent);
         return;
       }
     }
@@ -405,7 +495,7 @@ export function GUBERAssistant() {
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
       // First-time visitor — speak the greeting immediately
-      setTimeout(() => jacSpeak(DD_GREETING, { muted }), 300);
+      setTimeout(() => speak(DD_GREETING), 300);
       return;
     }
     fetch("/api/jac/updates")
@@ -482,14 +572,18 @@ export function GUBERAssistant() {
         console.log(`[JAC voice] STT→chat-response: ${chatMs}ms (server reported ${data.latencyMs ?? "?"}ms)`);
       }
       if (!muted) {
+        const engine = engineRef.current;
         jacSpeak(msg.content, {
           muted,
-          onStart: timing ? () => {
-            const totalMs = Math.round(performance.now() - timing.start);
-            console.log(`[JAC voice] STT→first-audio: ${totalMs}ms`);
-            voiceTimingRef.current = null;
-          } : undefined,
-        });
+          onStart: () => {
+            engine?.notifySpeakingStarted();
+            if (timing) {
+              const totalMs = Math.round(performance.now() - timing.start);
+              console.log(`[JAC voice] STT→first-audio: ${totalMs}ms`);
+              voiceTimingRef.current = null;
+            }
+          },
+        }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
       } else {
         voiceTimingRef.current = null;
       }
@@ -526,7 +620,7 @@ export function GUBERAssistant() {
         actions: Array.isArray(data.actions) ? data.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
       };
       setMessages((prev) => [...prev, msg]);
-      if (!muted) jacSpeak(msg.content, { muted });
+      speak(msg.content);
 
       if (data.ready && data.route) {
         // Always write the prefill so forms have data whether or not user is logged in
@@ -568,7 +662,7 @@ export function GUBERAssistant() {
             ],
           };
           setMessages(prev => [...prev, savedMsg]);
-          jacSpeak(savedMsg.content, { muted });
+          speak(savedMsg.content);
           return; // do NOT navigate — user isn't logged in
         }
 
@@ -619,7 +713,7 @@ export function GUBERAssistant() {
         actions: (data.actions ?? []).slice(0, 4),
       };
       setMessages(prev => [...prev, msg]);
-      if (!muted) jacSpeak(msg.content, { muted });
+      speak(msg.content);
     },
     onError: () => {
       setMessages(prev => [...prev, { role: "assistant", content: "I couldn't pull up options right now — please try again." }]);
@@ -674,7 +768,7 @@ export function GUBERAssistant() {
         guide = "Microphone access was denied. Click the 🔒 lock icon next to the address bar → Microphone → Allow, then try again.";
       }
       setMessages((prev) => [...prev, { role: "assistant", content: guide, actions: micActions }]);
-      jacSpeak(guide, { muted });
+      speak(guide);
       return;
     }
     if (text === "__submit_feedback_report__") {
@@ -686,7 +780,7 @@ export function GUBERAssistant() {
         { role: "user", content: "Yes, send report" },
         { role: "assistant", content: confirmMsg },
       ]);
-      jacSpeak(confirmMsg, { muted });
+      speak(confirmMsg);
       fetch("/api/jac/feedback-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -705,13 +799,13 @@ export function GUBERAssistant() {
     if (text === "__whisper_empty__") {
       const msg = "I didn't catch that — tap the mic and try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
-      jacSpeak(msg, { muted });
+      speak(msg);
       return;
     }
     if (text === "__whisper_error__" || text === "__mic_error__") {
       const msg = "Something went wrong with voice — please try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
-      jacSpeak(msg, { muted });
+      speak(msg);
       return;
     }
     unlockAudioContext();
@@ -1182,11 +1276,45 @@ export function GUBERAssistant() {
               disabled={anyPending}
             />
 
-            {/* Mic button */}
+            {/* Live Conversation Mode toggle — always-listening, interruptible */}
+            {micSupported && (
+              <button
+                onClick={toggleLiveMode}
+                className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
+                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
+                }`}
+                style={{
+                  background: liveMode
+                    ? liveState === "speaking"
+                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                      : liveState === "recording"
+                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
+                    : "linear-gradient(135deg, hsl(222 47% 20%), hsl(222 47% 12%))",
+                  color: liveMode ? "white" : "hsl(45 90% 60%)",
+                  boxShadow: liveMode
+                    ? "0 0 0 3px hsl(45 100% 55% / 0.3), 0 0 16px hsl(45 100% 55% / 0.45)"
+                    : "none",
+                }}
+                data-testid="button-live-conversation"
+                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
+                disabled={anyPending}
+                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
+              >
+                {liveMode && (liveState === "recording" || liveState === "listening") && (
+                  <span className="absolute inset-0 rounded-full animate-ping opacity-30"
+                    style={{ background: "hsl(45 100% 55%)" }} />
+                )}
+                <Zap className="w-5 h-5" fill={liveMode ? "currentColor" : "none"} />
+              </button>
+            )}
+
+            {/* Mic button (push-to-talk) */}
             {micSupported && (
               <button
                 onClick={() => {
                   unlockAudioContext();
+                  if (liveMode) stopLiveMode();
                   if (listening) {
                     stopListening();
                   } else {

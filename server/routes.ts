@@ -15914,6 +15914,27 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       }
       if (!sanitized.length) return res.status(400).json({ message: "No valid messages" });
 
+      // ── Deterministic short-circuit for voice-tech meta questions ──────────
+      // Same rationale as /api/ai/guber-assist: the LLM is unreliable about
+      // consistently disclosing this even with strong system-prompt
+      // instructions, so answer directly instead of risking a hallucinated
+      // or wishy-washy denial (this endpoint serves guests too).
+      const _onboardLastUserMsg = [...sanitized].reverse().find((m) => m.role === "user")?.content?.toLowerCase() ?? "";
+      const _ONBOARD_VOICE_TECH_PATTERNS = [
+        /\b(11\s*labs|eleven\s*labs|elevenlabs)\b/,
+        /what\s+(powers|is)\s+your\s+voice/,
+        /(are you|do you).{0,15}(connected to|use|using|have).{0,25}(voice engine|tts engine|text.?to.?speech engine|voice tech)/,
+      ];
+      if (_ONBOARD_VOICE_TECH_PATTERNS.some((p) => p.test(_onboardLastUserMsg))) {
+        return res.json({
+          reply: "Yes — my voice is powered by ElevenLabs' natural AI voice engine, so I sound as human as possible. If you can't hear me, check your device volume or browser sound settings.",
+          confidence: "high",
+          route: null,
+          actions: [],
+          options: [],
+        });
+      }
+
       // ── Inject user memory + live context for logged-in users ────────────
       const onboardUserId = (req.session as any)?.userId ?? null;
       let userContextSection = "";

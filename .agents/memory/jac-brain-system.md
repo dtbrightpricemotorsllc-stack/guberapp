@@ -30,3 +30,8 @@ The word "guber" appears in many KB question_patterns, so it often catches gener
 ## Seed guard
 `WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE created_by = 'system' LIMIT 1)` — 20 KB entries seeded once.
 Same for intents: `WHERE NOT EXISTS (SELECT 1 FROM jac_intents LIMIT 1)` — 10 intents seeded once.
+
+## Two separate JAC chat surfaces — fix both or one still misbehaves
+`client/src/components/guber-assistant.tsx` (logged-in sheet, posts to `/api/ai/guber-assist`, requires auth) and `client/src/components/jac-homepage.tsx` (guest widget, posts to `/api/jac/onboard`, no auth) are independent implementations with their own mic/TTS wiring and their own system prompts.
+**Why:** they were built at different times and never unified; a prompt/behavior fix (e.g. a deterministic short-circuit for a meta-question) applied to one endpoint silently leaves the other broken, and e2e tests against only one surface will pass while guests see the bug.
+**How to apply:** any JAC behavior/voice-tech fix, or new capability like an always-listening conversation mode, must be applied to BOTH `server/routes.ts` handlers (`/api/ai/guber-assist` and `/api/jac/onboard`) and BOTH client components, then e2e-tested against both the guest homepage flow and the logged-in assistant sheet.

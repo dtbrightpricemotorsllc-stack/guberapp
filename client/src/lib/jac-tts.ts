@@ -59,12 +59,31 @@ function detectCacheSlug(text: string): string | null {
 
 let _currentAudio: HTMLAudioElement | null = null;
 let _audioUnlocked = false;
+let _currentAbort: AbortController | null = null;
 
 export function cancelElevenLabsAudio() {
+  if (_currentAbort) {
+    try { _currentAbort.abort(); } catch {}
+    _currentAbort = null;
+  }
   if (_currentAudio) {
     _currentAudio.pause();
     _currentAudio.src = "";
     _currentAudio = null;
+  }
+}
+
+/**
+ * True while JAC is actively producing audible speech (ElevenLabs audio
+ * element playing, or Web Speech synthesis speaking/pending). Used by the
+ * live-conversation engine to know when interruption should be armed.
+ */
+export function isJacSpeaking(): boolean {
+  if (_currentAudio && !_currentAudio.paused) return true;
+  try {
+    return typeof window !== "undefined" && !!window.speechSynthesis?.speaking;
+  } catch {
+    return false;
   }
 }
 
@@ -160,18 +179,19 @@ export async function jacSpeak(
     if (played) return;
   }
 
-  // ── Tier 2: live ElevenLabs via backend proxy (web + Android only) ────────
-  // iOS WKWebView has latency/playback issues with streamed audio, so iOS
-  // goes straight to the native Web Speech fallback.
-  if (!isIOS) {
-    const played = await tryLiveElevenLabs(text, opts.onStart);
-    if (played) return;
-  }
+  // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────
+  // iOS WKWebView's MediaSource/streaming support is unreliable, but plain
+  // fetch → blob → <audio> playback works fine there, so iOS uses the
+  // buffered path (no streaming) while other platforms get progressive
+  // streaming playback for lower latency.
+  const played = isIOS
+    ? await tryLiveElevenLabsBuffered(text, opts.onStart)
+    : await tryLiveElevenLabs(text, opts.onStart);
+  if (played) return;
 
   // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
-  if (isIOS) return;
   opts.onFallback?.();
-  reportFallback(isIOS ? "ios_native" : "live_elevenlabs_failed");
+  reportFallback(isIOS ? "ios_elevenlabs_failed" : "live_elevenlabs_failed");
   webSpeechFallback(text, opts.onStart);
 }
 
@@ -201,12 +221,15 @@ async function tryLiveElevenLabs(text: string, onStart?: () => void): Promise<bo
 
 /** Progressive playback via MediaSource Extensions — audio starts as soon as the first chunk lands. */
 async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): Promise<boolean> {
+  const controller = new AbortController();
+  _currentAbort = controller;
   let res: Response;
   try {
     res = await fetch("/api/jac/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
+      signal: controller.signal,
     });
   } catch {
     return false;
@@ -232,6 +255,7 @@ async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): P
     const cleanup = () => {
       URL.revokeObjectURL(objectUrl);
       if (_currentAudio === audio) _currentAudio = null;
+      if (_currentAbort === controller) _currentAbort = null;
     };
 
     audio.onplay = () => { if (!started) { started = true; onStart?.(); } };
@@ -295,14 +319,18 @@ async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): P
   });
 }
 
-/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails. */
+/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails, and on iOS. */
 async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Promise<boolean> {
+  const controller = new AbortController();
+  _currentAbort = controller;
   try {
     const res = await fetch("/api/jac/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
+      signal: controller.signal,
     });
+    if (_currentAbort === controller) _currentAbort = null;
     if (!res.ok) return false;
     const blob = await res.blob();
     if (!blob.size) return false;

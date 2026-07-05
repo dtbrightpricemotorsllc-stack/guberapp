@@ -1,45 +1,8 @@
 import type { STTProvider, STTCallback } from "./VoiceProvider";
+import { getBestMimeType, transcribeBlob, isSttSentinel } from "./sttUtils";
 
 /** Max recording duration before auto-stop (ms) */
 const MAX_RECORD_MS = 30_000;
-
-/**
- * Returns the best MIME type for the current platform, or "" if none of the
- * known types are supported (caller should create MediaRecorder without
- * specifying a mimeType and let the browser choose).
- *
- * Priority order:
- *  1. audio/webm;codecs=opus  — Chrome / Android / desktop
- *  2. audio/webm               — Chrome fallback
- *  3. audio/mp4;codecs=mp4a.40.2 — iOS WKWebView (Capacitor)
- *  4. audio/mp4                — iOS fallback
- *  5. audio/ogg;codecs=opus   — Firefox
- */
-function getBestMimeType(): string {
-  if (typeof MediaRecorder === "undefined") return "";
-  const types = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4;codecs=mp4a.40.2",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
-  for (const t of types) {
-    if (MediaRecorder.isTypeSupported(t)) return t;
-  }
-  return "";
-}
-
-/** Safe base64 encode that works on large buffers (no reduce/call-stack risk). */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const CHUNK = 8192;
-  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
 
 export class WhisperProvider implements STTProvider {
   readonly name = "whisper";
@@ -176,30 +139,12 @@ export class WhisperProvider implements STTProvider {
 
     try {
       const blob = new Blob(chunks, { type: mimeType });
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64 = arrayBufferToBase64(arrayBuffer);
-
-      const res = await fetch("/api/jac/stt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audioBase64: base64, mimeType }),
-      });
-
-      if (!res.ok) {
-        console.warn("[WhisperProvider] STT server error", res.status);
-        onResult("__whisper_error__");
-        return;
-      }
-
-      const data = await res.json() as { text?: string };
-      const text = (data.text ?? "").trim();
-      if (text) onResult(text);
-      else onResult("__whisper_empty__");
-    } catch (e) {
-      console.error("[WhisperProvider] transcription error", e);
-      onResult("__whisper_error__");
+      const result = await transcribeBlob(blob, mimeType);
+      onResult(result);
     } finally {
       this._transcribing = false;
     }
   }
 }
+
+export { isSttSentinel };
