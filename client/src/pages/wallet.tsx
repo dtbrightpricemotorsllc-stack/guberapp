@@ -147,7 +147,7 @@ export default function WalletPage() {
     cashoutMinimum: number;
     creditsPerDollar: number;
   }>({
-    queryKey: ["/api/credits/balance"],
+    queryKey: ["/api/growth-tasks/my-balance"],
     enabled: !!user,
     staleTime: 30_000,
   });
@@ -323,7 +323,7 @@ export default function WalletPage() {
         )}
 
         {/* GUBER Credits */}
-        {creditsData && (
+        {creditsData && typeof creditsData.growthCredits === "number" && (
           <Link href="/credits">
             <div
               className="mb-4 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-primary/[0.03] p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-opacity"
@@ -347,12 +347,12 @@ export default function WalletPage() {
                 <div className="mt-1.5 h-1.5 rounded-full bg-primary/10 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary/60 transition-all duration-700"
-                    style={{ width: `${Math.min(100, Math.round((creditsData.growthCredits / creditsData.cashoutMinimum) * 100))}%` }}
+                    style={{ width: `${Math.min(100, Math.round((creditsData.growthCredits / (creditsData.cashoutMinimum || 1)) * 100))}%` }}
                     data-testid="bar-credits-progress"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1" data-testid="text-credits-progress">
-                  {creditsData.growthCredits.toLocaleString()} / {creditsData.cashoutMinimum.toLocaleString()} to cash out
+                  {creditsData.growthCredits.toLocaleString()} / {(creditsData.cashoutMinimum ?? 0).toLocaleString()} to cash out
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
