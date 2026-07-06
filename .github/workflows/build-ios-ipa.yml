@@ -32,6 +32,13 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
+      - name: Compute build number
+        id: buildnum
+        run: |
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
+          echo "Using CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+          echo "number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+
       - name: Select Xcode 26
         run: |
           sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
@@ -79,6 +86,7 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          BUILD_NUMBER: ${{ steps.buildnum.outputs.number }}
         run: |
           xcodebuild archive \
             -workspace       ios/App/App.xcworkspace \
@@ -92,6 +100,7 @@ jobs:
             -authenticationKeyID       "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             -authenticationKeyPath     /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             CODE_SIGN_STYLE=Automatic \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=7MC93QFW6Q \
