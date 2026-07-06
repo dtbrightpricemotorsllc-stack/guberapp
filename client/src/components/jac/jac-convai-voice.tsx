@@ -12,12 +12,69 @@
  * and user sign-off) happens in a later phase. The old STT/TTS pipeline remains
  * the fallback until then.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { apiRequest } from "@/lib/queryClient";
 import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import { Button } from "@/components/ui/button";
 import { Mic, PhoneOff, Loader2 } from "lucide-react";
+
+/**
+ * Screen Wake Lock helper. Audio-only calls don't count as "user activity" to
+ * mobile browsers, so without this the screen dims/locks mid-conversation and
+ * kills the mic. Not in older TS DOM libs, so accessed via `any`. Best-effort:
+ * unsupported browsers (older Safari/iOS) just fall back to normal behavior.
+ */
+function useScreenWakeLock(active: boolean) {
+  const sentinelRef = useRef<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function acquire() {
+      try {
+        const nav = navigator as any;
+        if (!nav.wakeLock) return;
+        const sentinel = await nav.wakeLock.request("screen");
+        if (cancelled) {
+          sentinel.release?.().catch(() => {});
+          return;
+        }
+        sentinelRef.current = sentinel;
+      } catch {
+        // Denied, unsupported, or backgrounded — non-fatal, call still works.
+      }
+    }
+
+    function release() {
+      sentinelRef.current?.release?.().catch(() => {});
+      sentinelRef.current = null;
+    }
+
+    if (active) {
+      acquire();
+      // The lock auto-releases when the tab is backgrounded; re-acquire on
+      // return so a phone call/app-switch during the conversation doesn't
+      // leave the screen sleeping for the rest of the session.
+      const onVisibility = () => {
+        if (document.visibilityState === "visible" && !sentinelRef.current) {
+          acquire();
+        }
+      };
+      document.addEventListener("visibilitychange", onVisibility);
+      return () => {
+        cancelled = true;
+        document.removeEventListener("visibilitychange", onVisibility);
+        release();
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      release();
+    };
+  }, [active]);
+}
 
 interface ConvaiSessionResponse {
   agentId: string;
@@ -41,6 +98,8 @@ function JacConvaiControl() {
       setPhase("error");
     },
   });
+
+  useScreenWakeLock(phase === "live");
 
   const start = useCallback(async () => {
     setErrorMsg(null);
