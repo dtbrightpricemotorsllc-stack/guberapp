@@ -4,7 +4,6 @@ import { ArrowLeft, CheckCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isStoreBuild } from "@/lib/platform";
-import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
 import shieldLogo from "@assets/__favicon_1773034423924.png";
 import { MobileReturnBanner } from "@/components/mobile-return-banner";
 
@@ -58,7 +57,7 @@ export default function AiOrNot() {
           let url = data.url;
           if (isStoreBuild || isDemoUser) {
             const sep = url.includes("?") ? "&" : "?";
-            url = url + sep + "hideCheckout=1";
+            url = url + sep + "hideCheckout=1&hideCredits=1";
           }
           setSignedUrl(url);
           // After updating the URL, notify the iframe about the fresh entitlements
@@ -254,86 +253,6 @@ export default function AiOrNot() {
       </div>
 
 
-      {/* iOS store-build purchase panel — floats above iframe when user lacks Trust Box or Day-1 OG */}
-      {isStoreBuild && showContent && !purchaseActivating && (
-        (() => {
-          const needsTrustBox = !user?.trustBoxPurchased;
-          const needsOG = !user?.day1OG;
-          if (!needsTrustBox && !needsOG) return null;
-          return (
-            <div
-              style={{
-                position: "absolute",
-                bottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)",
-                left: 16, right: 16,
-                zIndex: 10002,
-                display: "flex", flexDirection: "column", gap: 8,
-              }}
-            >
-              {needsTrustBox && (
-                <ExternalPurchaseSheet product="trust_box">
-                  {({ onPress, loading }) => (
-                    <button
-                      onClick={onPress}
-                      disabled={loading}
-                      data-testid="button-ios-trust-box"
-                      style={{
-                        width: "100%",
-                        padding: "13px 20px",
-                        borderRadius: 16,
-                        background: "rgba(180,60,255,0.88)",
-                        backdropFilter: "blur(16px)",
-                        WebkitBackdropFilter: "blur(16px)",
-                        border: "1px solid rgba(180,60,255,0.45)",
-                        color: "#fff",
-                        fontWeight: 800,
-                        fontSize: 13,
-                        fontFamily: "Oxanium, sans-serif",
-                        letterSpacing: "0.04em",
-                        cursor: loading ? "wait" : "pointer",
-                        opacity: loading ? 0.7 : 1,
-                        boxShadow: "0 4px 24px rgba(180,60,255,0.45)",
-                      }}
-                    >
-                      {loading ? "Opening…" : "Unlock Trust Box · $9.99/mo"}
-                    </button>
-                  )}
-                </ExternalPurchaseSheet>
-              )}
-              {needsOG && (
-                <ExternalPurchaseSheet product="day1og">
-                  {({ onPress, loading }) => (
-                    <button
-                      onClick={onPress}
-                      disabled={loading}
-                      data-testid="button-ios-day1og"
-                      style={{
-                        width: "100%",
-                        padding: "13px 20px",
-                        borderRadius: 16,
-                        background: "rgba(0,230,200,0.82)",
-                        backdropFilter: "blur(16px)",
-                        WebkitBackdropFilter: "blur(16px)",
-                        border: "1px solid rgba(0,230,200,0.4)",
-                        color: "#000",
-                        fontWeight: 800,
-                        fontSize: 13,
-                        fontFamily: "Oxanium, sans-serif",
-                        letterSpacing: "0.04em",
-                        cursor: loading ? "wait" : "pointer",
-                        opacity: loading ? 0.7 : 1,
-                        boxShadow: "0 4px 24px rgba(0,230,200,0.35)",
-                      }}
-                    >
-                      {loading ? "Opening…" : "Activate Day-1 OG · $1.99"}
-                    </button>
-                  )}
-                </ExternalPurchaseSheet>
-              )}
-            </div>
-          );
-        })()
-      )}
 
       {/* iframe */}
       <iframe

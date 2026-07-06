@@ -523,6 +523,8 @@ export default function VerifyInspect() {
   const [referencePhotoUploading, setReferencePhotoUploading] = useState(false);
   const [referencePhotoPreview, setReferencePhotoPreview] = useState<string>("");
 
+  const [jacViTypeHint, setJacViTypeHint] = useState<string>("");
+
   // ── JAC prefill: auto-populate from listing-collect conversation ──
   useEffect(() => {
     const prefill = readListingPrefill();
@@ -531,13 +533,30 @@ export default function VerifyInspect() {
     clearListingPrefill();
     if (c.description) setViDescription(c.description);
     if (c.zipcode) setViZip(String(c.zipcode));
+    if (c.budget) setViBudget(String(c.budget));
     if (c.urgent) setViUrgent(true);
+    if (c.vi_type) setJacViTypeHint(String(c.vi_type));
     setShowLanding(false);
   }, []);
 
   const { data: viCategories, isLoading: catsLoading, isError: catsError, refetch: catsRefetch } = useQuery<VICategory[]>({
     queryKey: ["/api/catalog/vi-categories"],
   });
+
+  // ── Auto-select V&I category from JAC vi_type hint once categories load ──
+  useEffect(() => {
+    if (!viCategories || viCategories.length === 0 || !jacViTypeHint || selectedCategoryId) return;
+    const nameHints: Record<string, string> = {
+      vehicle: "Wheels",
+      property: "Property",
+      item_online: "Online",
+      quick_check: "Quick",
+    };
+    const match = nameHints[jacViTypeHint];
+    if (!match) return;
+    const found = viCategories.find((c) => c.name?.includes(match));
+    if (found) setSelectedCategoryId(found.id);
+  }, [viCategories, jacViTypeHint]);
 
   const { data: useCases, isLoading: ucsLoading } = useQuery<UseCase[]>({
     queryKey: ["/api/catalog/use-cases", selectedCategoryId],

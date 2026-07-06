@@ -938,7 +938,7 @@ async function seedDemoReviewsAndWallet() {
 
     for (const e of earnings) {
       await db.insert(walletTransactions).values({
-        userId: consumer.id, type: "earning", amount: e.amount, status: "completed",
+        userId: consumer.id, type: "earning", amount: e.amount, status: "available",
         description: e.desc, stripeTransferId: `demo_txfr_${e.date.replace(/-/g, "")}`,
       });
     }

@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/select";
 import {
   Camera,
-  Upload,
   MapPin,
   CheckCircle2,
   AlertTriangle,
@@ -32,6 +31,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
+import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import type { Job, ProofTemplate, ProofChecklistItem } from "@shared/schema";
 import { Link } from "wouter";
 import { HandsFreeCapture } from "@/components/handsfree-capture";
@@ -116,7 +116,6 @@ export default function WorkerClipboard() {
   });
   const handsFreeEnabled = (handsFreeFlag?.value ?? "true") !== "false";
   const [itemStates, setItemStates] = useState<Record<number, ChecklistItemState>>({});
-  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   const { data: job, isLoading: jobLoading } = useQuery<Job>({
     queryKey: ["/api/jobs", jobId],
@@ -220,22 +219,6 @@ export default function WorkerClipboard() {
       toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
     }
   };
-
-  const handleFileUpload = useCallback(async (itemId: number, files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const current = getState(itemId);
-    const newFiles = [...current.files];
-    for (let i = 0; i < files.length; i++) {
-      try {
-        const base64 = await resizeImage(files[i], 1200);
-        const url = await uploadToCloudinary(base64);
-        newFiles.push(url);
-      } catch (err: any) {
-        toast({ title: "Upload Failed", description: err.message || "Failed to upload file", variant: "destructive" });
-      }
-    }
-    updateState(itemId, { files: newFiles });
-  }, [getState, updateState, toast]);
 
   const removeFile = useCallback((itemId: number, fileIndex: number) => {
     const current = getState(itemId);
@@ -538,34 +521,18 @@ export default function WorkerClipboard() {
                       </div>
                     ) : (
                       <div>
-                        <input
-                          ref={(el) => { fileInputRefs.current[item.id] = el; }}
-                          type="file"
-                          accept={item.mediaType === "video" ? "video/*" : "image/*"}
-                          multiple
-                          className="hidden"
-                          onChange={(e) => handleFileUpload(item.id, e.target.files)}
-                          data-testid={`input-file-${item.id}`}
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            className="flex-1 border-dashed border-border/40 text-muted-foreground rounded-xl"
-                            onClick={() => { setActiveItem(item.id); startCamera(item.id); }}
-                            data-testid={`button-camera-${item.id}`}
-                          >
-                            <Camera className="w-4 h-4 mr-2" />
-                            Open Camera
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="w-12 border-dashed border-border/40 text-muted-foreground rounded-xl"
-                            onClick={() => fileInputRefs.current[item.id]?.click()}
-                            data-testid={`button-upload-${item.id}`}
-                          >
-                            <Upload className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full border-dashed border-border/40 text-muted-foreground rounded-xl"
+                          onClick={() => { setActiveItem(item.id); startCamera(item.id); }}
+                          data-testid={`button-camera-${item.id}`}
+                        >
+                          <Camera className="w-4 h-4 mr-2" />
+                          Open Camera
+                        </Button>
+                        <p className="text-[10px] text-muted-foreground/70 mt-1.5 text-center">
+                          Live camera only — gallery uploads aren't accepted so we can confirm you're on-site.
+                        </p>
                       </div>
                     )}
 
@@ -752,10 +719,17 @@ function GeneralProofSubmit({ jobId, template }: { jobId: string; template: Temp
 
   return (
     <div className="space-y-3 mt-4">
-      <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={(e) => handleFileUpload(e.target.files)} data-testid="input-file-general" />
-      <Button variant="outline" className="w-full border-dashed rounded-xl" onClick={() => fileInputRef.current?.click()} data-testid="button-upload-general">
-        <Upload className="w-4 h-4 mr-2" /> Upload Proof
+      <input ref={fileInputRef} type="file" accept="image/*,video/*" capture="environment" multiple className="hidden" onChange={(e) => handleFileUpload(e.target.files)} data-testid="input-file-general" />
+      <Button variant="outline" className="w-full border-dashed rounded-xl" onClick={() => triggerLiveCameraCapture(fileInputRef, (file) => {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        handleFileUpload(dt.files);
+      })} data-testid="button-upload-general">
+        <Camera className="w-4 h-4 mr-2" /> Take Proof Photo
       </Button>
+      <p className="text-[10px] text-muted-foreground/70 text-center">
+        Live camera only — gallery uploads aren't accepted so we can confirm you're on-site.
+      </p>
       {files.length > 0 && (
         <div className="flex gap-2 flex-wrap">
           {files.map((f, i) => (

@@ -254,7 +254,7 @@ export default function OgAdvantage() {
               <Link href="/profile" className="inline-flex items-center gap-2 h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black"
                 style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 28px rgba(245,158,11,0.4), 0 4px 16px rgba(0,0,0,0.3)" }}
                 data-testid="link-og-get-started">
-                CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
+                UNLOCK OG STATUS — $2.00 <ArrowRight className="w-4 h-4" />
               </Link>
               <p className="text-[10px] text-muted-foreground">Secure payment via Stripe · No subscription · No hidden fees</p>
             </div>
@@ -359,7 +359,7 @@ export default function OgAdvantage() {
                 <Link href="/profile" className="h-12 px-10 rounded-xl font-display tracking-[0.2em] text-sm font-black flex items-center justify-center gap-2"
                   style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000", boxShadow: "0 0 24px rgba(245,158,11,0.35)" }}
                   data-testid="link-og-cta-signup">
-                  CLAIM YOUR OG STATUS <ArrowRight className="w-4 h-4" />
+                  UNLOCK OG STATUS — $2.00 <ArrowRight className="w-4 h-4" />
                 </Link>
               )}
               <Link href="/" className="h-12 px-8 rounded-xl font-display tracking-[0.2em] text-sm btn-glass-premium flex items-center justify-center" data-testid="link-og-cta-home">
@@ -369,8 +369,17 @@ export default function OgAdvantage() {
           </div>
         </div>
 
+        {/* Already purchased contact note */}
+        <p className="text-center text-[10px] text-muted-foreground/60 mt-8 leading-relaxed">
+          Already purchased Day-1 OG but not seeing your badge?{" "}
+          <a href="mailto:support@guberapp.com?subject=Day-1%20OG%20Badge%20Missing" className="text-amber-400/80 hover:text-amber-400 underline underline-offset-2 transition-colors">
+            Contact us
+          </a>{" "}
+          and we&apos;ll get it sorted.
+        </p>
+
         {/* Legal footer */}
-        <p className="text-center text-[10px] text-muted-foreground/50 font-display tracking-wider mt-8">
+        <p className="text-center text-[10px] text-muted-foreground/50 font-display tracking-wider mt-4">
           GUBER GLOBAL LLC · DAY-1 OG IS A PLATFORM DESIGNATION, NOT A FINANCIAL INSTRUMENT
         </p>
       </div>

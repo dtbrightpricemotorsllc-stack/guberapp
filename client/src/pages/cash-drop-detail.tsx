@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { GuberLayout } from "@/components/guber-layout";
@@ -245,7 +246,8 @@ export default function CashDropDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
   const id = parseInt(params?.id || "0");
-  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const singlePhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const itemPhotoInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [gpsPos, setGpsPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -849,17 +851,22 @@ export default function CashDropDetail() {
               {proofItems.length === 0 ? (
                 <div>
                   <p className="text-[11px] text-muted-foreground mb-2">Capture at least one photo as proof</p>
-                  <label className="flex items-center gap-2 p-3 rounded-xl border border-dashed border-primary/30 cursor-pointer hover:border-primary/50 transition-colors" data-testid="label-capture-photo">
+                  <div
+                    className="flex items-center gap-2 p-3 rounded-xl border border-dashed border-primary/30 cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => triggerLiveCameraCapture(singlePhotoInputRef, (file) => handleCapture(0, file))}
+                    data-testid="label-capture-photo"
+                  >
                     <Camera className="w-4 h-4 text-primary" />
                     <span className="text-sm text-primary font-display">{capturedPhotos[0] ? "Re-take Photo" : "Take Photo"}</span>
                     <input
+                      ref={singlePhotoInputRef}
                       type="file"
                       accept="image/*"
-                      capture={drop.requireInAppCamera ? "environment" : undefined}
+                      capture="environment"
                       className="hidden"
                       onChange={(e) => e.target.files?.[0] && handleCapture(0, e.target.files[0])}
                     />
-                  </label>
+                  </div>
                   {capturedPhotos[0] && (
                     <img src={capturedPhotos[0]} className="mt-2 rounded-lg w-full object-cover max-h-40" alt="proof" />
                   )}
@@ -868,17 +875,25 @@ export default function CashDropDetail() {
                 proofItems.map((item, i) => (
                   <div key={i} className="space-y-1.5">
                     <p className="text-[11px] text-muted-foreground font-medium">{item.label}</p>
-                    <label className={`flex items-center gap-2 p-3 rounded-xl border border-dashed cursor-pointer transition-colors ${capturedPhotos[i] ? "border-primary/50 bg-primary/5" : "border-white/10 hover:border-primary/30"}`} data-testid={`label-proof-item-${i}`}>
+                    <div
+                      className={`flex items-center gap-2 p-3 rounded-xl border border-dashed cursor-pointer transition-colors ${capturedPhotos[i] ? "border-primary/50 bg-primary/5" : "border-white/10 hover:border-primary/30"}`}
+                      onClick={() => triggerLiveCameraCapture(
+                        { current: itemPhotoInputRefs.current[i] },
+                        (file) => handleCapture(i, file)
+                      )}
+                      data-testid={`label-proof-item-${i}`}
+                    >
                       {capturedPhotos[i] ? <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" /> : <Camera className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
                       <span className="text-sm font-display text-muted-foreground">{capturedPhotos[i] ? "Captured ✓" : `Capture ${item.type}`}</span>
                       <input
+                        ref={el => { itemPhotoInputRefs.current[i] = el; }}
                         type="file"
                         accept={item.type === "video" ? "video/*" : "image/*"}
-                        capture={drop.requireInAppCamera ? "environment" : undefined}
+                        capture="environment"
                         className="hidden"
                         onChange={(e) => e.target.files?.[0] && handleCapture(i, e.target.files[0])}
                       />
-                    </label>
+                    </div>
                     {capturedPhotos[i] && item.type === "photo" && (
                       <img src={capturedPhotos[i]} className="rounded-lg w-full object-cover max-h-32" alt={item.label} />
                     )}
@@ -887,12 +902,10 @@ export default function CashDropDetail() {
               )}
             </div>
 
-            {drop.requireInAppCamera && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/15">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-400/70 flex-shrink-0 mt-0.5" />
-                <p className="text-[10px] text-amber-400/60">In-app camera only — gallery uploads are not accepted for this Cash Drop.</p>
-              </div>
-            )}
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/15">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400/70 flex-shrink-0 mt-0.5" />
+              <p className="text-[10px] text-amber-400/60">In-app camera only — this opens your camera live, gallery/photo library uploads are never accepted, so we can confirm you're really here.</p>
+            </div>
 
             <Button
               onClick={() => submitProofMutation.mutate()}

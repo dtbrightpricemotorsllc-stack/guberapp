@@ -14,6 +14,7 @@ export interface MissionTemplate {
   ogBonusPct: number;
   category: string;
   activeStatus: string | null;
+  instanceId?: number | null;
   effectiveCredits: number;
   isOG: boolean;
 }
@@ -66,7 +67,7 @@ export function MissionCard({
   const isActive = !!currentStatus;
   const badge = badgeFor(mission.category);
   const displayCredits = mission.effectiveCredits;
-  const dollarEquiv = (displayCredits / 1000).toFixed(2);
+  const resolvedInstanceId = acceptedInstanceId ?? mission.instanceId ?? null;
 
   const acceptMutation = useMutation({
     mutationFn: () =>
@@ -140,10 +141,10 @@ export function MissionCard({
 
           {/* Pay in credits */}
           <div className="flex-shrink-0 text-right">
-            <p className="font-display font-black text-base guber-text-green" data-testid={`text-mission-credits-${mission.id}`}>
-              ${dollarEquiv}
+            <p className="text-[9px] text-muted-foreground/60 font-bold uppercase tracking-wide">
+              Payout
             </p>
-            <p className="text-[9px] text-muted-foreground/60 font-medium">
+            <p className="font-display font-black text-base guber-text-green" data-testid={`text-mission-credits-${mission.id}`}>
               {displayCredits.toLocaleString()} cr
             </p>
           </div>
@@ -186,14 +187,13 @@ export function MissionCard({
 
             <div className="rounded-xl p-4 space-y-2" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)" }}>
               <p className="text-[10px] font-black tracking-widest uppercase mb-3" style={{ color: "#a78bfa" }}>
-                Mission Reward
+                Mission Payout
               </p>
               <div className="flex items-center gap-2">
                 <Coins className="w-4 h-4" style={{ color: "#4ade80" }} />
                 <span className="text-lg font-black" style={{ color: "#4ade80" }}>
                   +{displayCredits.toLocaleString()} credits
                 </span>
-                <span className="text-xs" style={{ color: "rgba(74,222,128,0.6)" }}>(${dollarEquiv})</span>
               </div>
               {mission.isOG && mission.ogBonusPct > 0 && (
                 <div className="flex items-center gap-2">
@@ -253,7 +253,15 @@ export function MissionCard({
                   <button
                     onClick={() => {
                       setOpen(false);
-                      if (acceptedInstanceId && onOpenProof) onOpenProof(acceptedInstanceId, mission.title);
+                      if (resolvedInstanceId && onOpenProof) {
+                        onOpenProof(resolvedInstanceId, mission.title);
+                      } else {
+                        toast({
+                          title: "Couldn't open proof submission",
+                          description: "Please refresh the page and try again.",
+                          variant: "destructive",
+                        });
+                      }
                     }}
                     className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-black active:scale-[0.98] transition-transform"
                     style={{ background: "#7c3aed", color: "#fff", fontFamily: "Inter, sans-serif" }}

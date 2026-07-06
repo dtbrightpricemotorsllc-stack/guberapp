@@ -35,11 +35,20 @@ Run these commands from the project root (same folder as `capacitor.config.ts`):
 ```bash
 npx cap add ios
 npx cap sync ios
+node scripts/fix-ios-plugin-registration.mjs
 ```
 
 This creates `ios/App/App/Info.plist` and the full Xcode workspace.
 
 > If you see `[fatal] The Capacitor CLI requires NodeJS >=22.0.0`, run `brew install node` first.
+
+> **CRITICAL — always run `node scripts/fix-ios-plugin-registration.mjs` immediately after ANY `npx cap sync ios`.**
+> GUBER has locally-defined native plugins (e.g. `AppleSignInPlugin` for Sign in with Apple)
+> that live directly in `ios/App/App/` and are intentionally NOT npm packages. `cap sync`
+> only scans installed npm Capacitor plugins to rebuild `packageClassList` in
+> `capacitor.config.json` — it silently wipes out local plugin classes with no error or
+> warning. If you skip this script after syncing, Sign in with Apple (and any other local
+> plugin) will silently stop working at runtime even though the app builds fine.
 
 ---
 
@@ -65,6 +74,7 @@ After editing Info.plist, run sync once more to confirm no conflicts:
 
 ```bash
 npx cap sync ios
+node scripts/fix-ios-plugin-registration.mjs
 ```
 
 ---
@@ -106,6 +116,21 @@ In Xcode:
 3. Bundle ID: `com.guber.app` (must match App Store Connect)
 4. Enable "Automatically manage signing"
 
+**Recommended failsafe — add a Build Phase so this can never be forgotten:**
+Xcode itself re-runs `cap sync`-adjacent Cordova/Capacitor "copy web assets" scripts as
+part of the build, but it will NOT re-run `fix-ios-plugin-registration.mjs` for you. Add
+your own Run Script Build Phase so the fix runs automatically on every build, not just
+when a human remembers to run it manually:
+1. Select the `App` target → Build Phases → `+` → New Run Script Phase
+2. Drag it to run BEFORE "Compile Sources"
+3. Script contents:
+   ```bash
+   cd "$SRCROOT/.."
+   node scripts/fix-ios-plugin-registration.mjs
+   ```
+This guarantees `packageClassList` always contains the local plugin classes even if
+someone runs `npx cap sync ios` right before an Archive build and forgets the manual step.
+
 ---
 
 ## Step 7 — Test on Device
@@ -117,6 +142,10 @@ Check that:
 - [ ] Google Sign-In opens in Safari and redirects back to the app
 - [ ] Camera permission dialog appears on first proof submission
 - [ ] All tabs and pages load from `https://guberapp.app`
+- [ ] Sign in with Apple button works and completes login (verifies `AppleSignInPlugin`
+      is present in `ios/App/App/capacitor.config.json`'s `packageClassList` — if the
+      button does nothing or hangs, re-run `node scripts/fix-ios-plugin-registration.mjs`
+      and rebuild)
 
 ---
 
@@ -125,6 +154,12 @@ Check that:
 1. Product → Archive
 2. Distribute App → App Store Connect
 3. Upload
+
+> Before archiving, confirm `ios/App/App/capacitor.config.json` still lists
+> `"AppleSignInPlugin"` in `packageClassList`. If you ran `npx cap sync ios` at any point
+> after Step 2 without also running `node scripts/fix-ios-plugin-registration.mjs` (or the
+> Xcode Build Phase from Step 6 isn't set up), it will have been silently dropped and Sign
+> in with Apple will be broken in the submitted build.
 
 ---
 

@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { isStoreBuild } from "@/lib/platform";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, Image as ImageIcon, Wand2, Info } from "lucide-react";
 import { useLocation } from "wouter";
@@ -155,7 +154,7 @@ export function MirrorMotionForm({
               }`}
               data-testid={`button-mirror-dur-${d}`}
             >
-              {d}s{!isStoreBuild && ` · ${perSecond * d} cr`}
+              {d}s · {perSecond * d} cr
             </button>
           ))}
         </div>
@@ -197,7 +196,7 @@ export function MirrorMotionForm({
       >
         {generate.isPending
           ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Rendering…</>
-          : <><Wand2 className="w-5 h-5 mr-2" /> {isStoreBuild ? "Generate" : (insufficient ? `Need ${cost} cr` : `Generate · ${cost} cr`)}</>}
+          : <><Wand2 className="w-5 h-5 mr-2" /> {insufficient ? `Need ${cost} cr` : `Generate · ${cost} cr`}</>}
       </Button>
     </div>
   );

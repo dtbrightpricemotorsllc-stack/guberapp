@@ -65,6 +65,7 @@ async function audit(req: Request, action: string, details: Record<string, any>)
 
 // Guards extracted to ./admin-qa-guards so tests cover the real implementation.
 import { requireStripeTestMode, requireLiveConfirmation } from "./admin-qa-guards.js";
+import { listIssues, getIssuesSummary, updateIssueStatus } from "./system-issues";
 
 export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) {
   // ── System checklist ─────────────────────────────────────────────────────
@@ -1687,5 +1688,46 @@ export function registerAdminQaRoutes(app: Express, requireAdmin: RequireAdmin) 
     const allRun = report.every(r => r.status !== "not_run");
     const allPass = report.every(r => r.status === "pass");
     res.json({ generatedAt: new Date().toISOString(), allRun, launchReady: allPass, flows: report });
+  });
+
+  // ── System Issues (JAC System Guardian) ─────────────────────────────────────
+  app.get("/api/admin/qa/issues", requireAdmin, async (req, res) => {
+    try {
+      const q = req.query;
+      const issues = await listIssues({
+        status: (typeof q.status === "string" ? q.status : undefined) as any,
+        platform: typeof q.platform === "string" ? q.platform : undefined,
+        severity: (typeof q.severity === "string" ? q.severity : undefined) as any,
+        module: typeof q.module === "string" ? q.module : undefined,
+        limit: q.limit ? Math.min(Math.max(parseInt(String(q.limit)) || 100, 1), 500) : undefined,
+      });
+      res.json({ issues });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message || "Failed to list issues" });
+    }
+  });
+
+  app.get("/api/admin/qa/issues/summary", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getIssuesSummary());
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message || "Failed to load summary" });
+    }
+  });
+
+  app.patch("/api/admin/qa/issues/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const status = String(req.body?.status || "");
+      if (!["open", "ack", "resolved"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const ok = await updateIssueStatus(id, status as any);
+      if (!ok) return res.status(404).json({ message: "Issue not found" });
+      await audit(req, "system_issue_status", { id, status });
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message || "Failed to update status" });
+    }
   });
 }

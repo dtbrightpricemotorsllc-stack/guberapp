@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { reportIssue } from "@/lib/report-issue";
 import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/queryClient";
@@ -10,9 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Eye, EyeOff, Sparkles, Building2 } from "lucide-react";
 import { InAppBrowserGate } from "@/components/in-app-browser-gate";
 import { Capacitor } from "@capacitor/core";
-import { isIOS } from "@/lib/platform";
+import { isIOS, isStoreBuild } from "@/lib/platform";
 import { nativeGoogleSignIn, browserGoogleSignIn } from "@/lib/native-google-sign-in";
-import { nativeAppleSignIn } from "@/lib/native-apple-sign-in";
 import { getToken } from "@/lib/token-storage";
 import { setGoogleAuthPhase } from "@/components/google-auth-overlay";
 
@@ -26,29 +26,11 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [appleLoading, setAppleLoading] = useState(false);
-  const [demoVisible, setDemoVisible] = useState(false);
   const [demoLoading, setDemoLoading] = useState<"consumer" | "business" | null>(null);
   const isNative = Capacitor.isNativePlatform();
 
-  // 5-tap logo counter
-  const tapCountRef = useRef(0);
-  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Synchronous in-flight lock for the Google sign-in handler — see comment in handler below.
   const googleInFlightRef = useRef(false);
-
-  const handleLogoTap = () => {
-    tapCountRef.current += 1;
-    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-    if (tapCountRef.current >= 5) {
-      tapCountRef.current = 0;
-      setDemoVisible(true);
-      return;
-    }
-    tapTimerRef.current = setTimeout(() => {
-      tapCountRef.current = 0;
-    }, 1500);
-  };
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -88,6 +70,12 @@ export default function Login() {
       }
     } catch (err: any) {
       toast({ title: "Login Failed", description: err.message || "Invalid credentials", variant: "destructive" });
+      // Only report system failures (network / 5xx) — wrong credentials (401/403)
+      // are expected user error, not an outage worth alerting on.
+      const status = err?.status;
+      if (status === undefined || status >= 500) {
+        reportIssue({ module: "login", attemptedAction: "password-login", error: err, blocked: true });
+      }
     } finally {
       setLoading(false);
     }
@@ -165,21 +153,6 @@ export default function Login() {
     }
   };
 
-  const handleAppleSignIn = async () => {
-    if (appleLoading) return;
-    setAppleLoading(true);
-    try {
-      const result = await nativeAppleSignIn();
-      if (result.ok) {
-        setLocation(returnTo || (result.accountType === "business" ? "/biz/dashboard" : "/dashboard"), { replace: true });
-      } else if (result.reason !== "cancelled") {
-        toast({ title: "Sign-In Failed", description: result.message || "Please try again.", variant: "destructive" });
-      }
-    } finally {
-      setAppleLoading(false);
-    }
-  };
-
   const handleDemoLogin = async (type: "consumer" | "business") => {
     setDemoLoading(type);
     try {
@@ -225,8 +198,7 @@ export default function Login() {
 
           <div className="text-center space-y-3 mb-10 animate-fade-in">
             <div
-              onClick={handleLogoTap}
-              className="inline-block cursor-pointer select-none active:opacity-75 transition-opacity"
+              className="inline-block select-none"
               data-testid="logo-tap-trigger"
             >
               <GuberLogo size="lg" />
@@ -266,29 +238,6 @@ export default function Login() {
               </>
             )}
 
-            {isIOS && isNative && (
-              <>
-                <Button
-                  type="button"
-                  className="w-full h-12 rounded-xl font-display text-sm tracking-wider flex items-center justify-center gap-3 bg-white text-black hover:bg-white/90 transition-all"
-                  onClick={handleAppleSignIn}
-                  disabled={appleLoading}
-                  data-testid="button-apple-signin"
-                >
-                  {appleLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-black" />
-                  ) : (
-                    <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="black">
-                      <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.54 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701z"/>
-                    </svg>
-                  )}
-                  Continue with Apple
-                </Button>
-                <p className="text-center text-[11px] text-muted-foreground/70 mt-2 mb-5 leading-relaxed" data-testid="text-apple-helper">
-                  Secure Apple sign-in — your email stays private if you choose.
-                </p>
-              </>
-            )}
 
             <div className="flex items-center gap-3 mb-5">
               <div className="flex-1 h-px bg-white/[0.06]" />
@@ -349,11 +298,8 @@ export default function Login() {
               </Button>
             </form>
 
-            {/* iOS-only helper notes. Google sign-in is hidden on iOS, so
-                existing Google web users need a path to email/password login —
-                the forgot-password flow already works for them, but they need
-                to know that. Reviewer hint also lives here. */}
-            {isIOS && !demoVisible && (
+            {/* iOS-only helper note for existing Google web users */}
+            {isIOS && (
               <div className="mt-3 space-y-2">
                 <p className="text-center text-[11px] text-muted-foreground/80 leading-relaxed" data-testid="text-google-user-hint">
                   Already use GUBER on the web with Google?{" "}
@@ -362,14 +308,11 @@ export default function Login() {
                   </Link>{" "}
                   to use the app — don't sign up again or you'll create a duplicate account.
                 </p>
-                <p className="text-center text-[10px] text-muted-foreground/70 font-display tracking-wider" data-testid="text-reviewer-hint">
-                  APP STORE REVIEWERS — TAP THE GUBER LOGO 5× FOR DEMO ACCESS
-                </p>
               </div>
             )}
 
-            {/* Demo login — revealed after 5 taps on the GUBER logo */}
-            {demoVisible && (
+            {/* Demo login — always visible on store builds so reviewers can access instantly */}
+            {isStoreBuild && (
               <div className="mt-5 pt-5 border-t border-white/[0.06]" data-testid="demo-login-section">
                 <p className="text-[10px] text-muted-foreground font-display tracking-widest text-center mb-3">REVIEWER DEMO ACCESS</p>
                 <div className="flex gap-2">

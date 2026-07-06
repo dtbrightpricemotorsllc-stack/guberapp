@@ -1,16 +1,26 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
+import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2, Zap } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
+
+interface JacPendingAction {
+  id: number;
+  type: string;
+  summary: string;
+  status: "pending" | "confirming" | "confirmed" | "cancelled" | "failed";
+  resultMessage?: string;
+}
 
 interface JacMsg {
   role: "user" | "assistant";
   content: string;
   buttons?: Array<{ label: string; message: string }>;
   signupRoute?: string;
+  pendingAction?: JacPendingAction;
 }
 
 interface JacJobPrefill {
@@ -176,6 +186,7 @@ export function JacHomepage() {
   });
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
 
   const { cancel: cancelSpeech, muted, supported: ttsSupported, toggleMute } = useSpeechOutput();
   const mutedRef = useRef(muted);
@@ -184,6 +195,87 @@ export function JacHomepage() {
   // Auto-send when mic result arrives — no send button tap required
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
     useSpeechInput((text) => processInput(text));
+
+  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
+  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
+  // (no ElevenLabs Conversational Agents / per-minute billing).
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const engineRef = useRef<ConversationEngine | null>(null);
+
+  function getEngine(): ConversationEngine {
+    if (!engineRef.current) {
+      engineRef.current = new ConversationEngine({
+        onUtterance: (text) => { processInput(text); },
+        onStateChange: setLiveState,
+        onError: (reason) => {
+          setLiveMode(false);
+          setLiveState("idle");
+          const sentinel = reason === "mic_denied" ? "__mic_denied__" : "__mic_error__";
+          processInput(sentinel);
+        },
+      });
+    }
+    return engineRef.current;
+  }
+
+  function stopLiveMode() {
+    engineRef.current?.stop();
+    setLiveMode(false);
+    setLiveState("idle");
+  }
+
+  async function toggleLiveMode() {
+    if (liveMode) {
+      stopLiveMode();
+      return;
+    }
+    unlockAudioContext();
+    cancelSpeech();
+    cancelAllJacAudio();
+    if (listening) stopListening();
+    setLiveMode(true);
+    await getEngine().start();
+  }
+
+  // Wrapper around jacSpeak that keeps the live-mode VAD in sync with
+  // playback so it knows when to arm interruption detection and when to
+  // go back to plain listening once JAC finishes talking.
+  const speak = useCallback((text: string) => {
+    if (mutedRef.current) return;
+    const engine = engineRef.current;
+    jacSpeak(text, {
+      muted: mutedRef.current,
+      onStart: () => engine?.notifySpeakingStarted(),
+    }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
+  }, []);
+
+  // Tear down the live mic stream on unmount, tab hide, or app background.
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === "hidden") stopLiveMode();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!(typeof window !== "undefined" && (window as any).Capacitor?.isNativePlatform?.())) return;
+    let handle: any;
+    (async () => {
+      try {
+        const { App: CapApp } = await import("@capacitor/app");
+        handle = CapApp.addListener("appStateChange", ({ isActive }: { isActive: boolean }) => {
+          if (!isActive) stopLiveMode();
+        });
+      } catch {}
+    })();
+    return () => { handle?.then?.((h: any) => h.remove()).catch(() => {}); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { engineRef.current?.stop(); }, []);
 
   // Dismiss float hint after 4s
   useEffect(() => {
@@ -206,27 +298,27 @@ export function JacHomepage() {
 
     const currentGreeting = messages[0]?.content ?? GREETING.content;
 
-    function speak() {
+    function speakGreeting() {
       if (greetingSpokenRef.current) return;
       greetingSpokenRef.current = true;
       unlockAudioContext();
-      setTimeout(() => jacSpeak(currentGreeting, { muted: mutedRef.current }), 120);
+      setTimeout(() => speak(currentGreeting), 120);
     }
 
     // Try immediately (works on Capacitor where audio is pre-unlocked)
     const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor;
-    if (isCapacitor) { speak(); return; }
+    if (isCapacitor) { speakGreeting(); return; }
 
     // Web: wait for first gesture then speak once
     const opts = { once: true, passive: true } as const;
     const cleanup = () => {
-      document.removeEventListener("click",      speak, opts);
-      document.removeEventListener("touchstart", speak, opts);
-      document.removeEventListener("keydown",    speak, opts);
+      document.removeEventListener("click",      speakGreeting, opts);
+      document.removeEventListener("touchstart", speakGreeting, opts);
+      document.removeEventListener("keydown",    speakGreeting, opts);
     };
-    document.addEventListener("click",      speak, opts);
-    document.addEventListener("touchstart", speak, opts);
-    document.addEventListener("keydown",    speak, opts);
+    document.addEventListener("click",      speakGreeting, opts);
+    document.addEventListener("touchstart", speakGreeting, opts);
+    document.addEventListener("keydown",    speakGreeting, opts);
     return cleanup;
   }, [mode, messages]);
 
@@ -260,6 +352,59 @@ export function JacHomepage() {
     unlockAudioContext();
     const trimmed = text.trim();
     if (!trimmed || typing) return;
+
+    // ── Navigation sentinels (guest D.D. sign-in invite) — handled client-side ─
+    if (trimmed === "__goto_signup__") { window.location.href = "/signup"; return; }
+    if (trimmed === "__goto_login__") { window.location.href = "/login"; return; }
+
+    // ── Voice sentinels — never leak to JAC as text ─────────────────────────
+    if (trimmed === "__mic_denied__") {
+      setMessages(prev => [...prev,
+        { role: "assistant", content: "Looks like mic access was blocked. What device are you using?", buttons: [
+          { label: "Samsung", message: "Samsung" },
+          { label: "Pixel", message: "Pixel" },
+          { label: "iPhone", message: "iPhone" },
+          { label: "Other Android", message: "Other Android" },
+        ]},
+      ]);
+      if (!muted) speak("Looks like mic access was blocked. What device are you using?");
+      return;
+    }
+    if (
+      trimmed === "__whisper_empty__" ||
+      trimmed === "__whisper_error__" ||
+      trimmed === "__mic_error__"
+    ) {
+      return;
+    }
+
+    // ── Feedback report sentinel ─────────────────────────────────────────────
+    if (trimmed === "__submit_feedback_report__") {
+      const draft = feedbackDraftRef.current;
+      const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
+      const currentMsgs = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const confirmMsg = "Got it — your report is on its way to the GUBER team. They'll review it shortly. Anything else I can help you with?";
+      setMessages(prev => [...prev,
+        { role: "user", content: "Yes, send report" },
+        { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS },
+      ]);
+      if (!muted) speak(confirmMsg);
+      fetch("/api/jac/feedback-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          deviceInfo: typeof window !== "undefined" ? (navigator.userAgent ?? null) : null,
+          currentRoute: typeof window !== "undefined" ? window.location.pathname : null,
+          issueCategory: draft?.category ?? "general",
+          userDescription: draft?.description ?? null,
+          jacMessages: currentMsgs,
+        }),
+      }).catch(() => {});
+      feedbackDraftRef.current = null;
+      return;
+    }
+
     const userMsg: JacMsg = { role: "user", content: trimmed };
     const next = [...messages, userMsg];
     setMessages(next);
@@ -279,6 +424,9 @@ export function JacHomepage() {
         _lastTracking = { ..._lastTracking, ...data.tracking };
         saveJacPrefill(_lastTracking);
       }
+      if (data.feedbackDraft?.ready) {
+        feedbackDraftRef.current = data.feedbackDraft;
+      }
 
       const aMsg: JacMsg = {
         role: "assistant",
@@ -288,11 +436,14 @@ export function JacHomepage() {
           ...(Array.isArray(data.actions) ? data.actions : []),
           ...(Array.isArray(data.options) ? data.options : []),
         ].filter((b: any) => b?.label && b?.message).slice(0, 11),
+        pendingAction: (data.pendingAction && typeof data.pendingAction === "object" && data.pendingAction.id && data.pendingAction.summary)
+          ? { id: data.pendingAction.id, type: data.pendingAction.type, summary: data.pendingAction.summary, status: "pending" }
+          : undefined,
       };
 
       const final = [...next, aMsg];
       setMessages(final);
-      if (!muted) jacSpeak(aMsg.content, { muted });
+      if (!muted) speak(aMsg.content);
       try { localStorage.setItem("jac_returning", "1"); } catch {}
 
       await logInteraction(final, {
@@ -308,6 +459,37 @@ export function JacHomepage() {
     } finally {
       setTyping(false);
     }
+  }
+
+  function updatePendingAction(id: number, patch: Partial<JacPendingAction>) {
+    setMessages(prev => prev.map(m =>
+      m.pendingAction?.id === id ? { ...m, pendingAction: { ...m.pendingAction, ...patch } } : m
+    ));
+  }
+
+  async function confirmPendingAction(pa: JacPendingAction) {
+    if (pa.status !== "pending") return;
+    updatePendingAction(pa.id, { status: "confirming" });
+    try {
+      const res = await fetch(`/api/jac/actions/${pa.id}/confirm`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        updatePendingAction(pa.id, { status: "confirmed" });
+        const confirmMsg = "Done — that's submitted. Anything else you need?";
+        setMessages(prev => [...prev, { role: "assistant", content: confirmMsg, buttons: OPENING_OPTIONS }]);
+        if (!muted) speak(confirmMsg);
+      } else {
+        updatePendingAction(pa.id, { status: "failed", resultMessage: data?.message || "That didn't go through." });
+      }
+    } catch {
+      updatePendingAction(pa.id, { status: "failed", resultMessage: "Something went wrong confirming this." });
+    }
+  }
+
+  async function cancelPendingAction(pa: JacPendingAction) {
+    if (pa.status !== "pending") return;
+    updatePendingAction(pa.id, { status: "cancelled" });
+    fetch(`/api/jac/actions/${pa.id}/cancel`, { method: "POST" }).catch(() => {});
   }
 
   function openChat(initial?: string) {
@@ -601,6 +783,52 @@ export function JacHomepage() {
                   </Link>
                 )}
 
+                {/* Confirm-before-submit workflow card */}
+                {msg.role === "assistant" && msg.pendingAction && (
+                  <div
+                    className="rounded-2xl px-4 py-3 space-y-2.5"
+                    style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(270 100% 65% / 0.35)" }}
+                    data-testid={`jac-pending-action-${msg.pendingAction.id}`}
+                  >
+                    <p className="text-[10px] font-display font-black tracking-widest" style={{ color: "hsl(270 100% 78%)" }}>
+                      REVIEW BEFORE SUBMITTING
+                    </p>
+                    <p className="text-sm text-white/90 leading-relaxed">{msg.pendingAction.summary}</p>
+                    {msg.pendingAction.status === "pending" && (
+                      <div className="flex gap-2 pt-0.5">
+                        <button
+                          onClick={() => confirmPendingAction(msg.pendingAction!)}
+                          className="flex-1 rounded-xl px-4 py-2 text-sm font-display font-black transition-all active:scale-[0.97]"
+                          style={{ background: "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))", color: "black" }}
+                          data-testid={`jac-confirm-action-${msg.pendingAction.id}`}
+                        >
+                          Confirm & Submit
+                        </button>
+                        <button
+                          onClick={() => cancelPendingAction(msg.pendingAction!)}
+                          className="rounded-xl px-4 py-2 text-sm font-display font-semibold transition-all active:scale-[0.97]"
+                          style={{ background: "hsl(222 47% 15%)", border: "1px solid hsl(222 47% 22%)", color: "rgba(255,255,255,0.7)" }}
+                          data-testid={`jac-cancel-action-${msg.pendingAction.id}`}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {msg.pendingAction.status === "confirming" && (
+                      <p className="text-xs text-white/50 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Submitting…</p>
+                    )}
+                    {msg.pendingAction.status === "confirmed" && (
+                      <p className="text-xs font-semibold" style={{ color: "hsl(152 100% 55%)" }}>✓ Submitted</p>
+                    )}
+                    {msg.pendingAction.status === "cancelled" && (
+                      <p className="text-xs text-white/40">Cancelled — nothing was submitted.</p>
+                    )}
+                    {msg.pendingAction.status === "failed" && (
+                      <p className="text-xs" style={{ color: "hsl(0 80% 65%)" }}>{msg.pendingAction.resultMessage || "That didn't go through."}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Follow-up buttons / option chips */}
                 {msg.role === "assistant" && msg.buttons && msg.buttons.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
@@ -653,7 +881,44 @@ export function JacHomepage() {
             />
             {micSupported && (
               <button
-                onClick={listening ? stopListening : startListening}
+                onClick={toggleLiveMode}
+                className={`relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
+                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
+                }`}
+                style={{
+                  background: liveMode
+                    ? liveState === "speaking"
+                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                      : liveState === "recording"
+                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
+                    : "hsl(222 47% 15%)",
+                  color: liveMode ? "white" : "hsl(45 90% 60%)",
+                  boxShadow: liveMode ? "0 0 0 2px hsl(45 100% 55% / 0.3), 0 0 12px hsl(45 100% 55% / 0.4)" : "none",
+                }}
+                data-testid="button-live-conversation"
+                disabled={typing}
+                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
+                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
+              >
+                {liveMode && (liveState === "recording" || liveState === "listening") && (
+                  <span className="absolute inset-0 rounded-xl animate-ping opacity-30" style={{ background: "hsl(45 100% 55%)" }} />
+                )}
+                <Zap className="w-3.5 h-3.5" fill={liveMode ? "currentColor" : "none"} />
+              </button>
+            )}
+            {micSupported && (
+              <button
+                onClick={() => {
+                  if (liveMode) stopLiveMode();
+                  if (listening) {
+                    stopListening();
+                  } else {
+                    cancelSpeech();
+                    cancelAllJacAudio();
+                    setTimeout(() => startListening(), 150);
+                  }
+                }}
                 className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${listening ? "animate-pulse" : ""}`}
                 style={{
                   background: listening ? "hsl(0 80% 55%)" : transcribing ? "hsl(270 60% 35%)" : "hsl(222 47% 15%)",

@@ -201,7 +201,7 @@ export default function MapExplore() {
   const [selectedZip, setSelectedZip] = useState<ZipGroup | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
   const [panelCatFilter, setPanelCatFilter] = useState("");
-  const [bottomOpen, setBottomOpen] = useState(true);
+  const [bottomOpen, setBottomOpen] = useState(false);
   const [zipFallback, setZipFallback] = useState<ZipFallbackResult | null>(null);
   const [proofSheet, setProofSheet] = useState<{ instanceId: number; title: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -234,6 +234,22 @@ export default function MapExplore() {
 
   const [selectedDrop, setSelectedDrop] = useState<any | null>(null);
   const dropOverlaysRef = useRef<any[]>([]);
+
+  // Notify JAC bubble about map panel state so she can get out of the way
+  useEffect(() => {
+    const hasOverlay = !!(selectedZip || selectedWorker || selectedDrop ||
+      (zipFallback?.hasFallback && !selectedZip && !selectedDrop));
+    window.dispatchEvent(new CustomEvent("jac:map-panel", {
+      detail: { expanded: bottomOpen, overlay: hasOverlay },
+    }));
+  }, [bottomOpen, selectedZip, selectedWorker, selectedDrop, zipFallback]);
+
+  // Reset JAC on unmount (leaving map page)
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("jac:map-panel", {
+      detail: { expanded: false, overlay: false },
+    }));
+  }, []);
 
   const apiKey = config?.googleMapsApiKey ?? "";
   const filterOrigin = jumpCenter || userPos;

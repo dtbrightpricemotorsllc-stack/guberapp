@@ -147,7 +147,7 @@ export default function WalletPage() {
     cashoutMinimum: number;
     creditsPerDollar: number;
   }>({
-    queryKey: ["/api/credits/balance"],
+    queryKey: ["/api/growth-tasks/my-balance"],
     enabled: !!user,
     staleTime: 30_000,
   });
@@ -185,15 +185,15 @@ export default function WalletPage() {
   const payments = transactions?.filter(t => t.type === "payment") || [];
   const earnings = transactions?.filter(t => t.type === "earning" || t.type === "credit") || [];
 
-  const totalEarnings = earnings.reduce((s, t) => s + t.amount, 0);
-  const availableBalance = earnings.filter(t => t.status === "available").reduce((s, t) => s + t.amount, 0);
-  const pendingEarnings = earnings.filter(t => t.status === "pending").reduce((s, t) => s + t.amount, 0);
-  const totalSpent = payments.reduce((s, t) => s + t.amount, 0);
-  const creditBalance = transactions?.filter(t => t.type === "credit" && t.status === "available").reduce((s, t) => s + t.amount, 0) || 0;
+  const totalEarnings = earnings.reduce((s, t) => s + (t.amount ?? 0), 0);
+  const availableBalance = earnings.filter(t => t.status === "available").reduce((s, t) => s + (t.amount ?? 0), 0);
+  const pendingEarnings = earnings.filter(t => t.status === "pending").reduce((s, t) => s + (t.amount ?? 0), 0);
+  const totalSpent = payments.reduce((s, t) => s + (t.amount ?? 0), 0);
+  const creditBalance = (transactions ?? []).filter(t => t.type === "credit" && t.status === "available").reduce((s, t) => s + (t.amount ?? 0), 0);
 
   const unsentTotal = earnings
     .filter(t => t.status === "available" && !(t as any).stripeTransferId)
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + (t.amount ?? 0), 0);
 
   const hasUnsent = unsentTotal > 0;
   const isConnectActive = connectStatus?.status === "active";
@@ -323,7 +323,7 @@ export default function WalletPage() {
         )}
 
         {/* GUBER Credits */}
-        {creditsData && (
+        {creditsData && typeof creditsData.growthCredits === "number" && (
           <Link href="/credits">
             <div
               className="mb-4 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-primary/[0.03] p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-opacity"
@@ -347,12 +347,12 @@ export default function WalletPage() {
                 <div className="mt-1.5 h-1.5 rounded-full bg-primary/10 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary/60 transition-all duration-700"
-                    style={{ width: `${Math.min(100, Math.round((creditsData.growthCredits / creditsData.cashoutMinimum) * 100))}%` }}
+                    style={{ width: `${Math.min(100, Math.round((creditsData.growthCredits / (creditsData.cashoutMinimum || 1)) * 100))}%` }}
                     data-testid="bar-credits-progress"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1" data-testid="text-credits-progress">
-                  {creditsData.growthCredits.toLocaleString()} / {creditsData.cashoutMinimum.toLocaleString()} to cash out
+                  {creditsData.growthCredits.toLocaleString()} / {(creditsData.cashoutMinimum ?? 0).toLocaleString()} to cash out
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -511,7 +511,7 @@ function TransactionList({ items }: { items: WalletTransaction[] }) {
             </div>
             <div className="text-right">
               <p className={`font-display font-bold ${isHeld ? "text-yellow-400" : colorClass}`}>
-                {t.type === "payment" ? "-" : "+"}${t.amount.toFixed(2)}
+                {t.type === "payment" ? "-" : "+"}${(t.amount ?? 0).toFixed(2)}
               </p>
               <Badge
                 variant="outline"

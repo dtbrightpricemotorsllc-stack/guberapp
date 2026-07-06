@@ -20,6 +20,7 @@ export type FeatureFlagKey =
   | "investor_pitch_public"
   | "verified_release_system"
   | "asset_protection_founders_club"
+  | "voice_pipeline_v2"
   | "free_quickpic_enabled";
 
 export type RolloutScope = "off" | "global" | "role" | "allowlist";
@@ -156,6 +157,13 @@ export const FEATURE_FLAGS: FeatureFlagDef[] = [
     key: "asset_protection_founders_club",
     label: "Asset Protection Founders Club",
     description: "Founders Club buy-in for the Verified Release System (first 500 at $99, then $299). Off until launch.",
+    defaultEnabled: false,
+    defaultScope: "off",
+  },
+  {
+    key: "voice_pipeline_v2",
+    label: "JAC Voice Pipeline v2 (ElevenLabs Conversational AI)",
+    description: "Route JAC voice through ElevenLabs Conversational AI (custom LLM = JAC's brain). Ship dark; the current STT/TTS pipeline stays the fallback until this is proven per-platform. Admins/allowlist only during staging.",
     defaultEnabled: false,
     defaultScope: "off",
   },

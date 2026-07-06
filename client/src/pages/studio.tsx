@@ -26,6 +26,7 @@
 // the `studio_v2` feature flag to "global" when ready to launch broadly.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from "react";
+import { reportIssue } from "@/lib/report-issue";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -658,6 +659,7 @@ export default function StudioPageV2() {
       queryClient.invalidateQueries({ queryKey: ["/api/studio/me"] });
       queryClient.invalidateQueries({ queryKey: ["/api/studio/free-quota"] });
       toast({ title: "Couldn't generate", description: msg, variant: "destructive" });
+      reportIssue({ module: "studio", attemptedAction: `generate:${activeToolKey}`, error: msg, blocked: true, relatedIds: { tool: activeToolKey } });
     },
   });
 

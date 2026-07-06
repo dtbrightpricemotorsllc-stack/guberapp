@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { reportIssue } from "@/lib/report-issue";
 import { ExternalLink } from "lucide-react";
 
 export type ExternalPurchaseProduct =
@@ -97,6 +98,7 @@ export function ExternalPurchaseSheet({
       }
     } catch (err: any) {
       setError(err?.message || "Unable to open checkout. Please try again.");
+      reportIssue({ module: "payment", attemptedAction: `checkout:${product}`, error: err, blocked: true, relatedIds: { product } });
     } finally {
       setLoading(false);
     }

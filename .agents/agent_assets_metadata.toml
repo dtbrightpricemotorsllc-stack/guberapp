@@ -629,3 +629,15 @@ id = "I5mCsfGMt3sw30cJau-ux"
 uri = "file://screenshots/ipad_3_signup.jpg"
 type = "image"
 title = "iPad 3 — Create Account (2064×2752)"
+
+[[outputs]]
+id = "vpqStquTdRGSR_A9WUYtV"
+uri = "file://attached_assets/voice_previews/jessica_preview.mp3"
+type = "audio"
+title = "Jessica (ElevenLabs) — current JAC voice sample"
+
+[[outputs]]
+id = "aLcrLv0MO0VrZRjTfAqaY"
+uri = "file://attached_assets/voice_previews/helia_preview.mp3"
+type = "audio"
+title = "Helia (ElevenLabs) — new JAC voice sample"

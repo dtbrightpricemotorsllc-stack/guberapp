@@ -1517,6 +1517,9 @@ export async function runAllScheduledSweeps(): Promise<void> {
     } catch (err: any) {
       console.error("[cron] health-monitor failed:", err?.message || err);
     }
+
+    // 24/7 Smart Monitoring — scheduled service health probe → system_issues.
+    await runHealthProbeSweep();
   } catch (err) {
     console.error("[cron] error in 5-min sweep:", err);
   }
@@ -1610,6 +1613,112 @@ export async function purgeAbandonedStudioSessions(): Promise<number> {
     await storage.endStudioSession(s.id, reason);
   }
   return sessions.length;
+}
+
+// ── Layer 1+ of 24/7 Smart Monitoring: scheduled health-probe → issue bridge ──
+// Runs the same real service health checks the admin dashboard uses, and folds
+// any CRITICAL result into the existing system_issues pipeline (source=health_probe).
+// This is NOT an AI sweep — it's a cheap deterministic probe. AI diagnosis only
+// fires afterward for issues that pass the strict shouldDiagnose() gate, at most
+// once per fingerprint. Recovered services auto-resolve their open probe issues.
+const _probeThrottle = new Map<string, number>(); // probe key → last-reported ms
+const PROBE_THROTTLE_MS = 15 * 60 * 1000;
+
+// Map a health-check key to a system_issues module (see KNOWN_MODULES).
+const PROBE_MODULE_MAP: Record<string, string> = {
+  database: "network",
+  backend_connectivity: "network",
+  google_login: "login",
+  apple_login: "login",
+  google_maps: "map",
+  stripe: "payment",
+  push_notifications: "push",
+  cloudinary: "upload",
+  r2_storage: "upload",
+  guber_studio: "studio",
+  marketplace: "marketplace",
+  verify_inspect: "verify_inspect",
+  load_board: "load_board",
+};
+
+async function runHealthProbeSweep(): Promise<void> {
+  let checks;
+  try {
+    const { runAllHealthChecks } = await import("./os/health-checks.js");
+    checks = await runAllHealthChecks();
+  } catch (err: any) {
+    console.error("[cron] health-probe: runAllHealthChecks failed:", err?.message || err);
+    return;
+  }
+  const { reportIssue, escalateCriticalIssue, shouldDiagnose } = await import("./system-issues.js");
+  const { maybeDiagnoseIssue } = await import("./ai-diagnosis.js");
+
+  for (const c of checks) {
+    const route = `health:${c.key}`;
+    const moduleName = PROBE_MODULE_MAP[c.key] ?? "network";
+
+    if (c.status === "critical") {
+      // Throttle: a still-down probe re-reports at most once per window so it
+      // keeps bumping occurrence_count/last_seen without hammering the DB every
+      // sweep. Recovery clears the throttle so a fresh failure reports at once.
+      const now = Date.now();
+      if (now - (_probeThrottle.get(c.key) ?? 0) < PROBE_THROTTLE_MS) continue;
+      _probeThrottle.set(c.key, now);
+
+      try {
+        const result = await reportIssue({
+          platform: "server",
+          route,
+          module: moduleName,
+          source: "health_probe",
+          severityFloor: "critical", // server-only floor — a hard-down service is critical
+          blocked: true,
+          attemptedAction: `Health probe: ${c.name}`,
+          errorMessage: c.failureReason || c.detail || `${c.name} health check failed`,
+          suggestedFix: c.recommendedAction || null,
+        });
+
+        // Escalate a new / upgraded / reopened critical (dedup repeats stay quiet).
+        if (result.isNew || result.oldSeverity !== "critical" || result.reopened) {
+          void escalateCriticalIssue({
+            id: result.id,
+            module: moduleName,
+            severity: result.severity,
+            platform: "server",
+            errorMessage: c.failureReason || c.detail || undefined,
+            occurrenceCount: result.occurrenceCount,
+          });
+        }
+        // Strictly-gated AI escalation (Layer 4), once per fingerprint + hourly cap.
+        if (shouldDiagnose({
+          severity: result.severity,
+          occurrenceCount: result.occurrenceCount,
+          distinctUsers: result.distinctUsers,
+          module: result.module,
+          blocked: result.blocked,
+        })) {
+          void maybeDiagnoseIssue(result.id);
+        }
+        console.warn(`[cron] health-probe CRITICAL ${c.key} — ${c.failureReason || c.detail}`);
+      } catch (err: any) {
+        console.error(`[cron] health-probe report failed for ${c.key}:`, err?.message || err);
+      }
+    } else if (c.status === "healthy") {
+      // Self-heal: a recovered service auto-resolves any open probe issue and
+      // clears its throttle so a future failure re-opens immediately.
+      _probeThrottle.delete(c.key);
+      try {
+        await pool.query(
+          `UPDATE system_issues SET status = 'resolved'
+           WHERE route = $1 AND source = 'health_probe' AND status <> 'resolved'`,
+          [route],
+        );
+      } catch (err: any) {
+        console.error(`[cron] health-probe auto-resolve failed for ${c.key}:`, err?.message || err);
+      }
+    }
+    // "warning" / "unknown": neither escalate nor auto-resolve — left as-is.
+  }
 }
 
 export function startCron() {
@@ -1724,6 +1833,9 @@ export function startCron() {
       } catch (err: any) {
         console.error("[cron] studio refund alert check failed:", err?.message || err);
       }
+
+      // 24/7 Smart Monitoring — scheduled service health probe → system_issues.
+      await runHealthProbeSweep();
     } catch (err) {
       console.error("[cron] error in cron job:", err);
     }

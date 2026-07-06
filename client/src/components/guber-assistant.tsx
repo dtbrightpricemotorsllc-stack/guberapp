@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 import { saveListingPrefill, clearListingPrefill } from "@/lib/jac-listing-prefill";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -28,11 +31,17 @@ const DD_PATTERNS = [
   /\$\s*\d+.{0,40}by\s+(today|tonight|tomorrow|friday|saturday|sunday|monday|tuesday|wednesday|thursday|next week|end of (week|day)|this weekend|midnight|eod)/i,
   /\b(need|want|make|earn|get)\b.{0,25}\$\s*\d+\b.{0,40}\b(by|before|this|tonight|tomorrow|end of|in)\b/i,
   /\bhow\s+(can|do)\s+i\s+(make|earn).{0,25}\$\s*\d+/i,
-  /\b(earning|financial)\s+goal\b/i,
+  /\b(earning|financial|income|money)\s+goal\b/i,
   /\bdestination\s+determination\b/i,
   /\bi\s+need\s+\$\s*\d+/i,
   /\bi\s+want\s+to\s+earn\s+\$\s*\d+/i,
   /\bset\s+(a|an|my)\s+(earning|income|money)\s+goal\b/i,
+  // Amount-free money-making intent (e.g. "how do I make money today")
+  /\bhow\s+(can|do|could|should)\s+i\s+(make|earn|get)\s+(some\s+)?(money|cash|income)\b/i,
+  /\b(make|earn|get)\s+(some\s+)?(money|cash)\s+(today|tonight|fast|quick|quickly|now|asap|this\s+week|this\s+weekend)\b/i,
+  /\bways?\s+to\s+(make|earn)\s+(money|cash|income)\b/i,
+  /\bi\s+need\s+(to\s+(make|earn)\s+)?(money|cash)\b/i,
+  /\bhelp\s+me\s+(make|earn)\s+(money|cash|income)\b/i,
 ];
 
 function hasDDIntent(text: string): boolean {
@@ -44,6 +53,8 @@ type DDPlanItem = {
   id?: number;
   title: string;
   estimatedPay: number;
+  availabilityCount?: number;
+  matchReason?: string;
   route: string;
   urgency: string;
   actionLabel: string;
@@ -58,7 +69,7 @@ interface Message {
   actions?: Array<{ label: string; message: string; route?: string }>;
   planItems?: DDPlanItem[];
   isDDPlan?: boolean;
-  ddGoalAmount?: number;
+  ddGoalAmount?: number | null;
   ddDeadline?: string | null;
   ddEarnedSoFar?: number;
 }
@@ -175,9 +186,20 @@ export function GUBERAssistantHeaderButton() {
 // ── Floating Jac bubble (FAB, rendered in guber-layout) ─────────────────────
 export function DDFloatingButton() {
   const s = useAssistantStore();
+  const [location] = useLocation();
+  const isMapPage = location === "/map";
+
   const [showHint, setShowHint] = useState(() => {
     try { return localStorage.getItem(FAB_HINT_KEY) !== "1"; } catch { return false; }
   });
+
+  // Map-specific state
+  const [mapPanelExpanded, setMapPanelExpanded] = useState(false);
+  const [mapOverlay, setMapOverlay] = useState(false);
+  const [mapInteracting, setMapInteracting] = useState(false);
+  // When minimized, user can tap to temporarily expand; resets on next panel state change
+  const [userExpandedOnMap, setUserExpandedOnMap] = useState(false);
+  const interactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!showHint) return;
@@ -188,13 +210,79 @@ export function DDFloatingButton() {
     return () => clearTimeout(t);
   }, [showHint]);
 
+  // Subscribe to map panel state events
+  useEffect(() => {
+    function onMapPanel(e: Event) {
+      const { expanded, overlay } = (e as CustomEvent<{ expanded: boolean; overlay: boolean }>).detail;
+      setMapPanelExpanded(expanded);
+      setMapOverlay(overlay);
+      // Reset user-override whenever panel state changes — re-evaluate minimize
+      setUserExpandedOnMap(false);
+    }
+    window.addEventListener("jac:map-panel", onMapPanel);
+    return () => window.removeEventListener("jac:map-panel", onMapPanel);
+  }, []);
+
+  // Reset map state when leaving the map page
+  useEffect(() => {
+    if (!isMapPage) {
+      setMapPanelExpanded(false);
+      setMapOverlay(false);
+      setMapInteracting(false);
+      setUserExpandedOnMap(false);
+    }
+  }, [isMapPage]);
+
+  // Detect map gestures (touch/drag) → fade JAC for 1.5 s
+  useEffect(() => {
+    if (!isMapPage) return;
+    function onInteract(e: Event) {
+      // Don't trigger fade if the user is tapping the JAC button itself
+      if ((e.target as HTMLElement)?.closest("[data-testid='button-dd-floating']")) return;
+      setMapInteracting(true);
+      if (interactTimerRef.current) clearTimeout(interactTimerRef.current);
+      interactTimerRef.current = setTimeout(() => setMapInteracting(false), 1500);
+    }
+    document.addEventListener("touchstart", onInteract, { passive: true });
+    document.addEventListener("pointerdown", onInteract, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onInteract);
+      document.removeEventListener("pointerdown", onInteract);
+      if (interactTimerRef.current) clearTimeout(interactTimerRef.current);
+    };
+  }, [isMapPage]);
+
   if (s.open) return null;
+
+  // Derive display mode
+  const needsMinimize = isMapPage && (mapPanelExpanded || mapOverlay) && !userExpandedOnMap;
+  const isFaded = isMapPage && mapInteracting;
+
+  // Minimized = small 36 px circle; normal = 56 px FAB
+  const size = needsMinimize ? 36 : 56;
+
+  function handleClick() {
+    if (needsMinimize) {
+      // First tap expands the bubble; second tap (when full) opens JAC
+      setUserExpandedOnMap(true);
+      return;
+    }
+    markSeen();
+    patchStore({ open: true });
+  }
+
   return (
     <div
       className="fixed z-[150]"
-      style={{ bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", right: "16px" }}
+      style={{
+        bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
+        right: "16px",
+        opacity: isFaded ? 0.4 : 1,
+        transition: "opacity 0.3s ease, bottom 0.3s ease",
+        pointerEvents: isFaded ? "none" : "auto",
+      }}
     >
-      {showHint && (
+      {showHint && !needsMinimize && (
         <div
           className="absolute bottom-16 right-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-[11px] font-display font-semibold text-white animate-fade-in mb-1"
           style={{ background: "hsl(270 100% 65% / 0.95)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
@@ -204,14 +292,21 @@ export function DDFloatingButton() {
       )}
       <button
         type="button"
-        onClick={() => { markSeen(); patchStore({ open: true }); }}
-        className="w-14 h-14 rounded-full overflow-hidden transition-all active:scale-95"
-        style={{
-          boxShadow: "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
-          border: "2px solid hsl(270 100% 65% / 0.6)",
-        }}
+        onClick={handleClick}
         data-testid="button-dd-floating"
-        aria-label="Open Jac"
+        aria-label={needsMinimize ? "Show Jac" : "Open Jac"}
+        className="rounded-full overflow-hidden active:scale-95"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          transition: "width 0.25s ease, height 0.25s ease, box-shadow 0.25s ease, border 0.25s ease",
+          boxShadow: needsMinimize
+            ? "0 2px 10px hsl(270 100% 65% / 0.35), 0 1px 4px rgba(0,0,0,0.5)"
+            : "0 4px 24px hsl(270 100% 65% / 0.55), 0 2px 8px rgba(0,0,0,0.6)",
+          border: needsMinimize
+            ? "1.5px solid hsl(270 100% 65% / 0.4)"
+            : "2px solid hsl(270 100% 65% / 0.6)",
+        }}
       >
         <img src={jacPortrait} alt="Jac" className="w-full h-full object-cover object-top" />
       </button>
@@ -236,11 +331,14 @@ export function GUBERAssistant() {
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastUserInputRef = useRef("");
+  const lastInputWasVoiceRef = useRef(false);
+  const voiceTimingRef = useRef<{ start: number } | null>(null);
 
   const { data: jacContext } = useJacContext(!!user && s.open);
   const { data: jacOpportunities } = useJacOpportunities(!!user && s.open);
 
   const briefingInjectedRef = useRef(false);
+  const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -259,7 +357,97 @@ export function GUBERAssistant() {
 
   // Auto-send when mic result arrives — no send button tap needed
   const { listening, transcribing, start: startListening, stop: stopListening, supported: micSupported } =
-    useSpeechInput((text) => doSend(text));
+    useSpeechInput((text) => {
+      lastInputWasVoiceRef.current = true;
+      doSend(text);
+    });
+
+  // ── Live Conversation Mode — always-listening, interruptible voice loop ──
+  // Reuses the existing per-character ElevenLabs TTS + Whisper STT stack
+  // (no ElevenLabs Conversational Agents / per-minute billing).
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const engineRef = useRef<ConversationEngine | null>(null);
+  const mutedRef = useRef(muted);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+  function getEngine(): ConversationEngine {
+    if (!engineRef.current) {
+      engineRef.current = new ConversationEngine({
+        onUtterance: (text) => {
+          lastInputWasVoiceRef.current = true;
+          doSend(text);
+        },
+        onStateChange: setLiveState,
+        onError: (reason) => {
+          setLiveMode(false);
+          setLiveState("idle");
+          const sentinel = reason === "mic_denied" ? "__mic_denied__" : reason === "unsupported" ? "__mic_error__" : "__mic_error__";
+          doSend(sentinel);
+        },
+      });
+    }
+    return engineRef.current;
+  }
+
+  function stopLiveMode() {
+    engineRef.current?.stop();
+    setLiveMode(false);
+    setLiveState("idle");
+  }
+
+  async function toggleLiveMode() {
+    if (liveMode) {
+      stopLiveMode();
+      return;
+    }
+    unlockAudioContext();
+    cancelSpeech();
+    cancelAllJacAudio();
+    if (listening) stopListening();
+    setLiveMode(true);
+    await getEngine().start();
+  }
+
+  // Wrapper around jacSpeak that keeps the live-mode VAD in sync with
+  // playback so it knows when to arm interruption detection and when to
+  // go back to plain listening once JAC finishes talking.
+  const speak = useCallback((text: string) => {
+    if (mutedRef.current) return;
+    const engine = engineRef.current;
+    jacSpeak(text, {
+      muted: mutedRef.current,
+      onStart: () => engine?.notifySpeakingStarted(),
+    }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
+  }, []);
+
+  // Tear down the live mic stream whenever the assistant sheet closes, the
+  // app is backgrounded (native), or the tab goes hidden (web) — never leave
+  // an open mic stream running unattended.
+  useEffect(() => {
+    if (!s.open) stopLiveMode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.open]);
+
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === "hidden") stopLiveMode();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const handle = CapApp.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive) stopLiveMode();
+    });
+    return () => { handle.then((h) => h.remove()).catch(() => {}); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { engineRef.current?.stop(); }, []);
 
   // Wake word listener — "Hey JAC" opens the panel and starts listening
   useEffect(() => {
@@ -307,7 +495,7 @@ export function GUBERAssistant() {
           actions: [{ label: "Continue where I left off", message: "__resume__" }],
         };
         setMessages(prev => [...prev, resumeMsg]);
-        jacSpeak(resumeContent, { muted });
+        speak(resumeContent);
         return;
       }
     }
@@ -315,7 +503,7 @@ export function GUBERAssistant() {
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
       // First-time visitor — speak the greeting immediately
-      setTimeout(() => jacSpeak(DD_GREETING, { muted }), 300);
+      setTimeout(() => speak(DD_GREETING), 300);
       return;
     }
     fetch("/api/jac/updates")
@@ -364,14 +552,18 @@ export function GUBERAssistant() {
   }, [s.open, user]);
 
   const sendMutation = useMutation({
-    mutationFn: async (msgs: Message[]) => {
+    mutationFn: async ({ msgs, voiceMode }: { msgs: Message[]; voiceMode?: boolean }) => {
       const res = await apiRequest("POST", "/api/ai/guber-assist", {
         messages: msgs.map((m) => ({ role: m.role, content: m.content })),
+        voiceMode: !!voiceMode,
       });
       const data = await res.json();
-      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }> };
+      return data as { reply: string; confidence?: string; route?: string | null; actions?: Array<{ label: string; message: string }>; options?: Array<{ label: string; message: string }>; feedbackDraft?: { ready: boolean; category: string; description: string } | null; latencyMs?: number };
     },
     onSuccess: (data) => {
+      if (data.feedbackDraft?.ready) {
+        feedbackDraftRef.current = data.feedbackDraft;
+      }
       const msg: Message = {
         role: "assistant",
         content: data.reply ?? "I'm having trouble right now — please try again.",
@@ -382,7 +574,27 @@ export function GUBERAssistant() {
         ].filter((a: any) => a?.label && a?.message).slice(0, 5),
       };
       setMessages((prev) => [...prev, msg]);
-      if (!muted) jacSpeak(msg.content, { muted });
+      const timing = voiceTimingRef.current;
+      if (timing) {
+        const chatMs = Math.round(performance.now() - timing.start);
+        console.log(`[JAC voice] STT→chat-response: ${chatMs}ms (server reported ${data.latencyMs ?? "?"}ms)`);
+      }
+      if (!muted) {
+        const engine = engineRef.current;
+        jacSpeak(msg.content, {
+          muted,
+          onStart: () => {
+            engine?.notifySpeakingStarted();
+            if (timing) {
+              const totalMs = Math.round(performance.now() - timing.start);
+              console.log(`[JAC voice] STT→first-audio: ${totalMs}ms`);
+              voiceTimingRef.current = null;
+            }
+          },
+        }).then(() => engine?.notifySpeakingEnded()).catch(() => engine?.notifySpeakingEnded());
+      } else {
+        voiceTimingRef.current = null;
+      }
       if (userRef.current && lastUserInputRef.current) {
         extractAndSaveMemory(lastUserInputRef.current, msg.content);
       }
@@ -416,7 +628,7 @@ export function GUBERAssistant() {
         actions: Array.isArray(data.actions) ? data.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
       };
       setMessages((prev) => [...prev, msg]);
-      if (!muted) jacSpeak(msg.content, { muted });
+      speak(msg.content);
 
       if (data.ready && data.route) {
         // Always write the prefill so forms have data whether or not user is logged in
@@ -424,10 +636,11 @@ export function GUBERAssistant() {
           try {
             localStorage.setItem("jac_job_prefill", JSON.stringify({
               category: newCollected.category || "",
-              serviceType: newCollected.serviceType || newCollected.service_type || "",
+              serviceType: newCollected.jobType || newCollected.serviceType || newCollected.service_type || "",
               descriptionSeed: newCollected.descriptionSeed || newCollected.description || "",
-              budgetHint: newCollected.budget ? Number(newCollected.budget) : null,
+              budget: newCollected.budget ? String(Number(newCollected.budget)) : "",
               zip: newCollected.zip || "",
+              jobDetails: (newCollected.jobDetails && typeof newCollected.jobDetails === "object") ? newCollected.jobDetails : {},
             }));
           } catch {}
         } else {
@@ -457,7 +670,7 @@ export function GUBERAssistant() {
             ],
           };
           setMessages(prev => [...prev, savedMsg]);
-          jacSpeak(savedMsg.content, { muted });
+          speak(savedMsg.content);
           return; // do NOT navigate — user isn't logged in
         }
 
@@ -486,11 +699,14 @@ export function GUBERAssistant() {
       const res = await apiRequest("POST", "/api/jac/dd/plan", { message: text });
       const data = await res.json();
       return data as {
-        goalId?: number;
-        goalAmount: number;
+        goalId?: number | null;
+        goalAmount: number | null;
         deadline: string | null;
+        daysLeft?: number;
         earnedSoFar: number;
         remaining: number;
+        realisticEarnable?: number;
+        realisticShortfall?: number;
         planItems: DDPlanItem[];
         reply: string;
         actions: Array<{ label: string; message: string; route?: string }>;
@@ -508,7 +724,7 @@ export function GUBERAssistant() {
         actions: (data.actions ?? []).slice(0, 4),
       };
       setMessages(prev => [...prev, msg]);
-      if (!muted) jacSpeak(msg.content, { muted });
+      speak(msg.content);
     },
     onError: () => {
       setMessages(prev => [...prev, { role: "assistant", content: "I couldn't pull up options right now — please try again." }]);
@@ -526,6 +742,8 @@ export function GUBERAssistant() {
   }
 
   function doSend(text: string) {
+    const wasVoice = lastInputWasVoiceRef.current;
+    lastInputWasVoiceRef.current = false;
     // Navigation sentinels — handled client-side, not sent to AI
     if (text === "__goto_signup__") {
       patchStore({ open: false });
@@ -546,25 +764,59 @@ export function GUBERAssistant() {
     // STT sentinels — show actionable feedback rather than silently doing nothing
     if (text === "__mic_denied__") {
       const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
-      const guide = platform === "android"
-        ? "Microphone is blocked. To fix it: open your phone's Settings app → Apps → tap the three-dot menu (⋮) or search for GUBER → App info → Permissions → Microphone → set to Allow. Then come back and try again."
-        : platform === "ios"
-          ? "Microphone access is blocked. Go to Settings → Privacy & Security → Microphone → GUBER and turn it on, then try again."
-          : "Microphone access was denied. Please allow microphone access in your browser settings, then try again.";
-      setMessages((prev) => [...prev, { role: "assistant", content: guide }]);
-      jacSpeak(guide, { muted });
+      let guide: string;
+      let micActions: Array<{ label: string; message: string }> | undefined;
+      if (platform === "ios") {
+        guide = "Microphone is blocked. Go to Settings → scroll down → find GUBER → tap it → Microphone → turn it ON. Then come back.";
+      } else if (platform === "android") {
+        guide = "Microphone is blocked. What phone are you using? I'll give you the exact steps.";
+        micActions = [
+          { label: "Samsung", message: "Samsung" },
+          { label: "Pixel", message: "Pixel" },
+          { label: "Other Android", message: "Other Android" },
+        ];
+      } else {
+        guide = "Microphone access was denied. Click the 🔒 lock icon next to the address bar → Microphone → Allow, then try again.";
+      }
+      setMessages((prev) => [...prev, { role: "assistant", content: guide, actions: micActions }]);
+      speak(guide);
+      return;
+    }
+    if (text === "__submit_feedback_report__") {
+      const draft = feedbackDraftRef.current;
+      const platform = (typeof window !== "undefined" && (window as any).Capacitor?.getPlatform?.()) ?? "web";
+      const currentMsgs = messages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const confirmMsg = "Got it — sending your report to the GUBER team now. They'll look into it and follow up. Is there anything else I can help you with?";
+      setMessages((prev) => [...prev,
+        { role: "user", content: "Yes, send report" },
+        { role: "assistant", content: confirmMsg },
+      ]);
+      speak(confirmMsg);
+      fetch("/api/jac/feedback-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          deviceInfo: typeof window !== "undefined" ? (navigator.userAgent ?? null) : null,
+          currentRoute: typeof window !== "undefined" ? window.location.pathname : null,
+          issueCategory: draft?.category ?? "general",
+          userDescription: draft?.description ?? null,
+          jacMessages: currentMsgs,
+        }),
+      }).catch(() => {});
+      feedbackDraftRef.current = null;
       return;
     }
     if (text === "__whisper_empty__") {
       const msg = "I didn't catch that — tap the mic and try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
-      jacSpeak(msg, { muted });
+      speak(msg);
       return;
     }
     if (text === "__whisper_error__" || text === "__mic_error__") {
       const msg = "Something went wrong with voice — please try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: msg }]);
-      jacSpeak(msg, { muted });
+      speak(msg);
       return;
     }
     unlockAudioContext();
@@ -576,13 +828,18 @@ export function GUBERAssistant() {
     setInput("");
     cancelSpeech();
     cancelAllJacAudio();
+    if (wasVoice) {
+      voiceTimingRef.current = { start: performance.now() };
+    } else {
+      voiceTimingRef.current = null;
+    }
     if (hasDDIntent(trimmed)) {
       ddMutation.mutate(trimmed);
     } else if (listingMode || hasListingIntent(trimmed)) {
       if (!listingMode) setListingMode(true);
       listingMutation.mutate(newMsgs);
     } else {
-      sendMutation.mutate(newMsgs);
+      sendMutation.mutate({ msgs: newMsgs, voiceMode: wasVoice });
     }
   }
 
@@ -913,9 +1170,15 @@ export function GUBERAssistant() {
                         }</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-white/90 leading-tight truncate">{item.title}</p>
+                          {item.matchReason && (
+                            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5" data-testid={`dd-plan-match-${k}`}>{item.matchReason}</p>
+                          )}
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {item.estimatedTime && (
                               <span className="text-[10px] text-muted-foreground">{item.estimatedTime}</span>
+                            )}
+                            {typeof item.availabilityCount === "number" && item.availabilityCount > 0 && (
+                              <span className="text-[10px] text-muted-foreground" data-testid={`dd-plan-avail-${k}`}>· {item.availabilityCount} nearby</span>
                             )}
                             {item.notes && (
                               <span className="text-[10px] text-muted-foreground truncate">{item.notes}</span>
@@ -1030,30 +1293,82 @@ export function GUBERAssistant() {
               disabled={anyPending}
             />
 
-            {/* Mic button */}
+            {/* Live Conversation Mode toggle — always-listening, interruptible */}
             {micSupported && (
               <button
-                onClick={() => { unlockAudioContext(); listening ? stopListening() : startListening(); }}
-                className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${
-                  listening ? "animate-pulse" : ""
+                onClick={toggleLiveMode}
+                className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
+                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
+                }`}
+                style={{
+                  background: liveMode
+                    ? liveState === "speaking"
+                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                      : liveState === "recording"
+                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
+                    : "linear-gradient(135deg, hsl(222 47% 20%), hsl(222 47% 12%))",
+                  color: liveMode ? "white" : "hsl(45 90% 60%)",
+                  boxShadow: liveMode
+                    ? "0 0 0 3px hsl(45 100% 55% / 0.3), 0 0 16px hsl(45 100% 55% / 0.45)"
+                    : "none",
+                }}
+                data-testid="button-live-conversation"
+                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
+                disabled={anyPending}
+                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
+              >
+                {liveMode && (liveState === "recording" || liveState === "listening") && (
+                  <span className="absolute inset-0 rounded-full animate-ping opacity-30"
+                    style={{ background: "hsl(45 100% 55%)" }} />
+                )}
+                <Zap className="w-5 h-5" fill={liveMode ? "currentColor" : "none"} />
+              </button>
+            )}
+
+            {/* Mic button (push-to-talk) */}
+            {micSupported && (
+              <button
+                onClick={() => {
+                  unlockAudioContext();
+                  if (liveMode) stopLiveMode();
+                  if (listening) {
+                    stopListening();
+                  } else {
+                    cancelSpeech();
+                    cancelAllJacAudio();
+                    setTimeout(() => startListening(), 150);
+                  }
+                }}
+                className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
+                  listening ? "scale-110" : "hover:scale-105 active:scale-95"
                 }`}
                 style={{
                   background: listening
-                    ? "hsl(0 80% 55%)"
+                    ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
                     : transcribing
-                      ? "hsl(270 60% 35%)"
-                      : "hsl(222 47% 15%)",
-                  color: listening || transcribing ? "white" : "hsl(0 0% 45%)",
+                      ? "linear-gradient(135deg, hsl(270 80% 40%), hsl(270 60% 30%))"
+                      : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
+                  color: listening ? "white" : transcribing ? "white" : "hsl(270 100% 78%)",
+                  boxShadow: listening
+                    ? "0 0 0 3px hsl(0 85% 52% / 0.35), 0 0 18px hsl(0 85% 52% / 0.5)"
+                    : transcribing
+                      ? "0 0 12px hsl(270 80% 55% / 0.4)"
+                      : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
                 }}
                 data-testid="button-dd-mic"
                 aria-label={transcribing ? "Transcribing…" : listening ? "Stop listening" : "Speak to Jac"}
                 disabled={anyPending || transcribing}
               >
+                {listening && (
+                  <span className="absolute inset-0 rounded-full animate-ping opacity-40"
+                    style={{ background: "hsl(0 85% 52%)" }} />
+                )}
                 {transcribing
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ? <Loader2 className="w-5 h-5 animate-spin" />
                   : listening
-                    ? <MicOff className="w-3.5 h-3.5" />
-                    : <Mic className="w-3.5 h-3.5" />}
+                    ? <MicOff className="w-5 h-5" />
+                    : <Mic className="w-5 h-5" />}
               </button>
             )}
 

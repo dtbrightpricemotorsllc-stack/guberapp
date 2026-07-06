@@ -38,6 +38,9 @@ export default defineConfig({
       external: ["@capacitor/camera"],
     },
   },
+  optimizeDeps: {
+    exclude: ["@capacitor/camera"],
+  },
   esbuild: {
     drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
   },

@@ -237,6 +237,12 @@ export const users = pgTable("users", {
   lifetimeCreditsRedeemed: integer("lifetime_credits_redeemed").default(0),
   // guberScore: engagement/reputation metric separate from trustScore.
   guberScore: integer("guber_score").default(0),
+  // campaignLabRole: null = no access (hidden from all non-admin users).
+  // "creator" = create content on assigned campaigns only.
+  // "reviewer" = approve/reject submitted work items.
+  // "marketing_manager" = full Campaign Lab access minus admin controls.
+  // Admin (role="admin") always has full access regardless of this column.
+  campaignLabRole: text("campaign_lab_role"),
 });
 
 export const categories = pgTable("categories", {
@@ -2813,6 +2819,7 @@ export const jacUserProfile = pgTable("jac_user_profile", {
   language:                    text("language").default("en"),
   tutorialStatus:              text("tutorial_status").default("not_started"),
   lastJacSummary:              jsonb("last_jac_summary").$type<Record<string, unknown>>().default({}),
+  memoryConsent:               text("memory_consent").default("unset"), // unset | granted | denied
   updatedAt:                   timestamp("updated_at").defaultNow(),
 });
 export type JacUserProfile       = typeof jacUserProfile.$inferSelect;
@@ -2872,6 +2879,46 @@ export const jacKnowledge = pgTable("jac_knowledge", {
 export type JacKnowledge       = typeof jacKnowledge.$inferSelect;
 export type InsertJacKnowledge = typeof jacKnowledge.$inferInsert;
 
+// ── System Issues (JAC System Guardian telemetry) ─────────────────────────────
+// Rich end-to-end failure reports captured across web / iOS / Android. Deduped
+// by fingerprint = md5(module + normalized error + route + platform); repeat
+// occurrences bump occurrence_count + last_seen instead of inserting new rows.
+// Severity is ALWAYS classified server-side — never trusted from the client.
+export const systemIssues = pgTable("system_issues", {
+  id:              serial("id").primaryKey(),
+  fingerprint:     text("fingerprint").notNull().unique(),
+  userId:          integer("user_id"),
+  platform:        text("platform").default("web"),        // web | ios | android
+  device:          text("device"),
+  appVersion:      text("app_version"),
+  route:           text("route"),
+  module:          text("module").notNull(),               // payment | login | upload | gps | map | wallet | studio | network | client | general
+  attemptedAction: text("attempted_action"),
+  errorMessage:    text("error_message"),
+  relatedIds:      jsonb("related_ids").$type<Record<string, string | number>>().default({}),
+  severity:        text("severity").default("medium"),     // low | medium | high | critical
+  blocked:         boolean("blocked").default(false),
+  steps:           jsonb("steps").$type<string[]>().default([]),
+  screenshotUrl:   text("screenshot_url"),
+  gpsPermission:   text("gps_permission"),
+  occurrenceCount: integer("occurrence_count").default(1),
+  firstSeen:       timestamp("first_seen").defaultNow(),
+  lastSeen:        timestamp("last_seen").defaultNow(),
+  status:          text("status").default("open"),         // open | ack | resolved
+  // ── 24/7 Smart Monitoring additions ──
+  affectedUserIds: jsonb("affected_user_ids").$type<number[]>().default([]), // distinct users hit (capped)
+  source:          text("source").default("user_event"),   // user_event | health_probe
+  suggestedFix:    text("suggested_fix"),                   // static remediation hint (self-healing prep)
+  aiDiagnosis:     jsonb("ai_diagnosis").$type<Record<string, string>>(), // { whatBroke, whereBroke, whoAffected, likelyCause, suggestedFix, urgency }
+  aiDiagnosedAt:   timestamp("ai_diagnosed_at"),            // set atomically BEFORE the OpenAI call — guarantees once-per-fingerprint
+});
+export const insertSystemIssueSchema = createInsertSchema(systemIssues).omit({
+  id: true, fingerprint: true, severity: true, occurrenceCount: true,
+  firstSeen: true, lastSeen: true, status: true,
+});
+export type SystemIssue       = typeof systemIssues.$inferSelect;
+export type InsertSystemIssue = z.infer<typeof insertSystemIssueSchema>;
+
 // ── JAC Intents ───────────────────────────────────────────────────────────────
 export const jacIntents = pgTable("jac_intents", {
   id:                serial("id").primaryKey(),
@@ -2920,3 +2967,188 @@ export const jacMemory = pgTable("jac_memory", {
 });
 export type JacMemoryEntry       = typeof jacMemory.$inferSelect;
 export type InsertJacMemoryEntry = typeof jacMemory.$inferInsert;
+
+export const jacFeedbackReports = pgTable("jac_feedback_reports", {
+  id:              serial("id").primaryKey(),
+  userId:          integer("user_id").references(() => users.id),
+  userEmail:       text("user_email"),
+  platform:        text("platform"),
+  deviceInfo:      text("device_info"),
+  currentRoute:    text("current_route"),
+  issueCategory:   text("issue_category"), // mic_failure|voice_failure|listing_interruption|payment_issue|gps_issue|form_problem|app_bug|general
+  userDescription: text("user_description"),
+  jacMessages:     jsonb("jac_messages").$type<Array<{role:string;content:string}>>().default([]),
+  status:          text("status").notNull().default("new"), // new|reviewed|fixed|dismissed
+  adminNotes:      text("admin_notes"),
+  createdAt:       timestamp("created_at").defaultNow(),
+  updatedAt:       timestamp("updated_at").defaultNow(),
+});
+export type JacFeedbackReport       = typeof jacFeedbackReports.$inferSelect;
+export type InsertJacFeedbackReport = typeof jacFeedbackReports.$inferInsert;
+
+// ── JAC Pending Actions (confirm-before-submit workflow execution) ────────────
+export const jacPendingActions = pgTable("jac_pending_actions", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").notNull().references(() => users.id),
+  actionType: text("action_type").notNull(), // post_job | marketplace_listing | transport_request | vi_request
+  payload:    jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  summary:    text("summary").notNull(),
+  status:     text("status").notNull().default("pending"), // pending | confirmed | executed | failed | cancelled | expired
+  resultBody: jsonb("result_body").$type<Record<string, unknown>>(),
+  createdAt:  timestamp("created_at").defaultNow(),
+  expiresAt:  timestamp("expires_at"),
+});
+export type JacPendingAction       = typeof jacPendingActions.$inferSelect;
+export type InsertJacPendingAction = typeof jacPendingActions.$inferInsert;
+
+// ── JAC Voice Usage Log (TTS/STT credit + reliability tracking) ──────────────
+export const jacVoiceUsageLog = pgTable("jac_voice_usage_log", {
+  id:         serial("id").primaryKey(),
+  userId:     integer("user_id").references(() => users.id),
+  type:       text("type").notNull(), // tts | stt
+  provider:   text("provider").notNull(), // elevenlabs | whisper | web_speech | static_cache
+  voiceId:    text("voice_id"),
+  units:      integer("units").notNull(), // tts: chars sent | stt: audio bytes
+  success:    boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  ip:         text("ip"),
+  latencyMs:  integer("latency_ms"), // time from request received to response sent
+  createdAt:  timestamp("created_at").defaultNow(),
+});
+export type JacVoiceUsageLog       = typeof jacVoiceUsageLog.$inferSelect;
+export type InsertJacVoiceUsageLog = typeof jacVoiceUsageLog.$inferInsert;
+
+// ── GUBER Campaign Lab ────────────────────────────────────────────────────────
+
+// Per-tool dollar cost registry (admin-editable, stored in cents)
+export const campaignLabToolCosts = pgTable("campaign_lab_tool_costs", {
+  id:          serial("id").primaryKey(),
+  toolKey:     text("tool_key").unique().notNull(),
+  displayName: text("display_name").notNull(),
+  costCents:   integer("cost_cents").notNull().default(0),
+  description: text("description"),
+  active:      boolean("active").default(true),
+  updatedAt:   timestamp("updated_at").defaultNow(),
+});
+export type CampaignLabToolCost       = typeof campaignLabToolCosts.$inferSelect;
+export type InsertCampaignLabToolCost = typeof campaignLabToolCosts.$inferInsert;
+
+// Global/monthly AI budget + kill switch (singleton row id=1)
+export const campaignLabBudgetConfig = pgTable("campaign_lab_budget_config", {
+  id:                   integer("id").primaryKey().default(1),
+  monthlyBudgetCents:   integer("monthly_budget_cents").default(50000),
+  monthlySpentCents:    integer("monthly_spent_cents").default(0),
+  budgetMonthYear:      text("budget_month_year"),
+  aiKillSwitch:         boolean("ai_kill_switch").default(false),
+  updatedAt:            timestamp("updated_at").defaultNow(),
+  updatedByUserId:      integer("updated_by_user_id").references(() => users.id),
+});
+export type CampaignLabBudgetConfig = typeof campaignLabBudgetConfig.$inferSelect;
+
+// Brand knowledge chunks injected into every AI prompt
+export const campaignLabBrandContext = pgTable("campaign_lab_brand_context", {
+  id:        serial("id").primaryKey(),
+  category:  text("category").notNull(),
+  title:     text("title").notNull(),
+  content:   text("content").notNull(),
+  isActive:  boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type CampaignLabBrandContext       = typeof campaignLabBrandContext.$inferSelect;
+export type InsertCampaignLabBrandContext = typeof campaignLabBrandContext.$inferInsert;
+
+// Asset library (logos, music, templates, screenshots, etc.)
+export const campaignLabAssets = pgTable("campaign_lab_assets", {
+  id:                 serial("id").primaryKey(),
+  category:          text("category").notNull(),
+  name:              text("name").notNull(),
+  description:       text("description"),
+  url:               text("url").notNull(),
+  cloudinaryPublicId:text("cloudinary_public_id"),
+  fileType:          text("file_type").notNull(),
+  mimeType:          text("mime_type"),
+  tags:              jsonb("tags").$type<string[]>().default([]),
+  isApproved:        boolean("is_approved").default(true),
+  uploadedByUserId:  integer("uploaded_by_user_id").references(() => users.id),
+  createdAt:         timestamp("created_at").defaultNow(),
+});
+export type CampaignLabAsset       = typeof campaignLabAssets.$inferSelect;
+export type InsertCampaignLabAsset = typeof campaignLabAssets.$inferInsert;
+
+// Campaign definitions
+export const campaignLabCampaigns = pgTable("campaign_lab_campaigns", {
+  id:                serial("id").primaryKey(),
+  title:             text("title").notNull(),
+  description:       text("description"),
+  goal:              text("goal"),
+  audience:          text("audience"),
+  approvedMessaging: text("approved_messaging"),
+  requiredCta:       text("required_cta"),
+  hashtags:          jsonb("hashtags").$type<string[]>().default([]),
+  budgetCents:       integer("budget_cents").default(0),
+  spentCents:        integer("spent_cents").default(0),
+  status:            text("status").notNull().default("draft"),
+  dueDate:           timestamp("due_date"),
+  coverImageUrl:     text("cover_image_url"),
+  createdByUserId:   integer("created_by_user_id").references(() => users.id),
+  createdAt:         timestamp("created_at").defaultNow(),
+  updatedAt:         timestamp("updated_at").defaultNow(),
+});
+export type CampaignLabCampaign       = typeof campaignLabCampaigns.$inferSelect;
+export type InsertCampaignLabCampaign = typeof campaignLabCampaigns.$inferInsert;
+
+// Creator assignments to campaigns (with per-creator spending limits)
+export const campaignLabCreatorAssignments = pgTable("campaign_lab_creator_assignments", {
+  id:                serial("id").primaryKey(),
+  userId:            integer("user_id").notNull().references(() => users.id),
+  campaignId:        integer("campaign_id").notNull().references(() => campaignLabCampaigns.id),
+  spendingLimitCents:integer("spending_limit_cents").default(2500),
+  spentCents:        integer("spent_cents").default(0),
+  active:            boolean("active").default(true),
+  assignedAt:        timestamp("assigned_at").defaultNow(),
+  assignedByUserId:  integer("assigned_by_user_id").references(() => users.id),
+});
+export type CampaignLabCreatorAssignment       = typeof campaignLabCreatorAssignments.$inferSelect;
+export type InsertCampaignLabCreatorAssignment = typeof campaignLabCreatorAssignments.$inferInsert;
+
+// Individual work items (script → storyboard → video approval gates)
+export const campaignLabWorkItems = pgTable("campaign_lab_work_items", {
+  id:               serial("id").primaryKey(),
+  userId:           integer("user_id").notNull().references(() => users.id),
+  campaignId:       integer("campaign_id").notNull().references(() => campaignLabCampaigns.id),
+  title:            text("title").notNull(),
+  type:             text("type").notNull(),
+  status:           text("status").notNull().default("draft"),
+  content:          text("content"),
+  assetUrl:         text("asset_url"),
+  cloudinaryPublicId:text("cloudinary_public_id"),
+  aiPromptUsed:     text("ai_prompt_used"),
+  notes:            text("notes"),
+  reviewerFeedback: text("reviewer_feedback"),
+  reviewedByUserId: integer("reviewed_by_user_id").references(() => users.id),
+  reviewedAt:       timestamp("reviewed_at"),
+  parentWorkItemId: integer("parent_work_item_id"),
+  createdAt:        timestamp("created_at").defaultNow(),
+  updatedAt:        timestamp("updated_at").defaultNow(),
+});
+export type CampaignLabWorkItem       = typeof campaignLabWorkItems.$inferSelect;
+export type InsertCampaignLabWorkItem = typeof campaignLabWorkItems.$inferInsert;
+
+// Every AI generation — dollar cost tracked per creator/campaign
+export const campaignLabGenerationLog = pgTable("campaign_lab_generation_log", {
+  id:            serial("id").primaryKey(),
+  userId:        integer("user_id").notNull().references(() => users.id),
+  campaignId:    integer("campaign_id").references(() => campaignLabCampaigns.id),
+  workItemId:    integer("work_item_id").references(() => campaignLabWorkItems.id),
+  toolKey:       text("tool_key").notNull(),
+  costCents:     integer("cost_cents").notNull().default(0),
+  status:        text("status").notNull().default("success"),
+  promptUsed:    text("prompt_used"),
+  outputUrl:     text("output_url"),
+  providerJobId: text("provider_job_id"),
+  createdAt:     timestamp("created_at").defaultNow(),
+});
+export type CampaignLabGenerationLog       = typeof campaignLabGenerationLog.$inferSelect;
+export type InsertCampaignLabGenerationLog = typeof campaignLabGenerationLog.$inferInsert;

@@ -19,6 +19,7 @@ import { isStoreBuild } from "@/lib/platform";
 import { WakeWordDetector } from "@/lib/voice";
 import { App as CapApp } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
+import { StatusBar, Style } from "@capacitor/status-bar";
 import {
   lockBiometricSession,
   getBiometricEnabled,
@@ -41,6 +42,7 @@ import AcceptableUse from "@/pages/acceptable-use";
 import DeleteAccount from "@/pages/delete-account";
 import JoinPage from "@/pages/join";
 import GpsTest from "@/pages/gps-test";
+import JacVoiceTest from "@/pages/jac-voice-test";
 import { LoadingSplash } from "@/components/loading-splash";
 
 // Authenticated consumer pages — lazy loaded
@@ -146,6 +148,13 @@ const AdminLocalBusinesses = lazy(() => import("@/pages/admin-local-businesses")
 const OgAdvantage = lazy(() => import("@/pages/og-advantage"));
 const CreditsPage = lazy(() => import("@/pages/credits"));
 const CarrierProfilePage = lazy(() => import("@/pages/carrier-profile"));
+
+// Campaign Lab — admin-gated marketing workspace
+const CampaignLabHub = lazy(() => import("@/pages/campaign-lab"));
+const CampaignLabBrandCenter = lazy(() => import("@/pages/campaign-lab").then(m => ({ default: m.CampaignLabBrandCenter })));
+const CampaignLabCampaignsList = lazy(() => import("@/pages/campaign-lab").then(m => ({ default: m.CampaignLabCampaignsList })));
+const CampaignLabCampaignDetail = lazy(() => import("@/pages/campaign-lab").then(m => ({ default: m.CampaignLabCampaignDetail })));
+const AdminCampaignLab = lazy(() => import("@/pages/admin-campaign-lab"));
 
 
 // Universal GUBER loading splash — replaces the legacy spinner-based loaders
@@ -367,6 +376,11 @@ function Router() {
       <Route path="/admin/guber-scout" component={() => <AdminRoute component={AdminGuberScout} />} />
       <Route path="/admin/jac-brain" component={() => <AdminRoute component={AdminJacBrain} />} />
       <Route path="/admin/asset-protection" component={() => <AdminRoute component={AdminAssetProtection} />} />
+      <Route path="/admin/campaign-lab" component={() => <AdminRoute component={AdminCampaignLab} />} />
+      <Route path="/campaign-lab/campaigns/:id" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignDetail /></Suspense>} />
+      <Route path="/campaign-lab/campaigns" component={() => <Suspense fallback={<PageLoader />}><CampaignLabCampaignsList /></Suspense>} />
+      <Route path="/campaign-lab/brand" component={() => <Suspense fallback={<PageLoader />}><CampaignLabBrandCenter /></Suspense>} />
+      <Route path="/campaign-lab" component={() => <Suspense fallback={<PageLoader />}><CampaignLabHub /></Suspense>} />
       <Route path="/admin/growth-engine" component={() => <AdminRoute component={AdminGrowthEngine} />} />
       <Route path="/admin/local-businesses" component={() => <AdminRoute component={AdminLocalBusinesses} />} />
       <Route path="/og-advantage" component={() => <Suspense fallback={<PageLoader />}><OgAdvantage /></Suspense>} />
@@ -436,6 +450,7 @@ function Router() {
       <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />
       <Route path="/gps-test" component={GpsTest} />
+      <Route path="/jac-voice-test" component={() => <ProtectedRoute component={JacVoiceTest} />} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/acceptable-use" component={AcceptableUse} />
@@ -455,6 +470,14 @@ export function NativeDeepLinkHandler() {
   const { logout } = useAuth();
   const { toast } = useToast();
   const [biometricLocked, setBiometricLocked] = useState(false);
+
+  // Ensure status bar always shows white/light icons on GUBER's dark background.
+  // Runs once on mount — guards both iOS and Android native builds.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    StatusBar.setStyle({ style: Style.Light }).catch(() => {});
+    StatusBar.setBackgroundColor({ color: "#00000000" }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;

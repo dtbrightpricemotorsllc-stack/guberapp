@@ -222,6 +222,43 @@ app.use((req, res, next) => {
     ALTER TABLE worker_qualifications ADD COLUMN IF NOT EXISTS expiry_warning_sent_at TIMESTAMP;
   `).catch(e => console.error("[migration] worker_qualifications expiry_warning_sent_at error:", e));
 
+  // System Issues — JAC System Guardian telemetry. Prod has no db:push, so
+  // self-heal the table + indexes here (idempotent). Deduped by fingerprint.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_issues (
+      id SERIAL PRIMARY KEY,
+      fingerprint TEXT NOT NULL UNIQUE,
+      user_id INTEGER,
+      platform TEXT DEFAULT 'web',
+      device TEXT,
+      app_version TEXT,
+      route TEXT,
+      module TEXT NOT NULL,
+      attempted_action TEXT,
+      error_message TEXT,
+      related_ids JSONB DEFAULT '{}'::jsonb,
+      severity TEXT DEFAULT 'medium',
+      blocked BOOLEAN DEFAULT false,
+      steps JSONB DEFAULT '[]'::jsonb,
+      screenshot_url TEXT,
+      gps_permission TEXT,
+      occurrence_count INTEGER DEFAULT 1,
+      first_seen TIMESTAMP DEFAULT NOW(),
+      last_seen TIMESTAMP DEFAULT NOW(),
+      status TEXT DEFAULT 'open'
+    );
+    CREATE INDEX IF NOT EXISTS idx_system_issues_status ON system_issues (status);
+    CREATE INDEX IF NOT EXISTS idx_system_issues_severity ON system_issues (severity);
+    CREATE INDEX IF NOT EXISTS idx_system_issues_last_seen ON system_issues (last_seen DESC);
+    CREATE INDEX IF NOT EXISTS idx_system_issues_module ON system_issues (module);
+    -- 24/7 Smart Monitoring columns (prod has no db:push — self-heal here, idempotent)
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS affected_user_ids JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'user_event';
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS suggested_fix TEXT;
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS ai_diagnosis JSONB;
+    ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS ai_diagnosed_at TIMESTAMP;
+  `).catch(e => console.error("[migration] system_issues table setup error:", e));
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_accounts (
       id SERIAL PRIMARY KEY,
@@ -878,6 +915,7 @@ app.use((req, res, next) => {
       language           TEXT DEFAULT 'en',
       tutorial_status    TEXT DEFAULT 'not_started',
       last_jac_summary   JSONB DEFAULT '{}',
+      memory_consent     TEXT DEFAULT 'unset',
       updated_at         TIMESTAMP DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS jac_tutorial_state (
@@ -996,6 +1034,209 @@ app.use((req, res, next) => {
     ALTER TABLE jac_dd_goals ADD COLUMN IF NOT EXISTS realistic_earnable REAL DEFAULT 0;
   `).catch(e => console.error("[migration] jac_dd_goals realistic_earnable error:", e));
 
+  // Add memory_consent column for users whose jac_user_profile row predates this feature
+  await pool.query(`
+    ALTER TABLE jac_user_profile ADD COLUMN IF NOT EXISTS memory_consent TEXT DEFAULT 'unset';
+  `).catch(e => console.error("[migration] jac_user_profile memory_consent error:", e));
+
+  // JAC confirm-before-submit workflow execution (post_job, marketplace_listing, transport_request, vi_request)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_pending_actions (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id),
+      action_type  TEXT NOT NULL,
+      payload      JSONB NOT NULL,
+      summary      TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'pending',
+      result_body  JSONB,
+      created_at   TIMESTAMP DEFAULT NOW(),
+      expires_at   TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_pending_actions_user ON jac_pending_actions(user_id, status);
+  `).catch(e => console.error("[migration] jac_pending_actions error:", e));
+
+  // JAC voice usage log (TTS/STT credit + reliability tracking)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_voice_usage_log (
+      id             SERIAL PRIMARY KEY,
+      user_id        INTEGER REFERENCES users(id),
+      type           TEXT NOT NULL,
+      provider       TEXT NOT NULL,
+      voice_id       TEXT,
+      units          INTEGER NOT NULL,
+      success        BOOLEAN NOT NULL DEFAULT TRUE,
+      error_message  TEXT,
+      ip             TEXT,
+      latency_ms     INTEGER,
+      created_at     TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_usage_log_user ON jac_voice_usage_log(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_jac_voice_usage_log_type ON jac_voice_usage_log(type, created_at);
+    ALTER TABLE jac_voice_usage_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER;
+  `).catch(e => console.error("[migration] jac_voice_usage_log error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS jac_feedback_reports (
+      id               SERIAL PRIMARY KEY,
+      user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      user_email       TEXT,
+      platform         TEXT,
+      device_info      TEXT,
+      current_route    TEXT,
+      issue_category   TEXT,
+      user_description TEXT,
+      jac_messages     JSONB DEFAULT '[]',
+      status           TEXT NOT NULL DEFAULT 'new',
+      admin_notes      TEXT,
+      created_at       TIMESTAMP DEFAULT NOW(),
+      updated_at       TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jac_feedback_status ON jac_feedback_reports(status, created_at DESC);
+  `).catch(e => console.error("[migration] jac_feedback_reports error:", e));
+
+  // ── GUBER Campaign Lab ─────────────────────────────────────────────────────
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS campaign_lab_role TEXT;
+  `).catch(e => console.error("[migration] campaign_lab_role error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_tool_costs (
+      id           SERIAL PRIMARY KEY,
+      tool_key     TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      cost_cents   INTEGER NOT NULL DEFAULT 0,
+      description  TEXT,
+      active       BOOLEAN DEFAULT TRUE,
+      updated_at   TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] campaign_lab_tool_costs error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_budget_config (
+      id                    INTEGER PRIMARY KEY DEFAULT 1,
+      monthly_budget_cents  INTEGER DEFAULT 50000,
+      monthly_spent_cents   INTEGER DEFAULT 0,
+      budget_month_year     TEXT,
+      ai_kill_switch        BOOLEAN DEFAULT FALSE,
+      updated_at            TIMESTAMP DEFAULT NOW(),
+      updated_by_user_id    INTEGER REFERENCES users(id)
+    );
+    INSERT INTO campaign_lab_budget_config (id) VALUES (1) ON CONFLICT DO NOTHING;
+  `).catch(e => console.error("[migration] campaign_lab_budget_config error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_brand_context (
+      id         SERIAL PRIMARY KEY,
+      category   TEXT NOT NULL,
+      title      TEXT NOT NULL,
+      content    TEXT NOT NULL,
+      is_active  BOOLEAN DEFAULT TRUE,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `).catch(e => console.error("[migration] campaign_lab_brand_context error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_assets (
+      id                   SERIAL PRIMARY KEY,
+      category             TEXT NOT NULL,
+      name                 TEXT NOT NULL,
+      description          TEXT,
+      url                  TEXT NOT NULL,
+      cloudinary_public_id TEXT,
+      file_type            TEXT NOT NULL,
+      mime_type            TEXT,
+      tags                 JSONB DEFAULT '[]',
+      is_approved          BOOLEAN DEFAULT TRUE,
+      uploaded_by_user_id  INTEGER REFERENCES users(id),
+      created_at           TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_assets_category ON campaign_lab_assets(category);
+  `).catch(e => console.error("[migration] campaign_lab_assets error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_campaigns (
+      id                 SERIAL PRIMARY KEY,
+      title              TEXT NOT NULL,
+      description        TEXT,
+      goal               TEXT,
+      audience           TEXT,
+      approved_messaging TEXT,
+      required_cta       TEXT,
+      hashtags           JSONB DEFAULT '[]',
+      budget_cents       INTEGER DEFAULT 0,
+      spent_cents        INTEGER DEFAULT 0,
+      status             TEXT NOT NULL DEFAULT 'draft',
+      due_date           TIMESTAMP,
+      cover_image_url    TEXT,
+      created_by_user_id INTEGER REFERENCES users(id),
+      created_at         TIMESTAMP DEFAULT NOW(),
+      updated_at         TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_campaigns_status ON campaign_lab_campaigns(status);
+  `).catch(e => console.error("[migration] campaign_lab_campaigns error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_creator_assignments (
+      id                   SERIAL PRIMARY KEY,
+      user_id              INTEGER NOT NULL REFERENCES users(id),
+      campaign_id          INTEGER NOT NULL REFERENCES campaign_lab_campaigns(id) ON DELETE CASCADE,
+      spending_limit_cents INTEGER DEFAULT 2500,
+      spent_cents          INTEGER DEFAULT 0,
+      active               BOOLEAN DEFAULT TRUE,
+      assigned_at          TIMESTAMP DEFAULT NOW(),
+      assigned_by_user_id  INTEGER REFERENCES users(id),
+      UNIQUE(user_id, campaign_id)
+    );
+  `).catch(e => console.error("[migration] campaign_lab_creator_assignments error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_work_items (
+      id                   SERIAL PRIMARY KEY,
+      user_id              INTEGER NOT NULL REFERENCES users(id),
+      campaign_id          INTEGER NOT NULL REFERENCES campaign_lab_campaigns(id) ON DELETE CASCADE,
+      title                TEXT NOT NULL,
+      type                 TEXT NOT NULL,
+      status               TEXT NOT NULL DEFAULT 'draft',
+      content              TEXT,
+      asset_url            TEXT,
+      cloudinary_public_id TEXT,
+      ai_prompt_used       TEXT,
+      notes                TEXT,
+      reviewer_feedback    TEXT,
+      reviewed_by_user_id  INTEGER REFERENCES users(id),
+      reviewed_at          TIMESTAMP,
+      parent_work_item_id  INTEGER,
+      created_at           TIMESTAMP DEFAULT NOW(),
+      updated_at           TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_work_items_campaign ON campaign_lab_work_items(campaign_id, status);
+    CREATE INDEX IF NOT EXISTS idx_cl_work_items_user ON campaign_lab_work_items(user_id, created_at DESC);
+  `).catch(e => console.error("[migration] campaign_lab_work_items error:", e));
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_lab_generation_log (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      campaign_id     INTEGER REFERENCES campaign_lab_campaigns(id),
+      work_item_id    INTEGER REFERENCES campaign_lab_work_items(id),
+      tool_key        TEXT NOT NULL,
+      cost_cents      INTEGER NOT NULL DEFAULT 0,
+      status          TEXT NOT NULL DEFAULT 'success',
+      prompt_used     TEXT,
+      output_url      TEXT,
+      provider_job_id TEXT,
+      created_at      TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_cl_gen_log_user ON campaign_lab_generation_log(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_cl_gen_log_campaign ON campaign_lab_generation_log(campaign_id, created_at DESC);
+  `).catch(e => console.error("[migration] campaign_lab_generation_log error:", e));
+
+  // Tool costs and brand/campaign seeds are loaded lazily by setupCampaignLabRoutes (non-blocking).
+
+
+
   // Add new JAC preference columns to jac_user_profile (idempotent)
   await pool.query(`
     ALTER TABLE jac_user_profile
@@ -1105,7 +1346,7 @@ app.use((req, res, next) => {
       ('safety','ID verification process',
         '["how does id verification work","verify my id","id check","identity verification","verify my identity","how do i verify","id required"]'::jsonb,
         '["id verification","verify","identity","id check","document","verify id"]'::jsonb,
-        'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. You must be 18+ (or have a parent account if 13–17).',
+        'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. GUBER is only for users 18 years of age or older.',
         '[{"label":"Go verify my ID","message":"Take me to verify my ID"}]'::jsonb,
         'system'),
       ('safety','How disputes work',
@@ -1135,6 +1376,14 @@ app.use((req, res, next) => {
     ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
     WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE created_by = 'system' LIMIT 1);
   `).catch(e => console.error("[migration] jac_knowledge seed error:", e));
+
+  // Correct stale "13-17 with parent account" copy on DBs that were already seeded
+  // before GUBER moved to a strict 18+-only policy.
+  await pool.query(`
+    UPDATE jac_knowledge
+    SET answer = 'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. GUBER is only for users 18 years of age or older.'
+    WHERE title = 'ID verification process' AND (answer ILIKE '%13%17%' OR answer ILIKE '%parent account%');
+  `).catch(e => console.error("[migration] jac_knowledge 18+ policy fix error:", e));
 
   // Seed initial intents
   await pool.query(`
@@ -1212,6 +1461,109 @@ app.use((req, res, next) => {
       target_flow = EXCLUDED.target_flow,
       fallback_response = EXCLUDED.fallback_response;
   `).catch(e => console.error("[migration] jac_intents seed error:", e));
+
+  // GUBER Brain v2 — knowledge base gap-fill seed (vehicles, real estate, missions,
+  // credits detail, Day-1 OG detail, city activation, payments/fees, accounts,
+  // messaging, FAQs). Guarded on its own marker title so it only runs once and
+  // is independent of the original jac_knowledge seed block above.
+  await pool.query(`
+    INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    SELECT * FROM (VALUES
+      ('marketplace','Vehicle listing fields and Buyer''s Order',
+        '["vehicle listing fields","vin mileage listing","buyer''s order","buyers order pdf","vehicle info sheet","what info do i need to sell my car"]'::jsonb,
+        '["vin","mileage","buyer''s order","vehicle fields","title status"]'::jsonb,
+        'Vehicle listings capture VIN, mileage, year, make/model, title status, and purchase type (finance or cash). Price must be at least $100 and mileage at least 2 to prevent junk listings. If a listing is missing details, a buyer can request them, then purchase a Buyer''s Order PDF (vehicle info sheet) for $1 — free (2/month) for Day-1 OG members. If the vehicle completed a Verify & Inspect job, the PDF carries a GUBER Verified badge.',
+        '[{"label":"List my vehicle","message":"I want to sell my vehicle"},{"label":"What is Verify and Inspect?","message":"What is Verify and Inspect?"}]'::jsonb,
+        'system'),
+      ('marketplace','Selling real estate on GUBER',
+        '["sell my house","list my property","real estate listing","sell land","list a property","sell my home on guber"]'::jsonb,
+        '["real estate","property","house","land","sell home"]'::jsonb,
+        'Real Estate is a category inside GUBER Marketplace, using the same listing system as other items (title, description, price, photos, location, offers, deals, boosting). You can also request a Verify & Inspect walkthrough on a property using its APN (Assessor''s Parcel Number) for extra buyer confidence.',
+        '[{"label":"Start a real estate listing","message":"I want to list my property"},{"label":"Request a property inspection","message":"I want to request a Verify and Inspect on a property"}]'::jsonb,
+        'system'),
+      ('general','What is City Activation',
+        '["what is city activation","city activation","is my city activated","when does my city activate","activation threshold"]'::jsonb,
+        '["city activation","activation","market launch","live feed"]'::jsonb,
+        'A city or local market "activates" once it reaches 250 verified/active users. Activation unlocks the live local feed and lets Cash Drops appear on the map for that area. GUBER rolls out market-by-market so there''s always enough real activity before turning on the full live experience.',
+        '[{"label":"What are Cash Drops?","message":"What are Cash Drops?"}]'::jsonb,
+        'system'),
+      ('payments','GUBER fees breakdown',
+        '["what fees does guber charge","platform fee","processing fee","how much does guber take","cashout fee","instant cashout fee","early cashout fee"]'::jsonb,
+        '["fees","platform fee","processing fee","cashout fee","commission"]'::jsonb,
+        'Platform fee on job payouts is 20% (15% for Day-1 OG). Posters also pay a 3.2% processing fee at checkout. Wallet cashouts: early cashout is 2% (Verified Worker tier+), instant cashout is 5% (Trusted Worker tier+). Standard payouts land in 2–7 business days via Stripe.',
+        '[{"label":"What is Day-1 OG?","message":"What is Day-1 OG?"},{"label":"How do trust tiers work?","message":"How does the trust score system work?"}]'::jsonb,
+        'system'),
+      ('safety','How the trust score system works',
+        '["trust score","how does trust score work","verified worker tier","trusted worker tier","how do i level up my trust score"]'::jsonb,
+        '["trust score","tier","verified worker","trusted worker","reputation"]'::jsonb,
+        'Everyone starts at a trust score of 50. It rises for good behavior (job confirmed +5, completed with proof +5, Day-1 OG +10) and falls for bad behavior (dispute opened -10, proof rejected -20, job abandoned -15). Below 60 = New Worker, 60-79 = Verified Worker (unlocks early cashout), 80+ = Trusted Worker (unlocks instant cashout).',
+        '[{"label":"Cashout fees","message":"What are the cashout fees?"}]'::jsonb,
+        'system'),
+      ('safety','Dispute resolution timeline',
+        '["how long does a dispute take","dispute timeline","dispute sla","what happens after i file a dispute","dispute response window"]'::jsonb,
+        '["dispute timeline","dispute sla","dispute window","24 hours","5 day"]'::jsonb,
+        'After a dispute is opened, the other party has 24 hours to respond with their own evidence, then an admin reviews. GUBER commits to resolving every dispute within 5 days — if that window passes with no resolution, the hirer is automatically issued a full refund. If no dispute is filed at all, jobs auto-confirm and pay out after 24-72 hours depending on job type/value.',
+        '[{"label":"How do disputes work?","message":"What happens if there is a dispute?"}]'::jsonb,
+        'system'),
+      ('general','Account deletion and data retention',
+        '["how do i delete my account","delete my account","account deletion","close my account","remove my account"]'::jsonb,
+        '["delete account","close account","soft delete","account removal"]'::jsonb,
+        'GUBER uses soft-delete: your name, photo, bio, and skills are wiped immediately and your email/username are anonymized. Job history and payment records are retained (without your identity attached) for a minimum of 90 days for legal/fraud purposes. Public lookups for a deleted account return "not found."',
+        '[{"label":"Is GUBER safe?","message":"Is GUBER safe?"}]'::jsonb,
+        'system'),
+      ('general','Editing your profile',
+        '["how do i edit my profile","update my profile","change my bio","edit my skills","change profile photo","update availability"]'::jsonb,
+        '["edit profile","update profile","bio","skills","availability","profile photo"]'::jsonb,
+        'From your Profile page you can edit your name, bio, zip code, skills list, availability toggle, and profile photo. Only you can edit your own profile, and photo changes go through the same content-safety checks as everything else on GUBER.',
+        '[{"label":"Go to my profile","message":"Take me to my profile"}]'::jsonb,
+        'system'),
+      ('general','Messaging and chat rules',
+        '["how does messaging work","can i chat with a seller","why can''t i message someone","chat rules","when does chat unlock"]'::jsonb,
+        '["chat","messaging","message seller","message buyer","deal chat"]'::jsonb,
+        'Marketplace chat with a seller unlocks only after a deal is created (an offer is accepted) — this prevents message spam to sellers. Jobs intentionally skip open-ended chat for scheduling and instead use GUBER''s structured availability-window flow. All messages, everywhere on GUBER, are automatically screened for phone numbers, emails, social handles, and off-platform payment mentions (Venmo/CashApp/Zelle) to keep transactions safe and on-platform.',
+        '[{"label":"Why does GUBER block contact info?","message":"Why can I not share my phone number on GUBER?"}]'::jsonb,
+        'system'),
+      ('credits','How missions work',
+        '["how do missions work","map missions","what missions can i do","earn credits from missions","list of missions"]'::jsonb,
+        '["missions","map mission","earn credits","growth task"]'::jsonb,
+        'Missions are small local tasks shown on the map that earn credits — separate from paid jobs. Examples: Submit Local Recommendation (25 cr), Fuel Price Report (50 cr), Verify Business Hours (75 cr), Add Local Info or Submit Local Event (100 cr each), Report Wrong/Closed Business (100 cr), Add Storefront Photo (100 cr), and High-Value Verified Local Intel (up to 500 cr, admin-reviewed). There''s also a profile mission, Set Your Availability + Skills, worth 200 cr. Day-1 OG members earn a bonus on top of every mission reward. Missions are community/promotional activities, not employment or guaranteed income.',
+        '[{"label":"Show me city missions","message":"Show me city missions"},{"label":"What is Day-1 OG?","message":"What is Day-1 OG?"}]'::jsonb,
+        'system'),
+      ('general','iOS digital purchases and ExternalPurchaseSheet',
+        '["why does it open a browser to pay","external purchase sheet","ios purchase","apple pay disclosure","why can''t i pay directly in the app"]'::jsonb,
+        '["ios purchase","external purchase","apple disclosure","in-app browser"]'::jsonb,
+        'On iOS, purely digital purchases (Studio credits/subscriptions, Day-1 OG, Trust Box, Business Scout plan, unlock packs, Buyer''s Order PDFs) show Apple''s required purchase disclosure, then open Stripe checkout in a secure in-app browser — this is required by Apple''s policy for digital goods. Real-world services (jobs, Verify & Inspect, barter, worker payouts, refunds) go straight through Stripe on every platform since those are exempt from Apple''s in-app purchase rules.',
+        '[{"label":"What is Day-1 OG?","message":"What is Day-1 OG?"}]'::jsonb,
+        'system')
+    ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'Vehicle listing fields and Buyer''s Order');
+  `).catch(e => console.error("[migration] jac_knowledge gap-fill seed error:", e));
+
+  // Seed GUVATAR (AI avatar platform) knowledge — incremental, guarded by first title
+  await pool.query(`
+    INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    SELECT * FROM (VALUES
+      ('general','What is GUVATAR',
+        '["what is guvatar","guvatar","tell me about guvatar","avatar platform","ai avatar","create an avatar","make an avatar","digital avatar","build an avatar"]'::jsonb,
+        '["guvatar","avatar","ai avatar","digital avatar","spokesperson","mascot","vtuber","character"]'::jsonb,
+        'GUVATAR is GUBER''s AI avatar platform, part of GUBER Studio. It turns a photo or an idea into a living digital avatar you can animate and customize — no 3D, rigging, or animation experience needed. Create a personal avatar, a business spokesperson, a company mascot, an AI influencer, a VTuber, a gaming or educational character, or something completely original. What would you like to create today?',
+        '[{"label":"What can I create?","message":"What can I create with GUVATAR?"},{"label":"How does it work?","message":"How does GUVATAR work?"}]'::jsonb,
+        'system'),
+      ('general','What can I create with GUVATAR',
+        '["what can i create with guvatar","what can guvatar make","types of avatars","what avatars can i make","guvatar ideas","what can i make with guvatar"]'::jsonb,
+        '["guvatar","avatar types","spokesperson","mascot","influencer","vtuber","gaming character","brand ambassador"]'::jsonb,
+        'With GUVATAR you can create personal AI avatars, business spokespersons, company mascots, AI influencers, VTubers, streamers, gaming characters, educational characters, customer-service reps, brand ambassadors, family characters, and original fictional characters — whatever you can imagine. Whether you''re creating content, growing a business, streaming, teaching, or gaming, GUVATAR makes it simple. What would you like to build first?',
+        '[{"label":"How does it work?","message":"How does GUVATAR work?"},{"label":"What is GUVATAR?","message":"What is GUVATAR?"}]'::jsonb,
+        'system'),
+      ('general','How does GUVATAR work',
+        '["how does guvatar work","how do i make a guvatar","how to create an avatar","guvatar steps","how do i build an avatar","how do i use guvatar"]'::jsonb,
+        '["guvatar","how it works","create avatar","upload photo","animate avatar","customize avatar"]'::jsonb,
+        'It''s simple: 1) Choose what you''d like to create. 2) Upload a photo or describe your idea. 3) Customize your avatar. 4) Animate it using supported AI technologies. 5) Use it across supported platforms. No 3D skills or animation experience required — just your imagination. GUVATAR is built with long-term compatibility in mind, and support keeps expanding over time. Ready to start?',
+        '[{"label":"What can I create?","message":"What can I create with GUVATAR?"},{"label":"Open GUBER Studio","message":"Take me to GUBER Studio"}]'::jsonb,
+        'system')
+    ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'What is GUVATAR');
+  `).catch(e => console.error("[migration] jac_knowledge GUVATAR seed error:", e));
 
   // Seed Phase 1 map mission templates — deactivate old placeholders first
   await pool.query(`

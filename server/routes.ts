@@ -1,7 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import { setupCampaignLabRoutes } from "./campaign-lab";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { getStudioToolsCache, setStudioToolsCache } from "./studio-tools-cache";
+import { synthesizeSpeech, httpStatusForError, estimateCostUsd, DEFAULT_JAC_VOICE_ID, DEFAULT_JAC_MODEL_ID } from "./elevenlabs";
 import { lookupZip, lookupZipCity, geocodeZip, geocodeZipFull, lookupZipsByCity, flushZipGeocodeCache } from "./zip-geocode";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -23,8 +25,11 @@ import {
   type StudioTierPlanId,
 } from "./studio-pricing";
 import { sendPushToUser } from "./push";
-import { tryLocalAnswer, promoteToCache, getJacBrainStats } from "./jac-brain";
+import { tryLocalAnswer, promoteToCache, getJacBrainStats, getMultiSourceContext } from "./jac-brain";
 import { syncJacProfile, buildJacProfileContext, buildMorningBriefing, scanOpportunities } from "./jac-profile";
+import { reportIssue as recordSystemIssue, escalateCriticalIssue, tryAdminMonitoringAnswer, shouldDiagnose } from "./system-issues";
+import { maybeDiagnoseIssue } from "./ai-diagnosis";
+import { isValidActionType, validateAndSummarize, createPendingAction, executeAction } from "./jac-actions";
 import { awardReferralRewardForJob, voidReferralRewardForJob } from "./referral-reward";
 import {
   getZipFallbackTasks, completeGrowthTask, countRealJobsInZip,
@@ -46,6 +51,8 @@ import { validatePasswordStrength, hashPassword, comparePasswords, filterContact
 import { detectDisallowedJobContent, detectOffPlatformPhrase, detectViLanguageHit, replaceViLanguage } from "@shared/liability";
 import { generateJWT, verifyJWT } from "./jwt";
 import { signMobileCheckoutToken, verifyMobileCheckoutToken, isValidProduct } from "./mobile-checkout-token";
+import { verifyJacVoiceToken, signJacVoiceToken } from "./jac-voice-token";
+import { sanitizeAssistMessages, resolveVoiceToken, newCompletionId, writeOpenAiStream, buildNonStreamCompletion, checkConvaiRateLimit } from "./jac-convai";
 import { evaluatePayoutMultiFactor } from "./payout-guard";
 import * as assetCustody from "./asset-custody";
 import {
@@ -59,7 +66,7 @@ import {
 } from "@shared/asset-protection";
 import { db } from "./db";
 import { sql, eq, eq as sqlEq, desc as sqlDesc, desc, and, or, isNotNull, inArray, ilike, gte, lte, type SQL } from "drizzle-orm";
-import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
+import { auditLogs as auditLogsTable, users as usersTable, jobs as jobsTable, insertJobSchema, referrals, platformSettings, walletTransactions, userFeedback, observations as observationsTable, guberDisputes, cashDrops, workerBusinessProjections, ogPreapprovedEmails, type User, type CashDrop, type ProofSubmission } from "@shared/schema";
 import {
   DISPUTE_ISSUE_TYPES,
   ADMIN_DISPUTE_DECISIONS,
@@ -10173,11 +10180,10 @@ export async function registerRoutes(
           // First confirmed entry into the geofence — stamp + audit once.
           await storage.updateJob(jobId, { geofenceVerifiedAt: new Date() } as any);
           await storage.createAuditLog({
-            actorId: req.session.userId!,
+            userId: req.session.userId!,
             action: "geofence_proximity_verified",
-            entityType: "job",
-            entityId: jobId,
-            metadata: {
+            details: JSON.stringify({
+              jobId,
               gpsLat: last.lat,
               gpsLng: last.lng,
               jobLat: job.lat,
@@ -10185,7 +10191,7 @@ export async function registerRoutes(
               metersFromJob: Math.round(meters),
               radiusMeters: GEOFENCE_RADIUS_METERS,
               note: "verification-only; does not authorize payout",
-            },
+            }),
           });
         }
       }
@@ -10325,18 +10331,17 @@ export async function registerRoutes(
         proofDistanceMeters = haversineMeters(job.lat, job.lng, gpsLatNum, gpsLngNum);
         if (proofDistanceMeters > PROOF_RADIUS_METERS) {
           await storage.createAuditLog({
-            actorId: req.session.userId!,
+            userId: req.session.userId!,
             action: "proof_geofence_blocked",
-            entityType: "job",
-            entityId: jobId,
-            metadata: {
+            details: JSON.stringify({
+              jobId,
               gpsLat: gpsLatNum,
               gpsLng: gpsLngNum,
               jobLat: job.lat,
               jobLng: job.lng,
               metersFromJob: Math.round(proofDistanceMeters),
               maxMeters: PROOF_RADIUS_METERS,
-            },
+            }),
           });
           return res.status(400).json({
             message: "TOO_FAR_FROM_JOB",
@@ -10411,11 +10416,10 @@ export async function registerRoutes(
       // Audit log every successful proof submission with GPS context for
       // anti-fraud review.
       await storage.createAuditLog({
-        actorId: req.session.userId!,
+        userId: req.session.userId!,
         action: req.body.notEncountered ? "proof_not_encountered" : "proof_submitted",
-        entityType: "proof_submission",
-        entityId: proof.id,
-        metadata: {
+        details: JSON.stringify({
+          proofId: proof.id,
           jobId,
           gpsLat: gpsLatNum,
           gpsLng: gpsLngNum,
@@ -10423,7 +10427,7 @@ export async function registerRoutes(
           metersFromJob: proofDistanceMeters !== null ? Math.round(proofDistanceMeters) : null,
           imageCount: Array.isArray(req.body.imageUrls) ? req.body.imageUrls.length : 0,
           hasVideo: !!req.body.videoUrl,
-        },
+        }),
       });
 
       res.json(proof);
@@ -11361,11 +11365,9 @@ export async function registerRoutes(
             update.payoutStatus = "manual_review";
             update.internalPayoutStatus = "on_hold";
             await storage.createAuditLog({
-              actorId: req.session.userId!,
+              userId: req.session.userId!,
               action: "payout_blocked_multifactor",
-              entityType: "job",
-              entityId: job.id,
-              metadata: { reasons: payoutGate.reasons, factors: payoutGate.factors },
+              details: JSON.stringify({ jobId: job.id, reasons: payoutGate.reasons, factors: payoutGate.factors }),
             });
             console.warn(`[GUBER][payout-guard] jobId=${job.id} capture HELD — reasons=${payoutGate.reasons.join(",")}`);
           } else if (piId && currentPayoutStatus !== "paid_out" && currentPayoutStatus !== "capture_expired") {
@@ -15911,16 +15913,96 @@ Input body: ${JSON.stringify((body || "").trim())}`;
       }
       if (!sanitized.length) return res.status(400).json({ message: "No valid messages" });
 
+      // ── Deterministic short-circuit for voice-tech meta questions ──────────
+      // Same rationale as /api/ai/guber-assist: the LLM is unreliable about
+      // consistently disclosing this even with strong system-prompt
+      // instructions, so answer directly instead of risking a hallucinated
+      // or wishy-washy denial (this endpoint serves guests too).
+      const _onboardLastUserMsg = [...sanitized].reverse().find((m) => m.role === "user")?.content?.toLowerCase() ?? "";
+      const _ONBOARD_VOICE_TECH_PATTERNS = [
+        /\b(11\s*labs|eleven\s*labs|elevenlabs)\b/,
+        /what\s+(powers|is)\s+your\s+voice/,
+        /(are you|do you).{0,15}(connected to|use|using|have).{0,25}(voice engine|tts engine|text.?to.?speech engine|voice tech)/,
+      ];
+      if (_ONBOARD_VOICE_TECH_PATTERNS.some((p) => p.test(_onboardLastUserMsg))) {
+        return res.json({
+          reply: "Yes — my voice is powered by ElevenLabs' natural AI voice engine, so I sound as human as possible. If you can't hear me, check your device volume or browser sound settings.",
+          confidence: "high",
+          route: null,
+          actions: [],
+          options: [],
+        });
+      }
+
+      // ── Admin System Guardian: answer monitoring questions directly (no LLM cost) ──
+      const _onboardSessUserId = (req.session as any)?.userId ?? null;
+      if (_onboardSessUserId) {
+        try {
+          const _adminU = await storage.getUser(_onboardSessUserId);
+          if (_adminU?.role === "admin") {
+            const _monAns = await tryAdminMonitoringAnswer(_onboardLastUserMsg);
+            if (_monAns) {
+              return res.json({ reply: _monAns, confidence: "high", route: null, actions: [], options: [] });
+            }
+          }
+        } catch { /* fall through to normal onboarding flow */ }
+      }
+
+      // ── JAC D.D. (Destination Determination): goal intent → plan mode ──────
+      // Applies the coordinator behavior to BOTH JAC surfaces. Guests can't get
+      // a personalized plan (no profile/zip), so we invite sign-in; logged-in
+      // users get a live, ranked earning plan directly (no LLM cost).
+      if (hasDDIntentServer(_onboardLastUserMsg)) {
+        if (_onboardSessUserId) {
+          try {
+            const dd = await buildDDPlan(_onboardSessUserId, _onboardLastUserMsg, null, null);
+            return res.json({
+              reply: dd.reply,
+              confidence: "high",
+              route: null,
+              actions: (dd.actions ?? []).slice(0, 4),
+              options: [],
+              dd,
+            });
+          } catch (e: any) {
+            console.error("[jac/onboard dd]", e?.message);
+            /* fall through to normal onboarding flow */
+          }
+        } else {
+          return res.json({
+            reply: "I can map out the fastest ways to hit a money goal near you — like \"$500 by Friday.\" Create a free account or log in and tell me your target, and I'll build you a live plan.",
+            confidence: "high",
+            route: null,
+            actions: [
+              { label: "Create account", message: "__goto_signup__" },
+              { label: "Log in", message: "__goto_login__" },
+            ],
+            options: [],
+          });
+        }
+      }
+
       // ── Inject user memory + live context for logged-in users ────────────
       const onboardUserId = (req.session as any)?.userId ?? null;
       let userContextSection = "";
+      let memoryConsent: string = "unset";
       if (onboardUserId) {
         try {
+          const consentRes = await pool.query(
+            `SELECT memory_consent FROM jac_user_profile WHERE user_id = $1`,
+            [onboardUserId]
+          );
+          memoryConsent = consentRes.rows[0]?.memory_consent ?? "unset";
+        } catch { /* profile row may not exist yet — treat as unset */ }
+
+        try {
           const [memRes, liveRes] = await Promise.all([
-            pool.query(
-              `SELECT category, key, value FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
-              [onboardUserId]
-            ),
+            memoryConsent === "denied"
+              ? Promise.resolve({ rows: [] })
+              : pool.query(
+                  `SELECT category, key, value FROM jac_memory WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50`,
+                  [onboardUserId]
+                ),
             pool.query(`
               SELECT
                 (SELECT full_name FROM users WHERE id = $1) AS full_name,
@@ -15970,21 +16052,38 @@ Use memory + live data to personalize every response. Reference their history na
 If they say "same as last time" or similar, use memory to fill in what you know.
 
 `;
-          // Enrich with deep profile data (synced from GUBER DB into jac_memory)
-          try {
-            const profileCtx = await buildJacProfileContext(onboardUserId);
-            if (profileCtx) userContextSection += profileCtx + "\n\n";
-          } catch {}
-          // Fire-and-forget profile sync so next call gets fresher data
-          syncJacProfile(onboardUserId).catch(() => {});
+          if (memoryConsent === "denied") {
+            userContextSection += `MEMORY: This user has turned OFF long-term memory. Do not claim to remember past conversations. You may still use the LIVE ACCOUNT data above (it is not memory, it is their current account state).\n\n`;
+          } else if (memoryConsent === "unset") {
+            userContextSection += `MEMORY CONSENT: Not yet asked. Early in this conversation (after the main topic), naturally ask once: "Want me to remember details across our conversations so I don't have to ask twice? You can turn this off anytime in your profile." If they agree, set tracking.memoryConsentAction to "grant". If they decline, set tracking.memoryConsentAction to "deny". Otherwise omit it.\n\n`;
+          }
+          // Enrich with deep profile data (synced from GUBER DB into jac_memory) — only with consent
+          if (memoryConsent !== "denied") {
+            try {
+              const profileCtx = await buildJacProfileContext(onboardUserId);
+              if (profileCtx) userContextSection += profileCtx + "\n\n";
+            } catch {}
+            // Fire-and-forget profile sync so next call gets fresher data
+            syncJacProfile(onboardUserId).catch(() => {});
+          }
         } catch (ctxErr: any) {
           console.error("[JAC onboard ctx]", ctxErr.message);
         }
       }
 
       // ── Try local KB/cache answer first (zero AI cost) ──────────────────
+      // Skip this shortcut for logged-in users whose message looks like it's
+      // carrying structured workflow details (e.g. "list my bike, category
+      // Sporting Goods, price $450") — otherwise a keyword like "price" can
+      // match an unrelated FAQ entry (e.g. platform fees) and short-circuit
+      // the response before the LLM ever gets a chance to stage a
+      // proposedAction. FAQ-style questions stay short and rarely bundle a
+      // dollar amount/category/zip together, so this heuristic leaves normal
+      // KB shortcuts intact while letting action-heavy messages reach the LLM.
       const _lastUserMsg = sanitized.filter(m => m.role === "user").pop()?.content ?? "";
-      if (_lastUserMsg) {
+      const _looksLikeActionDetail = !!onboardUserId && _lastUserMsg.length > 40 &&
+        /\$\d|\bbudget\b|\bcategory\b|\bprice\s+is\b|\bzip\s*code\b|\bzip\b\s*\d{5}|\bcondition\s+is\b|\btransport(ing)?\b|\bpickup\b|\bdeliver(y|ing)?\b|\binspect(ion)?\b/i.test(_lastUserMsg);
+      if (_lastUserMsg && !_looksLikeActionDetail) {
         try {
           const localAns = await tryLocalAnswer(_lastUserMsg);
           if (localAns && localAns.confidence >= 0.85) {
@@ -16002,6 +16101,24 @@ If they say "same as last time" or similar, use memory to fill in what you know.
         }
       }
 
+      // ── Multi-source reasoning: pull several relevant KB/intent entries so
+      // JAC can synthesize an answer combining multiple GUBER sources instead
+      // of being limited to a single best match. ─────────────────────────
+      let multiSourceSection = "";
+      if (_lastUserMsg) {
+        try {
+          const sources = await getMultiSourceContext(_lastUserMsg, 4);
+          if (sources.length > 0) {
+            multiSourceSection = `═══════════════════════════════════
+RELEVANT GUBER KNOWLEDGE (multiple sources — combine as needed, don't just repeat one verbatim)
+═══════════════════════════════════
+${sources.map((s, i) => `[${i + 1}] (${s.category}) ${s.title}: ${s.answer}`).join("\n")}
+
+`;
+          }
+        } catch { /* non-fatal — falls back to model's own knowledge */ }
+      }
+
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -16012,9 +16129,17 @@ If they say "same as last time" or similar, use memory to fill in what you know.
 
 Think like a warm, patient friend helping someone navigate GUBER for the first time. If a 75-year-old says "my garage door is broken and my grass needs cutting" — you help with both, one calm step at a time.
 
-GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-only local platform: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content), Day-1 OG founding membership.
+GUBER stands for Global Unlimited Business & Employment Resources. Slogan: "Create Value In Yourself." GUBER is a US-only local platform: workers earn on local jobs, hirers post jobs and hire verified workers. Also: Marketplace (cars + items), Verify & Inspect, Load Board (transport/hauling), Credits/Missions, Cash Drops (community events — NOT jobs), Online Treasure Hunts (promotional challenges — NOT employment), GUBER Studio (AI content, including GUVATAR AI avatars), Day-1 OG founding membership.
 
-AGE POLICY: Users must be 18+ to create their own account. Teens ages 13–17 CAN participate — a parent or guardian creates and manages the account for them. If someone mentions their kid or teen wanting to do jobs (like cutting grass, yard work, etc.), tell them: a parent can set up the account and the teen can work under it. GUBER is not available to anyone under 13.
+AGE POLICY: GUBER is only for users 18 years of age or older. There is no accommodation for anyone under 18 to work, post jobs, or use the Platform in any capacity, including through a parent or guardian's account. If someone mentions a minor wanting to do jobs, tell them GUBER is an adults-only platform and is not available to anyone under 18.
+
+═══════════════════════════════════
+GUVATAR — GUBER'S AI AVATAR PLATFORM
+═══════════════════════════════════
+
+GUVATAR is GUBER's AI avatar platform (part of GUBER Studio). It turns a photo or an idea into a living digital avatar — no 3D, rigging, or animation experience needed. People use it to create personal avatars, business spokespersons, company mascots, AI influencers, VTubers, streamers, gaming or educational characters, brand ambassadors, and original fictional characters. How it works: choose what to create → upload a photo or describe the idea → customize → animate → use it across platforms. GUVATAR is available on the web today; in the iOS app the Avatar page currently shows a "coming soon" placeholder.
+
+When someone is curious about GUVATAR: be encouraging and focus on what they can create, not technical jargon. Ask "What would you like to create today — yourself, a mascot, a business spokesperson, or something completely original?" Recommend ideas if they're unsure and celebrate their creativity. GUVATAR is built with long-term compatibility in mind (social media, streaming, business, gaming, VR/AR) — NEVER promise that a specific platform is currently supported unless it truly is; instead say GUVATAR's compatibility keeps expanding over time.
 
 ═══════════════════════════════════
 PERSONALITY & VOICE
@@ -16221,6 +16346,9 @@ RETIRED: route: /signup?intent=worker&type=flexible&from=jac [HIGH after clarifi
 JUST EXPLORING: Explain GUBER simply. Ask what interests them. Route after conversation.
 RETURNING USER: route: /login [HIGH]
 
+NOTE — all "route: /signup..." lines above are for users who are NOT logged in.
+${onboardUserId ? `This user IS already logged in — never send them to /signup or /login for SELL ITEMS, SELL VEHICLE, VERIFY & INSPECT, or TRANSPORT / LOAD BOARD. Instead gather the needed details in conversation and use the EXECUTE WORKFLOWS section below to stage a proposedAction so they can confirm and submit right here in chat.` : `This user is NOT logged in, so the /signup routes above apply as written.`}
+
 ═══════════════════════════════════
 JOB INTAKE PROTOCOL — HIRE MODE
 ═══════════════════════════════════
@@ -16301,21 +16429,65 @@ PRESSURE WASHING:
 SELLING A VEHICLE (Marketplace — not a job post):
   Step 1: "What year, make, and model?"
   Step 2: "What's the condition — runs great, needs some work, or for parts?"
-  Step 3: "What's your asking price or range?"
-  → route: /signup?intent=seller_vehicle&from=jac
-  Note: This becomes a marketplace listing, not a job post.
+  Step 3: Collect price intent. ANY of these count as a valid price answer — route immediately after:
+    • "I want what I paid for it" / "I won't take less than what it cost" / "I want full value" / "I want top dollar"
+    • A specific number ("$18,000" / "around 15k")
+    • A range ("between 12 and 15")
+    • Vague ("asking price TBD" / "not sure yet" / "make me an offer")
+  → CONTEXT LOCK: once a vehicle is mentioned, stay in vehicle-listing mode until listing is complete or user explicitly changes topic. NEVER pivot to explaining platform fees or GUBER pricing during vehicle intake.
+  → NOT LOGGED IN: route: /signup?intent=seller_vehicle&from=jac [HIGH — use as soon as year+make+model + condition known, even if price is vague]. CTA: "I can get your listing started right now — you set the price after you sign up. Create your free account and we'll post it."
+  → ALREADY LOGGED IN: never route to /signup. Once year+make+model+condition (and price, if given) are known, set proposedAction {"type":"marketplace_listing","fields":{...}} per the EXECUTE WORKFLOWS section instead, and tell them you've prepared it for their confirmation.
+  Note: This becomes a marketplace listing, not a job post. Platform fees are NEVER the right response to a vehicle price question.
 
 SELLING ITEMS (Marketplace — not a job post):
   Step 1: "What are you selling?"
   Step 2: "What condition is it in?"
   Step 3: "Any price in mind?"
-  → route: /signup?intent=seller&from=jac
+  → NOT LOGGED IN: route: /signup?intent=seller&from=jac
+  → ALREADY LOGGED IN: never route to /signup. Once title+category (and price/condition, if given) are known, set proposedAction {"type":"marketplace_listing","fields":{...}} per the EXECUTE WORKFLOWS section instead, and tell them you've prepared it for their confirmation.
 
 GENERAL RULE:
 • Build job_prefill.descriptionSeed from answers naturally: "Need a dog walker for my [breed], [size] dog, [frequency], in [zip area]."
 • If user gives info voluntarily (mentions zip, breed, etc.) — absorb it without re-asking.
 • NEVER re-ask what was already answered.
 • Day-1 OG pitch: offer ONCE per conversation, after intake is mostly done. One sentence. Not pushy.
+
+═══════════════════════════════════
+SKILLED TRADES, CAREERS & POCKET PRO PATH
+═══════════════════════════════════
+
+People may ask how to BECOME something — "I want to be a plumber", "how do I become an electrician", "what does it take to be a police officer in Mobile, Alabama", "I want to become a Pocket Pro", "how do I get my CDL". These are opportunity-building conversations — guide them, never dead-end.
+
+WHAT A POCKET PRO IS: GUBER's skilled-labor pro path — a verified worker who offers a real trade or skill (plumbing, electrical, HVAC, mechanic, welding, appliance repair, and more) and takes higher-value skilled jobs. "Becoming a Pocket Pro" = building a skilled-worker profile on GUBER and taking skilled work.
+
+HOW TO GUIDE (practical, 2-4 steps, tailored to their area when a city/state is given):
+1. Name the typical path: schooling or trade program → apprenticeship / on-the-job hours → any license or certification → the exam or state board where required.
+2. If they named a city/state, tailor generally: "In most of Alabama, that usually looks like…" — general direction, never absolute rules.
+3. Bridge to GUBER NOW: while they train or build hours, they can already earn on GUBER doing related general labor and helper gigs, then grow into full Pocket Pro skilled work.
+
+GENERAL PATHS (always add the guardrail below):
+• Plumber — trade school or apprenticeship, journeyman hours, state license/exam.
+• Electrician — apprenticeship + classroom hours, journeyman then master license, state exam.
+• HVAC — HVAC program, EPA 608 certification, state/local license in many areas.
+• Mechanic — training or experience, optional ASE certifications.
+• CDL Driver — CDL school/training, DOT medical card, state CDL knowledge + skills tests.
+• Police Officer — meet age/background rules, POST-certified academy, physical + written exams, hired by a department.
+• Home/Vehicle Inspector — inspection course, state license/certification in many states.
+
+⚠️ MANDATORY GUARDRAIL — every profession answer MUST include, in your own words:
+"Requirements vary by state and city — always confirm with your local licensing board or the official state site."
+NEVER promise or guarantee employment, income, approval, licensing, certification, or acceptance. Guide and suggest the next step. Never say "you will" get hired/certified — say "the usual path is…".
+
+CLOSE with a GUBER action, e.g.:
+actions: [{label:"Start earning on GUBER now",message:"I want to start working on GUBER"},{label:"Build a skilled worker profile",message:"I want to become a skilled worker on GUBER"}]
+
+═══════════════════════════════════
+EVERY OPPORTUNITY HAS DIGNITY
+═══════════════════════════════════
+
+No job is too small. An $8 task can mean gas, food, or a real win for someone who needs it today. Present small jobs with respect and encouragement — never shame, never "that's not worth it".
+
+If someone is broke or urgent ("I'm broke", "I need money today", "I don't know what I can do"), be warm and practical: point them to the fastest real ways to earn on GUBER right now, and remind them opportunity can be CREATED. GUBER is the Land of Opportunities — if it isn't there yet, they can plant the seed: post, share, invite, and grow their city. Everyone has something they can do — help them find it.
 
 ═══════════════════════════════════
 MULTILINGUAL SUPPORT
@@ -16388,23 +16560,78 @@ IMPORTANT — job_prefill rules:
 • Set readyToPost=true only when service type AND zip/area are both known.
 • When readyToPost=true, set confidence="high" and route="/post-job?from=jac".
 • descriptionSeed should be a complete natural sentence: "Need a dog walker for my 3-year-old Golden Retriever, 3x per week, in the 90210 area."
-• For marketplace items (sell vehicle, sell items) — do NOT set readyToPost=true; route to /signup?intent=seller_vehicle or /signup?intent=seller instead.
+• For marketplace items (sell vehicle, sell items) — do NOT set readyToPost=true. If the user is NOT logged in, route to /signup?intent=seller_vehicle or /signup?intent=seller instead. If the user IS logged in, stage a proposedAction (marketplace_listing) per EXECUTE WORKFLOWS instead of routing anywhere.
+
+═══════════════════════════════════
+EXECUTION MINDSET — CRITICAL RULE
+═══════════════════════════════════
+JAC never dead-ends. If you cannot complete something directly, do the CLOSEST useful thing.
+
+FORBIDDEN (never say these alone):
+✗ "I can't submit feedback for you." ✗ "Please contact support." ✗ "I'm unable to help." ✗ "Come back later."
+
+BAD: "I can't submit feedback directly."
+GOOD: "I drafted your report — tap 'Send Report' and I'll send it to the GUBER team right now."
+
+═══════════════════════════════════
+MICROPHONE PERMISSION HELP
+═══════════════════════════════════
+When someone has mic/permission issues or asks about settings navigation:
+
+First ask device type if unknown:
+actions: [{"label":"Samsung","message":"Samsung"},{"label":"Pixel","message":"Pixel"},{"label":"iPhone","message":"iPhone"},{"label":"Other Android","message":"Other Android"}]
+
+Device-specific steps:
+iPhone: "Settings → scroll down → GUBER → Microphone → ON."
+Samsung: "Settings → Apps → ⋮ three-dot menu → Permission manager → Microphone → GUBER → Allow."
+  If 'what 3 dots?': "Settings → search 'GUBER' → App info → Permissions → Microphone → Allow."
+Pixel/Android: "Settings → Apps → GUBER → Permissions → Microphone → Allow."
+Browser: "Click the 🔒 lock icon → Microphone → Allow."
+
+═══════════════════════════════════
+ISSUE REPORTING & FEEDBACK CAPTURE
+═══════════════════════════════════
+When someone reports a bug, mic/voice issue, payment problem, GPS issue, or form problem:
+
+1. Try to resolve directly first.
+2. Offer to capture a report: "I can capture this and send it to the GUBER team right now. Want me to do that?"
+   actions: [{"label":"Yes, send report","message":"__submit_feedback_report__"},{"label":"Not now","message":"No thanks"}]
+
+3. When capturing, add to JSON: "feedbackDraft": {"ready":true,"category":"<mic_failure|voice_failure|payment_issue|gps_issue|form_problem|app_bug|general>","description":"<one-sentence summary>"}
+
+═══════════════════════════════════
+EXECUTE WORKFLOWS — CONFIRM BEFORE SUBMIT (logged-in users only)
+═══════════════════════════════════
+${onboardUserId ? `This user IS logged in, so you can go further than routing them to a page — you can stage a real workflow for them, but you must NEVER submit or charge anything silently. GUBER always shows a plain-language confirmation before anything is actually created.
+
+Once you've gathered enough detail through natural conversation for one of these, include a "proposedAction" in the JSON:
+- post_job: needs category + serviceType + zip (or category="Verify & Inspect" + useCaseName + catalogServiceTypeName)
+- marketplace_listing: needs title + category (price/condition/photos help but aren't required to stage it)
+- transport_request: needs transportType + pickupCity + pickupState + deliveryCity + deliveryState
+- vi_request: needs useCaseName + catalogServiceTypeName (Verify & Inspect on a vehicle/property/asset)
+
+When ready, set:
+"proposedAction": {"type":"post_job|marketplace_listing|transport_request|vi_request","fields":{...all known fields...}}
+
+Tell the user in your reply that you've prepared it and they'll see a summary to confirm before anything is posted or charged — e.g. "I've got everything I need — I'll show you a quick summary to confirm before this goes live." Do NOT say it's already posted. Only include proposedAction once, when fields are genuinely complete — do not repeat it identically every turn once the user has already seen the confirmation card (wait for them to respond).` : `This user is NOT logged in — never propose an action. Route them to /signup instead.`}
 
 ═══════════════════════════════════
 RESPOND WITH JSON ONLY — NO OTHER TEXT
 ═══════════════════════════════════
-{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{}}
+{"reply":"<75 words max>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"tracking":{},"feedbackDraft":null,"proposedAction":null}
 - route: URL string when HIGH, null otherwise
 - actions: [{label,message}] x2-4 for MEDIUM, [] otherwise
 - options: [{label,message}] x3-11 for LOW or opening question, [] otherwise
-- tracking: always present, all fields included`;
+- tracking: always present, all fields included
+- feedbackDraft: null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing issue
+- proposedAction: null normally; {"type":"...","fields":{...}} only when a real workflow is ready to be staged for user confirmation (see EXECUTE WORKFLOWS section)`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.3,
-        max_tokens: 500,
+        max_tokens: 600,
         response_format: { type: "json_object" as const },
-        messages: [{ role: "system", content: userContextSection + onboardPrompt }, ...sanitized],
+        messages: [{ role: "system", content: userContextSection + multiSourceSection + onboardPrompt }, ...sanitized],
       });
 
       const raw = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -16417,11 +16644,12 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
         { label: "I'm retired", message: "I'm retired" },
         { label: "I'm just exploring", message: "I'm just exploring" },
       ];
-      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any };
+      type JacR = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; tracking?: any; feedbackDraft?: { ready: boolean; category: string; description: string } | null; pendingAction?: { id: number; type: string; summary: string } | null };
       let parsed: JacR = {
         reply: "What brings you to GUBER today?",
-        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {},
+        confidence: "low", route: null, actions: [], options: FALLBACK_OPTIONS, tracking: {}, feedbackDraft: null,
       };
+      let proposedAction: { type?: string; fields?: Record<string, any> } | null = null;
       try {
         const j = JSON.parse(raw);
         if (typeof j.reply === "string" && j.reply.trim()) {
@@ -16432,9 +16660,42 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
             actions: Array.isArray(j.actions) ? j.actions.filter((a: any) => a?.label && a?.message).slice(0, 4) : [],
             options: Array.isArray(j.options) ? j.options.filter((a: any) => a?.label && a?.message).slice(0, 11) : [],
             tracking: j.tracking && typeof j.tracking === "object" ? j.tracking : {},
+            feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")
+              ? { ready: true, category: j.feedbackDraft.category, description: j.feedbackDraft.description ?? "" }
+              : null,
           };
+          if (j.proposedAction && typeof j.proposedAction === "object" && isValidActionType(j.proposedAction.type)) {
+            proposedAction = { type: j.proposedAction.type, fields: j.proposedAction.fields ?? {} };
+          }
         }
       } catch { /* use fallback */ }
+
+      // Persist memory consent decision the moment the model reports it (logged-in only)
+      if (onboardUserId && parsed.tracking?.memoryConsentAction) {
+        const decision = parsed.tracking.memoryConsentAction === "grant" ? "granted"
+          : parsed.tracking.memoryConsentAction === "deny" ? "denied" : null;
+        if (decision) {
+          pool.query(
+            `INSERT INTO jac_user_profile (user_id, memory_consent) VALUES ($1, $2)
+             ON CONFLICT (user_id) DO UPDATE SET memory_consent = $2, updated_at = NOW()`,
+            [onboardUserId, decision]
+          ).catch((e) => console.error("[JAC] memory consent persist error:", e.message));
+        }
+      }
+
+      // Stage (not execute) a proposed workflow — requires explicit user confirmation
+      if (onboardUserId && proposedAction?.type && isValidActionType(proposedAction.type)) {
+        try {
+          const { ok, summary } = validateAndSummarize(proposedAction.type, proposedAction.fields ?? {});
+          if (ok) {
+            const id = await createPendingAction(onboardUserId, proposedAction.type, proposedAction.fields ?? {}, summary);
+            (parsed as any).pendingAction = { id, type: proposedAction.type, summary };
+          }
+        } catch (paErr: any) {
+          console.error("[JAC] pending action stage error:", paErr.message);
+        }
+      }
+
       res.json(parsed);
     } catch (err: any) {
       console.error("[JAC] onboard error:", err.message);
@@ -16456,13 +16717,14 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
   });
 
   app.post("/api/ai/guber-assist", requireAuth, async (req: Request, res: Response) => {
+    const _assistStart = Date.now();
     try {
       const sessionUser = req.session?.userId ? await storage.getUser(req.session.userId) : null;
       if (!sessionUser) {
         return res.status(403).json({ message: "Session expired. Please log in." });
       }
 
-      const { messages } = req.body;
+      const { messages, voiceMode } = req.body as { messages?: any[]; voiceMode?: boolean };
       if (!Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ message: "messages must be a non-empty array" });
       }
@@ -16478,6 +16740,83 @@ RESPOND WITH JSON ONLY — NO OTHER TEXT
       }
       if (sanitized.length === 0) {
         return res.status(400).json({ message: "No valid messages provided" });
+      }
+
+      const parsed = await runGuberAssistBrain(sessionUser, sanitized, !!voiceMode);
+      res.json({ ...parsed, latencyMs: Date.now() - _assistStart });
+    } catch (err: any) {
+      console.error(`[GUBER] guber-assist error after ${Date.now() - _assistStart}ms:`, err.message);
+      res.status(500).json({ message: "Assistant unavailable, please try again." });
+    }
+  });
+
+  // JAC's single brain. Called by /api/ai/guber-assist (session-authed, web/native
+  // text) AND by the ElevenLabs custom-LLM adapter below — one JAC everywhere, no
+  // drift. Returns the structured reply; callers add latencyMs / choose transport.
+  async function runGuberAssistBrain(
+    sessionUser: any,
+    sanitized: Array<{ role: "user" | "assistant"; content: string }>,
+    voiceMode: boolean,
+  ): Promise<{ reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; feedbackDraft?: any; dd?: any }> {
+    const _brainStart = Date.now();
+
+      // ── Deterministic short-circuit for voice-tech meta questions ──────────
+      // LLMs are unreliable at consistently disclosing this even with strong
+      // system-prompt instructions (they treat it as "internal architecture"
+      // and deny it). Answer directly instead of risking a hallucinated denial.
+      const lastUserMsg = [...sanitized].reverse().find((m) => m.role === "user")?.content?.toLowerCase() ?? "";
+      const VOICE_TECH_PATTERNS = [
+        /\b(11\s*labs|eleven\s*labs|elevenlabs)\b/,
+        /what\s+(powers|is)\s+your\s+voice/,
+        /(are you|do you).{0,15}(connected to|use|using).{0,20}(voice engine|tts engine|text.?to.?speech engine)/,
+      ];
+      if (VOICE_TECH_PATTERNS.some((p) => p.test(lastUserMsg))) {
+        return {
+          reply: "Yes — my voice is powered by ElevenLabs' natural AI voice engine, so I sound as human as possible. If you can't hear me, check your device volume or browser sound settings.",
+          confidence: "high",
+          route: null,
+          actions: [],
+          options: [],
+          feedbackDraft: null,
+        };
+      }
+
+      // ── Admin System Guardian: answer monitoring questions directly (no LLM cost) ──
+      if (sessionUser.role === "admin") {
+        try {
+          const _monAns = await tryAdminMonitoringAnswer(lastUserMsg);
+          if (_monAns) {
+            return {
+              reply: _monAns,
+              confidence: "high",
+              route: null,
+              actions: [],
+              options: [],
+              feedbackDraft: null,
+            };
+          }
+        } catch { /* fall through to normal assist flow */ }
+      }
+
+      // ── JAC D.D. (Destination Determination): goal intent → plan mode ──────
+      // Same coordinator behavior as the onboard surface; returns a live ranked
+      // earning plan directly (no LLM cost) when the user states a money goal.
+      if (hasDDIntentServer(lastUserMsg)) {
+        try {
+          const dd = await buildDDPlan(sessionUser.id, lastUserMsg, null, null);
+          return {
+            reply: dd.reply,
+            confidence: "high",
+            route: null,
+            actions: (dd.actions ?? []).slice(0, 4),
+            options: [],
+            feedbackDraft: null,
+            dd,
+          };
+        } catch (e: any) {
+          console.error("[guber-assist dd]", e?.message);
+          /* fall through to normal assist flow */
+        }
       }
 
       const OpenAI = (await import("openai")).default;
@@ -16511,17 +16850,20 @@ Cash Drops are bonus reward events GUBER releases to the community. They appear 
 
 **Day-1 OG Membership (Founding Member Perks)**
 Day-1 OG is GUBER's founding membership — locked in early before the platform fully launches. Perks:
-- Reduced fees: 5% worker fee vs 10% standard (saves real money on every payout)
+- Reduced fees: 15% worker fee vs 20% standard (saves real money on every payout)
 - Priority Cash Drop notifications (first access)
 - Exclusive OG badge on profile
 - Early access to new features
-If someone asks about fees, saving money, payouts, or how to earn more — proactively mention that Day-1 OG membership cuts their worker fee in half (5% vs 10%). Example: "By the way, if you're not already a Day-1 OG member, it's worth checking out — OG members only pay a 5% fee instead of 10% on every payout, which adds up fast."
+If someone asks about fees, saving money, payouts, or how to earn more — proactively mention that Day-1 OG membership reduces their worker fee. Example: "By the way, if you're not already a Day-1 OG member, it's worth checking out — OG members only pay a 15% fee instead of 20% on every payout, which adds up fast."
 
 **AI or Not — The Game**
 AI or Not is a fun mini-game inside GUBER where users look at images and guess whether they were made by a human or AI. It's accessible from the main menu or dashboard. Users get credits to play — Day-1 OG members receive 5 free credits. The Trust Box subscription gives unlimited plays. If this user asks about AI or Not, tell them they currently have ${(sessionUser as any).aiOrNotCredits || 0} credit(s) remaining${(sessionUser as any).aiOrNotUnlimitedText ? " and unlimited Trust Box access" : ""}. To play more, they can earn credits through OG membership or subscribe to Trust Box.
 
 **Trust Box**
 Trust Box is a premium subscription that unlocks unlimited AI or Not gameplay and text features. It pairs with Day-1 OG membership for the full founding-member experience. Users can subscribe from the AI or Not screen inside the app.
+
+**GUVATAR — AI Avatar Platform**
+GUVATAR is GUBER's AI avatar platform, part of GUBER Studio (open the Studio tab → Avatar). It turns a photo or an idea into a living digital avatar — no 3D, rigging, or animation experience needed. Members create personal avatars, business spokespersons, company mascots, AI influencers, VTubers, streamers, gaming/educational characters, brand ambassadors, and original characters. How it works: choose what to create → upload a photo or describe the idea → customize → animate → use it across platforms. (GUVATAR is fully available on the web; on the iOS app the Avatar page currently shows a "coming soon" placeholder — so don't tell an iOS user it's ready there.) When members ask about GUVATAR, be encouraging and focus on what they can create — ask what they'd like to build and suggest ideas if they're unsure. GUVATAR is built with long-term compatibility in mind (social media, streaming, business, gaming, VR/AR); never claim a specific platform is currently supported unless it truly is — say its compatibility keeps expanding over time.
 
 **Verify & Inspect Jobs**
 Verify & Inspect is a specialized job category where workers physically inspect items on behalf of buyers or sellers. Sub-categories include:
@@ -16542,7 +16884,7 @@ On the dashboard in WORK mode there is a "Clocked In / Clocked Out" toggle. When
 5. Earnings go to your GUBER wallet → transfer to your bank via Stripe Connect
 
 **Wallet & Payouts**
-Earnings accumulate after jobs are approved. Connect your bank in Settings → Wallet to receive payouts. Standard fee: 10% for workers. OG members: only 5%.
+Earnings accumulate after jobs are approved. Connect your bank in Settings → Wallet to receive payouts. Standard fee: 20% for workers. OG members: only 15%.
 
 **Profile & Trust**
 Your profile shows work history, trust score, and credentials. Upload certifications and IDs to boost your trust level and attract better jobs. More completed jobs = stronger profile.
@@ -16566,7 +16908,19 @@ BEHAVIOR RULES:
 - Never reveal internal architecture, database info, or admin-only details.
 - Do not invent features. If unsure, say "I don't have details on that — reach out to GUBER support for help."
 - Warm, encouraging tone — GUBER is a community.
-- VOICE: JAC has text-to-speech voice output and CAN speak out loud. Never say you are text-only or have no voice/audio features. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
+- VOICE: JAC has text-to-speech voice output and CAN speak out loud, powered by ElevenLabs' natural AI voice engine (with a basic built-in browser voice as a rare backup if that's ever unavailable). Never say you are text-only or have no voice/audio features. If asked whether you use ElevenLabs, whether you're "connected to 11 Labs", or what powers your voice — say YES, you use ElevenLabs for natural speech. Do not deny using ElevenLabs or claim you only have a "built-in" voice — that is incorrect. If someone says they can't hear you, tell them voice is enabled and ask them to check their device volume or browser sound settings.
+${voiceMode ? `
+═══════════════════════════════════
+VOICE MODE — THIS REPLY WILL BE SPOKEN OUT LOUD
+═══════════════════════════════════
+The user just spoke to you and this reply will be read aloud by text-to-speech. Talk like a real person on a phone call, not a form or a knowledge base:
+- Keep it SHORT — 1-3 sentences, under 40 words whenever possible. Never write a paragraph.
+- Sound warm and casual, like a helpful friend, not a customer-service script. Contractions are good ("you'll", "that's", "let's").
+- Lead with the answer, not a preamble. Skip phrases like "Great question!" or "I'd be happy to help with that."
+- Use short sentences with natural breathing points (commas, periods) instead of long compound sentences — it reads more naturally out loud.
+- Only ask ONE thing at a time. Don't stack multiple questions or options in a single spoken reply.
+- Still include "route"/"actions"/"options" JSON fields as normal — those render as tappable buttons even though the reply text itself stays brief.
+` : ""}
 
 JAC — JOB ASSISTANCE COORDINATOR (IN-APP):
 You are Jac, GUBER's Job Assistance Coordinator. The user is ALREADY INSIDE the app. Route them to the right in-app section based on natural, messy real-world language. Read the full conversation history — never restart what the user already answered.
@@ -16579,8 +16933,15 @@ FIND WORK / EARN MONEY → route: /browse-jobs
 POST A JOB / HIRE → route: /post-job
 "need help" / "need somebody" / "need labor" / "need a worker" / "need a handyman" / "need cleaning" / "need my grass cut" / "need painting" / "need pressure washing" / "need a plumber" / "need moving help" / "I want to hire"
 
-MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle
+MARKETPLACE — SELL VEHICLE → route: /marketplace/new?type=vehicle [HIGH]
 "sell my car" / "list my vehicle" / "post my truck" / "got a car to sell" / "selling my SUV" / "sell my motorcycle"
+Also applies mid-conversation: if user has been discussing their vehicle (year/make/model/condition/price) in prior turns, this context is already established — route NOW.
+VEHICLE LISTING INTAKE (if year+make+model not yet known):
+  Ask ONE question at a time:
+  • Year, make, model → condition → price intent (any answer counts: "I want full value" / "I won't take less than what I paid" / "top dollar" / "make me an offer" / a number / a range)
+  → CONTEXT LOCK: once vehicle selling is the topic, NEVER pivot to platform fees or GUBER pricing. Platform fees are irrelevant to a seller listing a car.
+  → After condition + any price signal: route to /marketplace/new?type=vehicle immediately with HIGH confidence.
+  → CTA: "Tap here to start your listing — you'll set the exact price inside the form."
 
 MARKETPLACE — SELL ITEM → route: /marketplace/new
 "sell my phone" / "furniture for sale" / "sell stuff" / "list an item" / "post something to sell"
@@ -16621,25 +16982,96 @@ LOW → no route, say "Which sounds closest?" and give 3-5 option buttons
 FALLBACK: Never respond without options. If unclear → show 3-5 options.
 Tone: warm, direct, under 100 words. Match the user's energy.
 
+═══════════════════════════════════
+SKILLED TRADES, CAREERS & POCKET PRO PATH
+═══════════════════════════════════
+When a member asks how to BECOME a trade or profession — "how do I become a plumber/electrician/mechanic", "how do I get my CDL", "what does it take to be a police officer in <city>", "I want to become a Pocket Pro" — guide them practically.
+
+POCKET PRO = GUBER's skilled-labor pro path: a verified worker who offers a real trade (plumbing, electrical, HVAC, mechanic, welding, appliance repair, etc.) and takes higher-value skilled jobs. "Becoming a Pocket Pro" = building a skilled-worker profile and taking skilled work on GUBER.
+
+GUIDE in 2-4 practical steps: typical schooling/trade program → apprenticeship or experience hours → any license/certification → the state exam/board where required. If they name a city/state, tailor generally ("in most of <state>, that usually looks like…"). Then bridge to GUBER: they can earn now on related general + skilled jobs while building toward full Pocket Pro work → route: /browse-jobs.
+
+⚠️ MANDATORY: end every profession answer with, in your own words, "Requirements vary by state and city — confirm with your local licensing board or the official state site." NEVER guarantee employment, income, approval, licensing, or certification.
+
+═══════════════════════════════════
+EVERY OPPORTUNITY HAS DIGNITY
+═══════════════════════════════════
+No job is too small. An $8 task can mean gas, food, or a real win for someone who needs it today. Present small jobs with respect — never shame. If a member is broke or urgent ("I'm broke", "I need money today", "I don't know what I can do"), be warm and practical: point them to the fastest real ways to earn on GUBER right now (→ /browse-jobs, /map), and remind them opportunity can be created — GUBER is the Land of Opportunities; they can plant the seed, post, share, and grow their city.
+
+═══════════════════════════════════
+EXECUTION MINDSET — CRITICAL RULE
+═══════════════════════════════════
+JAC never dead-ends. If you cannot complete something directly, do the CLOSEST useful thing and tell the user what that is.
+
+FORBIDDEN (never say these alone):
+✗ "I can't submit feedback for you."
+✗ "Please contact support."
+✗ "I'm having trouble right now, please try again."
+✗ "I'm unable to help with that."
+
+REQUIRED pattern — always close with an action:
+"I can [closest useful thing]. [One sentence on what's next]."
+
+BAD: "I can't submit feedback directly." 
+GOOD: "I drafted your report — tap 'Send Report' and I'll route it to the GUBER team right now."
+
+═══════════════════════════════════
+MICROPHONE PERMISSION HELP
+═══════════════════════════════════
+When someone has mic problems, permission denied, or asks about settings navigation:
+
+FIRST — if phone type is unknown, ask:
+"What phone are you using?"
+actions: [{"label":"Samsung","message":"Samsung"},{"label":"Pixel","message":"Pixel"},{"label":"iPhone","message":"iPhone"},{"label":"Other Android","message":"Other Android"}]
+
+DEVICE-SPECIFIC steps (give these after user identifies device):
+iPhone: "Go to Settings → scroll down → find GUBER → tap it → Microphone → turn it ON."
+Samsung: "Settings → Apps → tap the ⋮ three-dot menu in the top-right → Permission manager → Microphone → GUBER → Allow."
+  If they say 'what 3 dots?': "The ⋮ is in the top-right corner of the Apps screen. Can't find it? Try: Settings → search for 'GUBER' → App info → Permissions → Microphone → Allow."
+Pixel / stock Android: "Settings → Apps → GUBER → Permissions → Microphone → Allow."
+Other Android: "Settings → Apps → find GUBER → Permissions → Microphone → Allow."
+Browser / PWA: "Tap the 🔒 lock icon next to the address bar → Microphone → Allow. Or: browser Settings → Privacy → Site Settings → Microphone → find GUBER and allow it."
+
+Always follow up with:
+actions: [{"label":"Yes, it worked!","message":"Yes the mic works now"},{"label":"Still not working","message":"Mic still not working"}]
+
+═══════════════════════════════════
+ISSUE REPORTING & FEEDBACK CAPTURE
+═══════════════════════════════════
+When a user reports a bug, voice/mic failure, payment problem, GPS issue, or form problem:
+
+1. Try to help resolve it directly first.
+2. If unresolvable, offer to capture a structured report:
+   "I can capture this as a report and send it to the GUBER team right now. Want me to do that?"
+   actions: [{"label":"Yes, send report","message":"__submit_feedback_report__"},{"label":"Not now","message":"No thanks"}]
+
+3. When capturing a report, add to your JSON response:
+   "feedbackDraft": {"ready":true,"category":"<mic_failure|voice_failure|listing_interruption|payment_issue|gps_issue|form_problem|app_bug|general>","description":"<one-sentence summary>"}
+
+4. After user sends "__submit_feedback_report__" — confirm warmly and set feedbackDraft.ready=true in your response.
+
 CRITICAL — respond with JSON ONLY, no other text:
-{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[]}
+{"reply":"<message>","confidence":"high|medium|low","route":null,"actions":[],"options":[],"feedbackDraft":null}
 - "route": in-app path when confidence=high. null otherwise.
 - "actions": 2-3 {label,message} for medium confidence follow-up. [] otherwise.
-- "options": 3-5 {label,message} for low confidence disambiguation. [] otherwise.`;
+- "options": 3-5 {label,message} for low confidence disambiguation. [] otherwise.
+- "feedbackDraft": null normally; {"ready":true,"category":"<type>","description":"<summary>"} when capturing an issue report.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4.1-mini",
         temperature: 0.4,
-        max_tokens: 600,
+        max_tokens: voiceMode ? 220 : 600,
         response_format: { type: "json_object" as const },
         messages: [
           { role: "system", content: systemPrompt },
           ...sanitized,
         ],
       });
+      const assistMs = Date.now() - _brainStart;
+      console.log(`[JAC assist] ${assistMs}ms | voiceMode=${!!voiceMode} | user ${sessionUser.id}`);
 
       const rawContent = completion.choices[0]?.message?.content?.trim() ?? "";
-      type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[] };
+      type JacResp = { reply: string; confidence?: string; route?: string | null; actions?: any[]; options?: any[]; feedbackDraft?: { ready: boolean; category: string; description: string } | null };
       let parsed: JacResp = { reply: "I'm having trouble responding right now. Please try again!", confidence: "low" };
       try {
         const j = JSON.parse(rawContent);
@@ -16650,6 +17082,9 @@ CRITICAL — respond with JSON ONLY, no other text:
             route: typeof j.route === "string" && j.route.trim() ? j.route.trim() : null,
             actions: Array.isArray(j.actions) ? (j.actions as any[]).filter((a) => a?.label && a?.message).slice(0, 3) : [],
             options: Array.isArray(j.options) ? (j.options as any[]).filter((a) => a?.label && a?.message).slice(0, 5) : [],
+            feedbackDraft: (j.feedbackDraft?.ready === true && typeof j.feedbackDraft?.category === "string")
+              ? { ready: true, category: j.feedbackDraft.category, description: j.feedbackDraft.description ?? "" }
+              : null,
           };
         } else if (rawContent) {
           parsed.reply = rawContent;
@@ -16657,10 +17092,122 @@ CRITICAL — respond with JSON ONLY, no other text:
       } catch {
         if (rawContent) parsed.reply = rawContent;
       }
-      res.json(parsed);
+      return parsed;
+  }
+
+  // ── JAC voice session mint (ElevenLabs Conversational AI) ─────────────────
+  // Authenticated + voice_pipeline_v2-gated. Returns a short-lived signed URL
+  // for the PRIVATE ElevenLabs agent PLUS a per-conversation HMAC identity token
+  // the client passes as the SECRET dynamic variable `secret__jac_voice_token`.
+  // ElevenLabs forwards that to our adapter as the x-jac-voice-token header
+  // (never to the model). The ElevenLabs API key stays server-side. Because the
+  // flag defaults OFF, this returns 403 to everyone in prod → pipeline is inert.
+  app.post("/api/jac/convai/session", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "unauthorized" });
+
+      const { isFeatureEnabledFor } = await import("./feature-flags.js");
+      const enabled = await isFeatureEnabledFor("voice_pipeline_v2", { id: user.id, role: user.role });
+      if (!enabled) return res.status(403).json({ message: "voice pipeline not enabled for this account" });
+
+      const agentId = process.env.ELEVENLABS_CONVAI_AGENT_ID;
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!agentId || !apiKey) return res.status(503).json({ message: "voice agent not configured" });
+
+      const platformRaw = req.body?.platform;
+      const platform: "web" | "ios" | "android" =
+        platformRaw === "ios" ? "ios" : platformRaw === "android" ? "android" : "web";
+      const role: "admin" | "user" = user.role === "admin" ? "admin" : "user";
+      const voiceToken = signJacVoiceToken({ userId: user.id, role, platform });
+
+      // Private agent → mint a short-lived signed URL server-side.
+      const signedRes = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`,
+        { headers: { "xi-api-key": apiKey } },
+      );
+      if (!signedRes.ok) {
+        console.error("[jac/convai/session] signed-url failed", signedRes.status);
+        return res.status(502).json({ message: "voice provider unavailable" });
+      }
+      const signedJson: any = await signedRes.json().catch(() => ({}));
+      if (!signedJson?.signed_url) {
+        return res.status(502).json({ message: "voice provider returned no url" });
+      }
+
+      return res.json({
+        agentId,
+        signedUrl: signedJson.signed_url,
+        voiceToken,
+        dynamicVariableName: "secret__jac_voice_token",
+      });
     } catch (err: any) {
-      console.error("[GUBER] guber-assist error:", err.message);
-      res.status(500).json({ message: "Assistant unavailable, please try again." });
+      console.error("[jac/convai/session]", err?.message);
+      return res.status(500).json({ message: "session error" });
+    }
+  });
+
+  // ── JAC ⇄ ElevenLabs Conversational AI custom-LLM adapter ─────────────────
+  // ElevenLabs points here as its "LLM". We run JAC's OWN brain and stream the
+  // reply back as OpenAI chat.completion.chunk SSE, so voice on every platform
+  // is the same JAC. Auth = per-conversation HMAC identity token (userId derived
+  // ONLY from the token, never from the model/agent) + optional shared-secret
+  // header. Inert unless a valid token is minted; client is gated on voice_pipeline_v2.
+  app.post("/api/jac/convai/llm", async (req: Request, res: Response) => {
+    try {
+      const cfgSecret = process.env.JAC_CONVAI_SHARED_SECRET;
+      if (cfgSecret) {
+        const provided = req.headers["x-guber-convai-secret"];
+        if (provided !== cfgSecret) {
+          return res.status(401).json({ error: { message: "unauthorized", type: "invalid_request_error" } });
+        }
+      }
+
+      const rawToken = resolveVoiceToken(req);
+      const claims = rawToken ? verifyJacVoiceToken(rawToken) : null;
+      if (!claims) {
+        return res.status(401).json({ error: { message: "invalid or missing voice token", type: "invalid_request_error" } });
+      }
+      if (claims.userId == null) {
+        // Anonymous onboarding voice is a later phase; staging is authed-only.
+        return res.status(401).json({ error: { message: "authentication required", type: "invalid_request_error" } });
+      }
+      const user = await storage.getUser(claims.userId);
+      if (!user) {
+        return res.status(401).json({ error: { message: "user not found", type: "invalid_request_error" } });
+      }
+
+      // Per-conversation + per-user sliding-window cap: a minted token lives in
+      // the browser for up to 2h, so bound replay to keep LLM/voice spend safe.
+      const rl = checkConvaiRateLimit(claims.userId, claims.cid);
+      if (!rl.ok) {
+        res.setHeader("Retry-After", Math.ceil((rl.retryAfterMs ?? 60000) / 1000).toString());
+        return res.status(429).json({ error: { message: "rate limit exceeded", type: "rate_limit_error" } });
+      }
+
+      const body: any = req.body ?? {};
+      const model = typeof body.model === "string" && body.model ? body.model : "gpt-4.1-mini";
+      const stream = body.stream !== false; // ElevenLabs streams by default
+      const sanitized = sanitizeAssistMessages(Array.isArray(body.messages) ? body.messages : []);
+      if (sanitized.length === 0) sanitized.push({ role: "user", content: "hello" });
+
+      // voiceMode = true → brain keeps replies short + spoken-friendly.
+      const result = await runGuberAssistBrain(user, sanitized, true);
+      const content = (result?.reply || "Sorry, I didn't catch that — could you say that again?").toString();
+      const id = newCompletionId();
+
+      if (stream) {
+        writeOpenAiStream(res, { id, model, content });
+      } else {
+        res.json(buildNonStreamCompletion({ id, model, content }));
+      }
+    } catch (err: any) {
+      console.error("[jac/convai/llm]", err?.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: { message: "adapter error", type: "server_error" } });
+      } else {
+        try { res.end(); } catch { /* socket already closed */ }
+      }
     }
   });
 
@@ -16676,54 +17223,104 @@ CRITICAL — respond with JSON ONLY, no other text:
         .map((m: any) => ({ role: String(m.role) as "user" | "assistant", content: String(m.content).slice(0, 2000) }))
         .slice(-20);
 
-      const SYSTEM = `You are JAC — GUBER's listing assistant. Your job is to collect listing info through friendly, one-question-at-a-time conversation so you can pre-fill a posting form for the user.
+      const SYSTEM = `You are JAC — GUBER's smart Job Assistance Coordinator. Your one job: run a fast, friendly conversation that ends with a fully pre-filled form the user can post in seconds.
 
-LISTING TYPES you handle:
-- "vehicle" — cars, trucks, motorcycles, SUVs, vans, boats, trailers, RVs
-- "item" — phones, laptops, furniture, electronics, clothing, tools, any physical non-vehicle item
-- "house" — houses, apartments, condos, rentals, property listings
-- "load" — freight, cargo, loads that need shipping or transport (Load Board post)
-- "vi" — Verify & Inspect requests (need a GUBER worker to verify or inspect something)
-- "job" — hiring someone to do a task (lawn care, cleaning, moving, delivery, repairs, pet care, etc.)
+JAC TONE (non-negotiable):
+- Short. Warm. Direct. Sound like a smart friend texting, not a form.
+- ONE question per message. Never dump all fields at once.
+- GOOD: "Got it! How big is the yard — small, medium, or over half an acre?"
+- BAD: "Please select yard size from: Small (under 1/4 acre), Medium (1/4–1/2 acre)..."
+- When a question has 3–5 clear options, use "actions" chips so the user can tap instead of type.
+- Accept natural language and parse it. "about 200 bucks" → budget: "200".
 
-REQUIRED FIELDS per type (collect these one at a time, never ask for more than one at once):
-vehicle: year, make, model, condition (excellent/good/fair/poor), mileage (optional — skip if user says unknown), price, zipcode
-item: title (what is it exactly?), category (Electronics/Clothing/Furniture/Tools/Sports/Other), condition (new/like new/good/fair/poor), price, zipcode
-house: listing_type (for_sale or for_rent), price (sale price or monthly rent as a number), bedrooms, bathrooms, zipcode
-load: commodity_type (what is being shipped), pickup_zip, delivery_zip, weight_lbs (approximate number), trailer_type (dry_van/flatbed/reefer/other)
-vi: description (what needs to be verified or inspected and why), zipcode
-job: category (General Labor/Skilled Labor/On-Demand Help/Delivery/Moving/Cleaning/Lawn Care/Pet Care/Skilled Trades/Other), serviceType (specific task, e.g. "Lawn Mowing", "House Cleaning", "Furniture Assembly"), descriptionSeed (brief description of what needs doing), budget (how much willing to pay as a number), zip
+──────────────────────────────────────
+MODULES & REQUIRED FIELDS
+──────────────────────────────────────
 
-ROUTING:
-vehicle → /marketplace
-item → /marketplace
-house → /marketplace
-load → /load-board/post
-vi → /verify-inspect
-job → /post-job?from=jac
+vehicle: year, make, model, condition (Excellent/Good/Fair/Poor), mileage (optional—skip if unknown), price, zipcode
+  → auto-generate title as "year make model"
+  → route: /marketplace
 
-BEHAVIOR:
-1. First detect the listing type from the conversation (or use the provided hint). If unclear, ask.
-2. Ask ONE question at a time to collect missing required fields.
-3. Keep questions short, warm, and conversational. Do not list all fields at once.
-4. Accept natural language — parse into structured fields (e.g. "2019 Honda Civic" → year=2019, make=Honda, model=Civic; "$5000" → price=5000).
-5. When ALL required fields are collected, set ready=true and write a short warm confirmation reply.
-6. For vehicles, auto-generate title as "year make model" (e.g. "2019 Honda Civic").
-7. Store prices as numeric strings without $ or commas (e.g. "5000" not "$5,000").
-8. For mileage on vehicles: if the user skips or says unknown, omit vehicleMileage from collected.
+item: title, itemCategory (Electronics/Clothing/Furniture/Tools/Sports/Other), condition (New/Like New/Good/Fair/Poor), price, zipcode
+  → route: /marketplace
+
+house: listing_type (for_sale OR for_rent), price (number only), bedrooms (number), bathrooms (number), zipcode
+  → route: /marketplace
+
+load: commodity_type, pickup_zip, delivery_zip, weight_lbs (number), trailer_type (dry_van/flatbed/reefer/conestoga/hotshot/car_hauler)
+  → route: /load-board/post
+
+vi (Verify & Inspect): vi_type (see below), description, zipcode, budget (optional number)
+  → vi_type values and what they map to:
+    "vehicle"     — inspecting a car/truck/boat/motorcycle/RV
+    "property"    — checking a house/apartment/rental/land
+    "item_online" — verifying an item bought/sold online (eBay/Craigslist/etc.)
+    "quick_check" — simple errand-style check (mail pickup, package delivery confirm, etc.)
+  → Detect vi_type from what the user describes. Confirm with one short question if unclear.
+  → route: /verify-inspect
+
+job: category, jobType, descriptionSeed, budget (number), zip
+  PLUS up to 2 key jobDetails answers (see JOB GUIDED QUESTIONS below).
+  → route: /post-job?from=jac
+
+──────────────────────────────────────
+JOB TYPE LOOKUP  (jobType → category)
+──────────────────────────────────────
+General Labor: Lawn Care | Moving | Cleaning | Assembly | Hauling/Junk Removal | Pressure Washing | Garage Cleanout | Packing/Unpacking | Vehicle Detailing
+On-Demand Help: Pet Care | Errand Running | Delivery | Personal Assistant | House Sitting | Vehicle Transport | Roadside Assistance | Jump Start | Lockout Service
+Skilled Labor: Plumbing | Electrical | HVAC | Carpentry | Drywall | Painting | Welding | Auto Repair
+Other: Other
+
+If user describes something not listed, pick the closest match. Set category to the parent group above.
+
+──────────────────────────────────────
+JOB GUIDED QUESTIONS (collect AFTER zip, before ready=true)
+Ask the 1–2 most important section questions for the detected job type:
+──────────────────────────────────────
+Lawn Care    → services (chips: Mowing/Edging/Weed eating/Leaf removal/Mulching/Hedge trimming — multi-select okay), yardSize (Small under ¼ acre/Medium/Large/Very large)
+Moving       → moveSize (Few items/1 room/Apartment/House/Storage unit), heavyItems (No heavy items/Some heavy items/Very heavy items)
+Cleaning     → cleaningLevel (Light/Standard/Deep/Move-out), size (Small/Medium/Large)
+Pet Care     → petType (Dog/Cat/Bird/Other), petServices (Walk/Feed/Check-in/Pet sitting/Overnight stay — multi okay)
+Delivery     → itemSize (Small/Medium/Large/Heavy item), fragile (Yes/No)
+Assembly     → itemType (Furniture/Bed frame/Desk/Shelving/Gym equipment/Outdoor item), itemCount (1/2–3/4+)
+Plumbing     → issueType (Leak/Clog/Toilet/Sink/Faucet/Water heater/Other), urgency (Low/Medium/High)
+Electrical   → issueType (Outlet/Light fixture/Breaker/Switch/Fan/Other), urgency (Low/Medium/High)
+Auto Repair  → helpNeeded (Brakes/Battery/No start/Oil service/Diagnostics/AC/Tires/Other), workLocation (Driveway/Garage/Parking lot)
+All others   → skip guided questions; just collect descriptionSeed, budget, zip.
+
+Store guided answers in collected.jobDetails as a flat object: e.g. { "services": ["Mowing","Edging"], "yardSize": "Medium" }.
+For multi-select fields, store as array. For single-select, store as string.
+
+──────────────────────────────────────
+PARSING RULES
+──────────────────────────────────────
+- prices/budgets: strip $, commas → numeric string ("5000" not "$5,000")
+- "2019 Honda Civic" → year:"2019", make:"Honda", model:"Civic"
+- mileage on vehicles: if user says unknown/skip → omit mileage from collected
+- trailer_type: normalize user text → dry_van / flatbed / reefer / conestoga / hotshot / car_hauler
+
+──────────────────────────────────────
+FLOW
+──────────────────────────────────────
+1. Detect module from conversation (or hint). If genuinely unclear, ask one short question.
+2. For job: detect jobType first, set category automatically, confirm with user if needed.
+3. Collect required fields one at a time. Use action chips for multi-choice fields.
+4. For job: after zip, ask the 1–2 guided questions for the detected jobType (above).
+5. When ALL required fields are collected (incl. guided questions if applicable), set ready=true.
 
 ALWAYS respond with valid JSON only — no markdown, no prose outside the JSON:
 {
-  "reply": "your friendly one-sentence question or confirmation",
-  "actions": [{"label": "button text", "message": "the message sent if tapped"}],
-  "collected": { ...all fields gathered so far as flat key-value pairs },
+  "reply": "one warm sentence — question or confirmation",
+  "actions": [{"label": "chip label", "message": "sent when tapped"}],
+  "collected": { ...all fields gathered so far },
   "ready": false,
-  "listingType": "vehicle|item|house|load|vi",
-  "route": "/marketplace|/load-board/post|/verify-inspect"
+  "listingType": "vehicle|item|house|load|vi|job",
+  "route": "/marketplace|/load-board/post|/verify-inspect|/post-job?from=jac"
 }
 
-When ready=true, set reply to something warm like: "Perfect! I have everything. Opening your listing form now — the details will be pre-filled for you!"
-Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). Omit when the answer is open-ended.`;
+When ready=true → reply: "Perfect! I've got everything. Opening your form now — it'll be pre-filled and ready to post!"
+actions: [] when ready=true.
+Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answers.`;
 
       const sysMsg = hintType
         ? `${SYSTEM}\n\nHINT: The listing type is already known to be "${hintType}". Do not ask about listing type.`
@@ -16769,6 +17366,35 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     } catch (err: any) {
       console.error("[JAC] listing-collect error:", err.message);
       res.status(500).json({ message: "Listing assistant unavailable, please try again." });
+    }
+  });
+
+  // ── JAC Feedback Reports (auth optional) ─────────────────────────────────
+  app.post("/api/jac/feedback-report", async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session as any)?.userId ?? null;
+      const { platform, deviceInfo, currentRoute, issueCategory, userDescription, jacMessages } = req.body;
+      let userEmail: string | null = null;
+      if (userId) {
+        try {
+          const row = await pool.query(`SELECT email FROM users WHERE id = $1`, [userId]);
+          userEmail = row.rows[0]?.email ?? null;
+        } catch {}
+      }
+      const msgs = Array.isArray(jacMessages) ? jacMessages.slice(-10).map((m: any) => ({
+        role: typeof m.role === "string" ? m.role : "user",
+        content: typeof m.content === "string" ? m.content.slice(0, 500) : "",
+      })) : [];
+      const result = await pool.query(
+        `INSERT INTO jac_feedback_reports (user_id, user_email, platform, device_info, current_route, issue_category, user_description, jac_messages)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [userId, userEmail, platform ?? null, deviceInfo ?? null, currentRoute ?? null,
+         issueCategory ?? "general", userDescription ?? null, JSON.stringify(msgs)]
+      );
+      res.json({ ok: true, reportId: result.rows[0]?.id });
+    } catch (err: any) {
+      console.error("[JAC] feedback-report error:", err.message);
+      res.status(500).json({ message: "Could not save report." });
     }
   });
 
@@ -16872,7 +17498,9 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         voiceEnabled, language, tutorialStatus,
         textResponses, voiceActivation, floatingButton,
         proactiveSuggestions, personalizedRecommendations, voiceSelection, lowDataMode,
+        memoryConsent,
       } = req.body;
+      const safeMemoryConsent = ["granted", "denied"].includes(memoryConsent) ? memoryConsent : null;
       await pool.query(
         `INSERT INTO jac_user_profile (
           user_id, primary_goal, user_type, zip_code, interests, service_needs,
@@ -16881,8 +17509,8 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           startup_behavior, voice_enabled, language, tutorial_status,
           text_responses, voice_activation, floating_button,
           proactive_suggestions, personalized_recommendations, voice_selection, low_data_mode,
-          updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW())
+          memory_consent, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW())
         ON CONFLICT (user_id) DO UPDATE SET
           primary_goal     = COALESCE($2, jac_user_profile.primary_goal),
           user_type        = COALESCE($3, jac_user_profile.user_type),
@@ -16909,6 +17537,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           personalized_recommendations = COALESCE($24, jac_user_profile.personalized_recommendations),
           voice_selection              = COALESCE($25, jac_user_profile.voice_selection),
           low_data_mode                = COALESCE($26, jac_user_profile.low_data_mode),
+          memory_consent               = COALESCE($27, jac_user_profile.memory_consent),
           updated_at       = NOW()`,
         [
           userId,
@@ -16937,6 +17566,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           typeof personalizedRecommendations === "boolean" ? personalizedRecommendations : null,
           typeof voiceSelection === "string" ? voiceSelection : null,
           typeof lowDataMode === "boolean" ? lowDataMode : null,
+          safeMemoryConsent,
         ]
       );
       res.json({ ok: true });
@@ -17070,6 +17700,83 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       const userId = req.session.userId!;
       const id = parseInt(req.params.id);
       await pool.query(`DELETE FROM jac_memory WHERE id = $1 AND user_id = $2`, [id, userId]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── JAC Pending Actions — confirm-before-submit workflow execution ────────
+  app.get("/api/jac/actions/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const r = await pool.query(
+        `SELECT id, action_type, payload, summary, status, result_body, created_at, expires_at
+         FROM jac_pending_actions WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      if (!r.rows[0]) return res.status(404).json({ message: "Not found" });
+      res.json(r.rows[0]);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/jac/actions/:id/confirm", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const r = await pool.query(
+        `SELECT id, action_type, payload, status, expires_at FROM jac_pending_actions
+         WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+        [id, userId]
+      );
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ message: "Not found" });
+      if (row.status !== "pending") {
+        return res.status(409).json({ message: `Action already ${row.status}` });
+      }
+      if (new Date(row.expires_at).getTime() < Date.now()) {
+        await pool.query(`UPDATE jac_pending_actions SET status = 'expired' WHERE id = $1`, [id]);
+        return res.status(410).json({ message: "This request expired — please ask JAC to set it up again." });
+      }
+      if (!isValidActionType(row.action_type)) {
+        return res.status(400).json({ message: "Unknown action type" });
+      }
+      // Re-validate against the freshest fields (never trust client-supplied overrides)
+      const { ok, summary } = validateAndSummarize(row.action_type, row.payload);
+      if (!ok) {
+        await pool.query(`UPDATE jac_pending_actions SET status = 'failed', result_body = $2 WHERE id = $1`, [id, JSON.stringify({ message: "Missing required fields" })]);
+        return res.status(400).json({ message: "This request is missing required details — please ask JAC to fill them in." });
+      }
+      const port = parseInt(process.env.PORT || "5000", 10);
+      const { status, body } = await executeAction(row.action_type, row.payload, req.headers.cookie, port);
+      const success = status >= 200 && status < 300;
+      await pool.query(
+        `UPDATE jac_pending_actions SET status = $2, result_body = $3::jsonb WHERE id = $1`,
+        [id, success ? "completed" : "failed", JSON.stringify(body ?? {})]
+      );
+      if (!success) {
+        return res.status(status).json({ message: body?.message || "That didn't go through — please try again from the page directly.", body });
+      }
+      res.json({ ok: true, summary, result: body });
+    } catch (err: any) {
+      console.error("[jac/actions confirm]", err.message);
+      res.status(500).json({ message: "Something went wrong confirming this action." });
+    }
+  });
+
+  app.post("/api/jac/actions/:id/cancel", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const id = parseInt(req.params.id);
+      const r = await pool.query(
+        `UPDATE jac_pending_actions SET status = 'cancelled'
+         WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id`,
+        [id, userId]
+      );
+      if (!r.rows[0]) return res.status(404).json({ message: "Not found or already resolved" });
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -17239,24 +17946,43 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     return { goalAmount, deadline };
   }
 
-  app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.session.userId!;
-      // Accept both `goal` (spec contract) and `goalAmount` (backward-compat)
-      const { message, goal: bodyGoalSpec, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
-        message?: string;
-        goal?: number;
-        goalAmount?: number;
-        deadline?: string;
-      };
+  // Server-side goal-intent detector — mirrors the client DD_PATTERNS list,
+  // including amount-free money-intent phrases like "how do I make money today".
+  const DD_INTENT_PATTERNS: RegExp[] = [
+    /\$\s*\d+.{0,40}by\s+(today|tonight|tomorrow|friday|saturday|sunday|monday|tuesday|wednesday|thursday|next week|end of (week|day)|this weekend|midnight|eod)/i,
+    /\b(need|want|make|earn|get)\b.{0,25}\$\s*\d+\b.{0,40}\b(by|before|this|tonight|tomorrow|end of|in)\b/i,
+    /\bhow\s+(can|do)\s+i\s+(make|earn).{0,25}\$\s*\d+/i,
+    /\b(earning|financial|income|money)\s+goal\b/i,
+    /\bdestination\s+determination\b/i,
+    /\bi\s+need\s+\$\s*\d+/i,
+    /\bi\s+want\s+to\s+earn\s+\$\s*\d+/i,
+    /\bset\s+(a|an|my)\s+(earning|income|money)\s+goal\b/i,
+    /\bhow\s+(can|do|could|should)\s+i\s+(make|earn|get)\s+(some\s+)?(money|cash|income)\b/i,
+    /\b(make|earn|get)\s+(some\s+)?(money|cash)\s+(today|tonight|fast|quick|quickly|now|asap|this\s+week|this\s+weekend)\b/i,
+    /\bways?\s+to\s+(make|earn)\s+(money|cash|income)\b/i,
+    /\bi\s+need\s+(to\s+(make|earn)\s+)?(money|cash)\b/i,
+    /\bhelp\s+me\s+(make|earn)\s+(money|cash|income)\b/i,
+  ];
+  function hasDDIntentServer(message: string): boolean {
+    const t = (message || "").toLowerCase();
+    return DD_INTENT_PATTERNS.some((p) => p.test(t));
+  }
 
+  // Shared D.D. planner used by /api/jac/dd/plan AND both JAC chat surfaces
+  // (onboard + guber-assist), so a money goal enters D.D. mode consistently.
+  // When no amount is given (e.g. "how do I make money today") it returns a
+  // ranked list of live earning options and invites the user to set a target
+  // instead of erroring.
+  async function buildDDPlan(
+    userId: number,
+    message: string,
+    bodyGoal?: number | null,
+    bodyDeadline?: string | null,
+  ) {
       const parsed = parseDDIntent(message || "");
-      const goalAmount = bodyGoalSpec ?? bodyGoal ?? parsed.goalAmount;
+      const goalAmount = (bodyGoal ?? parsed.goalAmount) || null;
       const deadline = bodyDeadline ?? parsed.deadline;
-
-      if (!goalAmount || goalAmount <= 0) {
-        return res.status(400).json({ message: "Please specify a goal amount, e.g. 'I need $500 by Friday'." });
-      }
+      const hasGoal = !!goalAmount && goalAmount > 0;
 
       // ── Time window scoring ─────────────────────────────────────────────
       // Parse deadline into days remaining; default 7 if not specified.
@@ -17289,7 +18015,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         return 7;
       }
       const daysLeft = deadlineToDays(deadline);
-      const dailyRateNeeded = daysLeft > 0 ? goalAmount / daysLeft : goalAmount;
+      const dailyRateNeeded = hasGoal ? (daysLeft > 0 ? goalAmount! / daysLeft : goalAmount!) : 150;
 
       // ── Query all income streams + profile in parallel ──────────────────
       const userRes = await pool.query(
@@ -17310,9 +18036,10 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           `SELECT id, title, budget, category, service_type, zip, job_type,
                   COUNT(*) OVER() AS availability_count
            FROM jobs
-           WHERE status = 'open' AND assigned_worker_id IS NULL
+           WHERE status = 'open' AND assigned_helper_id IS NULL
              AND job_type IS DISTINCT FROM 'vi'
-             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND (is_test_job = FALSE OR is_test_job IS NULL)
+             AND (removed_by_admin = FALSE OR removed_by_admin IS NULL)
              AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
            ORDER BY
              CASE WHEN $2::text[] IS NOT NULL AND category = ANY($2::text[]) THEN 0 ELSE 1 END,
@@ -17324,16 +18051,17 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         pool.query(
           `SELECT id, title, budget, zip, COUNT(*) OVER() AS availability_count
            FROM jobs
-           WHERE status = 'open' AND assigned_worker_id IS NULL
+           WHERE status = 'open' AND assigned_helper_id IS NULL
              AND job_type = 'vi'
-             AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
+             AND (is_test_job = FALSE OR is_test_job IS NULL)
+             AND (removed_by_admin = FALSE OR removed_by_admin IS NULL)
              AND ($1::text IS NULL OR LEFT(zip,3) = LEFT($1,3))
            ORDER BY budget DESC NULLS LAST LIMIT 3`,
           [zip]
         ),
         // Load board — only if user has a vehicle; includes total count
         hasVehicle ? pool.query(
-          `SELECT id, cargo_type, posted_price, pickup_city, delivery_city, pickup_zip,
+          `SELECT id, commodity_type, posted_price, pickup_city, delivery_city, pickup_zip,
                   COUNT(*) OVER() AS availability_count
            FROM load_board_listings WHERE status = 'active'
            ORDER BY posted_price DESC NULLS LAST LIMIT 3`
@@ -17368,7 +18096,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
            WHERE mi.seller_id = $1 AND mi.status = 'active'
              AND COALESCE(mi.view_count, 0) > 0
              AND (SELECT COUNT(*) FROM marketplace_offers mo
-                  WHERE mo.item_id = mi.id
+                  WHERE mo.listing_id = mi.id
                     AND mo.status NOT IN ('rejected','withdrawn')) = 0
            ORDER BY mi.view_count DESC LIMIT 2`,
           [userId]
@@ -17442,7 +18170,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         items.push({
           type: "load_board",
           id: lb.id,
-          title: `Haul: ${lb.cargo_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
+          title: `Haul: ${lb.commodity_type || "Cargo"} (${lb.pickup_city || lb.pickup_zip || "pickup"} → ${lb.delivery_city || "delivery"})`,
           estimatedPay: pay,
           availabilityCount: lbAvail,
           route: `/load-board/${lb.id}`,
@@ -17520,46 +18248,56 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
         return bRate - aRate;
       });
 
-      const topItems = items.slice(0, 7);
+      const topItems = items.slice(0, 6);
 
       // ── Realistic gap analysis ──────────────────────────────────────────
       const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);
-      const realisticShortfall = Math.max(0, goalAmount - realisticEarnable);
+      const realisticShortfall = hasGoal ? Math.max(0, goalAmount! - realisticEarnable) : 0;
 
-      // ── Save goal — earnedSoFar = 0 (tracking starts from NOW) ──────────
-      await pool.query(
-        `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
-         WHERE user_id = $1 AND status = 'active'`,
-        [userId]
-      );
-      const insertRes = await pool.query(
-        `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, realistic_earnable, status)
-         VALUES ($1, $2, $3, $4::jsonb, 0, $5, 'active')
-         RETURNING id`,
-        [userId, goalAmount, deadline, JSON.stringify(topItems), realisticEarnable]
-      );
-      const goalId = insertRes.rows[0]?.id;
+      // ── Save goal — earnedSoFar = 0 (tracking starts from NOW). Only persist
+      // when the user actually named a target; amount-free "how do I make
+      // money" queries just surface options without creating a goal. ─────────
+      let goalId: number | null = null;
+      if (hasGoal) {
+        await pool.query(
+          `UPDATE jac_dd_goals SET status = 'superseded', updated_at = NOW()
+           WHERE user_id = $1 AND status = 'active'`,
+          [userId]
+        );
+        const insertRes = await pool.query(
+          `INSERT INTO jac_dd_goals (user_id, goal_amount, deadline, plan_json, earned_so_far, realistic_earnable, status)
+           VALUES ($1, $2, $3, $4::jsonb, 0, $5, 'active')
+           RETURNING id`,
+          [userId, goalAmount, deadline, JSON.stringify(topItems), realisticEarnable]
+        );
+        goalId = insertRes.rows[0]?.id ?? null;
+      }
 
-      // ── JAC coordinator voice — gap-aware response ───────────────────────
+      // ── JAC coordinator voice — honest, gap-aware response ───────────────
       const deadlineText = deadline ? ` by ${deadline}` : "";
-      const daysText = daysLeft < 1 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${Math.round(daysLeft)} days`;
+      const daysText = daysLeft < 1 ? "today" : daysLeft === 1 ? "by tomorrow" : `in about ${Math.round(daysLeft)} days`;
+      const earnable = Math.round(realisticEarnable);
 
       let intro: string;
       if (topItems.length === 0) {
-        intro = `Goal set: $${goalAmount.toFixed(2)}${deadlineText}. No live jobs showing in your area right now — but new ones post daily. Come back and I'll pull fresh options.`;
-      } else if (realisticShortfall > 0) {
-        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} possible option${topItems.length !== 1 ? "s" : ""} near you worth exploring — actual earnings depend on availability and what gets accepted. New jobs post daily:`;
+        intro = hasGoal
+          ? `Goal set: $${goalAmount!.toFixed(2)}${deadlineText}. I'm not seeing live options in your area right now — but new ones post daily. Check back and I'll pull a fresh plan.`
+          : `I'm not seeing live earning options in your area right now — but new ones post daily. Check back soon and I'll pull fresh options.`;
+      } else if (hasGoal && realisticShortfall > 0) {
+        intro = `Goal: $${goalAmount!.toFixed(2)}${deadlineText}. I'll be straight with you — from what's live right now, about $${earnable} looks realistically reachable ${daysText}, so the full $${Math.round(goalAmount!)} may need a bit more time or extra sources. Here ${topItems.length === 1 ? "is" : "are"} ${topItems.length} option${topItems.length !== 1 ? "s" : ""} ranked by speed-to-cash — new jobs post daily:`;
+      } else if (hasGoal) {
+        intro = `Goal: $${goalAmount!.toFixed(2)}${deadlineText}. Good news — about $${earnable} looks reachable from what's live now, which covers your target. Here ${topItems.length === 1 ? "is" : "are"} ${topItems.length} option${topItems.length !== 1 ? "s" : ""} ranked by payout:`;
       } else {
-        intro = `Goal: $${goalAmount.toFixed(2)}${deadlineText}. Here are ${topItems.length} option${topItems.length !== 1 ? "s" : ""} in your area that could be worth looking into — ranked by potential payout:`;
+        intro = `Here ${topItems.length === 1 ? "is" : "are"} ${topItems.length} way${topItems.length !== 1 ? "s" : ""} to make money near you right now, ranked by speed-to-cash. Want me to build a plan to a target? Tell me an amount and deadline — like "$500 by Friday" — and I'll map out how to hit it.`;
       }
 
-      res.json({
+      return {
         goalId,
-        goalAmount,
+        goalAmount: hasGoal ? goalAmount : null,
         deadline,
         daysLeft,
         earnedSoFar: 0,
-        remaining: goalAmount,
+        remaining: hasGoal ? goalAmount : 0,
         realisticEarnable,
         realisticShortfall,
         planItems: topItems,
@@ -17569,7 +18307,21 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           message: `Take me to: ${item.title}`,
           route: item.route,
         })),
-      });
+      };
+  }
+
+  app.post("/api/jac/dd/plan", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      // Accept both `goal` (spec contract) and `goalAmount` (backward-compat)
+      const { message, goal: bodyGoalSpec, goalAmount: bodyGoal, deadline: bodyDeadline } = req.body as {
+        message?: string;
+        goal?: number;
+        goalAmount?: number;
+        deadline?: string;
+      };
+      const plan = await buildDDPlan(userId, message || "", bodyGoalSpec ?? bodyGoal ?? null, bodyDeadline ?? null);
+      res.json(plan);
     } catch (err: any) {
       console.error("[jac/dd/plan]", err.message);
       res.status(500).json({ message: err.message });
@@ -17919,6 +18671,154 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ── JAC Feedback Reports Admin ─────────────────────────────────────────────
+  app.get("/api/admin/jac/reports", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : null;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const rows = await pool.query(
+        `SELECT r.*, u.username, u.full_name FROM jac_feedback_reports r
+         LEFT JOIN users u ON u.id = r.user_id
+         ${status ? "WHERE r.status = $1" : ""}
+         ORDER BY r.created_at DESC LIMIT ${status ? "$2" : "$1"}`,
+        status ? [status, limit] : [limit]
+      );
+      res.json({ reports: rows.rows });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.patch("/api/admin/jac/reports/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const VALID = new Set(["new", "reviewed", "fixed", "dismissed"]);
+      if (status && !VALID.has(status)) return res.status(400).json({ message: "Invalid status" });
+      await pool.query(
+        `UPDATE jac_feedback_reports SET
+           status = COALESCE($1, status),
+           admin_notes = COALESCE($2, admin_notes),
+           updated_at = NOW()
+         WHERE id = $3`,
+        [status ?? null, adminNotes ?? null, parseInt(req.params.id)]
+      );
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  // ── JAC voice usage logging (TTS/STT credit + reliability tracking) ─────────
+  async function logJacVoiceUsage(entry: {
+    userId?: number | null; type: "tts" | "stt"; provider: string; voiceId?: string | null;
+    units: number; success: boolean; errorMessage?: string | null; ip?: string | null; latencyMs?: number | null;
+  }) {
+    try {
+      await pool.query(
+        `INSERT INTO jac_voice_usage_log (user_id, type, provider, voice_id, units, success, error_message, ip, latency_ms)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [entry.userId ?? null, entry.type, entry.provider, entry.voiceId ?? null, entry.units, entry.success, entry.errorMessage ?? null, entry.ip ?? null, entry.latencyMs ?? null]
+      );
+    } catch (e: any) {
+      console.error("[JAC voice usage log] error:", e.message);
+    }
+  }
+
+  // ── System Issue Reporting (JAC System Guardian) ─────────────────────────────
+  // Auth-optional: captures end-to-end failures from web / iOS / Android clients.
+  // Severity is classified SERVER-SIDE (never trusted from the client). Deduped
+  // by fingerprint so a repeating failure bumps occurrence_count, not row count.
+  const _issueIpBucket = new Map<string, { count: number; resetAt: number }>();
+  const ISSUE_IP_MAX = 30;              // max reports per IP per window
+  const ISSUE_IP_WINDOW_MS = 60_000;
+
+  app.post("/api/issues/report", async (req: Request, res: Response) => {
+    try {
+      const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const bucket = _issueIpBucket.get(ip) ?? { count: 0, resetAt: now + ISSUE_IP_WINDOW_MS };
+      if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + ISSUE_IP_WINDOW_MS; }
+      if (bucket.count >= ISSUE_IP_MAX) {
+        return res.status(429).json({ ok: false, message: "Too many reports." });
+      }
+      bucket.count++;
+      _issueIpBucket.set(ip, bucket);
+      // Opportunistic sweep of expired buckets so this public-endpoint map stays
+      // bounded under IP churn (only runs when the map grows large).
+      if (_issueIpBucket.size > 5000) {
+        _issueIpBucket.forEach((v, k) => { if (now > v.resetAt) _issueIpBucket.delete(k); });
+      }
+
+      const b = (req.body ?? {}) as Record<string, any>;
+      const module = typeof b.module === "string" && b.module.trim() ? b.module : "general";
+
+      // Payload caps — defend against oversized / malicious bodies.
+      const str = (v: any, max: number): string | undefined =>
+        typeof v === "string" && v.trim() ? v.slice(0, max) : undefined;
+      const steps = Array.isArray(b.steps)
+        ? b.steps.filter((s: any) => typeof s === "string").slice(0, 20).map((s: string) => s.slice(0, 200))
+        : [];
+      let relatedIds: Record<string, string | number> = {};
+      if (b.relatedIds && typeof b.relatedIds === "object" && !Array.isArray(b.relatedIds)) {
+        for (const [k, v] of Object.entries(b.relatedIds)) {
+          if ((typeof v === "string" || typeof v === "number") && Object.keys(relatedIds).length < 20) {
+            relatedIds[k.slice(0, 40)] = typeof v === "string" ? v.slice(0, 120) : v;
+          }
+        }
+      }
+
+      const userId = (req.session as any)?.userId ?? null;
+      const result = await recordSystemIssue({
+        userId,
+        platform: str(b.platform, 20),
+        device: str(b.device, 300),
+        appVersion: str(b.appVersion, 60),
+        route: str(b.route, 300),
+        module,
+        attemptedAction: str(b.attemptedAction, 300),
+        errorMessage: str(b.errorMessage, 1000),
+        relatedIds,
+        blocked: b.blocked === true,
+        steps,
+        gpsPermission: str(b.gpsPermission, 40),
+      });
+
+      if (result.isNew || result.severity === "critical") {
+        console.warn(`[system-issue] ${result.severity.toUpperCase()} ${module} (x${result.occurrenceCount}) — ${str(b.errorMessage, 120) ?? "no message"} | fp ${result.fingerprint.slice(0, 8)}`);
+      }
+      // Escalate a NEW critical, or an UPGRADE to critical on a known issue
+      // (e.g. a previously non-blocking failure that becomes blocking). A repeat
+      // of an already-critical fingerprint (oldSeverity === "critical") never
+      // re-notifies, so dedupe still prevents notification floods.
+      // A reopened critical (a previously-resolved outage that recurred) also
+      // re-notifies — otherwise a recurring failure would stay silent.
+      if (result.severity === "critical" && (result.isNew || result.oldSeverity !== "critical" || result.reopened)) {
+        void escalateCriticalIssue({
+          id: result.id,
+          module,
+          severity: result.severity,
+          platform: str(b.platform, 20),
+          errorMessage: str(b.errorMessage, 140),
+          occurrenceCount: result.occurrenceCount,
+        });
+      }
+      // Layer 4 — strictly-gated AI escalation. Only qualifying issues (critical /
+      // repeat / multi-user / blocked money-access module) ever wake the model.
+      // Fire-and-forget: the reporter is never blocked, and the module itself
+      // guarantees at-most-once-per-fingerprint plus a global hourly cap.
+      if (shouldDiagnose({
+        severity: result.severity,
+        occurrenceCount: result.occurrenceCount,
+        distinctUsers: result.distinctUsers,
+        module: result.module,
+        blocked: result.blocked,
+      })) {
+        void maybeDiagnoseIssue(result.id);
+      }
+      return res.json({ ok: true, id: result.id, severity: result.severity });
+    } catch (e: any) {
+      console.error("[system-issue] report error:", e?.message || e);
+      // Never surface reporter internals; the client swallows failures anyway.
+      return res.status(200).json({ ok: false });
+    }
+  });
+
   // ── JAC ElevenLabs TTS Proxy ─────────────────────────────────────────────────
   // Keeps the API key server-side. Returns audio/mpeg stream.
   // ── TTS cost guards ───────────────────────────────────────────────────────
@@ -17926,66 +18826,80 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
   const _ttsIpBucket = new Map<string, { count: number; resetAt: number }>();
   const TTS_IP_MAX   = 10;
   const TTS_IP_WINDOW_MS = 60_000;
-  // Guard 2: Session character budget — max 1 500 chars of live TTS per session
-  const TTS_SESSION_CHAR_BUDGET = 1_500;
+  // Guard 2: Session character budget — ROLLING window, not a hard per-session
+  // cap. A never-resetting cap silently killed the real ElevenLabs voice after
+  // ~10 spoken replies and dropped users onto the robotic Web Speech fallback
+  // for the rest of their session. The IP limit above (10 req/min × 400 chars =
+  // 4 000 chars/min) is the real abuse throttle; this just bounds sustained cost
+  // while letting a normal conversation keep the good voice.
+  const TTS_SESSION_CHAR_BUDGET = 12_000;
+  const TTS_SESSION_WINDOW_MS = 15 * 60_000;
   // Guard 3: Per-request text cap — never send more than 400 chars to ElevenLabs
   const TTS_MAX_CHARS = 400;
 
   app.post("/api/jac/tts", async (req: Request, res: Response) => {
     try {
       const { text } = req.body as { text?: string };
+      const _ttsStart = Date.now();
       if (!text || typeof text !== "string") return res.status(400).json({ message: "text required" });
 
       // Guard 3: hard character cap per request
       const cleaned = text.slice(0, TTS_MAX_CHARS);
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
+      const userIdForLog = (req.session as any)?.userId ?? null;
+      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      if (!apiKey) {
+        console.warn("[JAC TTS] ELEVENLABS_API_KEY not set — falling back to client-side voice");
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "not_configured", ip, latencyMs: Date.now() - _ttsStart });
+        return res.status(503).json({ message: "TTS not configured" });
+      }
 
       // Guard 1: IP rate limit
-      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
       const now = Date.now();
       const bucket = _ttsIpBucket.get(ip) ?? { count: 0, resetAt: now + TTS_IP_WINDOW_MS };
       if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + TTS_IP_WINDOW_MS; }
       if (bucket.count >= TTS_IP_MAX) {
         console.warn(`[JAC TTS] rate-limited IP ${ip}`);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "ip_rate_limited", ip, latencyMs: Date.now() - _ttsStart });
         return res.status(429).json({ message: "Too many TTS requests — slow down." });
       }
       bucket.count++;
       _ttsIpBucket.set(ip, bucket);
 
-      // Guard 2: session character budget
+      // Guard 2: session character budget (rolling — resets each window so a
+      // long conversation never permanently loses the ElevenLabs voice)
       const sess = req.session as any;
+      if (!sess.ttsCharsResetAt || now > sess.ttsCharsResetAt) {
+        sess.ttsCharsUsed = 0;
+        sess.ttsCharsResetAt = now + TTS_SESSION_WINDOW_MS;
+      }
       sess.ttsCharsUsed = (sess.ttsCharsUsed ?? 0) + cleaned.length;
       if (sess.ttsCharsUsed > TTS_SESSION_CHAR_BUDGET) {
         console.warn(`[JAC TTS] session budget exceeded (${sess.ttsCharsUsed} chars)`);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", units: cleaned.length, success: false, errorMessage: "session_budget_exceeded", ip, latencyMs: Date.now() - _ttsStart });
         return res.status(429).json({ message: "Voice budget reached for this session." });
       }
 
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
-      console.log(`[JAC TTS] ${cleaned.length} chars | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
+      const modelId = process.env.JAC_ELEVENLABS_MODEL_ID || DEFAULT_JAC_MODEL_ID;
+      console.log(`[JAC TTS] ${cleaned.length} chars | model ${modelId} | IP ${ip} (${bucket.count}/${TTS_IP_MAX}) | session ${sess.ttsCharsUsed}/${TTS_SESSION_CHAR_BUDGET}`);
 
-      const upstream = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
-        {
-          method: "POST",
-          headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: cleaned,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
-          }),
-        }
-      );
+      const result = await synthesizeSpeech(cleaned, { voiceId, modelId, stream: true });
+      const upstreamMs = Date.now() - _ttsStart;
 
-      if (!upstream.ok) {
-        const err = await upstream.text();
-        console.error("[JAC TTS] ElevenLabs error", upstream.status, err);
-        return res.status(502).json({ message: "TTS upstream error" });
+      if (!result.ok) {
+        console.error(`[JAC TTS] ElevenLabs error [${result.code}] after ${upstreamMs}ms:`, result.message);
+        logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: false, errorMessage: result.code, ip, latencyMs: upstreamMs });
+        return res.status(httpStatusForError(result.code)).json({ message: result.message });
       }
+
+      console.log(`[JAC TTS] ElevenLabs responded in ${upstreamMs}ms (time-to-first-byte, streaming) | voice ${voiceId}`);
+      logJacVoiceUsage({ userId: userIdForLog, type: "tts", provider: "elevenlabs", voiceId, units: cleaned.length, success: true, ip, latencyMs: upstreamMs });
 
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Cache-Control", "no-store");
+      const upstream = result.response;
       if (upstream.body) {
         const { Readable } = await import("stream");
         Readable.fromWeb(upstream.body as any).pipe(res);
@@ -17995,13 +18909,38 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       }
     } catch (e: any) {
       console.error("[JAC TTS] error:", e.message);
+      logJacVoiceUsage({ userId: (req.session as any)?.userId ?? null, type: "tts", provider: "elevenlabs", units: (req.body?.text?.length) || 0, success: false, errorMessage: e.message?.slice(0, 200) });
       res.status(500).json({ message: "TTS error" });
+    }
+  });
+
+  // ── JAC TTS client-side fallback event log ───────────────────────────────────
+  // Called (fire-and-forget) by the browser when it silently falls back to the
+  // robotic Web Speech API because live ElevenLabs playback failed on the
+  // client side (network error, blob empty, autoplay blocked, etc). Without
+  // this, those failures are invisible to admins — the user hears a fallback
+  // voice but the usage log would otherwise show nothing happened.
+  app.post("/api/jac/tts/fallback-log", async (req: Request, res: Response) => {
+    try {
+      const { reason, textLength } = req.body as { reason?: string; textLength?: number };
+      const userIdForLog = (req.session as any)?.userId ?? null;
+      const ip = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      console.warn(`[JAC TTS] client fell back to Web Speech — reason: ${reason || "unknown"}`);
+      logJacVoiceUsage({
+        userId: userIdForLog, type: "tts", provider: "web_speech_fallback",
+        units: typeof textLength === "number" ? textLength : 0, success: false,
+        errorMessage: `client_fallback:${(reason || "unknown").slice(0, 100)}`, ip,
+      });
+      res.status(204).end();
+    } catch {
+      res.status(204).end();
     }
   });
 
   // ── JAC STT — Whisper transcription (iOS + fallback) ─────────────────────────
   app.post("/api/jac/stt", async (req: Request, res: Response) => {
     try {
+      const _sttStart = Date.now();
       const { audioBase64, mimeType } = req.body as { audioBase64?: string; mimeType?: string };
       if (!audioBase64 || typeof audioBase64 !== "string") {
         return res.status(400).json({ message: "audioBase64 required" });
@@ -18009,10 +18948,15 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
 
       const apiKey   = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
       const baseURL  = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      if (!apiKey) return res.status(503).json({ message: "STT not configured" });
-
-      // IP rate limit: 5 calls/min
+      const userIdForLog = (req.session as any)?.userId ?? null;
       const ip = ((req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+      const audioBytesForLog = Buffer.byteLength(audioBase64, "base64");
+      if (!apiKey) {
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "not_configured", ip, latencyMs: Date.now() - _sttStart });
+        return res.status(503).json({ message: "STT not configured" });
+      }
+
+      // IP rate limit: 20 calls/min
       const now = Date.now();
       const STT_WINDOW_MS = 60_000;
       const STT_IP_MAX    = 20;
@@ -18022,6 +18966,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       if (now > b.resetAt) { b.count = 0; b.resetAt = now + STT_WINDOW_MS; }
       if (b.count >= STT_IP_MAX) {
         console.warn(`[JAC STT] rate-limited IP ${ip}`);
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBytesForLog, success: false, errorMessage: "ip_rate_limited", ip, latencyMs: Date.now() - _sttStart });
         return res.status(429).json({ message: "Too many STT requests — slow down." });
       }
       b.count++;
@@ -18035,7 +18980,9 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           ? "ogg"
           : mt.includes("mp3") || mt.includes("mpeg")
             ? "mp3"
-            : "webm";
+            : mt.includes("wav")
+              ? "wav"
+              : "webm";
       const filename = `jac_audio.${ext}`;
 
       const OpenAI = (await import("openai")).default;
@@ -18043,18 +18990,70 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       const openai = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
 
       const file = await toFile(audioBuffer, filename, { type: mimeType ?? "audio/webm" });
+      // Domain-vocabulary hint biases the model toward GUBER's proper nouns and
+      // jargon (brand names, feature names) so they aren't mis-transcribed into
+      // similar-sounding everyday words — the main cause of JAC "misunderstanding".
       const transcription = await openai.audio.transcriptions.create({
         file,
-        model: "whisper-1",
+        model: "gpt-4o-mini-transcribe",
         language: "en",
+        prompt:
+          "GUBER, JAC, GUVATAR, GUBER Studio, Verify and Inspect, Cash Drop, " +
+          "Day-1 OG, Trust Box, Load Board, barter, marketplace, gig, hirer, " +
+          "worker, payout, Stripe, background check, direct offer, AI or Not.",
       });
 
       const text = (transcription.text ?? "").trim();
-      console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}"`);
-      return res.json({ text });
+      const sttMs = Date.now() - _sttStart;
+      console.log(`[JAC STT] ${audioBuffer.length} bytes → "${text.slice(0, 80)}" | ${sttMs}ms`);
+      logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBuffer.length, success: true, ip, latencyMs: sttMs });
+      return res.json({ text, latencyMs: sttMs });
     } catch (e: any) {
       console.error("[JAC STT] error:", e.message);
+      logJacVoiceUsage({ userId: (req.session as any)?.userId ?? null, type: "stt", provider: "openai_transcribe", units: Buffer.byteLength((req.body?.audioBase64 as string) || "", "base64"), success: false, errorMessage: e.message?.slice(0, 200) });
       return res.status(500).json({ message: "STT error" });
+    }
+  });
+
+  // ── JAC Voice Usage — admin cost/reliability tracking ───────────────────────
+  app.get("/api/admin/jac-voice-usage", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 200, 1000);
+      const rows = await pool.query(
+        `SELECT l.id, l.created_at, l.type, l.provider, l.voice_id, l.units, l.success, l.error_message,
+                l.user_id, u.email AS user_email
+         FROM jac_voice_usage_log l
+         LEFT JOIN users u ON u.id = l.user_id
+         ORDER BY l.id DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      const usage = rows.rows.map((r) => ({
+        id: r.id,
+        date: r.created_at,
+        userId: r.user_id,
+        userEmail: r.user_email ?? "anonymous",
+        feature: r.type === "tts" ? "Text-to-Speech" : "Speech-to-Text",
+        type: r.type,
+        provider: r.provider,
+        voiceId: r.voice_id,
+        units: r.units,
+        estimatedCostUsd: estimateCostUsd(r.type, r.units || 0),
+        success: r.success,
+        errorMessage: r.error_message,
+      }));
+
+      const summary = await pool.query(
+        `SELECT type, success, COUNT(*)::int AS count, COALESCE(SUM(units),0)::bigint AS total_units
+         FROM jac_voice_usage_log
+         GROUP BY type, success`
+      );
+
+      res.json({ usage, summary: summary.rows });
+    } catch (e: any) {
+      console.error("[admin/jac-voice-usage] error:", e.message);
+      res.status(500).json({ message: "Failed to load usage log" });
     }
   });
 
@@ -18067,7 +19066,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       if (userRow.rows[0]?.role !== "admin") return res.status(403).json({ message: "Admin only" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || "9BWtsMINqrJLrRacOk9x";
+      const voiceId = process.env.JAC_ELEVENLABS_VOICE_ID || DEFAULT_JAC_VOICE_ID;
       if (!apiKey) return res.status(503).json({ message: "TTS not configured" });
 
       const { readFileSync, writeFileSync, existsSync } = await import("fs");
@@ -18101,24 +19100,16 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
       for (const [key, text] of Object.entries(CACHE_CLIPS)) {
         const filePath = path.join(dir, `${key}.mp3`);
         if (existsSync(filePath)) { results[key] = "skipped (exists)"; continue; }
-        try {
-          const r = await fetch(
-            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
-            {
-              method: "POST",
-              headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                text,
-                model_id: "eleven_multilingual_v2",
-                voice_settings: { stability: 0.55, similarity_boost: 0.70, style: 0.08, use_speaker_boost: false },
-              }),
-            }
-          );
-          if (!r.ok) { results[key] = `error ${r.status}`; continue; }
-          const buf = await r.arrayBuffer();
-          writeFileSync(filePath, Buffer.from(buf));
-          results[key] = "generated";
-        } catch (e: any) { results[key] = `exception: ${e.message}`; }
+        const result = await synthesizeSpeech(text, { voiceId });
+        if (!result.ok) {
+          results[key] = `error: ${result.code}`;
+          logJacVoiceUsage({ userId, type: "tts", provider: "elevenlabs", voiceId, units: text.length, success: false, errorMessage: result.code });
+          continue;
+        }
+        const buf = await result.response.arrayBuffer();
+        writeFileSync(filePath, Buffer.from(buf));
+        results[key] = "generated";
+        logJacVoiceUsage({ userId, type: "tts", provider: "elevenlabs", voiceId, units: text.length, success: true });
       }
       res.json({ ok: true, results });
     } catch (e: any) {
@@ -18263,7 +19254,7 @@ Keep "actions" to 2-3 quick-reply chips when helpful (e.g. condition options). O
           id: "og",
           emoji: "👑",
           title: "Day-1 OG membership is still available",
-          description: "5% platform fee instead of 10% — and a permanent badge.",
+          description: "15% platform fee instead of 20% — and a permanent badge.",
           action: "Learn More",
           route: "/og-advantage",
           priority: 3,
@@ -23298,17 +24289,15 @@ OUTPUT STYLE:
       try { await storage.updateUser(userId, { lat: gpsLat, lng: gpsLng } as any); } catch {}
 
       await storage.createAuditLog({
-        actorId: userId,
+        userId,
         action: "worker_clock_in",
-        entityType: "user",
-        entityId: userId,
-        metadata: {
+        details: JSON.stringify({
           gpsLat,
           gpsLng,
           gpsAccuracy: typeof req.body.gpsAccuracy === "number" ? req.body.gpsAccuracy : null,
           gpsTimestamp: req.body.gpsTimestamp || null,
           ua: req.headers["user-agent"] || null,
-        },
+        }),
       });
 
       res.json({ success: true, clockedInAt: now });
@@ -23323,14 +24312,12 @@ OUTPUT STYLE:
       const now = new Date();
       await storage.updateUser(userId, { isAvailable: false, clockedInAt: null, clockedOutAt: now });
       await storage.createAuditLog({
-        actorId: userId,
+        userId,
         action: "worker_clock_out",
-        entityType: "user",
-        entityId: userId,
-        metadata: {
+        details: JSON.stringify({
           gpsLat: typeof req.body.gpsLat === "number" ? req.body.gpsLat : null,
           gpsLng: typeof req.body.gpsLng === "number" ? req.body.gpsLng : null,
-        },
+        }),
       });
       res.json({ success: true, clockedOutAt: now });
     } catch (err: any) {
@@ -26513,6 +27500,154 @@ OUTPUT STYLE:
     }
   });
 
+  // ── Day-1 OG Stripe Audit ────────────────────────────────────────────────────
+
+  // GET /api/admin/og-stripe-audit
+  // Scans ALL paid Stripe checkout sessions, cross-references with DB, returns full audit list.
+  app.get("/api/admin/og-stripe-audit", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const stripe = (await import("stripe")).default;
+      const client = new stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" });
+
+      // Collect all paid sessions
+      const sessions: any[] = [];
+      let hasMore = true;
+      let startingAfter: string | undefined;
+      while (hasMore) {
+        const page = await client.checkout.sessions.list({ limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) });
+        sessions.push(...page.data.filter((s: any) => s.payment_status === "paid" && s.amount_total !== null && s.amount_total <= 210));
+        hasMore = page.has_more;
+        if (page.data.length > 0) startingAfter = page.data[page.data.length - 1].id;
+      }
+
+      // Deduplicate by email (keep earliest payment date)
+      const byEmail: Record<string, { email: string; paidAt: string; sessionId: string; amount: number }> = {};
+      for (const s of sessions) {
+        const email = (s.customer_details?.email || s.metadata?.userEmail || "").toLowerCase().trim();
+        if (!email) continue;
+        const prev = byEmail[email];
+        if (!prev || s.created < new Date(prev.paidAt).getTime() / 1000) {
+          byEmail[email] = { email, paidAt: new Date(s.created * 1000).toISOString(), sessionId: s.id, amount: s.amount_total };
+        }
+      }
+
+      const emails = Object.keys(byEmail);
+      if (emails.length === 0) return res.json({ rows: [], scannedAt: new Date().toISOString() });
+
+      // Cross-reference DB using inArray (emails already lowercased)
+      const userRows = await db
+        .select({ emailRaw: usersTable.email, id: usersTable.id, username: usersTable.username, day1OG: usersTable.day1OG })
+        .from(usersTable)
+        .where(inArray(sql<string>`LOWER(${usersTable.email})`, emails));
+      const preRows = await db
+        .select({ email: ogPreapprovedEmails.email })
+        .from(ogPreapprovedEmails)
+        .where(inArray(sql<string>`LOWER(${ogPreapprovedEmails.email})`, emails));
+
+      const userMap: Record<string, { id: number; username: string; day1OG: boolean }> = {};
+      for (const r of userRows) {
+        userMap[r.emailRaw.toLowerCase()] = { id: r.id, username: r.username, day1OG: !!r.day1OG };
+      }
+      const preSet = new Set(preRows.map((r) => r.email.toLowerCase()));
+
+      const rows = emails.map((email) => ({
+        email,
+        paidAt: byEmail[email].paidAt,
+        sessionId: byEmail[email].sessionId,
+        amountCents: byEmail[email].amount,
+        hasAccount: !!userMap[email],
+        userId: userMap[email]?.id ?? null,
+        username: userMap[email]?.username ?? null,
+        day1OgActive: userMap[email]?.day1OG ?? false,
+        inPreapproved: preSet.has(email),
+      })).sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime());
+
+      res.json({ rows, scannedAt: new Date().toISOString() });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/admin/og-grant — add to preapproved + retroactively activate for existing users
+  app.post("/api/admin/og-grant", requireAdmin, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body as { email: string };
+      if (!email) return res.status(400).json({ message: "email required" });
+      const lower = email.toLowerCase().trim();
+
+      await db.execute(sql`INSERT INTO og_preapproved_emails (email) VALUES (${lower}) ON CONFLICT DO NOTHING`);
+      await db.execute(sql`UPDATE users SET day1_og = TRUE WHERE LOWER(email) = ${lower}`);
+      await db.execute(sql`
+        UPDATE users SET ai_or_not_credits = 5
+        WHERE LOWER(email) = ${lower}
+          AND day1_og = TRUE
+          AND trust_box_purchased = FALSE
+          AND (ai_or_not_credits IS NULL OR ai_or_not_credits < 5)
+      `);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/admin/og-notify-email — send OG welcome email via Resend
+  app.post("/api/admin/og-notify-email", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { email, hasAccount } = req.body as { email: string; hasAccount: boolean };
+      if (!email) return res.status(400).json({ message: "email required" });
+      if (!process.env.RESEND_API_KEY) return res.status(503).json({ message: "RESEND_API_KEY not configured" });
+
+      const { Resend } = await import("resend");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const fromDomain = process.env.RESEND_FROM_DOMAIN || "guberapp.app";
+      const baseUrl = process.env.BASE_URL || `https://${fromDomain}`;
+
+      const subject = hasAccount
+        ? "Your GUBER Day-1 OG Badge is Active 🏆"
+        : "You're a GUBER Day-1 OG — Create Your Account to Claim It";
+
+      const body = hasAccount
+        ? `<p style="font-size:15px;color:#ccc;line-height:1.6;margin:0 0 20px;">
+            Your <strong style="color:#fbbf24;">Day-1 OG</strong> founding-member badge has been activated on your account.
+            You're locked in at the <strong style="color:#fff;">15% service fee rate for life</strong> — that's the lowest rate GUBER will ever offer.
+            Log in to see your gold badge and all your member perks.
+          </p>
+          <a href="${baseUrl}/profile" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:10px;">View Your Profile</a>`
+        : `<p style="font-size:15px;color:#ccc;line-height:1.6;margin:0 0 20px;">
+            You purchased <strong style="color:#fbbf24;">Day-1 OG</strong> membership — thank you for being an early supporter of GUBER.
+            Your badge and lifetime rate lock are waiting. Create your account with this email address to claim them instantly.
+          </p>
+          <a href="${baseUrl}/signup" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:700;font-size:14px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:14px 32px;border-radius:10px;">Create Your Account</a>`;
+
+      const html = `
+        <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;background:#0a0a0a;color:#fff;padding:40px 32px;border-radius:16px;border:1px solid rgba(245,158,11,0.25);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <span style="font-size:26px;font-weight:900;color:#22c55e;letter-spacing:-0.5px;">GUBER</span>
+          </div>
+          <p style="font-size:11px;color:#666;letter-spacing:0.2em;text-transform:uppercase;margin:0 0 32px;">DAY-1 OG FOUNDING MEMBER</p>
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:20px;margin-bottom:28px;text-align:center;">
+            <div style="font-size:36px;margin-bottom:6px;">🏆</div>
+            <div style="font-size:18px;font-weight:900;color:#fbbf24;letter-spacing:0.1em;">DAY-1 OG</div>
+            <div style="font-size:11px;color:#a78b3e;letter-spacing:0.15em;text-transform:uppercase;">Founding Member · Lifetime Rate Lock</div>
+          </div>
+          ${body}
+          <p style="font-size:11px;color:#444;margin-top:28px;line-height:1.6;">
+            Questions? Reply to this email or contact <a href="mailto:support@guberapp.com" style="color:#22c55e;">support@guberapp.com</a>.
+          </p>
+        </div>`;
+
+      const { data, error } = await resend.emails.send({ from: `GUBER <noreply@${fromDomain}>`, to: email, subject, html });
+      if (error) {
+        console.error("[OG-NOTIFY] Resend error:", error.message);
+        return res.status(500).json({ message: error.message });
+      }
+      console.log("[OG-NOTIFY] Email sent to", email, "id:", data?.id);
+      res.json({ ok: true, emailId: data?.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // POST /api/load-board — create listing
   app.post("/api/load-board", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
@@ -28041,12 +29176,13 @@ OUTPUT STYLE:
       `);
 
       let activeMap: Record<number, string> = {};
+      let activeInstanceMap: Record<number, number> = {};
       let completedSet = new Set<number>();
       let isOG = false;
       if (userId) {
         const [ai, done, ogRow] = await Promise.all([
           pool.query(
-            `SELECT template_id, status FROM mission_instances
+            `SELECT id, template_id, status FROM mission_instances
              WHERE user_id = $1 AND status NOT IN ('approved','rejected','expired')`,
             [userId]
           ),
@@ -28057,7 +29193,10 @@ OUTPUT STYLE:
           ),
           pool.query(`SELECT day1_og FROM users WHERE id = $1`, [userId]),
         ]);
-        for (const r of ai.rows) activeMap[r.template_id] = r.status;
+        for (const r of ai.rows) {
+          activeMap[r.template_id] = r.status;
+          activeInstanceMap[r.template_id] = r.id;
+        }
         for (const r of done.rows) completedSet.add(r.template_id);
         isOG = !!ogRow.rows[0]?.day1_og;
       }
@@ -28079,6 +29218,7 @@ OUTPUT STYLE:
           category: t.category,
           sortOrder: t.sort_order,
           activeStatus: activeMap[t.id] ?? null,
+          instanceId: activeInstanceMap[t.id] ?? null,
           effectiveCredits: isOG
             ? Math.round(t.reward_credits * (1 + t.og_bonus_pct / 100))
             : t.reward_credits,
@@ -28315,6 +29455,9 @@ OUTPUT STYLE:
       res.status(500).json({ message: err.message });
     }
   });
+
+  // Campaign Lab
+  setupCampaignLabRoutes(app);
 
   return httpServer;
 }

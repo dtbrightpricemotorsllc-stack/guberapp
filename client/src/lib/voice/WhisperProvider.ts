@@ -1,45 +1,8 @@
 import type { STTProvider, STTCallback } from "./VoiceProvider";
+import { getBestMimeType, transcribeBlob, isSttSentinel } from "./sttUtils";
 
 /** Max recording duration before auto-stop (ms) */
 const MAX_RECORD_MS = 30_000;
-
-/**
- * Returns the best MIME type for the current platform, or "" if none of the
- * known types are supported (caller should create MediaRecorder without
- * specifying a mimeType and let the browser choose).
- *
- * Priority order:
- *  1. audio/webm;codecs=opus  — Chrome / Android / desktop
- *  2. audio/webm               — Chrome fallback
- *  3. audio/mp4;codecs=mp4a.40.2 — iOS WKWebView (Capacitor)
- *  4. audio/mp4                — iOS fallback
- *  5. audio/ogg;codecs=opus   — Firefox
- */
-function getBestMimeType(): string {
-  if (typeof MediaRecorder === "undefined") return "";
-  const types = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4;codecs=mp4a.40.2",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
-  for (const t of types) {
-    if (MediaRecorder.isTypeSupported(t)) return t;
-  }
-  return "";
-}
-
-/** Safe base64 encode that works on large buffers (no reduce/call-stack risk). */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const CHUNK = 8192;
-  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
 
 export class WhisperProvider implements STTProvider {
   readonly name = "whisper";
@@ -71,7 +34,17 @@ export class WhisperProvider implements STTProvider {
 
     // Pre-check permission state so we can distinguish "needs dialog" from
     // "hard denied" — avoids a confusing silent failure on Android.
-    if (typeof navigator !== "undefined" && navigator.permissions) {
+    //
+    // IMPORTANT: Skip this on iOS/Safari. On iOS Safari and PWA, any `await`
+    // before getUserMedia burns the user-gesture activation token. Once the
+    // activation is consumed, getUserMedia silently fails with NotAllowedError
+    // even when the user granted mic permission. We skip the pre-check on iOS
+    // and let getUserMedia handle the NotAllowedError itself.
+    const isIosSafari =
+      typeof navigator !== "undefined" &&
+      /iP(hone|ad|od)/i.test(navigator.userAgent);
+
+    if (!isIosSafari && typeof navigator !== "undefined" && navigator.permissions) {
       try {
         const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
         if (perm.state === "denied") {
@@ -85,7 +58,16 @@ export class WhisperProvider implements STTProvider {
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request clean speech capture — noise suppression + echo cancellation +
+      // auto gain markedly improve transcription accuracy in noisy/echoey
+      // rooms. Browsers that don't honor a constraint just ignore it.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
     } catch (err: any) {
       const msg = err?.name === "NotAllowedError" ? "__mic_denied__" : "__mic_error__";
       onResult(msg);
@@ -122,10 +104,18 @@ export class WhisperProvider implements STTProvider {
 
     rec.onstop = () => { this._finalize(); };
 
-    // timeslice 250ms — collects chunks during recording.
-    // Some iOS versions only fire ondataavailable on stop; that's fine because
-    // _finalize reads this._chunks which gets the single on-stop chunk too.
-    try { rec.start(250); } catch { rec.start(); }
+    // On iOS/Safari, timeslice recording is unreliable — the browser may fire
+    // ondataavailable with empty chunks and terminate the recorder early.
+    // Use no timeslice on iOS/Safari; the final ondataavailable fires on stop.
+    try {
+      if (isIosSafari) {
+        rec.start();
+      } else {
+        rec.start(250);
+      }
+    } catch {
+      try { rec.start(); } catch { /* give up */ }
+    }
 
     this._recorder = rec;
     this._listening = true;
@@ -158,30 +148,12 @@ export class WhisperProvider implements STTProvider {
 
     try {
       const blob = new Blob(chunks, { type: mimeType });
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64 = arrayBufferToBase64(arrayBuffer);
-
-      const res = await fetch("/api/jac/stt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audioBase64: base64, mimeType }),
-      });
-
-      if (!res.ok) {
-        console.warn("[WhisperProvider] STT server error", res.status);
-        onResult("__whisper_error__");
-        return;
-      }
-
-      const data = await res.json() as { text?: string };
-      const text = (data.text ?? "").trim();
-      if (text) onResult(text);
-      else onResult("__whisper_empty__");
-    } catch (e) {
-      console.error("[WhisperProvider] transcription error", e);
-      onResult("__whisper_error__");
+      const result = await transcribeBlob(blob, mimeType);
+      onResult(result);
     } finally {
       this._transcribing = false;
     }
   }
 }
+
+export { isSttSentinel };
