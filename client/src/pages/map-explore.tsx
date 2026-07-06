@@ -201,7 +201,7 @@ export default function MapExplore() {
   const [selectedZip, setSelectedZip] = useState<ZipGroup | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
   const [panelCatFilter, setPanelCatFilter] = useState("");
-  const [bottomOpen, setBottomOpen] = useState(true);
+  const [bottomOpen, setBottomOpen] = useState(false);
   const [zipFallback, setZipFallback] = useState<ZipFallbackResult | null>(null);
   const [proofSheet, setProofSheet] = useState<{ instanceId: number; title: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
