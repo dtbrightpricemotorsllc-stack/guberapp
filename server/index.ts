@@ -1346,7 +1346,7 @@ app.use((req, res, next) => {
       ('safety','ID verification process',
         '["how does id verification work","verify my id","id check","identity verification","verify my identity","how do i verify","id required"]'::jsonb,
         '["id verification","verify","identity","id check","document","verify id"]'::jsonb,
-        'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. You must be 18+ (or have a parent account if 13–17).',
+        'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. GUBER is only for users 18 years of age or older.',
         '[{"label":"Go verify my ID","message":"Take me to verify my ID"}]'::jsonb,
         'system'),
       ('safety','How disputes work',
@@ -1376,6 +1376,14 @@ app.use((req, res, next) => {
     ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
     WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE created_by = 'system' LIMIT 1);
   `).catch(e => console.error("[migration] jac_knowledge seed error:", e));
+
+  // Correct stale "13-17 with parent account" copy on DBs that were already seeded
+  // before GUBER moved to a strict 18+-only policy.
+  await pool.query(`
+    UPDATE jac_knowledge
+    SET answer = 'Go to your Profile and tap "Verify Identity." You''ll need to upload a photo of a government-issued ID (driver''s license, passport, or state ID) and take a selfie for face matching. Verification usually completes within minutes. GUBER is only for users 18 years of age or older.'
+    WHERE title = 'ID verification process' AND (answer ILIKE '%13%17%' OR answer ILIKE '%parent account%');
+  `).catch(e => console.error("[migration] jac_knowledge 18+ policy fix error:", e));
 
   // Seed initial intents
   await pool.query(`
