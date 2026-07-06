@@ -2,12 +2,12 @@
  * JAC Voice Selector — Web Speech API voice picker
  *
  * TTS Provider: Web Speech API (browser built-in, no external service)
- * Voice resolution: attempts "Flicker" first; if not found, scores
+ * Voice resolution: attempts "Hailey" first; if not found, scores
  * available voices for feminine / cheerful / bright qualities.
  */
 
 export const TTS_PROVIDER = "Web Speech API (browser built-in)";
-export const JAC_TARGET_VOICE = "Flicker";
+export const JAC_TARGET_VOICE = "Hailey";
 
 export interface VoiceDebugInfo {
   provider: string;
