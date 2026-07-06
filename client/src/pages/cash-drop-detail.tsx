@@ -855,7 +855,7 @@ export default function CashDropDetail() {
                     <input
                       type="file"
                       accept="image/*"
-                      capture={drop.requireInAppCamera ? "environment" : undefined}
+                      capture="environment"
                       className="hidden"
                       onChange={(e) => e.target.files?.[0] && handleCapture(0, e.target.files[0])}
                     />
@@ -874,7 +874,7 @@ export default function CashDropDetail() {
                       <input
                         type="file"
                         accept={item.type === "video" ? "video/*" : "image/*"}
-                        capture={drop.requireInAppCamera ? "environment" : undefined}
+                        capture="environment"
                         className="hidden"
                         onChange={(e) => e.target.files?.[0] && handleCapture(i, e.target.files[0])}
                       />
@@ -887,12 +887,10 @@ export default function CashDropDetail() {
               )}
             </div>
 
-            {drop.requireInAppCamera && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/15">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-400/70 flex-shrink-0 mt-0.5" />
-                <p className="text-[10px] text-amber-400/60">In-app camera only — gallery uploads are not accepted for this Cash Drop.</p>
-              </div>
-            )}
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/15">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400/70 flex-shrink-0 mt-0.5" />
+              <p className="text-[10px] text-amber-400/60">In-app camera only — this opens your camera live, gallery/photo library uploads are never accepted, so we can confirm you're really here.</p>
+            </div>
 
             <Button
               onClick={() => submitProofMutation.mutate()}

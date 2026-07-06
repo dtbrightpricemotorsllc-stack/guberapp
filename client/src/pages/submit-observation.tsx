@@ -261,11 +261,15 @@ export default function SubmitObservation() {
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              capture="environment"
               multiple
               className="hidden"
               onChange={handlePhotoSelect}
               data-testid="input-photos"
             />
+            <p className="text-[10px] text-muted-foreground/70">
+              Opens your live camera — gallery uploads aren't accepted, so we can confirm the observation is real and current.
+            </p>
           </div>
 
           <div className="space-y-2">

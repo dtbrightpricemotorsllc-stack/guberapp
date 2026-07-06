@@ -4013,12 +4013,12 @@ data-testid="select-final-location-mode"
 </div>
 <Switch checked={form.clueRevealOnArrival} onCheckedChange={(v) => setForm(f => ({ ...f, clueRevealOnArrival: v }))} data-testid="switch-clue-on-arrival" />
 </div>
-<div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border">
+<div className="flex items-center justify-between p-3 rounded-md glass-card-strong premium-border opacity-70">
 <div>
 <p className="text-sm font-display">In-app camera only</p>
-<p className="text-[10px] text-muted-foreground">Disables gallery uploads — live proof only</p>
+<p className="text-[10px] text-muted-foreground">Always on platform-wide — gallery uploads are never accepted for proof photos, on any Cash Drop</p>
 </div>
-<Switch checked={form.requireInAppCamera} onCheckedChange={(v) => setForm(f => ({ ...f, requireInAppCamera: v }))} data-testid="switch-in-app-camera" />
+<Switch checked={true} disabled data-testid="switch-in-app-camera" />
 </div>
 
 <div className="space-y-2 pt-1">
