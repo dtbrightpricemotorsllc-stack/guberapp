@@ -62,3 +62,46 @@ export async function triggerLiveCameraCapture(
   }
   fileInputRef.current?.click();
 }
+
+/**
+ * Launches the native photo picker (camera OR photo library) for general,
+ * non-proof photo uploads like a profile picture.
+ *
+ * On native iOS/Android this uses `@capacitor/camera` with
+ * `CameraSource.Prompt`, which shows the OS action sheet ("Take Photo" /
+ * "Choose from Library"). A plain `<input type="file">`'s `.click()` is
+ * unreliable inside WKWebView — it can silently no-op instead of opening a
+ * picker, which was reported as an unresponsive "change photo" button.
+ *
+ * On web (or if the native call throws for a non-cancel reason), it falls
+ * back to clicking the given hidden file input.
+ */
+export async function triggerPhotoPickerCapture(
+  fileInputRef: RefObject<HTMLInputElement>,
+  onFile: (file: File) => void,
+  opts?: { fileName?: string }
+): Promise<void> {
+  if (isNativeCameraPlatform) {
+    try {
+      const { Camera, CameraSource, CameraResultType } = await import("@capacitor/camera");
+      const photo = await Camera.getPhoto({
+        source: CameraSource.Prompt,
+        resultType: CameraResultType.DataUrl,
+        quality: 80,
+        allowEditing: false,
+        saveToGallery: false,
+      });
+      if (photo.dataUrl) {
+        const file = await dataUrlToFile(photo.dataUrl, opts?.fileName);
+        onFile(file);
+      }
+      return;
+    } catch (e: any) {
+      const msg = String(e?.message || "").toLowerCase();
+      if (msg.includes("cancel")) return;
+      // Any other native failure — fall back to the file-input capture
+      // sheet rather than leaving the user with no way to submit proof.
+    }
+  }
+  fileInputRef.current?.click();
+}

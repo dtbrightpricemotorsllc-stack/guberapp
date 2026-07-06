@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
+import { triggerLiveCameraCapture, triggerPhotoPickerCapture } from "@/lib/native-camera-capture";
 import { buildReferralShareText } from "@/lib/referral";
 import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
@@ -572,7 +572,16 @@ export default function Profile() {
               </Avatar>
               {isOwnProfile && (
                 <button
-                  onClick={() => photoInputRef.current?.click()}
+                  onClick={() =>
+                    triggerPhotoPickerCapture(photoInputRef, (file) => {
+                      const dt = new DataTransfer();
+                      dt.items.add(file);
+                      if (photoInputRef.current) {
+                        photoInputRef.current.files = dt.files;
+                        photoInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                      }
+                    })
+                  }
                   disabled={photoUploading || photoMutation.isPending}
                   className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-all"
                   style={{ background: "hsl(152 100% 44%)", border: "2px solid hsl(var(--card))" }}
