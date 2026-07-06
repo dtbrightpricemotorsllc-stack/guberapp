@@ -107,7 +107,16 @@ class WakeWordDetectorSingleton {
 
   private _stop(): void {
     if (this._restartTimer) { clearTimeout(this._restartTimer); this._restartTimer = null; }
-    try { this._rec?.stop(); } catch {}
+    if (this._rec) {
+      // Detach handlers FIRST — calling stop() fires onend, which would
+      // otherwise schedule a restart even though we're intentionally
+      // stopping (e.g. tab hidden or toggled off), causing zombie
+      // recognition instances / a runaway restart loop ("goes crazy").
+      this._rec.onend = null;
+      this._rec.onerror = null;
+      this._rec.onresult = null;
+      try { this._rec.stop(); } catch {}
+    }
     this._rec = null;
   }
 

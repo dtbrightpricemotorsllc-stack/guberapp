@@ -10180,11 +10180,10 @@ export async function registerRoutes(
           // First confirmed entry into the geofence — stamp + audit once.
           await storage.updateJob(jobId, { geofenceVerifiedAt: new Date() } as any);
           await storage.createAuditLog({
-            actorId: req.session.userId!,
+            userId: req.session.userId!,
             action: "geofence_proximity_verified",
-            entityType: "job",
-            entityId: jobId,
-            metadata: {
+            details: JSON.stringify({
+              jobId,
               gpsLat: last.lat,
               gpsLng: last.lng,
               jobLat: job.lat,
@@ -10192,7 +10191,7 @@ export async function registerRoutes(
               metersFromJob: Math.round(meters),
               radiusMeters: GEOFENCE_RADIUS_METERS,
               note: "verification-only; does not authorize payout",
-            },
+            }),
           });
         }
       }
@@ -10332,18 +10331,17 @@ export async function registerRoutes(
         proofDistanceMeters = haversineMeters(job.lat, job.lng, gpsLatNum, gpsLngNum);
         if (proofDistanceMeters > PROOF_RADIUS_METERS) {
           await storage.createAuditLog({
-            actorId: req.session.userId!,
+            userId: req.session.userId!,
             action: "proof_geofence_blocked",
-            entityType: "job",
-            entityId: jobId,
-            metadata: {
+            details: JSON.stringify({
+              jobId,
               gpsLat: gpsLatNum,
               gpsLng: gpsLngNum,
               jobLat: job.lat,
               jobLng: job.lng,
               metersFromJob: Math.round(proofDistanceMeters),
               maxMeters: PROOF_RADIUS_METERS,
-            },
+            }),
           });
           return res.status(400).json({
             message: "TOO_FAR_FROM_JOB",
@@ -10418,11 +10416,10 @@ export async function registerRoutes(
       // Audit log every successful proof submission with GPS context for
       // anti-fraud review.
       await storage.createAuditLog({
-        actorId: req.session.userId!,
+        userId: req.session.userId!,
         action: req.body.notEncountered ? "proof_not_encountered" : "proof_submitted",
-        entityType: "proof_submission",
-        entityId: proof.id,
-        metadata: {
+        details: JSON.stringify({
+          proofId: proof.id,
           jobId,
           gpsLat: gpsLatNum,
           gpsLng: gpsLngNum,
@@ -10430,7 +10427,7 @@ export async function registerRoutes(
           metersFromJob: proofDistanceMeters !== null ? Math.round(proofDistanceMeters) : null,
           imageCount: Array.isArray(req.body.imageUrls) ? req.body.imageUrls.length : 0,
           hasVideo: !!req.body.videoUrl,
-        },
+        }),
       });
 
       res.json(proof);
@@ -11368,11 +11365,9 @@ export async function registerRoutes(
             update.payoutStatus = "manual_review";
             update.internalPayoutStatus = "on_hold";
             await storage.createAuditLog({
-              actorId: req.session.userId!,
+              userId: req.session.userId!,
               action: "payout_blocked_multifactor",
-              entityType: "job",
-              entityId: job.id,
-              metadata: { reasons: payoutGate.reasons, factors: payoutGate.factors },
+              details: JSON.stringify({ jobId: job.id, reasons: payoutGate.reasons, factors: payoutGate.factors }),
             });
             console.warn(`[GUBER][payout-guard] jobId=${job.id} capture HELD — reasons=${payoutGate.reasons.join(",")}`);
           } else if (piId && currentPayoutStatus !== "paid_out" && currentPayoutStatus !== "capture_expired") {
@@ -16855,11 +16850,11 @@ Cash Drops are bonus reward events GUBER releases to the community. They appear 
 
 **Day-1 OG Membership (Founding Member Perks)**
 Day-1 OG is GUBER's founding membership — locked in early before the platform fully launches. Perks:
-- Reduced fees: 5% worker fee vs 10% standard (saves real money on every payout)
+- Reduced fees: 15% worker fee vs 20% standard (saves real money on every payout)
 - Priority Cash Drop notifications (first access)
 - Exclusive OG badge on profile
 - Early access to new features
-If someone asks about fees, saving money, payouts, or how to earn more — proactively mention that Day-1 OG membership cuts their worker fee in half (5% vs 10%). Example: "By the way, if you're not already a Day-1 OG member, it's worth checking out — OG members only pay a 5% fee instead of 10% on every payout, which adds up fast."
+If someone asks about fees, saving money, payouts, or how to earn more — proactively mention that Day-1 OG membership reduces their worker fee. Example: "By the way, if you're not already a Day-1 OG member, it's worth checking out — OG members only pay a 15% fee instead of 20% on every payout, which adds up fast."
 
 **AI or Not — The Game**
 AI or Not is a fun mini-game inside GUBER where users look at images and guess whether they were made by a human or AI. It's accessible from the main menu or dashboard. Users get credits to play — Day-1 OG members receive 5 free credits. The Trust Box subscription gives unlimited plays. If this user asks about AI or Not, tell them they currently have ${(sessionUser as any).aiOrNotCredits || 0} credit(s) remaining${(sessionUser as any).aiOrNotUnlimitedText ? " and unlimited Trust Box access" : ""}. To play more, they can earn credits through OG membership or subscribe to Trust Box.
@@ -16889,7 +16884,7 @@ On the dashboard in WORK mode there is a "Clocked In / Clocked Out" toggle. When
 5. Earnings go to your GUBER wallet → transfer to your bank via Stripe Connect
 
 **Wallet & Payouts**
-Earnings accumulate after jobs are approved. Connect your bank in Settings → Wallet to receive payouts. Standard fee: 10% for workers. OG members: only 5%.
+Earnings accumulate after jobs are approved. Connect your bank in Settings → Wallet to receive payouts. Standard fee: 20% for workers. OG members: only 15%.
 
 **Profile & Trust**
 Your profile shows work history, trust score, and credentials. Upload certifications and IDs to boost your trust level and attract better jobs. More completed jobs = stronger profile.
@@ -19259,7 +19254,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
           id: "og",
           emoji: "👑",
           title: "Day-1 OG membership is still available",
-          description: "5% platform fee instead of 10% — and a permanent badge.",
+          description: "15% platform fee instead of 20% — and a permanent badge.",
           action: "Learn More",
           route: "/og-advantage",
           priority: 3,
@@ -24294,17 +24289,15 @@ OUTPUT STYLE:
       try { await storage.updateUser(userId, { lat: gpsLat, lng: gpsLng } as any); } catch {}
 
       await storage.createAuditLog({
-        actorId: userId,
+        userId,
         action: "worker_clock_in",
-        entityType: "user",
-        entityId: userId,
-        metadata: {
+        details: JSON.stringify({
           gpsLat,
           gpsLng,
           gpsAccuracy: typeof req.body.gpsAccuracy === "number" ? req.body.gpsAccuracy : null,
           gpsTimestamp: req.body.gpsTimestamp || null,
           ua: req.headers["user-agent"] || null,
-        },
+        }),
       });
 
       res.json({ success: true, clockedInAt: now });
@@ -24319,14 +24312,12 @@ OUTPUT STYLE:
       const now = new Date();
       await storage.updateUser(userId, { isAvailable: false, clockedInAt: null, clockedOutAt: now });
       await storage.createAuditLog({
-        actorId: userId,
+        userId,
         action: "worker_clock_out",
-        entityType: "user",
-        entityId: userId,
-        metadata: {
+        details: JSON.stringify({
           gpsLat: typeof req.body.gpsLat === "number" ? req.body.gpsLat : null,
           gpsLng: typeof req.body.gpsLng === "number" ? req.body.gpsLng : null,
-        },
+        }),
       });
       res.json({ success: true, clockedOutAt: now });
     } catch (err: any) {
