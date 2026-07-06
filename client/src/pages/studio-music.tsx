@@ -149,7 +149,7 @@ export default function StudioMusicPage() {
       >
         {generate.isPending
           ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Composing…</>
-          : <><AudioLines className="w-5 h-5 mr-2" /> {isStoreBuild ? "Generate music" : (insufficient ? `Need ${cost} cr` : `Generate music · ${cost > 0 ? `${cost} cr` : "—"}`)}</>}
+          : <><AudioLines className="w-5 h-5 mr-2" /> {insufficient ? `Need ${cost} cr` : `Generate music · ${cost > 0 ? `${cost} cr` : "—"}`}</>}
       </Button>
     </StudioToolPageShell>
   );

@@ -105,7 +105,7 @@ export default function StudioTextToVideoPage() {
                   }`}
                   data-testid={`button-t2v-dur-${d}`}
                 >
-                  {d}s {!isStoreBuild && c > 0 && <span className="opacity-80 font-normal">· {c} cr</span>}
+                  {d}s {c > 0 && <span className="opacity-80 font-normal">· {c} cr</span>}
                 </button>
               );
             })}
@@ -120,7 +120,7 @@ export default function StudioTextToVideoPage() {
         >
           {generate.isPending
             ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Rendering…</>
-            : <><Wand2 className="w-5 h-5 mr-2" /> {isStoreBuild ? "Generate" : (insufficient ? `Need ${cost} cr` : `Generate · ${cost > 0 ? `${cost} cr` : "—"}`)}</>}
+            : <><Wand2 className="w-5 h-5 mr-2" /> {insufficient ? `Need ${cost} cr` : `Generate · ${cost > 0 ? `${cost} cr` : "—"}`}</>}
         </Button>
 
         <p className="text-center text-[12px] text-white/60">

@@ -16,7 +16,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { isStoreBuild } from "@/lib/platform";
 import {
   Loader2, Image as ImageIcon, ChevronLeft, ChevronRight, Check, Download,
 } from "lucide-react";
@@ -362,7 +361,7 @@ export function CommercialWizardForm({
             data-testid="button-commercial-generate"
           >
             {generate.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
-            {isStoreBuild ? "Generate" : (insufficient ? `Need ${cost} cr` : `Generate · ${cost} cr`)}
+            {insufficient ? `Need ${cost} cr` : `Generate · ${cost} cr`}
           </Button>
         )}
       </div>

@@ -81,9 +81,34 @@ such plugin is installed or compiled into the app (comment in the debug
 route suggests one was removed previously: "...falling back to the in-app
 browser").
 
-**Not yet fixed** — this needs a decision, not a guess (see "Open decisions"
-below): Apple *requires* offering Sign in with Apple because the app offers
-Google Sign-In (Guideline 4.8), so the button can't simply be removed.
+**Fixed:** built a first-party native plugin, `ios/App/App/AppleSignInPlugin.swift`,
+wrapping Apple's own `AuthenticationServices` (`ASAuthorizationAppleIDProvider`) —
+no third-party npm dependency, no new credentials needed. Rewrote
+`client/src/lib/native-apple-sign-in.ts` to call it via
+`registerPlugin<AppleSignInPlugin>("AppleSignIn")` and POST the resulting
+`identityToken`/`fullName` to the already-working `/api/auth/apple/native`
+route. `App.entitlements` already had `com.apple.developer.applesignin` — no
+entitlement change needed.
+
+**Second bug found and fixed during this work — local native plugins get
+silently dropped by `cap sync`:** `npx cap sync ios` rebuilds
+`ios/App/App/capacitor.config.json`'s `packageClassList` by scanning only
+*installed npm* Capacitor plugins' source files
+(`@capacitor/cli/util/iosplugin.js`) — it never scans this app target's own
+`ios/App/App/*.swift` files. Since `AppleSignInPlugin` is intentionally not an
+npm package, every `cap sync` silently removed it from `packageClassList` with
+no build error, so it would stop being registered at runtime. Also confirmed
+`CapacitorBridge.registerPluginType()` is NOT a usable workaround — it's a
+no-op whenever `autoRegisterPlugins` is true, which it is by default in this
+project.
+
+Fix: added `scripts/fix-ios-plugin-registration.mjs`, which re-injects
+`AppleSignInPlugin` (and any future local plugin classes) into
+`packageClassList`. Documented as a **mandatory step after every
+`npx cap sync ios`** in `ios-prep/SETUP_GUIDE.md`, including an optional Xcode
+Build Phase so it can't be forgotten before an Archive build. Verified the
+wipe-then-repair cycle by running `npx cap sync ios` and confirming the script
+correctly restores the missing class.
 
 ## Verified already-correct: account deletion (5.1.1)
 
@@ -114,22 +139,66 @@ resubmission notes / reviewer re-test guidance.
 
 ## Open decisions needing user input
 
-1. **Apple Sign-In**: implement a real flow. Two paths:
-   - **Native** (recommended): add a native "Sign in with Apple" Capacitor
-     plugin (e.g. `@capgo/capacitor-social-login` or Apple's own
-     AuthenticationServices via a small custom plugin), wire it to the
-     already-working `/api/auth/apple/native` server route. Needs the
-     `applesignin` entitlement (may already be present) and no new secrets.
-   - **Web OAuth**: implement `/api/auth/apple/web-initiate` as a real
-     "Sign in with Apple" web flow. Needs new Apple Developer setup: a
-     Services ID, a Sign-In-with-Apple private key, and a registered
-     redirect URI — i.e. new secrets from the user's Apple Developer
-     account.
-2. **3.1.1 IAP**: decide whether to pursue the External Purchase Link
-   entitlement route, restrict `ExternalPurchaseSheet` further, or dispute
-   with Apple citing the physical/service exemption — needs the user's
-   call since it changes monetization architecture.
+1. ~~**Apple Sign-In**~~ — **Resolved.** Native `AppleSignInPlugin` built and
+   wired (see above). Needs real-device verification before resubmission
+   (cannot be tested from this sandboxed Linux environment — requires Xcode
+   + a physical device or simulator with an Apple ID signed in).
+2. **3.1.1 IAP**: user approved a wording-only audit (no backend/architecture
+   changes) of all in-app money/credits/subscription/paywall copy for
+   misleading earn-vs-cost-vs-reward framing. See "3.1.1 wording audit"
+   section below once complete.
 3. **2.3.6 age rating**: needs the user (or whoever has App Store Connect
    access) to review/update the age rating and parental-controls
    questionnaire to match actual app content — not something fixable from
    the codebase.
+
+## 3.1.1 wording audit — complete
+
+Reviewed all in-app money/credits/subscription/paywall copy across Studio
+generation, Studio credits/tiers, Day-1 OG, Trust Box, Business Scout Plan,
+and profile unlocks for misleading earn-vs-cost-vs-reward framing. No backend
+logic, pricing, or purchase flows were changed — text only.
+
+**Fixed (real violations found):**
+- Several Studio "Generate" buttons hid the credit cost entirely on iOS store
+  builds (`isStoreBuild ? "Generate" : "Generate · {cost} cr"` pattern) — a
+  user on iOS could tap Generate with no idea it would consume credits until
+  after the fact. Now always shows the credit cost on every platform:
+  `commercial-wizard.tsx`, `mirror-motion-form.tsx`, `studio-music.tsx`,
+  `studio-text-to-video.tsx`.
+- `og-advantage.tsx` CTA buttons read "CLAIM YOUR OG STATUS" next to a $2
+  one-time fee — "claim" implies free. Changed both instances to
+  "UNLOCK OG STATUS — $2.00" so the price is in the button itself, not just
+  nearby copy.
+
+**Checked and already compliant (no change needed):**
+- `studio-credits.tsx` (packs/tiers): price + credit amount shown clearly,
+  `ExternalPurchaseSheet` disclosure used correctly before Stripe checkout.
+- `profile.tsx` Day-1 OG / Trust Box buttons already read
+  "Activate Day-1 OG — $1.99" with price inline — no ambiguous "claim/get"
+  wording present.
+- `biz-talent-explorer.tsx` "UNLOCK PROFILE" — this consumes a pre-purchased
+  plan allowance (like phone-plan minutes), not a new charge; the same screen
+  shows a live "Unlocks Left" counter, so the cost/allowance is visible in
+  context.
+- `credits.tsx` / `growth-tasks.tsx` — the earned/cashable currency is
+  consistently labeled "GUBER Credits" (distinct from purchased "Studio
+  Credits"), so there's no earn-vs-purchase conflation.
+- `og-advantage.tsx` "+25% OG BONUS" and `credits.tsx` "OG Bonus" — these
+  describe a referral-earnings rate, not a purchase, so they aren't
+  misleading in the 3.1.1 sense.
+
+Verified via `tsc --noEmit`, full app restart (clean boot, no runtime
+errors), and a visual check of `/og-advantage` in-app.
+
+## Apple Sign-In: manual verification still required
+
+This plugin cannot be compiled or run in this Linux sandbox (no Xcode). Before
+resubmitting to Apple, verify on a real device or Xcode simulator:
+1. Run through `ios-prep/SETUP_GUIDE.md` Step 2 (`cap sync` +
+   `fix-ios-plugin-registration.mjs`) and Step 6 (Xcode Build Phase).
+2. Confirm `ios/App/App/capacitor.config.json`'s `packageClassList` includes
+   `"AppleSignInPlugin"` right before building.
+3. Tap "Sign in with Apple" on the signup screen — the native Apple sheet
+   should appear, complete, and log the user in via `/api/auth/apple/native`
+   with no error toast.

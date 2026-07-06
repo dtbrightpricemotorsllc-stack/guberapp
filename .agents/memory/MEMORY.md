@@ -24,8 +24,9 @@
 - [JAC Brain system](jac-brain-system.md) — local KB + intent + cache bypass; confidence ≥0.85 skips OpenAI; admin UI at /admin/jac-brain. (Both-surface rule → jac-system-guardian.md.)
 - [JAC Deep Profile system](jac-deep-profile.md) — syncJacProfile() auto-syncs DB→jac_memory on every context fetch; buildJacProfileContext() reads back for prompt enrichment; briefing+opportunities are separate auth-gated endpoints.
 - [Cross-platform voice STT](voice-stt-cross-platform.md) — silent failures from swallowed sentinels + 5/min rate limit + MediaRecorder MIME fallback required for iOS.
-- [Capacitor plugin compilation gaps](capacitor-plugin-compilation.md) — a plugin can be imported in JS and still be absent from the compiled iOS binary if `cap sync` was never rerun; check `packageClassList` before blaming JS logic.
+- [Capacitor plugin compilation gaps](capacitor-plugin-compilation.md) — npm plugins need `cap sync`; local/custom native plugins get PERMANENTLY wiped by every `cap sync` (never re-added) — needs a post-sync repair script, not a one-time fix.
 - [jobs table column traps](jobs-table-column-traps.md) — hand-written "nearby" SQL in routes.ts often names columns that don't exist; always verify raw jobs/load-board/offers SQL against the live DB before trusting it.
 - [JAC voice latency optimization](jac-voice-latency-optimization.md) — eleven_flash_v2_5 streaming model + MediaSource progressive playback + voiceMode-gated short/warm prompt + admin-visible fallback logging.
 - [Wallet status enum consistency](wallet-status-enum-consistency.md) — wallet_transactions.status must exactly match wallet.tsx's filter strings ("available"/"pending") or balances silently show $0.
 - [JAC System Guardian + both surfaces](jac-system-guardian.md) — every JAC change hits BOTH onboard+guber-assist; adding a KB topic = 4 touch points w/ a seed-guard trap; system_issues deduped & monotonic.
+- [App Store 3.1.1 wording review](app-store-3-1-1-wording.md) — grep `isStoreBuild` conditionals hiding cost text, and CTA verbs like "claim/get" next to a fee, as the two recurring 3.1.1-flaggable patterns.

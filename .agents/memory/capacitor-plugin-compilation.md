@@ -27,3 +27,18 @@ listed in `package.json` even if it's dead/unused code — remove genuinely
 unused Capacitor packages from `package.json` before syncing, or they get
 silently recompiled back into the binary (e.g. reintroducing a background-
 location entitlement risk you just removed).
+
+**Local (non-npm) native plugins get wiped by every `cap sync` — this is
+permanent, not a one-time bug.** `packageClassList` is rebuilt by scanning
+only *installed npm* Capacitor plugins' `.swift`/`.m` files
+(`@capacitor/cli/util/iosplugin.js: getPluginFiles`/`generateIOSPackageJSON`).
+It never scans the app target's own source directory (e.g. `ios/App/App/`).
+A custom first-party plugin implemented directly there (no npm package) will
+have its class silently dropped from `packageClassList` on every `cap sync`,
+forever — this isn't fixable by adding it once. Also confirmed
+`CapacitorBridge.registerPluginType()` is NOT a workaround: it's a no-op
+whenever `autoRegisterPlugins` is true (the project default), so manually
+calling it from `AppDelegate` does nothing. The durable fix is a small script
+that re-injects the local class name(s) into `packageClassList` after every
+`cap sync`, wired in as a mandatory manual step (and ideally an Xcode Build
+Phase) documented right next to every `cap sync` invocation in setup docs.
