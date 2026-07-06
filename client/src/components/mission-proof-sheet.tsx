@@ -70,7 +70,9 @@ export function MissionProofSheet({ instanceId, missionTitle, onClose, onSubmitt
         }
       } catch (e: any) {
         if (!e?.message?.includes("cancelled") && !e?.message?.includes("cancel")) {
-          setCaptureError("Camera not available. " + (e?.message ?? ""));
+          // Fall back to the native file-input capture sheet rather than
+          // leaving the user with no way to submit proof.
+          fileInputRef.current?.click();
         }
       }
     } else {
