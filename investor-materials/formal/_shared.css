@@ -90,6 +90,7 @@ a{color:var(--green)}
   width:13.333in;height:7.5in;background:var(--paper);
   page-break-after:always;overflow:hidden;position:relative;
   display:flex;flex-direction:column;
+  page:landscape;
 }
 .slide:last-child{page-break-after:auto}
 @page landscape{size:13.333in 7.5in;margin:0}

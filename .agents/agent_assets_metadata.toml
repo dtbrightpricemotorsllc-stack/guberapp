@@ -647,3 +647,9 @@ id = "Riau4kBE-CPp4bwo9K-b0"
 uri = "file://GUBER-Investor-Business-Package.zip"
 type = "unspecified"
 title = "GUBER Investor & Business Document Package (8 PDFs)"
+
+[[outputs]]
+id = "Mxp0CWrbVp-ZplnZ8WlHR"
+uri = "file://investor-materials/formal/GUBER-Investor-Package.zip"
+type = "unspecified"
+title = "GUBER Investor Package (8 PDFs, revised)"
