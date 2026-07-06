@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import { gpsGetCurrentPosition } from "@/lib/gps";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
@@ -247,7 +248,11 @@ export default function SubmitObservation() {
               ))}
               {photos.length < 5 && (
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => triggerLiveCameraCapture(fileInputRef, (file) => {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    handlePhotoSelect({ target: { files: dt.files } } as unknown as React.ChangeEvent<HTMLInputElement>);
+                  })}
                   className="w-20 h-20 rounded-lg border border-dashed border-border/40 flex flex-col items-center justify-center gap-1 hover:border-primary/40 transition-colors"
                   disabled={uploadingPhoto}
                   data-testid="button-add-photo"

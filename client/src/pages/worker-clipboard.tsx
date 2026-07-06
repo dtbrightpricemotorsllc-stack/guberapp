@@ -31,6 +31,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
+import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import type { Job, ProofTemplate, ProofChecklistItem } from "@shared/schema";
 import { Link } from "wouter";
 import { HandsFreeCapture } from "@/components/handsfree-capture";
@@ -719,7 +720,11 @@ function GeneralProofSubmit({ jobId, template }: { jobId: string; template: Temp
   return (
     <div className="space-y-3 mt-4">
       <input ref={fileInputRef} type="file" accept="image/*,video/*" capture="environment" multiple className="hidden" onChange={(e) => handleFileUpload(e.target.files)} data-testid="input-file-general" />
-      <Button variant="outline" className="w-full border-dashed rounded-xl" onClick={() => fileInputRef.current?.click()} data-testid="button-upload-general">
+      <Button variant="outline" className="w-full border-dashed rounded-xl" onClick={() => triggerLiveCameraCapture(fileInputRef, (file) => {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        handleFileUpload(dt.files);
+      })} data-testid="button-upload-general">
         <Camera className="w-4 h-4 mr-2" /> Take Proof Photo
       </Button>
       <p className="text-[10px] text-muted-foreground/70 text-center">

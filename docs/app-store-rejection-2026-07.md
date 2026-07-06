@@ -110,6 +110,38 @@ Build Phase so it can't be forgotten before an Archive build. Verified the
 wipe-then-repair cycle by running `npx cap sync ios` and confirming the script
 correctly restores the missing class.
 
+## Confirmed root cause (app-wide): "no photo options" was not limited to one screen
+
+The original fix only patched `mission-proof-sheet.tsx`. Auditing every other
+proof/photo-capture surface found the exact same root cause (plain
+`<input type="file" capture="environment">` with no `@capacitor/camera` call,
+which WKWebView does not reliably honor) still present in:
+- `job-detail.tsx` — bounty photo slots
+- `cash-drop-detail.tsx` — cash drop proof capture (single-slot and
+  per-checklist-item variants, both built on `<label>`-wrapped file inputs)
+- `worker-clipboard.tsx` — `GeneralProofSubmit` (fallback proof upload when a
+  job has no checklist items)
+- `submit-observation.tsx` — observation marketplace photo attachments
+- `profile.tsx` — ID verification `UploadButton` (`type === "id"` only;
+  other upload types intentionally still allow gallery selection)
+
+**Fix applied:** extracted the working native-camera pattern from
+`mission-proof-sheet.tsx` into a shared helper,
+`client/src/lib/native-camera-capture.ts`
+(`triggerLiveCameraCapture(fileInputRef, onFile)`), and wired it into all five
+surfaces above. On native iOS/Android it calls `Camera.getPhoto()` directly;
+on web, or if the native call fails for a non-cancel reason, it falls back to
+clicking the hidden file input. `cash-drop-detail.tsx`'s `<label>`-based
+triggers were restructured into `<div onClick>` wrappers so the same ref-based
+helper can drive them. Note: `worker-clipboard.tsx`'s per-checklist-item
+camera (live `getUserMedia` video stream, not a file input) was already
+unaffected and needed no change.
+
+Verified via `tsc --noEmit` (no new errors introduced), a full app restart
+(clean boot), and the state-bleed audit (176 files, clean). Native camera
+behavior itself still requires a real-device/Xcode build to confirm — cannot
+be exercised from this Linux sandbox.
+
 ## Verified already-correct: account deletion (5.1.1)
 
 In-app account deletion already exists end-to-end:

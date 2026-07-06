@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import { buildReferralShareText } from "@/lib/referral";
 import { isStoreBuild } from "@/lib/platform";
 import { ExternalPurchaseSheet } from "@/components/external-purchase-sheet";
@@ -112,7 +113,16 @@ function UploadButton({ type, label, verified, pending, onUpload, documentType }
         size="sm"
         disabled={localPending}
         className="rounded-lg font-display text-xs h-8 border-white/[0.15] hover:border-white/25 gap-1.5"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          if (type === "id") {
+            triggerLiveCameraCapture(inputRef, (file) => {
+              const changeEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+              handleFile(changeEvent);
+            });
+          } else {
+            inputRef.current?.click();
+          }
+        }}
         data-testid={`button-upload-${type}`}
       >
         {localPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}

@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { gpsGetCurrentPosition } from "@/lib/gps";
+import { triggerLiveCameraCapture } from "@/lib/native-camera-capture";
 import { ensureBackgroundLocation } from "@/lib/background-location";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { useRoute } from "wouter";
@@ -2213,7 +2214,10 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
                     <div
                       className="relative w-full h-28 rounded-xl overflow-hidden flex items-center justify-center cursor-pointer"
                       style={{ border: `1.5px dashed ${bountyPhotos[i] ? "rgba(0,180,80,0.4)" : "rgba(255,255,255,0.15)"}`, background: "rgba(255,255,255,0.02)" }}
-                      onClick={() => fileInputRefs.current[i]?.click()}
+                      onClick={() => triggerLiveCameraCapture(
+                        { current: fileInputRefs.current[i] },
+                        (file) => handleBountyPhotoCapture(i, file)
+                      )}
                       data-testid={`photo-slot-${i}`}
                     >
                       {bountyPhotos[i] ? (
