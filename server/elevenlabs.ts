@@ -24,7 +24,7 @@ export interface ElevenLabsSuccess {
 
 export type ElevenLabsResult = ElevenLabsSuccess | ElevenLabsError;
 
-export const DEFAULT_JAC_VOICE_ID = "9BWtsMINqrJLrRacOk9x";
+export const DEFAULT_JAC_VOICE_ID = "VrUPKj92idNr4XrmO032"; // "Hailey" — warm, soft, clear female voice
 
 /**
  * Classifies an ElevenLabs error response into a stable, loggable code.
