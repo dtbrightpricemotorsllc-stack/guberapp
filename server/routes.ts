@@ -16006,11 +16006,11 @@ Input body: ${JSON.stringify((body || "").trim())}`;
             pool.query(`
               SELECT
                 (SELECT full_name FROM users WHERE id = $1) AS full_name,
-                (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
-                (SELECT COUNT(*)::int FROM jobs WHERE posted_by = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+                (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+                (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
                 (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
-                (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by=$1 AND ps.status='submitted') AS proofs_pending,
-                (SELECT COUNT(*)::int FROM guber_disputes WHERE (claimant_id=$1 OR respondent_id=$1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+                (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending,
+                (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id=$1 OR against_user_id=$1) AND status NOT IN ('resolved','closed')) AS open_disputes,
                 (SELECT COUNT(*)::int FROM marketplace_items WHERE seller_id=$1 AND status='active') AS marketplace_active,
                 (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_id=$1 AND status='pending') AS marketplace_offers,
                 (SELECT COUNT(*)::int FROM load_board_listings WHERE poster_id=$1 AND status='active') AS load_board_active,
@@ -17818,19 +17818,19 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         ),
         pool.query(`
           SELECT
-            (SELECT COUNT(*)::int  FROM jobs WHERE assigned_worker_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
-            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
-            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by = $1 AND status = 'open' AND assigned_worker_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
+            (SELECT COUNT(*)::int  FROM jobs WHERE assigned_helper_id = $1 AND status NOT IN ('completed','cancelled','disputed') AND deleted_at IS NULL) AS worker_active,
+            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by_id = $1 AND status IN ('open','in_progress') AND deleted_at IS NULL) AS hirer_active,
+            (SELECT COUNT(*)::int  FROM jobs WHERE posted_by_id = $1 AND status = 'open' AND assigned_helper_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
             (SELECT COUNT(*)::int  FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
-            (SELECT COUNT(*)::int  FROM proof_submissions ps JOIN jobs j ON j.id = ps.job_id WHERE j.posted_by = $1 AND ps.status = 'submitted') AS proofs_pending,
-            (SELECT COUNT(*)::int  FROM guber_disputes WHERE (claimant_id = $1 OR respondent_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
+            (SELECT COUNT(*)::int  FROM proof_submissions ps JOIN jobs j ON j.id = ps.job_id WHERE j.posted_by_id = $1 AND ps.status = 'submitted') AS proofs_pending,
+            (SELECT COUNT(*)::int  FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
             (SELECT COUNT(*)::int  FROM marketplace_items WHERE seller_id = $1 AND status = 'active') AS marketplace_active,
             (SELECT COUNT(*)::int  FROM marketplace_offers WHERE seller_id = $1 AND status = 'pending') AS marketplace_offers_received,
             (SELECT COUNT(*)::int  FROM load_board_listings WHERE poster_id = $1 AND status = 'active') AS load_board_active,
             (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int FROM credit_ledger WHERE user_id = $1) AS studio_credits,
             (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
-            (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status = 'in_progress' AND deleted_at IS NULL) AS jobs_in_progress_worker,
-            (SELECT COUNT(*)::int FROM jobs WHERE assigned_worker_id = $1 AND status = 'completed' AND deleted_at IS NULL) AS jobs_completed_worker
+            (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status = 'in_progress' AND deleted_at IS NULL) AS jobs_in_progress_worker,
+            (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status = 'completed' AND deleted_at IS NULL) AS jobs_completed_worker
         `, [userId]),
         pool.query(
           `SELECT full_name, id_verified, stripe_account_id, stripe_onboarding_complete FROM users WHERE id = $1`,

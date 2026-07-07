@@ -1249,6 +1249,16 @@ app.use((req, res, next) => {
       ADD COLUMN IF NOT EXISTS low_data_mode                BOOLEAN DEFAULT FALSE;
   `).catch(e => console.error("[migration] jac_user_profile prefs error:", e));
 
+  // Add stripe_onboarding_complete to users (used by /api/jac/context raw SQL)
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_onboarding_complete BOOLEAN DEFAULT FALSE;
+  `).catch(e => console.error("[migration] stripe_onboarding_complete error:", e));
+
+  // Add deleted_at to jobs (soft-delete; used by raw SQL in briefing/context queries)
+  await pool.query(`
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+  `).catch(e => console.error("[migration] jobs.deleted_at error:", e));
+
   // Seed GUBER knowledge base (only if empty)
   await pool.query(`
     INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
