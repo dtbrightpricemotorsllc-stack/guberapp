@@ -149,6 +149,7 @@ jobs:
           echo "Upload complete — build is now processing in App Store Connect."
 
       - name: Save IPA artifact (local copy from archive)
+        continue-on-error: true
         run: |
           # exportArchive with destination=upload may not write a local .ipa;
           # extract one from the archive for the artifact store.
