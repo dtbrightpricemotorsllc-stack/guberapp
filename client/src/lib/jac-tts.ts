@@ -224,18 +224,22 @@ export async function jacSpeak(
   }
 
   // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────
-  // iOS WKWebView's MediaSource/streaming support is unreliable, but plain
-  // fetch → blob → <audio> playback works fine there, so iOS uses the
-  // buffered path (no streaming) while other platforms get progressive
-  // streaming playback for lower latency.
-  const played = isIOS
+  // iOS Safari (web) and WKWebView (Capacitor) both lack reliable MediaSource
+  // support for audio/mpeg streaming — addSourceBuffer throws on those
+  // platforms.  Use the buffered path (fetch-all → blob → <audio>) for any
+  // iOS UA, whether that's the native Capacitor app or a web browser on
+  // iPhone/iPad.  Non-iOS platforms get progressive streaming for lower
+  // latency.  Note: `isIOS` (Capacitor) is a subset of `isIOSBrowser()` (UA),
+  // so checking UA here covers both.
+  const onIOSPath = isIOSBrowser();
+  const played = onIOSPath
     ? await tryLiveElevenLabsBuffered(text, opts.onStart)
     : await tryLiveElevenLabs(text, opts.onStart);
   if (played) return;
 
   // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
   opts.onFallback?.();
-  reportFallback(isIOS ? "ios_elevenlabs_failed" : "live_elevenlabs_failed");
+  reportFallback(onIOSPath ? "ios_elevenlabs_failed" : "live_elevenlabs_failed");
   webSpeechFallback(text, opts.onStart);
 }
 
