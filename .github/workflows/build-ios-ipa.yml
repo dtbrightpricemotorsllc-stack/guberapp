@@ -179,10 +179,12 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           BUILD_NUMBER: ${{ steps.buildnum.outputs.number }}
         run: |
-          pip3 install pyjwt cryptography --quiet
           python3 - <<'PYEOF'
-          import os, sys, time, json, re, textwrap, urllib.request, urllib.error
-          import jwt  # pyjwt
+          # No pip needed — uses only stdlib + cryptography (pre-installed on macOS runners)
+          import os, sys, time, json, re, textwrap, base64, urllib.request, urllib.error
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
           KEY_ID    = os.environ['ASC_KEY_ID']
           ISSUER_ID = os.environ['ASC_ISSUER_ID']
@@ -201,14 +203,23 @@ jobs:
           pem = ('-----BEGIN PRIVATE KEY-----\n' +
                  '\n'.join(textwrap.wrap(b64, 64)) +
                  '\n-----END PRIVATE KEY-----\n')
+          private_key = serialization.load_pem_private_key(pem.encode(), password=None)
 
-          # ── generate JWT ──────────────────────────────────────────────────────
+          # ── ES256 JWT (stdlib only, no pyjwt) ────────────────────────────────
+          def b64url(data):
+              if isinstance(data, str): data = data.encode()
+              return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
           def make_token():
               now = int(time.time())
-              payload = {'iss': ISSUER_ID, 'iat': now, 'exp': now + 1200,
-                         'aud': 'appstoreconnect-v1'}
-              return jwt.encode(payload, pem, algorithm='ES256',
-                                headers={'kid': KEY_ID})
+              hdr = b64url(json.dumps({'alg':'ES256','kid':KEY_ID}, separators=(',',':')))
+              pld = b64url(json.dumps({'iss':ISSUER_ID,'iat':now,'exp':now+1200,
+                                       'aud':'appstoreconnect-v1'}, separators=(',',':')))
+              msg = f'{hdr}.{pld}'.encode()
+              der = private_key.sign(msg, ec.ECDSA(hashes.SHA256()))
+              r, s = decode_dss_signature(der)
+              sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
+              return f'{hdr}.{pld}.{b64url(sig)}'
 
           def asc(method, path, body=None):
               url = 'https://api.appstoreconnect.apple.com/v1' + path
