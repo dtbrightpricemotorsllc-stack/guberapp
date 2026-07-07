@@ -51,20 +51,19 @@ function classifyError(status: number, bodyText: string): ElevenLabsError {
   return { ok: false, code: "upstream_error", httpStatus: status, message: `ElevenLabs upstream error (${status}).` };
 }
 
-// eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms model latency vs
-// ~300-400ms for eleven_multilingual_v2), purpose-built for real-time
-// conversational agents. Slight quality tradeoff vs multilingual_v2, but for a
-// live voice assistant the latency win is worth far more than it costs.
-export const DEFAULT_JAC_MODEL_ID = "eleven_flash_v2_5";
+// eleven_turbo_v2_5 balances quality and latency (~300ms vs ~75ms for flash).
+// Flash was chosen for speed but it significantly distorts voice characteristics
+// and sounds noticeably "not Hailey". Turbo reproduces the voice accurately.
+export const DEFAULT_JAC_MODEL_ID = "eleven_turbo_v2_5";
 
-// Tuned for a warmer, more natural conversational read (vs. the flatter
-// defaults previously used). Lower stability = more expressive/varied
-// delivery; higher similarity_boost + style + speaker_boost = closer to the
-// natural human reference recording instead of a flat TTS read.
+// similarity_boost at 0.95 locks the output tightly to the Hailey reference
+// recording — the key setting for making it sound like the actual voice.
+// stability at 0.50 keeps delivery consistent without sounding robotic.
+// style at 0.35 adds warmth and natural pacing.
 export const DEFAULT_JAC_VOICE_SETTINGS = {
-  stability: 0.42,
-  similarity_boost: 0.85,
-  style: 0.28,
+  stability: 0.50,
+  similarity_boost: 0.95,
+  style: 0.35,
   use_speaker_boost: true,
 };
 

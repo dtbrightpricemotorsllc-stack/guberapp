@@ -6,7 +6,7 @@ import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
 const VOICE_ID = process.env.JAC_ELEVENLABS_VOICE_ID || "VrUPKj92idNr4XrmO032";
-const MODEL_ID = process.env.JAC_ELEVENLABS_MODEL_ID || "eleven_flash_v2_5";
+const MODEL_ID = process.env.JAC_ELEVENLABS_MODEL_ID || "eleven_turbo_v2_5";
 const API_KEY  = process.env.ELEVENLABS_API_KEY;
 
 if (!API_KEY) {
@@ -15,9 +15,9 @@ if (!API_KEY) {
 }
 
 const VOICE_SETTINGS = {
-  stability: 0.42,
-  similarity_boost: 0.85,
-  style: 0.28,
+  stability: 0.50,
+  similarity_boost: 0.95,
+  style: 0.35,
   use_speaker_boost: true,
 };
 
