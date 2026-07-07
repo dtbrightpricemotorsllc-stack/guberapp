@@ -56,8 +56,19 @@ export default function StudioAvatarPage() {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // ── tab — never reset this from within upload handlers ──
+  // ── tab — switching resets all branch-scoped fields ──
   const [activeTab, setActiveTab] = useState<Tab>("starter");
+  function switchTab(tab: Tab) {
+    if (tab === activeTab) return;
+    setStarterPick(null);
+    setCharName("");
+    setPhotoDataUrl(null);
+    setPhotoPreview(null);
+    setPhotoStyle(STYLE_CHIPS[0].prompt);
+    setDescPrompt("");
+    setResultUrl(null);
+    setActiveTab(tab);
+  }
 
   // ── starter tab ──
   const [starterPick, setStarterPick]   = useState<string | null>(null);
@@ -208,7 +219,7 @@ export default function StudioAvatarPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => switchTab(tab.id)}
                 className="flex items-center gap-1.5 px-3 py-3 text-[13px] font-bold whitespace-nowrap transition-all shrink-0"
                 style={{
                   color:      active ? ACCENT : "rgba(255,255,255,0.4)",
