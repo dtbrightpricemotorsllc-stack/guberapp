@@ -115,8 +115,22 @@ export function unlockAudioContext() {
         if (!_audioCtx || _audioCtx.state === "closed") {
           _audioCtx = new AC();
         }
-        if (_audioCtx.state === "suspended") {
-          _audioCtx.resume().catch(() => {});
+        const ctx = _audioCtx;
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => {});
+        }
+        // Play a 1-sample silent buffer — this is the standard iOS trick to
+        // fully unlock the AudioContext inside a user gesture so that
+        // subsequent async calls (API fetch + play) also go through the
+        // loudspeaker instead of the earpiece.
+        if (ctx.state === "running" || ctx.state === "suspended") {
+          try {
+            const silent = ctx.createBuffer(1, 1, 22050);
+            const src = ctx.createBufferSource();
+            src.buffer = silent;
+            src.connect(ctx.destination);
+            src.start(0);
+          } catch { /* non-fatal */ }
         }
       }
     }
@@ -380,14 +394,19 @@ async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Pr
  * Decode and play an ArrayBuffer via AudioContext.
  * AudioContext routes audio through the loudspeaker on iOS — <audio> elements
  * default to the earpiece (quiet, phone-call-mode speaker at the top).
- * Returns false if AudioContext is unavailable or decoding fails.
+ * Only used when the context is "running" — a suspended context hangs forever
+ * because source.onended never fires until the context is resumed, which
+ * breaks the greeting and any audio triggered from a non-gesture path.
+ * Returns false immediately if the context isn't running so callers fall
+ * back to <audio>.
  */
 async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): Promise<boolean> {
   const ctx = _audioCtx;
-  if (!ctx || ctx.state === "closed") return false;
+  if (!ctx || ctx.state !== "running") return false;
   try {
-    if (ctx.state === "suspended") await ctx.resume();
     const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    // Check again after the async decode — context might have been closed.
+    if (ctx.state !== "running") return false;
     const source = ctx.createBufferSource();
     source.buffer = decoded;
     source.connect(ctx.destination);
@@ -407,9 +426,10 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
 }
 
 function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
-  // Fetch the audio, then play via AudioContext (loudspeaker) when available.
-  // Falls back to <audio> element if AudioContext is not yet unlocked.
-  if (_audioCtx && _audioCtx.state !== "closed") {
+  // Fetch the audio, then play via AudioContext (loudspeaker) when running.
+  // Falls back to <audio> element if AudioContext is not yet unlocked/running
+  // (e.g. greeting fired from useEffect before any user gesture on iOS).
+  if (_audioCtx && _audioCtx.state === "running") {
     return fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
       .then((buf) => playViaAudioCtx(buf, onStart))
