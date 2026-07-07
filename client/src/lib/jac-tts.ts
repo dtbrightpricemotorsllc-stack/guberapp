@@ -61,10 +61,20 @@ let _currentAudio: HTMLAudioElement | null = null;
 let _audioUnlocked = false;
 let _currentAbort: AbortController | null = null;
 
+// AudioContext — routes to the loudspeaker on iOS instead of the earpiece
+// (the default for <audio> elements). Created inside the first user gesture
+// via unlockAudioContext() so iOS allows it.
+let _audioCtx: AudioContext | null = null;
+let _audioCtxSource: AudioBufferSourceNode | null = null;
+
 export function cancelElevenLabsAudio() {
   if (_currentAbort) {
     try { _currentAbort.abort(); } catch {}
     _currentAbort = null;
+  }
+  if (_audioCtxSource) {
+    try { _audioCtxSource.stop(); } catch {}
+    _audioCtxSource = null;
   }
   if (_currentAudio) {
     _currentAudio.pause();
@@ -79,6 +89,7 @@ export function cancelElevenLabsAudio() {
  * live-conversation engine to know when interruption should be armed.
  */
 export function isJacSpeaking(): boolean {
+  if (_audioCtxSource) return true;
   if (_currentAudio && !_currentAudio.paused) return true;
   try {
     return typeof window !== "undefined" && !!window.speechSynthesis?.speaking;
@@ -92,6 +103,25 @@ export function isJacSpeaking(): boolean {
  * Unlocks audio playback on mobile browsers that require a gesture.
  */
 export function unlockAudioContext() {
+  // Create / resume the Web Audio API context inside this user gesture.
+  // AudioContext routes audio to the loudspeaker on iOS; <audio> elements
+  // default to the earpiece (the tiny phone-call speaker at the top).
+  // Must be called synchronously inside the gesture handler — iOS blocks
+  // AudioContext creation/resume in async callbacks.
+  try {
+    if (typeof window !== "undefined") {
+      const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext | undefined;
+      if (AC) {
+        if (!_audioCtx || _audioCtx.state === "closed") {
+          _audioCtx = new AC();
+        }
+        if (_audioCtx.state === "suspended") {
+          _audioCtx.resume().catch(() => {});
+        }
+      }
+    }
+  } catch {}
+
   // Unlock HTML5 audio (autoplay gate)
   if (!_audioUnlocked) {
     const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
@@ -332,16 +362,63 @@ async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Pr
     });
     if (_currentAbort === controller) _currentAbort = null;
     if (!res.ok) return false;
-    const blob = await res.blob();
-    if (!blob.size) return false;
+    const arrayBuffer = await res.arrayBuffer();
+    if (!arrayBuffer.byteLength) return false;
+    // Use AudioContext to route through the loudspeaker on iOS.
+    const played = await playViaAudioCtx(arrayBuffer, onStart);
+    if (played) return true;
+    // AudioContext not available — fall back to <audio> element.
+    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
     const url = URL.createObjectURL(blob);
-    return await tryPlayAudio(url, true, onStart);
+    return await playViaAudioElement(url, true, onStart);
   } catch {
     return false;
   }
 }
 
+/**
+ * Decode and play an ArrayBuffer via AudioContext.
+ * AudioContext routes audio through the loudspeaker on iOS — <audio> elements
+ * default to the earpiece (quiet, phone-call-mode speaker at the top).
+ * Returns false if AudioContext is unavailable or decoding fails.
+ */
+async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): Promise<boolean> {
+  const ctx = _audioCtx;
+  if (!ctx || ctx.state === "closed") return false;
+  try {
+    if (ctx.state === "suspended") await ctx.resume();
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    const source = ctx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(ctx.destination);
+    _audioCtxSource = source;
+    return new Promise<boolean>((resolve) => {
+      source.onended = () => {
+        if (_audioCtxSource === source) _audioCtxSource = null;
+        resolve(true);
+      };
+      source.start(0);
+      onStart?.();
+    });
+  } catch {
+    _audioCtxSource = null;
+    return false;
+  }
+}
+
 function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
+  // Fetch the audio, then play via AudioContext (loudspeaker) when available.
+  // Falls back to <audio> element if AudioContext is not yet unlocked.
+  if (_audioCtx && _audioCtx.state !== "closed") {
+    return fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+      .then((buf) => playViaAudioCtx(buf, onStart))
+      .catch(() => playViaAudioElement(url, isBlob, onStart));
+  }
+  return playViaAudioElement(url, isBlob, onStart);
+}
+
+function playViaAudioElement(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     audio.preload = "auto";
@@ -349,7 +426,7 @@ function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promis
     let started = false;
     const cleanup = () => {
       if (isBlob) URL.revokeObjectURL(url);
-      _currentAudio = null;
+      if (_currentAudio === audio) _currentAudio = null;
     };
     audio.onplay  = () => { if (!started) { started = true; onStart?.(); } };
     audio.onended = () => { cleanup(); resolve(true); };
