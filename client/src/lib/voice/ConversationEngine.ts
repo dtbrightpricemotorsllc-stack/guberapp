@@ -103,7 +103,16 @@ export class ConversationEngine {
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: this._micConstraints });
+      // Race getUserMedia against an 8-second timeout. Samsung Browser (and some
+      // Android WebViews) can hang indefinitely on getUserMedia with no error or
+      // resolution, leaving the mic button spinner stuck forever.
+      const micTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("getUserMedia timeout")), 8000)
+      );
+      stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({ audio: this._micConstraints }),
+        micTimeout,
+      ]);
     } catch (err: any) {
       this.callbacks.onError?.(err?.name === "NotAllowedError" ? "mic_denied" : "mic_error");
       return;

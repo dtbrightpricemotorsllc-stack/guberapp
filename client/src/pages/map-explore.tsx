@@ -198,6 +198,7 @@ export default function MapExplore() {
   const [zipError, setZipError] = useState("");
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [locationErrorCode, setLocationErrorCode] = useState<1 | 2>(2);
   const [selectedZip, setSelectedZip] = useState<ZipGroup | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<any | null>(null);
   const [panelCatFilter, setPanelCatFilter] = useState("");
@@ -365,7 +366,10 @@ export default function MapExplore() {
         console.warn(`[GUBER] map-explore geolocation: ${labels[err.code] ?? "UNKNOWN"} (code ${err.code}) — ${err.message}`);
         setLocating(false);
         // code 1 = PERMISSION_DENIED, code 2 = POSITION_UNAVAILABLE (device GPS off)
-        if (err.code === 1 || err.code === 2) setLocationDenied(true);
+        if (err.code === 1 || err.code === 2) {
+          setLocationErrorCode(err.code === 1 ? 1 : 2);
+          setLocationDenied(true);
+        }
       },
       { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
     ).then((id) => {
@@ -374,7 +378,7 @@ export default function MapExplore() {
         return;
       }
       watchIdRef2.current = id;
-    }).catch(() => { clearGpsTimeout(); setLocating(false); setLocationDenied(true); });
+    }).catch(() => { clearGpsTimeout(); setLocating(false); setLocationErrorCode(2); setLocationDenied(true); });
   };
 
   const handleRetryLocation = () => {
@@ -817,24 +821,59 @@ export default function MapExplore() {
         >
           <LocateOff className="w-3.5 h-3.5 shrink-0" style={{ color: "#f59e0b" }} />
           <span className="flex-1 text-[10px] font-bold tracking-wide" style={{ color: "rgba(255,255,255,0.85)", fontFamily: "Inter, sans-serif" }}>
-            {isNativeApp ? "Location off — tap to enable" : "Location disabled — search by ZIP code above"}
+            {isNativeApp
+              ? locationErrorCode === 1
+                ? "Location access denied — open Settings"
+                : "Device GPS is off — enable Location, then retry"
+              : "Location disabled — search by ZIP code above"}
           </span>
           {isNativeApp ? (
-            <button
-              onClick={async () => {
-                try {
-                  const { App } = await import("@capacitor/app");
-                  // Android: opens app permissions page; iOS: opens app settings
-                  const url = isAndroid ? "package:com.guber.app" : "app-settings:";
-                  await App.openUrl({ url });
-                } catch {}
-              }}
-              className="flex items-center gap-1 text-[10px] font-bold whitespace-nowrap"
-              style={{ color: "#f59e0b" }}
-              data-testid="button-open-location-settings"
-            >
-              Open Settings
-            </button>
+            <div className="flex items-center gap-2">
+              {locationErrorCode === 1 && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const { App } = await import("@capacitor/app");
+                      const url = isAndroid ? "package:com.guber.app" : "app-settings:";
+                      await App.openUrl({ url });
+                    } catch {}
+                  }}
+                  className="text-[10px] font-bold whitespace-nowrap"
+                  style={{ color: "#f59e0b" }}
+                  data-testid="button-open-location-settings"
+                >
+                  Settings
+                </button>
+              )}
+              {locationErrorCode === 2 && isAndroid && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const { App } = await import("@capacitor/app");
+                      await App.openUrl({ url: "android.settings.LOCATION_SOURCE_SETTINGS" });
+                    } catch {
+                      try {
+                        const { App } = await import("@capacitor/app");
+                        await App.openUrl({ url: "package:com.guber.app" });
+                      } catch {}
+                    }
+                  }}
+                  className="text-[10px] font-bold whitespace-nowrap"
+                  style={{ color: "#f59e0b" }}
+                  data-testid="button-open-device-location-settings"
+                >
+                  Settings
+                </button>
+              )}
+              <button
+                onClick={handleRetryLocation}
+                className="flex items-center gap-1 text-[10px] font-bold"
+                style={{ color: "#4ade80" }}
+                data-testid="button-retry-location-explore"
+              >
+                <RefreshCw className="w-3 h-3" /> Retry
+              </button>
+            </div>
           ) : (
             <button
               onClick={handleRetryLocation}
