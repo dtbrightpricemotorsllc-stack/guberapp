@@ -389,11 +389,11 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
     const [actionRes, walletRes, onTheWayRes, expiringDocsRes] = await Promise.all([
       pool.query(`
         SELECT
-          (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
-          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS mkt_offers,
-          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.verified = false) AS proofs_pending,
+          (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1::int OR against_user_id = $1::int) AND status NOT IN ('resolved','closed')) AS disputes,
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1::int AND status = 'pending') AS mkt_offers,
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1::int AND ps.verified = false) AS proofs_pending,
           (SELECT COUNT(*)::int FROM jobs j
-           WHERE j.assigned_helper_id = $1
+           WHERE j.assigned_helper_id = $1::int
              AND j.status IN ('accepted','in_progress','arrived')
              AND j.proof_required = TRUE
              AND j.deleted_at IS NULL
