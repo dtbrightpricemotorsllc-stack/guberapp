@@ -69,13 +69,14 @@ let _audioCtxSource: AudioBufferSourceNode | null = null;
 
 // ── User-controllable volume ───────────────────────────────────────────────
 // Stored in localStorage as "jac_volume" (float 0.5 – 6.0).
-// Default 4.0 — high but not clipping on typical speech content.
-// A DynamicsCompressor node sits before the GainNode to prevent hard
-// clipping at high gains, giving perceptually much louder output safely.
-const JAC_VOLUME_KEY = "jac_volume";
-const JAC_VOLUME_DEFAULT = 4.0;
-const JAC_VOLUME_MIN = 0.5;
-const JAC_VOLUME_MAX = 6.0;
+// Gain pipeline: source → GainNode → Limiter → destination.
+// Gain goes FIRST so we amplify everything; the limiter then
+// hard-clips peaks to just below 0 dBFS so there's no distortion.
+// v2 key — clears old 4.0 savings so everyone gets the louder default.
+const JAC_VOLUME_KEY = "jac_volume_v2";
+const JAC_VOLUME_DEFAULT = 8.0;
+const JAC_VOLUME_MIN = 1.0;
+const JAC_VOLUME_MAX = 16.0;
 
 function _loadVolume(): number {
   try {
@@ -462,24 +463,30 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
     const source = ctx.createBufferSource();
     source.buffer = decoded;
 
-    // ── Loudness pipeline ─────────────────────────────────────────────────
-    // DynamicsCompressor normalises the signal before the gain stage so we
-    // can push the volume high without hard clipping on peaks.
-    // Settings tuned for speech: fast attack, moderate release, high ratio.
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -24;  // start compressing at -24 dBFS
-    comp.knee.value      = 10;   // soft knee
-    comp.ratio.value     = 12;   // 12:1 — strong limiting
-    comp.attack.value    = 0.003;
-    comp.release.value   = 0.2;
-
-    // GainNode applies the user-chosen volume multiplier after compression.
+    // ── Loudness pipeline: Gain → Limiter → destination ───────────────────
+    // Gain goes FIRST to amplify the signal as much as the user wants.
+    // The limiter (DynamicsCompressor tuned as a hard brickwall) goes AFTER
+    // to clip peaks to just below 0 dBFS — no distortion, maximum loudness.
+    //
+    // OLD (wrong): Compressor(threshold=-24) → Gain(4×)
+    //   The compressor was crushing quiet speech before the gain, nearly
+    //   cancelling out the boost — net effect was barely louder than 1×.
+    //
+    // NEW (correct): Gain(8×) → Limiter(threshold=-1dB, ratio=20:1)
+    //   Everything is amplified first, then peaks are hard-clipped safely.
     const gain = ctx.createGain();
-    gain.gain.value = _jacVolume; // 0.5 – 6.0, default 4.0
+    gain.gain.value = _jacVolume; // 1.0 – 16.0, default 8.0
 
-    source.connect(comp);
-    comp.connect(gain);
-    gain.connect(ctx.destination);
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -1;   // only clip the very top of peaks
+    limiter.knee.value      = 0;    // hard knee — true brickwall
+    limiter.ratio.value     = 20;   // 20:1 — effectively a hard limiter
+    limiter.attack.value    = 0.001; // 1 ms — catch transients immediately
+    limiter.release.value   = 0.1;  // 100 ms release
+
+    source.connect(gain);
+    gain.connect(limiter);
+    limiter.connect(ctx.destination);
     _audioCtxSource = source;
     return new Promise<boolean>((resolve) => {
       source.onended = () => {
