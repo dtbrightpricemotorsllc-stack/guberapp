@@ -224,7 +224,7 @@ export default function MapExplore() {
 
   const { data: activeDrops = [] } = useQuery<any[]>({
     queryKey: ["/api/cash-drops/active"],
-    refetchInterval: 10000,
+    refetchInterval: 30_000,
   });
 
   const { data: missions = [] } = useQuery<MissionTemplate[]>({

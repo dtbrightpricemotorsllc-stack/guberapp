@@ -154,7 +154,7 @@ export default function CashDropsList() {
   const { data: drops = [], isLoading } = useQuery<CashDrop[]>({
     queryKey: ["/api/cash-drops/active"],
     enabled: !!user,
-    refetchInterval: isVisible ? 5000 : false,
+    refetchInterval: isVisible ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
 
