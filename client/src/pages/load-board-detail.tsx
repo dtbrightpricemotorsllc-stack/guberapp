@@ -577,7 +577,7 @@ export default function LoadBoardDetail() {
 
   return (
     <GuberLayout title="Load Detail" showBack backHref={isDemo ? "/load-board?demo=1" : "/load-board"}>
-      <div className="px-4 pb-28 pt-2 space-y-4">
+      <div className="px-4 pb-40 pt-2 space-y-4">
 
         {/* ── Demo mode banner ── */}
         {isDemo && (

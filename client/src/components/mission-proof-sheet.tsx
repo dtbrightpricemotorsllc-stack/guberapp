@@ -118,8 +118,8 @@ export function MissionProofSheet({ instanceId, missionTitle, onClose, onSubmitt
     >
       {/* Drag handle + header */}
       <div
-        className="rounded-t-3xl px-4 pt-5 pb-4"
-        style={{ background: "#0e0f16", borderTop: "1px solid rgba(139,92,246,0.3)", marginTop: "auto" }}
+        className="rounded-t-3xl px-4 pt-5 overflow-y-auto"
+        style={{ background: "#0e0f16", borderTop: "1px solid rgba(139,92,246,0.3)", marginTop: "auto", maxHeight: "90vh", paddingBottom: "env(safe-area-inset-bottom, 24px)" }}
       >
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -267,7 +267,7 @@ export function MissionProofSheet({ instanceId, missionTitle, onClose, onSubmitt
           )}
         </button>
 
-        <p className="text-center text-[10px] mt-2" style={{ color: "rgba(156,163,175,0.6)", fontFamily: "Inter, sans-serif" }}>
+        <p className="text-center text-[10px] mt-2 mb-8" style={{ color: "rgba(156,163,175,0.6)", fontFamily: "Inter, sans-serif" }}>
           Photos are reviewed by GUBER admins · Credits awarded on approval
         </p>
       </div>
