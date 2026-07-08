@@ -1293,39 +1293,6 @@ export function GUBERAssistant() {
               disabled={anyPending}
             />
 
-            {/* Live Conversation Mode toggle — always-listening, interruptible */}
-            {micSupported && (
-              <button
-                onClick={toggleLiveMode}
-                className={`relative w-10 h-10 rounded-full flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
-                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
-                }`}
-                style={{
-                  background: liveMode
-                    ? liveState === "speaking"
-                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                      : liveState === "recording"
-                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
-                    : "linear-gradient(135deg, hsl(222 47% 20%), hsl(222 47% 12%))",
-                  color: liveMode ? "white" : "hsl(45 90% 60%)",
-                  boxShadow: liveMode
-                    ? "0 0 0 3px hsl(45 100% 55% / 0.3), 0 0 16px hsl(45 100% 55% / 0.45)"
-                    : "none",
-                }}
-                data-testid="button-live-conversation"
-                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
-                disabled={anyPending}
-                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
-              >
-                {liveMode && (liveState === "recording" || liveState === "listening") && (
-                  <span className="absolute inset-0 rounded-full animate-ping opacity-30"
-                    style={{ background: "hsl(45 100% 55%)" }} />
-                )}
-                <Zap className="w-5 h-5" fill={liveMode ? "currentColor" : "none"} />
-              </button>
-            )}
-
             {/* Mic button (push-to-talk) */}
             {micSupported && (
               <button

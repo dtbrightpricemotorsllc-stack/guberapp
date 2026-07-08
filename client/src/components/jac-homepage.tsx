@@ -881,34 +881,6 @@ export function JacHomepage() {
             />
             {micSupported && (
               <button
-                onClick={toggleLiveMode}
-                className={`relative w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${
-                  liveMode ? "scale-110" : "hover:scale-105 active:scale-95"
-                }`}
-                style={{
-                  background: liveMode
-                    ? liveState === "speaking"
-                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
-                      : liveState === "recording"
-                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                        : "linear-gradient(135deg, hsl(45 100% 55%), hsl(35 95% 45%))"
-                    : "hsl(222 47% 15%)",
-                  color: liveMode ? "white" : "hsl(45 90% 60%)",
-                  boxShadow: liveMode ? "0 0 0 2px hsl(45 100% 55% / 0.3), 0 0 12px hsl(45 100% 55% / 0.4)" : "none",
-                }}
-                data-testid="button-live-conversation"
-                disabled={typing}
-                aria-label={liveMode ? "Stop live conversation" : "Start live conversation"}
-                title={liveMode ? "Live conversation on — tap to stop" : "Start live conversation (always listening)"}
-              >
-                {liveMode && (liveState === "recording" || liveState === "listening") && (
-                  <span className="absolute inset-0 rounded-xl animate-ping opacity-30" style={{ background: "hsl(45 100% 55%)" }} />
-                )}
-                <Zap className="w-3.5 h-3.5" fill={liveMode ? "currentColor" : "none"} />
-              </button>
-            )}
-            {micSupported && (
-              <button
                 onClick={() => {
                   if (liveMode) stopLiveMode();
                   if (listening) {
@@ -919,20 +891,30 @@ export function JacHomepage() {
                     setTimeout(() => startListening(), 150);
                   }
                 }}
-                className={`w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all ${listening ? "animate-pulse" : ""}`}
+                className={`relative w-11 h-11 rounded-2xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${listening ? "scale-110" : "hover:scale-105 active:scale-95"}`}
                 style={{
-                  background: listening ? "hsl(0 80% 55%)" : transcribing ? "hsl(270 60% 35%)" : "hsl(222 47% 15%)",
-                  color: listening || transcribing ? "white" : "hsl(0 0% 45%)",
+                  background: listening
+                    ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                    : transcribing
+                      ? "linear-gradient(135deg, hsl(270 80% 40%), hsl(270 60% 30%))"
+                      : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
+                  color: listening ? "white" : transcribing ? "white" : "hsl(270 100% 78%)",
+                  boxShadow: listening
+                    ? "0 0 0 3px hsl(0 85% 52% / 0.35), 0 0 18px hsl(0 85% 52% / 0.5)"
+                    : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
                 }}
                 data-testid="button-jac-mic"
                 disabled={typing || transcribing}
-                aria-label={transcribing ? "Transcribing…" : listening ? "Stop" : "Speak"}
+                aria-label={transcribing ? "Transcribing…" : listening ? "Stop" : "Speak to JAC"}
               >
+                {listening && (
+                  <span className="absolute inset-0 rounded-2xl animate-ping opacity-30" style={{ background: "hsl(0 85% 52%)" }} />
+                )}
                 {transcribing
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ? <Loader2 className="w-5 h-5 animate-spin" />
                   : listening
-                    ? <MicOff className="w-3.5 h-3.5" />
-                    : <Mic className="w-3.5 h-3.5" />}
+                    ? <MicOff className="w-5 h-5" />
+                    : <Mic className="w-5 h-5" />}
               </button>
             )}
             <button

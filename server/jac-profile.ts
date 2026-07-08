@@ -238,14 +238,14 @@ export async function buildMorningBriefing(userId: number): Promise<{
           (SELECT COUNT(*)::int FROM jobs WHERE posted_by_id = $1 AND status = 'open' AND assigned_helper_id IS NULL AND deleted_at IS NULL) AS hirer_unfilled,
           (SELECT COUNT(*)::int FROM notifications WHERE user_id = $1 AND read = false) AS unread_notifs,
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) AS open_disputes,
-          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_id = $1 AND status = 'pending') AS pending_offers,
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS pending_offers,
           (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
           (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions
            WHERE user_id = $1 AND type = 'earning' AND status IN ('available','completed')
              AND created_at > NOW() - INTERVAL '7 days') AS earn_7d,
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) +
-          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_id = $1 AND status = 'pending') +
-          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS pending_action_count,
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') +
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.verified = false) AS pending_action_count,
           (SELECT COUNT(*)::int FROM jobs
            WHERE status = 'open' AND assigned_helper_id IS NULL AND is_published = TRUE
              AND (is_test_job = FALSE OR is_test_job IS NULL) AND deleted_at IS NULL
@@ -390,15 +390,15 @@ export async function scanOpportunities(userId: number): Promise<JacOpportunity[
       pool.query(`
         SELECT
           (SELECT COUNT(*)::int FROM guber_disputes WHERE (opened_by_user_id = $1 OR against_user_id = $1) AND status NOT IN ('resolved','closed')) AS disputes,
-          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_id = $1 AND status = 'pending') AS mkt_offers,
-          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.status='submitted') AS proofs_pending,
+          (SELECT COUNT(*)::int FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS mkt_offers,
+          (SELECT COUNT(*)::int FROM proof_submissions ps JOIN jobs j ON j.id=ps.job_id WHERE j.posted_by_id=$1 AND ps.verified = false) AS proofs_pending,
           (SELECT COUNT(*)::int FROM jobs j
            WHERE j.assigned_helper_id = $1
              AND j.status IN ('accepted','in_progress','arrived')
              AND j.proof_required = TRUE
              AND j.deleted_at IS NULL
              AND NOT EXISTS (
-               SELECT 1 FROM proof_submissions ps WHERE ps.job_id = j.id AND ps.status = 'submitted'
+               SELECT 1 FROM proof_submissions ps WHERE ps.job_id = j.id AND ps.verified = false
              )
           ) AS unsubmitted_proof
       `, [userId]),

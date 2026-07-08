@@ -413,7 +413,14 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
     if (ctx.state !== "running") return false;
     const source = ctx.createBufferSource();
     source.buffer = decoded;
-    source.connect(ctx.destination);
+    // Boost volume — ElevenLabs output is quiet on iOS speakers.
+    // GainNode sits between the source and the destination; value > 1.0
+    // amplifies the signal. 1.8 is loud without audible clipping on
+    // typical speech content.
+    const gain = ctx.createGain();
+    gain.gain.value = 1.8;
+    source.connect(gain);
+    gain.connect(ctx.destination);
     _audioCtxSource = source;
     return new Promise<boolean>((resolve) => {
       source.onended = () => {
