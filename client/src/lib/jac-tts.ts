@@ -71,12 +71,12 @@ let _audioCtxSource: AudioBufferSourceNode | null = null;
 // Stored in localStorage as "jac_volume" (float 0.5 – 6.0).
 // Gain pipeline: source → GainNode → Limiter → destination.
 // Gain goes FIRST so we amplify everything; the limiter then
-// hard-clips peaks to just below 0 dBFS so there's no distortion.
-// v2 key — clears old 4.0 savings so everyone gets the louder default.
-const JAC_VOLUME_KEY = "jac_volume_v2";
-const JAC_VOLUME_DEFAULT = 8.0;
-const JAC_VOLUME_MIN = 1.0;
-const JAC_VOLUME_MAX = 16.0;
+// catches only true peaks to prevent clipping — NOT an aggressive hard limiter.
+// v3 key — clears the too-loud 8.0 default that caused noise pumping.
+const JAC_VOLUME_KEY = "jac_volume_v3";
+const JAC_VOLUME_DEFAULT = 3.0;
+const JAC_VOLUME_MIN = 0.5;
+const JAC_VOLUME_MAX = 8.0;
 
 function _loadVolume(): number {
   try {
@@ -472,17 +472,20 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
     //   The compressor was crushing quiet speech before the gain, nearly
     //   cancelling out the boost — net effect was barely louder than 1×.
     //
-    // NEW (correct): Gain(8×) → Limiter(threshold=-1dB, ratio=20:1)
-    //   Everything is amplified first, then peaks are hard-clipped safely.
+    // NEW (correct): Gain(3×) → soft peak limiter(threshold=-3dB, ratio=8:1)
+    //   Modest gain first, then a soft limiter only touches true peaks.
+    //   Do NOT use an aggressive ratio (20:1) or hard knee (0) — that causes
+    //   the limiter to "pump" the noise floor up and down between words,
+    //   producing the cassette-tape / wind-noise artefact.
     const gain = ctx.createGain();
-    gain.gain.value = _jacVolume; // 1.0 – 16.0, default 8.0
+    gain.gain.value = _jacVolume; // 0.5 – 8.0, default 3.0
 
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -1;   // only clip the very top of peaks
-    limiter.knee.value      = 0;    // hard knee — true brickwall
-    limiter.ratio.value     = 20;   // 20:1 — effectively a hard limiter
-    limiter.attack.value    = 0.001; // 1 ms — catch transients immediately
-    limiter.release.value   = 0.1;  // 100 ms release
+    limiter.threshold.value = -3;   // only engage on real peaks near 0 dBFS
+    limiter.knee.value      = 6;    // soft knee — transparent, no pumping
+    limiter.ratio.value     = 8;    // 8:1 — firm but not brickwall
+    limiter.attack.value    = 0.003; // 3 ms — fast enough for speech transients
+    limiter.release.value   = 0.25; // 250 ms — slow enough to avoid pumping
 
     source.connect(gain);
     gain.connect(limiter);
