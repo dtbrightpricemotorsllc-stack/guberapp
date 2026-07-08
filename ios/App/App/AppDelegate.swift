@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import AVFoundation
 
 // MARK: - AppDelegate
 //
@@ -23,13 +24,34 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Force all audio (JAC/ElevenLabs TTS) through the loudspeaker at full
+        // system volume.  Without this iOS defaults to soloAmbient which routes
+        // to the tiny earpiece speaker at the top — essentially inaudible unless
+        // the phone is held to your ear.  mixWithOthers lets background music
+        // keep playing while JAC speaks rather than interrupting it.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(
+                .playback,
+                mode: .default,
+                options: [.mixWithOthers]
+            )
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            // Non-fatal — audio still works, this just guarantees loudspeaker routing
+        }
         return true
     }
 
     func applicationWillResignActive(_ application: UIApplication) {}
     func applicationDidEnterBackground(_ application: UIApplication) {}
     func applicationWillEnterForeground(_ application: UIApplication) {}
-    func applicationDidBecomeActive(_ application: UIApplication) {}
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        // Re-assert loudspeaker routing after interruptions (phone calls, Siri,
+        // other apps stealing the audio session).
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
     func applicationWillTerminate(_ application: UIApplication) {}
 
     func application(_ app: UIApplication, open url: URL,

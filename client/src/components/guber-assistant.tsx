@@ -10,7 +10,7 @@ import {
   Target, TrendingUp, Zap,
 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
-import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -368,6 +368,8 @@ export function GUBERAssistant() {
   // (no ElevenLabs Conversational Agents / per-minute billing).
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const engineRef = useRef<ConversationEngine | null>(null);
   const mutedRef = useRef(muted);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
@@ -1292,6 +1294,29 @@ export function GUBERAssistant() {
           className="flex-shrink-0 px-4 py-3 border-t border-white/[0.05]"
           style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}
         >
+          {/* Volume slider */}
+          {showVolumeSlider && (
+            <div className="flex items-center gap-3 mb-2 px-1">
+              <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+              <input
+                type="range"
+                min={JAC_VOLUME_BOUNDS.min}
+                max={JAC_VOLUME_BOUNDS.max}
+                step={0.1}
+                value={jacVolume}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setJacVolume(v);
+                  setJacVolumeState(v);
+                }}
+                className="flex-1 accent-purple-400"
+                data-testid="slider-dd-volume"
+              />
+              <span className="text-xs w-6 text-right flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }}>
+                {Math.round((jacVolume / JAC_VOLUME_BOUNDS.max) * 100)}%
+              </span>
+            </div>
+          )}
           <div
             className="flex items-end gap-2 rounded-2xl px-3 py-2"
             style={{ background: "hsl(222 47% 9%)", border: "1px solid hsl(222 47% 16%)" }}
@@ -1307,6 +1332,17 @@ export function GUBERAssistant() {
               data-testid="input-assistant-message"
               disabled={anyPending}
             />
+
+            {/* Volume toggle button */}
+            <button
+              onClick={() => setShowVolumeSlider(v => !v)}
+              className="w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+              style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 45%)" }}
+              data-testid="button-dd-volume"
+              aria-label="Adjust JAC volume"
+            >
+              <Volume2 className="w-4 h-4" />
+            </button>
 
             {/* Mic button — tap to call JAC (live always-listening mode) */}
             {micSupported && (

@@ -67,6 +67,39 @@ let _currentAbort: AbortController | null = null;
 let _audioCtx: AudioContext | null = null;
 let _audioCtxSource: AudioBufferSourceNode | null = null;
 
+// ── User-controllable volume ───────────────────────────────────────────────
+// Stored in localStorage as "jac_volume" (float 0.5 – 6.0).
+// Default 4.0 — high but not clipping on typical speech content.
+// A DynamicsCompressor node sits before the GainNode to prevent hard
+// clipping at high gains, giving perceptually much louder output safely.
+const JAC_VOLUME_KEY = "jac_volume";
+const JAC_VOLUME_DEFAULT = 4.0;
+const JAC_VOLUME_MIN = 0.5;
+const JAC_VOLUME_MAX = 6.0;
+
+function _loadVolume(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(JAC_VOLUME_KEY) ?? "");
+    if (!isNaN(v) && v >= JAC_VOLUME_MIN && v <= JAC_VOLUME_MAX) return v;
+  } catch {}
+  return JAC_VOLUME_DEFAULT;
+}
+
+let _jacVolume: number = JAC_VOLUME_DEFAULT;
+// Load persisted value once on module init (browser only).
+if (typeof window !== "undefined") {
+  _jacVolume = _loadVolume();
+}
+
+export function getJacVolume(): number { return _jacVolume; }
+
+export function setJacVolume(v: number) {
+  _jacVolume = Math.max(JAC_VOLUME_MIN, Math.min(JAC_VOLUME_MAX, v));
+  try { localStorage.setItem(JAC_VOLUME_KEY, String(_jacVolume)); } catch {}
+}
+
+export const JAC_VOLUME_BOUNDS = { min: JAC_VOLUME_MIN, max: JAC_VOLUME_MAX, default: JAC_VOLUME_DEFAULT };
+
 export function cancelElevenLabsAudio() {
   if (_currentAbort) {
     try { _currentAbort.abort(); } catch {}
@@ -136,8 +169,12 @@ export function unlockAudioContext() {
     }
   } catch {}
 
-  // Unlock HTML5 audio (autoplay gate)
-  if (!_audioUnlocked) {
+  // Unlock HTML5 audio (autoplay gate) — skipped on iOS Capacitor because
+  // playing an <audio> element there resets the AVAudioSession category from
+  // .playback (loudspeaker) back to .soloAmbient (earpiece/quiet).
+  // The AudioContext silent-buffer trick above is sufficient on Capacitor.
+  const onCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
+  if (!_audioUnlocked && !onCapacitor) {
     const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
     const a = new Audio(SILENT_MP3);
     a.volume = 0;
@@ -409,17 +446,27 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
   if (!ctx || ctx.state !== "running") return false;
   try {
     const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
-    // Check again after the async decode — context might have been closed.
     if (ctx.state !== "running") return false;
     const source = ctx.createBufferSource();
     source.buffer = decoded;
-    // Boost volume — ElevenLabs output is quiet on iOS speakers.
-    // GainNode sits between the source and the destination; value > 1.0
-    // amplifies the signal. 1.8 is loud without audible clipping on
-    // typical speech content.
+
+    // ── Loudness pipeline ─────────────────────────────────────────────────
+    // DynamicsCompressor normalises the signal before the gain stage so we
+    // can push the volume high without hard clipping on peaks.
+    // Settings tuned for speech: fast attack, moderate release, high ratio.
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -24;  // start compressing at -24 dBFS
+    comp.knee.value      = 10;   // soft knee
+    comp.ratio.value     = 12;   // 12:1 — strong limiting
+    comp.attack.value    = 0.003;
+    comp.release.value   = 0.2;
+
+    // GainNode applies the user-chosen volume multiplier after compression.
     const gain = ctx.createGain();
-    gain.gain.value = 1.8;
-    source.connect(gain);
+    gain.gain.value = _jacVolume; // 0.5 – 6.0, default 4.0
+
+    source.connect(comp);
+    comp.connect(gain);
     gain.connect(ctx.destination);
     _audioCtxSource = source;
     return new Promise<boolean>((resolve) => {

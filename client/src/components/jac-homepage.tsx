@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
-import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
+import { jacSpeak, cancelAllJacAudio, unlockAudioContext, getJacVolume, setJacVolume, JAC_VOLUME_BOUNDS } from "@/lib/jac-tts";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
 import jacFull from "@assets/Picsart_26-06-23_12-22-52-096_1782235908382.png";
 import jacPortrait from "@assets/Picsart_26-06-23_12-26-51-004_1782235908420.png";
@@ -201,6 +201,8 @@ export function JacHomepage() {
   // (no ElevenLabs Conversational Agents / per-minute billing).
   const [liveMode, setLiveMode] = useState(false);
   const [liveState, setLiveState] = useState<ConversationState>("idle");
+  const [jacVolume, setJacVolumeState] = useState(() => getJacVolume());
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const engineRef = useRef<ConversationEngine | null>(null);
 
   function getEngine(): ConversationEngine {
@@ -881,6 +883,29 @@ export function JacHomepage() {
 
         {/* Input bar */}
         <div className="px-5 pb-5 pt-3 flex-shrink-0" style={{ borderTop: "1px solid hsl(222 47% 13%)" }}>
+          {/* Volume slider — shown when user taps the volume icon */}
+          {showVolumeSlider && (
+            <div className="flex items-center gap-3 mb-2 px-1">
+              <Volume2 className="w-4 h-4 flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }} />
+              <input
+                type="range"
+                min={JAC_VOLUME_BOUNDS.min}
+                max={JAC_VOLUME_BOUNDS.max}
+                step={0.1}
+                value={jacVolume}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setJacVolume(v);
+                  setJacVolumeState(v);
+                }}
+                className="flex-1 accent-purple-400"
+                data-testid="slider-jac-volume"
+              />
+              <span className="text-xs w-6 text-right flex-shrink-0" style={{ color: "hsl(270 100% 78%)" }}>
+                {Math.round((jacVolume / JAC_VOLUME_BOUNDS.max) * 100)}%
+              </span>
+            </div>
+          )}
           <div className="flex items-end gap-2 rounded-2xl px-3 py-2" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 16%)" }}>
             <textarea
               ref={inputRef}
@@ -893,6 +918,16 @@ export function JacHomepage() {
               disabled={typing}
               data-testid="input-jac-homepage"
             />
+            {/* Volume toggle */}
+            <button
+              onClick={() => setShowVolumeSlider(v => !v)}
+              className="w-8 h-8 rounded-xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+              style={{ color: showVolumeSlider ? "hsl(270 100% 78%)" : "hsl(0 0% 45%)" }}
+              data-testid="button-jac-volume"
+              aria-label="Adjust JAC volume"
+            >
+              <Volume2 className="w-4 h-4" />
+            </button>
             {micSupported && (
               <button
                 onClick={toggleLiveMode}
