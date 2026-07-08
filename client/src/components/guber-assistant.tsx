@@ -339,6 +339,7 @@ export function GUBERAssistant() {
 
   const briefingInjectedRef = useRef(false);
   const feedbackDraftRef = useRef<{ ready: boolean; category: string; description: string } | null>(null);
+  const greetingSpokenRef = useRef(false);
 
   // ── "jac:prefill" — quick-action chips pre-load a message ──
   useEffect(() => {
@@ -401,10 +402,22 @@ export function GUBERAssistant() {
       stopLiveMode();
       return;
     }
+    // unlockAudioContext() MUST run synchronously inside this gesture handler
+    // so the AudioContext is in "running" state — audio routes to the
+    // loudspeaker on iOS/Android instead of the earpiece or going silent.
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
+
+    // Play greeting now, inside the gesture — AudioContext is running so it
+    // comes out of the loudspeaker.  The ref prevents double-play.
+    if (!greetingSpokenRef.current && messages.length === 1) {
+      greetingSpokenRef.current = true;
+      const greetingText = messages[0]?.content ?? DD_GREETING;
+      setTimeout(() => speak(greetingText), 200);
+    }
+
     setLiveMode(true);
     await getEngine().start();
   }
@@ -502,8 +515,10 @@ export function GUBERAssistant() {
 
     const returning = localStorage.getItem("jac_returning") === "1";
     if (!returning) {
-      // First-time visitor — speak the greeting immediately
-      setTimeout(() => speak(DD_GREETING), 300);
+      if (!greetingSpokenRef.current) {
+        greetingSpokenRef.current = true;
+        setTimeout(() => speak(DD_GREETING), 300);
+      }
       return;
     }
     fetch("/api/jac/updates")

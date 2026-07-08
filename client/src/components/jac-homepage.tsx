@@ -230,10 +230,23 @@ export function JacHomepage() {
       stopLiveMode();
       return;
     }
+    // unlockAudioContext() MUST run synchronously inside this gesture handler
+    // so the AudioContext is in "running" state before any async work starts.
+    // After this call, audio will route through the loudspeaker on iOS/Android.
     unlockAudioContext();
     cancelSpeech();
     cancelAllJacAudio();
     if (listening) stopListening();
+
+    // Play greeting NOW — AudioContext is running (unlocked above), so the
+    // audio goes through the loudspeaker on every platform.  The ref guard
+    // prevents double-play if the document click listener also fires.
+    if (!greetingSpokenRef.current) {
+      greetingSpokenRef.current = true;
+      const greetingText = messages[0]?.content ?? GREETING.content;
+      setTimeout(() => speak(greetingText), 200);
+    }
+
     setLiveMode(true);
     await getEngine().start();
   }
@@ -287,11 +300,17 @@ export function JacHomepage() {
     return () => clearTimeout(t);
   }, [showFloatHint]);
 
-  // Auto-speak greeting on homepage load.
-  // Browsers require a user gesture before audio plays (web PWA).
-  // On Capacitor (iOS/Android) audio is already unlocked — speak immediately.
-  // On web: speak on the very first user interaction anywhere on the page.
+  // Greeting spoken flag — shared between the useEffect listener path
+  // (user types before tapping mic) and toggleLiveMode (user taps mic first).
   const greetingSpokenRef = useRef(false);
+
+  // Auto-speak greeting on first user interaction.
+  // All platforms need a user gesture before audio plays — on iOS/Android the
+  // AudioContext starts suspended even in Capacitor native builds, so firing
+  // before a gesture sends audio to the earpiece (or nowhere).  Waiting for
+  // the gesture guarantees the AudioContext is running and audio goes to the
+  // loudspeaker.  The mic-button path is handled inside toggleLiveMode so this
+  // listener is only the fallback for users who type or tap elsewhere first.
   useEffect(() => {
     if (mode !== "chat") return;
     if (greetingSpokenRef.current) return;
@@ -305,11 +324,6 @@ export function JacHomepage() {
       setTimeout(() => speak(currentGreeting), 120);
     }
 
-    // Try immediately (works on Capacitor where audio is pre-unlocked)
-    const isCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor;
-    if (isCapacitor) { speakGreeting(); return; }
-
-    // Web: wait for first gesture then speak once
     const opts = { once: true, passive: true } as const;
     const cleanup = () => {
       document.removeEventListener("click",      speakGreeting, opts);
