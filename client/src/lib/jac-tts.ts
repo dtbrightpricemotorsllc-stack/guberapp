@@ -133,13 +133,13 @@ export function isJacSpeaking(): boolean {
 
 /**
  * Call this on ANY user interaction (button tap, send, mic press) before speaking.
- * Unlocks audio playback on mobile browsers that require a gesture.
+ * Unlocks audio playback on all platforms (mobile browsers, PWA, native Capacitor).
  */
 export function unlockAudioContext() {
   // Create / resume the Web Audio API context inside this user gesture.
-  // AudioContext routes audio to the loudspeaker on iOS; <audio> elements
-  // default to the earpiece (the tiny phone-call speaker at the top).
-  // Must be called synchronously inside the gesture handler — iOS blocks
+  // AudioContext routes audio through the main speaker on all platforms;
+  // raw <audio> elements can default to earpiece routing on some phones.
+  // Must be called synchronously inside the gesture handler — browsers block
   // AudioContext creation/resume in async callbacks.
   try {
     if (typeof window !== "undefined") {
@@ -152,10 +152,9 @@ export function unlockAudioContext() {
         if (ctx.state === "suspended") {
           ctx.resume().catch(() => {});
         }
-        // Play a 1-sample silent buffer — this is the standard iOS trick to
-        // fully unlock the AudioContext inside a user gesture so that
-        // subsequent async calls (API fetch + play) also go through the
-        // loudspeaker instead of the earpiece.
+        // Play a 1-sample silent buffer to fully unlock the AudioContext
+        // inside a user gesture so that subsequent async calls (API fetch
+        // + play) are routed through the main speaker on all platforms.
         if (ctx.state === "running" || ctx.state === "suspended") {
           try {
             const silent = ctx.createBuffer(1, 1, 22050);
@@ -169,12 +168,16 @@ export function unlockAudioContext() {
     }
   } catch {}
 
-  // Unlock HTML5 audio (autoplay gate) — skipped on iOS Capacitor because
+  // Unlock HTML5 audio (autoplay gate) — skipped ONLY on iOS Capacitor because
   // playing an <audio> element there resets the AVAudioSession category from
-  // .playback (loudspeaker) back to .soloAmbient (earpiece/quiet).
-  // The AudioContext silent-buffer trick above is sufficient on Capacitor.
-  const onCapacitor = typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
-  if (!_audioUnlocked && !onCapacitor) {
+  // .playback (loudspeaker) back to .soloAmbient (earpiece).
+  // Android Capacitor, Android browser, PWA, and all desktop browsers need
+  // this unlock — it's NOT skipped there.
+  const onIosCapacitor =
+    typeof window !== "undefined" &&
+    !!(window as any).Capacitor?.isNativePlatform?.() &&
+    /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!_audioUnlocked && !onIosCapacitor) {
     const SILENT_MP3 = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
     const a = new Audio(SILENT_MP3);
     a.volume = 0;
@@ -261,13 +264,11 @@ export async function jacSpeak(
   }
 
   // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────
-  // iOS Safari (web) and WKWebView (Capacitor) both lack reliable MediaSource
-  // support for audio/mpeg streaming — addSourceBuffer throws on those
-  // platforms.  Use the buffered path (fetch-all → blob → <audio>) for any
-  // iOS UA, whether that's the native Capacitor app or a web browser on
-  // iPhone/iPad.  Non-iOS platforms get progressive streaming for lower
-  // latency.  Note: `isIOS` (Capacitor) is a subset of `isIOSBrowser()` (UA),
-  // so checking UA here covers both.
+  // iOS Safari / WKWebView lack reliable MediaSource for audio/mpeg streaming.
+  // Android Chrome, Android WebView, desktop browsers, and PWA all support
+  // MediaSource and get the lower-latency streaming path.
+  // tryLiveElevenLabs() also feature-detects MediaSource.isTypeSupported()
+  // internally and falls back to buffered automatically when unsupported.
   const onIOSPath = isIOSBrowser();
   const played = onIOSPath
     ? await tryLiveElevenLabsBuffered(text, opts.onStart)
@@ -404,7 +405,7 @@ async function tryLiveElevenLabsStreaming(text: string, onStart?: () => void): P
   });
 }
 
-/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails, and on iOS. */
+/** Full-blob buffering fallback — used when MediaSource streaming is unsupported or fails (e.g. iOS Safari). */
 async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Promise<boolean> {
   const controller = new AbortController();
   _currentAbort = controller;
@@ -432,9 +433,9 @@ async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Pr
 }
 
 /**
- * Decode and play an ArrayBuffer via AudioContext.
- * AudioContext routes audio through the loudspeaker on iOS — <audio> elements
- * default to the earpiece (quiet, phone-call-mode speaker at the top).
+ * Decode and play an ArrayBuffer via AudioContext (all platforms).
+ * AudioContext routes audio through the main speaker on all devices — raw
+ * <audio> elements can default to earpiece routing on some phones.
  * Only used when the context is "running" — a suspended context hangs forever
  * because source.onended never fires until the context is resumed, which
  * breaks the greeting and any audio triggered from a non-gesture path.
@@ -486,7 +487,7 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
 function tryPlayAudio(url: string, isBlob = false, onStart?: () => void): Promise<boolean> {
   // Fetch the audio, then play via AudioContext (loudspeaker) when running.
   // Falls back to <audio> element if AudioContext is not yet unlocked/running
-  // (e.g. greeting fired from useEffect before any user gesture on iOS).
+  // (e.g. greeting fired from useEffect before any user gesture).
   if (_audioCtx && _audioCtx.state === "running") {
     return fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
