@@ -173,7 +173,11 @@ export class ConversationEngine {
 
   /** Call this when JAC's TTS reply finishes (naturally, not via interruption). */
   notifySpeakingEnded(): void {
-    if (this.state !== "speaking") return;
+    // Also accept "processing": if TTS fails before audio starts, onStart
+    // never fires so notifySpeakingStarted() is never called — engine stays
+    // stuck in "processing" forever.  Accepting it here lets the .catch()
+    // path in speak() unstick the spinner in that case.
+    if (this.state !== "speaking" && this.state !== "processing") return;
     this.speakingStartedAt = null;
     this.setState("listening");
     // Re-acquire mic so we can hear the next utterance.

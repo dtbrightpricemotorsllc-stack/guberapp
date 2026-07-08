@@ -383,6 +383,11 @@ export function GUBERAssistant() {
         },
         onStateChange: setLiveState,
         onError: (reason) => {
+          // Hard-stop the engine FIRST so that the speak() call in doSend()
+          // below doesn't call notifySpeakingStarted() on a live engine —
+          // which would re-open the mic after TTS ends even though liveMode
+          // is being set to false.
+          engineRef.current?.stop();
           setLiveMode(false);
           setLiveState("idle");
           const sentinel = reason === "mic_denied" ? "__mic_denied__" : reason === "unsupported" ? "__mic_error__" : "__mic_error__";

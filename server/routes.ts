@@ -17827,7 +17827,7 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
             (SELECT COUNT(*)::int  FROM marketplace_items WHERE seller_id = $1 AND status = 'active') AS marketplace_active,
             (SELECT COUNT(*)::int  FROM marketplace_offers WHERE seller_user_id = $1 AND status = 'pending') AS marketplace_offers_received,
             (SELECT COUNT(*)::int  FROM load_board_listings WHERE poster_id = $1 AND status = 'active') AS load_board_active,
-            (SELECT COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0)::int FROM credit_ledger WHERE user_id = $1) AS studio_credits,
+            (SELECT COALESCE(SUM(amount),0)::int FROM credit_ledger WHERE user_id = $1) AS studio_credits,
             (SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE user_id = $1 AND status = 'completed') AS wallet_balance,
             (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status = 'in_progress' AND deleted_at IS NULL) AS jobs_in_progress_worker,
             (SELECT COUNT(*)::int FROM jobs WHERE assigned_helper_id = $1 AND status = 'completed' AND deleted_at IS NULL) AS jobs_completed_worker
