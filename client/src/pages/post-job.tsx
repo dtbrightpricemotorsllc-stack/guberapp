@@ -155,7 +155,6 @@ export default function PostJob() {
   const [urgentSwitch, setUrgentSwitch] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const gpsLoadingRef = useRef(false);
-  const [validationAttempted, setValidationAttempted] = useState(false);
   const validationBannerRef = useRef<HTMLDivElement>(null);
   const [jobDetails, setJobDetails] = useState<Record<string, any>>(() => {
     if (params.get("from") === "jac") {
@@ -649,18 +648,6 @@ export default function PostJob() {
   };
 
   const handleSubmitClick = () => {
-    if (!canSubmit) {
-      setValidationAttempted(true);
-      toast({
-        title: "Missing information",
-        description: missingReason || "Please complete all required fields.",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        validationBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 50);
-      return;
-    }
     // Gate the global disclaimer at the submit moment so it appears exactly
     // when the user is committing to post a job.
     if (user && !(user as any).liabilityDisclaimerAcceptedAt) {
@@ -669,10 +656,6 @@ export default function PostJob() {
     }
     continueSubmitFlow();
   };
-
-  useEffect(() => {
-    if (!missingReason) setValidationAttempted(false);
-  }, [missingReason]);
 
   const handleSafetyGateConfirm = () => {
     setSafetyGateOpen(false);
@@ -1645,10 +1628,10 @@ export default function PostJob() {
             </div>
           )}
 
-          {(validationAttempted && missingReason) && (
+          {missingReason && (
             <div
               ref={validationBannerRef}
-              className="flex items-start gap-3 rounded-xl px-4 py-3 animate-fade-in"
+              className="flex items-start gap-3 rounded-xl px-4 py-3"
               style={{ background: "rgba(251,146,60,0.1)", border: "1px solid rgba(251,146,60,0.4)" }}
               data-testid="text-missing-reason"
             >
@@ -1665,7 +1648,7 @@ export default function PostJob() {
           )}
 
           <Button onClick={handleSubmitClick}
-            disabled={checkoutMutation.isPending}
+            disabled={checkoutMutation.isPending || !canSubmit || (category === "Verify & Inspect" && !isVIJob)}
             className="w-full font-display tracking-wider premium-btn bg-secondary text-secondary-foreground border border-secondary-border rounded-md gap-2"
             data-testid="button-post-job">
             {checkoutMutation.isPending ? (
