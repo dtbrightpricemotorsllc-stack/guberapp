@@ -267,15 +267,23 @@ jobs:
               print('ERROR: build never reached VALID state after 20 min'); sys.exit(1)
           print(f'Build ID ready: {build_id}')
 
-          # ── 3. find App Store version — list ALL, match by versionString ─────
-          # No versionString filter: Apple 409s on POST if ANY version exists,
-          # so we must find and reuse it regardless of state. Log every version
-          # we see so failures are easy to diagnose.
+          # ── 3. find App Store version — list ALL, match by normalised version ─
+          # Apple normalises "1.0.0" → "1.0" in ASC, so we must strip trailing
+          # zero segments before comparing. We also accept any state we can try
+          # to attach to — worst case the PATCH fails with a clear error.
           EDITABLE   = {'PREPARE_FOR_SUBMISSION', 'WAITING_FOR_REVIEW',
                         'DEVELOPER_REJECTED', 'REJECTED',
                         'METADATA_REJECTED', 'INVALID_BINARY'}
-          ATTACHABLE = EDITABLE | {'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE',
-                                   'PENDING_APPLE_RELEASE'}
+          ATTACHABLE = EDITABLE | {'IN_REVIEW', 'READY_FOR_REVIEW',
+                                   'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE'}
+
+          def norm_ver(v):
+              parts = v.split('.')
+              while len(parts) > 1 and parts[-1] == '0':
+                  parts.pop()
+              return '.'.join(parts)
+
+          norm_mktg = norm_ver(MKTG_VER)
 
           all_vers = asc('GET',
               f'/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20')
@@ -285,8 +293,8 @@ jobs:
               for v in all_vers['data']:
                   state = v['attributes'].get('appStoreState', '')
                   ver   = v['attributes'].get('versionString', '?')
-                  print(f'  Version {ver} id={v["id"]} state={state}')
-                  if ver == MKTG_VER:
+                  print(f'  Version {ver} (normalised={norm_ver(ver)}) id={v["id"]} state={state}')
+                  if norm_ver(ver) == norm_mktg:
                       if state in EDITABLE:
                           version_id = v['id']
                           break
@@ -294,11 +302,11 @@ jobs:
                           fallback_id = v['id']
 
           if not version_id and fallback_id:
-              print(f'No fully-editable version — will try attaching to {fallback_id}')
+              print(f'Version is in a non-editable state — will attempt attach anyway: {fallback_id}')
               version_id = fallback_id
 
           if not version_id:
-              print(f'No {MKTG_VER} version found at all — creating one ...')
+              print(f'No {MKTG_VER} version found — creating one ...')
               new_ver = asc('POST', '/appStoreVersions', {
                   'data': {
                       'type': 'appStoreVersions',
