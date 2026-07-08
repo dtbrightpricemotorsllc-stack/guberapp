@@ -72,11 +72,11 @@ let _audioCtxSource: AudioBufferSourceNode | null = null;
 // Gain pipeline: source → GainNode → Limiter → destination.
 // Gain goes FIRST so we amplify everything; the limiter then
 // catches only true peaks to prevent clipping — NOT an aggressive hard limiter.
-// v3 key — clears the too-loud 8.0 default that caused noise pumping.
-const JAC_VOLUME_KEY = "jac_volume_v3";
-const JAC_VOLUME_DEFAULT = 3.0;
+// v4 key — clears 3.0/8.0 savings; no limiter so higher gain stays clean.
+const JAC_VOLUME_KEY = "jac_volume_v4";
+const JAC_VOLUME_DEFAULT = 2.0;
 const JAC_VOLUME_MIN = 0.5;
-const JAC_VOLUME_MAX = 8.0;
+const JAC_VOLUME_MAX = 6.0;
 
 function _loadVolume(): number {
   try {
@@ -463,33 +463,18 @@ async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): 
     const source = ctx.createBufferSource();
     source.buffer = decoded;
 
-    // ── Loudness pipeline: Gain → Limiter → destination ───────────────────
-    // Gain goes FIRST to amplify the signal as much as the user wants.
-    // The limiter (DynamicsCompressor tuned as a hard brickwall) goes AFTER
-    // to clip peaks to just below 0 dBFS — no distortion, maximum loudness.
-    //
-    // OLD (wrong): Compressor(threshold=-24) → Gain(4×)
-    //   The compressor was crushing quiet speech before the gain, nearly
-    //   cancelling out the boost — net effect was barely louder than 1×.
-    //
-    // NEW (correct): Gain(3×) → soft peak limiter(threshold=-3dB, ratio=8:1)
-    //   Modest gain first, then a soft limiter only touches true peaks.
-    //   Do NOT use an aggressive ratio (20:1) or hard knee (0) — that causes
-    //   the limiter to "pump" the noise floor up and down between words,
-    //   producing the cassette-tape / wind-noise artefact.
+    // ── Loudness pipeline: source → GainNode → destination ───────────────
+    // Plain gain only — NO DynamicsCompressor of any kind.
+    // Any compressor/limiter on speech causes audible pumping ("cassette-tape
+    // wind noise") because speech dynamics make it engage and release
+    // constantly.  A simple gain node is transparent and artefact-free.
+    // ElevenLabs audio is already well-levelled; 2× is enough to be
+    // clearly louder through the phone speaker without clipping.
     const gain = ctx.createGain();
-    gain.gain.value = _jacVolume; // 0.5 – 8.0, default 3.0
-
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -3;   // only engage on real peaks near 0 dBFS
-    limiter.knee.value      = 6;    // soft knee — transparent, no pumping
-    limiter.ratio.value     = 8;    // 8:1 — firm but not brickwall
-    limiter.attack.value    = 0.003; // 3 ms — fast enough for speech transients
-    limiter.release.value   = 0.25; // 250 ms — slow enough to avoid pumping
+    gain.gain.value = _jacVolume; // 0.5 – 6.0, default 2.0
 
     source.connect(gain);
-    gain.connect(limiter);
-    limiter.connect(ctx.destination);
+    gain.connect(ctx.destination);
     _audioCtxSource = source;
     return new Promise<boolean>((resolve) => {
       source.onended = () => {
