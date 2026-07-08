@@ -285,9 +285,23 @@ jobs:
                       break
 
           if not version_id:
-              # Try creating a new patch version 1.0.1 as fallback
-              print(f'No editable version found for {MKTG_VER} — will try next patch.')
-              sys.exit(1)   # Surface clearly so operator can decide
+              print(f'No editable version found for {MKTG_VER} — creating a new App Store version ...')
+              new_ver = asc('POST', '/appStoreVersions', {
+                  'data': {
+                      'type': 'appStoreVersions',
+                      'attributes': {
+                          'platform': 'IOS',
+                          'versionString': MKTG_VER,
+                      },
+                      'relationships': {
+                          'app': {'data': {'type': 'apps', 'id': app_id}}
+                      }
+                  }
+              })
+              if not new_ver or not new_ver.get('data'):
+                  print('ERROR: failed to create App Store version'); sys.exit(1)
+              version_id = new_ver['data']['id']
+              print(f'Created new App Store version: {version_id}')
 
           print(f'App Store version ID: {version_id}')
 
@@ -306,3 +320,4 @@ jobs:
           print('Next step: go to App Store Connect → GUBER → iOS App → 1.0.0')
           print('and click "Submit for Review" when ready.')
           PYEOF
+
