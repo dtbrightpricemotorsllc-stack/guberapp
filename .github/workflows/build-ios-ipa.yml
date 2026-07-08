@@ -267,39 +267,49 @@ jobs:
               print('ERROR: build never reached VALID state after 20 min'); sys.exit(1)
           print(f'Build ID ready: {build_id}')
 
-          # ── 3. find the App Store version (PREPARE_FOR_SUBMISSION or READY) ──
-          versions = asc('GET',
-              f'/apps/{app_id}/appStoreVersions'
-              f'?filter[platform]=IOS'
-              f'&filter[versionString]={MKTG_VER}')
+          # ── 3. find App Store version — list ALL, match by versionString ─────
+          # No versionString filter: Apple 409s on POST if ANY version exists,
+          # so we must find and reuse it regardless of state. Log every version
+          # we see so failures are easy to diagnose.
+          EDITABLE   = {'PREPARE_FOR_SUBMISSION', 'WAITING_FOR_REVIEW',
+                        'DEVELOPER_REJECTED', 'REJECTED',
+                        'METADATA_REJECTED', 'INVALID_BINARY'}
+          ATTACHABLE = EDITABLE | {'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE',
+                                   'PENDING_APPLE_RELEASE'}
+
+          all_vers = asc('GET',
+              f'/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=20')
           version_id = None
-          if versions and versions.get('data'):
-              for v in versions['data']:
+          fallback_id = None
+          if all_vers and all_vers.get('data'):
+              for v in all_vers['data']:
                   state = v['attributes'].get('appStoreState', '')
-                  print(f'  Version {v["id"]} state={state}')
-                  # Prefer PREPARE_FOR_SUBMISSION, accept WAITING_FOR_REVIEW too
-                  if state in ('PREPARE_FOR_SUBMISSION', 'WAITING_FOR_REVIEW',
-                               'DEVELOPER_REJECTED', 'REJECTED',
-                               'METADATA_REJECTED', 'INVALID_BINARY'):
-                      version_id = v['id']
-                      break
+                  ver   = v['attributes'].get('versionString', '?')
+                  print(f'  Version {ver} id={v["id"]} state={state}')
+                  if ver == MKTG_VER:
+                      if state in EDITABLE:
+                          version_id = v['id']
+                          break
+                      elif state in ATTACHABLE and not fallback_id:
+                          fallback_id = v['id']
+
+          if not version_id and fallback_id:
+              print(f'No fully-editable version — will try attaching to {fallback_id}')
+              version_id = fallback_id
 
           if not version_id:
-              print(f'No editable version found for {MKTG_VER} — creating a new App Store version ...')
+              print(f'No {MKTG_VER} version found at all — creating one ...')
               new_ver = asc('POST', '/appStoreVersions', {
                   'data': {
                       'type': 'appStoreVersions',
-                      'attributes': {
-                          'platform': 'IOS',
-                          'versionString': MKTG_VER,
-                      },
-                      'relationships': {
-                          'app': {'data': {'type': 'apps', 'id': app_id}}
-                      }
+                      'attributes': {'platform': 'IOS', 'versionString': MKTG_VER},
+                      'relationships': {'app': {'data': {'type': 'apps', 'id': app_id}}}
                   }
               })
               if not new_ver or not new_ver.get('data'):
-                  print('ERROR: failed to create App Store version'); sys.exit(1)
+                  print('ERROR: could not find or create App Store version.')
+                  print('Action needed: create a 1.0.0 iOS version in App Store Connect.')
+                  sys.exit(1)
               version_id = new_ver['data']['id']
               print(f'Created new App Store version: {version_id}')
 
