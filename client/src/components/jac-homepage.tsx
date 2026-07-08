@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Send, Mic, MicOff, ArrowRight, MessageSquare, Minus, Loader2, Zap } from "lucide-react";
+import { Send, Mic, Volume2, ArrowRight, MessageSquare, Minus, Loader2 } from "lucide-react";
 import { useSpeechInput, useSpeechOutput } from "@/hooks/use-speech";
 import { jacSpeak, cancelAllJacAudio, unlockAudioContext } from "@/lib/jac-tts";
 import { ConversationEngine, type ConversationState } from "@/lib/voice/ConversationEngine";
@@ -881,40 +881,35 @@ export function JacHomepage() {
             />
             {micSupported && (
               <button
-                onClick={() => {
-                  if (liveMode) stopLiveMode();
-                  if (listening) {
-                    stopListening();
-                  } else {
-                    cancelSpeech();
-                    cancelAllJacAudio();
-                    setTimeout(() => startListening(), 150);
-                  }
-                }}
-                className={`relative w-11 h-11 rounded-2xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${listening ? "scale-110" : "hover:scale-105 active:scale-95"}`}
+                onClick={toggleLiveMode}
+                className={`relative w-12 h-12 rounded-2xl flex-shrink-0 mb-0.5 flex items-center justify-center transition-all duration-200 ${liveMode ? "scale-110" : "hover:scale-105 active:scale-95"}`}
                 style={{
-                  background: listening
-                    ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
-                    : transcribing
-                      ? "linear-gradient(135deg, hsl(270 80% 40%), hsl(270 60% 30%))"
-                      : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
-                  color: listening ? "white" : transcribing ? "white" : "hsl(270 100% 78%)",
-                  boxShadow: listening
-                    ? "0 0 0 3px hsl(0 85% 52% / 0.35), 0 0 18px hsl(0 85% 52% / 0.5)"
+                  background: liveMode
+                    ? liveState === "speaking"
+                      ? "linear-gradient(135deg, hsl(152 90% 40%), hsl(152 70% 30%))"
+                      : liveState === "recording"
+                        ? "linear-gradient(135deg, hsl(0 85% 52%), hsl(15 90% 48%))"
+                        : "linear-gradient(135deg, hsl(270 100% 65%), hsl(152 100% 44%))"
+                    : "linear-gradient(135deg, hsl(270 70% 25%), hsl(152 60% 16%))",
+                  color: "white",
+                  boxShadow: liveMode
+                    ? "0 0 0 3px hsl(270 100% 65% / 0.35), 0 0 20px hsl(270 100% 65% / 0.5)"
                     : "0 0 10px hsl(270 100% 65% / 0.35), inset 0 1px 0 hsl(270 100% 70% / 0.15)",
                 }}
                 data-testid="button-jac-mic"
-                disabled={typing || transcribing}
-                aria-label={transcribing ? "Transcribing…" : listening ? "Stop" : "Speak to JAC"}
+                disabled={typing}
+                aria-label={liveMode ? "End conversation" : "Call JAC"}
               >
-                {listening && (
-                  <span className="absolute inset-0 rounded-2xl animate-ping opacity-30" style={{ background: "hsl(0 85% 52%)" }} />
+                {liveMode && (
+                  <span className="absolute inset-0 rounded-2xl animate-ping opacity-25" style={{ background: "hsl(270 100% 65%)" }} />
                 )}
-                {transcribing
-                  ? <Loader2 className="w-5 h-5 animate-spin" />
-                  : listening
-                    ? <MicOff className="w-5 h-5" />
-                    : <Mic className="w-5 h-5" />}
+                {liveMode
+                  ? liveState === "recording"
+                    ? <Mic className="w-6 h-6" />
+                    : liveState === "speaking"
+                      ? <Volume2 className="w-6 h-6" />
+                      : <Loader2 className="w-6 h-6 animate-spin" />
+                  : <Mic className="w-6 h-6" />}
               </button>
             )}
             <button
