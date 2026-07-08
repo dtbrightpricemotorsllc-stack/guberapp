@@ -180,8 +180,7 @@ export default function StudioAvatarPage() {
             <UserRound className="w-8 h-8" style={{ color: ACCENT }} />
           </div>
           <p className="text-sm text-white/40 font-medium leading-relaxed">
-            GUVATAR is coming to the iOS app soon.<br />
-            Build your character on the web in the meantime.
+            Updating — come try later.
           </p>
         </div>
       </StudioToolPageShell>
@@ -301,13 +300,12 @@ export default function StudioAvatarPage() {
             <div>
               <p className="font-bold text-white/80 text-sm">Mesh Import</p>
               <p className="text-xs text-white/35 mt-1 max-w-[260px] leading-relaxed">
-                Import a custom 3D mesh (.glb / .fbx) to use as your character base.
-                This feature is coming soon.
+                Updating — come try later.
               </p>
             </div>
             <span className="px-3 py-1.5 rounded-full text-[11px] font-bold"
                   style={{ background: `${ACCENT}18`, color: ACCENT, border: `1px solid ${ACCENT}44` }}>
-              Coming Soon
+              Updating
             </span>
           </div>
         )}

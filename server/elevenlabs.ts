@@ -24,7 +24,7 @@ export interface ElevenLabsSuccess {
 
 export type ElevenLabsResult = ElevenLabsSuccess | ElevenLabsError;
 
-export const DEFAULT_JAC_VOICE_ID = "VrUPKj92idNr4XrmO032"; // "Hailey" — warm, soft, clear female voice
+export const DEFAULT_JAC_VOICE_ID = "cgSgspJ2msm6clMCkdW9"; // "Jessica" — playful, bright, warm, conversational (more exciting than the old "Hailey" voice)
 
 /**
  * Classifies an ElevenLabs error response into a stable, loggable code.
@@ -53,17 +53,20 @@ function classifyError(status: number, bodyText: string): ElevenLabsError {
 
 // eleven_turbo_v2_5 balances quality and latency (~300ms vs ~75ms for flash).
 // Flash was chosen for speed but it significantly distorts voice characteristics
-// and sounds noticeably "not Hailey". Turbo reproduces the voice accurately.
+// and sounds noticeably off. Turbo reproduces the voice accurately while still
+// being fast enough for real-time conversational use.
 export const DEFAULT_JAC_MODEL_ID = "eleven_turbo_v2_5";
 
-// similarity_boost at 0.95 locks the output tightly to the Hailey reference
-// recording — the key setting for making it sound like the actual voice.
-// stability at 0.50 keeps delivery consistent without sounding robotic.
-// style at 0.35 adds warmth and natural pacing.
+// similarity_boost at 0.9 keeps the output close to the Jessica reference
+// recording while leaving room for expressiveness.
+// stability at 0.38 (lower = more dynamic/expressive delivery — this is what
+// makes the voice sound "exciting" instead of flat) while staying above the
+// point where it gets incoherent.
+// style at 0.55 pushes more of the voice's natural energy/inflection through.
 export const DEFAULT_JAC_VOICE_SETTINGS = {
-  stability: 0.50,
-  similarity_boost: 0.95,
-  style: 0.35,
+  stability: 0.38,
+  similarity_boost: 0.9,
+  style: 0.55,
   use_speaker_boost: true,
 };
 
