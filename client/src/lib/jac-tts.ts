@@ -264,20 +264,25 @@ export async function jacSpeak(
   }
 
   // ── Tier 2: live ElevenLabs via backend proxy ─────────────────────────────
-  // iOS Safari / WKWebView lack reliable MediaSource for audio/mpeg streaming.
-  // Android Chrome, Android WebView, desktop browsers, and PWA all support
-  // MediaSource and get the lower-latency streaming path.
-  // tryLiveElevenLabs() also feature-detects MediaSource.isTypeSupported()
-  // internally and falls back to buffered automatically when unsupported.
-  const onIOSPath = isIOSBrowser();
-  const played = onIOSPath
-    ? await tryLiveElevenLabsBuffered(text, opts.onStart)
-    : await tryLiveElevenLabs(text, opts.onStart);
+  // ALL platforms use the buffered path (fetch-all → ArrayBuffer → AudioContext).
+  //
+  // Why not the streaming path (MediaSource)?
+  //   The streaming path creates a plain `new Audio()` backed by a MediaSource
+  //   object URL — it never touches AudioContext, so it gets NO gain boost and
+  //   NO DynamicsCompressor.  On Android this is especially bad: the audio plays
+  //   at system default volume (quiet) through whatever routing Android chose.
+  //   The buffered path routes the decoded PCM through:
+  //     BufferSource → DynamicsCompressor → GainNode (4× default) → destination
+  //   which is audibly much louder and goes through the loudspeaker.
+  //
+  // Latency difference is negligible: ElevenLabs responses for typical
+  // utterances (~5 s audio) are ~80 KB and download in ~100–200 ms.
+  const played = await tryLiveElevenLabsBuffered(text, opts.onStart);
   if (played) return;
 
   // ── Tier 3: Web Speech (always available, no cost) ────────────────────────
   opts.onFallback?.();
-  reportFallback(onIOSPath ? "ios_elevenlabs_failed" : "live_elevenlabs_failed");
+  reportFallback("live_elevenlabs_failed");
   webSpeechFallback(text, opts.onStart);
 }
 
@@ -444,7 +449,13 @@ async function tryLiveElevenLabsBuffered(text: string, onStart?: () => void): Pr
  */
 async function playViaAudioCtx(arrayBuffer: ArrayBuffer, onStart?: () => void): Promise<boolean> {
   const ctx = _audioCtx;
-  if (!ctx || ctx.state !== "running") return false;
+  if (!ctx) return false;
+  // After mic release/re-acquire the context can be suspended even though
+  // it was running at unlock time.  Try one resume before giving up.
+  if (ctx.state === "suspended") {
+    try { await ctx.resume(); } catch {}
+  }
+  if (ctx.state !== "running") return false;
   try {
     const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
     if (ctx.state !== "running") return false;
