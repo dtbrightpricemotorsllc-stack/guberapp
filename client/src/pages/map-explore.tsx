@@ -343,7 +343,11 @@ export default function MapExplore() {
 
     gpsStartWatchPosition(
       (pos) => {
-        if (pos.coords.accuracy > 300) return;
+        // Accept any fix up to 5 km — Android's first fix is often a coarse
+        // cell-tower reading (500–2000 m). Rejecting it causes the 10-second
+        // timeout to fire and falsely shows "Location off".
+        // The watch keeps running and will refine accuracy automatically.
+        if (pos.coords.accuracy > 5000) return;
         clearGpsTimeout();
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserPos(coords);
