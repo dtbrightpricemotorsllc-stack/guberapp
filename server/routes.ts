@@ -18986,6 +18986,19 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       sttBucket.set(ip, b);
 
       const audioBuffer = Buffer.from(audioBase64, "base64");
+
+      // Recordings under ~1KB are almost never real speech — they're accidental
+      // taps or a recorder that stopped before the first chunk flushed. Sending
+      // these to Whisper returns a confusing "audio file might be corrupted"
+      // 400 which the client maps to a scary "Something went wrong" message.
+      // Treat them as empty instead so the client shows the friendly
+      // "I didn't catch that — tap the mic and try again" prompt.
+      const MIN_AUDIO_BYTES = 800;
+      if (audioBuffer.length < MIN_AUDIO_BYTES) {
+        logJacVoiceUsage({ userId: userIdForLog, type: "stt", provider: "openai_transcribe", units: audioBuffer.length, success: true, errorMessage: "too_short_skipped", ip, latencyMs: Date.now() - _sttStart });
+        return res.json({ text: "", latencyMs: Date.now() - _sttStart });
+      }
+
       const mt = (mimeType ?? "audio/webm").toLowerCase();
       const ext = mt.includes("mp4") || mt.includes("m4a") || mt.includes("aac")
         ? "m4a"
