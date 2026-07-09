@@ -57,6 +57,8 @@ public class GuberTrackingService extends Service {
     public static final String EXTRA_TEXT       = "text";
     public static final String EXTRA_JOB_ID     = "job_id";
     public static final String EXTRA_AUTH_TOKEN = "auth_token";
+    /** Optional: override the default /api/jobs/{id}/location-batch path. */
+    public static final String EXTRA_BATCH_PATH = "batch_path";
 
     private static final String CHANNEL_ID      = "guber_tracking";
     private static final int    NOTIFICATION_ID = 4711;
@@ -64,7 +66,11 @@ public class GuberTrackingService extends Service {
 
     private static final long  LOCATION_INTERVAL_MS = 10_000L;
     private static final float MIN_DISPLACEMENT_M   = 20f;
-    private static final float MAX_ACCURACY_M       = 80f;
+    // Relaxed from 80 m to 2 000 m so the service accepts the coarse cell-tower
+    // fixes it receives during GPS warm-up (typically 100-500 m accuracy).
+    // Fused Location quickly converges to GPS-accurate fixes (< 20 m) once the
+    // radio has a clear sky view; the server stores all points for audit purposes.
+    private static final float MAX_ACCURACY_M       = 2000f;
     private static final long  FLUSH_INTERVAL_MS    = 30_000L;
     private static final int   FLUSH_MIN_POINTS     = 5;
 
@@ -76,6 +82,7 @@ public class GuberTrackingService extends Service {
 
     private int    activeJobId = -1;
     private String authToken   = null;
+    private String batchPath   = null; // null → use default /api/jobs/{id}/location-batch
 
     private final List<double[]> locationQueue = new ArrayList<>();
 
@@ -115,18 +122,20 @@ public class GuberTrackingService extends Service {
 
         int    jobId = intent != null ? intent.getIntExtra(EXTRA_JOB_ID, -1) : -1;
         String token = intent != null ? intent.getStringExtra(EXTRA_AUTH_TOKEN) : null;
+        String path  = intent != null ? intent.getStringExtra(EXTRA_BATCH_PATH) : null;
         if (jobId > 0 && token != null && !token.isEmpty()) {
-            startTracking(jobId, token);
+            startTracking(jobId, token, path);
         }
 
         return START_STICKY;
     }
 
-    private void startTracking(int jobId, String token) {
+    private void startTracking(int jobId, String token, String path) {
         stopTracking();
 
         activeJobId = jobId;
         authToken   = token;
+        batchPath   = (path != null && !path.isEmpty()) ? path : null;
         synchronized (locationQueue) { locationQueue.clear(); }
 
         handlerThread = new HandlerThread("GuberLocationThread");
@@ -184,6 +193,7 @@ public class GuberTrackingService extends Service {
         locationCallback = null;
         activeJobId      = -1;
         authToken        = null;
+        batchPath        = null;
     }
 
     private void flushQueue() {
@@ -215,7 +225,10 @@ public class GuberTrackingService extends Service {
             body.put("points", arr);
 
             byte[]            bodyBytes = body.toString().getBytes("UTF-8");
-            URL               url       = new URL(SERVER_BASE + "/api/jobs/" + jobId + "/location-batch");
+            // Use override path if provided (e.g. load board uses /api/load-board/:id/location-batch);
+            // otherwise fall back to the regular jobs endpoint.
+            String resolvedPath = (batchPath != null) ? batchPath : "/api/jobs/" + jobId + "/location-batch";
+            URL               url       = new URL(SERVER_BASE + resolvedPath);
             HttpURLConnection conn      = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
