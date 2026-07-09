@@ -42,6 +42,7 @@ import AcceptableUse from "@/pages/acceptable-use";
 import DeleteAccount from "@/pages/delete-account";
 import JoinPage from "@/pages/join";
 import GpsTest from "@/pages/gps-test";
+import BgLocationDemo from "@/pages/bg-location-demo";
 import JacVoiceTest from "@/pages/jac-voice-test";
 import { LoadingSplash } from "@/components/loading-splash";
 
@@ -450,6 +451,7 @@ function Router() {
       <Route path="/auth-success" component={AuthSuccess} />
       <Route path="/join/:code" component={JoinPage} />
       <Route path="/gps-test" component={GpsTest} />
+      <Route path="/bg-location-demo" component={BgLocationDemo} />
       <Route path="/jac-voice-test" component={() => <ProtectedRoute component={JacVoiceTest} />} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
