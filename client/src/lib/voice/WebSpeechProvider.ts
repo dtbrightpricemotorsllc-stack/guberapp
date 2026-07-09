@@ -35,7 +35,11 @@ export class WebSpeechProvider implements STTProvider {
 
       rec.onerror = (e) => {
         this._listening = false;
-        if ((e as any).error === "not-allowed") onResult("__mic_denied__");
+        const err = (e as any).error;
+        if (err === "not-allowed" || err === "service-not-allowed") onResult("__mic_denied__");
+        else if (err === "no-speech") onResult("__whisper_empty__");
+        else if (err === "aborted") { /* user or system cancelled — no feedback needed */ }
+        else onResult("__mic_error__");
       };
 
       rec.start();
