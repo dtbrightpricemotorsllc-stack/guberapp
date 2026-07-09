@@ -98,6 +98,13 @@ jobs:
           echo "--- OpenSSL key check ---"
           openssl pkey -in /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 -noout -text 2>&1 | head -5
 
+      - name: Install iOS platform (ibtool needs iOS 18.2 platform files)
+        run: |
+          # ibtool on Xcode 16.2 requires the iOS 18.2 platform to compile
+          # storyboards — those files aren't pre-installed on GitHub runners.
+          sudo xcodebuild -downloadPlatform iOS
+          echo "Platform install complete."
+
       - name: Resolve Swift Package Manager dependencies
         run: |
           xcodebuild -resolvePackageDependencies \
