@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 60
 
     steps:
@@ -46,19 +46,20 @@ jobs:
         run: |
           echo "=== Available Xcode installs ==="
           ls /Applications/Xcode*.app 2>/dev/null || true
-          # Prefer Xcode 16.2 (ships with iOS 18 SDK); fall back to newest 16.x
-          # macos-latest recently switched to a runner with Xcode 26 beta which
-          # expects iOS 26 SDK — pinning to macos-15 + Xcode 16.x avoids that.
-          if [ -d /Applications/Xcode_16.2.app ]; then
-            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-          elif [ -d /Applications/Xcode_16.3.app ]; then
-            sudo xcode-select -s /Applications/Xcode_16.3.app/Contents/Developer
-          elif [ -d /Applications/Xcode_16.4.app ]; then
-            sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
-          elif [ -d /Applications/Xcode_16.app ]; then
-            sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+          # Use Xcode 15.4 — it bundles the iOS 17.5 SDK inside the .app so
+          # ibtool works without any platform download step. Xcode 16.x moved
+          # platform files to separate downloads, which fail on headless CI.
+          # Capacitor 8.2 requires Xcode >= 15.1, so 15.4 is fully compatible.
+          if [ -d /Applications/Xcode_15.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          elif [ -d /Applications/Xcode_15.3.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.3.app/Contents/Developer
+          elif [ -d /Applications/Xcode_15.2.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+          elif [ -d /Applications/Xcode_15.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer
           else
-            XCODE=$(ls -d /Applications/Xcode_1[0-9]*.app 2>/dev/null | sort -V | tail -1)
+            XCODE=$(ls -d /Applications/Xcode_1[56]*.app 2>/dev/null | sort -V | head -1)
             [ -n "$XCODE" ] && sudo xcode-select -s "$XCODE/Contents/Developer"
           fi
           echo "=== Selected Xcode ==="
@@ -97,13 +98,6 @@ jobs:
              ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
           echo "--- OpenSSL key check ---"
           openssl pkey -in /tmp/asc/AuthKey_${ASC_KEY_ID}.p8 -noout -text 2>&1 | head -5
-
-      - name: Install iOS platform (ibtool needs iOS 18.2 platform files)
-        run: |
-          # ibtool on Xcode 16.2 requires the iOS 18.2 platform to compile
-          # storyboards — those files aren't pre-installed on GitHub runners.
-          sudo xcodebuild -downloadPlatform iOS
-          echo "Platform install complete."
 
       - name: Resolve Swift Package Manager dependencies
         run: |
