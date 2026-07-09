@@ -32,29 +32,24 @@ export class WhisperProvider implements STTProvider {
     this._chunks = [];
     this._actualMimeType = "";
 
-    // Pre-check permission state so we can distinguish "needs dialog" from
-    // "hard denied" — avoids a confusing silent failure on Android.
-    //
-    // IMPORTANT: Skip this on iOS/Safari. On iOS Safari and PWA, any `await`
-    // before getUserMedia burns the user-gesture activation token. Once the
-    // activation is consumed, getUserMedia silently fails with NotAllowedError
-    // even when the user granted mic permission. We skip the pre-check on iOS
-    // and let getUserMedia handle the NotAllowedError itself.
+    // NOTE: We intentionally do NOT pre-check navigator.permissions.query()
+    // for microphone before calling getUserMedia. Two independent platforms
+    // make this pre-check actively harmful:
+    //  - iOS Safari/PWA: any `await` before getUserMedia burns the transient
+    //    user-gesture activation token, so getUserMedia then silently fails
+    //    with NotAllowedError even when mic permission was already granted.
+    //  - Android Capacitor WebView: permissions.query({name:"microphone"})
+    //    is known to misreport "denied" even when the OS-level app permission
+    //    is actually granted (confirmed live: users with mic allowed in
+    //    Android Settings still got __mic_denied__ from this pre-check for
+    //    days). The WebView's permission-delegation state doesn't reliably
+    //    track the real OS grant.
+    // getUserMedia itself is the source of truth on every platform — its
+    // NotAllowedError catch below already handles the genuinely-denied case,
+    // so we go straight there instead of trusting the flaky pre-check.
     const isIosSafari =
       typeof navigator !== "undefined" &&
       /iP(hone|ad|od)/i.test(navigator.userAgent);
-
-    if (!isIosSafari && typeof navigator !== "undefined" && navigator.permissions) {
-      try {
-        const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (perm.state === "denied") {
-          onResult("__mic_denied__");
-          return;
-        }
-      } catch {
-        // permissions.query not supported on this platform — fall through
-      }
-    }
 
     let stream: MediaStream;
     try {
