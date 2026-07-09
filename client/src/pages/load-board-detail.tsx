@@ -190,10 +190,10 @@ export default function LoadBoardDetail() {
 
     if (shouldTrack) {
       if (isIOS) {
-        void taskTrackingService.startTask(listingId);
+        void taskTrackingService.startTask(listingId, "load_board");
       } else {
         void ensureBackgroundLocation("load_board").then(() =>
-          taskTrackingService.startTask(listingId)
+          taskTrackingService.startTask(listingId, "load_board")
         );
       }
     } else {

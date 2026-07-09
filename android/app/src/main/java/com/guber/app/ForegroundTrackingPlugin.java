@@ -43,6 +43,7 @@ public class ForegroundTrackingPlugin extends Plugin {
         String text      = call.getString("text", "Sharing your live location for an active task.");
         Integer jobIdObj = call.getInt("jobId");
         String authToken = call.getString("authToken");
+        String batchPath = call.getString("batchPath");
 
         Intent intent = new Intent(getContext(), GuberTrackingService.class);
         intent.setAction(GuberTrackingService.ACTION_START);
@@ -53,6 +54,9 @@ public class ForegroundTrackingPlugin extends Plugin {
         }
         if (authToken != null && !authToken.isEmpty()) {
             intent.putExtra(GuberTrackingService.EXTRA_AUTH_TOKEN, authToken);
+        }
+        if (batchPath != null && !batchPath.isEmpty()) {
+            intent.putExtra(GuberTrackingService.EXTRA_BATCH_PATH, batchPath);
         }
 
         try {

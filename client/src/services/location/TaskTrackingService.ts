@@ -44,9 +44,14 @@ export const BATCH_INTERVAL_MS = 120_000;
 // Safety net: never let a foreground tracker run forever if a stop signal is
 // somehow missed. 8 h comfortably exceeds any realistic single job.
 export const MAX_SESSION_MS = 8 * 60 * 60 * 1000;
-const ACCURACY_CEILING_M = 300;
+// Raised from 300 m to 2 000 m so the service doesn't silently drop all fixes
+// during GPS warm-up (cell-tower fixes can be 300-1 500 m before the radio has
+// a clear-sky lock). The server accepts all points for audit; the Java native
+// service uses the same threshold.
+const ACCURACY_CEILING_M = 2000;
 
 const LS_JOB = "guber.tracking.activeJobId";
+const LS_TYPE = "guber.tracking.activeType";
 const LS_QUEUE = "guber.tracking.queue";
 const LS_LAST = "guber.tracking.lastKnown";
 const LS_STARTED = "guber.tracking.startedAt";
@@ -67,6 +72,7 @@ export function haversineMeters(a: Coords, b: Coords): number {
 
 export class TaskTrackingService {
   private activeJobId: number | null = null;
+  private activeType: "job" | "load_board" = "job";
   private watchId: number | null = null;
   private bgWatchId: number | null = null;
   private starting = false;
@@ -128,10 +134,13 @@ export class TaskTrackingService {
   }
 
   /**
-   * Begin (or resume) tracking for a job. Idempotent: calling again for the
-   * already-active job is a no-op. Switching jobs flushes + stops the old one.
+   * Begin (or resume) tracking for a job or load-board listing. Idempotent:
+   * calling again for the already-active id is a no-op. Switching ids flushes
+   * + stops the old one.
+   * @param type  "job" (default) | "load_board" — controls which server
+   *              endpoint the bg token request and location-batch uploads use.
    */
-  async startTask(jobId: number): Promise<void> {
+  async startTask(jobId: number, type: "job" | "load_board" = "job"): Promise<void> {
     if (this.activeJobId === jobId && this.watchId !== null) return;
     if (this.activeJobId !== null && this.activeJobId !== jobId) {
       await this.stopTask(this.activeJobId);
@@ -139,6 +148,7 @@ export class TaskTrackingService {
     if (this.starting) return;
     this.starting = true;
     this.activeJobId = jobId;
+    this.activeType = type;
     if (!this.startedAt) this.startedAt = Date.now();
     this.loadPersisted(jobId);
     this.persistMeta();
@@ -279,9 +289,17 @@ export class TaskTrackingService {
    * session cookie) so tracking continues when the screen locks.
    */
   private async startForegroundService(jobId: number): Promise<void> {
+    const isLoadBoard = this.activeType === "load_board";
+    const batchPath = isLoadBoard
+      ? `/api/load-board/${jobId}/location-batch`
+      : `/api/jobs/${jobId}/location-batch`;
+
     let authToken: string | undefined;
     try {
-      const resp = await apiRequest("POST", "/api/auth/bg-location-token", { jobId });
+      const body = isLoadBoard
+        ? { type: "load_board", listingId: jobId }
+        : { jobId };
+      const resp = await apiRequest("POST", "/api/auth/bg-location-token", body);
       if (resp.ok) {
         const data = await resp.json();
         authToken = data.token;
@@ -289,7 +307,7 @@ export class TaskTrackingService {
     } catch {
       // Non-fatal — foreground service still starts; native GPS just won't post
     }
-    void startForegroundTracking({ jobId, authToken });
+    void startForegroundTracking({ jobId, authToken, batchPath });
   }
 
   private startFlushTimer(): void {
@@ -325,7 +343,10 @@ export class TaskTrackingService {
     this.flushing = true;
     const batch = this.queue.slice();
     try {
-      const resp = await apiRequest("POST", `/api/jobs/${jobId}/location-batch`, {
+      const batchUrl = this.activeType === "load_board"
+        ? `/api/load-board/${jobId}/location-batch`
+        : `/api/jobs/${jobId}/location-batch`;
+      const resp = await apiRequest("POST", batchUrl, {
         points: batch.map((p) => ({ lat: p.lat, lng: p.lng, ts: p.ts })),
       });
       const data = await resp.json().catch(() => ({} as any));
@@ -375,6 +396,7 @@ export class TaskTrackingService {
   private persistMeta(): void {
     try {
       localStorage.setItem(LS_JOB, String(this.activeJobId));
+      localStorage.setItem(LS_TYPE, this.activeType);
       localStorage.setItem(LS_STARTED, String(this.startedAt));
     } catch { /* storage unavailable — degrade to in-memory only */ }
   }
@@ -390,6 +412,7 @@ export class TaskTrackingService {
   private clearPersisted(): void {
     try {
       localStorage.removeItem(LS_JOB);
+      localStorage.removeItem(LS_TYPE);
       localStorage.removeItem(LS_QUEUE);
       localStorage.removeItem(LS_LAST);
       localStorage.removeItem(LS_STARTED);
@@ -400,6 +423,8 @@ export class TaskTrackingService {
     try {
       const savedJob = localStorage.getItem(LS_JOB);
       if (savedJob && Number(savedJob) === jobId) {
+        const t = localStorage.getItem(LS_TYPE);
+        if (t === "job" || t === "load_board") this.activeType = t;
         const q = localStorage.getItem(LS_QUEUE);
         this.queue = q ? JSON.parse(q) : [];
         const last = localStorage.getItem(LS_LAST);

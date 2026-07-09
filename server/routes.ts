@@ -2574,6 +2574,19 @@ export async function registerRoutes(
 
   app.post("/api/auth/bg-location-token", requireAuth, async (req: Request, res: Response) => {
     try {
+      const type = req.body?.type; // "load_board" or undefined (regular job)
+      if (type === "load_board") {
+        const listingId = parseInt(req.body?.listingId);
+        if (isNaN(listingId) || listingId <= 0) return res.status(400).json({ message: "listingId required" });
+        const listing = await storage.getLoadBoardListing(listingId);
+        if (!listing || listing.connectedCarrierId !== req.session.userId) {
+          return res.status(403).json({ message: "Not the connected carrier for this listing" });
+        }
+        const exp   = Date.now() + BG_LOC_TTL_MS;
+        const token = signBgLocToken(req.session.userId!, listingId, exp);
+        return res.json({ token, expiresAt: exp });
+      }
+      // Regular job
       const jobId = parseInt(req.body?.jobId);
       if (isNaN(jobId) || jobId <= 0) return res.status(400).json({ message: "jobId required" });
       const job = await storage.getJob(jobId);
@@ -28718,6 +28731,54 @@ OUTPUT STYLE:
     // This is called internally from the main webhook after signature verification.
     // For now the main webhook will call this logic directly via the metadata.type check.
     res.json({ ok: true });
+  });
+
+  // POST /api/load-board/:id/location-batch — carrier live location tracking
+  // Mirrors /api/jobs/:id/location-batch but validates against the load_board_listings
+  // table instead of the jobs table. Accepts the same Bearer bg-loc token.
+  app.post("/api/load-board/:id/location-batch", acceptBgLocToken, requireAuth, demoGuard, async (req: Request, res: Response) => {
+    try {
+      const listingId = parseInt(req.params.id);
+      if (isNaN(listingId)) return res.status(400).json({ message: "Invalid listing id" });
+      const listing = await storage.getLoadBoardListing(listingId);
+      if (!listing) return res.status(404).json({ message: "Listing not found" });
+      if (listing.connectedCarrierId !== req.session.userId) {
+        return res.status(403).json({ message: "Not the connected carrier" });
+      }
+      if (listing.status !== "connected") {
+        return res.json({ active: false, stored: 0 });
+      }
+
+      const rawPoints = Array.isArray(req.body?.points) ? req.body.points : [];
+      if (rawPoints.length === 0) return res.json({ active: true, stored: 0 });
+
+      const MAX_POINTS = 200;
+      const valid = rawPoints
+        .slice(0, MAX_POINTS)
+        .filter((p: any) =>
+          typeof p?.lat === "number" && typeof p?.lng === "number" &&
+          p.lat >= -90 && p.lat <= 90 && p.lng >= -180 && p.lng <= 180,
+        );
+      if (valid.length === 0) return res.json({ active: true, stored: 0 });
+
+      // Store as job_location_pings reusing jobId=listingId for telemetry.
+      const rows = valid.map((p: any) => ({
+        jobId: listingId,
+        userId: req.session.userId!,
+        lat: p.lat,
+        lng: p.lng,
+        recordedAt: typeof p.ts === "number" ? new Date(p.ts) : new Date(),
+      }));
+      await storage.insertJobLocationPings(rows);
+
+      // Mirror latest fix onto the carrier's profile for nearby/map visibility.
+      const last = valid[valid.length - 1];
+      await storage.updateUser(req.session.userId!, { lat: last.lat, lng: last.lng });
+
+      return res.json({ active: true, stored: valid.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // ── GUBER GROWTH ENGINE ────────────────────────────────────────────────────
