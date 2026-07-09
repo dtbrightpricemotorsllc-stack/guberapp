@@ -229,7 +229,11 @@ jobs:
               req.add_header('Content-Type', 'application/json')
               try:
                   with urllib.request.urlopen(req) as r:
-                      return json.loads(r.read())
+                      raw = r.read()
+                      # 204 No Content is success (e.g. PATCH build relationship)
+                      if not raw.strip():
+                          return {'ok': True}
+                      return json.loads(raw)
               except urllib.error.HTTPError as e:
                   body = e.read().decode(errors='replace')
                   print(f'HTTP {e.code} {method} {path}: {body}')
@@ -324,10 +328,11 @@ jobs:
           print(f'App Store version ID: {version_id}')
 
           # ── 4. attach build ───────────────────────────────────────────────────
+          # Apple returns 204 No Content on success — asc() maps that to {'ok':True}
           result = asc('PATCH', f'/appStoreVersions/{version_id}/relationships/build',
                        {'data': {'type': 'builds', 'id': build_id}})
           if result is None:
-              print('PATCH returned None — checking current build relationship …')
+              print('PATCH failed — checking current build relationship …')
               current = asc('GET', f'/appStoreVersions/{version_id}/relationships/build')
               print('Current build rel:', json.dumps(current, indent=2))
               sys.exit(1)
