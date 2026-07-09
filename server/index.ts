@@ -251,6 +251,7 @@ app.use((req, res, next) => {
     CREATE INDEX IF NOT EXISTS idx_system_issues_severity ON system_issues (severity);
     CREATE INDEX IF NOT EXISTS idx_system_issues_last_seen ON system_issues (last_seen DESC);
     CREATE INDEX IF NOT EXISTS idx_system_issues_module ON system_issues (module);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications (user_id, created_at DESC);
     -- 24/7 Smart Monitoring columns (prod has no db:push — self-heal here, idempotent)
     ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS affected_user_ids JSONB DEFAULT '[]'::jsonb;
     ALTER TABLE system_issues ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'user_event';
@@ -1249,6 +1250,16 @@ app.use((req, res, next) => {
       ADD COLUMN IF NOT EXISTS low_data_mode                BOOLEAN DEFAULT FALSE;
   `).catch(e => console.error("[migration] jac_user_profile prefs error:", e));
 
+  // Add stripe_onboarding_complete to users (used by /api/jac/context raw SQL)
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_onboarding_complete BOOLEAN DEFAULT FALSE;
+  `).catch(e => console.error("[migration] stripe_onboarding_complete error:", e));
+
+  // Add deleted_at to jobs (soft-delete; used by raw SQL in briefing/context queries)
+  await pool.query(`
+    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+  `).catch(e => console.error("[migration] jobs.deleted_at error:", e));
+
   // Seed GUBER knowledge base (only if empty)
   await pool.query(`
     INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
@@ -1538,6 +1549,40 @@ app.use((req, res, next) => {
     ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
     WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'Vehicle listing fields and Buyer''s Order');
   `).catch(e => console.error("[migration] jac_knowledge gap-fill seed error:", e));
+
+  // Seed microphone-permission troubleshooting steps — used when JAC asks
+  // "What phone are you using?" after a mic_denied voice error, so the
+  // follow-up reply gives exact real steps instead of a generic AI guess.
+  await pool.query(`
+    INSERT INTO jac_knowledge (category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    SELECT * FROM (VALUES
+      ('support','Unblock microphone on Samsung',
+        '["samsung","samsung mic blocked","fix mic samsung","microphone blocked samsung"]'::jsonb,
+        '["samsung","mic blocked","microphone permission","one ui"]'::jsonb,
+        'On Samsung: go to Settings > Apps > GUBER > Permissions > Microphone, and set it to Allow. If you''re using Samsung Internet instead of the app, open Samsung Internet > Menu (≡) > Settings > Sites and downloads > Microphone, find guberapp.app, and set it to Allow. Then fully close and reopen GUBER and try the mic again.',
+        '[{"label":"Try mic again","message":"Try the mic again"}]'::jsonb,
+        'system'),
+      ('support','Unblock microphone on Pixel',
+        '["pixel","pixel mic blocked","fix mic pixel","microphone blocked pixel"]'::jsonb,
+        '["pixel","mic blocked","microphone permission","stock android"]'::jsonb,
+        'On a Pixel (stock Android): go to Settings > Apps > GUBER > Permissions > Microphone, and set it to Allow. If using Chrome instead of the app, open Chrome, tap the lock/info icon in the address bar next to guberapp.app, tap Permissions > Microphone > Allow. Then fully close and reopen GUBER and try the mic again.',
+        '[{"label":"Try mic again","message":"Try the mic again"}]'::jsonb,
+        'system'),
+      ('support','Unblock microphone on other Android',
+        '["other android","android mic blocked","fix mic android","microphone blocked android"]'::jsonb,
+        '["android","mic blocked","microphone permission"]'::jsonb,
+        'On most Android phones: go to Settings > Apps (or Application Manager) > GUBER > Permissions > Microphone, and set it to Allow. If you''re using a browser instead of the app, open the browser''s site settings for guberapp.app and allow Microphone there. Then fully close and reopen GUBER and try the mic again.',
+        '[{"label":"Try mic again","message":"Try the mic again"}]'::jsonb,
+        'system'),
+      ('support','Unblock microphone on iPhone',
+        '["iphone mic blocked","fix mic iphone","microphone blocked iphone","ios mic blocked"]'::jsonb,
+        '["iphone","ios","mic blocked","microphone permission"]'::jsonb,
+        'On iPhone: go to Settings > GUBER > Microphone, and turn it on. If using Safari instead of the app, go to Settings > Safari > Microphone > Allow, or tap "aA" in the address bar > Website Settings > Microphone > Allow. Then fully close and reopen GUBER and try the mic again.',
+        '[{"label":"Try mic again","message":"Try the mic again"}]'::jsonb,
+        'system')
+    ) AS v(category, title, question_patterns, keywords, answer, follow_up_actions, created_by)
+    WHERE NOT EXISTS (SELECT 1 FROM jac_knowledge WHERE title = 'Unblock microphone on Samsung');
+  `).catch(e => console.error("[migration] jac_knowledge mic-permission seed error:", e));
 
   // Seed GUVATAR (AI avatar platform) knowledge — incremental, guarded by first title
   await pool.query(`
