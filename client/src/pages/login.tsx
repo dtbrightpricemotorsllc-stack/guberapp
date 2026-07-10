@@ -32,6 +32,28 @@ export default function Login() {
   // Synchronous in-flight lock for the Google sign-in handler — see comment in handler below.
   const googleInFlightRef = useRef(false);
 
+  // 5-taps-on-the-logo demo shortcut. The Demo Consumer/Demo Business buttons
+  // below are already visible on store builds, but App Review notes have
+  // historically told reviewers to "tap the logo 5 times to sign in" — this
+  // wires that up so it actually does something instead of being dead UI
+  // (see docs/app-store-rejection-2026-07.md, "app not responsive when
+  // tapping the logo 5 times").
+  const logoTapCountRef = useRef(0);
+  const logoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleLogoTap = () => {
+    if (!isStoreBuild) return;
+    logoTapCountRef.current += 1;
+    if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
+    if (logoTapCountRef.current >= 5) {
+      logoTapCountRef.current = 0;
+      handleDemoLogin("consumer");
+      return;
+    }
+    logoTapTimerRef.current = setTimeout(() => {
+      logoTapCountRef.current = 0;
+    }, 600);
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(search);
     const error = params.get("error");
@@ -200,6 +222,7 @@ export default function Login() {
             <div
               className="inline-block select-none"
               data-testid="logo-tap-trigger"
+              onClick={handleLogoTap}
             >
               <GuberLogo size="lg" />
             </div>
