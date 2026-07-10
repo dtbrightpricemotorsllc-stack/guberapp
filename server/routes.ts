@@ -12129,7 +12129,7 @@ export async function registerRoutes(
   });
 
   // STRIPE - DAY-1 OG
-  app.post("/api/stripe/og-checkout", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/stripe/og-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
@@ -12247,7 +12247,7 @@ export async function registerRoutes(
   // ───────────────────────────────────────────────────────────────────────────
   app.get("/api/studio/packs", studioPacksHandler);
 
-  app.post("/api/stripe/studio-credits-checkout", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/stripe/studio-credits-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const packId = String(req.body?.packId || "") as StudioPackId;
       const pack = STUDIO_CREDIT_PACKS[packId];
@@ -12300,7 +12300,7 @@ export async function registerRoutes(
   // preconfigured Stripe Price IDs are required.
   app.get("/api/studio/tiers", studioTiersHandler);
 
-  app.post("/api/stripe/studio-subscription-checkout", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/stripe/studio-subscription-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const tierId = String(req.body?.tier || "") as StudioTierPlanId;
       const plan = STUDIO_TIER_PLANS[tierId];
@@ -14225,7 +14225,7 @@ export async function registerRoutes(
     });
   });
 
-  app.post("/api/stripe/trust-box-checkout", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/stripe/trust-box-checkout", requireAuth, demoGuard, async (req: Request, res: Response) => {
     try {
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });

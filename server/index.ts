@@ -53,6 +53,22 @@ const loginLimiter = rateLimit({
   },
 });
 
+// Demo login is a no-password, reviewer-facing shortcut — it must never share
+// its budget with real login/Google/Apple auth attempts. A reviewer retrying
+// a broken sign-in method a few times could otherwise exhaust the shared
+// loginLimiter and make the Demo Consumer/Demo Business buttons look
+// unresponsive even though they're working fine.
+const demoLoginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV !== "production",
+  message: {
+    message: "Too many demo login attempts. Please wait a minute and try again.",
+  },
+});
+
 const signupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -77,7 +93,7 @@ const passwordResetLimiter = rateLimit({
 
 app.use("/api", generalLimiter);
 app.use("/api/auth/login", loginLimiter);
-app.use("/api/demo-login", loginLimiter);
+app.use("/api/demo-login", demoLoginLimiter);
 app.use("/api/auth/google/native", loginLimiter);
 app.use("/api/auth/apple/native", loginLimiter);
 app.use("/api/auth/signup", signupLimiter);
