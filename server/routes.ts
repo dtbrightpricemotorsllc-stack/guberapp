@@ -18261,7 +18261,14 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
         return bRate - aRate;
       });
 
-      const topItems = items.slice(0, 6);
+      // City Missions are a fallback, not a headline recommendation — real
+      // paying jobs/gigs must always be listed first. Take the top 2-3 real
+      // matches, and only pad with missions if there aren't enough real
+      // options to fill out the plan.
+      const realItems = items.filter(i => i.type !== "city_mission");
+      const missionItems = items.filter(i => i.type === "city_mission");
+      const topReal = realItems.slice(0, 3);
+      const topItems = topReal.concat(missionItems).slice(0, 6);
 
       // ── Realistic gap analysis ──────────────────────────────────────────
       const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);

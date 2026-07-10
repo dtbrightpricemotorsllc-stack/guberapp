@@ -25,6 +25,7 @@
 - [JAC Brain system](jac-brain-system.md) — local KB + intent + cache bypass; confidence ≥0.85 skips OpenAI; admin UI at /admin/jac-brain. (Both-surface rule → jac-system-guardian.md.)
 - [JAC Deep Profile system](jac-deep-profile.md) — syncJacProfile() auto-syncs DB→jac_memory on every context fetch; buildJacProfileContext() reads back for prompt enrichment; briefing+opportunities are separate auth-gated endpoints.
 - [Cross-platform voice STT](voice-stt-cross-platform.md) — silent failures from swallowed sentinels + 5/min rate limit + MediaRecorder MIME fallback required for iOS.
+- [WKWebView getUserMedia](wkwebview-getusermedia.md) — native iOS mic needs a WKUIDelegate granting requestMediaCapturePermissionFor, or getUserMedia silently rejects even with OS mic permission granted.
 - [Capacitor SPM plugin version pin](capacitor-plugin-spm-version-pin.md) — mixing a Capacitor core major with a newer-major plugin fails iOS CI's SPM resolve step invisibly until a real build runs; downgrade the outlier plugin to match core's major.
 - [iOS build number must increment](ios-build-number-must-increment.md) — re-uploading the same version+build to App Store Connect silently no-ops (CI reports success); CI must bump CURRENT_PROJECT_VERSION every run and you must verify the build number actually changed in ASC.
 - [Capacitor plugin compilation gaps](capacitor-plugin-compilation.md) — npm plugins need `cap sync`; local/custom native plugins get PERMANENTLY wiped by every `cap sync` (never re-added) — needs a post-sync repair script, not a one-time fix.

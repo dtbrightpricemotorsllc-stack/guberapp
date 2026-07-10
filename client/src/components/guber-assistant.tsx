@@ -708,10 +708,15 @@ export function GUBERAssistant() {
         }, 1400);
       }
     },
-    onError: () => {
+    onError: (err: any) => {
+      console.error("[JAC listing-collect] failed:", err?.message || err);
+      // Don't leave the user stuck in a broken listing flow that will just
+      // keep failing the same way on every next message — drop back to
+      // normal chat mode so at least general conversation still works.
+      exitListingMode();
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, I'm having trouble right now. Please try again in a moment." },
+        { role: "assistant", content: "Sorry, I hit a snag building your listing. Let's keep chatting — tell me again what you'd like to post." },
       ]);
     },
   });
