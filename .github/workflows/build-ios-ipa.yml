@@ -35,6 +35,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync ios
 
+      - name: Re-register local native plugins (cap sync silently drops them)
+        run: node scripts/fix-ios-plugin-registration.mjs
+
       - name: Compute build number
         id: buildnum
         run: |
@@ -342,3 +345,4 @@ jobs:
           print('Next step: go to App Store Connect -> GUBER -> iOS App -> 1.0.0')
           print('and click "Submit for Review" when ready.')
           PYEOF
+
