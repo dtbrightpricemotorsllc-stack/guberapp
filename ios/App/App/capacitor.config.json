@@ -1,0 +1,44 @@
+{
+	"appId": "com.guber.app",
+	"appName": "GUBER",
+	"webDir": "dist/public",
+	"server": {
+		"url": "https://guberapp.app",
+		"cleartext": false
+	},
+	"plugins": {
+		"Browser": {
+			"presentationStyle": "popover"
+		},
+		"PushNotifications": {
+			"presentationOptions": [
+				"alert",
+				"badge",
+				"sound"
+			]
+		},
+		"StatusBar": {
+			"style": "LIGHT",
+			"overlaysWebView": false
+		}
+	},
+	"ios": {
+		"scheme": "guber",
+		"contentInset": "automatic"
+	},
+	"android": {
+		"allowMixedContent": false,
+		"minWebViewVersion": 60
+	},
+	"packageClassList": [
+		"BiometricAuthNative",
+		"AppPlugin",
+		"CAPBrowserPlugin",
+		"CAPCameraPlugin",
+		"GeolocationPlugin",
+		"PreferencesPlugin",
+		"PushNotificationsPlugin",
+		"StatusBarPlugin",
+		"AppleSignInPlugin"
+	]
+}
