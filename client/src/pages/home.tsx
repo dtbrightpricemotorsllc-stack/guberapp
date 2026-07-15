@@ -53,7 +53,7 @@ interface PublicJob {
 const SLIDES = [
   { label: "EARN",       color: "#00E576", cta: "BROWSE JOBS",     href: "/browse-jobs",                                        img: heroEarnImg,    focus: "center" },
   { label: "HIRE",       color: "#3B82F6", cta: "POST A JOB",      href: "/post-job",                                           img: heroHireImg,    focus: "center" },
-  { label: "VERIFY",     color: "#8B5CF6", cta: "SEE V&I JOBS",    href: "/browse-jobs?category=Verify+%26+Inspect",            img: heroVerifyImg,  focus: "center" },
+  { label: "SEE FOR ME", color: "#8B5CF6", cta: "SEE FOR ME JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",            img: heroVerifyImg,  focus: "center" },
   { label: "LOAD BOARD", color: "#0891b2", cta: "VIEW LOAD BOARD", href: "/load-board",                                         img: heroLoadImg,    focus: "center" },
   { label: "EXPLORE",    color: "#EC4899", cta: "EXPLORE ALL",     href: "/browse-jobs",                                        img: heroExploreImg, focus: "center" },
 ];
@@ -77,11 +77,11 @@ const FIVE_DOORS = [
     number: "2",
   },
   {
-    id: "verify",    color: "#8B5CF6", icon: ShieldCheck, label: "VERIFY",
+    id: "verify",    color: "#8B5CF6", icon: ShieldCheck, label: "SEE FOR ME",
     headline: "Eyes on the ground.",
     tagline: "Photo proof, property inspections.",
     features: ["Pre-purchase vehicle photos", "Property walk-throughs", "$40–$120+ per job"],
-    cta: "SEE V&I JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",
+    cta: "SEE FOR ME JOBS", href: "/browse-jobs?category=Verify+%26+Inspect",
     number: "3",
   },
   {
@@ -335,7 +335,7 @@ function JobCard({ job, onAccept }: { job: PublicJob; onAccept: () => void }) {
           )}
         </div>
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate">{job.category}</Badge>
+          <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate">{job.category === "Verify & Inspect" ? "See For Me" : job.category}</Badge>
           <Badge variant="outline" className="text-[10px] font-display no-default-hover-elevate capitalize">{job.jobType}</Badge>
         </div>
         <div className="flex items-center justify-between mt-auto">
@@ -1188,7 +1188,7 @@ export default function Home() {
                 they take clear photos and short video. $40–$120+ per job.
               </p>
               <Link href="/browse-jobs?category=Verify+%26+Inspect" className="inline-flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display tracking-[0.15em] premium-btn" data-testid="link-vi-learn-more">
-                SEE SEE FOR ME JOBS <ArrowRight className="w-4 h-4" />
+                SEE FOR ME JOBS <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>

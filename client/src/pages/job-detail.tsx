@@ -44,6 +44,7 @@ function toLocalDatetimeString(date: Date): string {
   return `${y}-${m}-${d}T${h}:${min}`;
 }
 import { TrustBadge } from "@/components/trust-badge";
+import SeeForMeAction from "@/components/see-for-me-action";
 import { formatJobTime } from "@/lib/job-time";
 import { Link, useLocation } from "wouter";
 import { SchedulingPanel, isJobAddressUnlocked } from "@/components/scheduling-panel";
@@ -1197,6 +1198,20 @@ ${data.proofs && data.proofs.length > 0 ? `<h2>Proof Photos</h2>
           {isVIJob && (
             <div className="mb-3">
               <VisualOnlyLabel />
+            </div>
+          )}
+
+          {/* See For Me quick-action — lets the owner add a remote visual check on a physical-asset job */}
+          {isOwner && !isVIJob && job.location && (
+            <div className="mb-3">
+              <SeeForMeAction
+                variant="compact"
+                context={{
+                  title: job.title ?? undefined,
+                  category: job.category ?? undefined,
+                  address: job.location ?? undefined,
+                }}
+              />
             </div>
           )}
 
