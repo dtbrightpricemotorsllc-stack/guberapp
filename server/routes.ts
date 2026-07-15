@@ -18268,7 +18268,10 @@ Keep actions to 2–4 chips max when helpful; omit entirely for open-ended answe
       const realItems = items.filter(i => i.type !== "city_mission");
       const missionItems = items.filter(i => i.type === "city_mission");
       const topReal = realItems.slice(0, 3);
-      const topItems = topReal.concat(missionItems).slice(0, 6);
+      // Missions are fallback only — omit them entirely when 3+ real results exist.
+      const topItems = topReal.length >= 3
+        ? topReal
+        : topReal.concat(missionItems).slice(0, 6);
 
       // ── Realistic gap analysis ──────────────────────────────────────────
       const realisticEarnable = topItems.reduce((s, i) => s + i.estimatedPay, 0);
