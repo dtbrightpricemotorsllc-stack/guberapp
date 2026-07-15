@@ -88,7 +88,7 @@ const INTENT_LABELS: Record<string, string> = {
   sell_vehicle: "vehicle listing",
   sell_item:    "item listing",
   transport:    "transport request",
-  verify_car:   "Verify & Inspect request",
+  verify_car:   "See For Me request",
   find_work:    "work search",
   earn_credits: "credits mission",
   general:      "request",
@@ -96,7 +96,7 @@ const INTENT_LABELS: Record<string, string> = {
   item:         "item listing",
   house:        "property listing",
   load:         "transport request",
-  vi:           "Verify & Inspect request",
+  vi:           "See For Me request",
 };
 
 export function getIntentLabel(draft: JacSessionDraft): string {

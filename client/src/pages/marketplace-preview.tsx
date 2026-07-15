@@ -333,7 +333,7 @@ export default function MarketplacePreview() {
             <p className="text-sm font-display font-bold text-violet-300 leading-tight">
               💡 Don't buy blind
             </p>
-            <p className="text-[11px] text-violet-300/50 mt-0.5">Use Verify & Inspect today →</p>
+            <p className="text-[11px] text-violet-300/50 mt-0.5">Use See For Me today →</p>
           </div>
           <ChevronRight className="w-4 h-4 text-violet-400/50 shrink-0" />
         </button>

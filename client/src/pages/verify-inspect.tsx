@@ -931,7 +931,7 @@ export default function VerifyInspect() {
           <div>
             <h2 className="text-xl font-display font-bold text-foreground mb-2">ID Verification Required</h2>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              You need to verify your ID before you can submit a Verify &amp; Inspect request.
+              You need to verify your ID before you can submit a See For Me request.
               It only takes a few minutes.
             </p>
           </div>
@@ -958,17 +958,17 @@ export default function VerifyInspect() {
 
           <div className="relative rounded-2xl overflow-hidden mb-5 min-h-[120px]"
                style={{ border: "1.5px solid hsl(275 90% 65% / 0.5)", boxShadow: "0 0 18px hsl(275 90% 65% / 0.12)" }}>
-            <img src={verifyInspectImg} alt="Verify & Inspect" className="absolute inset-0 w-full h-full object-cover opacity-70" />
+            <img src={verifyInspectImg} alt="See For Me" className="absolute inset-0 w-full h-full object-cover opacity-70" />
             <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
             <div className="relative p-5 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-[9px] font-display font-bold tracking-widest text-primary/80 uppercase mb-1">GUBER</p>
-                <h1 className="text-2xl font-display font-black text-white tracking-tight leading-tight">Verify &amp; Inspect</h1>
-                <p className="text-white/80 text-xs mt-1">Visual proof — eyes on the ground, not inspectors</p>
+                <h1 className="text-2xl font-display font-black text-white tracking-tight leading-tight">See For Me</h1>
+                <p className="text-white/80 text-xs mt-1">Your eyes on the ground when you can't be there.</p>
               </div>
               <img
                 src={viLogoImg}
-                alt="Verify & Inspect"
+                alt="See For Me"
                 className="w-20 h-20 object-contain shrink-0 drop-shadow-2xl"
                 style={{ mixBlendMode: "screen" }}
               />
@@ -1059,7 +1059,7 @@ export default function VerifyInspect() {
           </button>
 
           <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed mt-4 px-2" data-testid="text-vi-disclaimer">
-            Verify &amp; Inspect provides visual documentation only — not a legal guarantee of condition or authenticity. Use your own judgement before making purchasing decisions.
+            See For Me provides visual documentation only — not a legal guarantee of condition or authenticity. Use your own judgement before making purchasing decisions.
           </p>
         </div>
       </GuberLayout>
@@ -2504,7 +2504,7 @@ export default function VerifyInspect() {
             Posting is free. Your verifier offer{urgentFee > 0 ? " and urgent fee" : ""} is only charged when a worker locks in.
           </p>
           <p className="text-[10px] text-muted-foreground/50 text-center leading-relaxed px-2 mt-0.5">
-            Verify &amp; Inspect provides visual documentation only — not a legal guarantee of condition or authenticity.
+            See For Me provides visual documentation only — not a legal guarantee of condition or authenticity.
           </p>
         </div>
       </div>

@@ -545,7 +545,7 @@ export default function PostJob() {
   const missingReason = useMemo(() => {
     if (!category) return "Pick a category";
     if (category === "Verify & Inspect") {
-      if (!isVIJob) return "Complete the Verify & Inspect details";
+      if (!isVIJob) return "Complete the See For Me details";
       if (budgetNum <= 0) return "Enter a budget";
       if (minPayoutError) return minPayoutError;
       return "";
@@ -740,7 +740,7 @@ export default function PostJob() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <Lock className="w-4 h-4 guber-text-purple" />
-                <span className="text-xs text-muted-foreground uppercase tracking-wider font-display">Verify & Inspect Job</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wider font-display">See For Me Job</span>
               </div>
               {/* Liability protection (Task #318): persistent V&I label */}
               <VisualOnlyLabel />
@@ -807,7 +807,7 @@ export default function PostJob() {
                         onClick={() => setLocation("/verify-inspect")}
                         data-testid="button-go-vi"
                       >
-                        Go to Verify & Inspect
+                        Go to See For Me
                       </Button>
                     </div>
                   </div>

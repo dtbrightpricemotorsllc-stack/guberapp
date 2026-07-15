@@ -1757,7 +1757,7 @@ function PriceLocationStep({ form, setForm, photos, onBack, onSubmit, isSubmitti
       )}
 
       {/* V&I link */}
-      <Section title="GUBER Verify & Inspect">
+      <Section title="GUBER See For Me">
         <div className="rounded-xl p-3" style={{ background: "rgba(0,180,80,0.07)", border: "1px solid rgba(0,180,80,0.18)" }}>
           <div className="flex items-center gap-2 mb-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />

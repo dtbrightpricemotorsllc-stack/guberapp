@@ -108,7 +108,7 @@ const INITIAL_CHIPS = [
   "Earn credits",
   "Cash Drops",
   "Day-1 OG",
-  "Verify & Inspect",
+  "See For Me",
   "Transport / Load Board",
   "Start a listing",
 ];

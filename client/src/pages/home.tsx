@@ -1166,29 +1166,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Verify & Inspect callout ── */}
+      {/* ── See For Me callout ── */}
       <section className="relative z-10 px-5 pb-20 max-w-6xl mx-auto w-full">
         <div className="rounded-2xl overflow-hidden relative"
           style={{ background: "linear-gradient(135deg,rgba(0,229,229,0.06) 0%,rgba(0,229,229,0.02) 100%)", border: "1px solid rgba(0,229,229,0.15)" }}>
           <div className="p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-8">
             <div className="relative w-full sm:w-64 h-48 sm:h-48 shrink-0">
-              <img src={verifyInspectImg} alt="Verify & Inspect" className="w-full h-full object-cover rounded-xl" />
+              <img src={verifyInspectImg} alt="See For Me" className="w-full h-full object-cover rounded-xl" />
               <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/40 to-transparent" />
-              <img src={viLogoImg} alt="V&I" className="absolute bottom-2 right-2 w-16 h-16 object-contain drop-shadow-2xl" style={{ mixBlendMode: "screen" }} />
+              <img src={viLogoImg} alt="See For Me" className="absolute bottom-2 right-2 w-16 h-16 object-contain drop-shadow-2xl" style={{ mixBlendMode: "screen" }} />
             </div>
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full text-[10px] font-display tracking-widest"
                 style={{ background: "rgba(0,229,229,0.1)", border: "1px solid rgba(0,229,229,0.2)", color: "#00E5E5" }}>
                 <ShieldCheck className="w-3 h-3" />GUBER EXCLUSIVE
               </div>
-              <h2 className="text-2xl font-display font-black tracking-wider mb-3">VERIFY &amp; INSPECT</h2>
+              <h2 className="text-2xl font-display font-black tracking-wider mb-3">SEE FOR ME</h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                Get paid to show up and document — visual proof, eyes on the ground. Property walk-throughs,
+                Get paid to show up and be someone's eyes on location. Property walk-throughs,
                 pre-purchase photo runs, online listing verification. Helpers don't certify, diagnose, or appraise —
                 they take clear photos and short video. $40–$120+ per job.
               </p>
               <Link href="/browse-jobs?category=Verify+%26+Inspect" className="inline-flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-display tracking-[0.15em] premium-btn" data-testid="link-vi-learn-more">
-                SEE V&I JOBS <ArrowRight className="w-4 h-4" />
+                SEE SEE FOR ME JOBS <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>

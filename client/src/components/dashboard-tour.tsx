@@ -39,7 +39,7 @@ const STEPS = [
   },
   {
     testId: "card-category-verify-inspect",
-    title: "Verify & Inspect",
+    title: "See For Me",
     desc: "Book a verified local to take photos, check on assets, or inspect a property on your behalf.",
     phase: "tile",
     radius: 18,
